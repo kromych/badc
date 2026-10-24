@@ -497,6 +497,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "stringapiset.h",
         include_str!("../../libc/include/stringapiset.h"),
     ),
+    ("intsafe.h", include_str!("../../libc/include/intsafe.h")),
     ("winioctl.h", include_str!("../../libc/include/winioctl.h")),
     ("pathcch.h", include_str!("../../libc/include/pathcch.h")),
     ("psapi.h", include_str!("../../libc/include/psapi.h")),

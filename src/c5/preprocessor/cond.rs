@@ -1119,7 +1119,13 @@ impl<'a> IfExprParser<'a> {
             }
         }
         // An identifier left after expansion -- undefined, or a macro
-        // whose unquoted body is no number -- is 0 (C99 6.10.1p4).
+        // whose unquoted body is no number -- is 0 (C99 6.10.1p4); gcc
+        // reports a function-like name with no arguments the same way.
+        if self.live {
+            let text = format!("`{name}` is not defined, evaluates to 0");
+            self.pp
+                .park_warning(super::UNDEF, self.filename, self.line_no, text);
+        }
         Ok(IfValue::signed(0))
     }
 }

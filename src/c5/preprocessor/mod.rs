@@ -1955,6 +1955,7 @@ pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
 pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
 pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
 pub(crate) const DATE_TIME: Code = Code::new(1008);
+pub(crate) const UNDEF: Code = Code::new(1009);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the

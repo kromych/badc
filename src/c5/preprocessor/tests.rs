@@ -4743,6 +4743,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         PRAGMA_POP_WITHOUT_PUSH,
         IGNORED_PRAGMA_INTRINSIC,
         DATE_TIME,
+        UNDEF,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
@@ -5437,4 +5438,39 @@ fn date_time_reports_each_expansion() {
     assert_eq!(lines(src), vec![]);
     let asked = format!("#pragma GCC diagnostic warning \"-Wdate-time\"\n{src}");
     assert_eq!(lines(&asked), vec![(2, DATE_TIME), (8, DATE_TIME)]);
+}
+
+/// gcc's `-Wundef`: an identifier left in an evaluated `#if` / `#elif`
+/// operand after expansion, which is 0. A short-circuited or not-taken
+/// operand, a `defined` operand, a skipped group and an `#elif` after a
+/// taken group evaluate nothing. Off unless asked for.
+#[test]
+fn undef_reports_each_evaluated_identifier() {
+    let src = "#if FOO\n#endif\n\
+               #if 0 && BAR\n#endif\n\
+               #if 1 || BAZ\n#endif\n\
+               #if 1 ? 2 : QUX\n#endif\n\
+               #if defined(NOPE) || defined NOPE2\n#endif\n\
+               #if X1 + X2\n#endif\n\
+               #define F(x) x\n\
+               #if F(Y1)\n#endif\n\
+               #if F\n#endif\n\
+               #if 0\n#if INSKIP\n#endif\n#endif\n\
+               #if 1\n#elif ELIFX\n#endif\n\
+               #ifdef Z1\n#elif Z2\n#endif\n\
+               #define A B\n\
+               #if A\n#endif\n";
+    let lines = |src: &str| -> Vec<u32> {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let _ = pp.process(src).expect("preprocessor failed");
+        pp.sink
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == UNDEF)
+            .map(|d| d.loc.as_ref().unwrap().line)
+            .collect()
+    };
+    assert_eq!(lines(src), Vec::<u32>::new());
+    let asked = format!("#pragma GCC diagnostic warning \"-Wundef\"\n{src}");
+    assert_eq!(lines(&asked), vec![2, 12, 12, 15, 17, 27, 30]);
 }

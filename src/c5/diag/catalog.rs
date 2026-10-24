@@ -77,6 +77,9 @@ catalog! {
     1008, "date-time", [], Ignore, Controllable,
         [], Live,
         "a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next";
+    1009, "undef", [], Ignore, Controllable,
+        [], Live,
+        "an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0";
     1010, "directive", [], Error, Hard,
         [], Live,
         "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";

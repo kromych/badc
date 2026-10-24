@@ -1016,6 +1016,8 @@ impl Compiler {
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
         self.apply_symbol_attributes(id_idx);
+        let align = core::mem::take(&mut self.pending.attrs.align).max(0) as u32;
+        self.symbols[id_idx].code_align = self.symbols[id_idx].code_align.max(align);
         // Read the sticky request back so a definition follows what any
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.

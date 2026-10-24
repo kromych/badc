@@ -168,6 +168,10 @@ pub(crate) struct Symbol {
     /// of the symbol, in place of `-fpatchable-function-entry=`.
     pub patchable_function_entry: Option<(u32, u32)>,
 
+    /// `__attribute__((aligned(N)))` on a function's declarations: the
+    /// largest `N`, the boundary its first instruction takes; 0 for none.
+    pub code_align: u32,
+
     /// `__attribute__((no_instrument_function))` seen on any declaration
     /// of the name: `-pg` emits no profiling call in the body.
     pub no_instrument_function: bool,
@@ -923,6 +927,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_hidden: _,
             section_name,
             patchable_function_entry: _,
+            code_align: _,
             no_instrument_function: _,
             no_stack_protector: _,
             is_noinline: _,

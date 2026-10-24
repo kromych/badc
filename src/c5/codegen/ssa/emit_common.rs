@@ -2694,6 +2694,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .collect();
     let fn_align = native.min_function_alignment.max(1) as usize;
     st.text_align = st.text_align.max(fn_align);
+    // `aligned(N)` on a function raises its own entry's boundary.
+    let code_aligns: alloc::collections::BTreeMap<&str, usize> = (program.symbols.iter())
+        .filter(|s| s.code_align > 1 && s.class == crate::c5::token::Token::Fun as i64)
+        .map(|s| (s.def_link_name(), s.code_align as usize))
+        .collect();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         let entry = super::FunctionEntry::of(func_ssa, &native);
@@ -2701,7 +2706,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // multiple of N, the gap filled with no-ops. Under
         // `-fpatchable-function-entry` that byte opens the no-op area, of
         // which `nops_before` precede the symbol.
-        b.align_entry(&mut st, fn_align);
+        let align = fn_align.max(
+            code_aligns
+                .get(func_ssa.name.as_str())
+                .copied()
+                .unwrap_or(1),
+        );
+        st.text_align = st.text_align.max(align);
+        b.align_entry(&mut st, align);
         if entry.nops_before + entry.nops_after > 0 {
             st.patchable_entries.push(super::EntryArea {
                 func: st.func_ent_pcs.len(),

@@ -1377,6 +1377,8 @@ fn windows_h_imports_its_win32_functions_from_their_dlls() {
             &[
                 ("ShowWindow", "ShowWindow", "user32.dll"),
                 ("CreateWindowExW", "CreateWindowExW", "user32.dll"),
+                ("GetUpdateRect", "GetUpdateRect", "user32.dll"),
+                ("GetUpdateRgn", "GetUpdateRgn", "user32.dll"),
                 ("BitBlt", "BitBlt", "gdi32.dll"),
                 ("SwapBuffers", "SwapBuffers", "gdi32.dll"),
                 ("wglMakeCurrent", "wglMakeCurrent", "opengl32.dll"),

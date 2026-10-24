@@ -4069,6 +4069,8 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::GetRawInputDeviceInfoW,     "GetRawInputDeviceInfoW")
 #pragma binding(user32::GetRawInputDeviceList,      "GetRawInputDeviceList")
 #pragma binding(user32::GetSystemMetrics,           "GetSystemMetrics")
+#pragma binding(user32::GetUpdateRect,              "GetUpdateRect")
+#pragma binding(user32::GetUpdateRgn,               "GetUpdateRgn")
 #pragma binding(user32::GetWindowLongA,             "GetWindowLongA")
 #pragma binding(user32::GetWindowLongPtrW,          "GetWindowLongPtrW")
 #pragma binding(user32::GetWindowLongW,             "GetWindowLongW")
@@ -4264,6 +4266,8 @@ UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerF
 BOOL KillTimer(HWND hWnd, UINT_PTR uIDEvent);
 HDC BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
 BOOL EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
+BOOL GetUpdateRect(HWND hWnd, LPRECT lpRect, BOOL bErase);
+int GetUpdateRgn(HWND hWnd, HRGN hRgn, BOOL bErase);
 BOOL BringWindowToTop(HWND hWnd);
 BOOL AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
 BOOL MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);

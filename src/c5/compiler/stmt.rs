@@ -3612,7 +3612,7 @@ impl Compiler {
                     // the same incompatible pointer / integer cases the
                     // assignment path flags, before the conversion
                     // rewrites `self.ty`.
-                    let rhs_is_zero = self.last_emit_is_zero();
+                    let rhs_is_zero = self.value_is_null_pointer_constant();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
                     let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
                     let value_fn = self.value_fn_type(self.ast_acc);

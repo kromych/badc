@@ -2484,7 +2484,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let want = callee.params[nargs as usize];
         let arg_ty = self.ty;
-        let zero = self.last_emit_is_zero();
+        let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
@@ -3755,7 +3755,7 @@ impl Compiler {
                 self.symbols[idx].binding.was_written = true;
             }
             self.expr(Token::Assign as i64)?;
-            let rhs_is_zero = self.last_emit_is_zero();
+            let rhs_is_zero = self.value_is_null_pointer_constant();
             let rhs_is_untyped = self.last_emit_was_indirect_call();
             let rhs_fn = self.value_fn_type(self.ast_acc);
             let what = ("assignment", "lhs", "rhs");

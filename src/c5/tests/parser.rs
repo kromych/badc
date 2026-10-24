@@ -3864,6 +3864,58 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn every_conversion_to_a_pointer_takes_the_same_null_pointer_constants() {
+    // C99 6.3.2.3p3 with 6.6p6: an integer constant expression of value 0,
+    // whatever its spelling, converts to a pointer in an assignment, an
+    // argument, a return and an initializer, as it does in `?:`; a value
+    // read through a pointer cast is no integer constant expression, and a
+    // floating constant cast to an integer type is one.
+    use crate::diag::Code;
+    let warns = |body: &str| {
+        let src =
+            format!("int *ip; void take(int *); int x;\n{body}\nint main(void) {{ return 0; }}\n");
+        let program = Compiler::new(src)
+            .compile()
+            .unwrap_or_else(|e| panic!("{body}: {e}"));
+        program
+            .warnings
+            .iter()
+            .any(|w| w.code == Code::INT_CONVERSION)
+    };
+    for body in [
+        "void f(void) { ip = 1 - 1; }",
+        "void f(void) { ip = (char)0; }",
+        "void f(void) { take((unsigned char)256); }",
+        "int *g(void) { return 0 * 5; }",
+        "void f(void) { ip = sizeof(int) - 4; }",
+        "void f(void) { ip = (1 ? 0 : 1); }",
+        "void f(void) { ip = (int)0.5; }",
+        "void f(void) { int *lp = 2 - 2; (void)lp; }",
+    ] {
+        assert!(!warns(body), "{body}");
+    }
+    for body in [
+        "void f(void) { int z = 0; ip = z; }",
+        "void f(void) { ip = x * 0; }",
+        "void f(void) { ip = (long)(char *)0; }",
+    ] {
+        assert!(warns(body), "{body}");
+    }
+    expect_compile_error(
+        "int *f(int c) { __typeof__(c ? (void *)((long)(char *)0) : (int *)0) q = 0;\n\
+         int **r = &q; return *r; }\nint main(void) { return 0; }",
+        "incompatible pointer types",
+    );
+    Compiler::new(
+        "int *f(int c) { __typeof__(c ? (void *)((int)0.5) : (int *)0) q = 0;\n\
+         int **r = &q; return *r; }\nint main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
 fn redeclarations_compare_the_function_types_pointers_lead_to() {
     // C99 6.7p4: the declarations of one object or function have compatible
     // types, which extends through the function types pointers lead to

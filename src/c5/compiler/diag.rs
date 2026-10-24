@@ -313,25 +313,45 @@ impl Compiler {
             _ => e,
         };
         expr_ty(self.ast.expr(e)).is_some_and(|t| !is_pointer_ty(t) && !is_floating_scalar(t))
-            && self.expr_const_int(e) == Some(0)
+            && self.const_int(e, true) == Some(0)
+    }
+
+    /// [`Self::expr_is_null_pointer_constant`] for the value in hand, which
+    /// every conversion to a pointer type asks.
+    pub(super) fn value_is_null_pointer_constant(&self) -> bool {
+        self.ast_acc.map_or(self.last_emit_is_zero(), |e| {
+            self.expr_is_null_pointer_constant(e)
+        })
     }
 
     /// Fold a literal-rooted integer constant expression, each value in its
     /// own type: a cast to an integer type converts (C99 6.3.1.3).
     pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
+        self.const_int(e, false)
+    }
+
+    /// [`Self::expr_const_int`]; `ice` holds the operands to C99 6.6p6: a
+    /// cast converts an integer or the floating constant it is applied to,
+    /// and no pointer.
+    fn const_int(&self, e: ExprId, ice: bool) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
             Expr::Sizeof(s) => Some(s.size_bytes),
             Expr::Cast { child, to_ty }
                 if !is_pointer_ty(*to_ty) && !is_floating_scalar(*to_ty) =>
             {
-                let v = self.expr_const_int(*child)?;
+                let v = match self.ast.expr(*child) {
+                    Expr::FloatLit { bits, .. } if ice => f64::from_bits(*bits) as i64,
+                    c if ice && expr_ty(c).is_none_or(is_pointer_ty) => return None,
+                    _ => self.const_int(*child, ice)?,
+                };
                 let (bytes, is_bool) = (self.size_of_type(*to_ty), is_bool_ty(*to_ty));
                 Some(narrow_const_int(bytes, is_unsigned_ty(*to_ty), is_bool, v as i128) as i64)
             }
-            Expr::Cast { child, .. } => self.expr_const_int(*child),
+            Expr::Cast { .. } if ice => None,
+            Expr::Cast { child, .. } => self.const_int(*child, ice),
             Expr::Unary { op, child, ty } => {
-                let v = self.expr_const_int(*child)?;
+                let v = self.const_int(*child, ice)?;
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
@@ -352,8 +372,8 @@ impl Compiler {
                 if !imm_safe_binop(*op) && !divmod {
                     return None;
                 }
-                let l = self.expr_const_int(*lhs)?;
-                let r = self.expr_const_int(*rhs)?;
+                let l = self.const_int(*lhs, ice)?;
+                let r = self.const_int(*rhs, ice)?;
                 fold_const_int_binop(&self.ast, self.target, *op, *ty, (*lhs, l), (*rhs, r))
             }
             // A conditional with a constant condition folds to its selected
@@ -366,8 +386,8 @@ impl Compiler {
                 else_e,
                 ..
             } => {
-                let c = self.expr_const_int(*cond)?;
-                self.expr_const_int(if c != 0 { *then_e } else { *else_e })
+                let c = self.const_int(*cond, ice)?;
+                self.const_int(if c != 0 { *then_e } else { *else_e }, ice)
             }
             _ => None,
         }
@@ -1039,7 +1059,10 @@ impl Compiler {
         bits: u32,
         line: usize,
     ) -> Result<(), C5Error> {
-        let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
+        let flags = (
+            self.value_is_null_pointer_constant(),
+            self.last_emit_was_indirect_call(),
+        );
         let actual_fn = self.value_fn_type(self.ast_acc);
         self.check_initializer_conversion((declared, &None), (self.ty, &actual_fn), flags, line)?;
         self.check_constant_conversion_of(self.ast_acc, declared, bits, line);
@@ -1061,7 +1084,10 @@ impl Compiler {
         if self.check_function_conversion(declared, actual, true, line, what)? {
             return Ok(());
         }
-        let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
+        let flags = (
+            self.value_is_null_pointer_constant(),
+            self.last_emit_was_indirect_call(),
+        );
         self.check_initializer_conversion(declared, actual, flags, line)?;
         self.check_constant_conversion_of(self.ast_acc, declared.0, bits, line);
         Ok(())

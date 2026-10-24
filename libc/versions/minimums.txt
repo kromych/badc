@@ -95,3 +95,11 @@ libc.so.6 glob
     signal 0 and on an out-of-range signal number. POSIX leaves the
     first case undefined and <pthread.h> states nothing about it.
 libc.so.6 pthread_kill
+
+[-] GLIBC_2.24 stopped running, from quick_exit, the thread-local
+    destructors __cxa_thread_atexit_impl registers. Contrasted on glibc
+    2.43, x86_64 and aarch64: both definitions run the at_quick_exit
+    handlers, skip the atexit chain and end with the status; only a
+    destructor so registered tells them apart. <stdlib.h> declares no
+    way to register one, so the interface it states is the same for both.
+libc.so.6 quick_exit

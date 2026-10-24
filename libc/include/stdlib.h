@@ -50,6 +50,8 @@
 #pragma binding(libc::abort,   "_abort")
 #pragma binding(libc::exit,    "_exit")
 #pragma binding(libc::_Exit,   "__Exit")
+#pragma binding(libc::quick_exit,    "_quick_exit")
+#pragma binding(libc::at_quick_exit, "_at_quick_exit")
 #pragma binding(libc::system,  "_system")
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
@@ -112,6 +114,8 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::abort,   "abort")
 #pragma binding(libc::exit,    "exit")
 #pragma binding(libc::_Exit,   "_Exit")
+#pragma binding(libc::quick_exit,          "quick_exit")
+#pragma binding(libc::__cxa_at_quick_exit, "__cxa_at_quick_exit")
 #pragma binding(libc::system,  "system")
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
@@ -365,6 +369,18 @@ static inline lldiv_t lldiv(long long n, long long d) {
 _Noreturn void abort(void);
 _Noreturn void exit(int status);
 _Noreturn void _Exit(int status);
+#ifndef _WIN32
+// C11 7.22.4.7 and 7.22.4.3, where the C library defines them; msvcrt.dll
+// exports neither. The Linux C library's `at_quick_exit` is a static
+// wrapper over `__cxa_at_quick_exit`, reached as `atexit` is.
+_Noreturn void quick_exit(int status);
+#ifdef __linux__
+int __cxa_at_quick_exit(void (*handler)(void), void *dso);
+#define at_quick_exit(handler) __cxa_at_quick_exit((handler), 0)
+#else
+int at_quick_exit(void (*handler)(void));
+#endif
+#endif
 int system(const char *cmd);
 char *getenv(const char *name);
 #ifdef _WIN32

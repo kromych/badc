@@ -230,6 +230,17 @@ fn asm_reaches_an_imported_object_through_its_slot() {
     }
 }
 
+/// C11 7.22.4.7 under the JIT, which keeps the handler chains of its own:
+/// `quick_exit` runs the `at_quick_exit` handlers and no atexit handler.
+/// msvcrt.dll defines neither function.
+#[cfg(not(windows))]
+#[test]
+fn quick_exit_runs_its_handlers() {
+    let src = include_str!("../../../tests/fixtures/c/quick_exit_runs_its_handlers.c");
+    assert_eq!(jit_exit(src, &["quick-exit"]), 5);
+    assert_eq!(jit_exit_native_optimized(src, &["quick-exit-opt"]), 5);
+}
+
 /// The JIT image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

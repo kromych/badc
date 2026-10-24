@@ -174,6 +174,9 @@ mod jit_impl {
         /// caller passed in (typically NULL or a `&__dso_handle`).
         static JIT_ATEXIT_CHAIN: RefCell<Vec<(extern "C" fn(*mut c_void), usize)>> =
             const { RefCell::new(Vec::new()) };
+        /// The `at_quick_exit` handlers, which `quick_exit` runs instead.
+        static JIT_QUICK_EXIT_CHAIN: RefCell<Vec<extern "C" fn()>> =
+            const { RefCell::new(Vec::new()) };
     }
 
     /// Replacement for libc's `atexit` when JIT'd code resolves
@@ -249,12 +252,28 @@ mod jit_impl {
         end_program(status, true)
     }
 
-    /// Replacement for `_exit`, `_Exit` and `quick_exit`, which run no
-    /// atexit handler (C99 7.20.4.4, POSIX `_exit`); the bundled headers
-    /// offer no `at_quick_exit`.
+    /// Replacement for `_exit` and `_Exit`, which run no atexit handler
+    /// (C99 7.20.4.4, POSIX `_exit`).
     extern "C" fn jit_immediate_exit_thunk(status: c_int) -> ! {
         JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().clear());
+        JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().clear());
         end_program(status, false)
+    }
+
+    /// Replacement for `quick_exit`: the `at_quick_exit` handlers run, last
+    /// registered first, and then no atexit handler (C11 7.22.4.7).
+    extern "C" fn jit_quick_exit_thunk(status: c_int) -> ! {
+        while let Some(handler) = JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().pop()) {
+            handler();
+        }
+        jit_immediate_exit_thunk(status)
+    }
+
+    /// Replacement for `at_quick_exit` and glibc's `__cxa_at_quick_exit`,
+    /// whose second operand names the registering object.
+    extern "C" fn jit_at_quick_exit_thunk(handler: extern "C" fn(), _dso: *mut c_void) -> c_int {
+        JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().push(handler));
+        0
     }
 
     /// End the guest program with `status`. On the worker thread the call
@@ -498,8 +517,10 @@ mod jit_impl {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             "exit" => jit_exit_thunk as *const () as usize as u64,
-            "_exit" | "_Exit" | "quick_exit" => {
-                jit_immediate_exit_thunk as *const () as usize as u64
+            "_exit" | "_Exit" => jit_immediate_exit_thunk as *const () as usize as u64,
+            "quick_exit" => jit_quick_exit_thunk as *const () as usize as u64,
+            "at_quick_exit" | "__cxa_at_quick_exit" => {
+                jit_at_quick_exit_thunk as *const () as usize as u64
             }
             _ => 0,
         }
@@ -515,16 +536,25 @@ mod jit_impl {
         }
     }
 
+    type PriorExitChains = (
+        Vec<(extern "C" fn(*mut c_void), usize)>,
+        Vec<extern "C" fn()>,
+    );
+
     /// Save the current thread's atexit chain (any entries left over
     /// from a nested `jit_run` invocation on the same thread) so the
     /// outer call's drain does not consume them. Restore by passing
     /// the returned Vec to [`restore_jit_atexit_chain`].
-    fn take_prior_jit_atexit_chain() -> Vec<(extern "C" fn(*mut c_void), usize)> {
-        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect())
+    fn take_prior_jit_atexit_chain() -> PriorExitChains {
+        (
+            JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect()),
+            JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect()),
+        )
     }
 
-    fn restore_jit_atexit_chain(prior: Vec<(extern "C" fn(*mut c_void), usize)>) {
-        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = prior);
+    fn restore_jit_atexit_chain((atexit, quick): PriorExitChains) {
+        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = atexit);
+        JIT_QUICK_EXIT_CHAIN.with(|chain| *chain.borrow_mut() = quick);
     }
 
     pub fn jit_run(

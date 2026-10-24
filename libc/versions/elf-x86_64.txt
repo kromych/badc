@@ -18,6 +18,7 @@
 
 [libc.so.6]
 _Exit                                    GLIBC_2.2.5
+__cxa_at_quick_exit                      GLIBC_2.10
 __cxa_atexit                             GLIBC_2.2.5
 __environ                                GLIBC_2.2.5
 __errno_location                         GLIBC_2.2.5
@@ -475,6 +476,7 @@ pwrite64                                 GLIBC_2.2.5
 pwritev                                  GLIBC_2.10
 pwritev2                                 GLIBC_2.26
 qsort                                    GLIBC_2.2.5
+quick_exit                               GLIBC_2.10
 raise                                    GLIBC_2.2.5
 rand                                     GLIBC_2.2.5
 random                                   GLIBC_2.2.5

@@ -188,6 +188,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         diag: cli.front.diag.clone(),
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         symbolic: cli.link.symbolic,
+        symbolic_functions: cli.link.symbolic_functions,
         warn_execstack: cli.link.warn_execstack,
         warn_rwx_segments: cli.link.warn_rwx_segments,
         output_name: (out.file_name())

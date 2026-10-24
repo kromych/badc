@@ -274,6 +274,8 @@ pub struct DynTables {
     pub verdef_count: u16,
     /// `sh_info` for `.dynsym`: one past the last local entry.
     pub first_global: u32,
+    /// Each named entry's `.dynsym` index.
+    index: alloc::collections::BTreeMap<String, u32>,
 }
 
 impl DynTables {
@@ -282,6 +284,10 @@ impl DynTables {
     }
     pub fn str_offset(&self, name: &str) -> u32 {
         self.strtab.offset_of(name)
+    }
+    /// `.dynsym` index of the entry named `name`.
+    pub fn index_of(&self, name: &str) -> Option<u32> {
+        self.index.get(name).copied()
     }
 }
 
@@ -383,6 +389,10 @@ pub fn build_tables(
         // Only the null entry is local; bfd emits every dynamic symbol
         // it keeps as global or weak.
         first_global: 1,
+        index: (symbols.iter().enumerate().skip(1))
+            .rev()
+            .map(|(i, s)| (s.name.clone(), i as u32))
+            .collect(),
     }
 }
 

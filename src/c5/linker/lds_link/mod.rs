@@ -22,7 +22,9 @@
 //! `.eh_frame`, `layout` walks the statements, `eval` evaluates script
 //! expressions, `veneers` reserves erratum stubs, `dynamic_sections`
 //! and `got` size the dynamic tables and slots, `reloc` /
-//! `reloc_aarch64` apply relocations, `synth` fills synthetic content,
+//! `reloc_aarch64` apply relocations, `preempt` decides which of a
+//! shared object's definitions the loader may preempt and how each
+//! reference reaches one, `synth` fills synthetic content,
 //! `phdrs` and `symtab` build the program headers and the symbol
 //! table, and `write` assembles the image.
 
@@ -36,6 +38,7 @@ mod inputs;
 mod layout;
 mod phdrs;
 mod pools;
+mod preempt;
 mod reloc;
 mod reloc_aarch64;
 mod sections;
@@ -154,6 +157,10 @@ const STT_SECTION: u8 = 3;
 const STT_FILE: u8 = 4;
 
 const STT_COMMON: u8 = 5;
+
+const STT_TLS: u8 = 6;
+
+const STT_GNU_IFUNC: u8 = 10;
 
 const STV_DEFAULT: u8 = 0;
 
@@ -332,8 +339,12 @@ pub struct LdsOptions {
     pub output_name: String,
     /// `--hash-style`.
     pub hash_style: HashStyle,
-    /// `-Bsymbolic`: `DT_SYMBOLIC` and `DF_SYMBOLIC`.
+    /// `-Bsymbolic`: a shared object binds every reference to its own
+    /// definitions, and records `DT_SYMBOLIC` and `DF_SYMBOLIC`.
     pub symbolic: bool,
+    /// `-Bsymbolic-functions`: a shared object binds its references to
+    /// its own definitions other than objects.
+    pub symbolic_functions: bool,
     /// `-n` / `--nmagic`: a `PT_LOAD` aligns to the strongest
     /// alignment among its sections rather than to a page.
     pub nmagic: bool,
@@ -389,6 +400,7 @@ impl Default for LdsOptions {
             output_name: String::new(),
             hash_style: HashStyle::default(),
             symbolic: false,
+            symbolic_functions: false,
             nmagic: false,
             eh_frame_hdr: false,
             gc_sections: false,
@@ -630,9 +642,9 @@ struct DynReloc {
     offset: u64,
     rtype: u32,
     addend: i64,
-    /// `.dynsym` index the entry names; 0 where the fixup needs no
-    /// symbol.
-    sym: u32,
+    /// The dynamic symbol the entry names, `None` where the fixup
+    /// needs none. Its index is read from the final `.dynsym`.
+    sym: Option<String>,
 }
 
 pub struct LdsLinker<'a> {
@@ -665,7 +677,14 @@ pub struct LdsLinker<'a> {
     /// symbol-named dynamic relocations carry.
     imports: Vec<String>,
     import_of: HashMap<String, usize>,
-    /// The subset reached by a call, in the order of their PLT stubs.
+    /// The definitions of a shared object the loader may preempt; see
+    /// the `preempt` module.
+    preemptible: HashSet<String>,
+    /// Per object, the names its `.note.badc` lists as data it reaches
+    /// through a symbol.
+    noted_data: Vec<HashSet<String>>,
+    /// The imports and preemptible definitions a call reaches, in the
+    /// order of their PLT stubs.
     plt_syms: Vec<String>,
     plt_of: HashMap<String, usize>,
     /// Program headers `SIZEOF_HEADERS` accounts for where the script
@@ -985,6 +1004,8 @@ impl<'a> LdsLinker<'a> {
             eh_frames: Vec::new(),
             imports: Vec::new(),
             import_of: HashMap::new(),
+            preemptible: HashSet::new(),
+            noted_data: Vec::new(),
             plt_syms: Vec::new(),
             plt_of: HashMap::new(),
             phdrs: 4,
@@ -1029,10 +1050,11 @@ impl<'a> LdsLinker<'a> {
         linker.dedup_groups();
         linker.resolve_globals()?;
         linker.collect_visibility();
-        linker.synthesize_sections();
-        linker.flatten_inputs();
         linker.build_statements()?;
         linker.collect_script_assigned();
+        linker.collect_preemptible();
+        linker.synthesize_sections();
+        linker.flatten_inputs();
         linker.gc_sections();
         linker.claim_inputs()?;
         linker.build_merge_pools();

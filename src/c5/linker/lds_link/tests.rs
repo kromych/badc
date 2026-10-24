@@ -5207,3 +5207,455 @@ fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
         assert_eq!(vis(name), want, "{name}");
     }
 }
+
+/// `.rela.dyn` as `(offset, type, symbol, addend)`, the symbol by name.
+fn dyn_relocs(image: &[u8]) -> Vec<(u64, u32, String, i64)> {
+    let syms = dynsym_entries(image);
+    let (_, rela) = image_section(image, ".rela.dyn");
+    let word = |c: &[u8], at: usize| u64::from_le_bytes(c[at..at + 8].try_into().unwrap());
+    (rela.as_chunks::<24>().0.iter())
+        .map(|c| {
+            let info = word(c, 8);
+            let sym = syms.get((info >> 32) as usize).map(|s| s.0.clone());
+            (
+                word(c, 0),
+                info as u32,
+                sym.unwrap_or_default(),
+                word(c, 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// The address of output section `name`, if the image has it.
+fn section_addr(image: &[u8], name: &str) -> Option<u64> {
+    readelf_sections(image)
+        .iter()
+        .find(|s| s.0 == name)
+        .map(|s| s.2)
+}
+
+fn u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+}
+
+/// `-shared` options under `-Bsymbolic` (`Some(true)`),
+/// `-Bsymbolic-functions` (`Some(false)`) or neither.
+fn binding_opts(machine: u16, symbolic: Option<bool>) -> LdsOptions {
+    LdsOptions {
+        symbolic: symbolic == Some(true),
+        symbolic_functions: symbolic == Some(false),
+        ..shared_opts(machine)
+    }
+}
+
+/// A unit calling `func`, loading `data`'s address through the GOT,
+/// and holding `&func` and `&data + 4` in `.data`: `.text` is the call,
+/// the GOT load, a return, then `func` at 16; `.data` is `data` and
+/// the two pointers. Symtab: null(0), sections(1, 2), func(3),
+/// data(4), caller(5).
+fn preemption_unit(machine: u16) -> Vec<u8> {
+    let mut text = [0u8; 20];
+    let (call, got_page, got_lo, abs) = if machine == EM_AARCH64 {
+        for (k, w) in [0x9400_0000u32, 0x9000_0000, 0xf940_0000, 0xd65f_03c0]
+            .iter()
+            .enumerate()
+        {
+            text[4 * k..4 * k + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        text[16..20].copy_from_slice(&0xd65f_03c0u32.to_le_bytes());
+        (
+            (0, rt::R_AARCH64_CALL26, 0),
+            Some((4, rt::R_AARCH64_ADR_GOT_PAGE)),
+            (8, rt::R_AARCH64_LD64_GOT_LO12_NC, 0),
+            rt::R_AARCH64_ABS64,
+        )
+    } else {
+        text[..12].copy_from_slice(&[0xe8, 0, 0, 0, 0, 0x48, 0x8b, 0x05, 0, 0, 0, 0]);
+        text[12] = 0xc3;
+        text[16] = 0xc3;
+        (
+            (1, rt::R_X86_64_PLT32, -4),
+            None,
+            (8, rt::R_X86_64_REX_GOTPCRELX, -4),
+            rt::R_X86_64_64,
+        )
+    };
+    let mut o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 24])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 16, 4)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .sym("caller", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+        .reloc(0, call.0, 3, call.1, call.2)
+        .reloc(0, got_lo.0, 4, got_lo.1, got_lo.2)
+        .reloc(1, 8, 3, abs, 0)
+        .reloc(1, 16, 4, abs, 4);
+    if let Some((at, rtype)) = got_page {
+        o = o.reloc(0, at, 4, rtype, 0);
+    }
+    o.build(machine)
+}
+
+fn link_preemption(machine: u16, symbolic: Option<bool>) -> LdsResult {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let objs = alloc::vec![parse_lds_object("u.o", preemption_unit(machine)).expect("parses")];
+    link_with_script(&script, objs, &binding_opts(machine, symbolic)).expect("links")
+}
+
+/// Where the call at the start of `.text` branches to.
+fn call_target(machine: u16, image: &[u8]) -> u64 {
+    let (text_addr, text) = image_section(image, ".text");
+    if machine == EM_AARCH64 {
+        let imm = (u32_at(&text, 0) & 0x03ff_ffff) << 6;
+        return text_addr.wrapping_add((((imm as i32) >> 6) as i64 * 4) as u64);
+    }
+    let disp = u32_at(&text, 1) as i32 as i64;
+    (text_addr as i64 + 5 + disp) as u64
+}
+
+/// GNU ld 2.46.1 `-shared -T`, measured with gcc objects on both
+/// targets: a call to the object's own default-visibility function goes
+/// through a PLT stub and the stub through a GOT slot the loader fills.
+/// badc's stub loads a slot `GLOB_DAT` binds, as the stubs of its
+/// imports do, where bfd's lazy one takes `JUMP_SLOT`; both name the
+/// definition's own `.dynsym` entry. `-Bsymbolic` and
+/// `-Bsymbolic-functions` call the function in place.
+#[test]
+fn a_shared_objects_call_to_its_own_function_takes_a_stub() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let res = link_preemption(machine, None);
+        let plt = section_addr(&res.image, ".plt").expect("a .plt");
+        assert_eq!(call_target(machine, &res.image), plt, "{machine}");
+        let got = section_addr(&res.image, ".got").expect("a .got");
+        let slot = got + if machine == EM_AARCH64 { 8 } else { 0 };
+        let (_, stub) = image_section(&res.image, ".plt");
+        let through = if machine == EM_AARCH64 {
+            let page =
+                ((u32_at(&stub, 0) >> 29 & 3) | (u32_at(&stub, 0) >> 5 & 0x7ffff) << 2) as u64;
+            (plt & !0xfff) + (page << 12) + ((u32_at(&stub, 4) >> 10 & 0xfff) as u64) * 8
+        } else {
+            (plt as i64 + 6 + u32_at(&stub, 2) as i32 as i64) as u64
+        };
+        assert_eq!(through, slot, "{machine}: the stub loads func's slot");
+        let relocs = dyn_relocs(&res.image);
+        let glob_dat = if machine == EM_AARCH64 {
+            rt::R_AARCH64_GLOB_DAT
+        } else {
+            rt::R_X86_64_GLOB_DAT
+        };
+        assert!(
+            relocs.contains(&(slot, glob_dat, String::from("func"), 0)),
+            "{machine}: {relocs:?}"
+        );
+        for symbolic in [Some(true), Some(false)] {
+            let res = link_preemption(machine, symbolic);
+            let func = find_sym(&image_symbols(&res.image), "func");
+            assert_eq!(call_target(machine, &res.image), func, "{symbolic:?}");
+        }
+    }
+}
+
+/// GNU ld 2.46.1 keeps a GOT reference to a preemptible definition on
+/// its slot, bound by `GLOB_DAT` against the definition, and writes the
+/// slot zero; x86-64 does not relax the load to an address.
+/// `-Bsymbolic` relaxes it, and `-Bsymbolic-functions` keeps an
+/// object's slot.
+#[test]
+fn a_got_reference_to_a_preemptible_definition_keeps_its_slot() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let glob_dat = if machine == EM_AARCH64 {
+            rt::R_AARCH64_GLOB_DAT
+        } else {
+            rt::R_X86_64_GLOB_DAT
+        };
+        for symbolic in [None, Some(false), Some(true)] {
+            let res = link_preemption(machine, symbolic);
+            let relocs = dyn_relocs(&res.image);
+            let data_slot = relocs
+                .iter()
+                .find(|r| r.1 == glob_dat && r.2 == "data")
+                .map(|r| r.0);
+            assert_eq!(
+                data_slot.is_some(),
+                symbolic != Some(true),
+                "{machine} {symbolic:?}: {relocs:?}"
+            );
+            let (_, text) = image_section(&res.image, ".text");
+            if machine == EM_X86_64 {
+                let kept = text[6] == 0x8b;
+                assert_eq!(kept, symbolic != Some(true), "{symbolic:?}: mov kept");
+            }
+            if let Some(slot) = data_slot {
+                let (got, body) = image_section(&res.image, ".got");
+                let at = (slot - got) as usize;
+                assert_eq!(body[at..at + 8], [0; 8], "{machine}: the loader fills it");
+            }
+        }
+    }
+}
+
+/// GNU ld 2.46.1 leaves an address-width field naming a preemptible
+/// definition to an `R_X86_64_64` / `R_AARCH64_ABS64` against the
+/// symbol, with the addend, and writes nothing in place.
+/// `-Bsymbolic-functions` takes a `RELATIVE` for the function only.
+#[test]
+fn an_address_field_names_a_preemptible_definition() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let (abs, relative) = if machine == EM_AARCH64 {
+            (rt::R_AARCH64_ABS64, rt::R_AARCH64_RELATIVE)
+        } else {
+            (rt::R_X86_64_64, rt::R_X86_64_RELATIVE)
+        };
+        for (symbolic, func_form, data_form) in [
+            (None, abs, abs),
+            (Some(false), relative, abs),
+            (Some(true), relative, relative),
+        ] {
+            let res = link_preemption(machine, symbolic);
+            let (data_addr, data) = image_section(&res.image, ".data");
+            let relocs = dyn_relocs(&res.image);
+            let at = |off: u64| relocs.iter().find(|r| r.0 == data_addr + off).cloned();
+            let (_, ftype, fname, _) = at(8).expect("&func has a dynamic entry");
+            let (_, dtype, dname, daddend) = at(16).expect("&data + 4 has one");
+            assert_eq!((ftype, dtype), (func_form, data_form), "{symbolic:?}");
+            if func_form == abs {
+                assert_eq!(fname, "func");
+            }
+            if data_form == abs {
+                assert_eq!((dname.as_str(), daddend), ("data", 4));
+                assert_eq!(data[16..24], [0; 8], "{machine}: nothing in place");
+            }
+        }
+    }
+}
+
+/// GNU ld 2.46.1 on a field neither a stub, a slot nor a dynamic
+/// relocation can redirect: x86-64 refuses a PC-relative one in a
+/// read-only section and leaves one in a writable section to an
+/// `R_X86_64_PC32` against the symbol; aarch64 refuses `adrp` and binds
+/// a PC-relative data field directly. Under `-Bsymbolic` each binds
+/// directly.
+#[test]
+fn a_pc_relative_field_follows_ld_against_a_preemptible_definition() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = |machine: u16| {
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0; 4])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+            .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .build(machine)
+    };
+    let site = |machine: u16, sec: &str, rtype: u32| {
+        let flags = if sec == ".text" {
+            SHF_ALLOC | SHF_EXECINSTR
+        } else {
+            SHF_ALLOC | SHF_WRITE
+        };
+        let body: &[u8] = if machine == EM_AARCH64 && sec == ".text" {
+            &[0, 0, 0, 0x90]
+        } else {
+            &[0x48, 0x8d, 0x05, 0, 0, 0, 0, 0]
+        };
+        let at = if machine == EM_X86_64 && sec == ".text" {
+            3
+        } else {
+            0
+        };
+        TestObj::new()
+            .sec(sec, SHT_PROGBITS, flags, 4, body)
+            .sym("data", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .reloc(0, at, 2, rtype, 0)
+            .build(machine)
+    };
+    let link = |machine: u16, sec: &str, rtype: u32, symbolic: bool| {
+        let objs = alloc::vec![
+            parse_lds_object("defs.o", defs(machine)).expect("parses"),
+            parse_lds_object("site.o", site(machine, sec, rtype)).expect("parses"),
+        ];
+        let opts = binding_opts(machine, symbolic.then_some(true));
+        link_with_script(&script, objs, &opts)
+    };
+    for (machine, sec, rtype) in [
+        (EM_X86_64, ".text", rt::R_X86_64_PC32),
+        (EM_AARCH64, ".text", rt::R_AARCH64_ADR_PREL_PG_HI21),
+    ] {
+        let e = alloc::format!("{}", link(machine, sec, rtype, false).expect_err("refused"));
+        assert!(
+            e.contains("site.o(.text+0x")
+                && e.contains("against symbol `data`")
+                && e.contains("when making a shared object")
+                && e.contains("recompile with -fPIC"),
+            "{e}"
+        );
+        link(machine, sec, rtype, true).expect("-Bsymbolic binds it");
+    }
+    let res = link(EM_X86_64, ".data", rt::R_X86_64_PC32, false).expect("links");
+    let relocs = dyn_relocs(&res.image);
+    assert!(
+        relocs
+            .iter()
+            .any(|r| r.1 == rt::R_X86_64_PC32 && r.2 == "data"),
+        "{relocs:?}"
+    );
+    let res = link(EM_AARCH64, ".data", rt::R_AARCH64_PREL32, false).expect("links");
+    assert!(
+        !readelf_sections(&res.image)
+            .iter()
+            .any(|s| s.0 == ".rela.dyn" && s.3 > 0),
+        "aarch64 binds the field in place"
+    );
+}
+
+/// GNU ld 2.46.1 binds every reference to a protected, hidden or
+/// internal definition, and to one the version script makes local,
+/// directly: the call reaches the function, the GOT load relaxes, and
+/// the pointer takes a `RELATIVE`.
+#[test]
+fn a_definition_the_loader_cannot_preempt_binds_directly() {
+    let base = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let local =
+        alloc::format!("{SHARED_SCRIPT}\nVERSION {{ V1 {{ global: caller; local: *; }}; }}");
+    let local = parse_linker_script(&local).expect("script parses");
+    let cases: [(&LinkerScript, u8); 4] = [
+        (&base, STV_PROTECTED),
+        (&base, STV_HIDDEN),
+        (&base, STV_INTERNAL),
+        (&local, STV_DEFAULT),
+    ];
+    for (script, vis) in cases {
+        let unit = preemption_unit(EM_X86_64);
+        let mut o = parse_lds_object("u.o", unit).expect("parses");
+        for s in o
+            .symbols
+            .iter_mut()
+            .filter(|s| s.name == "func" || s.name == "data")
+        {
+            s.other = vis;
+        }
+        let res = link_with_script(script, alloc::vec![o], &shared_opts(EM_X86_64)).expect("links");
+        let func = find_sym(&image_symbols(&res.image), "func");
+        assert_eq!(call_target(EM_X86_64, &res.image), func, "vis {vis}");
+        let (_, text) = image_section(&res.image, ".text");
+        assert_eq!(text[6], 0x8d, "vis {vis}: the load relaxes");
+        let relocs = dyn_relocs(&res.image);
+        assert!(
+            relocs.iter().all(|r| r.1 == rt::R_X86_64_RELATIVE),
+            "vis {vis}: {relocs:?}"
+        );
+    }
+}
+
+/// GNU ld 2.46.1 makes a symbol the script defines preemptible when it
+/// is exported, provided or not, and binds a hidden one directly. Under
+/// `-Bsymbolic-functions` an untyped script symbol binds directly, as
+/// bfd counts only an object as data.
+#[test]
+fn a_script_symbol_is_preemptible_unless_hidden() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let names = ["script_sym", "prov_sym", "hid_sym"];
+    let mut o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc3; 4],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 24]);
+    for (k, name) in names.iter().enumerate() {
+        o = o.sym(name, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0).reloc(
+            1,
+            8 * k as u64,
+            3 + k as u32,
+            rt::R_X86_64_64,
+            0,
+        );
+    }
+    let unit = o.build(EM_X86_64);
+    for (symbolic, want) in [
+        (None, [true, true, false]),
+        (Some(false), [false, false, false]),
+    ] {
+        let objs = alloc::vec![parse_lds_object("s.o", unit.clone()).expect("parses")];
+        let opts = binding_opts(EM_X86_64, symbolic);
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let relocs = dyn_relocs(&res.image);
+        for (name, preempted) in names.iter().zip(want) {
+            let named = relocs
+                .iter()
+                .any(|r| r.1 == rt::R_X86_64_64 && r.2 == *name);
+            assert_eq!(named, preempted, "{name} {symbolic:?}: {relocs:?}");
+        }
+    }
+}
+
+/// A `.note.badc` body listing `names` as data the unit reaches through
+/// a symbol (record 12).
+fn badc_extern_data_note(names: &[&str]) -> Vec<u8> {
+    let mut desc: Vec<u8> = Vec::new();
+    for n in names {
+        desc.extend_from_slice(n.as_bytes());
+        desc.push(0);
+    }
+    let mut note = Vec::new();
+    for w in [5u32, desc.len() as u32, 12] {
+        note.extend_from_slice(&w.to_le_bytes());
+    }
+    note.extend_from_slice(b"badc\0\0\0\0");
+    note.extend_from_slice(&desc);
+    note.resize(note.len().next_multiple_of(4), 0);
+    note
+}
+
+/// badc reaches an aarch64 object through an `adrp` / `add` pair its
+/// note lists, which a link rewrites into a load of the object's GOT
+/// slot where the object binds at load time. A preemptible definition
+/// takes the rewrite and a `GLOB_DAT`; a load through the pair's low
+/// bits is refused, since the pair's page is the slot's.
+#[test]
+fn a_noted_page_pair_loads_a_preemptible_definitions_slot() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let unit = |second: u32, rtype: u32| {
+        let mut text = Vec::new();
+        for w in [0x9000_0001u32, second, 0xd65f_03c0] {
+            text.extend_from_slice(&w.to_le_bytes());
+        }
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+            .sec(".note.badc", SHT_NOTE, 0, 4, &badc_extern_data_note(&["g"]))
+            .sym("g", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            // Symtab: null(0), sections(1..=3), g(4).
+            .reloc(0, 0, 4, rt::R_AARCH64_ADR_PREL_PG_HI21, 0)
+            .reloc(0, 4, 4, rtype, 0)
+            .build(EM_AARCH64)
+    };
+    // add x1, x1, :lo12:g, then ldr w1, [x1, :lo12:g].
+    let link = |second: u32, rtype: u32| {
+        let objs = alloc::vec![parse_lds_object("n.o", unit(second, rtype)).expect("parses")];
+        link_with_script(&script, objs, &shared_opts(EM_AARCH64))
+    };
+    let res = link(0x9100_0021, rt::R_AARCH64_ADD_ABS_LO12_NC).expect("links");
+    let (text_addr, text) = image_section(&res.image, ".text");
+    let relocs = dyn_relocs(&res.image);
+    let slot = relocs
+        .iter()
+        .find(|r| r.1 == rt::R_AARCH64_GLOB_DAT && r.2 == "g")
+        .unwrap_or_else(|| panic!("g's slot: {relocs:?}"))
+        .0;
+    let adrp = u32_at(&text, 0);
+    let page = ((adrp >> 29 & 3) | (adrp >> 5 & 0x7ffff) << 2) as u64;
+    assert_eq!(
+        (text_addr & !0xfff) + (page << 12),
+        slot & !0xfff,
+        "adrp takes the slot's page"
+    );
+    let ldr = 0xf940_0021 | (((slot & 0xfff) / 8) as u32) << 10;
+    assert_eq!(u32_at(&text, 4), ldr, "the add becomes ldr x1, [x1, slot]");
+    let e = link(0xb940_0021, rt::R_AARCH64_LDST32_ABS_LO12_NC).expect_err("refused");
+    assert!(
+        alloc::format!("{e}").contains("recompile with -fPIC"),
+        "{e}"
+    );
+}

@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::got::{PLT_ENTRY_SIZE, index_map};
+use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
@@ -91,7 +92,9 @@ impl<'a> LdsLinker<'a> {
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
             // Every import loads through a slot the loader fills, so
-            // each takes one whether or not an input names the GOT.
+            // each takes one whether or not an input names the GOT. So
+            // does a preemptible definition a reference reaches through
+            // a stub or a slot.
             let mut slots: Vec<String> = self.imports.clone();
             let mut map: HashMap<String, usize> = index_map(&slots);
             for i in 0..self.insecs.len() {
@@ -103,6 +106,9 @@ impl<'a> LdsLinker<'a> {
                     if matches!(
                         r.rtype,
                         rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
+                    ) || matches!(
+                        self.reach_at(id.obj, id.sec, r),
+                        Reach::Plt | Reach::Got | Reach::NotedPair
                     ) {
                         let name = self.objects[id.obj].symbols[r.sym as usize].name.clone();
                         if name.is_empty() {
@@ -141,6 +147,16 @@ impl<'a> LdsLinker<'a> {
             let base = self.outs[out].addr + p.off;
             let packable = self.objects[id.obj].sections[id.sec].addralign > 1;
             for r in &self.objects[id.obj].sections[id.sec].relocs {
+                // The loader fills a field naming a preemptible definition.
+                if self.reach_at(id.obj, id.sec, r) == Reach::Dynamic {
+                    sym_relas.push(DynReloc {
+                        offset: base + r.offset,
+                        rtype: r.rtype,
+                        addend: r.addend,
+                        sym: Some(self.objects[id.obj].symbols[r.sym as usize].name.clone()),
+                    });
+                    continue;
+                }
                 if r.rtype != abs_addr {
                     continue;
                 }
@@ -156,7 +172,7 @@ impl<'a> LdsLinker<'a> {
                             offset: base + r.offset,
                             rtype: abs_addr,
                             addend: r.addend,
-                            sym: self.dynsym_index(name),
+                            sym: Some(name.clone()),
                         });
                     }
                     continue;
@@ -170,20 +186,21 @@ impl<'a> LdsLinker<'a> {
                 ));
             }
         }
-        // GOT slots are RELATIVE targets too; a slot for an unresolved
-        // weak reference gets GLOB_DAT instead.
+        // GOT slots are RELATIVE targets too; a slot for an import, a
+        // preemptible definition or an unresolved weak reference gets
+        // GLOB_DAT instead.
         let slot_size = self.class.addr_size();
         if let Some(got_base) = self.got_slot_base() {
             for (k, name) in self.got_slots.clone().iter().enumerate() {
                 let slot = got_base + k as u64 * slot_size;
-                if let Some(v) = self.resolve_name(name) {
+                if let Some(v) = self.slot_value(name) {
                     rel_addrs.push((slot, v as i64, true));
                 } else {
                     sym_relas.push(DynReloc {
                         offset: slot,
                         rtype: glob_dat,
                         addend: 0,
-                        sym: self.dynsym_index(name),
+                        sym: Some(name.clone()),
                     });
                 }
             }
@@ -199,7 +216,7 @@ impl<'a> LdsLinker<'a> {
                     offset: addr,
                     rtype: relative,
                     addend,
-                    sym: 0,
+                    sym: None,
                 });
             }
         }
@@ -283,7 +300,7 @@ impl<'a> LdsLinker<'a> {
     /// The version index the script assigns `name`, or `None` when the
     /// script makes it local. Exact patterns are consulted before
     /// wildcards, as bfd matches them.
-    fn version_of(&self, name: &str) -> Option<u16> {
+    pub(super) fn version_of(&self, name: &str) -> Option<u16> {
         let nodes = self.script.versions().unwrap_or(&[]);
         if nodes.is_empty() {
             return Some(dynamic::VER_NDX_GLOBAL);

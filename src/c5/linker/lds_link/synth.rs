@@ -68,7 +68,7 @@ impl<'a> LdsLinker<'a> {
             sec.addralign = 4;
             sec.size = self.opts.build_id.note_len() as u64;
         }
-        if !self.opts.shared_libs.is_empty() {
+        if !self.opts.shared_libs.is_empty() || self.calls_preemptible() {
             let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
             let synth = self.synth_obj;
             self.objects[synth].sections[idx].addralign = PLT_ENTRY_SIZE;
@@ -230,10 +230,16 @@ impl<'a> LdsLinker<'a> {
                 // live entries, as bfd leaves them.
                 bytes.resize(self.dyn_nones.unwrap_or(0) as usize * rela_ent as usize, 0);
                 for d in &self.dyn_relas {
+                    let sym = d.sym.as_deref().map_or(0, |n| self.dynsym_index(n));
+                    if sym == 0
+                        && let Some(n) = d.sym.as_ref().filter(|n| self.preemptible.contains(*n))
+                    {
+                        self.errors
+                            .push(format!("internal: `{n}' has no .dynsym entry to name"));
+                    }
                     bytes.extend_from_slice(&class.addr_bytes(d.offset)[..aw]);
-                    bytes.extend_from_slice(
-                        &class.addr_bytes(class.reloc_info(d.sym, d.rtype))[..aw],
-                    );
+                    bytes
+                        .extend_from_slice(&class.addr_bytes(class.reloc_info(sym, d.rtype))[..aw]);
                     if use_rela {
                         bytes.extend_from_slice(&class.addr_bytes(d.addend as u64)[..aw]);
                     }
@@ -256,7 +262,7 @@ impl<'a> LdsLinker<'a> {
                         }
                         let base = self.got_slot_base().unwrap_or(0);
                         for (k, gname) in self.got_slots.clone().iter().enumerate() {
-                            let v = self.resolve_name(gname).unwrap_or(0);
+                            let v = self.slot_value(gname).unwrap_or(0);
                             let slot_addr = base + k as u64 * slot;
                             let write =
                                 relr_set.contains(&slot_addr) || self.opts.apply_dynamic_relocs;

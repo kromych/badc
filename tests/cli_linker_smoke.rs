@@ -10235,6 +10235,111 @@ fn a_shared_librarys_references_within_one_unit_are_preemptible() {
     }
 }
 
+// A shared library the `-T` engine links leaves its exported definitions to
+// the loader too, through the driver and the `--ld` persona alike: the
+// executable's `g` and `f` preempt the library's reads, addresses, calls and
+// pointer initializers, in a unit badc compiles and in a -fPIC one of the
+// system compiler. -Bsymbolic binds the library to its own definitions,
+// -Bsymbolic-functions its functions; the `static` function stays direct.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_script_linked_shared_librarys_references_are_preemptible() {
+    let dir = tempdir("preempt-script");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int g = 1;\nint *pg = &g;\nint get_g(void) { return g; }\nint f(void) { return 1; }\n\
+         int (*pf)(void) = f;\n\
+         int call_f(void) { return f() * 10 + pf() + (pf == f) * 100 + (*pg) * 1000; }\n\
+         static int s(void) { return 3; }\nint call_s(void) { return s(); }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\nint g = 5;\nint f(void) { return 7; }\n\
+         int get_g(void);\nint call_f(void);\nint call_s(void);\n\
+         int main(void) { printf(\"%d %d %d\\n\", get_g(), call_f(), call_s()); return 0; }\n",
+    );
+    let script = write_source(
+        &dir,
+        "lib.lds",
+        "SECTIONS {\n  . = SIZEOF_HEADERS;\n  .hash : { *(.hash) }\n  .gnu.hash : { *(.gnu.hash) }\n\
+         .dynsym : { *(.dynsym) }\n  .dynstr : { *(.dynstr) }\n  .rela.dyn : { *(.rela.*) }\n\
+         .plt : { *(.plt) }\n  .text : { *(.text*) }\n  .rodata : { *(.rodata*) }\n\
+         .eh_frame : { *(.eh_frame) }\n  . = ALIGN(CONSTANT (MAXPAGESIZE));\n\
+         .dynamic : { *(.dynamic) }\n  .got : { *(.got) }\n  .got.plt : { *(.got.plt) }\n\
+         .data : { *(.data*) }\n  .bss : { *(.bss*) }\n}\n",
+    );
+    let mut objects = vec![dir.join("badc.o")];
+    run(
+        Command::new(badc())
+            .args(["-q", "-fPIC", "-c"])
+            .arg(&lib)
+            .arg("-o")
+            .arg(&objects[0]),
+        "compile the library with badc",
+    );
+    if let Some(cc) = host_cc() {
+        let obj = dir.join("cc.o");
+        run(
+            Command::new(&cc)
+                .args(["-O1", "-fPIC", "-c"])
+                .arg(&lib)
+                .arg("-o")
+                .arg(&obj),
+            "compile the library with the system compiler",
+        );
+        objects.push(obj);
+    }
+    for obj in &objects {
+        for (flag, want) in [
+            (None, "5 5177 3"),
+            (Some("-Bsymbolic"), "1 1111 3"),
+            (Some("-Bsymbolic-functions"), "5 5111 3"),
+        ] {
+            for persona in [false, true] {
+                let sub = dir.join(format!(
+                    "{}-{}-{persona}",
+                    obj.file_stem().unwrap().to_string_lossy(),
+                    flag.unwrap_or("default").trim_start_matches('-')
+                ));
+                std::fs::create_dir_all(&sub).expect("mkdir");
+                let mut link = Command::new(badc());
+                if persona {
+                    link.args(["--ld", "-shared"]).args(flag);
+                } else {
+                    link.args(["-q", "-shared"]).args(flag);
+                }
+                run(
+                    link.arg("-T")
+                        .arg(&script)
+                        .arg(obj)
+                        .arg("-o")
+                        .arg(sub.join("libone.so")),
+                    "link the shared library under -T",
+                );
+                let exe = sub.join("prog");
+                run(
+                    Command::new(badc())
+                        .arg("-q")
+                        .arg(&main)
+                        .arg(format!("-L{}", sub.display()))
+                        .args(["-lone", "-o"])
+                        .arg(&exe),
+                    "link the executable",
+                );
+                let out = run(Command::new(&exe).env("LD_LIBRARY_PATH", &sub), "run");
+                assert_eq!(
+                    String::from_utf8_lossy(&out.stdout).trim(),
+                    want,
+                    "{} {flag:?} persona={persona}",
+                    obj.display()
+                );
+            }
+        }
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

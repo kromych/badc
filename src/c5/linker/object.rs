@@ -708,6 +708,23 @@ pub(crate) fn absolute_in_pie_body(
     )
 }
 
+/// Refusal for a field no dynamic relocation fills against a definition
+/// the loader may preempt: the reference would keep the image's own
+/// definition. GNU ld declines the same input.
+pub(crate) fn preemptible_in_shared_body(location: &str, reloc: &str, symbol: &str) -> String {
+    format!(
+        "{location}: {reloc} against symbol `{symbol}` can not be used when making a shared \
+         object: the symbol may bind externally, and the reference reaches it through neither \
+         the GOT nor the PLT; recompile with -fPIC"
+    )
+}
+
+/// The names a `.note.badc` body lists as data a unit reaches through a
+/// symbol (record 12). A body that does not parse lists none.
+pub(crate) fn badc_note_extern_data(body: &[u8]) -> Vec<String> {
+    BadcNote::parse(body).map_or_else(|_| Vec::new(), |n| n.extern_data_names)
+}
+
 /// Which section a symbol's value lives in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeSymSection {

@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::inputs::RawReloc;
+use super::preempt::Reach;
 use super::{
     Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHN_ABS, SHN_COMMON, SHN_UNDEF,
     STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_PLT, SecFate,
@@ -100,11 +101,23 @@ impl<'a> LdsLinker<'a> {
     /// libraries named on the command line. Each binding takes a
     /// `.dynsym` entry and a GOT slot; one a call reaches also takes a
     /// PLT stub, since a call site holds a displacement rather than a
-    /// slot to load through.
+    /// slot to load through. A call to a preemptible definition takes
+    /// one as well.
     pub(super) fn build_imports(&mut self) {
-        if self.opts.shared_libs.is_empty() {
-            return;
+        self.prune_preemptible();
+        if !self.opts.shared_libs.is_empty() {
+            self.bind_shared_libraries();
         }
+        let reached = self.reached_by(Reach::Plt);
+        let called: BTreeSet<String> = (core::mem::take(&mut self.plt_syms).into_iter())
+            .chain(reached)
+            .collect();
+        self.plt_syms = called.into_iter().collect();
+        self.plt_of = index_map(&self.plt_syms);
+    }
+
+    /// The imports, and the ones a call reaches.
+    fn bind_shared_libraries(&mut self) {
         // The script's own definitions satisfy a reference on their
         // own, whether or not a library exports the same name.
         let assigned = self
@@ -161,13 +174,17 @@ impl<'a> LdsLinker<'a> {
         self.imports = names.iter().map(|s| String::from(*s)).collect();
         self.plt_syms = called.iter().map(|s| String::from(*s)).collect();
         self.import_of = index_map(&self.imports);
-        self.plt_of = index_map(&self.plt_syms);
     }
 
-    /// `.dynsym` index of an imported symbol. Imports sit right after
-    /// the null entry, in their own order.
+    /// `.dynsym` index of `name`. Imports sit right after the null
+    /// entry, in their own order; a definition's index is the table's.
     pub(super) fn dynsym_index(&self, name: &str) -> u32 {
-        self.import_of.get(name).map_or(0, |&k| 1 + k as u32)
+        if let Some(&k) = self.import_of.get(name) {
+            return 1 + k as u32;
+        }
+        (self.dyn_tables.as_ref())
+            .and_then(|t| t.index_of(name))
+            .unwrap_or(0)
     }
 
     /// True when a shared library exports `name` as a data object, so a
@@ -186,12 +203,10 @@ impl<'a> LdsLinker<'a> {
             return None;
         }
         if reloc_needs_plt(self.machine, rtype) {
-            let k = *self.plt_of.get(name)?;
-            return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
+            return self.stub_or_slot(name, Reach::Plt);
         }
         if reloc_uses_got(self.machine, rtype) {
-            let k = *self.got_map.get(name)?;
-            return Some(self.got_slot_base()? + k as u64 * self.class.addr_size());
+            return self.stub_or_slot(name, Reach::Got);
         }
         None
     }

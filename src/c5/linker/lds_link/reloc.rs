@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::inputs::RawReloc;
+use super::preempt::Reach;
 use super::sections::{is_debug_section, is_unwind_section};
 use super::{
     EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsLinker, MODULE, R_NONE, SHN_ABS, SHN_COMMON,
@@ -64,7 +65,24 @@ impl<'a> LdsLinker<'a> {
                         format!("{source}: access beyond end of merged section ({bad})"),
                     );
                 }
-                let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
+                let reach = self.reach_at(id.obj, id.sec, r);
+                let target = match reach {
+                    Reach::Plt | Reach::Got | Reach::NotedPair => {
+                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                        let at = self.stub_or_slot(name, reach);
+                        if at.is_none() {
+                            let what = if reach == Reach::Plt {
+                                "PLT stub"
+                            } else {
+                                "GOT slot"
+                            };
+                            let source = &self.objects[id.obj].source;
+                            errors.push(format!("{source}: no {what} for `{name}'"));
+                        }
+                        at.map(|v| v.wrapping_add(r.addend as u64))
+                    }
+                    _ => self.resolve_reloc_target(id.obj, r, tolerant, &mut errors),
+                };
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
                     break;
@@ -85,6 +103,23 @@ impl<'a> LdsLinker<'a> {
                 if let Some(e) = self.unrepresentable_in_dyn(id.obj, id.sec, r, alloc) {
                     errors.push(e);
                     continue;
+                }
+                match reach {
+                    Reach::Refused => {
+                        errors.push(self.preempted_refusal(id.obj, id.sec, r));
+                        continue;
+                    }
+                    // The loader writes the field from the dynamic
+                    // relocation naming the symbol.
+                    Reach::Dynamic => continue,
+                    Reach::NotedPair => {
+                        let half = (id.obj, id.sec, r);
+                        if let Err(e) = self.apply_noted_pair(buf, site, p, s_plus_a, half) {
+                            errors.push(e);
+                        }
+                        continue;
+                    }
+                    _ => {}
                 }
                 self.apply_one(
                     buf,
@@ -298,9 +333,13 @@ impl<'a> LdsLinker<'a> {
                     w(buf, site, &[v as u8]);
                 }
                 rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
-                    // An import has no link-time address to relax to;
-                    // the site keeps its load from the GOT slot.
-                    if self.import_of.contains_key(&name()) {
+                    // An import or a preemptible definition has no
+                    // link-time address to relax to; the site keeps its
+                    // load from the GOT slot.
+                    let target = name();
+                    if self.import_of.contains_key(&target)
+                        || (alloc && self.preemptible.contains(&target))
+                    {
                         let v = sa.wrapping_sub(p) as i64;
                         w(buf, site, &(v as i32).to_le_bytes());
                         return;

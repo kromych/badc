@@ -105,6 +105,9 @@ struct LdArgs {
     hash_style: HashStyle,
     /// `-Bsymbolic`.
     symbolic: bool,
+    /// `-Bsymbolic-functions`; the last of it, `-Bsymbolic` and
+    /// `-Bno-symbolic` holds.
+    symbolic_functions: bool,
     /// `-n` / `--nmagic`: no page alignment between segments.
     nmagic: bool,
     /// `--eh-frame-hdr`.
@@ -310,6 +313,7 @@ impl LdArgs {
             soname: None,
             hash_style: HashStyle::default(),
             symbolic: false,
+            symbolic_functions: false,
             nmagic: false,
             eh_frame_hdr: false,
             interp: None,
@@ -390,10 +394,9 @@ impl LdArgs {
                 "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
                 // `-n`: a segment aligns to its sections, not to a page.
                 "-n" | "--nmagic" => a.nmagic = true,
-                "-Bsymbolic" => a.symbolic = true,
-                // A shared library binds every reference to its own
-                // definitions, which records nothing for functions alone.
-                "-Bsymbolic-functions" => {}
+                "-Bsymbolic" => (a.symbolic, a.symbolic_functions) = (true, false),
+                "-Bsymbolic-functions" => (a.symbolic, a.symbolic_functions) = (false, true),
+                "-Bno-symbolic" => (a.symbolic, a.symbolic_functions) = (false, false),
                 "-soname" | "-h" => a.soname = Some(next_of(&mut it, arg)?),
                 s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
                     a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
@@ -1073,6 +1076,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             .to_string(),
         hash_style: a.hash_style,
         symbolic: a.symbolic,
+        symbolic_functions: a.symbolic_functions,
         nmagic: a.nmagic,
         eh_frame_hdr: a.eh_frame_hdr,
         interp: a.interp.clone(),

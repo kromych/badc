@@ -4959,6 +4959,30 @@ fn pragma_export_round_trips_into_shared_library() {
     );
 }
 
+/// C99 5.1.2.2.3: a return from `main` calls `exit`. The single ELF
+/// image's `_start` reaches libc's when the unit binds the C library,
+/// though it declares no `exit`; an image that binds nothing keeps no
+/// libc dependency and ends in `exit_group`.
+#[test]
+fn single_elf_image_returns_from_main_through_libc_exit() {
+    use crate::c5::linker::object::read_dynamic_symbol_names;
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let names = |src: &str| {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .expect("compile");
+            let image =
+                emit_native_with_options(&program, target, NativeOptions::default()).expect("emit");
+            read_dynamic_symbol_names(&image).expect("parse .dynsym")
+        };
+        let libc = names("#include <stdio.h>\nint main(void) { puts(\"x\"); return 0; }\n");
+        assert!(libc.iter().any(|n| n == "exit"), "{target:?}: {libc:?}");
+        let bare = names("int main(void) { return 0; }\n");
+        assert!(bare.is_empty(), "{target:?}: {bare:?}");
+    }
+}
+
 #[test]
 fn export_all_executable_exposes_dynamic_symbols() {
     // The same exports go into an executable's `.dynsym` (the

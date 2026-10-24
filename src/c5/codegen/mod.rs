@@ -1575,6 +1575,31 @@ impl ResolvedImports {
         Ok(())
     }
 
+    /// Import `exit` from the C library when the image binds that library
+    /// and no binding for the name is in scope. The import takes a binding
+    /// index past the binding table, which no call site carries.
+    pub fn include_libc_exit(&mut self, program: &Program) {
+        let Some(dylib_index) = self.dylibs.iter().position(|d| d.name == "libc") else {
+            return;
+        };
+        if self.imports.iter().any(|i| i.local_name == "exit") {
+            return;
+        }
+        let bindings: usize = program.dylibs.iter().map(|d| d.bindings.len()).sum();
+        self.imports.push(ResolvedImport {
+            binding_idx: bindings as i64,
+            local_name: "exit".to_string(),
+            real_symbol: "exit".to_string(),
+            dylib_index,
+            flat_lookup: false,
+            kind: crate::c5::codegen::ImportKind::Function,
+            is_variadic: false,
+            fixed_args: 1,
+            return_type_tag: 0,
+            param_types: alloc::vec![super::token::Ty::Int as i64],
+        });
+    }
+
     /// Add a dylib no import references, for images that depend on a
     /// loader-resolved symbol outside the binding table. Prefers an
     /// in-scope `#pragma dylib` spec whose path contains `fragment`;
@@ -4502,21 +4527,6 @@ pub(crate) fn lower_for_with_prebuilt(
         Some(p) => ResolvedImports::resolve_with(program, &p.funcs)?,
         None => ResolvedImports::resolve(program)?,
     };
-    // Linux ELF's `_start` always tail-calls libc `exit` so glibc
-    // gets to flush stdio and run atexit before the kernel reaps us.
-    // The SSA walk only finds bindings the user's code calls --
-    // a `int main() { return 42; }` carries no call into `exit` --
-    // so force-include it here. Resolves through the same
-    // `program.dylibs` lookup as user-emitted bindings would, so a
-    // source that omits `<stdlib.h>` still gets the friendly
-    // "no `#pragma binding(... ::exit, ...)`" error.
-    // Linux ELF executables tail-call libc `exit` from
-    // `_start`; force-including the binding lets the writer
-    // emit the call even if user code never names it.
-    // Shared libraries skip this -- they have no `_start`,
-    // and pulling in an unused libc reference would surface
-    // a "no `#pragma binding(libc::exit, ...)`" error on
-    // sources that legitimately don't include `<stdlib.h>`.
     // A canary's failure branch names `__stack_chk_fail`, which only the
     // relocatable writer records a relocation for. Every path the driver
     // takes compiles to relocatable objects and links them; the single-TU
@@ -4573,24 +4583,22 @@ pub(crate) fn lower_for_with_prebuilt(
         ));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
-    // Only force-include libc `exit` when the user
-    // already declared a binding for it (typically via
-    // `#include <stdlib.h>`). When no `exit` binding is in
-    // scope, the ELF `_start` stub falls back to a direct
-    // `sys_exit_group` syscall and the resulting binary has no
-    // libc dependency at all -- so trivial fixtures like
-    // `int main() { return argc; }` compile without any header
-    // include.
+    // C99 5.1.2.2.3: returning from `main` calls `exit`, which flushes
+    // the streams (7.20.4.3p4). The ELF `_start` stub calls libc's `exit`
+    // when an `exit` binding is in scope or the image binds the C library
+    // already; an image with neither ends in `sys_exit_group` and has no
+    // libc dependency.
     let exit_binding_in_scope = program
         .dylibs
         .iter()
         .flat_map(|d| d.bindings.iter())
         .any(|b| b.local_name == "exit");
-    if !is_shared
-        && matches!(target, Target::LinuxAarch64 | Target::LinuxX64)
-        && exit_binding_in_scope
-    {
-        imports.force_include_by_name("exit", program)?;
+    if !is_shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+        if exit_binding_in_scope {
+            imports.force_include_by_name("exit", program)?;
+        } else if options.output_kind == OutputKind::Executable {
+            imports.include_libc_exit(program);
+        }
     }
     // macOS arm64 `_Thread_local`: each TLV descriptor's getter slot
     // is bound to libSystem's `__tlv_bootstrap` by dylib ordinal, so

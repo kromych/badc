@@ -265,6 +265,28 @@ fn recursion_factorial() {
     assert_eq!(build_and_run(src, "fact"), 120);
 }
 
+/// C99 5.1.2.2.3: a return from `main` calls `exit`, which flushes the
+/// streams. The unit declares no `exit`, and its stdout is a pipe, so
+/// `puts` buffers the line until then.
+#[test]
+fn main_return_flushes_stdout() {
+    let src = "#include <stdio.h>\nint main(void) { puts(\"flushed\"); return 3; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit");
+    let path = super::unique_temp_path("badc-elf-x64-flush", "run", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "flushed\n");
+}
+
 #[test]
 fn printf_through_libc_got() {
     let src = r#"int main() { printf("%d\n", 42); return 0; }"#;

@@ -34,18 +34,20 @@
 // the call regardless of inline / dllimport tagging -- so they
 // expand to nothing. `__declspec(...)` swallows its argument
 // list; `__forceinline` / `__inline` collapse to nothing.
-// Win32 TCHAR-aware string macros. Real headers expand these to
-// `L"..."` under `UNICODE`; we treat them as no-ops because c5's
-// runtime always reaches for the ANSI-flavoured calls. The
-// matching `LoadLibrary` / `GetModuleHandle` / etc. macros pick
-// the `A` suffix variant. `_T` and `_TEXT` are <tchar.h>'s.
-#define __TEXT(x) x
-#define TEXT(x) x
-// Generic-text character type. c5 reaches for the ANSI-flavoured calls, so
-// TCHAR is `char` unless the program opts into UNICODE.
-#define LoadLibrary LoadLibraryA
-#define GetModuleHandle GetModuleHandleA
-#define GetSystemDirectory GetSystemDirectoryA
+// UNICODE selects the W form of each generic Win32 name and a wide TEXT
+// literal, as mingw-w64's winnt.h and _mingw_unicode.h do; the generic
+// names are defined at the end of this header. `_T` / `_TEXT` are
+// <tchar.h>'s, keyed on _UNICODE.
+#ifdef UNICODE
+#define __TEXT(quote) L##quote
+#define __MINGW_NAME_AW(func) func##W
+#define __MINGW_TYPEDEF_AW(type) typedef type##W type;
+#else
+#define __TEXT(quote) quote
+#define __MINGW_NAME_AW(func) func##A
+#define __MINGW_TYPEDEF_AW(type) typedef type##A type;
+#endif
+#define TEXT(quote) __TEXT(quote)
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
@@ -315,11 +317,6 @@ typedef enum {
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
-// SearchPathA is the canonical kernel32 entry; the unsuffixed
-// `SearchPath` spelling lets source compiled against `<windows.h>`
-// pick up the same binding through the `#define SearchPath
-// SearchPathA` alias below.
-#pragma binding(kernel32::SearchPath,              "SearchPathA")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
@@ -369,6 +366,7 @@ typedef enum {
 #pragma binding(kernel32::SleepConditionVariableCS,    "SleepConditionVariableCS")
 #pragma binding(kernel32::WakeConditionVariable,       "WakeConditionVariable")
 #pragma binding(kernel32::WakeAllConditionVariable,    "WakeAllConditionVariable")
+#pragma binding(kernel32::CreateSemaphoreA,            "CreateSemaphoreA")
 #pragma binding(kernel32::CreateSemaphoreW,            "CreateSemaphoreW")
 #pragma binding(kernel32::ReleaseSemaphore,            "ReleaseSemaphore")
 #pragma binding(kernel32::GetCurrentThread,            "GetCurrentThread")
@@ -484,6 +482,7 @@ typedef enum {
 #pragma binding(kernel32::DeleteProcThreadAttributeList, "DeleteProcThreadAttributeList")
 // Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
 #pragma binding(advapi32::OpenProcessToken,            "OpenProcessToken")
+#pragma binding(advapi32::LookupPrivilegeValueA,       "LookupPrivilegeValueA")
 #pragma binding(advapi32::LookupPrivilegeValueW,       "LookupPrivilegeValueW")
 #pragma binding(advapi32::AdjustTokenPrivileges,       "AdjustTokenPrivileges")
 
@@ -830,6 +829,21 @@ typedef struct _OSVERSIONINFOEXW {
 } OSVERSIONINFOEXW;
 typedef struct _OSVERSIONINFOEXW *LPOSVERSIONINFOEXW;
 typedef struct _OSVERSIONINFOEXW *POSVERSIONINFOEXW;
+typedef struct _OSVERSIONINFOEXA {
+    DWORD          dwOSVersionInfoSize;
+    DWORD          dwMajorVersion;
+    DWORD          dwMinorVersion;
+    DWORD          dwBuildNumber;
+    DWORD          dwPlatformId;
+    CHAR           szCSDVersion[128];
+    WORD           wServicePackMajor;
+    WORD           wServicePackMinor;
+    WORD           wSuiteMask;
+    unsigned char  wProductType;
+    unsigned char  wReserved;
+} OSVERSIONINFOEXA;
+typedef struct _OSVERSIONINFOEXA *LPOSVERSIONINFOEXA;
+typedef struct _OSVERSIONINFOEXA *POSVERSIONINFOEXA;
 
 // OSVERSIONINFOA / OSVERSIONINFOW -- a program reads `dwPlatformId`
 // out of the struct after a `GetVersionEx*` call. The other fields
@@ -862,15 +876,6 @@ struct _OSVERSIONINFOW {
 typedef struct _OSVERSIONINFOW OSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *LPOSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
-
-// Generic OSVERSIONINFO* names resolve to the W variant (winbase.h
-// under UNICODE), matching the rest of this header's A/W convention.
-typedef OSVERSIONINFOW OSVERSIONINFO;
-typedef OSVERSIONINFOW *LPOSVERSIONINFO;
-typedef OSVERSIONINFOW *POSVERSIONINFO;
-typedef OSVERSIONINFOEXW OSVERSIONINFOEX;
-typedef OSVERSIONINFOEXW *LPOSVERSIONINFOEX;
-typedef OSVERSIONINFOEXW *POSVERSIONINFOEX;
 
 #define VER_PLATFORM_WIN32s         0
 #define VER_PLATFORM_WIN32_WINDOWS  1
@@ -1068,7 +1073,6 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define VOLUME_NAME_NONE               0x4
 #define FILE_NAME_NORMALIZED           0x0
 #define FILE_NAME_OPENED               0x8
-#define CreateEvent CreateEventA
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #define CT_CTYPE1          1
 #define CT_CTYPE2          2
@@ -1477,10 +1481,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define COPYFILE2_PROGRESS_QUIET           3
 #define COPYFILE2_PROGRESS_PAUSE           4
 
-// UNICODE name mapping for the privilege-lookup call and its name string
-// (winbase.h / winnt.h). Source uses the bare spelling under UNICODE.
-#define LookupPrivilegeValue LookupPrivilegeValueW
-#define SE_RESTORE_NAME L"SeRestorePrivilege"
+#define SE_RESTORE_NAME TEXT("SeRestorePrivilege")
 
 // Exception status codes (winnt.h) and their exception-record aliases
 // (minwinbase.h).
@@ -2068,7 +2069,8 @@ VOID WakeConditionVariable(PCONDITION_VARIABLE ConditionVariable);
 VOID WakeAllConditionVariable(PCONDITION_VARIABLE ConditionVariable);
 HANDLE CreateSemaphoreW(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount,
                         LONG lMaximumCount, LPCWSTR lpName);
-#define CreateSemaphore CreateSemaphoreW
+HANDLE CreateSemaphoreA(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount,
+                        LONG lMaximumCount, LPCSTR lpName);
 BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPreviousCount);
 HANDLE GetCurrentThread(VOID);
 BOOL GetProcessTimes(HANDLE hProcess, LPFILETIME lpCreationTime, LPFILETIME lpExitTime,
@@ -2125,15 +2127,6 @@ BOOL GetStringTypeExA(LCID Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc
                       LPWORD lpCharType);
 BOOL GetStringTypeExW(LCID Locale, DWORD dwInfoType, LPCWCH lpSrcStr, int cchSrc,
                       LPWORD lpCharType);
-#ifdef UNICODE
-#define CompareString   CompareStringW
-#define FoldString      FoldStringW
-#define GetStringTypeEx GetStringTypeExW
-#else
-#define CompareString   CompareStringA
-#define FoldString      FoldStringA
-#define GetStringTypeEx GetStringTypeExA
-#endif
 #define NORM_IGNORECASE            0x00000001
 #define NORM_IGNORENONSPACE        0x00000002
 #define NORM_IGNORESYMBOLS         0x00000004
@@ -2219,7 +2212,6 @@ BOOLEAN CreateSymbolicLinkW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName,
                             DWORD dwFlags);
 BOOL MoveFileExW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags);
 BOOL MoveFileExA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, DWORD dwFlags);
-#define MoveFileEx MoveFileExA
 BOOL SetEnvironmentVariableW(LPCWSTR lpName, LPCWSTR lpValue);
 UINT GetDriveTypeW(LPCWSTR lpRootPathName);
 BOOL GetDiskFreeSpaceExW(LPCWSTR lpDirectoryName,
@@ -2289,15 +2281,6 @@ BOOL ReportEventA(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
 BOOL ReportEventW(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
                   PSID lpUserSid, WORD wNumStrings, DWORD dwDataSize, LPCWSTR *lpStrings,
                   LPVOID lpRawData);
-#ifdef UNICODE
-#define RegDeleteTree       RegDeleteTreeW
-#define RegisterEventSource RegisterEventSourceW
-#define ReportEvent         ReportEventW
-#else
-#define RegDeleteTree       RegDeleteTreeA
-#define RegisterEventSource RegisterEventSourceA
-#define ReportEvent         ReportEventA
-#endif
 #define EVENTLOG_SEQUENTIAL_READ       0x0001
 #define EVENTLOG_SEEK_READ             0x0002
 #define EVENTLOG_FORWARDS_READ         0x0004
@@ -2386,6 +2369,7 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetTickCount,            "GetTickCount")
 #pragma binding(kernel32::GetVersionExA,           "GetVersionExA")
 #pragma binding(kernel32::GetVersionExW,           "GetVersionExW")
+#pragma binding(kernel32::VerifyVersionInfoA,      "VerifyVersionInfoA")
 #pragma binding(kernel32::VerifyVersionInfoW,      "VerifyVersionInfoW")
 #pragma binding(kernel32::VerSetConditionMask,     "VerSetConditionMask")
 #pragma binding(kernel32::GetComputerNameExW,      "GetComputerNameExW")
@@ -2609,11 +2593,11 @@ DWORD GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
 DWORD GetTickCount(VOID);
 BOOL GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
 BOOL GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
-#define GetVersionEx GetVersionExW
+BOOL VerifyVersionInfoA(LPOSVERSIONINFOEXA lpVersionInformation, DWORD dwTypeMask,
+                        DWORDLONG dwlConditionMask);
 BOOL VerifyVersionInfoW(LPOSVERSIONINFOEXW lpVersionInformation, DWORD dwTypeMask,
                         DWORDLONG dwlConditionMask);
 ULONGLONG VerSetConditionMask(ULONGLONG ConditionMask, ULONG TypeMask, UCHAR Condition);
-#define VerifyVersionInfo VerifyVersionInfoW
 BOOL GetComputerNameExW(COMPUTER_NAME_FORMAT NameType, LPWSTR lpBuffer, LPDWORD nSize);
 LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
 SIZE_T HeapCompact(HANDLE hHeap, DWORD dwFlags);
@@ -2749,8 +2733,6 @@ DWORD ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
 DWORD ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 DWORD SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                   DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
-DWORD SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
-                 DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
 DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize);
 DWORD SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                   DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart);
@@ -2887,6 +2869,7 @@ VOID DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList)
 
 // Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
 BOOL OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
+BOOL LookupPrivilegeValueA(LPCSTR lpSystemName, LPCSTR lpName, PLUID lpLuid);
 BOOL LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
 BOOL AdjustTokenPrivileges(HANDLE TokenHandle, BOOL DisableAllPrivileges,
                            PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
@@ -3389,6 +3372,8 @@ typedef struct _IMAGE_RESOURCE_DATA_ENTRY {
 #define RGB(r, g, b) \
     ((COLORREF)(((BYTE)(r)) | (((WORD)((BYTE)(g))) << 8) | (((DWORD)(BYTE)(b)) << 16)))
 #define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
+#define MAKEINTRESOURCEW(i) ((LPWSTR)((ULONG_PTR)((WORD)(i))))
+#define MAKEINTRESOURCE __MINGW_NAME_AW(MAKEINTRESOURCE)
 
 struct tagPOINT { LONG x; LONG y; };
 typedef struct tagPOINT POINT;
@@ -3525,7 +3510,6 @@ typedef struct tagMONITORINFOEXA {
     DWORD dwFlags;
     char  szDevice[CCHDEVICENAME];
 } MONITORINFOEXA, *LPMONITORINFOEXA;
-#define MONITORINFOEX MONITORINFOEXW
 
 struct _DISPLAY_DEVICEA {
     DWORD cb;
@@ -3901,7 +3885,7 @@ typedef struct {
 #define LR_SHARED 0x00008000
 #endif
 #ifndef IDI_APPLICATION
-#define IDI_APPLICATION ((LPCSTR)(ULONG_PTR)32512)
+#define IDI_APPLICATION MAKEINTRESOURCE(32512)
 #endif
 #ifndef MONITORINFOF_PRIMARY
 #define MONITORINFOF_PRIMARY 0x00000001
@@ -4115,7 +4099,7 @@ typedef struct {
 #define RIM_TYPEMOUSE   0
 #define MONITOR_DEFAULTTOPRIMARY 0x00000001
 #define WHEEL_DELTA     120
-#define IDC_ARROW       MAKEINTRESOURCEA(32512)
+#define IDC_ARROW       MAKEINTRESOURCE(32512)
 #define OCR_NORMAL      32512
 #define OCR_IBEAM       32513
 #define OCR_CROSS       32515
@@ -4205,6 +4189,7 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::GetUpdateRect,              "GetUpdateRect")
 #pragma binding(user32::GetUpdateRgn,               "GetUpdateRgn")
 #pragma binding(user32::GetWindowLongA,             "GetWindowLongA")
+#pragma binding(user32::GetWindowLongPtrA,          "GetWindowLongPtrA")
 #pragma binding(user32::GetWindowLongPtrW,          "GetWindowLongPtrW")
 #pragma binding(user32::GetWindowLongW,             "GetWindowLongW")
 #pragma binding(user32::GetWindowPlacement,         "GetWindowPlacement")
@@ -4214,7 +4199,9 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::IsZoomed,                   "IsZoomed")
 #pragma binding(user32::KillTimer,                  "KillTimer")
 #pragma binding(user32::LoadCursorA,                "LoadCursorA")
+#pragma binding(user32::LoadCursorW,                "LoadCursorW")
 #pragma binding(user32::LoadIconA,                  "LoadIconA")
+#pragma binding(user32::LoadIconW,                  "LoadIconW")
 #pragma binding(user32::LoadImageA,                 "LoadImageA")
 #pragma binding(user32::MapVirtualKeyA,             "MapVirtualKeyA")
 #pragma binding(user32::MapVirtualKeyW,             "MapVirtualKeyW")
@@ -4224,6 +4211,7 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::MsgWaitForMultipleObjects,  "MsgWaitForMultipleObjects")
 #pragma binding(user32::OpenClipboard,              "OpenClipboard")
 #pragma binding(user32::PeekMessageA,               "PeekMessageA")
+#pragma binding(user32::PostMessageA,               "PostMessageA")
 #pragma binding(user32::PostMessageW,               "PostMessageW")
 #pragma binding(user32::RegisterClassA,             "RegisterClassA")
 #pragma binding(user32::RegisterClassW,             "RegisterClassW")
@@ -4231,6 +4219,7 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::ReleaseDC,                  "ReleaseDC")
 #pragma binding(user32::RemovePropW,                "RemovePropW")
 #pragma binding(user32::ScreenToClient,             "ScreenToClient")
+#pragma binding(user32::SendMessageA,               "SendMessageA")
 #pragma binding(user32::SendMessageW,               "SendMessageW")
 #pragma binding(user32::SetClassLongPtrA,           "SetClassLongPtrA")
 #pragma binding(user32::SetClipboardData,           "SetClipboardData")
@@ -4243,6 +4232,7 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::SetPropW,                   "SetPropW")
 #pragma binding(user32::SetTimer,                   "SetTimer")
 #pragma binding(user32::SetWindowLongA,             "SetWindowLongA")
+#pragma binding(user32::SetWindowLongPtrA,          "SetWindowLongPtrA")
 #pragma binding(user32::SetWindowLongPtrW,          "SetWindowLongPtrW")
 #pragma binding(user32::SetWindowLongW,             "SetWindowLongW")
 #pragma binding(user32::SetWindowPos,               "SetWindowPos")
@@ -4254,10 +4244,6 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::TranslateMessage,           "TranslateMessage")
 #define CreateWindowA(cls, name, style, x, y, w, h, parent, menu, inst, param) \
     CreateWindowExA(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
-#define LoadCursor    LoadCursorA
-#define MapVirtualKey MapVirtualKeyA
-#define GetWindowLong GetWindowLongA
-#define SetWindowLong SetWindowLongA
 HWND CreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
                      DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
@@ -4271,18 +4257,6 @@ HWND CreateWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 ATOM RegisterClassW(const WNDCLASSW *lpWndClass);
 LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-#ifndef SendMessage
-#define SendMessage SendMessageW
-#endif
-#ifndef PostMessage
-#define PostMessage PostMessageW
-#endif
-#ifndef GetWindowLongPtr
-#define GetWindowLongPtr GetWindowLongPtrW
-#endif
-#ifndef LoadIcon
-#define LoadIcon LoadIconA
-#endif
 HANDLE GetPropW(HWND hWnd, LPCWSTR lpString);
 BOOL SetPropW(HWND hWnd, LPCWSTR lpString, HANDLE hData);
 HANDLE RemovePropW(HWND hWnd, LPCWSTR lpString);
@@ -4387,10 +4361,14 @@ BOOL FlashWindowEx(PFLASHWINFO pfwi);
 BOOL GetMonitorInfoW(HMONITOR hMonitor, LPMONITORINFO lpmi);
 BOOL IsZoomed(HWND hWnd);
 HICON LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
+HICON LoadIconW(HINSTANCE hInstance, LPCWSTR lpIconName);
 HANDLE LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy, UINT fuLoad);
+LONG_PTR GetWindowLongPtrA(HWND hWnd, int nIndex);
 LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
+LONG_PTR SetWindowLongPtrA(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 BOOL SetWindowTextW(HWND hWnd, LPCWSTR lpString);
+LRESULT SendMessageA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 HWND SetFocus(HWND hWnd);
 BOOL SetForegroundWindow(HWND hWnd);
@@ -4418,10 +4396,12 @@ BOOL PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax
                   UINT wRemoveMsg);
 BOOL TranslateMessage(const MSG *lpMsg);
 LRESULT DispatchMessageA(const MSG *lpMsg);
+BOOL PostMessageA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 BOOL PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 DWORD MsgWaitForMultipleObjects(DWORD nCount, const HANDLE *pHandles, BOOL fWaitAll,
                                 DWORD dwMilliseconds, DWORD dwWakeMask);
 HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName);
+HCURSOR LoadCursorW(HINSTANCE hInstance, LPCWSTR lpCursorName);
 SHORT GetKeyState(int nVirtKey);
 int GetKeyNameTextA(LONG lParam, LPSTR lpString, int cchSize);
 UINT MapVirtualKeyA(UINT uCode, UINT uMapType);
@@ -4519,5 +4499,93 @@ PROC wglGetProcAddress(LPCSTR lpszProc);
 HDC wglGetCurrentDC(VOID);
 HGLRC wglGetCurrentContext(VOID);
 BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
+
+
+// The generic names of the A / W pairs above, as mingw-w64's headers map them.
+#define CompareString __MINGW_NAME_AW(CompareString)
+#define CreateDirectory __MINGW_NAME_AW(CreateDirectory)
+#define CreateEvent __MINGW_NAME_AW(CreateEvent)
+#define CreateFile __MINGW_NAME_AW(CreateFile)
+#define CreateFileTransacted __MINGW_NAME_AW(CreateFileTransacted)
+#define CreateMutex __MINGW_NAME_AW(CreateMutex)
+#define CreateProcess __MINGW_NAME_AW(CreateProcess)
+#define CreateSemaphore __MINGW_NAME_AW(CreateSemaphore)
+#define CreateWindow __MINGW_NAME_AW(CreateWindow)
+#define CreateWindowEx __MINGW_NAME_AW(CreateWindowEx)
+#define DefWindowProc __MINGW_NAME_AW(DefWindowProc)
+#define DeleteFile __MINGW_NAME_AW(DeleteFile)
+#define EnumDisplayDevices __MINGW_NAME_AW(EnumDisplayDevices)
+#define ExpandEnvironmentStrings __MINGW_NAME_AW(ExpandEnvironmentStrings)
+#define FillConsoleOutputCharacter __MINGW_NAME_AW(FillConsoleOutputCharacter)
+#define FindFirstFile __MINGW_NAME_AW(FindFirstFile)
+#define FindNextFile __MINGW_NAME_AW(FindNextFile)
+#define FoldString __MINGW_NAME_AW(FoldString)
+#define FormatMessage __MINGW_NAME_AW(FormatMessage)
+#define GetConsoleTitle __MINGW_NAME_AW(GetConsoleTitle)
+#define GetCurrentDirectory __MINGW_NAME_AW(GetCurrentDirectory)
+#define GetDiskFreeSpace __MINGW_NAME_AW(GetDiskFreeSpace)
+#define GetEnvironmentVariable __MINGW_NAME_AW(GetEnvironmentVariable)
+#define GetFileAttributes __MINGW_NAME_AW(GetFileAttributes)
+#define GetFullPathName __MINGW_NAME_AW(GetFullPathName)
+#define GetModuleFileName __MINGW_NAME_AW(GetModuleFileName)
+#define GetModuleHandle __MINGW_NAME_AW(GetModuleHandle)
+#define GetMonitorInfo __MINGW_NAME_AW(GetMonitorInfo)
+#define GetRawInputDeviceInfo __MINGW_NAME_AW(GetRawInputDeviceInfo)
+#define GetStringTypeEx __MINGW_NAME_AW(GetStringTypeEx)
+#define GetSystemDirectory __MINGW_NAME_AW(GetSystemDirectory)
+#define GetTempFileName __MINGW_NAME_AW(GetTempFileName)
+#define GetTempPath __MINGW_NAME_AW(GetTempPath)
+#define GetVersionEx __MINGW_NAME_AW(GetVersionEx)
+#define GetWindowLong __MINGW_NAME_AW(GetWindowLong)
+#define GetWindowLongPtr __MINGW_NAME_AW(GetWindowLongPtr)
+#define GetWindowsDirectory __MINGW_NAME_AW(GetWindowsDirectory)
+#define LoadCursor __MINGW_NAME_AW(LoadCursor)
+#define LoadIcon __MINGW_NAME_AW(LoadIcon)
+#define LoadLibrary __MINGW_NAME_AW(LoadLibrary)
+#define LoadLibraryEx __MINGW_NAME_AW(LoadLibraryEx)
+#define LookupPrivilegeValue __MINGW_NAME_AW(LookupPrivilegeValue)
+#define MapVirtualKey __MINGW_NAME_AW(MapVirtualKey)
+#define MoveFileEx __MINGW_NAME_AW(MoveFileEx)
+#define OpenEvent __MINGW_NAME_AW(OpenEvent)
+#define OutputDebugString __MINGW_NAME_AW(OutputDebugString)
+#define PeekConsoleInput __MINGW_NAME_AW(PeekConsoleInput)
+#define PostMessage __MINGW_NAME_AW(PostMessage)
+#define ReadConsole __MINGW_NAME_AW(ReadConsole)
+#define ReadConsoleInput __MINGW_NAME_AW(ReadConsoleInput)
+#define RegDeleteTree __MINGW_NAME_AW(RegDeleteTree)
+#define RegisterClass __MINGW_NAME_AW(RegisterClass)
+#define RegisterEventSource __MINGW_NAME_AW(RegisterEventSource)
+#define RemoveDirectory __MINGW_NAME_AW(RemoveDirectory)
+#define ReportEvent __MINGW_NAME_AW(ReportEvent)
+#define ScrollConsoleScreenBuffer __MINGW_NAME_AW(ScrollConsoleScreenBuffer)
+#define SearchPath __MINGW_NAME_AW(SearchPath)
+#define SendMessage __MINGW_NAME_AW(SendMessage)
+#define SetConsoleTitle __MINGW_NAME_AW(SetConsoleTitle)
+#define SetCurrentDirectory __MINGW_NAME_AW(SetCurrentDirectory)
+#define SetFileAttributes __MINGW_NAME_AW(SetFileAttributes)
+#define SetWindowLong __MINGW_NAME_AW(SetWindowLong)
+#define SetWindowLongPtr __MINGW_NAME_AW(SetWindowLongPtr)
+#define SetWindowText __MINGW_NAME_AW(SetWindowText)
+#define VerifyVersionInfo __MINGW_NAME_AW(VerifyVersionInfo)
+#define WriteConsole __MINGW_NAME_AW(WriteConsole)
+#define WriteConsoleInput __MINGW_NAME_AW(WriteConsoleInput)
+#define lstrcpy __MINGW_NAME_AW(lstrcpy)
+__MINGW_TYPEDEF_AW(DISPLAY_DEVICE)
+__MINGW_TYPEDEF_AW(PDISPLAY_DEVICE)
+__MINGW_TYPEDEF_AW(MONITORINFOEX)
+__MINGW_TYPEDEF_AW(LPMONITORINFOEX)
+__MINGW_TYPEDEF_AW(OSVERSIONINFO)
+__MINGW_TYPEDEF_AW(POSVERSIONINFO)
+__MINGW_TYPEDEF_AW(LPOSVERSIONINFO)
+__MINGW_TYPEDEF_AW(OSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(POSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(LPOSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(STARTUPINFO)
+__MINGW_TYPEDEF_AW(LPSTARTUPINFO)
+__MINGW_TYPEDEF_AW(WIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(PWIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(LPWIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(WNDCLASS)
+__MINGW_TYPEDEF_AW(LPWNDCLASS)
 
 #endif

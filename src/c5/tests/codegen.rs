@@ -1443,6 +1443,122 @@ fn windows_event_log_registry_tree_and_crt_wide_calls_compile_silently() {
     }
 }
 
+/// A generic Win32 name selects the W form under `UNICODE` and the A form
+/// otherwise, as mingw-w64's `__MINGW_NAME_AW` / `__MINGW_TYPEDEF_AW` do:
+/// each function imports its suffixed entry point, each type is its
+/// suffixed struct, and `TEXT` / `MAKEINTRESOURCE` follow.
+#[test]
+fn windows_generic_names_follow_unicode() {
+    const K: &str = "kernel32.dll";
+    const U: &str = "user32.dll";
+    const A: &str = "advapi32.dll";
+    let functions = [
+        ("CompareString", K),
+        ("CreateDirectory", K),
+        ("CreateEvent", K),
+        ("CreateFile", K),
+        ("CreateFileTransacted", K),
+        ("CreateMutex", K),
+        ("CreateProcess", K),
+        ("CreateSemaphore", K),
+        ("DeleteFile", K),
+        ("ExpandEnvironmentStrings", K),
+        ("FillConsoleOutputCharacter", K),
+        ("FindFirstFile", K),
+        ("FindNextFile", K),
+        ("FoldString", K),
+        ("FormatMessage", K),
+        ("GetConsoleTitle", K),
+        ("GetCurrentDirectory", K),
+        ("GetDiskFreeSpace", K),
+        ("GetEnvironmentVariable", K),
+        ("GetFileAttributes", K),
+        ("GetFullPathName", K),
+        ("GetModuleFileName", K),
+        ("GetModuleHandle", K),
+        ("GetStringTypeEx", K),
+        ("GetSystemDirectory", K),
+        ("GetTempFileName", K),
+        ("GetTempPath", K),
+        ("GetVersionEx", K),
+        ("GetWindowsDirectory", K),
+        ("LoadLibrary", K),
+        ("LoadLibraryEx", K),
+        ("MoveFileEx", K),
+        ("OpenEvent", K),
+        ("OutputDebugString", K),
+        ("PeekConsoleInput", K),
+        ("ReadConsole", K),
+        ("ReadConsoleInput", K),
+        ("RemoveDirectory", K),
+        ("ScrollConsoleScreenBuffer", K),
+        ("SearchPath", K),
+        ("SetConsoleTitle", K),
+        ("SetCurrentDirectory", K),
+        ("SetFileAttributes", K),
+        ("VerifyVersionInfo", K),
+        ("WriteConsole", K),
+        ("WriteConsoleInput", K),
+        ("lstrcpy", K),
+        ("CreateWindowEx", U),
+        ("DefWindowProc", U),
+        ("EnumDisplayDevices", U),
+        ("GetMonitorInfo", U),
+        ("GetRawInputDeviceInfo", U),
+        ("GetWindowLong", U),
+        ("GetWindowLongPtr", U),
+        ("LoadCursor", U),
+        ("LoadIcon", U),
+        ("MapVirtualKey", U),
+        ("PostMessage", U),
+        ("RegisterClass", U),
+        ("SendMessage", U),
+        ("SetWindowLong", U),
+        ("SetWindowLongPtr", U),
+        ("SetWindowText", U),
+        ("CryptAcquireContext", A),
+        ("LookupPrivilegeValue", A),
+        ("RegDeleteTree", A),
+        ("RegisterEventSource", A),
+        ("ReportEvent", A),
+    ];
+    let types = [
+        "DISPLAY_DEVICE",
+        "MONITORINFOEX",
+        "OSVERSIONINFO",
+        "OSVERSIONINFOEX",
+        "STARTUPINFO",
+        "WIN32_FIND_DATA",
+        "WNDCLASS",
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for (unicode, s, ch) in [("", "A", "CHAR"), ("#define UNICODE\n", "W", "WCHAR")] {
+            let mut src = alloc::format!(
+                "{unicode}#include <windows.h>\n#include <wincrypt.h>\n\
+                 _Static_assert(sizeof(TEXT(\"ab\")) == 3 * sizeof({ch}), \"\");\n\
+                 _Static_assert(sizeof(*MAKEINTRESOURCE(1)) == sizeof({ch}), \"\");\n\
+                 _Static_assert(sizeof(*IDC_ARROW) == sizeof({ch}), \"\");\n"
+            );
+            for t in types {
+                src += &alloc::format!("{t}{s} *{t}_probe = ({t} *)0;\n");
+            }
+            src += "typedef void (*fn)(void);\nstatic const fn used[] = {\n";
+            for (name, _) in &functions {
+                src += &alloc::format!("    (fn){name},\n");
+            }
+            src += "};\nint main(void) { return used[0] == 0; }\n";
+            let symbols: alloc::vec::Vec<String> = functions
+                .iter()
+                .map(|(n, _)| alloc::format!("{n}{s}"))
+                .collect();
+            let imports: alloc::vec::Vec<_> = (symbols.iter().zip(&functions))
+                .map(|(sym, (_, dll))| (sym.as_str(), *dll))
+                .collect();
+            assert_windows_unit_imports(target, &src, &imports);
+        }
+    }
+}
+
 /// `<stringapiset.h>` included alone declares the string comparison,
 /// folding, classification and conversion calls mingw-w64's declares, and
 /// the A forms its `<winnls.h>` adds, each imported from kernel32.dll; the

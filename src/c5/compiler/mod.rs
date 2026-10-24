@@ -38,6 +38,7 @@ mod sizeof_expr;
 mod stmt;
 mod type_layout;
 mod value_builtin;
+mod vla_bound;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 #[cfg(all(test, not(debug_assertions)))]
@@ -605,6 +606,8 @@ pub struct CompileOptions {
     /// single flag selects release semantics (optimization passes plus
     /// asserts compiled out). Explicit `-D` / `-U` flags override.
     pub optimize: bool,
+    /// `-Wvla-larger-than=N`, in bytes; see [`vla_bound`].
+    pub vla_larger_than: Option<u64>,
     /// `-fgnu89-inline` -- make [`InlineModel::Gnu89`] the unit's
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
@@ -832,6 +835,11 @@ impl CompileOptions {
     /// Enable the `-O` predefines. See [`Self::optimize`].
     pub fn with_optimize(mut self, on: bool) -> Self {
         self.optimize = on;
+        self
+    }
+    /// See [`Self::vla_larger_than`].
+    pub fn with_vla_larger_than(mut self, bound: Option<u64>) -> Self {
+        self.vla_larger_than = bound;
         self
     }
     /// Replace the `-I` include-search-path list.
@@ -2340,6 +2348,7 @@ pub struct Compiler {
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
+    vla_larger_than: Option<u64>,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
@@ -2997,6 +3006,7 @@ impl Compiler {
             fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
+            vla_larger_than: opts.vla_larger_than,
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89

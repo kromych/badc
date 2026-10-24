@@ -113,6 +113,8 @@ pub(crate) struct FrontEnd {
     /// before the pragmas in a translation unit apply.
     pub(crate) diag: badc::diag::Config,
     pub(crate) optimize: bool,
+    /// `-Wvla-larger-than=`, in bytes.
+    pub(crate) vla_larger_than: Option<u64>,
     /// The host's implicit system header directories, resolved against
     /// the target after parsing.
     pub(crate) system_include_paths: Vec<String>,
@@ -800,6 +802,19 @@ impl Parser {
                 self.codegen.frame_larger_than = Some(bound);
                 self.front.diag.set_level(
                     badc::diag::Code::FRAME_LARGER_THAN,
+                    badc::diag::Level::Warning,
+                );
+            }
+            s if s.starts_with("-Wvla-larger-than=") => {
+                let Some(bound) = byte_size(&s["-Wvla-larger-than=".len()..]) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}` takes a byte size: \
+                         -Wvla-larger-than=<n>[kB|KiB|MB|MiB|GB|GiB]"
+                    )));
+                };
+                self.front.vla_larger_than = Some(bound);
+                self.front.diag.set_level(
+                    badc::diag::Code::VLA_LARGER_THAN,
                     badc::diag::Level::Warning,
                 );
             }
@@ -2427,6 +2442,7 @@ impl FrontEnd {
             .with_no_builtin_fns(self.no_builtin_fns.clone())
             .with_gnu_dialect(self.gnu_dialect)
             .with_optimize(self.optimize)
+            .with_vla_larger_than(self.vla_larger_than)
             .with_defines(tu_defines(label, &self.defines))
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
@@ -2868,6 +2884,29 @@ mod tests {
     fn level(args: &[&str], sel: &str) -> badc::diag::Level {
         let code = badc::diag::Code::from_selector(sel).expect("a catalogue row");
         parse(args).front.diag.level(code)
+    }
+
+    #[test]
+    fn vla_larger_than_takes_a_byte_size_and_keeps_the_w_grammar() {
+        use badc::diag::Level;
+        let bound = |args: &[&str]| parse(args).front.vla_larger_than;
+        assert_eq!(bound(&["a.c"]), None);
+        assert_eq!(bound(&["-Wvla-larger-than=1", "a.c"]), Some(1));
+        assert_eq!(bound(&["-Wvla-larger-than=4KiB", "a.c"]), Some(4096));
+        let sel = "vla-larger-than";
+        assert_eq!(level(&["a.c"], sel), Level::Ignore);
+        assert_eq!(level(&["-Wvla-larger-than=1", "a.c"], sel), Level::Warning);
+        assert_eq!(
+            level(&["-Wvla-larger-than=1", "-Wno-vla-larger-than", "a.c"], sel),
+            Level::Ignore
+        );
+        assert_eq!(
+            level(
+                &["-Wvla-larger-than=1", "-Werror=vla-larger-than=", "a.c"],
+                sel
+            ),
+            Level::Error
+        );
     }
 
     #[test]

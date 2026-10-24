@@ -1734,6 +1734,7 @@ impl Compiler {
         let ptr_slot = self.reserve_slots(1);
         let size_slot = self.reserve_slots(1);
         let elem_size = self.size_of_type(elem_ty) as i64;
+        self.check_vla_bound(dim, elem_size as u64);
         let s = &mut self.symbols[loc_idx];
         s.is_vla = true;
         s.type_ = elem_ty;

@@ -6182,3 +6182,51 @@ fn implicit_fallthrough_reports_where_gcc_does() {
         assert_eq!(lines(&["all", "extra"]), Vec::<u32>::new());
     }
 }
+
+/// `-Wvla-larger-than=N` reports a variable-length array whose size the
+/// size expression does not bound by N bytes, under optimization, as gcc
+/// 16 -O2 reports the same declarations (measured). A signed size may be
+/// negative, so it bounds nothing.
+#[test]
+fn vla_larger_than_reports_the_arrays_gcc_does() {
+    let src = "void use(char *, ...);\n\
+               void a(int n) { char v[n]; use(v); }\n\
+               void b(unsigned char n) { char v[n]; use(v); }\n\
+               void d(int n) { int v[n][4]; use((char *)v); }\n\
+               void e(unsigned n) { char v[n % 8]; use(v); }\n\
+               void g(int n) { use(0, sizeof(char[n])); }\n\
+               void sc(signed char n) { char v[n]; use(v); }\n\
+               void sh(unsigned short n) { char v[n]; use(v); }\n\
+               void un(unsigned n) { char v[n]; use(v); }\n\
+               void an(unsigned n) { char v[n & 15]; use(v); }\n\
+               void tr(unsigned n) { char v[n > 4 ? 4 : n]; use(v); }\n\
+               void pl(unsigned char n) { char v[n + 1]; use(v); }\n\
+               void mu(unsigned char n) { int v[n]; use((char *)v); }\n\
+               void bo(_Bool n) { char v[n]; use(v); }\n\
+               int main(void) { return 0; }\n";
+    let lines = |bound: Option<u64>, optimize: bool| -> Vec<u32> {
+        let options = crate::CompileOptions::default()
+            .with_optimize(optimize)
+            .with_vla_larger_than(bound)
+            .with_diag(super::diag_config(&["vla-larger-than"]));
+        Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::VLA_LARGER_THAN)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    for (bound, want) in [
+        (1, &[2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13][..]),
+        (100, &[2, 3, 4, 7, 8, 9, 12, 13]),
+        (255, &[2, 4, 7, 8, 9, 12, 13]),
+        (300, &[2, 4, 7, 8, 9, 13]),
+        (70000, &[2, 4, 7, 9]),
+        (1 << 40, &[2, 4, 7]),
+    ] {
+        assert_eq!(lines(Some(bound), true), want, "-Wvla-larger-than={bound}");
+    }
+    assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
+}

@@ -580,10 +580,28 @@
 #define FP_NORMAL 4
 #endif
 
-// C99 7.12.3.1 / 7.12.3.6 / 7.12.11.1: classify, test the sign, and
-// copy the sign by inspecting the IEEE-754 binary64 fields directly,
-// so they need no math-library call. copysignf reuses the double form;
-// a float magnitude widens to double exactly.
+// C99 7.12.3: the classification macros take any real floating type and
+// classify the value in its own type. Each dispatches on the argument's
+// size, as the macOS SDK does, to a form that inspects the IEEE-754
+// binary32 or binary64 fields directly, so none needs a library call. The
+// functions keep the macros' names so `(isnan)(x)` and `&isnan` still name
+// a callable, as the double form.
+static inline int __badc_fpclassifyf(float x) {
+    union {
+        float f;
+        unsigned int u;
+    } a;
+    a.f = x;
+    unsigned int exp = (a.u >> 23) & 0xff;
+    unsigned int man = a.u & 0x7fffff;
+    if (exp == 0) {
+        return man == 0 ? FP_ZERO : FP_SUBNORMAL;
+    }
+    if (exp == 0xff) {
+        return man == 0 ? FP_INFINITE : FP_NAN;
+    }
+    return FP_NORMAL;
+}
 static inline int fpclassify(double x) {
     union {
         double d;
@@ -600,17 +618,18 @@ static inline int fpclassify(double x) {
     }
     return FP_NORMAL;
 }
-// C99 7.12.3.4 / 7.12.3.3 / 7.12.3.2. Defined in terms of fpclassify so
-// they need no math-library call. A float argument widens to double
-// exactly, so the double form covers both.
-static inline int isnan(double x) {
-    return fpclassify(x) == FP_NAN;
+// TODO: classify in the long double format once long double values are
+// held in it; until then a long double value is a binary64 one.
+static inline int __badc_fpclassifyl(long double x) {
+    return fpclassify((double)x);
 }
-static inline int isinf(double x) {
-    return fpclassify(x) == FP_INFINITE;
-}
-static inline int isfinite(double x) {
-    return fpclassify(x) >= FP_ZERO;
+static inline int __badc_signbitf(float x) {
+    union {
+        float f;
+        unsigned int u;
+    } a;
+    a.f = x;
+    return (int)(a.u >> 31);
 }
 static inline int signbit(double x) {
     union {
@@ -620,6 +639,31 @@ static inline int signbit(double x) {
     a.d = x;
     return (int)(a.u >> 63);
 }
+static inline int __badc_signbitl(long double x) {
+    return signbit((double)x);
+}
+static inline int isnan(double x) {
+    return fpclassify(x) == FP_NAN;
+}
+static inline int isinf(double x) {
+    return fpclassify(x) == FP_INFINITE;
+}
+static inline int isfinite(double x) {
+    return fpclassify(x) >= FP_ZERO;
+}
+static inline int isnormal(double x) {
+    return fpclassify(x) == FP_NORMAL;
+}
+#define fpclassify(x) \
+    (sizeof(x) == sizeof(float) ? __badc_fpclassifyf(x) \
+     : sizeof(x) == sizeof(double) ? fpclassify(x) : __badc_fpclassifyl(x))
+#define isnan(x) (fpclassify(x) == FP_NAN)
+#define isinf(x) (fpclassify(x) == FP_INFINITE)
+#define isfinite(x) (fpclassify(x) >= FP_ZERO)
+#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+#define signbit(x) \
+    (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \
+     : sizeof(x) == sizeof(double) ? signbit(x) : __badc_signbitl(x))
 // C99 7.12.14 relational macros. The standard forms avoid the "invalid"
 // FP exception on a NaN operand; the emitted code does not raise that
 // exception, so the plain relational operators yield the same result
@@ -630,6 +674,8 @@ static inline int signbit(double x) {
 #define islessequal(x, y) ((x) <= (y))
 #define islessgreater(x, y) ((x) < (y) || (x) > (y))
 #define isunordered(x, y) (isnan(x) || isnan(y))
+// C99 7.12.11.1: copysign copies the sign bit; copysignf reuses the double
+// form, a float magnitude widening to double exactly.
 static inline double copysign(double x, double y) {
     union {
         double d;

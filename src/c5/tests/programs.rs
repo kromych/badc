@@ -4145,6 +4145,13 @@ fn enumerator_scopes_of_parameter_lists() {
 }
 
 #[test]
+fn array_typedef_pointer_casts() {
+    // C99 6.7.7p3: `(A3 *)` with `typedef int A3[3]` points to the row, in
+    // a static initializer's cast and compound literal too.
+    assert_eq!(run_fixture("array_typedef_pointer_casts.c"), 0);
+}
+
+#[test]
 fn designator_resumes_in_subobject() {
     // C99 6.7.8p17: a positional entry after `[i].m`, `.m.x` or `.a[i]`
     // takes the next subobject of the designated one's enclosing object;

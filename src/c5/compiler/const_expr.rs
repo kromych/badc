@@ -1187,6 +1187,24 @@ impl Compiler {
         ConstVal::Int { val, ty }
     }
 
+    /// A parenthesized constant expression, which may hold a comma operator
+    /// only where it is not evaluated (C99 6.6p3); its value is the right
+    /// operand's.
+    fn parse_const_expr_comma_val(&mut self) -> Result<ConstVal, C5Error> {
+        let mut v = self.parse_const_expr_cond_val()?;
+        while self.lex.tk == ',' {
+            if self.const_unevaluated == 0 {
+                return Err(self.compile_err(
+                    Code::CONSTANT_EXPRESSION,
+                    "a comma operator is evaluated in this constant expression",
+                ));
+            }
+            self.next()?;
+            v = self.parse_const_expr_cond_val()?;
+        }
+        Ok(v)
+    }
+
     /// Run `rule` with the unevaluated-operand depth raised when
     /// `unevaluated` holds, so C99 6.6p4 zero-divisor diagnostics
     /// stay scoped to evaluated operands.
@@ -2284,6 +2302,19 @@ impl Compiler {
         // Consumed as a type name, not bound through a declarator.
         self.pending.bare_function_type_declarator = false;
         let base_is_const = self.pending.base_is_const;
+        // C99 6.7.7p3: a pointer to an array typedef points to the array.
+        let (ty, folded) = if self.lex.tk == Token::MulOp {
+            let dims = self.take_typedef_literal_dims(0);
+            let folded = dims.len() as i64;
+            let ty = if dims.is_empty() {
+                ty
+            } else {
+                self.array_agg_type(ty, &dims)
+            };
+            (ty, folded)
+        } else {
+            (ty, 0)
+        };
         let ptr = self.consume_abstract_pointer(ty)?;
         let ptr_levels = ptr.levels;
         // The first `*` on a function-type typedef forms the pointer to the
@@ -2295,7 +2326,7 @@ impl Compiler {
         } else {
             ptr.ty
         };
-        let fn_ty = base_fn.map(|(f, d)| (f, d + ptr_levels - i64::from(absorbed)));
+        let fn_ty = base_fn.map(|(f, d)| (f, d + folded + ptr_levels - i64::from(absorbed)));
         // A `const` after the outermost `*` qualifies the object itself.
         let outer_const = ptr.outer_const;
         while self.lex.tk == Token::TypeQual {
@@ -2462,7 +2493,7 @@ impl Compiler {
                 return Ok(inner);
             }
             self.restore_init_checkpoint(cp);
-            let v = self.parse_const_expr_cond_val()?;
+            let v = self.parse_const_expr_comma_val()?;
             if self.lex.tk != ')' {
                 return Err(self.compile_err_at(
                     Code::SYNTAX,
@@ -3082,7 +3113,7 @@ impl Compiler {
                 }
                 return Ok(self.const_convert(v, target_ty));
             }
-            let v = self.parse_const_expr_cond_val()?;
+            let v = self.parse_const_expr_comma_val()?;
             if self.lex.tk != ')' {
                 return Err(
                     self.compile_err(Code::SYNTAX, "close paren expected in constant expression")

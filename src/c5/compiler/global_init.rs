@@ -638,6 +638,13 @@ impl Compiler {
             } else {
                 self.restore_lex(after_open);
                 self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
+                // C99 6.6p3: the evaluated comma of `(a, b)`.
+                if self.lex.tk == ',' {
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        "a comma operator is evaluated in this constant expression",
+                    ));
+                }
                 self.accept(')')?;
                 return Ok(true);
             }

@@ -3864,6 +3864,49 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn derived_type_spellings_agree_and_a_cast_names_no_array() {
+    // C99 6.7.7p3: a typedef's spelling and the abstract one denote the same
+    // pointer to an array of function pointers; 6.5.4p2: a cast names a
+    // scalar type, and 6.5.15p6 types `?:` by its non-null-constant arm.
+    let src = "typedef void (*fp)(void);\ntypedef fp arr4[4];\nextern arr4 *pa;\n\
+               extern void (*(*pa)[4])(void);\nvoid (*(*pb)[4])(void);\narr4 *pc = 0;\n\
+               struct T { int a; };\n\
+               int f(int c) { __typeof__(c ? (void *)0 : (struct T *)0) p = 0;\n\
+               struct T **q = &p; pb = pc; pc = pb; return q != 0; }\n\
+               int main(void) { return f(1) - 1; }\n";
+    assert_eq!(super::run_str(src), 0);
+    for src in [
+        "typedef int A[2]; int main(void) { int x[2]; (void)(A)x; return 0; }",
+        "int x[2]; int main(void) { (void)(int[2])x; return 0; }",
+    ] {
+        expect_compile_error(src, "cast specifies array type");
+    }
+}
+
+#[test]
+fn a_comma_operator_stands_in_an_unevaluated_constant_subexpression() {
+    // C99 6.6p3: a constant expression holds no comma operator except in a
+    // subexpression that is not evaluated.
+    for src in [
+        "enum { E = 1 ? 2 : (3, 4) }; int main(void) { return E - 2; }",
+        "int g = 0 ? (1, 2) : 3; int main(void) { return g - 3; }",
+        "int a[1 ? 2 : (3, 4)]; int main(void) { return sizeof a / sizeof a[0] - 2; }",
+        "int k = 1 || (2, 3); int main(void) { return k - 1; }",
+        "int main(void) { switch (2) { case 0 ? (1, 2) : 2: return 0; } return 1; }",
+    ] {
+        assert_eq!(super::run_str(src), 0, "{src}");
+    }
+    for src in [
+        "enum { F = (3, 4) }; int main(void) { return F; }",
+        "int h = (1, 2); int main(void) { return h; }",
+        "int main(void) { static int h = (1, 2); return h; }",
+        "int h[] = { (1, 2) }; int main(void) { return h[0]; }",
+    ] {
+        expect_compile_error(src, "a comma operator is evaluated");
+    }
+}
+
+#[test]
 fn every_conversion_to_a_pointer_takes_the_same_null_pointer_constants() {
     // C99 6.3.2.3p3 with 6.6p6: an integer constant expression of value 0,
     // whatever its spelling, converts to a pointer in an assignment, an

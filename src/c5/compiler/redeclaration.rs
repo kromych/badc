@@ -9,11 +9,12 @@ use alloc::vec::Vec;
 use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
+use super::super::symbol::FnType;
 use super::super::token::Ty;
 use super::Compiler;
 use super::function::{ParamForm, ParsedParams};
 use super::types::{
-    VOL_LVL_MASK, VOLATILE_MASK, format_signature, format_type, is_void_ty,
+    VOL_LVL_MASK, VOLATILE_MASK, fn_type_spelling, format_signature, format_type, is_void_ty,
     rebase_enum_placeholder, strip_object_const, strip_unsigned, unqualified_version_ty,
 };
 
@@ -33,11 +34,16 @@ impl Spelled {
     }
 }
 
-/// A function type's parameter information (C99 6.7.5.3p14), by [`ParamForm`].
+/// The function type a type leads to and the pointer levels above it,
+/// which its tag does not spell.
+pub(super) type FnSig = Option<(FnType, i64)>;
+
+/// A function type's parameter information (C99 6.7.5.3p14), by [`ParamForm`];
+/// a prototype keeps the function types its parameters lead to.
 #[derive(Clone, Debug)]
 pub(super) enum Params {
     Unspecified,
-    Prototype(Vec<Spelled>, bool),
+    Prototype(Vec<Spelled>, bool, Vec<(usize, FnType, i64)>),
     IdentifierList(Vec<Spelled>),
 }
 
@@ -47,7 +53,9 @@ impl Params {
         match params.form {
             ParamForm::Empty if !defining => Params::Unspecified,
             ParamForm::Empty | ParamForm::IdentifierList => Params::IdentifierList(types),
-            ParamForm::Prototype => Params::Prototype(types, params.is_variadic),
+            ParamForm::Prototype => {
+                Params::Prototype(types, params.is_variadic, params.fn_types.clone())
+            }
         }
     }
 
@@ -62,17 +70,19 @@ impl Params {
 }
 
 /// The type one declaration gives an identifier with linkage: an object's
-/// type and bounds (outermost first, `-1` unspecified), or a function's, with
-/// the calling convention an attribute named.
+/// type, bounds (outermost first, `-1` unspecified) and the function type it
+/// leads to, or a function's, with the calling convention an attribute named
+/// and the function type its result leads to.
 #[derive(Clone, Debug)]
 pub(super) enum DeclaredType {
-    Object(Spelled, Vec<i64>),
-    Function(Spelled, Params, Option<CallConv>),
+    Object(Spelled, Vec<i64>, FnSig),
+    Function(Spelled, Params, Option<CallConv>, FnSig),
 }
 
 /// What a function definition adds to its type: its line and its GNU forms.
 pub(super) struct Definition {
     pub(super) ret: Spelled,
+    pub(super) ret_fn: FnSig,
     pub(super) conv: Option<CallConv>,
     pub(super) line: usize,
     pub(super) implicit_int: bool,
@@ -113,13 +123,13 @@ fn promoted(ty: i64) -> i64 {
 
 fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
     match (prior, new) {
-        (DeclaredType::Object(ty, a), DeclaredType::Object(_, b)) => {
+        (DeclaredType::Object(ty, a, f), DeclaredType::Object(_, b, g)) => {
             let bounds = a.iter().zip(&b).map(|(&x, &y)| if x < 0 { y } else { x });
-            DeclaredType::Object(ty, bounds.collect())
+            DeclaredType::Object(ty, bounds.collect(), f.or(g))
         }
-        (DeclaredType::Function(ret, p, c), DeclaredType::Function(_, q, d)) => {
+        (DeclaredType::Function(ret, p, c, f), DeclaredType::Function(_, q, d, g)) => {
             let params = if q.rank() > p.rank() { q } else { p };
-            DeclaredType::Function(ret, params, c.or(d))
+            DeclaredType::Function(ret, params, c.or(d), f.or(g))
         }
         (prior, _) => prior,
     }
@@ -136,7 +146,7 @@ impl Compiler {
         line: usize,
     ) -> Result<(CallConv, bool), C5Error> {
         let earlier = match self.linked(idx).map(|e| &e.ty) {
-            Some(DeclaredType::Function(.., c)) => *c,
+            Some(DeclaredType::Function(_, _, c, _)) => *c,
             _ => return Ok((named.unwrap_or_default(), named.is_some())),
         };
         let conv = earlier.unwrap_or_default();
@@ -177,7 +187,7 @@ impl Compiler {
         def: Definition,
         params: Params,
     ) -> Result<(), C5Error> {
-        let new = DeclaredType::Function(def.ret, params, def.conv);
+        let new = DeclaredType::Function(def.ret, params, def.conv, def.ret_fn);
         self.fold_linked(idx, new, def.line, def.implicit_int, false)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
@@ -215,7 +225,7 @@ impl Compiler {
     /// argument promotions (6.5.2.2p6).
     pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
         match self.linked(idx).map(|e| &e.ty) {
-            Some(DeclaredType::Function(_, Params::Prototype(t, false), _))
+            Some(DeclaredType::Function(_, Params::Prototype(t, false, _), ..))
                 if t.len() == declared.len() =>
             {
                 t.iter().map(|s| self.spelled_ty(*s)).collect()
@@ -230,7 +240,7 @@ impl Compiler {
         !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
             || matches!(
                 self.linked(idx).map(|e| &e.ty),
-                Some(DeclaredType::Function(_, Params::Prototype(..), _))
+                Some(DeclaredType::Function(_, Params::Prototype(..), ..))
             )
     }
 
@@ -241,7 +251,7 @@ impl Compiler {
             _ => self.symbols[idx].array_size,
         };
         if let Some(LinkedEntity {
-            ty: DeclaredType::Object(_, bounds),
+            ty: DeclaredType::Object(_, bounds, _),
             ..
         }) = self
             .linked_entities
@@ -328,20 +338,24 @@ impl Compiler {
             ));
         }
         let verdict = match (&prior.ty, &new) {
-            (DeclaredType::Object(ta, da), DeclaredType::Object(tb, db)) => {
+            (DeclaredType::Object(ta, da, fa), DeclaredType::Object(tb, db, fb)) => {
                 let bounds = da.len() == db.len()
                     && da.iter().zip(db).all(|(&x, &y)| x < 0 || y < 0 || x == y);
-                if bounds && self.tags_agree(self.spelled_ty(*ta), self.spelled_ty(*tb), true) {
+                if bounds
+                    && self.tags_agree(self.spelled_ty(*ta), self.spelled_ty(*tb), true)
+                    && self.sigs_agree(fa, fb)
+                {
                     Verdict::Compatible
                 } else {
                     Verdict::Conflict
                 }
             }
-            (DeclaredType::Function(ra, pa, _), DeclaredType::Function(rb, pb, _)) => {
+            (DeclaredType::Function(ra, pa, _, fa), DeclaredType::Function(rb, pb, _, fb)) => {
                 // GNU: an implicit `int` definition of a function declared `void`.
                 let gnu_void = implicit_int && is_void_ty(ra.ty);
                 let rb = if gnu_void { *ra } else { *rb };
                 match self.function_verdict((*ra, pa), (rb, pb)) {
+                    _ if !self.sigs_agree(fa, fb) => Verdict::Conflict,
                     Verdict::Compatible if gnu_void => Verdict::Extension,
                     v => v,
                 }
@@ -414,13 +428,16 @@ impl Compiler {
             }
         };
         match (prior, new) {
-            (Prototype(a, va), Prototype(b, vb)) => {
-                verdict(va == vb && a.len() == b.len() && a.iter().zip(b).all(|(x, y)| agree(x, y)))
-            }
-            (Prototype(t, v), Unspecified) | (Unspecified, Prototype(t, v)) => {
+            (Prototype(a, va, fa), Prototype(b, vb, fb)) => verdict(
+                va == vb
+                    && a.len() == b.len()
+                    && a.iter().zip(b).all(|(x, y)| agree(x, y))
+                    && self.param_sigs_agree(fa, fb),
+            ),
+            (Prototype(t, v, _), Unspecified) | (Unspecified, Prototype(t, v, _)) => {
                 verdict(!*v && t.iter().all(|p| promoted(value(p)) == value(p)))
             }
-            (Prototype(p, v), IdentifierList(k)) | (IdentifierList(k), Prototype(p, v)) => {
+            (Prototype(p, v, _), IdentifierList(k)) | (IdentifierList(k), Prototype(p, v, _)) => {
                 if *v || p.len() != k.len() {
                     return Verdict::Conflict;
                 }
@@ -443,6 +460,51 @@ impl Compiler {
         }
     }
 
+    /// The function types two types lead to are compatible (C99 6.7.5.3p15)
+    /// at the same pointer level; a declaration that recorded none agrees.
+    fn sigs_agree(&self, a: &FnSig, b: &FnSig) -> bool {
+        match (a, b) {
+            (Some((fa, da)), Some((fb, db))) => da == db && self.fn_types_agree(fa, fb),
+            _ => true,
+        }
+    }
+
+    /// The parameters at the same positions lead to compatible function
+    /// types, and the same ones lead to one.
+    fn param_sigs_agree(&self, a: &[(usize, FnType, i64)], b: &[(usize, FnType, i64)]) -> bool {
+        let at = |list: &[(usize, FnType, i64)], pos| {
+            list.iter()
+                .find(|(p, ..)| *p == pos)
+                .map(|(_, f, d)| (f.clone(), *d))
+        };
+        let positions = a.iter().chain(b).map(|&(p, ..)| p);
+        positions.into_iter().all(|p| match (at(a, p), at(b, p)) {
+            (Some(x), Some(y)) => self.sigs_agree(&Some(x), &Some(y)),
+            _ => false,
+        })
+    }
+
+    /// C99 6.7.5.3p15 over the parts of two function types their tags leave
+    /// out, the calling convention included; with no prototype on either
+    /// side the parameters are not compared.
+    fn fn_types_agree(&self, a: &FnType, b: &FnType) -> bool {
+        let value = |t: i64| strip_object_const(t);
+        let (pa, pb) = (&a.params, &b.params);
+        let params = !pa.prototyped
+            || !pb.prototyped
+            || (pa.variadic == pb.variadic
+                && pa.types.len() == pb.types.len()
+                && (pa.types.iter().zip(&pb.types))
+                    .all(|(&x, &y)| self.tags_agree(value(x), value(y), false))
+                && self.param_sigs_agree(&pa.fn_types, &pb.fn_types));
+        let ret = match (&a.ret, &b.ret) {
+            (Some((fa, da)), Some((fb, db))) => da == db && self.fn_types_agree(fa, fb),
+            (None, None) => true,
+            _ => false,
+        };
+        params && ret && self.target.abi_row(a.conv) == self.target.abi_row(b.conv)
+    }
+
     /// C99 6.2.7p1 over two tags; the type's own qualifiers take part when
     /// `own`.
     fn tags_agree(&self, a: i64, b: i64, own: bool) -> bool {
@@ -461,8 +523,11 @@ impl Compiler {
     fn describe(&self, ty: &DeclaredType) -> String {
         let name = |s: &Spelled| format_type(self.spelled_ty(*s), &self.structs);
         match ty {
-            DeclaredType::Object(t, bounds) if bounds.is_empty() => name(t),
-            DeclaredType::Object(t, bounds) => {
+            DeclaredType::Object(t, bounds, Some((f, depth))) if bounds.is_empty() => {
+                fn_type_spelling(self.spelled_ty(*t), f, *depth, &self.structs)
+            }
+            DeclaredType::Object(t, bounds, _) if bounds.is_empty() => name(t),
+            DeclaredType::Object(t, bounds, _) => {
                 let dim = |&b: &i64| {
                     if b < 0 {
                         String::from("[]")
@@ -472,8 +537,8 @@ impl Compiler {
                 };
                 format!("{} {}", name(t), bounds.iter().map(dim).collect::<String>())
             }
-            DeclaredType::Function(ret, Params::Unspecified, _) => format!("{} ()", name(ret)),
-            DeclaredType::Function(ret, Params::IdentifierList(t), _) => {
+            DeclaredType::Function(ret, Params::Unspecified, ..) => format!("{} ()", name(ret)),
+            DeclaredType::Function(ret, Params::IdentifierList(t), ..) => {
                 let list: Vec<String> = t.iter().map(name).collect();
                 format!(
                     "{} ({}) in an old-style definition",
@@ -481,7 +546,7 @@ impl Compiler {
                     list.join(", ")
                 )
             }
-            DeclaredType::Function(ret, Params::Prototype(t, v), _) => {
+            DeclaredType::Function(ret, Params::Prototype(t, v, _), ..) => {
                 let types: Vec<i64> = t.iter().map(|s| self.spelled_ty(*s)).collect();
                 format_signature(self.spelled_ty(*ret), &types, *v, &self.structs)
             }

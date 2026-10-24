@@ -971,7 +971,12 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             };
-            let declared = DeclaredType::Function(ret, Params::of(&params, false), named);
+            let ret_fn = self.symbols[id_idx]
+                .fn_type
+                .ret
+                .clone()
+                .map(|(r, d)| (*r, d));
+            let declared = DeclaredType::Function(ret, Params::of(&params, false), named, ret_fn);
             self.declare_linked(id_idx, declared, declarator_line, false)?;
         }
         // For Sys symbols (header-bound libc functions),
@@ -1004,6 +1009,11 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             },
+            ret_fn: self.symbols[id_idx]
+                .fn_type
+                .ret
+                .clone()
+                .map(|(r, d)| (*r, d)),
             conv: named,
             line: declarator_line,
             implicit_int,
@@ -2040,9 +2050,11 @@ impl Compiler {
             ty,
             enum_tag: decl.base_enum_tag,
         };
+        let leads_to = (b.fn_ptr_indirection > 0)
+            .then(|| (self.symbols[id_idx].fn_type.clone(), b.fn_ptr_indirection));
         self.declare_linked(
             id_idx,
-            DeclaredType::Object(spelled, bounds),
+            DeclaredType::Object(spelled, bounds, leads_to),
             signature_line,
             thread_local,
         )?;

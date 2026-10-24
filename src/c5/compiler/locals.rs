@@ -566,7 +566,12 @@ impl Compiler {
                     ty,
                     enum_tag: base_enum_tag,
                 };
-                let declared = super::redeclaration::DeclaredType::Object(spelled, bounds);
+                let leads_to = fn_type.clone().filter(|_| fn_ptr_indirection > 0);
+                let declared = super::redeclaration::DeclaredType::Object(
+                    spelled,
+                    bounds,
+                    leads_to.map(|f| (f, fn_ptr_indirection)),
+                );
                 self.declare_linked(loc_idx, declared, self.lex.line, is_thread_local)?;
             }
             // A block-scope `extern` allocates no storage (C11 6.7.5).
@@ -880,7 +885,8 @@ impl Compiler {
         };
         let (conv, conv_named) = self.declared_conv(ent, f.conv, self.lex.line)?;
         let listed = super::redeclaration::Params::of(&f.params, false);
-        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv);
+        let ret_fn = f.ret_fn.clone().map(|(r, d)| (*r, d));
+        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv, ret_fn);
         self.declare_linked(ent, declared, self.lex.line, false)?;
         let prototyped = f.params.form == super::function::ParamForm::Prototype;
         let fresh = super::stmt::FnEntity {

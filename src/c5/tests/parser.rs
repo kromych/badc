@@ -3864,6 +3864,57 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn redeclarations_compare_the_function_types_pointers_lead_to() {
+    // C99 6.7p4: the declarations of one object or function have compatible
+    // types, which extends through the function types pointers lead to
+    // (6.7.5.3p15): their parameters, their variadic tails, their results
+    // and their calling conventions. The verdicts are clang's on x86-64.
+    use crate::Target;
+    let compile = |src: &str| {
+        Compiler::with_target(
+            format!("{src}\nint main(void) {{ return 0; }}\n"),
+            Target::LinuxX64,
+        )
+        .compile()
+        .map(|_| ())
+    };
+    for src in [
+        "extern int (*x)(int); extern int (*x)(long);",
+        "void take(int (*p)(int)); void take(int (*p)(long));",
+        "extern int (__attribute__((ms_abi)) **y)(int); extern int (**y)(int);",
+        "extern int (*a)(int, ...); extern int (*a)(int);",
+        "extern int (*b)(int); extern int (*b)(int, int);",
+        "extern int (*c)(void (*)(int)); extern int (*c)(void (*)(long));",
+        "extern int (*(*g)(void))(int); extern int (*(*g)(void))(long);",
+        "int (*h(void))(int); int (*h(void))(long);",
+        "extern int (*k[2])(int); extern int (*k[2])(long);",
+        "typedef int (*fp)(long); extern fp n; extern int (*n)(int);",
+        "int f(void) { extern int (*bx)(int); return 0; } extern int (*bx)(long);",
+    ] {
+        let err = compile(src).expect_err(src).to_string();
+        assert!(err.contains("conflicting types"), "{src}: {err}");
+    }
+    for src in [
+        "extern int (*d)(int); extern int (*d)(const int);",
+        "extern int (*e)(int *); extern int (*e)(int[]);",
+        "extern int (*f)(int); extern int (*f)();",
+        "typedef int (*fp)(int); extern fp m; extern int (*m)(int);",
+        "void q(int (*)(int)); void q(int (*p)(int));",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+    // The attribute is inert off x86-64, as clang reads it.
+    Compiler::with_target(
+        "extern int (__attribute__((ms_abi)) **y)(int); extern int (**y)(int);\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
 fn the_address_of_a_call_result_is_refused() {
     // C99 6.5.3.2p1: a call's value is no lvalue, of pointer type too.
     for src in [

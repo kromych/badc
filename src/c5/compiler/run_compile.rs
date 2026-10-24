@@ -392,6 +392,7 @@ impl Compiler {
             self.parse_file_scope_declaration()?;
         }
         self.complete_tentative_definitions()?;
+        self.apply_pragma_weak()?;
         self.resolve_pending_aliases()?;
         self.place_object_aliases();
         // Before the asm `.globl` sweep: that directive is an explicit
@@ -2885,6 +2886,37 @@ impl Compiler {
         }
     }
 
+    /// `#pragma weak`: a name binds weak as `.weak` does; `name = target` is a weak alias.
+    fn apply_pragma_weak(&mut self) -> Result<(), C5Error> {
+        use crate::c5::symbol::Linkage;
+        for (name, target) in core::mem::take(&mut self.pragma_weak) {
+            if !self.asm_weak_names.contains(&name) {
+                self.asm_weak_names.push(name.clone());
+            }
+            let Some(target) = target else {
+                continue;
+            };
+            let decl = self.symbols.iter().position(|s| {
+                s.link_name() == name
+                    && s.linkage == Linkage::External
+                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+            });
+            let Some(idx) = decl else {
+                Self::set_alias(&mut self.asm_sym_sets, &name, &target, 0);
+                continue;
+            };
+            if self.symbols[idx].defined_here && !self.symbols[idx].is_extern_decl {
+                let text = format!("`#pragma weak {name} = {target}` names a definition");
+                return Err(self.compile_err(Code::INVALID_DECLARATION, text));
+            }
+            let is_object = self.symbols[idx].class == Token::Glo as i64;
+            self.symbols[idx].is_weak = true;
+            self.symbols[idx].is_alias = true;
+            self.pending_aliases.push((idx, target, is_object));
+        }
+        Ok(())
+    }
+
     /// A file-scope `asm(".weak name");` binds the name weak, as the attribute does.
     fn resolve_file_scope_asm_weak(&mut self) {
         for name in &self.asm_weak_names {
@@ -2926,6 +2958,8 @@ impl Compiler {
                     });
                 continue;
             }
+            // References to an extern declaration's storage move onto the target's.
+            self.note_global_relocated(id_idx, is_object, self.symbols[tgt].val);
             self.symbols[id_idx].val = self.symbols[tgt].val;
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;

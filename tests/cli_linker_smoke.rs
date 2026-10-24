@@ -226,6 +226,52 @@ fn weak_alias_strong_override_wins_at_link() {
     );
 }
 
+/// `#pragma weak name` binds a definition weak, before or after it and
+/// through `_Pragma`, and `#pragma weak name = target` defines a weak
+/// alias, as the `weak` and `alias` attributes do: a strong definition in
+/// another unit overrides each, and with none the weak one binds.
+#[test]
+fn pragma_weak_binds_a_definition_or_an_alias_weak() {
+    let dir = tempdir("pragma-weak");
+    let weak = write_source(
+        &dir,
+        "weak.c",
+        "#pragma weak before\n\
+         int before = 1;\n\
+         int after = 2;\n\
+         _Pragma(\"weak after\")\n\
+         int impl(void) { return 3; }\n\
+         #pragma weak api = impl\n\
+         int api(void);\n\
+         int sum(void) { return before + after + api(); }\n",
+    );
+    let strong = write_source(
+        &dir,
+        "strong.c",
+        "int sum(void);\n\
+         int before = 10, after = 20;\n\
+         int api(void) { return 30; }\n\
+         int main(void) { return sum(); }\n",
+    );
+    let alone = write_source(
+        &dir,
+        "alone.c",
+        "int sum(void);\nint main(void) { return sum(); }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(
+            link_units_and_run(&dir, opt, &[&weak, &strong]),
+            Some(60),
+            "{opt}"
+        );
+        assert_eq!(
+            link_units_and_run(&dir, opt, &[&weak, &alone]),
+            Some(6),
+            "{opt}"
+        );
+    }
+}
+
 /// Compile each source with `-c` at `opt`, link the objects in order and
 /// return the image's exit status.
 fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {

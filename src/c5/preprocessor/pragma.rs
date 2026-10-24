@@ -144,18 +144,17 @@ impl Preprocessor {
         };
         // Record the directives feeding the side outputs the compile
         // consumes, so a reused pass can replay them in order.
-        if self.reuse.is_some()
-            && [
-                "dylib(",
-                "binding(",
-                "export(",
-                "intrinsic(",
-                "entrypoint(",
-                "subsystem(",
-            ]
-            .iter()
-            .any(|p| args.starts_with(p))
-        {
+        let side_output = [
+            "dylib(",
+            "binding(",
+            "export(",
+            "intrinsic(",
+            "entrypoint(",
+            "subsystem(",
+        ]
+        .iter()
+        .any(|p| args.starts_with(p));
+        if self.reuse.is_some() && (side_output || pragma_weak_operand(args).is_some()) {
             let rec = self.reuse.as_deref_mut().expect("checked above");
             rec.pragma_events
                 .push((args.to_string(), line_no, filename.to_string()));
@@ -201,6 +200,10 @@ impl Preprocessor {
             .and_then(|s| s.strip_suffix(')'))
         {
             return self.parse_pragma_warning(inner.trim(), site);
+        }
+        if let Some(operand) = pragma_weak_operand(args) {
+            self.parse_pragma_weak(operand, site);
+            return Ok(());
         }
         // Borland / Watcom `#pragma warn -<code>` form (`-rch`,
         // `-aus`, ...). Parsed for visibility into `warn_disabled`;
@@ -793,6 +796,22 @@ impl Preprocessor {
         Ok(())
     }
 
+    /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
+    fn parse_pragma_weak(&mut self, operand: &str, site: Site<'_>) {
+        let (name, target) = match operand.split_once('=') {
+            Some((n, t)) => (n.trim(), Some(t.trim())),
+            None => (operand, None),
+        };
+        if !is_ident(name) || target.is_some_and(|t| !is_ident(t)) {
+            let text = format!("malformed `#pragma weak {operand}` -- ignored");
+            self.warn(PRAGMA_SYNTAX, site, text);
+            return;
+        }
+        let target = target.map(|t| ident::key(t).into_owned());
+        self.weak_pragmas
+            .push((ident::key(name).into_owned(), target));
+    }
+
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib
     /// the codegen can attach bindings to. `name` is an
     /// identifier-style c5-side handle (`libc`, `kernel32`, ...);
@@ -1090,6 +1109,13 @@ impl WarningAction {
             WarningAction::Suppress => control.open_suppress(offset, code),
         }
     }
+}
+
+/// The operand of a `weak` pragma: `name` or `name = target`.
+fn pragma_weak_operand(args: &str) -> Option<&str> {
+    let rest = args.strip_prefix("weak")?;
+    rest.starts_with(|c: char| c.is_ascii_whitespace())
+        .then(|| rest.trim())
 }
 
 /// True when `args` is the head of a `pack(...)` pragma -- the

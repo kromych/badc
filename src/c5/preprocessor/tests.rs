@@ -4570,6 +4570,24 @@ fn export_and_dylib_declarations_are_ordered_and_unique() {
     assert!(pp.dylibs[0].bindings.is_empty());
 }
 
+/// `#pragma weak` takes a name or `name = target`, through either form
+/// of the directive, in source order; a malformed operand is reported
+/// and ignored.
+#[test]
+fn pragma_weak_records_names_and_aliases() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.process(
+        "#pragma weak a\n_Pragma(\"weak b = c\")\n#pragma weak d=e\n\
+         #pragma weak 1x\n#pragma weak f =\n",
+    )
+    .expect("preprocess");
+    let got: Vec<(&str, Option<&str>)> = (pp.weak_pragmas.iter())
+        .map(|(n, t)| (n.as_str(), t.as_deref()))
+        .collect();
+    assert_eq!(got, [("a", None), ("b", Some("c")), ("d", Some("e"))]);
+    assert_eq!(codes(&pp), vec![PRAGMA_SYNTAX, PRAGMA_SYNTAX]);
+}
+
 /// The lexed-body cache is keyed by macro name; a redefinition must
 /// re-lex even when the new body is the same length as the old.
 #[test]

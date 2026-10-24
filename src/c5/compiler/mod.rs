@@ -2052,6 +2052,8 @@ pub struct Compiler {
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String, i64)>,
+    /// `#pragma weak` names and their alias targets, in source order.
+    pragma_weak: Vec<(String, Option<String>)>,
     /// `.file "name"` operands from file-scope asm, in directive order.
     pub(super) asm_file_names: Vec<String>,
     /// `.ident` strings from file-scope asm, in directive order.
@@ -2794,6 +2796,7 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
+        let pragma_weak = pp.weak_pragmas;
         // The preprocessor's diagnostics head the unit's, and the pragmas
         // it recorded are keyed on byte offsets into `preprocessed`, which
         // is what the lexer reads, so they govern the parser's as well.
@@ -2924,6 +2927,7 @@ impl Compiler {
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
             asm_sym_sets: Vec::new(),
+            pragma_weak,
             asm_file_names: Vec::new(),
             asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),

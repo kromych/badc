@@ -183,6 +183,8 @@ pub(crate) struct Preprocessor {
     /// Membership half of `exports`, which keeps its declaration order
     /// because the export tables are written in it.
     export_names: BTreeSet<String>,
+    /// `#pragma weak name` and `#pragma weak name = target`, in source order.
+    pub weak_pragmas: Vec<(String, Option<String>)>,
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
@@ -1180,6 +1182,7 @@ impl Preprocessor {
             dylibs: Vec::new(),
             dylib_index: HashMap::new(),
             exports: Vec::new(),
+            weak_pragmas: Vec::new(),
             export_names: BTreeSet::new(),
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),

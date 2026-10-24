@@ -528,6 +528,24 @@ fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
 }
 
 #[test]
+fn pragma_weak_binds_a_declared_reference_weak() {
+    // `#pragma weak` binds a reference weak whether it stands before or
+    // after the declaration, a C-library function's included, as gcc and
+    // clang bind it.
+    let src = "#pragma weak atoi\n#include <stdlib.h>\n\
+               int f(void);\n#pragma weak f\nextern int o;\n#pragma weak o\n\
+               long g(void) { return atoi(\"1\") + (f ? f() : 0) + (&o ? o : 0); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "w.o").expect("parse");
+        for name in ["atoi", "f", "o"] {
+            let syms: Vec<&EtSym> = a.symbols.iter().filter(|s| s.name == name).collect();
+            assert_eq!(syms.len(), 1, "{target:?}: one entry for `{name}`");
+            assert_eq!(syms[0].binding, 2, "{target:?}: `{name}` is STB_WEAK");
+        }
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

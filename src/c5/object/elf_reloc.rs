@@ -12,7 +12,7 @@ use core::ops::Range;
 
 use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
-use super::super::program::{ExportedFunction, Program, SymVisibility};
+use super::super::program::{Program, SymVisibility};
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
@@ -3896,9 +3896,13 @@ impl<'a> RelocWriter<'a> {
         // Built ahead of the section count: an empty body drops the
         // section, which the note parser reads as it does a foreign object
         // carrying none.
+        let export_names: Vec<&str> = (program.exports.iter())
+            .map(|e| e.name.as_str())
+            .chain(program.exported_objects.iter().map(String::as_str))
+            .collect();
         let note = build_badc_note(
             &build.imports,
-            &program.exports,
+            &export_names,
             &build.tls_index_fixups,
             &build.macho_tlv_descriptors,
             &build.macho_tlv_fixups,
@@ -4660,7 +4664,7 @@ fn push_note_record(out: &mut Vec<u8>, ntype: u32, desc: &[u8]) {
 #[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,
-    exports: &[ExportedFunction],
+    exports: &[&str],
     tls_index_fixups: &[super::TlsIndexFixup],
     macho_tlv_descriptors: &[super::MachoTlvDescriptor],
     macho_tlv_fixups: &[super::MachoTlvFixup],
@@ -4707,7 +4711,7 @@ fn build_badc_note(
     if !exports.is_empty() {
         let mut ex_desc: Vec<u8> = Vec::new();
         for e in exports {
-            ex_desc.extend_from_slice(e.name.as_bytes());
+            ex_desc.extend_from_slice(e.as_bytes());
             ex_desc.push(0);
         }
         push_note_record(&mut out, NT_BADC_EXPORTS, &ex_desc);

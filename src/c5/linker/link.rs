@@ -85,8 +85,9 @@ pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool 
     }
 }
 
-/// Whether an image exports `sym`: at default visibility, a function a `#pragma
-/// export` names or any under `--export-all`, an object under `--export-data`.
+/// Whether an image exports `sym`: at default visibility, a function or an
+/// object a `#pragma export` names, any function under `--export-all`, any
+/// object under `--export-data`.
 pub(crate) fn exports_definition(
     sym: &MergedSymbol,
     named: bool,
@@ -96,7 +97,7 @@ pub(crate) fn exports_definition(
     sym.visibility == super::object::STV_DEFAULT
         && match sym.section {
             NativeSymSection::Text => named || export_all,
-            NativeSymSection::Data | NativeSymSection::Bss => export_data,
+            NativeSymSection::Data | NativeSymSection::Bss => named || export_data,
             _ => false,
         }
 }

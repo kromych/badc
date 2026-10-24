@@ -1443,24 +1443,6 @@ fn pragma_export_with_unknown_name_is_refused() {
 }
 
 #[test]
-fn pragma_export_with_global_data_is_refused() {
-    // `#pragma export(...)` only handles functions. Pointing it at a
-    // global variable surfaces a clear "not a function" diagnostic.
-    let src = "
-        int counter;
-        #pragma export(counter)
-        int main() { return 0; }
-    ";
-    let res = super::Compiler::new(super::with_prelude(src)).compile();
-    let err = res.expect_err("expected data-export to fail");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("expected a function"),
-        "expected non-function diagnostic, got: {msg}"
-    );
-}
-
-#[test]
 fn libc_call_with_struct_arg_compiles() {
     // A struct passed by value to a Token::Sys (libc) call is packed into the
     // platform-ABI argument registers (SysV / AAPCS64), no longer refused. The
@@ -3877,6 +3859,31 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
     .compile()
     .expect("a thread-local initialized with an ordinary object's address stays legal");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+#[test]
+fn pragma_export_names_a_function_or_an_object_this_unit_defines() {
+    // An object with external linkage the unit defines is exported by its
+    // link name; a `static` one, an `extern` declaration and a thread-local
+    // are not objects a shared library exports.
+    let program = Compiler::new(
+        "int g = 1;\nint *pg = &g;\n#pragma export(g)\n#pragma export(pg)\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(program.exported_objects, ["g", "pg"]);
+    for src in [
+        "static int s = 1;\n#pragma export(s)\n",
+        "extern int e;\n#pragma export(e)\n",
+        "_Thread_local int t;\n#pragma export(t)\n",
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}int main(void) {{ return 0; }}\n"),
+            "is not a function or an object with external linkage",
+        );
+    }
 }
 
 #[test]

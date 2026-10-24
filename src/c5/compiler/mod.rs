@@ -3100,34 +3100,44 @@ impl Compiler {
     }
 
     /// Resolve `#pragma export(<name>)` directives against the
-    /// now-finalised symbol table. Each name must resolve to a
-    /// `Token::Fun` (a function defined in this translation
-    /// unit); anything else gets a clear diagnostic so a
-    /// misspelled export doesn't silently produce a shared object
-    /// missing the symbol the user expected.
+    /// now-finalised symbol table: the functions, and the names of the
+    /// objects with external linkage, this unit defines. Anything else
+    /// gets a clear diagnostic so a misspelled export doesn't silently
+    /// produce a shared object missing the symbol the user expected.
     ///
     /// Drains `self.pending_exports` -- callers should only invoke
     /// once on the way out of `compile()`.
-    fn resolve_exports(&mut self) -> Result<Vec<crate::c5::program::ExportedFunction>, C5Error> {
+    fn resolve_exports(
+        &mut self,
+    ) -> Result<(Vec<crate::c5::program::ExportedFunction>, Vec<String>), C5Error> {
+        use crate::c5::symbol::Linkage;
         let mut exports = Vec::with_capacity(self.pending_exports.len());
+        let mut objects = Vec::new();
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
                 return Err(self.compile_err(
                     Code::UNDECLARED_IDENTIFIER,
                     format!(
                         "`#pragma export({name})` -- no such symbol; the name must \
-                     refer to a function defined in this source"
+                     refer to a function or an object defined in this source"
                     ),
                 ));
             };
-            if self.symbols[idx].class != Token::Fun as i64 {
+            let sym = &self.symbols[idx];
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.is_thread_local
+            {
+                objects.push(sym.link_name().into());
+                continue;
+            }
+            if sym.class != Token::Fun as i64 {
                 return Err(self.compile_err(
                     Code::INVALID_PRAGMA,
                     format!(
-                        "`#pragma export({name})` -- expected a function, but `{name}` \
-                     is class {} (only locally-defined functions are exportable today; \
-                     globals would need data-export support that isn't wired up yet)",
-                        self.symbols[idx].class
+                        "`#pragma export({name})` -- `{name}` is not a function or an \
+                         object with external linkage this source defines"
                     ),
                 ));
             }
@@ -3162,7 +3172,7 @@ impl Compiler {
                 });
             }
         }
-        Ok(exports)
+        Ok((exports, objects))
     }
 
     fn failed(&mut self, e: C5Error) -> C5Error {
@@ -3537,7 +3547,7 @@ impl Compiler {
         let (entry_pc, dllmain_pc, resolved_entry_name) = self
             .resolve_entry_and_dllmain_pcs()
             .map_err(|e| self.failed(e))?;
-        let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
+        let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
@@ -3583,6 +3593,7 @@ impl Compiler {
             tls_init_size: self.tls_init_size,
             tls_align: self.tls_align,
             exports,
+            exported_objects,
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,

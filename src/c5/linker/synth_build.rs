@@ -435,6 +435,7 @@ fn synth_program(
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),
         exports: exports.to_vec(),
+        exported_objects: Vec::new(),
         dylibs: Vec::new(),
         dllmain_pc: None,
         source_files: Vec::new(),
@@ -628,14 +629,24 @@ fn synth_dynamic_exports(
             && merged.shared_names.contains(name)
             && !merged.copy_relocs.iter().any(|(local, _)| local == name)
     };
-    if !export_funcs && !export_data_globals && (!elf_exec || merged.shared_names.is_empty()) {
+    // The objects `#pragma export` names; the functions it names are in
+    // the function export table.
+    let named: alloc::collections::BTreeSet<&str> =
+        merged.exports.iter().map(String::as_str).collect();
+    if !export_funcs
+        && !export_data_globals
+        && named.is_empty()
+        && (!elf_exec || merged.shared_names.is_empty())
+    {
         return Vec::new();
     }
     merged
         .defined
         .iter()
         .filter_map(|(name, sym)| {
-            let exported = exports_definition(sym, false, export_funcs, export_data_globals)
+            let named_object =
+                sym.section != NativeSymSection::Text && named.contains(name.as_str());
+            let exported = exports_definition(sym, named_object, export_funcs, export_data_globals)
                 || linked(name) && exports_definition(sym, true, false, true);
             if name.is_empty() || !exported {
                 return None;
@@ -1551,6 +1562,7 @@ fn synth_exports(
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
+            && sym.section == NativeSymSection::Text
             && exports_definition(sym, true, false, false)
             && seen.insert(name.clone())
         {

@@ -363,6 +363,9 @@ pub struct Program {
     /// library). The VM and JIT ignore this field; only the
     /// shared-object writer paths consume it.
     pub exports: Vec<ExportedFunction>,
+    /// The objects `#pragma export` names, by link name: a shared-object
+    /// writer exports each, a link through the unit's export note.
+    pub exported_objects: Vec<String>,
     /// Per-target dylib + binding map produced by the preprocessor
     /// from the `#pragma comment(dylib, ...)` and
     /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.
@@ -735,6 +738,7 @@ impl DataOffsets for Program {
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
             exports: _,
+            exported_objects: _,
             dylibs: _,
             dllmain_pc: _,
             source_files: _,
@@ -875,6 +879,7 @@ mod data_offset_tests {
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             exports: Vec::new(),
+            exported_objects: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
             source_files: Vec::new(),

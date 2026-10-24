@@ -9660,6 +9660,130 @@ fn a_data_initializer_holds_a_library_functions_address() {
     }
 }
 
+// `#pragma export` names a shared library's objects as it names its
+// functions: an `int`, a pointer and a structure, each loaded by name in
+// another image and written through, the library's own function reading the
+// write back -- on every host, through its own loader.
+#[test]
+fn a_shared_library_exports_the_objects_pragma_export_names() {
+    let dir = tempdir("export-objects");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "struct S { int a, b; };\nint g = 1;\nint *pg = &g;\nstruct S s = { 3, 4 };\n\
+         int get_g(void) { return g; }\n\
+         #pragma export(g)\n#pragma export(pg)\n#pragma export(s)\n#pragma export(get_g)\n",
+    );
+    let (lib_name, load, find) = if cfg!(windows) {
+        ("x.dll", "LoadLibraryA(argv[1])", "GetProcAddress")
+    } else if cfg!(target_os = "macos") {
+        ("libx.dylib", "dlopen(argv[1], RTLD_NOW)", "dlsym")
+    } else {
+        ("libx.so", "dlopen(argv[1], RTLD_NOW)", "dlsym")
+    };
+    let header = if cfg!(windows) {
+        "windows.h"
+    } else {
+        "dlfcn.h"
+    };
+    let loader = write_source(
+        &dir,
+        "load.c",
+        &format!(
+            "#include <{header}>\nstruct S {{ int a, b; }};\n\
+             int main(int argc, char **argv) {{\n\
+               void *h = (void *){load};\n\
+               if (!h) return 9;\n\
+               int *g = (int *){find}(h, \"g\");\n\
+               int **pg = (int **){find}(h, \"pg\");\n\
+               struct S *s = (struct S *){find}(h, \"s\");\n\
+               int (*get_g)(void) = (int (*)(void)){find}(h, \"get_g\");\n\
+               if (!g || !pg || !s || !get_g) return 1;\n\
+               *g = 6;\n\
+               return **pg == 6 && s->b == 4 && get_g() == 6 ? 0 : 2;\n\
+             }}\n"
+        ),
+    );
+    let lib_path = dir.join(lib_name);
+    run(
+        Command::new(badc())
+            .args(["-q", "-shared"])
+            .arg(&lib)
+            .arg("-o")
+            .arg(&lib_path),
+        "build the shared library",
+    );
+    let exe = dir.join(format!("load{}", std::env::consts::EXE_SUFFIX));
+    run(
+        Command::new(badc())
+            .arg("-q")
+            .arg(&loader)
+            .arg("-o")
+            .arg(&exe),
+        "build the loader",
+    );
+    let out = Command::new(&exe).arg(&lib_path).output().expect("run");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+// An object a library's `#pragma export` names is interposable (System V
+// gABI): with the library built from a unit defining it and one reading
+// it, an executable defining the same object takes the library's read,
+// and one only declaring it reads the library's.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_exported_object_is_interposed_by_the_executables_definition() {
+    let dir = tempdir("export-object-preempt");
+    let defs = write_source(
+        &dir,
+        "defs.c",
+        "int lib_obj = 1;\n#pragma export(lib_obj)\n",
+    );
+    let uses = write_source(
+        &dir,
+        "uses.c",
+        "extern int lib_obj;\nint read_obj(void) { return lib_obj; }\n#pragma export(read_obj)\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-shared"])
+            .arg(&defs)
+            .arg(&uses)
+            .arg("-o")
+            .arg(dir.join("libobj.so")),
+        "build the shared library",
+    );
+    for (name, main, want) in [
+        (
+            "defines",
+            "int lib_obj = 2;\nint read_obj(void);\nint main(void) { return read_obj() * 10 + lib_obj; }\n",
+            22,
+        ),
+        (
+            "declares",
+            "extern int lib_obj;\nint read_obj(void);\nint main(void) { return read_obj() * 10 + lib_obj; }\n",
+            11,
+        ),
+    ] {
+        let src = write_source(&dir, &format!("{name}.c"), main);
+        let exe = dir.join(name);
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg(&src)
+                .arg(format!("-L{}", dir.display()))
+                .args(["-lobj", "-o"])
+                .arg(&exe),
+            "link the executable",
+        );
+        let out = Command::new(&exe)
+            .env("LD_LIBRARY_PATH", &dir)
+            .output()
+            .expect("run");
+        assert_eq!(out.status.code(), Some(want), "{name}");
+    }
+}
+
 // An executable exports its definition of a name a linked shared library
 // references and does not define, so the loader binds the library's
 // reference to it (GNU ld's `ref_dynamic`), with no option asking for the

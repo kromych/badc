@@ -775,6 +775,7 @@ pub(crate) mod test_support {
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             exports: Vec::new(),
+            exported_objects: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
             source_files: Vec::new(),

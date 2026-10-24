@@ -1466,6 +1466,24 @@ fn a_block_scope_extern_thread_local_reaches_the_other_units_definition() {
 }
 
 #[test]
+fn a_pc_relative_text_word_naming_data_is_fixed_at_link() {
+    // `.long data - .` in an executable section is a distance within the
+    // image, which the link fixes on every output format.
+    let dir = tempdir("pcrel-text-word");
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/c/asm_pcrel_words_name_text_and_data.c");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("prog{opt}{}", std::env::consts::EXE_SUFFIX));
+        run(
+            Command::new(badc()).arg(opt).arg("-o").arg(&exe).arg(&src),
+            "link pc-relative text words",
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(out.status.code(), Some(0), "{opt}");
+    }
+}
+
+#[test]
 fn duplicate_thread_local_definition_fails_link() {
     // C99 6.9p5: two units each defining one `_Thread_local` object fail
     // the link with `multiple definition`, whatever the target.

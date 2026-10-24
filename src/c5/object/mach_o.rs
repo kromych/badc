@@ -1833,14 +1833,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
 impl<'a> MachOWriter<'a> {
     fn new(program: &'a Program, build: &'a Build) -> Result<Self, C5Error> {
-        // The pc-relative data-word carriers have no Mach-O placement.
-        // TODO
-        if !build.data_pcrel_relocs.is_empty()
-            || !build.text_pcrel_relocs.is_empty()
-            || !build.text_abs_relocs.is_empty()
-        {
+        // The synthesizer parks an absolute text field only for a format
+        // that rebases an executable section, which a Mach-O image is not.
+        if !build.text_abs_relocs.is_empty() {
             return Err(Self::internal(String::from(
-                "Mach-O writer: pc-relative data-word slots not implemented",
+                "Mach-O writer: an absolute text field reached an image build",
             )));
         }
         if !build.rodata.abs64.is_empty() {
@@ -2702,6 +2699,25 @@ impl<'a> MachOWriter<'a> {
             l.thread_vars_vmaddr(),
             &build.macho_tlv_fixups,
         )?;
+        // A pc-relative word in `__text` naming data holds the distance,
+        // which a slide keeps.
+        for r in &build.text_pcrel_relocs {
+            let target = l
+                .data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_data_offset.wrapping_sub(r.target_anchor));
+            let value = target as i64 - (code_vmaddr_base + r.site_text_offset) as i64;
+            let at = code_file_offset + r.site_text_offset as usize;
+            let bytes = value.to_le_bytes();
+            let width = r.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok();
+            let Some(field) = out.get_mut(at..at + width).filter(|_| fits) else {
+                return Err(Self::internal(format!(
+                    "Mach-O: text pcrel field at __text+{:#x} cannot take {value:#x}",
+                    r.site_text_offset
+                )));
+            };
+            field.copy_from_slice(&bytes[..width]);
+        }
         out.resize(l.const_fileoff as usize, 0);
         out.extend_from_slice(&build.data[..l.ro_head as usize]);
         out.resize((l.const_fileoff + l.const_marker_off) as usize, 0);

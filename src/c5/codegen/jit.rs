@@ -739,6 +739,30 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
+        // A pc-relative word of the data image holds the distance to its
+        // target, in the data image or the code.
+        if !build.data_pcrel_relocs.is_empty()
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.data_pcrel_relocs {
+                let base = if r.target_in_data {
+                    data_vmaddr
+                } else {
+                    code_vmaddr
+                };
+                let at = r.slot_data_offset as usize;
+                let value = (base + r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                let width = r.width as usize;
+                let fits = width == 8 || i32::try_from(value).is_ok();
+                let Some(slot) = bytes.get_mut(at..at + width).filter(|_| fits) else {
+                    return Err(C5Error::internal(format!(
+                        "JIT: data pcrel slot {at:#x} cannot take {value:#x}"
+                    )));
+                };
+                slot.copy_from_slice(&value.to_le_bytes()[..width]);
+            }
+        }
         // `&&label` initializer slots: the emit already resolved each
         // label to a text offset, so only the code region's runtime
         // address has to be added.
@@ -1929,6 +1953,19 @@ mod jit_impl {
                 fx.part,
                 "func fixup",
             )?;
+        }
+        for r in &build.text_pcrel_relocs {
+            let at = r.site_text_offset as usize;
+            let value =
+                (data_vmaddr + r.target_data_offset) as i64 - (code_vmaddr + at as u64) as i64;
+            let width = r.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok();
+            let Some(field) = code.get_mut(at..at + width).filter(|_| fits) else {
+                return Err(C5Error::internal(format!(
+                    "JIT: text pcrel field at +{at:#x} cannot take {value:#x}"
+                )));
+            };
+            field.copy_from_slice(&value.to_le_bytes()[..width]);
         }
         apply_jit_asm_sym_fixups(code, code_vmaddr, data_vmaddr, build)?;
         Ok(())

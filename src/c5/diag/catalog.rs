@@ -137,6 +137,12 @@ catalog! {
     2014, "strict-prototypes", [], Ignore, Controllable,
         [], Live,
         "a function declarator whose empty or identifier list declares no prototype, outside a cast and a definition an earlier prototype covers";
+    2015, "missing-prototypes", [], Ignore, Controllable,
+        [], Live,
+        "an external function definition, neither `inline` nor `main`, that no file-scope declaration with a prototype precedes";
+    2016, "missing-declarations", [], Ignore, Controllable,
+        [], Live,
+        "an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -448,6 +454,8 @@ impl Code {
     pub const INLINE_ASM: Code = Code::new(2012);
     pub const VISIBILITY: Code = Code::new(2013);
     pub const STRICT_PROTOTYPES: Code = Code::new(2014);
+    pub const MISSING_PROTOTYPES: Code = Code::new(2015);
+    pub const MISSING_DECLARATIONS: Code = Code::new(2016);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);

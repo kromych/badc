@@ -5804,3 +5804,66 @@ fn strict_prototypes_reports_where_gcc_does() {
         [1, 4, 5, 6, 7, 8, 9, 10, 10, 10, 12, 12]
     );
 }
+
+/// gcc's `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
+/// definition, neither `inline` nor `main`, with no earlier file-scope
+/// declaration having a prototype / at all. A block-scope declaration does
+/// not count. The lines are gcc 16.2.1's for the same units, and the
+/// declaration forms of the second unit each count, as in gcc.
+#[test]
+fn missing_prototypes_and_declarations_report_where_gcc_does() {
+    use crate::c5::diag::Code;
+    let lines = |src: &str, code: Code| -> Vec<u32> {
+        let selectors = ["missing-prototypes", "missing-declarations"];
+        super::compile_str_bare_with_diags(src, &selectors)
+            .warnings
+            .iter()
+            .filter(|w| w.code == code)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    let src = "int a(void) { return 0; }\n\
+               static int b(void) { return 0; }\n\
+               inline int c(void) { return 0; }\n\
+               extern inline int d(void) { return 0; }\n\
+               static inline int e(void) { return 0; }\n\
+               int main(void) { return 0; }\n\
+               int f();\n\
+               int f(void) { return 0; }\n\
+               int g(void);\n\
+               int g(void) { return 0; }\n\
+               void h(void) { extern int i(void); }\n\
+               int i(void) { return 0; }\n\
+               int j(x) int x; { return x; }\n\
+               __attribute__((weak)) int k(void) { return 0; }\n\
+               int l(void);\n\
+               static int l2(void);\n\
+               int m() { return 0; }\n";
+    assert_eq!(
+        lines(src, Code::MISSING_PROTOTYPES),
+        [1, 8, 11, 12, 13, 14, 17]
+    );
+    assert_eq!(
+        lines(src, Code::MISSING_DECLARATIONS),
+        [1, 11, 12, 13, 14, 17]
+    );
+    let declared = "typedef int fn_t(void);\n\
+                    fn_t foo1;\n\
+                    int foo1(void) { return 0; }\n\
+                    int x, foo2(void);\n\
+                    int foo2(void) { return 0; }\n\
+                    int (foo5)(void);\n\
+                    int (foo5)(void) { return 0; }\n\
+                    int foo6(void) __asm__(\"foo6_alias\");\n\
+                    int foo6(void) { return 0; }\n\
+                    int (*foo10(void))(void);\n\
+                    int (*foo10(void))(void) { return 0; }\n\
+                    __typeof__(foo1) foo11;\n\
+                    int foo11(void) { return 0; }\n\
+                    int main(void) { return 0; }\n";
+    assert_eq!(lines(declared, Code::MISSING_PROTOTYPES), Vec::<u32>::new());
+    assert_eq!(
+        lines(declared, Code::MISSING_DECLARATIONS),
+        Vec::<u32>::new()
+    );
+}

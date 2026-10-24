@@ -1894,6 +1894,9 @@ pub struct Compiler {
     /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
     /// reports: `(id, file, line)`.
     unprototyped_lists: Vec<(u32, String, usize)>,
+    /// The functions a file-scope declaration that is no definition named,
+    /// and whether one of those declarations had a prototype.
+    file_scope_fn_decls: hashbrown::HashMap<String, bool>,
 
     /// Nesting depth of unevaluated constant-expression operands
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
@@ -2900,6 +2903,7 @@ impl Compiler {
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
             unprototyped_lists: Vec::new(),
+            file_scope_fn_decls: hashbrown::HashMap::new(),
             const_object_fold: 0,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),

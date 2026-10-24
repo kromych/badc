@@ -1037,6 +1037,9 @@ impl Compiler {
         // A `Sys` binding's stub signature is no declaration of the unit, so the
         // first one the unit spells starts the composite type.
         if !is_defining_declarator {
+            let prototype = params.form == super::function::ParamForm::Prototype;
+            let name = self.symbols[id_idx].name.clone();
+            *self.file_scope_fn_decls.entry(name).or_default() |= prototype;
             let ret = Spelled {
                 ty,
                 enum_tag: decl.base_enum_tag,
@@ -1229,6 +1232,32 @@ impl Compiler {
         Ok(())
     }
 
+    /// gcc's `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
+    /// definition, neither `inline` nor `main`, that no file-scope
+    /// declaration with a prototype / at all preceded. A block-scope
+    /// declaration is not visible there and counts for neither.
+    fn report_missing_declaration(&mut self, id_idx: usize, line: usize) {
+        let s = &self.symbols[id_idx];
+        if s.saw_static_decl
+            || s.saw_plain_inline_decl
+            || s.saw_extern_inline_decl
+            || s.name == "main"
+            || !self.in_user_source()
+        {
+            return;
+        }
+        let name = s.name.clone();
+        let declared = self.file_scope_fn_decls.get(&name).copied();
+        if declared != Some(true) {
+            let text = format!("no previous prototype for `{name}`");
+            self.warn_at(Code::MISSING_PROTOTYPES, line, text);
+        }
+        if declared.is_none() {
+            let text = format!("no previous declaration for `{name}`");
+            self.warn_at(Code::MISSING_DECLARATIONS, line, text);
+        }
+    }
+
     /// The definition: the K&R parameter declarations, the body, and the
     /// records the walker and the debug info read off the finished frame.
     fn parse_function_definition(
@@ -1287,6 +1316,7 @@ impl Compiler {
             let text = alloc::string::String::from("function declaration is not a prototype");
             self.warn_at(Code::STRICT_PROTOTYPES, def.line, text);
         }
+        self.report_missing_declaration(id_idx, def.line);
         self.symbols[id_idx].unprototyped_def = !prototyped;
         self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;

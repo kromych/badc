@@ -3864,6 +3864,17 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn the_address_of_a_call_result_is_refused() {
+    // C99 6.5.3.2p1: a call's value is no lvalue, of pointer type too.
+    for src in [
+        "int *g(void); int main(void) { int **p = &g(); return p != 0; }",
+        "char **g(void); int main(void) { char ***p = &(g()); return p != 0; }",
+    ] {
+        expect_compile_error(src, "bad address-of");
+    }
+}
+
+#[test]
 fn thread_local_is_in_every_declaration_of_an_object_or_in_none() {
     // C11 6.7.1p3, at file and block scope, in either order.
     for (src, needle) in [

@@ -3203,10 +3203,8 @@ impl Compiler {
             // was materialized without a trailing load, so the walker's lvalue
             // path yields its slot address.
             self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
-        } else if is_pointer_ty(pre_addr_ty) {
-            // A pointer value with no shape on record and no load to drop.
-            self.retag_expr_fn_depth(|d| d + 1);
         } else {
+            // C99 6.5.3.2p1: no lvalue, no function designator, no array.
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad address-of"));
         }
         // `&` adds one level toward a tracked function pointer; -1

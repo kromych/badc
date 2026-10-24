@@ -122,10 +122,10 @@ SOURCES = [
         # because the last release tag (release_0_9_27, 2017). Version
         # embeds the commit's author date.
         name="tinycc",
-        version="20260513",
-        url="https://github.com/TinyCC/tinycc/archive/757507eb022f7af4be63dc9a72b299761181efbb.zip",
+        version="20261016",
+        url="https://github.com/TinyCC/tinycc/archive/e23dabed154a8495f3ac1ff3cc9d04fa1c207893.zip",
         ext=".zip",
-        upstream_sha="757507eb022f7af4be63dc9a72b299761181efbb",
+        upstream_sha="e23dabed154a8495f3ac1ff3cc9d04fa1c207893",
         sha_kind="git",
     ),
     Source(

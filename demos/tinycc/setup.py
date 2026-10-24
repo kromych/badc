@@ -30,11 +30,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "20260513"
-UPSTREAM_SHA = "757507eb022f7af4be63dc9a72b299761181efbb"  # github.com/TinyCC/tinycc mob HEAD
+VERSION = "20261016"
+UPSTREAM_SHA = "e23dabed154a8495f3ac1ff3cc9d04fa1c207893"  # github.com/TinyCC/tinycc mob HEAD
 ASSET = f"tinycc-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "3111f0b293e4a30f4b0293a7541edfa0ea1ca47d5f793c5541652af0b1b6bbf4"
+SHA256 = "03f7a203d8b73812df7c5927b9f3770a37cf4d225d017719178b4e15787fad4d"
 
 # Compile units always pulled in by a multi-TU tcc build, regardless
 # of host triple. ONE_SOURCE is deliberately NOT defined, so libtcc.c

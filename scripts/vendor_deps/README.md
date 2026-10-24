@@ -37,6 +37,8 @@ project's identifier for the release:
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
 | tcl        | SourceForge tcl release tarball         | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
+| python     | www.python.org release tarball          | tarball-sha256  |
+| python-frozen | `Python/frozen_modules/` of a host build | file-sha256  |
 | qemu       | git v11.1.2 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.1.2 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |

@@ -500,6 +500,34 @@ fn a_block_scope_extern_thread_local_is_referenced_as_one() {
 }
 
 #[test]
+fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
+    // The call and the address-of reach one undefined symbol, as gcc and
+    // clang write it; the symbol table holds no second entry of the name.
+    let src = "int f(void);\nint g(void) { return f ? f() : 7; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "f.o").expect("parse");
+        let f: Vec<usize> = (0..a.symbols.len())
+            .filter(|&i| a.symbols[i].name == "f")
+            .collect();
+        assert_eq!(f.len(), 1, "{target:?}");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let refs = text
+            .relocs
+            .iter()
+            .filter(|r| r.sym as usize == f[0])
+            .count();
+        assert!(
+            refs >= 2,
+            "{target:?}: the call and the address use the entry"
+        );
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

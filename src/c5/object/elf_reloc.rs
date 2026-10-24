@@ -2896,6 +2896,12 @@ impl<'a> RelocWriter<'a> {
         }
         for i in 0..self.names.user_extern_data_names.len() {
             let name = self.names.user_extern_data_names[i];
+            // A callee whose address is taken too has one undefined entry.
+            if let Some(k) = self.names.user_extern_names.iter().position(|&n| n == name) {
+                let idx = self.syms.user_extern_sym_idx[k];
+                self.syms.user_extern_data_sym_idx.push(idx);
+                continue;
+            }
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.user_extern_data + i],
                 st_info: pack_sym_info(self.bind_for(name), STT_NOTYPE),

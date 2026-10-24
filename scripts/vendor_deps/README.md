@@ -37,8 +37,8 @@ project's identifier for the release:
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
 | tcl        | SourceForge tcl release tarball         | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
-| qemu       | git v11.1.1 tag; bundle assembled off   | git (assembled) |
-| pc-bios-x86| qemu 11.1.1 release tarball `pc-bios/`  | tarball-sha256  |
+| qemu       | git v11.1.2 tag; bundle assembled off   | git (assembled) |
+| pc-bios-x86| qemu 11.1.2 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
 | edk2-mdepkg| edk2-stable tag; MdePkg subset packed   | packed-sha256   |
 | uemacs     | github torvalds/uemacs `master` commit  | git             |
@@ -74,7 +74,7 @@ Each target is configured and built on a host of its own
 architecture, in a directory beside a git clone of the release
 tag named `qemu-rm` (the compile database names sources as
 `../qemu-rm/...`), and built with `ninja -d keeprsp` so the
-linker response files survive for the capture. The 11.1.1
+linker response files survive for the capture. The 11.1.2
 bundle was configured with:
 
 ```sh
@@ -142,9 +142,9 @@ gives it to its q35 machine. It is packed straight from an upstream
 release tarball, so no build directory is involved:
 
 ```sh
-curl -O https://download.qemu.org/qemu-11.1.1.tar.xz
+curl -O https://download.qemu.org/qemu-11.1.2.tar.xz
 python3 scripts/vendor_deps/build_qemu_bundle.py \
-    --pack-pc-bios qemu-11.1.1.tar.xz --out /tmp/roms
+    --pack-pc-bios qemu-11.1.2.tar.xz --out /tmp/roms
 ```
 
 The blob list is `PC_BIOS_X86` in that script; the asset name

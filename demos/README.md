@@ -278,7 +278,7 @@ assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
 
 ## qemu/
 
-Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc --
+Builds the [QEMU](https://www.qemu.org/) 11.1.2 system emulator with badc --
 well over a thousand translation units per target (device models, the TCG code
 generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object

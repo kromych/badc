@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against QEMU 11.1.1 (system emulator).
+"""End-to-end smoke for badc against QEMU 11.1.2 (system emulator).
 
 Compiles every translation unit that feeds ``qemu-system-<arch>`` with badc and
 archives its in-tree libraries with badc's ``--ar`` -- no ``make``, no ``meson``.
@@ -57,7 +57,7 @@ _syslib_spec = importlib.util.spec_from_file_location(
 _syslib = importlib.util.module_from_spec(_syslib_spec)
 _syslib_spec.loader.exec_module(_syslib)
 
-VERSION = "11.1.1"
+VERSION = "11.1.2"
 
 # Per-target vendored build config: (cache build subdir, response-file stem).
 TARGETS = {

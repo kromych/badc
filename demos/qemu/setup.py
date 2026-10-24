@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Fetch the QEMU 11.1.1 source + captured build config from the badc
+"""Fetch the QEMU 11.1.2 source + captured build config from the badc
 vendor-deps mirror.
 
-After this runs, ``demos/qemu/.cache/qemu-11.1.1/`` holds the trimmed QEMU
+After this runs, ``demos/qemu/.cache/qemu-11.1.2/`` holds the trimmed QEMU
 source (``qemu-rm/``) and the meson-generated build config for each captured
 target (``qbuild-<arch>/``). QEMU's build is not reproducible off-box without
 meson's generated config, so the asset ships it: per target a captured
@@ -36,12 +36,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "11.1.1"
-# git commit for the v11.1.1 tag (c3d48b7d...); sha_kind "git".
-UPSTREAM_SHA = "c3d48b7d1e89604920e5b81b91140c2ad39a1943"
+VERSION = "11.1.2"
+# git commit for the v11.1.2 tag (4fc49f46...); sha_kind "git".
+UPSTREAM_SHA = "4fc49f46dc95d4a27de2509e7fceb2931e91faeb"
 ASSET = f"qemu-{VERSION}-{UPSTREAM_SHA[:8]}.tar.xz"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "2996728e02ff7ed1513a0b0cbd009c1a0c7426e319c8b3730d7e51a5d04c6b66"
+SHA256 = "f08645caf2e88b95efe740613b2e089ee78d6a05e876c91e602de9cb3b9714aa"
 PREFIX = f"qemu-{VERSION}"
 
 # Boot kernel bundle, used by smoke.py's boot check. Each per-arch bundle is a
@@ -77,8 +77,8 @@ KERNEL_BUNDLES = {
 # asset is trimmed of them. An emulator linked without a data directory needs
 # `-L <this directory>`. The sha suffix is the upstream release tarball's
 # sha256; `scripts/vendor_deps/build_qemu_bundle.py --pack-pc-bios` packs it.
-PC_BIOS_ASSET = f"pc-bios-x86-{VERSION}-079ffbff.tar.xz"
-PC_BIOS_SHA256 = "35ed112a02352f0cfb7e206f9aa30b8bafdde329aefcf3f02bb51b3bd431fa87"
+PC_BIOS_ASSET = f"pc-bios-x86-{VERSION}-731b5681.tar.xz"
+PC_BIOS_SHA256 = "5e5104591266566b11ca571c428b8322dafa8b49d23387525048f04f17f7616d"
 
 QEMU_DIR = Path(__file__).resolve().parent
 

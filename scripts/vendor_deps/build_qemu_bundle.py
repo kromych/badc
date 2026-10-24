@@ -34,7 +34,7 @@ The packed asset is ``qemu-<version>-<commit8>.tar.xz`` with layout
 The x86 run-time ROM set is a separate, independent asset, packed straight from
 an upstream release tarball (no build directory needed):
 
-  build_qemu_bundle.py --pack-pc-bios ~/qemu-11.1.1.tar.xz --out /tmp/roms
+  build_qemu_bundle.py --pack-pc-bios ~/qemu-11.1.2.tar.xz --out /tmp/roms
 """
 
 from __future__ import annotations
@@ -58,9 +58,11 @@ SRC_EXCLUDE = {".git", ".github", ".gitlab", ".gitlab-ci.d", "tests", "docs",
 NESTED_EXCLUDE = SRC_EXCLUDE | {"berkeley-softfloat-3", "berkeley-testfloat-3",
                                 "__pycache__"}
 
-# macOS tar stores extended attributes as AppleDouble `._*` members unless this
-# is set; GNU tar ignores it.
+# macOS tar writes extended attributes as AppleDouble `._*` members unless
+# COPYFILE_DISABLE is set, and as pax records unless --no-xattrs is given; GNU
+# tar ignores the variable and accepts the flag.
 TAR_ENV = {**os.environ, "COPYFILE_DISABLE": "1"}
+TAR_CREATE = ["tar", "--no-xattrs"]
 
 # Run-time ROM set for QEMU's x86 machines: the machine firmware plus the option
 # ROMs a `pc` / `q35` boot loads (the APIC helper, the -kernel loader, the VGA
@@ -153,7 +155,7 @@ def pack_pc_bios(tarball: Path, out: Path) -> Path:
         raise SystemExit(f"{tarball}: no pc-bios/{{{','.join(missing)}}}")
     asset = out / f"pc-bios-x86-{version}-{sha256_of(tarball)[:8]}.tar.xz"
     print(f"packing {len(found)} ROMs from {tarball.name} -> {asset}")
-    subprocess.run(["tar", "-C", str(staged), "-cJf", str(asset), *PC_BIOS_X86],
+    subprocess.run([*TAR_CREATE, "-C", str(staged), "-cJf", str(asset), *PC_BIOS_X86],
                    check=True, env=TAR_ENV)
     return asset
 
@@ -203,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("no .commit recorded; run a capture step with --qemu-src first")
         asset = args.out / f"qemu-{version}-{commit[:8]}.tar.xz"
         print(f"packing {root} -> {asset}")
-        with subprocess.Popen(["tar", "-C", str(args.out), "-cf", "-", root.name],
+        with subprocess.Popen([*TAR_CREATE, "-C", str(args.out), "-cf", "-", root.name],
                               stdout=subprocess.PIPE, env=TAR_ENV) as tar:
             with open(asset, "wb") as out, subprocess.Popen(
                     ["xz", "-6", "-T0"], stdin=tar.stdout, stdout=out) as xz:

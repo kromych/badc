@@ -883,6 +883,18 @@ jobs:
         # PSD is skipped via STBI_NO_PSD pending an aarch64
         # codegen-drift regression specific to that decoder.
         run: python demos/stb/smoke.py
+      - name: X11 development headers for the nuklear demos (linux only)
+        if: runner.os == 'Linux'
+        run: ./scripts/apt_resilient_install.sh libx11-dev
+      - name: nuklear smoke (header regen + per-source compile + demos + headless frames)
+        # Nuklear has no unit tests; this checks what its own CI checks with
+        # badc as the compiler (nuklear.h regenerated from src/, each src/*.c
+        # compiled alone, the X11 demo built), then drives the upstream demo
+        # windows for 90 frames through the rawfb software renderer and
+        # nk_convert, and requires every frame's digests to agree between
+        # badc -O0, badc -O and (but on Windows) the host's cc. 5 to 25 s
+        # per lane on the validation boxes.
+        run: python demos/nuklear/smoke.py
       - name: gui_hello build-only smoke
         # Three GUI demos -- Win32, X11, Cocoa via objc_msgSend --
         # cross-compiled to all five supported targets. Build-only

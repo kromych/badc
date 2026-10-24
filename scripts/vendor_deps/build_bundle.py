@@ -344,6 +344,16 @@ SOURCES = [
         upstream_sha="989d33b1bc6569965d7aad3bd50a8d35fa4c359e",
         sha_kind="git",
     ),
+    Source(
+        # Nuklear -- immediate-mode GUI. The asset is the upstream GitHub
+        # archive of the v4.13.3 tag, pinned by its own sha256.
+        name="nuklear",
+        version="4.13.3",
+        url="https://github.com/Immediate-Mode-UI/Nuklear/archive/refs/tags/v4.13.3.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="834bf30974a294e996f7b1222aa59f1eb4ee259bd8d7d7967e8a2fb213d82dde",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

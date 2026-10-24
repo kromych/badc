@@ -199,6 +199,17 @@ checks the file each run writes and the terminal output against the
 reference build's. Linux only: the macOS build reaches SDK headers
 badc's own set does not carry. See [`vim/README.md`](./vim/README.md).
 
+## nuklear/
+
+[Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) 4.13.3, the
+single-header immediate-mode GUI library, which has no unit tests: the
+smoke checks what upstream's CI checks with badc as the compiler (the header
+regenerated from `src/`, each `src/*.c` compiled on its own, the X11 demo
+built), then drives the upstream demo windows for 90 frames of scripted
+input through the rawfb software renderer and `nk_convert`, and requires
+every frame's digests to agree between badc -O0, badc -O and the host
+compiler. All five targets. See [`nuklear/README.md`](./nuklear/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

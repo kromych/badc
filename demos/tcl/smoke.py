@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build tclsh 8.6.14 with badc and run the Tcl test suite.
+"""Build tclsh 8.6.18 with badc and run the Tcl test suite.
 
 Pipeline:
-  - ``setup.py`` fetches + extracts the source under ``.cache/tcl8.6.14``.
+  - ``setup.py`` fetches + extracts the source under ``.cache/tcl8.6.18``.
   - ``unix/configure`` generates the Makefile; ``make -n binaries`` yields
     the per-translation-unit compile commands, which are replayed through
     badc, plus the bundled zlib the Makefile skips when configured against
@@ -46,7 +46,7 @@ def _first_diagnostic(text: str, rc: int) -> str:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TCL_DIR = Path(__file__).resolve().parent
-VERSION = "8.6.14"
+VERSION = "8.6.18"
 SRC = TCL_DIR / ".cache" / f"tcl{VERSION}"
 
 # Bundled zlib units tclZlib references; the Makefile omits them when Tcl

@@ -34,6 +34,7 @@ project's identifier for the release:
 | monocypher | github LoupVaillant/Monocypher tag      | tarball-sha256  |
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
+| tcl        | SourceForge tcl release tarball         | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
 | qemu       | git v11.1.1 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.1.1 release tarball `pc-bios/`  | tarball-sha256  |

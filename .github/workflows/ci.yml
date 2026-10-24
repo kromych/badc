@@ -1221,7 +1221,7 @@ jobs:
           python3 demos/quickjs/bench.py | tee perf-out/qjs_cmp.md
           cat perf-out/qjs_cmp.md >> "$GITHUB_STEP_SUMMARY"
 
-  # Build the Tcl 8.6.14 interpreter with badc and run the upstream
+  # Build the Tcl 8.6.18 interpreter with badc and run the upstream
   # test suite (tests/all.tcl). Isolated from the `test` job because the
   # 169-unit build plus the full suite exceeds that job's 10-minute
   # budget. POSIX only; Windows is excluded (the build runs configure +

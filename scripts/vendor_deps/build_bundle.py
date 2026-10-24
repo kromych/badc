@@ -87,10 +87,10 @@ SOURCES = [
     ),
     Source(
         name="sqlite-amalgamation",
-        version="3530000",
-        url="https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip",
+        version="3540100",
+        url="https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip",
         ext=".zip",
-        upstream_sha="4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
+        upstream_sha="555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76",
         sha_kind="fossil",
     ),
     Source(

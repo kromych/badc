@@ -11,6 +11,54 @@
 // A cross-device copy is copied rather than refused with EXDEV: glibc's
 // fallback copies, and current kernels copy across file systems too, so
 // EXDEV would be a behaviour only this emulation has.
+//
+// On Windows the file also defines sleep, usleep, ftruncate and truncate,
+// which mingw-w64's <unistd.h> declares and libmingwex defines: the sleeps
+// over nanosleep, the truncations over msvcrt's 64-bit `_chsize_s`.
+
+#ifdef _WIN32
+
+#include <errno.h>
+#include <fcntl.h>
+#include <io.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
+
+unsigned int sleep(unsigned int seconds) {
+    struct timespec req = {seconds, 0};
+    nanosleep(&req, NULL);
+    return 0;
+}
+
+int usleep(useconds_t usec) {
+    unsigned int us = (unsigned int)usec;
+    struct timespec req = {us / 1000000, (long)(us % 1000000) * 1000};
+    return nanosleep(&req, NULL);
+}
+
+int ftruncate(int fd, off_t len) {
+    int error = len < 0 ? EINVAL : _chsize_s(fd, len);
+    if (error) {
+        errno = error;
+        return -1;
+    }
+    return 0;
+}
+
+int truncate(const char *path, off_t len) {
+    int fd = _open((char *)path, O_RDWR | O_BINARY, 0);
+    int rc, error;
+    if (fd < 0)
+        return -1;
+    rc = ftruncate(fd, len);
+    error = errno;
+    _close(fd);
+    errno = error;
+    return rc;
+}
+
+#endif
 
 #ifndef __linux__
 

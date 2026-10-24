@@ -52,6 +52,7 @@ struct AttrFlags {
     no_stack_protector: bool,
     uninitialized: bool,
     transparent_union: bool,
+    designated_init: bool,
     ms_abi: bool,
     sysv_abi: bool,
 }
@@ -76,6 +77,7 @@ impl AttrFlags {
         self.no_stack_protector |= other.no_stack_protector;
         self.uninitialized |= other.uninitialized;
         self.transparent_union |= other.transparent_union;
+        self.designated_init |= other.designated_init;
         self.ms_abi |= other.ms_abi;
         self.sysv_abi |= other.sysv_abi;
     }
@@ -244,6 +246,7 @@ impl Compiler {
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
         let head_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
+        let head_designated = core::mem::take(&mut self.pending.attrs.designated_init);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -266,6 +269,9 @@ impl Compiler {
             self.apply_post_body_attributes(id)?;
             if head_transparent {
                 self.mark_transparent_union(id);
+            }
+            if head_designated {
+                self.mark_designated_init(id)?;
             }
             id
         } else {
@@ -1039,6 +1045,8 @@ impl Compiler {
                 // GNU `uninitialized`: the automatic object opts out of
                 // `-ftrivial-auto-var-init`.
                 f.uninitialized = true;
+            } else if n == "designated_init" || n == "__designated_init__" {
+                f.designated_init = true;
             } else if n == "transparent_union" || n == "__transparent_union__" {
                 // GNU `transparent_union`: parameters of the union type
                 // accept arguments of any member type.
@@ -1450,6 +1458,9 @@ impl Compiler {
         }
         if attrs.transparent_union {
             self.pending.attrs.transparent_union = true;
+        }
+        if attrs.designated_init {
+            self.pending.attrs.designated_init = true;
         }
         if vector_size > 0 {
             self.pending.attrs.vector_size = vector_size;

@@ -1332,6 +1332,7 @@ pub(super) fn is_known_attribute(name: &str) -> bool {
             | "destructor"
             | "may_alias"
             | "transparent_union"
+            | "designated_init"
             | "fallthrough"
             | "nothrow"
             | "no_instrument_function"

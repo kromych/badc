@@ -5942,3 +5942,45 @@ fn cast_function_type_reports_where_gcc_does() {
     let llp64 = lines(Target::WindowsX64, &["cast-function-type"]);
     assert_eq!(llp64, [27, 34, 35, 37, 38, 42]);
 }
+
+/// GNU `designated_init` on a struct type: each initializer element with
+/// no designator for one of its members reports, braced or brace-elided,
+/// in a static, an automatic and a compound-literal initializer. The lines
+/// warned are gcc 16.2.1's for the same unit; gcc counts some elements on
+/// lines 16 and 17 differently but warns on the same lines.
+#[test]
+fn designated_init_reports_a_positional_member() {
+    let src = "struct s { int a, b; } __attribute__((designated_init));\n\
+               struct s x1 = { 1, 2 };\n\
+               struct s x2 = { .a = 1, 2 };\n\
+               struct s x3 = { 0 };\n\
+               struct s x4 = { };\n\
+               struct s x5 = { .a = 1, .b = 2 };\n\
+               struct t { struct s in; int c; };\n\
+               struct t y1 = { { 1, 2 }, 3 };\n\
+               struct s arr[2] = { { 1, 2 }, [1] = { 3 } };\n\
+               void f(void) { struct s l = { 5 }; struct s m = (struct s){ 6 }; (void)l; (void)m; }\n\
+               struct u { int a; };\n\
+               typedef struct __attribute__((designated_init)) { int q; } V;\n\
+               V v1 = { 1 };\n\
+               struct w { int z; } __attribute__((designated_init)) ww = { 4 };\n\
+               struct t y2 = { 1, 2, 3 };\n\
+               struct t y3 = { .in.a = 1, 2, 3 };\n\
+               struct s arr2[2] = { 1, 2, 3, 4 };\n\
+               struct t y4 = { .in = { .a = 1 }, 3 };\n\
+               #if __has_attribute(designated_init)\n\
+               int main(void) { return 0; }\n\
+               #endif\n";
+    let mut lines: Vec<u32> = super::compile_str_bare(src)
+        .warnings
+        .iter()
+        .filter(|w| w.code == crate::c5::diag::Code::DESIGNATED_INIT)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    lines.dedup();
+    assert_eq!(lines, [2, 3, 4, 8, 9, 10, 13, 14, 15, 16, 17]);
+    expect_compile_error(
+        "union __attribute__((designated_init)) u { int i; float f; };\nint main(void) { return 0; }\n",
+        "`designated_init` applies to a struct type only",
+    );
+}

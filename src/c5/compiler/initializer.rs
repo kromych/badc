@@ -4118,6 +4118,14 @@ impl Compiler {
         while self.lex.tk != '}' && (braced || pos < n_fields) {
             // Designator?
             let designated = self.lex.tk == Token::Dot;
+            if !designated && self.structs[struct_id].designated_init {
+                let text = format!(
+                    "positional initialization of a member of struct {}, declared with \
+                     `designated_init`",
+                    self.structs[struct_id].name
+                );
+                self.warn_at(Code::DESIGNATED_INIT, self.lex.line, text);
+            }
             // C99 6.7.8p2, p17: a union holds one object to initialize,
             // so a positional initializer after the list's first item
             // names nothing; a designated one overrides (p19).

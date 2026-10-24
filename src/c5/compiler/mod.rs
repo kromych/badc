@@ -175,6 +175,9 @@ pub struct StructDef {
     /// that member. Set only when the attribute is honored
     /// (`mark_transparent_union`).
     pub is_transparent_union: bool,
+    /// GNU `designated_init`: an initializer names each member it gives a
+    /// value by a designator.
+    pub designated_init: bool,
     /// A cast type-name in this unit names the aggregate. C99 6.5.4 makes
     /// that a use of the type whatever becomes of the value, so debug info
     /// keeps a DIE for it with no object of the type declared.
@@ -207,6 +210,7 @@ impl StructDef {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum,
@@ -1389,6 +1393,7 @@ pub(super) struct DeclAttrs {
     /// diagnostic for the declared locals.
     pub maybe_unused: bool,
     pub transparent_union: bool,
+    pub designated_init: bool,
     /// `_Alignas(N)` / `aligned(N)` / `__declspec(align(N))`, 0 for none.
     pub align: i64,
     /// The `_Alignas(N)` share of `align`: C11 6.7.5 makes it raise-only and

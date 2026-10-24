@@ -1216,6 +1216,9 @@ impl Compiler {
             self.repack_struct(struct_id, Packing::Attribute);
         }
         let transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
+        if core::mem::take(&mut self.pending.attrs.designated_init) {
+            self.mark_designated_init(struct_id)?;
+        }
         let req = self.take_member_align()?;
         if req > 0 {
             let align = self.structs[struct_id].align.max(req as usize);
@@ -1234,6 +1237,18 @@ impl Compiler {
         if self.target.ms_layout() && s.is_complete && s.size == 0 {
             s.size = if s.explicit_align >= 4 { s.align } else { 4 };
         }
+        Ok(())
+    }
+
+    /// GNU `designated_init`, which gcc takes on a struct type only.
+    pub(super) fn mark_designated_init(&mut self, struct_id: usize) -> Result<(), C5Error> {
+        if self.structs[struct_id].is_union {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`designated_init` applies to a struct type only",
+            ));
+        }
+        self.structs[struct_id].designated_init = true;
         Ok(())
     }
 

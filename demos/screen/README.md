@@ -1,6 +1,6 @@
 # screen demo
 
-Build [GNU Screen](https://www.gnu.org/software/screen/) 5.0.0 with badc
+Build [GNU Screen](https://www.gnu.org/software/screen/) 5.0.2 with badc
 and run it as both halves of its own client/server pair. screen is the
 terminal multiplexer: it allocates a pseudo-terminal per window, paints
 through terminfo, and a second copy of the binary reaches the running
@@ -9,7 +9,7 @@ badc-built binary here.
 
 The source tree is **not committed**: `setup.py` fetches the upstream
 `ftp.gnu.org` tarball from the `kromych/badc` vendor-deps release
-(mirrored as `screen-5.0.0-f04a39d0.tar.gz`), verifies a sha256, and
+(mirrored as `screen-5.0.2-ca9a2c7e.tar.gz`), verifies a sha256, and
 extracts it under `demos/screen/.cache/`. The tree is built as upstream
 ships it; no patches.  While the release lacks the asset, `setup.py`
 exits with status 3 and the smoke reports a skip naming it.
@@ -61,7 +61,7 @@ path once every run has passed.
 
 ## Platforms
 
-Linux only. Upstream 5.0.0's `socket.c` picks between `<shadow.h>`'s
+Linux only. Upstream 5.0.2's `socket.c` picks between `<shadow.h>`'s
 `getspnam` and BSD's `getpwnam_shadow` on `#ifndef _PWD_H` -- glibc's
 include guard -- so on macOS, whose `<pwd.h>` spells its guard `_PWD_H_`,
 it reaches for a function the platform does not have. `clang` on macOS

@@ -305,10 +305,10 @@ SOURCES = [
         # GNU Screen -- terminal multiplexer. The asset is the upstream
         # release tarball, pinned by its own sha256.
         name="screen",
-        version="5.0.0",
-        url="https://ftp.gnu.org/gnu/screen/screen-5.0.0.tar.gz",
+        version="5.0.2",
+        url="https://ftp.gnu.org/gnu/screen/screen-5.0.2.tar.gz",
         ext=".tar.gz",
-        upstream_sha="f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971",
+        upstream_sha="ca9a2c7e240919bc7ac12124593ae4529bb4eb5f7349d8857829b7e3f0b3b332",
         sha_kind="tarball-sha256",
     ),
     Source(

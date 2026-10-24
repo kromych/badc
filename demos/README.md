@@ -174,7 +174,7 @@ way through it, and ends the session with `C-a C-x`. POSIX only. See
 
 ## screen/
 
-[GNU Screen](https://www.gnu.org/software/screen/) 5.0.0, the terminal
+[GNU Screen](https://www.gnu.org/software/screen/) 5.0.2, the terminal
 multiplexer: `./configure` + `make` generate the derived sources and the
 host-`cc` reference, then the compile line for each of the 38 units is
 taken out of `make -n` and replayed through `badc -c`, and badc's linker
@@ -183,7 +183,7 @@ produces `screen` against the system terminfo and crypt libraries, at
 client/server pair -- a detached session driven over the session socket
 with `stuff`, `hardcopy` and `quit`, and an attached session under a
 pseudo-terminal -- and compares the window text and the terminal output
-with the reference build's. Linux only: upstream 5.0.0 does not compile
+with the reference build's. Linux only: upstream 5.0.2 does not compile
 on macOS with any compiler. See [`screen/README.md`](./screen/README.md).
 
 ## vim/

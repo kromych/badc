@@ -1424,7 +1424,7 @@ jobs:
   # reference binary, then every unit's compile line is replayed through
   # badc and badc's linker produces the multiplexer. The smoke runs it as
   # both halves of its own client/server pair. Linux only -- upstream
-  # 5.0.0 does not compile on macOS with any compiler.
+  # 5.0.2 does not compile on macOS with any compiler.
   screen:
     needs: build
     name: screen suite (${{ matrix.os }})

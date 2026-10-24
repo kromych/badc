@@ -23,7 +23,7 @@ Pipeline:
     The badc builds' hardcopy and terminal output are compared with the
     reference build's.
 
-Linux only. Upstream 5.0.0's ``socket.c`` selects between
+Linux only. Upstream 5.0.2's ``socket.c`` selects between
 ``getspnam`` and BSD's ``getpwnam_shadow`` on ``#ifndef _PWD_H``, the
 glibc include guard, so on macOS it reaches for a function the platform
 does not have; the host compiler fails there the same way badc does.
@@ -51,7 +51,7 @@ from pathlib import Path
 
 SCREEN_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCREEN_DIR.parent.parent
-VERSION = "5.0.0"
+VERSION = "5.0.2"
 SRC = SCREEN_DIR / ".cache" / f"screen-{VERSION}"
 
 _tu_spec = importlib.util.spec_from_file_location(
@@ -335,7 +335,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if not sys.platform.startswith("linux"):
-        print(f"screen smoke skipped ({sys.platform}: upstream 5.0.0 is glibc-only)")
+        print(f"screen smoke skipped ({sys.platform}: upstream 5.0.2 is glibc-only)")
         return 0
     start = time.monotonic()
     badc = resolve_badc()

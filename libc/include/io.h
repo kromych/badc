@@ -5,8 +5,11 @@
 
 #ifdef _WIN32
 
+#include <stddef.h>
+
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::_open,    "_open")
+#pragma binding(msvcrt::_wopen,   "_wopen")
 #pragma binding(msvcrt::_close,   "_close")
 #pragma binding(msvcrt::_read,    "_read")
 #pragma binding(msvcrt::_write,   "_write")
@@ -29,7 +32,9 @@
 #pragma binding(msvcrt::chmod,    "_chmod")
 #pragma binding(msvcrt::mktemp,   "_mktemp")
 
-int       _open(char *path, int oflag, int pmode);
+// The mode is read only with _O_CREAT.
+int       _open(const char *path, int oflag, ...);
+int       _wopen(const wchar_t *path, int oflag, ...);
 int       _close(int fd);
 int       _read(int fd, void *buf, unsigned int count);
 int       _write(int fd, void *buf, unsigned int count);

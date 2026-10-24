@@ -1344,23 +1344,36 @@ fn windows_pthread_declarations_link() {
 /// Links a unit that takes the address of each `(name, ..)` after `headers`
 /// for `target` and checks that each is imported as `symbol` from `dll`.
 fn assert_windows_imports(target: crate::Target, headers: &str, imports: &[(&str, &str, &str)]) {
-    use crate::{Compiler, NativeOptions};
     let mut src =
         alloc::format!("{headers}typedef void (*fn)(void);\nstatic const fn used[] = {{\n");
     for (name, ..) in imports {
         src += &alloc::format!("    (fn){name},\n");
     }
     src += "};\nint main(void) { return used[0] == 0; }\n";
-    let program = Compiler::with_target(src, target)
+    let symbols: alloc::vec::Vec<_> = imports.iter().map(|&(_, s, d)| (s, d)).collect();
+    assert_windows_unit_imports(target, &src, &symbols);
+}
+
+/// Links `src` for `target`, which compiles with no diagnostic and no
+/// auto-included header, and checks that each `(symbol, dll)` is imported.
+fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&str, &str)]) {
+    use crate::{Compiler, NativeOptions};
+    let program = Compiler::with_target(src.to_string(), target)
         .compile()
         .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    assert!(
+        program.warnings.is_empty() && program.notes.is_empty(),
+        "{target:?}: {:?} {:?}",
+        program.warnings,
+        program.notes
+    );
     let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
         .unwrap_or_else(|e| panic!("{target:?}: {e}"));
-    for (name, symbol, dll) in imports {
+    for (symbol, dll) in imports {
         assert_eq!(
             pe_import_dll_of(&image, symbol).as_deref(),
             Some(*dll),
-            "{target:?}: {name} as {symbol}"
+            "{target:?}: {symbol}"
         );
     }
 }
@@ -1383,6 +1396,48 @@ fn windows_h_imports_its_win32_functions_from_their_dlls() {
                 ("SwapBuffers", "SwapBuffers", "gdi32.dll"),
                 ("wglMakeCurrent", "wglMakeCurrent", "opengl32.dll"),
                 ("RegGetValueW", "RegGetValueW", "advapi32.dll"),
+            ],
+        );
+    }
+}
+
+/// The event-log, `RegDeleteTree` and `GetOEMCP` calls `<windows.h>`
+/// declares, and the CRT's `_wcsnicmp` and `_wopen` / `_open`, which read
+/// the mode only with `_O_CREAT`, compile without a diagnostic in the forms
+/// mingw-w64 declares and import the entry points their DLLs export.
+#[test]
+fn windows_event_log_registry_tree_and_crt_wide_calls_compile_silently() {
+    const SRC: &str = "#include <windows.h>\n#include <wchar.h>\n#include <io.h>\n\
+        #include <fcntl.h>\n\
+        _Static_assert(EVENTLOG_SUCCESS == 0 && EVENTLOG_ERROR_TYPE == 1 &&\n\
+            EVENTLOG_WARNING_TYPE == 2 && EVENTLOG_INFORMATION_TYPE == 4 &&\n\
+            EVENTLOG_AUDIT_SUCCESS == 8 && EVENTLOG_AUDIT_FAILURE == 0x10, \"\");\n\
+        int main(void)\n{\n\
+            HANDLE ev = RegisterEventSourceW(NULL, L\"probe\");\n\
+            LPCWSTR msg = L\"probe\";\n\
+            if (ev) {\n\
+                ReportEventW(ev, EVENTLOG_INFORMATION_TYPE, 0, 1, NULL, 1, 0, &msg, NULL);\n\
+                DeregisterEventSource(ev);\n\
+            }\n\
+            int fd = _wopen(L\"NUL\", _O_RDONLY) + _open(\"NUL\", _O_RDONLY);\n\
+            return (int)GetOEMCP() + (int)RegDeleteTreeW(HKEY_CURRENT_USER, L\"absent\")\n\
+                   + _wcsnicmp(L\"ABC\", L\"abd\", 2) + fd * 0;\n\
+        }\n";
+    const A: &str = "advapi32.dll";
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("RegisterEventSourceW", A),
+                ("ReportEventW", A),
+                ("DeregisterEventSource", A),
+                ("RegDeleteTreeW", A),
+                ("GetOEMCP", "kernel32.dll"),
+                ("_wopen", M),
+                ("_open", M),
+                ("_wcsnicmp", M),
             ],
         );
     }

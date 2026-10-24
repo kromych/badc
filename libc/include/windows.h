@@ -397,6 +397,13 @@ typedef enum {
 #pragma binding(advapi32::RegDeleteKeyW,               "RegDeleteKeyW")
 #pragma binding(advapi32::RegDeleteKeyExW,             "RegDeleteKeyExW")
 #pragma binding(advapi32::RegDeleteValueW,             "RegDeleteValueW")
+#pragma binding(advapi32::RegDeleteTreeA,              "RegDeleteTreeA")
+#pragma binding(advapi32::RegDeleteTreeW,              "RegDeleteTreeW")
+#pragma binding(advapi32::RegisterEventSourceA,        "RegisterEventSourceA")
+#pragma binding(advapi32::RegisterEventSourceW,        "RegisterEventSourceW")
+#pragma binding(advapi32::DeregisterEventSource,       "DeregisterEventSource")
+#pragma binding(advapi32::ReportEventA,                "ReportEventA")
+#pragma binding(advapi32::ReportEventW,                "ReportEventW")
 #pragma binding(advapi32::RegEnumKeyExW,               "RegEnumKeyExW")
 #pragma binding(advapi32::RegEnumValueW,               "RegEnumValueW")
 #pragma binding(advapi32::RegFlushKey,                 "RegFlushKey")
@@ -414,6 +421,7 @@ typedef enum {
 #pragma binding(version::GetFileVersionInfoW,          "GetFileVersionInfoW")
 #pragma binding(version::VerQueryValueW,               "VerQueryValueW")
 #pragma binding(kernel32::GetACP,                      "GetACP")
+#pragma binding(kernel32::GetOEMCP,                    "GetOEMCP")
 #pragma binding(kernel32::GetLocaleInfoA,              "GetLocaleInfoA")
 #pragma binding(kernel32::GetFinalPathNameByHandleW,   "GetFinalPathNameByHandleW")
 #pragma binding(kernel32::CreateWaitableTimerExW,      "CreateWaitableTimerExW")
@@ -2173,6 +2181,7 @@ BOOL GetOverlappedResult(HANDLE hFile, LPOVERLAPPED lpOverlapped,
 NTSTATUS BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer,
                          ULONG dwFlags);
 UINT GetACP(VOID);
+UINT GetOEMCP(VOID);
 int GetLocaleInfoA(LCID Locale, LCTYPE LCType, LPSTR lpLCData, int cchData);
 DWORD GetFinalPathNameByHandleW(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath,
                                 DWORD dwFlags);
@@ -2268,6 +2277,42 @@ LSTATUS RegCreateKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpCl
 LSTATUS RegDeleteKeyW(HKEY hKey, LPCWSTR lpSubKey);
 LSTATUS RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
 LSTATUS RegDeleteValueW(HKEY hKey, LPCWSTR lpValueName);
+LSTATUS RegDeleteTreeA(HKEY hKey, LPCSTR lpSubKey);
+LSTATUS RegDeleteTreeW(HKEY hKey, LPCWSTR lpSubKey);
+// Event-log sources (winbase.h) and the event types they report (winnt.h).
+HANDLE RegisterEventSourceA(LPCSTR lpUNCServerName, LPCSTR lpSourceName);
+HANDLE RegisterEventSourceW(LPCWSTR lpUNCServerName, LPCWSTR lpSourceName);
+BOOL DeregisterEventSource(HANDLE hEventLog);
+BOOL ReportEventA(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
+                  PSID lpUserSid, WORD wNumStrings, DWORD dwDataSize, LPCSTR *lpStrings,
+                  LPVOID lpRawData);
+BOOL ReportEventW(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
+                  PSID lpUserSid, WORD wNumStrings, DWORD dwDataSize, LPCWSTR *lpStrings,
+                  LPVOID lpRawData);
+#ifdef UNICODE
+#define RegDeleteTree       RegDeleteTreeW
+#define RegisterEventSource RegisterEventSourceW
+#define ReportEvent         ReportEventW
+#else
+#define RegDeleteTree       RegDeleteTreeA
+#define RegisterEventSource RegisterEventSourceA
+#define ReportEvent         ReportEventA
+#endif
+#define EVENTLOG_SEQUENTIAL_READ       0x0001
+#define EVENTLOG_SEEK_READ             0x0002
+#define EVENTLOG_FORWARDS_READ         0x0004
+#define EVENTLOG_BACKWARDS_READ        0x0008
+#define EVENTLOG_SUCCESS               0x0000
+#define EVENTLOG_ERROR_TYPE            0x0001
+#define EVENTLOG_WARNING_TYPE          0x0002
+#define EVENTLOG_INFORMATION_TYPE      0x0004
+#define EVENTLOG_AUDIT_SUCCESS         0x0008
+#define EVENTLOG_AUDIT_FAILURE         0x0010
+#define EVENTLOG_START_PAIRED_EVENT    0x0001
+#define EVENTLOG_END_PAIRED_EVENT      0x0002
+#define EVENTLOG_END_ALL_PAIRED_EVENTS 0x0004
+#define EVENTLOG_PAIRED_EVENT_ACTIVE   0x0008
+#define EVENTLOG_PAIRED_EVENT_INACTIVE 0x0010
 LSTATUS RegEnumKeyExW(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
                       LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
                       PFILETIME lpftLastWriteTime);
@@ -4244,7 +4289,6 @@ HANDLE RemovePropW(HWND hWnd, LPCWSTR lpString);
 
 // Registry read used for the Windows dark-mode query.
 #pragma binding(advapi32::RegGetValueW, "RegGetValueW")
-#define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
 #define RRF_RT_REG_DWORD 0x00000010
 LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags,
                      LPDWORD pdwType, PVOID pvData, LPDWORD pcbData);

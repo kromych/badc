@@ -98,6 +98,12 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(msvcrt::wcstod, "wcstod")
 #pragma binding(msvcrt::wcstok, "wcstok")
 #pragma binding(msvcrt::wcsicmp, "_wcsicmp")
+#pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
+#pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
+#pragma binding(msvcrt::_wopen, "_wopen")
+int _wcsicmp(const wchar_t *a, const wchar_t *b);
+int _wcsnicmp(const wchar_t *a, const wchar_t *b, size_t n);
+int _wopen(const wchar_t *path, int oflag, ...);
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::wcstok_s, "wcstok_s")
 int wcsicmp(const wchar_t *a, const wchar_t *b);

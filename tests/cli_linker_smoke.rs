@@ -6234,6 +6234,43 @@ fn a_programs_definition_takes_the_place_of_the_on_demand_sources() {
     }
 }
 
+/// The on-demand C library compiles under none of the user units' `-I` paths
+/// or `-D` macros, so a header shadowing a standard one or a keyword macro
+/// leaves it alone.
+#[test]
+fn the_on_demand_library_ignores_the_user_units_paths_and_macros() {
+    let dir = tempdir("on-demand-own-headers");
+    std::fs::create_dir_all(dir.join("inc")).unwrap();
+    for h in ["string.h", "stdlib.h", "dirent.h", "time.h"] {
+        write_source(&dir.join("inc"), h, "#error user header reached\n");
+    }
+    write_source(
+        &dir,
+        "od.c",
+        "int not_defined_anywhere(void);\n\
+         int main(void) { return not_defined_anywhere(); }\n",
+    );
+    let targets = ["linux-x64", "macos-aarch64", "windows-x64", "windows-arm64"];
+    for (target, opt) in targets
+        .iter()
+        .flat_map(|t| [(t, "-Iinc"), (t, "-Dunsigned=struct")])
+    {
+        let out = Command::new(badc())
+            .args([&format!("--target={target}"), opt, "od.c", "-o", "od.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            err.lines().collect::<Vec<_>>(),
+            [
+                "badc: error: undefined reference to `not_defined_anywhere` [B6010] [undefined-symbol]"
+            ],
+            "{target} {opt}"
+        );
+    }
+}
+
 // A program using the glibc entry points that live only in the static
 // libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
 // prints a marker so a run confirms it was registered and invoked.

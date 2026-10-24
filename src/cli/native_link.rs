@@ -253,18 +253,18 @@ impl EmbeddedSources<'_> {
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
         // `wmain` / `wWinMain` entry).
-        let mut copts_defines = cli.front.defines.clone();
-        for (k, v) in extra {
-            copts_defines.push((k.to_string(), v.to_string()));
-        }
-        let mut copts = cli
-            .front
-            .compile_options(label)
-            .with_defines(copts_defines)
+        // As a C library is built: no user `-I`, `-D`, `-include` or language option.
+        let front = super::args::FrontEnd {
+            optimize: cli.front.optimize,
+            system_include_paths: cli.front.system_include_paths.clone(),
+            own_header_roots: cli.front.own_header_roots.clone(),
+            translation_time: cli.front.translation_time,
+            ..Default::default()
+        };
+        let defines = (extra.iter()).map(|(k, v)| (k.to_string(), v.to_string()));
+        let copts = (front.compile_options(label))
+            .with_defines(defines.collect())
             .with_no_entry_point(true);
-        // A bundled source resolves `#include "..."` inside the bundled
-        // set, not through the user's `-iquote` paths.
-        copts.quote_include_paths.clear();
         let program = Compiler::with_options(src, cli.target, copts).compile()?;
         let mut opts = reloc_opts;
         opts.dump_ssa &= dump;

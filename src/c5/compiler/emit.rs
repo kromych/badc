@@ -1020,9 +1020,10 @@ impl Compiler {
     /// block-scope or C89-implicit function declaration): diagnose a
     /// same-scope redeclaration, save the outer binding for the scope's
     /// exit, and mark a function-body binding for the function-exit
-    /// restore. No-op at file scope, where the binding is permanent.
+    /// restore. No-op at file scope outside a parameter list, where the
+    /// binding is permanent.
     pub(super) fn rebind_scoped(&mut self, idx: usize) -> Result<(), C5Error> {
-        if !self.in_function_body() {
+        if !self.in_function_body() && self.param_list_scopes == 0 {
             return Ok(());
         }
         if self.binds_in_current_scope(idx) {

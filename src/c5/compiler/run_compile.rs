@@ -1177,7 +1177,11 @@ impl Compiler {
         for (name, id) in core::mem::take(&mut params.tags) {
             self.tag_scopes.bind(&name, id);
         }
-        self.parse_kr_parameter_declarations(&mut params, def.line)?;
+        self.open_param_list_scope();
+        let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
+        let enumerators = self.close_param_list_scope();
+        kr?;
+        params.enumerators.extend(enumerators);
         self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1210,6 +1214,14 @@ impl Compiler {
         self.next()?;
 
         let ent_pc = self.open_function_body(id_idx, &params);
+        // The function's block continues the scope of the enumeration
+        // constants its parameter list declared (C99 6.2.1p4).
+        for &(idx, ty, val) in &params.enumerators {
+            self.rebind_scoped(idx)?;
+            let s = &mut self.symbols[idx];
+            (s.class, s.type_, s.val) = (Token::Num as i64, ty, val);
+            s.incomplete_enum_tag = None;
+        }
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items(&params)?;
         self.tag_scopes.pop();

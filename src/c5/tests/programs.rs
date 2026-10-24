@@ -4138,6 +4138,13 @@ fn struct_array_designator_resume() {
 }
 
 #[test]
+fn enumerator_scopes_of_parameter_lists() {
+    // C99 6.2.1p4: a prototype's enumeration constants end with it; a
+    // definition's, and its old-style declaration list's, with its block.
+    assert_eq!(run_fixture("enumerator_scopes_of_parameter_lists.c"), 0);
+}
+
+#[test]
 fn designator_resumes_in_subobject() {
     // C99 6.7.8p17: a positional entry after `[i].m`, `.m.x` or `.a[i]`
     // takes the next subobject of the designated one's enclosing object;

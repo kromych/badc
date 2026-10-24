@@ -1769,6 +1769,10 @@ pub struct Compiler {
     /// innermost level. Empty at the function-body top level, whose
     /// bindings use the per-symbol `h_*` slots instead.
     block_scopes: Vec<Vec<stmt::BlockShadow>>,
+    /// Parameter lists being parsed: each holds a level of
+    /// `block_scopes` for the enumeration constants it declares
+    /// (C99 6.2.1p4), at file scope too.
+    param_list_scopes: u32,
 
     // --- Codegen state ---
     /// Next available `ent_pc` identifier for a user function or
@@ -2858,6 +2862,7 @@ impl Compiler {
             symbol_index,
             scope_bound: Vec::new(),
             block_scopes: Vec::new(),
+            param_list_scopes: 0,
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),

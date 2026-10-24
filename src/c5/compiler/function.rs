@@ -46,6 +46,9 @@ pub(super) struct ParsedParams {
     pub(super) sizes: Vec<ParamSize>,
     /// The tags the list declared; a definition's block continues their scope.
     pub(super) tags: Vec<(alloc::string::String, usize)>,
+    /// The enumeration constants the list declared, `(symbol, type,
+    /// value)`; a definition's block continues their scope too.
+    pub(super) enumerators: Vec<(usize, i64, i64)>,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -109,6 +112,7 @@ impl ParsedParams {
             fn_types: p.fn_types,
             sizes: Vec::new(),
             tags: Vec::new(),
+            enumerators: Vec::new(),
         }
     }
 
@@ -167,6 +171,35 @@ impl Compiler {
     /// A parameter's attributes describe that parameter, not the declarator
     /// the list belongs to, so the enclosing ones are detached across the
     /// list the way the other declarator carriers are.
+    /// Open the scope of the ordinary identifiers a parameter list or an
+    /// old-style declaration list declares, its enumeration constants.
+    pub(super) fn open_param_list_scope(&mut self) {
+        self.block_scopes.push(Vec::new());
+        self.param_list_scopes += 1;
+    }
+
+    /// Close [`Self::open_param_list_scope`]'s scope, returning the
+    /// enumeration constants it declared as `(symbol, type, value)`.
+    pub(super) fn close_param_list_scope(&mut self) -> Vec<(usize, i64, i64)> {
+        self.param_list_scopes -= 1;
+        let mut enumerators = Vec::new();
+        for b in self
+            .block_scopes
+            .pop()
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+        {
+            let s = &self.symbols[b.idx];
+            if s.class == Token::Num as i64 {
+                enumerators.push((b.idx, s.type_, s.val));
+            }
+            self.restore_block_shadow(b);
+        }
+        enumerators.reverse();
+        enumerators
+    }
+
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_attrs = core::mem::take(&mut self.pending.attrs);
         // The enclosing declarator's function-pointer carriers and function
@@ -191,7 +224,9 @@ impl Compiler {
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
         self.tag_scopes.push();
+        self.open_param_list_scope();
         let mut r = self.parse_function_params_inner();
+        let enumerators = self.close_param_list_scope();
         let tags = self.tag_scopes.pop();
         for (name, id) in &tags {
             if !self.structs[*id].is_anonymous {
@@ -207,6 +242,7 @@ impl Compiler {
         if let Ok(params) = &mut r {
             params.sizes = sizes;
             params.tags = tags;
+            params.enumerators = enumerators;
         }
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
@@ -542,6 +578,7 @@ impl Compiler {
             fn_types,
             sizes: Vec::new(),
             tags: Vec::new(),
+            enumerators: Vec::new(),
         })
     }
 

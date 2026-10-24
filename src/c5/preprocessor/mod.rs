@@ -2387,15 +2387,43 @@ impl<'p, 's> LinePass<'p, 's> {
             self.idx += 1;
             return Ok(());
         }
-        let (buffer, consumed) = self.join_invocation(line)?;
-        // `__LINE__` reflects the presumed line, which a `#line` can
-        // retarget (C99 6.10.4); absent one it is the physical line.
-        let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
-        let site = self.site(self.presumed);
-        let processed = self
-            .pp
-            .apply_pragma_operators(&substituted, site, &self.current_file)?;
-        self.out.push_str(&processed);
+        let (mut buffer, mut consumed) = self.join_invocation(line)?;
+        loop {
+            // A rescan that ends at a function-like macro name takes the
+            // `(` of a later line (C99 6.10.3.4p1): the joined text is
+            // expanded again, from the state the first expansion found.
+            let counter = self.pp.counter.get();
+            let had_error = self.pp.pending_error.borrow().is_some();
+            // `__LINE__` reflects the presumed line, which a `#line` can
+            // retarget (C99 6.10.4); absent one it is the physical line.
+            let (substituted, tail) =
+                self.pp
+                    .substitute_line(&buffer, self.filename, self.presumed);
+            let more = match tail {
+                Tail::FnName => self
+                    .paren_line(consumed)
+                    .map(|_| JoinScan::awaiting_paren()),
+                Tail::OpenArgs => {
+                    (self.idx + consumed < self.lines.len()).then(JoinScan::open_args)
+                }
+                Tail::Complete => None,
+            };
+            if let Some(join) = more {
+                drop(substituted);
+                self.pp.counter.set(counter);
+                if !had_error {
+                    self.pp.pending_error.borrow_mut().take();
+                }
+                self.join_lines(&mut buffer, &mut consumed, join)?;
+                continue;
+            }
+            let site = self.site(self.presumed);
+            let processed =
+                self.pp
+                    .apply_pragma_operators(&substituted, site, &self.current_file)?;
+            self.out.push_str(&processed);
+            break;
+        }
         // One newline for the line itself, one per joined continuation,
         // so source line numbering survives the join.
         for _ in 0..consumed {
@@ -2420,22 +2448,54 @@ impl<'p, 's> LinePass<'p, 's> {
     fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
         let mut buffer = String::from(first);
         let mut consumed = 1usize;
-        // The scan advances over appended bytes only; re-scanning the
-        // grown buffer per joined line is quadratic in the invocation.
         let mut join = JoinScan::new();
         join.feed(&buffer, self.pp);
-        while self.idx + consumed < self.lines.len()
-            && (join.unclosed()
-                // A function-like macro name at the end of a line with
-                // its `(` on the next is still an invocation (C99
-                // 6.10.3: white space, newlines included, may separate
-                // the name from its `(`).
-                || (join.pending_head()
-                    && self.lines[self.idx + consumed].trim_start().starts_with('(')))
-        {
-            let cont = self.lines[self.idx + consumed];
-            consumed += 1;
-            let dline = self.presumed + consumed - 1;
+        self.join_lines(&mut buffer, &mut consumed, join)?;
+        Ok((buffer, consumed))
+    }
+
+    /// The count of lines past `self.idx`, from `consumed` on and past
+    /// blank ones, at which a line opening with `(` stands.
+    fn paren_line(&self, consumed: usize) -> Option<usize> {
+        let mut k = consumed;
+        while self.idx + k < self.lines.len() && self.lines[self.idx + k].trim().is_empty() {
+            k += 1;
+        }
+        let line = self.lines.get(self.idx + k)?;
+        line.trim_start().starts_with('(').then_some(k)
+    }
+
+    /// Join to `buffer`, which holds the first `consumed` lines, the
+    /// lines an invocation it opens spans, as `join` scans it.
+    fn join_lines(
+        &mut self,
+        buffer: &mut String,
+        consumed: &mut usize,
+        mut join: JoinScan,
+    ) -> Result<(), C5Error> {
+        // The scan advances over appended bytes only; re-scanning the
+        // grown buffer per joined line is quadratic in the invocation.
+        while self.idx + *consumed < self.lines.len() {
+            if !join.unclosed() {
+                // A function-like macro name at the end of a line with its
+                // `(` on a later one is still an invocation (C99 6.10.3:
+                // white space, newlines included, may separate them).
+                let Some(k) = join
+                    .pending_head()
+                    .then(|| self.paren_line(*consumed))
+                    .flatten()
+                else {
+                    break;
+                };
+                for blank in *consumed..k {
+                    buffer.push('\n');
+                    buffer.push_str(self.lines[self.idx + blank]);
+                }
+                *consumed = k;
+            }
+            let cont = self.lines[self.idx + *consumed];
+            *consumed += 1;
+            let dline = self.presumed + *consumed - 1;
             if let Some(rest) = cont.trim_start().strip_prefix('#') {
                 let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
                 // TODO: `#include`, `#line` and `#pragma` inside an
@@ -2459,7 +2519,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 join.feed(&buffer[appended..], self.pp);
             }
         }
-        Ok((buffer, consumed))
+        Ok(())
     }
 }
 
@@ -2480,7 +2540,7 @@ use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
     format_line_marker, header_name, parse_directive,
 };
-use expand::JoinScan;
+use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
 use text::unfold_and_strip;

@@ -192,6 +192,18 @@ struct Exp<'a> {
     filename: &'a str,
     line_no: usize,
     ar: &'a mut ExpScratch,
+    /// What the rescan of the line ended at.
+    tail: Tail,
+}
+
+/// How the rescan of a line ends: complete, or at an invocation the
+/// following lines may supply -- a function-like macro name nothing
+/// follows, or one whose argument list is still open.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Tail {
+    Complete,
+    FnName,
+    OpenArgs,
 }
 
 impl<'a> Exp<'a> {
@@ -209,6 +221,7 @@ impl<'a> Exp<'a> {
             filename,
             line_no,
             ar,
+            tail: Tail::Complete,
         }
     }
 
@@ -676,6 +689,11 @@ impl<'a> Exp<'a> {
                     self.put_vec(sub);
                     continue;
                 }
+                if depth == 0 && rest.is_empty() {
+                    self.tail = Tail::FnName;
+                } else if depth == 0 && rest.last().is_some_and(|&t| self.is_punct(t, "(")) {
+                    self.tail = Tail::OpenArgs;
+                }
                 out.push(tok);
                 continue;
             }
@@ -1086,14 +1104,6 @@ impl Preprocessor {
         (buf, toks, has_paste)
     }
 
-    /// The identifier ending the replacement list `body` of the macro
-    /// `name`, or `None` when the list is empty or ends in another token.
-    fn trailing_identifier<'b>(&self, name: &str, body: &'b str) -> Option<&'b str> {
-        let (_, toks, _) = self.cached_body(name, body);
-        let last = toks.last().filter(|t| t.kind == TokKind::Ident)?;
-        Some(&body[last.start as usize..last.end as usize])
-    }
-
     /// Substitute every macro invocation in `line`. `filename` and
     /// `line_no` feed `__FILE__` / `__LINE__`, whose expansion changes
     /// per line and so can't live in the static macro table.
@@ -1103,6 +1113,19 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, true).0
+    }
+
+    /// [`Self::substitute`] for a content line, and how its rescan ended:
+    /// C99 6.10.3.4p1 rescans the replacement together with the rest of
+    /// the source, so an invocation an expansion forms may take its `(` or
+    /// its arguments from later lines.
+    pub(super) fn substitute_line<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> (Cow<'l, str>, Tail) {
         self.substitute_serialized(line, filename, line_no, true)
     }
 
@@ -1119,7 +1142,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, false)
+        self.substitute_serialized(line, filename, line_no, false).0
     }
 
     fn substitute_serialized<'l>(
@@ -1128,9 +1151,9 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
         relex_safe: bool,
-    ) -> Cow<'l, str> {
+    ) -> (Cow<'l, str>, Tail) {
         if !self.line_mentions_macro(line) {
-            return Cow::Borrowed(line);
+            return (Cow::Borrowed(line), Tail::Complete);
         }
         let mut scratch = self.exp_scratch.borrow_mut();
         let mut ex = Exp::new(self, filename, line_no, &mut scratch);
@@ -1145,7 +1168,7 @@ impl Preprocessor {
         let mut out = String::from(indent);
         ex.serialize_into(&expanded, &mut out, relex_safe);
         ex.put_vec(expanded);
-        Cow::Owned(out)
+        (Cow::Owned(out), ex.tail)
     }
 
     /// Pre-scan: most lines name no macro at all, and copying them
@@ -1396,6 +1419,24 @@ impl JoinScan {
         }
     }
 
+    /// A scan whose text so far ends in a function-like macro name.
+    pub(super) fn awaiting_paren() -> Self {
+        JoinScan {
+            depth: 0,
+            quote: 0,
+            pending: true,
+        }
+    }
+
+    /// A scan whose text so far ends inside an argument list.
+    pub(super) fn open_args() -> Self {
+        JoinScan {
+            depth: 1,
+            quote: 0,
+            pending: false,
+        }
+    }
+
     /// An invocation's argument list is still open.
     pub(super) fn unclosed(&self) -> bool {
         self.depth > 0
@@ -1512,30 +1553,13 @@ impl JoinScan {
     }
 }
 
-/// A name that heads a joinable invocation: a function-like macro, or an
-/// object-like macro whose replacement list *ends* in one. C99 6.10.3.4p1
-/// rescans the replacement list together with the tokens that follow, so
-/// it is the name ending the list that meets the `(` -- which may be on a
-/// later line (`#define dprint if (debug) print`).
+/// A name that heads a joinable invocation: a function-like macro. An
+/// invocation an expansion forms is joined after its rescan, which
+/// [`Preprocessor::substitute_line`] reports.
 fn join_head(name: &str, pp: &Preprocessor) -> bool {
-    let mut name = key(name);
-    for _ in 0..MAX_MACRO_DEPTH {
-        pp.obs_note(&name);
-        if pp.fn_macros.contains_key(&*name) {
-            return true;
-        }
-        let Some(body) = pp.macros.get(&*name) else {
-            return false;
-        };
-        let Some(tail) = pp.trailing_identifier(&name, body).map(key) else {
-            return false;
-        };
-        if tail == name {
-            return false;
-        }
-        name = Cow::Owned(tail.into_owned());
-    }
-    false
+    let name = key(name);
+    pp.obs_note(&name);
+    pp.fn_macros.contains_key(&*name)
 }
 
 /// Cap on the argument-expansion nesting depth. Generous: real code

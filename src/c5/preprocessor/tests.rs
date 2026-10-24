@@ -5256,3 +5256,83 @@ fn macro_parameters_are_separated_by_commas() {
         "{out}"
     );
 }
+
+/// C99 6.10.3.4p1: the rescan takes the rest of the source with the
+/// replacement, so a function-like macro name that ends an expansion is
+/// invoked by a `(` on a later line, past blank lines. A token between
+/// them, a directive line or an argument's own expansion ends the
+/// lookahead, and a discarded first expansion leaves `__COUNTER__` as it
+/// was. The expected lines are gcc's and clang's.
+#[test]
+fn an_expansion_ending_in_a_function_like_name_takes_a_later_lines_paren() {
+    let out = process(
+        "#define tail(x) x tailfn\n#define tailfn(y) <y>\n#define EMPTY\n\
+         #define obj tailfn\n#define id(x) x\n\
+         A: tail(1)\n(3)\n\
+         B: tail(1) EMPTY\n(3)\n\
+         C: tail(1)\n\n(3)\n\
+         D: obj\n(4)\n\
+         E: id(tailfn)\n(5)\n\
+         F: tail(1)\n#define Z 9\n(6)\n\
+         G: tail(1)\n  (7) after\n\
+         H: tail(1)\n(tail(2)\n)\n(8)\n\
+         I: tailfn\n\n(9)\n\
+         K: tail(__COUNTER__)\n(__COUNTER__)\n\
+         L: __COUNTER__\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A: 1 <3>",
+            "B: 1 tailfn",
+            "(3)",
+            "C: 1 <3>",
+            "D: <4>",
+            "E: <5>",
+            "F: 1 tailfn",
+            "(6)",
+            "G: 1 <7> after",
+            "H: 1 <2 tailfn>",
+            "(8)",
+            "I: <9>",
+            "K: 0 <1>",
+            "L: 2",
+        ],
+        "{out}"
+    );
+}
+
+/// An invocation an expansion forms may take its argument list from the
+/// lines after it, its `(` included; the expected lines are gcc's and
+/// clang's.
+#[test]
+fn an_invocation_an_expansion_forms_takes_arguments_from_later_lines() {
+    let out = process(
+        "#define print(f, ...) P(f, __VA_ARGS__)\n#define dprint if (d) print\n\
+         #define call(f) f\n#define nest(x) x nest2\n#define nest2(a, b) [a|b]\n\
+         A: call(print)(\"x\",\n 1);\n\
+         B: dprint(\"y\",\n 2);\n\
+         C: nest(0)(1,\n 2) tail\n\
+         D: call(print)(\"z\", (1,\n 2), 3);\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A: P(\"x\", 1);",
+            "B: if (d) P(\"y\", 2);",
+            "C: 0 [1|2] tail",
+            "D: P(\"z\", (1, 2), 3);",
+        ],
+        "{out}"
+    );
+}

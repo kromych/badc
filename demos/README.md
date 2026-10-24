@@ -231,8 +231,8 @@ since runners have no display server. See
 badc compiles raylib 6.0 (RGFW desktop backend) from source and
 links a small game (Lode Runner) into a standalone binary. The
 pure game-logic self-test runs through badc on any host; the full
-standalone build + headless run is wired for macOS today (the X11
-/ Win32 header surface for the Linux / Windows ports is pending).
+standalone build links on macOS, Linux and Windows and renders a
+frame on macOS and, under Xvfb, on Linux.
 See [`raylib/README.md`](./raylib/README.md).
 
 ## stb/

@@ -18,8 +18,11 @@ bundled `glad`, loaded at runtime; the OS frameworks (Cocoa / CoreVideo
 / CoreGraphics / OpenGL on macOS) are recorded as `LC_LOAD_DYLIB`
 commands so their Objective-C classes register at launch.
 
-The build is asset-free: rectangles and text only (the embedded default
-font), so no image or audio file loaders are compiled.
+Every raylib module is compiled with `config.h`'s feature set passed as
+`-D` flags, so the game loads its sprites from `assets/` (and its sound on
+macOS, the one target that links `raudio`); without them it renders
+procedurally. The MP3 decoder is left out (it is NEON-only) and the other
+decoders' SIMD paths are off.
 
 ## Layout
 
@@ -35,11 +38,12 @@ font), so no image or audio file loaders are compiled.
 ## Workflow
 
 ```sh
-python demos/raylib/smoke.py        # logic self-test on any host;
-                                    # full standalone build + headless
-                                    # run on macOS.
+python demos/raylib/smoke.py        # logic self-test, standalone build
+                                    # and (see Platform status) a
+                                    # rendered frame.
 
 # Play it (macOS, with a display):
+python demos/raylib/smoke.py --out-dir demos/raylib/.build
 ./demos/raylib/.build/loderunner    # arrows / WASD move; Q / E dig;
                                     # R restarts. Collect the gold, then
                                     # climb the exit ladders.
@@ -73,6 +77,7 @@ xcrun stapler staple loderunner.app
 
 ## Platform status
 
-macOS is the standalone target today. The Linux (X11 / GLX) and Windows
-(Win32 / WGL) header surfaces RGFW needs are not yet authored as badc
-headers, so on those hosts `smoke.py` runs the logic self-test only.
+The standalone game builds on macOS (Cocoa), Linux (X11 / GLX) and
+Windows (Win32 / WGL). It renders a frame on macOS and, under `Xvfb`, on
+Linux; on Windows the smoke checks that every PE import resolves and that
+the subsystem is GUI.

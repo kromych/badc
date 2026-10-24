@@ -53,6 +53,44 @@ fn vla_array_type_runs_under_the_interpreter() {
     }
 }
 
+/// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
+/// is no constant: an array bound of it declares a variable-length array
+/// (`int b[sizeof a]`), and a context that requires a constant rejects it,
+/// as gcc 16 does. The run's values are gcc's.
+#[test]
+fn sizeof_of_a_vla_is_not_a_constant() {
+    let src = "int f(int n) { char a[n];\n\
+               int b[sizeof a]; char c[sizeof a][2];\n\
+               _Static_assert(sizeof(sizeof a) == sizeof(void *), \"\");\n\
+               return (int)(sizeof b / sizeof b[0]) + (int)sizeof c * 10\n\
+                 + (int)sizeof(int[sizeof(char[n])]) * 100 + __builtin_constant_p(sizeof a); }\n\
+               int main(void) { return f(3) != 1263; }\n";
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        let program = Compiler::with_target(super::with_prelude(src), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+    for body in [
+        "switch (n) { case sizeof a: return 1; }",
+        "enum { E = sizeof a };",
+        "_Static_assert(sizeof a == 3, \"\");",
+        "static int x = sizeof a;",
+    ] {
+        let src = alloc::format!("int f(int n) {{ char a[n]; {body} return n; }}\n");
+        match Compiler::new(src).compile() {
+            Ok(_) => panic!("{body}: compiled"),
+            Err(e) => {
+                let msg = alloc::format!("{e}");
+                assert!(
+                    msg.contains("`sizeof` of a variable-length array is not a constant"),
+                    "{body}: {msg}"
+                );
+            }
+        }
+    }
+}
+
 /// An object declared through `typeof` of a VLA would need its storage
 /// sized at run time; it is rejected rather than declared as the element
 /// pointer the decayed operand has.

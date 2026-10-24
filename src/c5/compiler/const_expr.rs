@@ -1624,6 +1624,14 @@ impl Compiler {
             // returns the byte count, typed `size_t` (C99 6.5.3.4p4).
             self.next()?;
             let v = self.sizeof_operand_bytes()?;
+            // The size of a variable-length array is taken at run time.
+            if self.pending.sizeof_vla_size_slot.is_some() {
+                self.pending.const_expr_nonconst = true;
+                return Err(self.compile_err(
+                    Code::CONSTANT_EXPRESSION,
+                    "`sizeof` of a variable-length array is not a constant expression",
+                ));
+            }
             return Ok(ConstVal::Int {
                 val: v as i128,
                 ty: self.size_t_ty(),

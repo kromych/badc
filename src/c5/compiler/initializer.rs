@@ -894,8 +894,7 @@ impl Compiler {
             _ => return value,
         };
         if is_float {
-            let f = f64::from_bits(f64_bits as u64) as f32;
-            return f.to_bits() as i128;
+            return crate::c5::softfp::f64_to_f32(f64_bits as u64) as i128;
         }
         // A wide-format `long double` object stores the widened image;
         // the caller writes `size_of_type` bytes of it.

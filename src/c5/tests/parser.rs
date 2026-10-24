@@ -5325,6 +5325,7 @@ fn call_arguments_are_separated_by_commas() {
         "int f(); int main(void) { return f(1 2); }",
         "int (*fp)(int, int); int main(void) { return fp(1 2); }",
         "int (*fp)(int, int); int main(void) { return (*fp)(1 2); }",
+        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
     ] {
         expect_syntax_error(
             src,
@@ -5337,10 +5338,6 @@ fn call_arguments_are_separated_by_commas() {
     ] {
         expect_syntax_error(src, "bad expression: got `)`");
     }
-    expect_syntax_error(
-        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
-        "close paren expected",
-    );
 }
 
 #[test]
@@ -5697,4 +5694,77 @@ fn static_init_reads_only_a_const_object_in_bounds() {
             &format!("constant integer expected (got identifier `{name}`)"),
         );
     }
+}
+
+/// The value builtins take gcc's operands: their arity, the conversion of
+/// each operand to its parameter type, and integer constants for
+/// `__builtin_prefetch`'s access kind and locality, which outside their
+/// range warn as gcc does and are taken as 0.
+#[test]
+fn value_builtins_check_their_operands() {
+    let with_main = |body: &str| alloc::format!("{body}\nint main(void) {{ return 0; }}\n");
+    for (body, needle) in [
+        (
+            "long f(int x) { return __builtin_expect(x); }",
+            "too few arguments to `__builtin_expect` (expected 2, got 1)",
+        ),
+        (
+            "void f(void) { __builtin_prefetch(); }",
+            "too few arguments to `__builtin_prefetch` (expected 1 to 3, got 0)",
+        ),
+        (
+            "double f(void) { return __builtin_inf(1); }",
+            "too many arguments to `__builtin_inf` (expected 0)",
+        ),
+        (
+            "void *f(int *p) { return __builtin_assume_aligned(p, 8, 1, 2); }",
+            "too many arguments to `__builtin_assume_aligned` (expected 2 to 3)",
+        ),
+        (
+            "void f(int *p, int r) { __builtin_prefetch(p, r); }",
+            "argument 2 of `__builtin_prefetch` is not an integer constant expression",
+        ),
+        (
+            "struct s { int a; } v; int f(void) { return __builtin_isdigit(v); }",
+            "incompatible struct types in argument 1 of `__builtin_isdigit`",
+        ),
+        (
+            "int f(void) { return __builtin_toascii((void)0); }",
+            "`void` expression used as a value",
+        ),
+        (
+            "static double d = __builtin_nan(\"abc\");",
+            "`__builtin_nan` is constant only for a literal spelling a number",
+        ),
+    ] {
+        expect_compile_error(&with_main(body), needle);
+    }
+    let warnings = |body: &str| -> Vec<(crate::c5::diag::Code, String)> {
+        Compiler::new(with_main(body))
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .map(|w| (w.code, w.to_string()))
+            .collect()
+    };
+    let w = warnings("void f(int *p) { __builtin_prefetch(p, 2, 4); }");
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert_eq!(w[0].0, crate::c5::diag::Code::BUILTIN_ARGUMENT_RANGE);
+    assert!(
+        w[0].1
+            .contains("argument 3 of `__builtin_prefetch` is 4, not 0 to 3"),
+        "{w:?}"
+    );
+    let w = warnings("long f(int *p) { return __builtin_expect(p, 0); }");
+    assert!(
+        w.iter()
+            .any(|(c, t)| *c == crate::c5::diag::Code::INT_CONVERSION
+                && t.contains("argument 1 of `__builtin_expect`")),
+        "{w:?}"
+    );
+    // gcc takes any alignment value, constant or not.
+    assert!(
+        warnings("void *f(int *p, int a) { return __builtin_assume_aligned(p, a); }").is_empty()
+    );
 }

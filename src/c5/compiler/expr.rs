@@ -566,7 +566,7 @@ impl Compiler {
         let ty = super::types::void_ptr_ty();
         let size = match self.expr_const_int(args[2]) {
             Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
-            _ => return self.emit_mem_transfer_libcall(op, &args, ty),
+            _ => return self.emit_builtin_libcall(mem_transfer_lib_name(op), &args, ty),
         };
         self.mark_emit_other();
         let pos = self.ast_src_pos();
@@ -660,20 +660,20 @@ impl Compiler {
         slot
     }
 
-    /// Build the call a declined memory-transfer expansion falls back
-    /// to: the library function of the same name, with the arguments
-    /// already parsed. An undeclared library name reports the same
-    /// "unknown function" the ordinary call path does, so the
-    /// auto-include retry brings its header in (C99 7.1.4p2).
-    fn emit_mem_transfer_libcall(
+    /// Build the call a builtin falls back to where it declines to expand:
+    /// the library function `name`, with the arguments already parsed. An
+    /// undeclared library name reports the same "unknown function" the
+    /// ordinary call path does, so the auto-include retry brings its header
+    /// in (C99 7.1.4p2).
+    pub(super) fn emit_builtin_libcall(
         &mut self,
-        op: super::super::ast::MemTransferOp,
+        name: &str,
         args: &[super::super::ast::ExprId],
         ty: i64,
     ) -> Result<(), C5Error> {
-        let name = mem_transfer_lib_name(op);
         let callable = self.callable_symbol(name);
-        let retry_unavailable = self.nostdinc || self.library_name_is_opaque(name);
+        let retry_unavailable =
+            self.nostdinc || self.preprocessed || self.library_name_is_opaque(name);
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
@@ -1623,6 +1623,10 @@ impl Compiler {
                 self.parse_gcc_atomic_builtin(&name, id_idx)
             }
             Some(BuiltinCall::Atomic(kind)) => self.parse_atomic_builtin(kind, id_idx),
+            Some(BuiltinCall::Value(kind)) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_value_builtin(kind, &name)
+            }
             Some(BuiltinCall::Intrinsic(id)) => self.parse_intrinsic_call(id_idx, id),
             None => self.parse_direct_call(id_idx),
         }
@@ -1669,10 +1673,13 @@ impl Compiler {
 
     /// The builtin a call on `id_idx` lowers to, or `None` for a call to
     /// a declared function. A name bound to a real function is not a
-    /// builtin, except that a registered intrinsic is lowered whatever
-    /// the name is bound to.
+    /// builtin, except that a registered intrinsic or a value builtin is
+    /// lowered whatever the name is bound to.
     fn builtin_call(&self, id_idx: usize) -> Option<BuiltinCall> {
         let name = self.symbols[id_idx].name.as_str();
+        if let Some(kind) = super::value_builtin::ValueBuiltin::of(name) {
+            return Some(BuiltinCall::Value(kind));
+        }
         let class = self.symbols[id_idx].class;
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
@@ -6403,6 +6410,7 @@ enum BuiltinCall {
     Overflow,
     GccAtomic,
     Atomic(super::super::ast::AtomicKind),
+    Value(super::value_builtin::ValueBuiltin),
     Intrinsic(i64),
 }
 

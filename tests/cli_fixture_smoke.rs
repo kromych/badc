@@ -755,6 +755,65 @@ fn int128_atomics_hold_under_contention() {
     }
 }
 
+// `-E` output keeps the builtins as calls, as gcc's does, and the `.i`
+// unit takes them. `__builtin_nan` of an operand other than a literal
+// spelling a number calls `nan` (C99 7.12.11.2), which the bundled
+// <math.h> binds on every target; the payload is the library's, which
+// the Universal CRT ignores. The exit status has bit 0 for a wrong
+// runtime NaN and bit 1 for a wrong literal one.
+#[test]
+fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-builtin-nan");
+    let src = dir.join("n.c");
+    std::fs::write(
+        &src,
+        "#include <math.h>\n\
+         #ifdef _WIN32\n#define LIBRARY_PAYLOAD 0\n#else\n#define LIBRARY_PAYLOAD 0x10\n#endif\n\
+         static unsigned long long bits(double d) {\n\
+           union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
+         int main(int argc, char **argv) {\n\
+           const char *s = __builtin_expect(argc > 5, 0) ? argv[0] : \"0x10\";\n\
+           unsigned long long lib = LIBRARY_PAYLOAD;\n\
+           return (bits(__builtin_nan(s)) != (0x7ff8000000000000ull | lib))\n\
+             | (bits(__builtin_nan(\"0x10\")) != 0x7ff8000000000010ull) << 1;\n\
+         }\n",
+    )
+    .expect("write n.c");
+    let unit = dir.join("n.i");
+    let out = Command::new(badc)
+        .args(["-q", "-E"])
+        .arg(&src)
+        .arg("-o")
+        .arg(&unit)
+        .output()
+        .expect("run badc -E");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = std::fs::read_to_string(&unit).expect("read n.i");
+    assert!(text.contains("__builtin_nan(s)"), "{text}");
+    let exe = dir.join(format!("n{}", std::env::consts::EXE_SUFFIX));
+    for level in ["-O0", "-O"] {
+        let out = Command::new(badc)
+            .args(["-q", level])
+            .arg(&unit)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{level}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{level}");
+    }
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

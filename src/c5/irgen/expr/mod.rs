@@ -34,8 +34,7 @@ impl<'a> Walker<'a> {
                 // precision, so the lexer's f64 pattern narrows to the
                 // f32 one and the value is tagged f32.
                 if is_float_ty(*ty) {
-                    let f32_bits = f64::from_bits(*bits) as f32;
-                    return Ok(b.imm_f32(f32_bits.to_bits()));
+                    return Ok(b.imm_f32(crate::c5::softfp::f64_to_f32(*bits)));
                 }
                 Ok(b.imm(*bits as i64))
             }

@@ -27,8 +27,8 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 }
 
 /// Header names whose contents are part of the compiler implementation:
-/// the `__builtin_*` thunks every unit is given, and intrinsic wrappers
-/// built on badc's own inline-asm encoders. Another compiler's copy of such
+/// the intrinsic wrappers built on badc's own builtins and inline-asm
+/// encoders. Another compiler's copy of such
 /// a header is written against that compiler's builtins and can never
 /// compile here, so when a build line puts a foreign toolchain's private
 /// include directory on the search path (an `-isystem
@@ -39,7 +39,6 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// the usual order (`-I` shadows the embedded set, as it does in gcc and
 /// clang).
 pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
-    "_builtins.h",
     "arm_neon.h",
     "x86intrin.h",
     "immintrin.h",
@@ -68,10 +67,6 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
 pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
-    (
-        "_builtins.h",
-        include_str!("../../libc/include/_builtins.h"),
-    ),
     ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
     (
         "x86intrin.h",

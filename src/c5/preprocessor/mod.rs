@@ -1115,14 +1115,10 @@ fn default_translation_time() -> i64 {
 /// Clang bounds hint badc does not implement; empty is the fallback the
 /// kernel UAPI headers take when the compiler lacks it, and
 /// `__has_attribute(counted_by)` reports 0 to match.
-/// `__builtin_expect(exp, c)` is a GCC builtin needing no header, its
-/// value the first operand; it is here so a unit that never triggers
-/// the `<_builtins.h>` auto-include still compiles.
 static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
     ("__counted_by", &["m"], ""),
     ("__counted_by_le", &["m"], ""),
     ("__counted_by_be", &["m"], ""),
-    ("__builtin_expect", &["exp", "c"], "(exp)"),
 ];
 
 impl Preprocessor {

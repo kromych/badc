@@ -413,17 +413,13 @@ fn vendor_and_stdc_pragmas_are_silent() {
 }
 
 #[test]
-fn builtin_expect_is_predefined() {
-    // `__builtin_expect(exp, c)` is available with no header and no
-    // auto-include; the expansion is the first operand.
+fn builtins_reach_the_parser_unexpanded() {
+    // gcc and clang keep a builtin's call in their preprocessed output, so
+    // the parser takes it from `-E` text as from a source file.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let out = pp
-        .process("int f(int v) { return __builtin_expect(v > 1, 1); }\n")
-        .expect("preprocessor failed");
-    assert!(
-        out.contains("(v > 1)") && !out.contains("__builtin_expect"),
-        "expected the predefined expansion, got: {out}"
-    );
+    let src = "int f(int v) { return __builtin_expect(v > 1, 1) + __builtin_isdigit(v); }\n";
+    let out = pp.process(src).expect("preprocessor failed");
+    assert!(out.contains(src.trim_end()), "got: {out}");
 }
 
 #[test]
@@ -2655,10 +2651,10 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
     let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
     owned.set_nostdinc(true);
     let out = owned
-        .process("#include <_builtins.h>\nint f(int x) { return __builtin_expect(x, 1); }\n")
-        .expect("the __builtin_* thunk header stays reachable");
+        .process("#include <x86intrin.h>\n")
+        .expect("the compiler's intrinsic header stays reachable");
     std::fs::remove_dir_all(&base).ok();
-    assert!(out.contains("return (x);"), "{out}");
+    assert!(out.contains("__bsfd"), "{out}");
 }
 
 #[test]
@@ -3646,31 +3642,18 @@ fn builtin_table_answers_all_three_roles() {
 }
 
 /// `__has_builtin` answers 1 for every builtin badc accepts, however it is
-/// supplied: each row of the table, each library alias, each `__builtin_`
-/// macro <_builtins.h> or the predefines define, and on the x86 targets
-/// each vector builtin, which the other targets refuse.
+/// supplied: each row of the table, each library alias, and on the x86
+/// targets each vector builtin, which the other targets refuse. No
+/// `__builtin_` name is a predefined macro.
 #[test]
 fn has_builtin_reports_every_accepted_builtin() {
     use super::builtins;
-    let thunks = crate::c5::headers::embedded_headers()
-        .iter()
-        .find(|(n, _)| *n == "_builtins.h")
-        .expect("_builtins.h is bundled")
-        .1;
-    let macros: Vec<&str> = thunks
-        .lines()
-        .filter_map(|l| l.trim_start().strip_prefix("#define "))
-        .map(|d| d.split(['(', ' ']).next().unwrap_or(d))
-        .chain(PREDEFINED_FN_MACROS.iter().map(|m| m.0))
-        .filter(|n| n.starts_with("__builtin_"))
-        .collect();
-    assert!(macros.len() >= 16, "macros found: {macros:?}");
-    for m in &macros {
-        assert!(
-            builtins::is_builtin(m),
-            "`{m}` is a macro with no table row"
-        );
-    }
+    assert!(
+        PREDEFINED_FN_MACROS
+            .iter()
+            .all(|m| !m.0.starts_with("__builtin_")),
+        "a builtin defined as a macro is unknown in preprocessed input"
+    );
     let mut names: Vec<String> = builtins::BUILTINS
         .iter()
         .filter(|b| !matches!(b.supply, builtins::Supply::Library(_)))

@@ -1,10 +1,11 @@
-//! Conversions between binary64 and the wider `long double` storage
-//! formats (x87 80-bit extended, IEEE binary128). The compute path
-//! carries every `long double` value as binary64; these routines widen
-//! a value into the target ABI's object format on store (exact) and
-//! narrow an object back on load (round to nearest, ties to even).
-//! Shared by the constant-image builder, the SSA VM, and the tests
-//! that pin the aarch64 inline lowering to the same algorithm.
+//! Conversions between binary64 and the other storage formats: binary32
+//! and the wider `long double` formats (x87 80-bit extended, IEEE
+//! binary128). The compute path carries every `long double` value as
+//! binary64; these routines widen a value into the target ABI's object
+//! format on store (exact) and narrow an object back on load (round to
+//! nearest, ties to even). Shared by the constant-image builder, the SSA
+//! VM, and the tests that pin the aarch64 inline lowering to the same
+//! algorithm.
 
 /// Round a finite, non-zero magnitude to binary64. `exp` is the
 /// unbiased exponent of `frac` read as a 1.63 fixed-point value with
@@ -35,6 +36,17 @@ fn round_to_f64(sign: u64, exp: i64, frac: u64, sticky: bool) -> u64 {
     // the add renormalizes: a carry out of the significand bumps the
     // exponent field, and reaching 0x7ff yields infinity.
     sign + ((e_field << 52) + sig + u64::from(round_up))
+}
+
+/// Narrow a binary64 bit pattern to binary32, rounding to nearest with
+/// ties to even. A NaN keeps the leading bits of its payload and is
+/// quieted, as the hardware narrowing conversion does.
+pub(crate) fn f64_to_f32(bits: u64) -> u32 {
+    if (bits >> 52) & 0x7ff == 0x7ff && bits & ((1 << 52) - 1) != 0 {
+        let sign = ((bits >> 63) as u32) << 31;
+        return sign | 0x7fc0_0000 | ((bits >> 29) as u32 & 0x003f_ffff);
+    }
+    (f64::from_bits(bits) as f32).to_bits()
 }
 
 /// Widen a binary64 bit pattern to the x87 80-bit extended format:

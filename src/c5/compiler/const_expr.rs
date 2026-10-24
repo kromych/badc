@@ -1730,6 +1730,9 @@ impl Compiler {
             };
             return Ok(ConstVal::Int { val, ty });
         }
+        if let Some(v) = self.try_fold_value_builtin()? {
+            return Ok(v);
+        }
         // GCC bit / byte builtins (`__builtin_clz` / `ctz` / `popcount` /
         // `clrsb` / `parity` / `ffs` and their `l` / `ll` forms, plus
         // `bswap16` / `bswap32` / `bswap64`) fold when the argument is a
@@ -2007,7 +2010,9 @@ impl Compiler {
     /// Stage a narrow string literal (adjacent parts already glued) and
     /// return its data offset and byte length. A wide literal declines:
     /// its elements are not bytes.
-    fn try_take_narrow_string_literal(&mut self) -> Result<Option<(usize, usize)>, C5Error> {
+    pub(super) fn try_take_narrow_string_literal(
+        &mut self,
+    ) -> Result<Option<(usize, usize)>, C5Error> {
         if self.lex.tk != '"' || self.lex.str_is_wide {
             return Ok(None);
         }
@@ -2706,7 +2711,7 @@ impl Compiler {
     /// C99 6.6p9: an integer constant converted to pointer type `ty` is an
     /// address constant with no symbol, whose arithmetic strides by the
     /// pointee (6.5.6p8), or by bytes for a `function` pointer (GNU C).
-    fn const_pointer_of(&self, v: i128, ty: i64, function: bool) -> ConstVal {
+    pub(super) fn const_pointer_of(&self, v: i128, ty: i64, function: bool) -> ConstVal {
         let pointee = (!function).then(|| pointee_ty(ty));
         ConstVal::Addr(ConstAddr {
             value: v as i64,

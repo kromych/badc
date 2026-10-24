@@ -36,7 +36,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=0
     v22  Imm(53)                                          -> x7
     v23  LocalAddr(-16)                                   -> x9
     v24  StoreLocal { off=-16, value=v21, kind=F80 }      -> -
-    v25  CallExt { binding_idx=190, args=[v23, v22], fp_arg_mask=0x0 } -> x0
+    v25  CallExt { binding_idx=193, args=[v23, v22], fp_arg_mask=0x0 } -> x0
     v26  LocalAddr(-17)                                   -> x0
     v27  LoadLocal { off=-17, kind=F80 }                  -> d0
     v28  Imm(0)                                           -> x0

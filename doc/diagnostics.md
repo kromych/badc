@@ -78,6 +78,7 @@ regenerates.
 | B3011 | `incompatible-pointer-types-discards-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **` |
 | B3012 | `switch-bool` | warning | controllable | default | a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both |
 | B3013 | `excess-initializers` | warning | controllable | default | a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped |
+| B3014 | `builtin-argument-range` | warning | controllable | default | an integer constant operand of a builtin outside the values the builtin takes; 0 is used in its place |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |

@@ -8570,7 +8570,7 @@ fn escape_analysis_reads_identifier_runs_not_whole_templates() {
 /// A unit that uses a library builtin and has the library name declared
 /// compiles in one front-end pass with nothing recovered.
 #[test]
-fn builtin_thunks_need_no_auto_include_retry() {
+fn library_builtins_need_no_auto_include_retry() {
     use crate::{CompileOptions, Compiler, Target};
     let src = "
         int memcmp(const void *a, const void *b, unsigned long n);
@@ -8583,7 +8583,7 @@ fn builtin_thunks_need_no_auto_include_retry() {
     ";
     let prog = Compiler::with_options(src.into(), Target::LinuxX64, CompileOptions::default())
         .compile()
-        .expect("the thunks resolve without a retry");
+        .expect("the builtins resolve without a retry");
     assert!(
         prog.auto_includes.is_empty(),
         "no retry should be needed, got {:?}",
@@ -8594,7 +8594,7 @@ fn builtin_thunks_need_no_auto_include_retry() {
 /// The absolute-value builtins fold in a constant expression alongside
 /// the other library builtins.
 #[test]
-fn absolute_value_builtins_fold_alongside_the_thunks() {
+fn absolute_value_builtins_fold_alongside_the_library_builtins() {
     use crate::{CompileOptions, Compiler, Target};
     let src = "
         int memcmp(const void *a, const void *b, unsigned long n);
@@ -8610,12 +8610,11 @@ fn absolute_value_builtins_fold_alongside_the_thunks() {
 }
 
 /// A driver `-include` file may hold a translation unit's body rather than
-/// declarations, so the `__builtin_*` thunk header has to precede the whole
-/// forced-include list, not follow it. gcc and clang make the builtins visible
-/// before any input is read.
+/// declarations; the builtins are visible to it as to the main source, as
+/// gcc and clang make them visible before any input is read.
 #[test]
 #[cfg(feature = "full")]
-fn builtin_thunks_precede_the_forced_include_list() {
+fn builtins_are_visible_to_a_forced_include_body() {
     use crate::{CompileOptions, Compiler, Target};
     let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch dir");
@@ -8641,7 +8640,7 @@ fn builtin_thunks_precede_the_forced_include_list() {
     .compile();
     std::fs::remove_file(&body).ok();
     std::fs::remove_dir(&dir).ok();
-    prog.expect("the thunk header is visible to a forced-include body");
+    prog.expect("the builtins are visible to a forced-include body");
 }
 
 #[test]

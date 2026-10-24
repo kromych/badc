@@ -156,6 +156,9 @@
 #pragma binding(libc::hypotl, "_hypot")
 #pragma binding(libc::fminl, "_fmin")
 #pragma binding(libc::fmaxl, "_fmax")
+#pragma binding(libc::nan, "_nan")
+#pragma binding(libc::nanf, "_nanf")
+#pragma binding(libc::nanl, "_nan")
 #pragma binding(libc::nextafterl, "_nextafter")
 #pragma binding(libc::remainderl, "_remainder")
 #pragma binding(libc::ldexpl, "_ldexp")
@@ -308,6 +311,9 @@
 #pragma binding(libm::hypotl, "hypotl")
 #pragma binding(libm::fminl, "fminl")
 #pragma binding(libm::fmaxl, "fmaxl")
+#pragma binding(libm::nan, "nan")
+#pragma binding(libm::nanf, "nanf")
+#pragma binding(libm::nanl, "nanl")
 #pragma binding(libm::nextafterl, "nextafterl")
 #pragma binding(libm::remainderl, "remainderl")
 #pragma binding(libm::ldexpl, "ldexpl")
@@ -495,6 +501,9 @@
 #pragma binding(msvcrt::hypotl, "_hypot")
 #pragma binding(ucrtbase::fminl, "fmin")
 #pragma binding(ucrtbase::fmaxl, "fmax")
+#pragma binding(ucrtbase::nan, "nan")
+#pragma binding(ucrtbase::nanf, "nanf")
+#pragma binding(ucrtbase::nanl, "nan")
 #pragma binding(msvcrt::nextafterl, "_nextafter")
 #pragma binding(ucrtbase::remainderl, "remainder")
 #pragma binding(msvcrt::ldexpl, "ldexp")
@@ -812,6 +821,10 @@ long double atan2l(long double x, long double y);
 long double hypotl(long double x, long double y);
 long double fminl(long double x, long double y);
 long double fmaxl(long double x, long double y);
+// C99 7.12.11.2: the quiet NaN whose payload `tagp` spells.
+double nan(const char *tagp);
+float nanf(const char *tagp);
+long double nanl(const char *tagp);
 long double nextafterl(long double x, long double y);
 long double remainderl(long double x, long double y);
 long double ldexpl(long double x, int exp);

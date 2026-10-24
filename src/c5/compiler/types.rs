@@ -604,6 +604,11 @@ pub(crate) fn void_ptr_ty() -> i64 {
     void_ty() + Ty::Ptr as i64
 }
 
+/// A pointer to `const`-qualified `elem` (`const void *` for `void`).
+pub(crate) fn pointer_to_const(elem: i64) -> i64 {
+    (elem | const_level_bit(ptr_depth_of(elem))) + Ty::Ptr as i64
+}
+
 /// True for scalar `void`, at any qualification.
 pub(crate) fn is_void_ty(ty: i64) -> bool {
     (ty & VOID_BIT) != 0 && strip_unsigned(ty) == Ty::Char as i64

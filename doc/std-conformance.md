@@ -482,8 +482,11 @@ registers under either compiler.
   `__builtin_toascii` fold from their operand as gcc folds them. A few
   (`__builtin_strlen`, `strcmp`, `strncmp`, `memcmp`, `abs` and its wider
   forms) additionally constant-fold on literal operands. The hints with no
-  code-generation effect and the infinity / NaN constants stay macros in
-  the bundled `_builtins.h`, which every translation unit includes.
+  code-generation effect (`__builtin_expect`, `__builtin_prefetch`,
+  `__builtin_assume_aligned`) and the infinity / NaN constants are parsed
+  at the call site with gcc's signatures and operand checks, so they are
+  available in preprocessed input too; `__builtin_nan` folds a string
+  literal's payload as gcc does and calls `nan` for any other operand.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
   compiles. The `__atomic_*` memory-order operand selects the load, store

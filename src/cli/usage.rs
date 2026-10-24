@@ -224,8 +224,8 @@ Compile knobs:
                            carries is an error instead of resolving to
                            badc's libc, and the auto-include retry is
                            off. The compiler's own headers
-                           (`_builtins.h`, `arm_neon.h`) stay, as gcc's
-                           builtins do.
+                           (`arm_neon.h`, `x86intrin.h` and the x86
+                           intrinsic headers) stay, as gcc's do.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later

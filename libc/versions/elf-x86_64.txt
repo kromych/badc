@@ -870,6 +870,9 @@ lroundl       GLIBC_2.2.5
 modf          GLIBC_2.2.5
 modff         GLIBC_2.2.5
 modfl         GLIBC_2.2.5
+nan           GLIBC_2.2.5
+nanf          GLIBC_2.2.5
+nanl          GLIBC_2.2.5
 nearbyint     GLIBC_2.2.5
 nearbyintf    GLIBC_2.2.5
 nearbyintl    GLIBC_2.2.5

@@ -35,6 +35,7 @@ mod run_compile;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
+mod value_builtin;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 #[cfg(all(test, not(debug_assertions)))]
@@ -2324,6 +2325,8 @@ pub struct Compiler {
     optimize: bool,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
+    preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
     wrapv: bool,
     /// Mirror of [`CompileOptions::fp_contract`].
@@ -2503,10 +2506,6 @@ pub struct Compiler {
     pp_reuse: Option<PpReuse>,
 }
 
-/// Header of `__builtin_*` thunks every translation unit is given; see
-/// [`Compiler::configure_preprocessor`].
-const BUILTIN_THUNK_HEADER: &str = "_builtins.h";
-
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -2660,21 +2659,6 @@ impl Compiler {
         }
         pp.set_nostdinc(opts.nostdinc);
         pp.set_no_builtin(opts.no_builtin);
-        // The GCC `__builtin_*` library thunks, which gcc and clang give
-        // every unit with no `#include`. The header is only `#define`s of
-        // names C99 7.1.3 reserves to the implementation, so it declares
-        // nothing and orders nothing; supplying it up front rather than
-        // on a parse failure keeps the compile to one front-end pass. It
-        // goes ahead of the driver's `-include` list because a forced
-        // include may itself be a translation unit's body, and the thunks
-        // have to be visible to it as they are to the main source.
-        if !opts
-            .force_includes
-            .iter()
-            .any(|h| h == BUILTIN_THUNK_HEADER)
-        {
-            pp.add_force_include(BUILTIN_THUNK_HEADER);
-        }
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
@@ -2987,6 +2971,7 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
+            preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
             fp_contract: opts.fp_contract,
@@ -3218,10 +3203,9 @@ impl Compiler {
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)
-        // resolves a chain -- a `__builtin_*` thunk header pulling in
-        // the library function's header -- and several independent
-        // missing headers. The force-include set only grows, and a
-        // header already in it ends the loop, so progress is monotone.
+        // resolves several independent missing headers. The
+        // force-include set only grows, and a header already in it ends
+        // the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
         let mut auto_names: Vec<String> = Vec::new();
         loop {
@@ -3249,9 +3233,7 @@ impl Compiler {
                 Some(h) => h,
                 None => return Err(e),
             };
-            // The thunk header is always in scope, so a failure naming
-            // one of its macros is not something a retry can fix.
-            if header == BUILTIN_THUNK_HEADER || opts.force_includes.iter().any(|h| h == header) {
+            if opts.force_includes.iter().any(|h| h == header) {
                 return Err(e);
             }
             opts.force_includes.push(header.to_string());

@@ -5437,10 +5437,8 @@ fn builtin_choose_expr_selects_on_constant() {
     // constant `c` is non-zero, else `b`. badc provides it as a
     // constant-condition conditional thunk; only the taken branch is
     // evaluated, and the result folds to that branch (usable in constant
-    // contexts). Guarded by __GNUC__ so the `<_builtins.h>` thunk is in play.
+    // contexts).
     let src = "\
-#define __GNUC__ 4\n\
-#include <_builtins.h>\n\
 _Static_assert(__builtin_choose_expr(1, 7, 999) == 7, \"true picks a\");\n\
 _Static_assert(__builtin_choose_expr(0, 999, 3) == 3, \"false picks b\");\n\
 int main(void){\n\
@@ -5575,8 +5573,8 @@ fn vsnprintf_and_the_va_list_forms_are_declared_with_prototypes() {
 }
 
 #[test]
-fn builtin_expect_is_predefined() {
-    // `__builtin_expect` is predefined -- available in a translation
+fn builtin_expect_needs_no_header() {
+    // `__builtin_expect` is a builtin -- available in a translation
     // unit with no #include and no auto-include; its value is the
     // first operand.
     assert_eq!(run_fixture("builtin_expect_no_header.c"), 0);
@@ -8157,6 +8155,49 @@ fn integer_constant_added_to_an_address_constant() {
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
+}
+
+#[test]
+fn value_builtins_take_preprocessed_input() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // gcc and clang keep the builtins as calls in `-E` output, so a `.i`
+    // unit reaches the parser with them. Dropping the fixture's directive
+    // lines keeps its ASCII-classification block.
+    assert_eq!(run_fixture("value_builtins.c"), 0);
+    let text: String = super::load_fixture("value_builtins.c")
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let opts = CompileOptions::default().with_preprocessed(true);
+    let program = Compiler::with_options(text, Target::host(), opts)
+        .compile()
+        .expect("the preprocessed unit compiles");
+    assert_eq!(Vm::new(program).run().unwrap(), 0);
+}
+
+#[test]
+fn builtin_nan_reads_its_payload_as_gcc_does() {
+    // gcc 16 skips leading white space and a sign, reads a bare `0x` as 0
+    // and stops at the first NUL; clang calls `nan` for the signed form.
+    // clang also folds `__builtin_assume_aligned` of an address constant in
+    // a static initializer, which gcc rejects.
+    let src = "static unsigned long long bits(double d) {\n\
+                 union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
+               static double minus = __builtin_nan(\"-5\");\n\
+               static double space = __builtin_nan(\" 5\");\n\
+               static double bare = __builtin_nan(\"0x\");\n\
+               static double glued = __builtin_nan(\"1\\0\" \"2\");\n\
+               static int anchor;\n\
+               static void *aligned = __builtin_assume_aligned(&anchor, 8);\n\
+               int main(void) {\n\
+                 if (bits(minus) != 0x7ff8000000000005ull) return 1;\n\
+                 if (bits(space) != 0x7ff8000000000005ull) return 2;\n\
+                 if (bits(bare) != 0x7ff8000000000000ull) return 3;\n\
+                 if (bits(glued) != 0x7ff8000000000001ull) return 4;\n\
+                 return aligned == (void *)&anchor ? 0 : 5;\n\
+               }\n";
+    assert_eq!(run_str(src), 0);
 }
 
 #[test]

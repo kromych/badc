@@ -6692,10 +6692,10 @@ fn compile_only_object_keeps_the_read_only_prefix_when_linked() {
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 
-/// A named section carries `SHF_WRITE` only when some member of it is
+/// A named section carries `SHF_WRITE` only when its members are
 /// writable: an all-`const` section is read-only, matching gcc and
-/// clang. The flags of members sharing a name union, so one writable
-/// member makes the whole section writable.
+/// clang. A `const` and a writable member in one section are a section
+/// type conflict, as gcc reports it.
 #[test]
 fn named_section_flags_follow_member_constness() {
     let dir = tempdir("named-section-const");
@@ -6704,9 +6704,24 @@ fn named_section_flags_follow_member_constness() {
         "s.c",
         "__attribute__((section(\".ro.tab\"))) const int ro_only[4] = {1,2,3,4};\n\
          __attribute__((section(\".rw.tab\"))) int rw_tab[4] = {1,2,3,4};\n\
-         __attribute__((section(\".mixed\"))) const int mixed_c[2] = {1,2};\n\
-         __attribute__((section(\".mixed\"))) int mixed_w[2] = {3,4};\n\
-         int main(void) { return ro_only[0] + rw_tab[0] + mixed_c[0] + mixed_w[0]; }\n",
+         int main(void) { return ro_only[0] + rw_tab[0]; }\n",
+    );
+    let mixed = write_source(
+        &dir,
+        "m.c",
+        "__attribute__((section(\".mixed\"))) const int mixed_c[2] = {1,2};\n\
+         __attribute__((section(\".mixed\"))) int mixed_w[2] = {3,4};\n",
+    );
+    let refused = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("m.o"))
+        .arg(&mixed)
+        .output()
+        .expect("run badc");
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("section type conflict"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
     );
     let out = dir.join("s.o");
     run(
@@ -6731,11 +6746,6 @@ fn named_section_flags_follow_member_constness() {
         "all-const section is read-only"
     );
     assert_eq!(flags(".rw.tab"), SHF_ALLOC | SHF_WRITE);
-    assert_eq!(
-        flags(".mixed"),
-        SHF_ALLOC | SHF_WRITE,
-        "one writable member makes the section writable",
-    );
 }
 
 /// `const`-qualified file-scope storage with no relocated slot lands

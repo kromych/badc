@@ -400,7 +400,69 @@ impl Compiler {
         self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
         self.resolve_file_scope_asm_weak();
+        self.reject_section_type_conflicts()?;
         self.warn_unused_static_functions();
+        Ok(())
+    }
+
+    /// GNU `section`: a named section holds code, writable data or read-only
+    /// data, by the first definition placed in it; a later definition of
+    /// another kind is "a section type conflict", as gcc reports it, so no
+    /// section of C definitions is both writable and executable. A `const`
+    /// object a relocation writes is read-only to gcc only without `-fPIC`,
+    /// which this unit does not know, so it conflicts with code alone.
+    fn reject_section_type_conflicts(&self) -> Result<(), C5Error> {
+        const CODE: u8 = 0;
+        const READ_ONLY: u8 = 1;
+        const WRITABLE: u8 = 2;
+        const RELRO: u8 = 3;
+        let relocated = |s: &crate::c5::symbol::Symbol| {
+            let elems = s.array_size.max(1) as u64;
+            let bytes = (s.reserved_data_bytes.max(0) as u64)
+                .max(self.size_of_type(s.type_) as u64 * elems);
+            let span = (s.val as u64)..(s.val as u64 + bytes);
+            (self.data_relocs.iter().map(|r| r.data_offset))
+                .chain(self.code_relocs.iter().map(|r| r.data_offset))
+                .chain(self.extern_data_relocs.iter().map(|r| r.data_offset))
+                .any(|off| span.contains(&off))
+        };
+        let mut placed: Vec<(usize, &str, u8)> = (0..self.symbols.len())
+            .filter_map(|i| {
+                let s = &self.symbols[i];
+                let section = s.section_name.as_deref()?;
+                let kind = if s.class == Token::Fun as i64 && s.defined_here {
+                    CODE
+                } else if s.class == Token::Glo as i64 && s.defined_here && !s.is_alias {
+                    match (s.storage_is_const, s.is_thread_local || relocated(s)) {
+                        (true, false) => READ_ONLY,
+                        (true, true) => RELRO,
+                        (false, _) => WRITABLE,
+                    }
+                } else {
+                    return None;
+                };
+                Some((i, section, kind))
+            })
+            .collect();
+        placed.sort_by_key(|&(i, ..)| {
+            let b = &self.symbols[i].binding;
+            (b.decl_file, b.decl_line, i)
+        });
+        let mut first: alloc::collections::BTreeMap<&str, (usize, u8)> = Default::default();
+        for (i, section, kind) in placed {
+            let &mut (j, k) = first.entry(section).or_insert((i, kind));
+            let data = |k| k != CODE;
+            if k != kind && !(data(k) && data(kind) && (k == RELRO || kind == RELRO)) {
+                let (name, other) = (&self.symbols[i].name, &self.symbols[j].name);
+                return Err(self.compile_err_at(
+                    Code::INVALID_DECLARATION,
+                    self.symbols[i].binding.decl_line,
+                    format!(
+                        "`{name}` causes a section type conflict with `{other}` in `{section}`"
+                    ),
+                ));
+            }
+        }
         Ok(())
     }
 

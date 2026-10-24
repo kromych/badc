@@ -3864,6 +3864,48 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn a_named_section_holds_one_kind_of_definition() {
+    // GNU `section`: the first definition in a section sets its kind --
+    // code, writable data or read-only data -- and a definition of another
+    // kind is a section type conflict, as gcc reports it; a declaration
+    // places nothing. A `const` object a relocation writes sits with data
+    // of either kind.
+    let unit = |a: &str, b: &str| {
+        format!(
+            "int w0;\n__attribute__((section(\".tsec\"))) {a}\n\
+             __attribute__((section(\".tsec\"))) {b}\nint main(void) {{ return 0; }}\n"
+        )
+    };
+    let code = "int fn_a(void) { return 1; }";
+    let writable = "int w_b = 1;";
+    let zero = "int z_b;";
+    let read_only = "const int c_b = 2;";
+    let relocated = "int *const r_b = &w0;";
+    for (a, b) in [
+        (code, writable),
+        (writable, code),
+        (code, read_only),
+        (zero, code),
+        (writable, read_only),
+        (read_only, zero),
+        (code, relocated),
+    ] {
+        expect_compile_error(&unit(a, b), "section type conflict");
+    }
+    for (a, b) in [
+        (writable, zero),
+        ("int fd_a(void);", writable),
+        (read_only, relocated),
+        (relocated, writable),
+        (code, "int fn_b(void) { return 2; }"),
+    ] {
+        Compiler::new(unit(a, b))
+            .compile()
+            .unwrap_or_else(|e| panic!("{a} {b}: {e}"));
+    }
+}
+
+#[test]
 fn derived_type_spellings_agree_and_a_cast_names_no_array() {
     // C99 6.7.7p3: a typedef's spelling and the abstract one denote the same
     // pointer to an array of function pointers; 6.5.4p2: a cast names a

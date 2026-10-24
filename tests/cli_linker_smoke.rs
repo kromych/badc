@@ -1518,6 +1518,68 @@ fn a_definition_takes_precedence_over_a_data_binding_of_its_name() {
     assert_eq!(out.status.code(), Some(0));
 }
 
+/// The address of an object a DLL exports is the object's, read from the
+/// import address table, as MSVC and clang give it for
+/// `__declspec(dllimport)` data. The arm64 msvcrt exports no `_environ`,
+/// which the headers reach there through an accessor function.
+#[cfg(all(windows, target_arch = "x86_64"))]
+#[test]
+fn an_imported_objects_address_is_the_objects_in_a_pe_image() {
+    let dir = tempdir("pe-import-address");
+    write_source(
+        &dir,
+        "e.c",
+        "#include <stdlib.h>\n\
+         int main(void) { char ***pe = &_environ; return *pe != _environ; }\n",
+    );
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("e.c"))
+            .current_dir(&dir),
+        "link the address of an imported object",
+    );
+    let out = Command::new(&exe).output().expect("run");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+/// A PE loader writes an imported object's address into the import address
+/// table alone, so a static initializer cannot hold it -- MSVC refuses one
+/// as not constant -- and a link of the unit says so rather than storing the
+/// address of the import's call stub, linked from the source or an object.
+#[test]
+fn a_static_initializer_cannot_hold_an_imported_objects_address_in_a_pe_image() {
+    let dir = tempdir("pe-import-address-init");
+    let src = write_source(
+        &dir,
+        "s.c",
+        "#include <stdlib.h>\nchar ***spe = &_environ;\nint main(void) { return spe != 0; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=windows-x64"])
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join("s.o"))
+            .current_dir(&dir),
+        "compile -c windows-x64",
+    );
+    for input in ["s.c", "s.o"] {
+        let out = Command::new(badc())
+            .args(["--target=windows-x64", "-o", "prog.exe", input])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("the address of the imported object `_environ`"),
+            "{input}: {err}"
+        );
+    }
+}
+
 /// A data binding whose C name differs from the library's symbol links as
 /// data in a position-dependent executable: no PLT entry, no function
 /// symbol for it.

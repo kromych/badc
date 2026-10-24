@@ -4972,6 +4972,19 @@ fn emit_plt(
         },
     ) in refs
     {
+        // A PE loader writes an object's address into the import address
+        // table alone, and the stub is the import's address only for a function.
+        if slots == DataImportSlots::Thunk && is_data_import(merged, import_index) {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "a static initializer takes the address of the imported object `{}`, which \
+                     a PE image reaches only through its import address table; take it at run time",
+                    import_name(merged, import_index)
+                ),
+            ));
+        }
         let stub_at = match tramp_for_import.get(&import_index) {
             Some(&off) => off,
             None => {

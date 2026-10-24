@@ -1341,6 +1341,43 @@ fn windows_pthread_declarations_link() {
     }
 }
 
+/// The user32, gdi32, opengl32 and advapi32 functions `<windows.h>`
+/// declares are imported from the DLL whose import library defines them in
+/// mingw-w64, with no binding of the program's own.
+#[test]
+fn windows_h_imports_its_win32_functions_from_their_dlls() {
+    use crate::{Compiler, NativeOptions, Target};
+    const IMPORTS: &[(&str, &str)] = &[
+        ("ShowWindow", "user32.dll"),
+        ("CreateWindowExW", "user32.dll"),
+        ("BitBlt", "gdi32.dll"),
+        ("SwapBuffers", "gdi32.dll"),
+        ("wglMakeCurrent", "opengl32.dll"),
+        ("RegGetValueW", "advapi32.dll"),
+    ];
+    let mut src = alloc::string::String::from(
+        "#include <windows.h>\ntypedef void (*fn)(void);\nstatic const fn used[] = {\n",
+    );
+    for (name, _) in IMPORTS {
+        src += &alloc::format!("    (fn){name},\n");
+    }
+    src += "};\nint main(void) { return used[0] == 0; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for (name, dll) in IMPORTS {
+            assert_eq!(
+                pe_import_dll_of(&image, name).as_deref(),
+                Some(*dll),
+                "{target:?}: {name}"
+            );
+        }
+    }
+}
+
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
 /// x86-64 PE target must lower the data reference as a load of the
 /// import's IAT slot, not as the address of a `jmp [IAT]` call

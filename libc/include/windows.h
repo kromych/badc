@@ -4027,6 +4027,96 @@ BOOL GlobalUnlock(HGLOBAL hMem);
 SIZE_T GlobalSize(HGLOBAL hMem);
 
 // user32.dll window, message, input, monitor, and clipboard entry points.
+#pragma binding(user32::AdjustWindowRectEx,         "AdjustWindowRectEx")
+#pragma binding(user32::BeginPaint,                 "BeginPaint")
+#pragma binding(user32::BringWindowToTop,           "BringWindowToTop")
+#pragma binding(user32::ChangeDisplaySettingsExW,   "ChangeDisplaySettingsExW")
+#pragma binding(user32::CharLowerBuffA,             "CharLowerBuffA")
+#pragma binding(user32::ClientToScreen,             "ClientToScreen")
+#pragma binding(user32::ClipCursor,                 "ClipCursor")
+#pragma binding(user32::CloseClipboard,             "CloseClipboard")
+#pragma binding(user32::CreateIconIndirect,         "CreateIconIndirect")
+#pragma binding(user32::CreateWindowExA,            "CreateWindowExA")
+#pragma binding(user32::CreateWindowExW,            "CreateWindowExW")
+#pragma binding(user32::DefWindowProcA,             "DefWindowProcA")
+#pragma binding(user32::DefWindowProcW,             "DefWindowProcW")
+#pragma binding(user32::DestroyCursor,              "DestroyCursor")
+#pragma binding(user32::DestroyIcon,                "DestroyIcon")
+#pragma binding(user32::DestroyWindow,              "DestroyWindow")
+#pragma binding(user32::DispatchMessageA,           "DispatchMessageA")
+#pragma binding(user32::EmptyClipboard,             "EmptyClipboard")
+#pragma binding(user32::EndPaint,                   "EndPaint")
+#pragma binding(user32::EnumDisplayDevicesA,        "EnumDisplayDevicesA")
+#pragma binding(user32::EnumDisplayDevicesW,        "EnumDisplayDevicesW")
+#pragma binding(user32::EnumDisplayMonitors,        "EnumDisplayMonitors")
+#pragma binding(user32::EnumDisplaySettingsW,       "EnumDisplaySettingsW")
+#pragma binding(user32::FlashWindowEx,              "FlashWindowEx")
+#pragma binding(user32::GetClientRect,              "GetClientRect")
+#pragma binding(user32::GetClipboardData,           "GetClipboardData")
+#pragma binding(user32::GetCursorPos,               "GetCursorPos")
+#pragma binding(user32::GetDC,                      "GetDC")
+#pragma binding(user32::GetForegroundWindow,        "GetForegroundWindow")
+#pragma binding(user32::GetKeyNameTextA,            "GetKeyNameTextA")
+#pragma binding(user32::GetKeyState,                "GetKeyState")
+#pragma binding(user32::GetKeyboardLayout,          "GetKeyboardLayout")
+#pragma binding(user32::GetKeyboardState,           "GetKeyboardState")
+#pragma binding(user32::GetLayeredWindowAttributes, "GetLayeredWindowAttributes")
+#pragma binding(user32::GetMonitorInfoA,            "GetMonitorInfoA")
+#pragma binding(user32::GetMonitorInfoW,            "GetMonitorInfoW")
+#pragma binding(user32::GetPropW,                   "GetPropW")
+#pragma binding(user32::GetRawInputData,            "GetRawInputData")
+#pragma binding(user32::GetRawInputDeviceInfoA,     "GetRawInputDeviceInfoA")
+#pragma binding(user32::GetRawInputDeviceInfoW,     "GetRawInputDeviceInfoW")
+#pragma binding(user32::GetRawInputDeviceList,      "GetRawInputDeviceList")
+#pragma binding(user32::GetSystemMetrics,           "GetSystemMetrics")
+#pragma binding(user32::GetWindowLongA,             "GetWindowLongA")
+#pragma binding(user32::GetWindowLongPtrW,          "GetWindowLongPtrW")
+#pragma binding(user32::GetWindowLongW,             "GetWindowLongW")
+#pragma binding(user32::GetWindowPlacement,         "GetWindowPlacement")
+#pragma binding(user32::GetWindowRect,              "GetWindowRect")
+#pragma binding(user32::IsWindow,                   "IsWindow")
+#pragma binding(user32::IsWindowVisible,            "IsWindowVisible")
+#pragma binding(user32::IsZoomed,                   "IsZoomed")
+#pragma binding(user32::KillTimer,                  "KillTimer")
+#pragma binding(user32::LoadCursorA,                "LoadCursorA")
+#pragma binding(user32::LoadIconA,                  "LoadIconA")
+#pragma binding(user32::LoadImageA,                 "LoadImageA")
+#pragma binding(user32::MapVirtualKeyA,             "MapVirtualKeyA")
+#pragma binding(user32::MapVirtualKeyW,             "MapVirtualKeyW")
+#pragma binding(user32::MonitorFromPoint,           "MonitorFromPoint")
+#pragma binding(user32::MonitorFromWindow,          "MonitorFromWindow")
+#pragma binding(user32::MoveWindow,                 "MoveWindow")
+#pragma binding(user32::MsgWaitForMultipleObjects,  "MsgWaitForMultipleObjects")
+#pragma binding(user32::OpenClipboard,              "OpenClipboard")
+#pragma binding(user32::PeekMessageA,               "PeekMessageA")
+#pragma binding(user32::PostMessageW,               "PostMessageW")
+#pragma binding(user32::RegisterClassA,             "RegisterClassA")
+#pragma binding(user32::RegisterClassW,             "RegisterClassW")
+#pragma binding(user32::RegisterRawInputDevices,    "RegisterRawInputDevices")
+#pragma binding(user32::ReleaseDC,                  "ReleaseDC")
+#pragma binding(user32::RemovePropW,                "RemovePropW")
+#pragma binding(user32::ScreenToClient,             "ScreenToClient")
+#pragma binding(user32::SendMessageW,               "SendMessageW")
+#pragma binding(user32::SetClassLongPtrA,           "SetClassLongPtrA")
+#pragma binding(user32::SetClipboardData,           "SetClipboardData")
+#pragma binding(user32::SetCursor,                  "SetCursor")
+#pragma binding(user32::SetCursorPos,               "SetCursorPos")
+#pragma binding(user32::SetFocus,                   "SetFocus")
+#pragma binding(user32::SetForegroundWindow,        "SetForegroundWindow")
+#pragma binding(user32::SetLayeredWindowAttributes, "SetLayeredWindowAttributes")
+#pragma binding(user32::SetProcessDPIAware,         "SetProcessDPIAware")
+#pragma binding(user32::SetPropW,                   "SetPropW")
+#pragma binding(user32::SetTimer,                   "SetTimer")
+#pragma binding(user32::SetWindowLongA,             "SetWindowLongA")
+#pragma binding(user32::SetWindowLongPtrW,          "SetWindowLongPtrW")
+#pragma binding(user32::SetWindowLongW,             "SetWindowLongW")
+#pragma binding(user32::SetWindowPos,               "SetWindowPos")
+#pragma binding(user32::SetWindowTextA,             "SetWindowTextA")
+#pragma binding(user32::SetWindowTextW,             "SetWindowTextW")
+#pragma binding(user32::ShowWindow,                 "ShowWindow")
+#pragma binding(user32::ToAscii,                    "ToAscii")
+#pragma binding(user32::ToUnicodeEx,                "ToUnicodeEx")
+#pragma binding(user32::TranslateMessage,           "TranslateMessage")
 #define CreateWindowA(cls, name, style, x, y, w, h, parent, menu, inst, param) \
     CreateWindowExA(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
 #define LoadCursor    LoadCursorA
@@ -4063,12 +4153,13 @@ BOOL SetPropW(HWND hWnd, LPCWSTR lpString, HANDLE hData);
 HANDLE RemovePropW(HWND hWnd, LPCWSTR lpString);
 
 // Registry read used for the Windows dark-mode query.
+#pragma binding(advapi32::RegGetValueW, "RegGetValueW")
 #define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
 #define RRF_RT_REG_DWORD 0x00000010
 LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags,
                      LPDWORD pdwType, PVOID pvData, LPDWORD pcbData);
 
-// Display / paint / timer surface RGFW's win32 backend reads.
+// The display, paint and timer surface.
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
 
 typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
@@ -4244,6 +4335,22 @@ HANDLE SetClipboardData(UINT uFormat, HANDLE hMem);
 DWORD CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
 
 // gdi32.dll pixel format, DIB, and bitblt entry points.
+#pragma dylib(gdi32, "gdi32.dll")
+#pragma binding(gdi32::BitBlt,              "BitBlt")
+#pragma binding(gdi32::ChoosePixelFormat,   "ChoosePixelFormat")
+#pragma binding(gdi32::CreateBitmap,        "CreateBitmap")
+#pragma binding(gdi32::CreateCompatibleDC,  "CreateCompatibleDC")
+#pragma binding(gdi32::CreateDCW,           "CreateDCW")
+#pragma binding(gdi32::CreateDIBSection,    "CreateDIBSection")
+#pragma binding(gdi32::DeleteDC,            "DeleteDC")
+#pragma binding(gdi32::DeleteObject,        "DeleteObject")
+#pragma binding(gdi32::DescribePixelFormat, "DescribePixelFormat")
+#pragma binding(gdi32::GetDeviceCaps,       "GetDeviceCaps")
+#pragma binding(gdi32::GetDeviceGammaRamp,  "GetDeviceGammaRamp")
+#pragma binding(gdi32::SelectObject,        "SelectObject")
+#pragma binding(gdi32::SetDeviceGammaRamp,  "SetDeviceGammaRamp")
+#pragma binding(gdi32::SetPixelFormat,      "SetPixelFormat")
+#pragma binding(gdi32::SwapBuffers,         "SwapBuffers")
 int ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
 BOOL SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
 int DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes,
@@ -4261,6 +4368,14 @@ HGDIOBJ SelectObject(HDC hdc, HGDIOBJ h);
 HICON CreateIconIndirect(PICONINFO piconinfo);
 
 // opengl32.dll WGL context entry points.
+#pragma dylib(opengl32, "opengl32.dll")
+#pragma binding(opengl32::wglCreateContext,     "wglCreateContext")
+#pragma binding(opengl32::wglDeleteContext,     "wglDeleteContext")
+#pragma binding(opengl32::wglGetCurrentContext, "wglGetCurrentContext")
+#pragma binding(opengl32::wglGetCurrentDC,      "wglGetCurrentDC")
+#pragma binding(opengl32::wglGetProcAddress,    "wglGetProcAddress")
+#pragma binding(opengl32::wglMakeCurrent,       "wglMakeCurrent")
+#pragma binding(opengl32::wglShareLists,        "wglShareLists")
 HGLRC wglCreateContext(HDC hdc);
 BOOL wglDeleteContext(HGLRC hglrc);
 BOOL wglMakeCurrent(HDC hdc, HGLRC hglrc);

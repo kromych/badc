@@ -2946,11 +2946,17 @@ impl Compiler {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
+        let line = self.lex.line;
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
             self.reject_incomplete_value(self.ty)?;
             self.check_cast(t, self.ty)?;
+        }
+        if let Some(to) = type_name.fn_ty.as_ref().filter(|f| f.ptr_depth == 1)
+            && let Some(from) = self.value_fn_type(self.ast_acc).filter(|f| f.1 == 1)
+        {
+            self.check_function_cast((t, &to.f), (self.ty, &from.0), line);
         }
         if let Some(member) = self.union_cast_member(t, self.ty) {
             return self.union_cast_literal(t, member);

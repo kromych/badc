@@ -197,6 +197,9 @@ catalog! {
     3013, "excess-initializers", [], Warning, Controllable,
         [DEFAULT], Live,
         "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
+    3015, "cast-function-type", [], Ignore, Controllable,
+        [EXTRA], Live,
+        "a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision";
     3014, "builtin-argument-range", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer constant operand of a builtin outside the values the builtin takes; 0 is used in its place";
@@ -469,6 +472,7 @@ impl Code {
     pub const NESTED_QUALIFIERS: Code = Code::new(3011);
     pub const SWITCH_BOOL: Code = Code::new(3012);
     pub const EXCESS_INITIALIZERS: Code = Code::new(3013);
+    pub const CAST_FUNCTION_TYPE: Code = Code::new(3015);
     pub const BUILTIN_ARGUMENT_RANGE: Code = Code::new(3014);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);

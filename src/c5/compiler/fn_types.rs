@@ -13,8 +13,9 @@ use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    is_pointer_ty, is_struct_ty, ptr_depth_of, strip_unsigned, struct_id_of, struct_ptr_depth,
-    unqualified_at_level, unqualified_object_ty, unqualified_version_ty,
+    is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty, is_void_ty, pointee_ty,
+    ptr_depth_of, strip_unsigned, struct_id_of, struct_ptr_depth, unqualified_at_level,
+    unqualified_object_ty, unqualified_version_ty,
 };
 
 /// `tag` of a value leading to `f` at `depth`, each return type along the
@@ -436,6 +437,67 @@ impl Compiler {
             (false, true) => unpromoted(b),
             (false, false) => true,
         }
+    }
+
+    /// gcc's `-Wcast-function-type` (c-typeck.c `c_safe_function_type_p`),
+    /// for targets that promote no prototype argument: the returns and the
+    /// common leading parameters agree as pointers, as integers of one
+    /// precision, or as compatible types; `void (*)(void)` matches all.
+    pub(super) fn check_function_cast(
+        &mut self,
+        (to_ty, to): (i64, &FnType),
+        (from_ty, from): (i64, &FnType),
+        line: usize,
+    ) {
+        let void = super::types::void_ty();
+        let generic = |ret: i64, f: &FnType| {
+            is_void_ty(ret)
+                && f.params.prototyped
+                && f.params.types.is_empty()
+                && !f.params.variadic
+        };
+        let equiv = |a: i64, b: i64| {
+            let (a, b) = (unqualified_version_ty(a), unqualified_version_ty(b));
+            let precision = |t: i64| {
+                if is_bool_ty(t) {
+                    1
+                } else {
+                    self.size_of_type(t) * 8
+                }
+            };
+            (is_pointer_ty(a) && is_pointer_ty(b))
+                || (is_integer_scalar_ty(a)
+                    && is_integer_scalar_ty(b)
+                    && precision(a) == precision(b))
+                || self.tags_compatible(a, b)
+        };
+        // gcc's TYPE_ARG_TYPES: a non-variadic prototype's list ends in `void`.
+        let list = |p: &FnParams| -> alloc::vec::Vec<i64> {
+            let end = (p.prototyped && !p.variadic).then_some(void);
+            p.types
+                .iter()
+                .copied()
+                .filter(|_| p.prototyped)
+                .chain(end)
+                .collect()
+        };
+        let (to_ret, from_ret) = (pointee_ty(to_ty), pointee_ty(from_ty));
+        if generic(to_ret, to)
+            || generic(from_ret, from)
+            || (equiv(to_ret, from_ret)
+                && list(&to.params)
+                    .iter()
+                    .zip(&list(&from.params))
+                    .all(|(&a, &b)| equiv(a, b)))
+        {
+            return;
+        }
+        let text = alloc::format!(
+            "cast between incompatible function types from `{}` to `{}`",
+            self.typed_text(from_ty, &Some((from.clone(), 1))),
+            self.typed_text(to_ty, &Some((to.clone(), 1))),
+        );
+        self.warn_at(Code::CAST_FUNCTION_TYPE, line, text);
     }
 
     /// Whether two values, each with the function type it leads to at its

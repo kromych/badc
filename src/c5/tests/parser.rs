@@ -5867,3 +5867,78 @@ fn missing_prototypes_and_declarations_report_where_gcc_does() {
         Vec::<u32>::new()
     );
 }
+
+/// gcc's `-Wcast-function-type` (in `-Wextra`): a cast between pointers to
+/// functions whose returns or common leading parameters differ other than
+/// as pointers, as integers of one precision, or in qualifiers;
+/// `void (*)(void)`, a variadic tail and a list without a prototype match.
+/// The lines are gcc 16.2.1's for the same unit on x86-64 and AArch64
+/// Linux; under LLP64 `long` has `int`'s precision, so 26 and 41 match.
+#[test]
+fn cast_function_type_reports_where_gcc_does() {
+    use crate::c5::Target;
+    let src = "typedef void (*v_v)(void);\n\
+               typedef int (*i_i)(int);\n\
+               typedef long (*l_l)(long);\n\
+               typedef int (*i_ii)(int, int);\n\
+               typedef int (*i_iv)(int, ...);\n\
+               typedef int (*i_u)();\n\
+               typedef void (*v_c)(char);\n\
+               typedef void (*v_uc)(unsigned char);\n\
+               typedef void (*v_s)(short);\n\
+               typedef void (*v_us)(unsigned short);\n\
+               typedef void (*v_u)(unsigned);\n\
+               typedef void (*v_i)(int);\n\
+               typedef void (*v_p)(void *);\n\
+               typedef void (*v_cp)(const char *);\n\
+               typedef double (*d_d)(double);\n\
+               typedef float (*f_f)(float);\n\
+               typedef void (*v_ll)(long long);\n\
+               typedef int (*i_ci)(const int);\n\
+               struct S { int a; };\n\
+               typedef void (*v_st)(struct S);\n\
+               typedef void (*v_st2)(struct S *);\n\
+               int fi(int x) { return x; }\n\
+               void use(void) {\n\
+               (void)(v_v)fi;          /* 24 */\n\
+               (void)(i_i)(v_v)0;      /* 25 */\n\
+               (void)(l_l)fi;          /* 26 */\n\
+               (void)(i_ii)fi;         /* 27 */\n\
+               (void)(i_iv)fi;         /* 28 */\n\
+               (void)(i_u)fi;          /* 29 */\n\
+               (void)(v_c)(v_uc)0;     /* 30 */\n\
+               (void)(v_s)(v_us)0;     /* 31 */\n\
+               (void)(v_u)(v_i)0;      /* 32 */\n\
+               (void)(v_p)(v_cp)0;     /* 33 */\n\
+               (void)(d_d)(f_f)0;      /* 34 */\n\
+               (void)(v_ll)(v_i)0;     /* 35 */\n\
+               (void)(i_ci)fi;         /* 36 */\n\
+               (void)(v_st)(v_st2)0;   /* 37 */\n\
+               (void)(v_i)fi;          /* 38 */\n\
+               (void)(i_i)(void *)fi;  /* 39 */\n\
+               (void)(int (*)(int, char))(int (*)(int, ...))0; /* 40 */\n\
+               (void)(long (*)(int))(int (*)(int))0; /* 41 */\n\
+               (void)(_Bool (*)(int))(char (*)(int))0; /* 42 */\n\
+               (void)(int (*)(int))(unsigned (*)(int))0; /* 43 */\n\
+               }\n\
+               int main(void){return 0;}\n";
+    let lines = |target: Target, selectors: &[&str]| -> Vec<u32> {
+        let opts = crate::CompileOptions::default().with_diag(super::diag_config(selectors));
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::CAST_FUNCTION_TYPE)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    let lp64 = [26, 27, 34, 35, 37, 38, 41, 42];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert_eq!(lines(target, &["cast-function-type"]), lp64, "{target:?}");
+        assert_eq!(lines(target, &["extra"]), lp64, "{target:?}");
+        assert_eq!(lines(target, &["all"]), Vec::<u32>::new(), "{target:?}");
+    }
+    let llp64 = lines(Target::WindowsX64, &["cast-function-type"]);
+    assert_eq!(llp64, [27, 34, 35, 37, 38, 42]);
+}

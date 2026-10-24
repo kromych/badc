@@ -134,6 +134,9 @@ catalog! {
     2013, "visibility", [], Warning, Controllable,
         [DEFAULT], Live,
         "a tag declared in a parameter list, whose scope ends with the declaration or definition";
+    2014, "strict-prototypes", [], Ignore, Controllable,
+        [], Live,
+        "a function declarator whose empty or identifier list declares no prototype, outside a cast and a definition an earlier prototype covers";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -444,6 +447,7 @@ impl Code {
     pub const IMPLICIT_INT: Code = Code::new(2011);
     pub const INLINE_ASM: Code = Code::new(2012);
     pub const VISIBILITY: Code = Code::new(2013);
+    pub const STRICT_PROTOTYPES: Code = Code::new(2014);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);

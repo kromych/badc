@@ -1891,6 +1891,9 @@ pub struct Compiler {
     /// The integer literals that stand for a folded `__builtin_object_size`,
     /// which C does not count as integer constant expressions.
     folded_builtin_lits: Vec<super::ast::ExprId>,
+    /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
+    /// reports: `(id, file, line)`.
+    unprototyped_lists: Vec<(u32, String, usize)>,
 
     /// Nesting depth of unevaluated constant-expression operands
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
@@ -2896,6 +2899,7 @@ impl Compiler {
             const_unevaluated: 0,
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
+            unprototyped_lists: Vec::new(),
             const_object_fold: 0,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),

@@ -49,6 +49,9 @@ pub(super) struct ParsedParams {
     /// The enumeration constants the list declared, `(symbol, type,
     /// value)`; a definition's block continues their scope too.
     pub(super) enumerators: Vec<(usize, i64, i64)>,
+    /// The `-Wstrict-prototypes` record of a list that declares no
+    /// prototype.
+    pub(super) unprototyped: Option<u32>,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -113,6 +116,7 @@ impl ParsedParams {
             sizes: Vec::new(),
             tags: Vec::new(),
             enumerators: Vec::new(),
+            unprototyped: None,
         }
     }
 
@@ -223,9 +227,16 @@ impl Compiler {
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
+        let line = self.lex.line;
         self.tag_scopes.push();
         self.open_param_list_scope();
         let mut r = self.parse_function_params_inner();
+        if let Ok(params) = &mut r
+            && params.form != ParamForm::Prototype
+            && self.in_user_source()
+        {
+            params.unprototyped = Some(self.note_unprototyped_list(line));
+        }
         let enumerators = self.close_param_list_scope();
         let tags = self.tag_scopes.pop();
         for (name, id) in &tags {
@@ -262,6 +273,31 @@ impl Compiler {
         p.fn_own_sig = outer_own;
         p.fn_decl_base = outer_base;
         r
+    }
+
+    /// Record a parameter list that declares no prototype (C99 6.7.5.3p14)
+    /// for gcc's `-Wstrict-prototypes`, reported with the declaration unless
+    /// a cast's type name or a definition takes it back.
+    fn note_unprototyped_list(&mut self, line: usize) -> u32 {
+        let id = self.unprototyped_lists.last().map_or(0, |&(id, ..)| id + 1);
+        self.unprototyped_lists
+            .push((id, self.lex.file.clone(), line));
+        id
+    }
+
+    /// A definition's own list: reported at the definition, and only when
+    /// no earlier declaration gave the function a prototype, as gcc does.
+    pub(super) fn claim_unprototyped_list(&mut self, params: &ParsedParams) {
+        if let Some(id) = params.unprototyped {
+            self.unprototyped_lists.retain(|&(i, ..)| i != id);
+        }
+    }
+
+    pub(super) fn report_unprototyped_lists(&mut self) {
+        for (_, file, line) in core::mem::take(&mut self.unprototyped_lists) {
+            let text = alloc::string::String::from("function declaration is not a prototype");
+            self.warn_at_file(Code::STRICT_PROTOTYPES, &file, line, text);
+        }
     }
 
     fn parse_function_params_inner(&mut self) -> Result<ParsedParams, C5Error> {
@@ -579,6 +615,7 @@ impl Compiler {
             sizes: Vec::new(),
             tags: Vec::new(),
             enumerators: Vec::new(),
+            unprototyped: None,
         })
     }
 

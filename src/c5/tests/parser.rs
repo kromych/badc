@@ -5768,3 +5768,39 @@ fn value_builtins_check_their_operands() {
         warnings("void *f(int *p, int a) { return __builtin_assume_aligned(p, a); }").is_empty()
     );
 }
+
+/// gcc's `-Wstrict-prototypes` under C99's rules: a function declarator
+/// whose empty or identifier list declares no prototype (C99 6.7.5.3p14),
+/// in a declaration, a pointer, a typedef, a parameter, a member and a
+/// type name, but not in a cast's type name; a definition reports only
+/// when no earlier declaration gave the function a prototype. The lines
+/// are gcc 16.2.1's under `-std=gnu17` for the same unit.
+#[test]
+fn strict_prototypes_reports_where_gcc_does() {
+    let src = "int f();\n\
+               int g(void);\n\
+               int g() { return 0; }\n\
+               int h() { return 0; }\n\
+               int k(a) int a; { return a; }\n\
+               int (*fp)();\n\
+               typedef int T();\n\
+               void u(int (*cb)());\n\
+               struct s { int (*op)(); };\n\
+               int w(void) { int (*lp)() = 0; extern int e(); (void)lp; return sizeof(int (*)()); }\n\
+               void c(void) { (void)(int (*)(void))(int (*)())0; }\n\
+               void l(void) { int (*const *p)() = (int (*const[1])()){0}; (void)p; }\n\
+               int main(void) { return 0; }\n";
+    let lines = |selectors: &[&str]| -> Vec<u32> {
+        super::compile_str_bare_with_diags(src, selectors)
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::STRICT_PROTOTYPES)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    assert_eq!(lines(&["all", "extra"]), Vec::<u32>::new());
+    assert_eq!(
+        lines(&["strict-prototypes"]),
+        [1, 4, 5, 6, 7, 8, 9, 10, 10, 10, 12, 12]
+    );
+}

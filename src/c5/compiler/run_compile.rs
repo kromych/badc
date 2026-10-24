@@ -390,7 +390,9 @@ impl Compiler {
                 continue;
             }
             self.parse_file_scope_declaration()?;
+            self.report_unprototyped_lists();
         }
+        self.report_unprototyped_lists();
         self.complete_tentative_definitions()?;
         self.apply_pragma_weak()?;
         self.resolve_pending_aliases()?;
@@ -1280,6 +1282,11 @@ impl Compiler {
             params.types.clone()
         };
         let prototyped = self.has_prototype(id_idx, &params);
+        self.claim_unprototyped_list(&params);
+        if !prototyped && self.in_user_source() {
+            let text = alloc::string::String::from("function declaration is not a prototype");
+            self.warn_at(Code::STRICT_PROTOTYPES, def.line, text);
+        }
         self.symbols[id_idx].unprototyped_def = !prototyped;
         self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;

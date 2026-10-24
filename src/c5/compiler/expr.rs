@@ -2880,12 +2880,17 @@ impl Compiler {
     }
 
     fn parse_cast_or_compound_literal(&mut self) -> Result<(), C5Error> {
+        let unprototyped = self.unprototyped_lists.len();
         let type_name = self.parse_type_name()?;
         self.note_cast_type_name(type_name.base);
         if self.lex.tk == ')' {
             self.next()?;
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
+        }
+        // gcc's -Wstrict-prototypes passes over a cast's type name.
+        if self.lex.tk != '{' {
+            self.unprototyped_lists.truncate(unprototyped);
         }
         if self.lex.tk == '{' && type_name.vla.is_some() {
             // C99 6.5.2.5p1: no variable-length array type; a type derived

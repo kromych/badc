@@ -2980,11 +2980,7 @@ mod tests {
     #[test]
     fn a_warning_badc_does_not_implement_is_taken_and_reported() {
         let reported = |args: &[&str]| parse(args).diagnostics;
-        for arg in [
-            "-Wshadow",
-            "-Werror=strict-prototypes",
-            "-Wimplicit-fallthrough=5",
-        ] {
+        for arg in ["-Wshadow", "-Werror=cast-align", "-Wimplicit-fallthrough=5"] {
             let lines = reported(&[arg, "a.c"]);
             assert_eq!(lines.len(), 1, "{arg}: {lines:?}");
             assert!(

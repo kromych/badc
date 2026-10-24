@@ -217,7 +217,9 @@ struct stat {
 #pragma binding(msvcrt::fstat, "_fstat")
 #endif
 int stat(const char *path, struct stat *buf);
+#ifndef _WIN32
 int lstat(const char *path, struct stat *buf);
+#endif
 int fstat(int fd, struct stat *buf);
 
 // Mode bits

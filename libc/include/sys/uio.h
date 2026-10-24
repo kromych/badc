@@ -30,11 +30,13 @@ struct iovec {
 #pragma binding(libc::process_vm_writev, "process_vm_writev")
 #endif
 
+#ifndef _WIN32
 ssize_t readv(int fd, const struct iovec *iov, int iovcnt);
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt);
 // Positioned vectored I/O (POSIX): like readv/writev at `offset`.
 ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, long offset);
 ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, long offset);
+#endif
 #ifdef __linux__
 // Positioned vectored I/O with a flags word (Linux).
 ssize_t preadv2(int fd, const struct iovec *iov, int iovcnt, long offset, int flags);

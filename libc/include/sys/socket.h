@@ -358,7 +358,9 @@ int socket(int domain, int type, int protocol);
 int bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int fd, int backlog);
 int accept(int fd, struct sockaddr *restrict addr, socklen_t *restrict addrlen);
+#ifndef _WIN32
 int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+#endif
 int connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int getsockopt(int fd, int level, int optname, void *restrict optval,
@@ -371,7 +373,9 @@ ssize_t recv(int fd, void *buf, size_t n, int flags);
 ssize_t send(int fd, const void *buf, size_t n, int flags);
 #endif
 int shutdown(int fd, int how);
+#ifndef _WIN32
 int socketpair(int domain, int type, int protocol, int *sv);
+#endif
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 #ifdef _WIN32

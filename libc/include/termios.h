@@ -224,6 +224,7 @@ struct termios {
 #define IEXTEN 0100000
 #endif
 
+#ifndef _WIN32
 int tcgetattr(int fd, struct termios *termios_p);
 unsigned int cfgetospeed(const struct termios *termios_p);
 unsigned int cfgetispeed(const struct termios *termios_p);
@@ -235,6 +236,7 @@ int tcdrain(int fd);
 int tcflush(int fd, int queue_selector);
 int tcflow(int fd, int action);
 void cfmakeraw(struct termios *termios_p);
+#endif
 
 // POSIX constants completed from per-target system headers (termios baud/flags,
 // control chars, queue/flow selectors). Values extracted per target.

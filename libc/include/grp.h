@@ -30,6 +30,7 @@ struct group {
 #pragma binding(libc::endgrent, "endgrent")
 #endif
 
+#ifndef _WIN32
 struct group *getgrnam(const char *name);
 struct group *getgrgid(unsigned int gid);
 int getgrnam_r(const char *name, struct group *grp, char *buf, unsigned long buflen, struct group **result);
@@ -38,3 +39,4 @@ int getgrgid_r(unsigned int gid, struct group *grp, char *buf, unsigned long buf
 void setgrent(void);
 struct group *getgrent(void);
 void endgrent(void);
+#endif

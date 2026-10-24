@@ -282,11 +282,13 @@ void *malloc(size_t size);
 void *calloc(size_t n, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
+#ifndef _WIN32
 // Aligned allocation. posix_memalign stores the block through memptr and
 // returns 0 or an errno value; memalign is a glibc extension.
 int posix_memalign(void **memptr, size_t alignment, size_t size);
 void *aligned_alloc(size_t alignment, size_t size);
 void *valloc(size_t size);
+#endif
 #ifdef __linux__
 void *memalign(size_t alignment, size_t size);
 #endif
@@ -434,9 +436,10 @@ unsigned long long _strtoui64(const char *s, char **endp, int base);
 char *_fullpath(char *absPath, char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
-int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
+#ifndef _WIN32
+int mkstemps(char *templ, int suffixlen);
 long random(void);
 void srandom(unsigned int seed);
 // SVID 48-bit linear-congruential PRNG family. drand48 returns a double
@@ -454,6 +457,7 @@ char *ptsname(int fd);
 int ptsname_r(int fd, char *buf, unsigned long buflen);
 // System load averages over 1/5/15 minutes (BSD).
 int getloadavg(double *loadavg, int nelem);
+#endif
 
 /* GCC / clang `__clear_cache(begin, end)` is the runtime hint
 ** that makes instructions newly written into [begin, end)

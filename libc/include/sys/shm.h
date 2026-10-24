@@ -90,7 +90,9 @@ struct shmid_ds {
 #pragma binding(libc::shmctl, "shmctl")
 #endif
 
+#ifndef _WIN32
 int shmget(key_t key, unsigned long size, int shmflg);
 void *shmat(int shmid, const void *shmaddr, int shmflg);
 int shmdt(const void *shmaddr);
 int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+#endif

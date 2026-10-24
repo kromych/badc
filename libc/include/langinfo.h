@@ -16,7 +16,9 @@ typedef int nl_item;
 #pragma binding(libc::nl_langinfo, "nl_langinfo")
 #endif
 
+#ifndef _WIN32
 char *nl_langinfo(nl_item item);
+#endif
 
 // nl_langinfo item numbers (POSIX 7.21). Per-target values; CODESET above.
 #ifndef _DATE_FMT

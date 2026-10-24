@@ -153,8 +153,10 @@ typedef void (*sighandler_t)(int);
 
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
+#ifndef _WIN32
 int kill(int pid, int sig);
 int killpg(int pgrp, int sig);
+#endif
 
 #if defined(__APPLE__) || defined(__linux__)
 // The signal set as the target's C library declares it: the macOS SDK's

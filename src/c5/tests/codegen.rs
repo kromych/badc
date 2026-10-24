@@ -1248,6 +1248,57 @@ fn windows_headers_leave_posix_fallbacks_to_the_program() {
     );
 }
 
+/// The POSIX functions mingw-w64's headers do not declare are undeclared on
+/// the Windows targets, so a program's own function of the name compiles
+/// whatever its type. The same unit is a conflicting redeclaration where the
+/// headers declare POSIX's.
+#[test]
+fn windows_headers_leave_undeclared_posix_names_to_the_program() {
+    use crate::{Compiler, Target};
+    const HEADERS: &str = "#include <unistd.h>\n#include <stdlib.h>\n#include <signal.h>\n\
+        #include <sys/stat.h>\n#include <termios.h>\n#include <sys/mman.h>\n\
+        #include <pwd.h>\n#include <grp.h>\n#include <poll.h>\n#include <sys/wait.h>\n\
+        #include <sys/socket.h>\n#include <netdb.h>\n";
+    const NAMES: &[&str] = &[
+        "fork",
+        "pipe",
+        "getuid",
+        "fsync",
+        "lstat",
+        "kill",
+        "random",
+        "tcgetattr",
+        "mmap",
+        "getpwuid",
+        "getgrgid",
+        "poll",
+        "waitpid",
+        "socketpair",
+        "hstrerror",
+    ];
+    let mut src = alloc::string::String::from(HEADERS);
+    for n in NAMES {
+        src += &alloc::format!("static void {n}(void) {{}}\n");
+    }
+    src += "int main(void) {\n";
+    for n in NAMES {
+        src += &alloc::format!("    {n}();\n");
+    }
+    src += "    return 0;\n}\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(e) = Compiler::with_target(src.clone(), target).compile() {
+            panic!("{target:?}: {e}");
+        }
+    }
+    let err = Compiler::with_target(src, Target::LinuxX64)
+        .compile()
+        .expect_err("POSIX <unistd.h> declares fork");
+    assert!(
+        alloc::format!("{err}").contains("conflicting types for `fork`"),
+        "{err}"
+    );
+}
+
 /// Every function the Windows `<pthread.h>` and `<sched.h>` declare has a
 /// definition the link finds, in the C-library sources it offers like
 /// archive members. The PE fixtures run them on a Windows host; this links

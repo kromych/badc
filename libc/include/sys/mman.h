@@ -108,6 +108,7 @@
 int memfd_create(const char *name, unsigned int flags);
 #endif
 
+#ifndef _WIN32
 // POSIX: the mapping length is size_t and the file offset is off_t, both
 // 64-bit. An `int` length/offset truncates a mapping at or past 2GB.
 // `long` / `unsigned long` match off_t / size_t on LP64 (this block's
@@ -133,3 +134,4 @@ int shm_unlink(const char *name);
 // Lock/unlock the whole address space (POSIX); flags are the MCL_* set.
 int mlockall(int flags);
 int munlockall(void);
+#endif

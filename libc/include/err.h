@@ -16,6 +16,7 @@
 #pragma binding(libc::vwarnx, "vwarnx")
 #endif
 
+#ifndef _WIN32
 // The err/errx family prints the message and exits with eval.
 _Noreturn void err(int eval, const char *fmt, ...);
 _Noreturn void errx(int eval, const char *fmt, ...);
@@ -27,3 +28,4 @@ void warn(const char *fmt, ...);
 void warnx(const char *fmt, ...);
 void vwarn(const char *fmt, va_list ap);
 void vwarnx(const char *fmt, va_list ap);
+#endif

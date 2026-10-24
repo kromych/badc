@@ -183,9 +183,11 @@ int getaddrinfo(const char *node, const char *service,
 void freeaddrinfo(struct addrinfo *res);
 int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
                 socklen_t hostlen, char *serv, socklen_t servlen, int flags);
+#ifndef _WIN32
 const char *gai_strerror(int errcode);
 // Error string for an h_errno value (the network database).
 const char *hstrerror(int err);
+#endif
 
 // h_errno: the network-database error code. macOS exposes it as a data
 // symbol; glibc routes it through a thread-local accessor (like errno).

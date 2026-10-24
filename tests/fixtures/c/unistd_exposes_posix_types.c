@@ -28,12 +28,12 @@ int main(void) {
     if (sizeof(uid) != 4) return 15;
     if (sizeof(gid) != 4) return 16;
     // The id functions return the id types, which glibc and Darwin make
-    // unsigned.
+    // unsigned. mingw-w64 declares neither function.
 #ifndef _WIN32
     if ((uid_t)-1 < 0 || (gid_t)-1 < 0) return 17;
-#endif
     if (!_Generic(getuid(), uid_t: 1, default: 0) || !_Generic(getgid(), gid_t: 1, default: 0))
         return 18;
+#endif
     if (!_Generic(getpid(), pid_t: 1, default: 0)) return 19;
     return 0;
 }

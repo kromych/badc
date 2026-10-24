@@ -13,4 +13,6 @@
 // Return EAGAIN rather than block when the requested pool isn't ready.
 #define GRND_NONBLOCK 0x0001
 
+#ifndef _WIN32
 long getrandom(char *buf, unsigned long buflen, unsigned int flags);
+#endif

@@ -365,10 +365,12 @@ int read(int fd, void *buf, unsigned int n);
 #else
 ssize_t read(int fd, void *buf, size_t n);
 #endif
+#ifndef _WIN32
 // POSIX: pread/pwrite take an off_t offset and size_t count; an `int`
 // offset truncates positions past 2GB. Matches the pread64/pwrite64
 // signatures below.
 ssize_t pread(int fd, void *buf, size_t n, off_t offset);
+#endif
 int close(int fd);
 #ifdef __linux__
 int close_range(unsigned int first, unsigned int last, int flags);
@@ -378,8 +380,8 @@ void closefrom(int lowfd);
 int write(int fd, const void *buf, unsigned int n);
 #else
 ssize_t write(int fd, const void *buf, size_t n);
-#endif
 ssize_t pwrite(int fd, const void *buf, size_t n, off_t offset);
+#endif
 #ifdef __linux__
 // Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
 // result are 64-bit; a program may reach for these names directly.
@@ -387,18 +389,20 @@ long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
 int access(const char *path, int mode);
+#ifndef _WIN32
 // Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
 // 2GB. `long` is off_t on LP64 (the POSIX targets lseek is declared for).
-#ifndef _WIN32
 long lseek(int fd, long offset, int whence);
-#endif
 int fsync(int fd);
+#endif
 int ftruncate(int fd, off_t len);
+#ifndef _WIN32
 int fcntl(int fd, int cmd, ...);
+#endif
 int unlink(const char *path);
 int rmdir(const char *path);
 #ifdef _WIN32
@@ -407,40 +411,43 @@ char *getcwd(char *buf, int n);
 char *getcwd(char *buf, size_t n);
 #endif
 int chdir(const char *path);
+#ifndef _WIN32
 int chroot(char *path);
 uid_t getuid(void);
 uid_t geteuid(void);
 gid_t getgid(void);
 gid_t getegid(void);
 pid_t getppid(void);
+#endif
 pid_t getpid(void);
 #ifdef __linux__
 // Linux thread id of the calling thread (glibc >= 2.30).
 pid_t gettid(void);
 #endif
-#ifdef _WIN32
-// Winsock's type, as <winsock2.h> declares it.
-int gethostname(char *name, int namelen);
-#else
+#ifndef _WIN32
 int gethostname(char *name, unsigned long len);
-#endif
 int sethostname(const char *name, unsigned long len);
+#endif
 unsigned int sleep(unsigned int seconds);
+#ifndef _WIN32
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
 // remaining seconds (POSIX). Both counts are unsigned.
 unsigned int alarm(unsigned int seconds);
+#endif
 int usleep(useconds_t microseconds);
+#ifndef _WIN32
 // Suspend until a signal is delivered; always returns -1 with EINTR.
 int pause(void);
-int isatty(int fd);
-ssize_t readlink(const char *path, char *buf, size_t n);
-#ifndef _WIN32
-int mkdir(const char *path, mode_t mode);
 #endif
+int isatty(int fd);
+#ifndef _WIN32
+ssize_t readlink(const char *path, char *buf, size_t n);
+int mkdir(const char *path, mode_t mode);
 // POSIX: create a filesystem node. The device argument is unused for
 // regular / FIFO nodes; callers pass 0.
 int mknod(const char *path, mode_t mode, dev_t dev);
 int mkfifo(const char *path, mode_t mode);
+#endif
 int dup(int fd);
 int dup2(int oldfd, int newfd);
 #ifdef __linux__
@@ -460,9 +467,11 @@ int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 // the link on demand.
 long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
                      unsigned long len, unsigned int flags);
+#ifndef _WIN32
 int pipe(int *fds);
 pid_t fork(void);
 pid_t vfork(void);
+#endif
 int execvp(const char *file, char *const argv[]);
 int execve(const char *path, char *const argv[], char *const envp[]);
 // List-form exec (variadic argv terminated by a NULL char*; execle takes a
@@ -474,24 +483,31 @@ int execle(const char *path, const char *arg, ...);
 // glibc extension: execvp with an explicit environment.
 int execvpe(const char *file, char *const argv[], char *const envp[]);
 #endif
+#ifndef _WIN32
 // Detach into the background (BSD/glibc); nochdir/noclose suppress the
 // chdir("/") and stdio redirection.
 int daemon(int nochdir, int noclose);
 int setgid(gid_t gid);
 int setuid(uid_t uid);
+#endif
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
+#ifndef _WIN32
 int fchmod(int fd, mode_t mode);
 int fchown(int fd, uid_t uid, gid_t gid);
 int utimes(char *path, char *times);
 int futimes(int fd, char *times);
 int lutimes(char *path, char *times);
+#endif
 mode_t umask(mode_t mode);
 int chmod(const char *path, mode_t mode);
+#ifndef _WIN32
 int chown(const char *path, uid_t uid, gid_t gid);
+#endif
 int truncate(const char *path, off_t len);
+#ifndef _WIN32
 int link(const char *from, const char *to);
 int symlink(const char *from, const char *to);
 // The *at family (POSIX): operate relative to a directory descriptor
@@ -557,12 +573,16 @@ int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
 int lockf(int fd, int cmd, long len);
+#endif
 int execv(const char *path, char *const argv[]);
+#ifndef _WIN32
 int fexecve(int fd, char *const argv[], char *const envp[]);
+#endif
 #ifdef __linux__
 // Linux-only: flush a file's data without its metadata.
 int fdatasync(int fd);
 #endif
+#ifndef _WIN32
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
 long pathconf(char *path, int name);
 long sysconf(int name);
@@ -576,6 +596,7 @@ int getdtablesize(void);
 char *crypt(char *key, char *salt);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
+#endif
 char *getenv(const char *name);
 #ifdef __APPLE__
 // libSystem accessor for the per-process environ slot. Returns a
@@ -587,8 +608,8 @@ char ***_NSGetEnviron(void);
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 char *realpath(const char *path, char *resolved);
-#endif
 int fchdir(int fd);
+#endif
 int getopt(int argc, char *const argv[], const char *opts);
 // POSIX.1 requires <unistd.h> to declare the getopt parser state
 // alongside getopt itself; <getopt.h> adds the GNU long-option surface.
@@ -596,8 +617,10 @@ extern char *optarg;
 extern int optind;
 extern int opterr;
 extern int optopt;
+#ifndef _WIN32
 void sync(void);
 int confstr(int name, char *buf, int len);
+#endif
 
 #define LOCK_SH 1
 #define LOCK_EX 2

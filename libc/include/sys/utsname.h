@@ -32,4 +32,6 @@ struct utsname {
 #endif
 
 struct utsname;
+#ifndef _WIN32
 int uname(struct utsname *buf);
+#endif

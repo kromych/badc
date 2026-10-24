@@ -22,6 +22,7 @@
 #define XATTR_CREATE  1
 #define XATTR_REPLACE 2
 
+#ifndef _WIN32
 long getxattr(const char *path, const char *name, void *value, unsigned long size);
 long lgetxattr(const char *path, const char *name, void *value, unsigned long size);
 long fgetxattr(int fd, const char *name, void *value, unsigned long size);
@@ -37,6 +38,7 @@ long flistxattr(int fd, char *list, unsigned long size);
 int removexattr(const char *path, const char *name);
 int lremovexattr(const char *path, const char *name);
 int fremovexattr(int fd, const char *name);
+#endif
 
 // xattr operation flags and size limits (Linux).
 #ifndef XATTR_CREATE

@@ -1388,6 +1388,49 @@ fn windows_h_imports_its_win32_functions_from_their_dlls() {
     }
 }
 
+/// `<stringapiset.h>` included alone declares the string comparison,
+/// folding, classification and conversion calls mingw-w64's declares, and
+/// the A forms its `<winnls.h>` adds, each imported from kernel32.dll; the
+/// generic names follow `UNICODE`.
+#[test]
+fn windows_stringapiset_h_imports_its_functions_from_kernel32() {
+    const K: &str = "kernel32.dll";
+    let names = [
+        "CompareStringA",
+        "CompareStringW",
+        "CompareStringEx",
+        "CompareStringOrdinal",
+        "FoldStringA",
+        "FoldStringW",
+        "GetStringTypeA",
+        "GetStringTypeW",
+        "GetStringTypeExA",
+        "GetStringTypeExW",
+        "MultiByteToWideChar",
+        "WideCharToMultiByte",
+    ];
+    let imports: alloc::vec::Vec<_> = names.iter().map(|n| (*n, *n, K)).collect();
+    let generic = [
+        ("CompareString", "CompareString"),
+        ("FoldString", "FoldString"),
+        ("GetStringTypeEx", "GetStringTypeEx"),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(target, "#include <stringapiset.h>\n", &imports);
+        for (unicode, suffix) in [("", "A"), ("#define UNICODE\n", "W")] {
+            let headers = alloc::format!("{unicode}#include <stringapiset.h>\n");
+            let symbols: alloc::vec::Vec<String> = generic
+                .iter()
+                .map(|(_, s)| alloc::format!("{s}{suffix}"))
+                .collect();
+            let imports: alloc::vec::Vec<_> = (generic.iter().zip(&symbols))
+                .map(|((n, _), s)| (*n, s.as_str(), K))
+                .collect();
+            assert_windows_imports(target, &headers, &imports);
+        }
+    }
+}
+
 /// `<tchar.h>` maps the generic-text names to the wide C runtime functions
 /// under `_UNICODE` and to the single-byte ones otherwise, as mingw-w64's
 /// does, and `_T` / `_TEXT` build a literal of the matching width. `TCHAR`

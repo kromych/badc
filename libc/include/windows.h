@@ -2089,6 +2089,85 @@ BOOL GetThreadTimes(HANDLE hThread, LPFILETIME lpCreationTime, LPFILETIME lpExit
 HANDLE OpenThread(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwThreadId);
 int CompareStringOrdinal(LPCWCH lpString1, int cchCount1, LPCWCH lpString2,
                          int cchCount2, BOOL bIgnoreCase);
+
+// String comparison, folding and classification (stringapiset.h, and the A
+// forms winnls.h adds), from kernel32.dll.
+#pragma binding(kernel32::CompareStringA,   "CompareStringA")
+#pragma binding(kernel32::CompareStringW,   "CompareStringW")
+#pragma binding(kernel32::CompareStringEx,  "CompareStringEx")
+#pragma binding(kernel32::FoldStringA,      "FoldStringA")
+#pragma binding(kernel32::FoldStringW,      "FoldStringW")
+#pragma binding(kernel32::GetStringTypeA,   "GetStringTypeA")
+#pragma binding(kernel32::GetStringTypeExA, "GetStringTypeExA")
+#pragma binding(kernel32::GetStringTypeExW, "GetStringTypeExW")
+typedef const CHAR  *PCNZCH;
+typedef const WCHAR *PCNZWCH;
+int CompareStringA(LCID Locale, DWORD dwCmpFlags, PCNZCH lpString1, int cchCount1,
+                   PCNZCH lpString2, int cchCount2);
+int CompareStringW(LCID Locale, DWORD dwCmpFlags, PCNZWCH lpString1, int cchCount1,
+                   PCNZWCH lpString2, int cchCount2);
+int CompareStringEx(LPCWSTR lpLocaleName, DWORD dwCmpFlags, LPCWCH lpString1, int cchCount1,
+                    LPCWCH lpString2, int cchCount2, LPNLSVERSIONINFO lpVersionInformation,
+                    LPVOID lpReserved, LPARAM lParam);
+int FoldStringA(DWORD dwMapFlags, LPCSTR lpSrcStr, int cchSrc, LPSTR lpDestStr, int cchDest);
+int FoldStringW(DWORD dwMapFlags, LPCWCH lpSrcStr, int cchSrc, LPWSTR lpDestStr, int cchDest);
+BOOL GetStringTypeA(LCID Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc,
+                    LPWORD lpCharType);
+BOOL GetStringTypeExA(LCID Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc,
+                      LPWORD lpCharType);
+BOOL GetStringTypeExW(LCID Locale, DWORD dwInfoType, LPCWCH lpSrcStr, int cchSrc,
+                      LPWORD lpCharType);
+#ifdef UNICODE
+#define CompareString   CompareStringW
+#define FoldString      FoldStringW
+#define GetStringTypeEx GetStringTypeExW
+#else
+#define CompareString   CompareStringA
+#define FoldString      FoldStringA
+#define GetStringTypeEx GetStringTypeExA
+#endif
+#define NORM_IGNORECASE            0x00000001
+#define NORM_IGNORENONSPACE        0x00000002
+#define NORM_IGNORESYMBOLS         0x00000004
+#define LINGUISTIC_IGNORECASE      0x00000010
+#define LINGUISTIC_IGNOREDIACRITIC 0x00000020
+#define NORM_IGNOREKANATYPE        0x00010000
+#define NORM_IGNOREWIDTH           0x00020000
+#define NORM_LINGUISTIC_CASING     0x08000000
+#define SORT_DIGITSASNUMBERS       0x00000008
+#define SORT_STRINGSORT            0x00001000
+#define MAP_FOLDCZONE              0x00000010
+#define MAP_PRECOMPOSED            0x00000020
+#define MAP_COMPOSITE              0x00000040
+#define MAP_FOLDDIGITS             0x00000080
+#define MAP_EXPAND_LIGATURES       0x00002000
+#define C1_UPPER   0x0001
+#define C1_LOWER   0x0002
+#define C1_DIGIT   0x0004
+#define C1_SPACE   0x0008
+#define C1_PUNCT   0x0010
+#define C1_CNTRL   0x0020
+#define C1_BLANK   0x0040
+#define C1_XDIGIT  0x0080
+#define C1_ALPHA   0x0100
+#define C1_DEFINED 0x0200
+#define C2_LEFTTORIGHT      0x0001
+#define C2_RIGHTTOLEFT      0x0002
+#define C2_EUROPENUMBER     0x0003
+#define C2_EUROPESEPARATOR  0x0004
+#define C2_EUROPETERMINATOR 0x0005
+#define C2_ARABICNUMBER     0x0006
+#define C2_COMMONSEPARATOR  0x0007
+#define C2_BLOCKSEPARATOR   0x0008
+#define C2_SEGMENTSEPARATOR 0x0009
+#define C2_WHITESPACE       0x000a
+#define C2_OTHERNEUTRAL     0x000b
+#define C2_NOTAPPLICABLE    0x0000
+#define LANG_INVARIANT  0x7f
+#define SUBLANG_NEUTRAL 0x00
+#define SORT_DEFAULT    0x0
+#define MAKELCID(lgid, srtid) ((DWORD)((((DWORD)((WORD)(srtid))) << 16) | ((DWORD)((WORD)(lgid)))))
+#define LOCALE_INVARIANT (MAKELCID(MAKELANGID(LANG_INVARIANT, SUBLANG_NEUTRAL), SORT_DEFAULT))
 BOOL GetOverlappedResult(HANDLE hFile, LPOVERLAPPED lpOverlapped,
                          LPDWORD lpNumberOfBytesTransferred, BOOL bWait);
 NTSTATUS BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer,

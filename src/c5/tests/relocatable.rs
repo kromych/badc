@@ -444,6 +444,32 @@ fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
 }
 
 #[test]
+fn a_zero_length_object_ends_the_objects_of_its_own_section() {
+    // A GNU zero-length array is an object of size zero. It sits in the
+    // section its type and initializer give it, after the objects defined
+    // there before it, as gcc and clang place it -- not at the start of
+    // the next section's first object.
+    let src = "const long ro_a[2] = {1, 2};\n\
+               const long ro_z[0] = {};\n\
+               long rw_a[2] = {3, 4};\n\
+               long rw_z[0] = {};\n\
+               long bss_a[2];\n\
+               long *f(void) { return bss_a; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "z.o").expect("parse");
+        let sym = |n: &str| a.symbols.iter().find(|s| s.name == n).expect(n);
+        let section = |n: &str| match sym(n).sec {
+            EtSymRef::Section(i) => a.sections[i].name.as_str(),
+            _ => panic!("{n} is not defined in a section"),
+        };
+        assert_eq!(section("ro_z"), ".rodata", "{target:?}");
+        assert_eq!(sym("ro_z").value, sym("ro_a").value + 16, "{target:?}");
+        assert_eq!(section("rw_z"), ".bss", "{target:?}");
+        assert_ne!(sym("rw_z").value, sym("bss_a").value, "{target:?}");
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

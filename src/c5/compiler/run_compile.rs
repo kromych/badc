@@ -2393,7 +2393,6 @@ impl Compiler {
         // array-ness that the scalar `array_size == 0`
         // encoding would otherwise drop.
         self.symbols[id_idx].is_zero_len_array = final_size == 0;
-        self.reserve_zero_length_array_slot(id_idx);
         // Patch the deferred-outer placeholder in
         // `array_dims[0]` to the resolved row count.
         // Layout: total elements = outer * inner-dims-product,
@@ -2430,6 +2429,7 @@ impl Compiler {
             fresh
         };
         self.symbols[id_idx].val = off;
+        self.reserve_zero_length_array_slot(id_idx);
         self.write_array_init_into_data(off, ty, &elements)?;
         self.symbols[id_idx].has_initializer = true;
         self.symbols[id_idx].defined_here = true;

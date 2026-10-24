@@ -6556,10 +6556,10 @@ fn const_globals_land_in_read_only_rodata() {
 }
 
 /// A zero-length array (`T x[] = {}` and `T x[0]`, the GNU extension
-/// C99 6.7.5.2 leaves out) occupies no storage: it reports `st_size` 0
-/// and shares the address of the object that follows it, as gcc does.
-/// Sizing it from its element width instead gave it a range that ran
-/// into that object, which the `.rodata` carve rejects as an overlap.
+/// C99 6.7.5.2 leaves out) reports `st_size` 0 and lies in the section
+/// its type gives it, outside the object that follows it. Sizing it from
+/// its element width instead gave it a range that ran into that object,
+/// which the `.rodata` carve rejects as an overlap.
 #[test]
 fn zero_length_arrays_occupy_no_storage() {
     let dir = tempdir("zero-len-array");
@@ -6589,16 +6589,16 @@ fn zero_length_arrays_occupy_no_storage() {
         };
         let filled = get("filled_pins");
         assert_eq!(filled.2, 24, "{target}: sized array keeps its size");
+        let secs = elf_sections(&bytes);
         for n in ["empty_pins", "zerodim"] {
             let z = get(n);
             assert_eq!(z.2, 0, "{target}: {n} occupies no storage");
-            assert_eq!(
-                (z.1, z.3),
-                (filled.1, filled.3),
-                "{target}: {n} shares the address of the object after it",
+            assert_eq!(secs[z.3 as usize].0, ".rodata", "{target}: {n}");
+            assert!(
+                z.1 <= filled.1 || z.1 >= filled.1 + filled.2,
+                "{target}: {n} lies inside the object after it",
             );
         }
-        let secs = elf_sections(&bytes);
         assert_eq!(
             secs[filled.3 as usize].0, ".rodata",
             "{target}: const arrays are carved into .rodata",

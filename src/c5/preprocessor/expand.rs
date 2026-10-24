@@ -194,7 +194,14 @@ struct Exp<'a> {
     ar: &'a mut ExpScratch,
     /// What the rescan of the line ended at.
     tail: Tail,
+    /// Offset in the line's buffer of the last token the rescan took from
+    /// it, not from a replacement: a line joined for an invocation spans
+    /// several source lines.
+    src_pos: u32,
 }
+
+/// Arena id of the line [`Exp`] substitutes, the first buffer it adds.
+const LINE_BUF: u32 = 0;
 
 /// How the rescan of a line ends: complete, or at an invocation the
 /// following lines may supply -- a function-like macro name nothing
@@ -222,6 +229,7 @@ impl<'a> Exp<'a> {
             line_no,
             ar,
             tail: Tail::Complete,
+            src_pos: 0,
         }
     }
 
@@ -636,7 +644,15 @@ impl<'a> Exp<'a> {
         rest.reverse();
         let mut out: Vec<Tok> = self.take_vec();
         out.reserve(rest.len());
+        // `rest[replaced..]` holds the replacements pushed for rescanning.
+        let mut replaced = usize::MAX;
         while let Some(tok) = rest.pop() {
+            if rest.len() < replaced {
+                replaced = usize::MAX;
+                if tok.buf == LINE_BUF {
+                    self.src_pos = tok.start;
+                }
+            }
             if tok.kind != TokKind::Ident {
                 out.push(tok);
                 continue;
@@ -680,11 +696,16 @@ impl<'a> Exp<'a> {
                     pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
                     let common = self.hs_intersect(tok.hs, rp_hs);
                     let inv = self.hs_with_name(common, name);
+                    let at = self.src_pos;
                     let mut sub = self.subst(name, def, &raw_args, &sep_space, inv, depth);
+                    // The replacement is at the line of the macro name, as gcc
+                    // gives it; each argument was at its own.
+                    self.src_pos = at;
                     if let Some(f) = sub.first_mut() {
                         f.space = tok.space;
                     }
                     sub.reverse();
+                    replaced = replaced.min(rest.len());
                     rest.append(&mut sub);
                     self.put_vec(sub);
                     continue;
@@ -708,6 +729,7 @@ impl<'a> Exp<'a> {
                 f.space = tok.space;
             }
             btoks.reverse();
+            replaced = replaced.min(rest.len());
             rest.append(&mut btoks);
             self.put_vec(btoks);
         }
@@ -726,7 +748,10 @@ impl<'a> Exp<'a> {
             return false;
         }
         match self.text(tok) {
+            // The line of the source token the expansion is at.
             "__LINE__" => {
+                let line = &self.ar.bufs[LINE_BUF as usize];
+                let line_no = line_no + line[..self.src_pos as usize].matches('\n').count();
                 let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
                 out.push(t);
             }
@@ -1158,6 +1183,7 @@ impl Preprocessor {
         let mut scratch = self.exp_scratch.borrow_mut();
         let mut ex = Exp::new(self, filename, line_no, &mut scratch);
         let bid = ex.add_buf(Rc::from(line));
+        debug_assert_eq!(bid, LINE_BUF);
         let mut toks = ex.take_vec();
         toks.reserve(line.len() / 4 + 4);
         lex_into(&ex.ar.bufs[bid as usize].clone(), bid, &mut toks);

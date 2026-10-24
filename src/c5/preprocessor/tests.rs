@@ -5336,3 +5336,34 @@ fn an_invocation_an_expansion_forms_takes_arguments_from_later_lines() {
         "{out}"
     );
 }
+
+/// C99 6.10.8: `__LINE__` is the line of the source token the expansion
+/// is at, also inside a joined invocation and after one; the expected
+/// lines are gcc's and, but for the replacement list's in C, clang's.
+#[test]
+fn line_in_an_invocation_spanning_lines_is_its_own_tokens_line() {
+    let out = process(
+        "#define L __LINE__\n#define f(x, y) x y\n#define g(x) x __LINE__\n\
+         A f(1,\n2\n) __LINE__\n\
+         B f(L,\nL)\n\
+         C g(\n__LINE__\n)\n\
+         D __LINE__ f(__LINE__,\n__LINE__), __LINE__\n\
+         E g(1 &&\n 3)\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A 1 2 6",
+            "B 7 8",
+            "C 10 9",
+            "D 12 12 13, 13",
+            "E 1 && 3 14"
+        ],
+        "{out}"
+    );
+}

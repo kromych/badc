@@ -5992,6 +5992,32 @@ fn designated_init_reports_a_positional_member() {
 /// nested switch when it breaks or its last statement completes, and a
 /// label landing on `break`, `goto`, a bare `return` or the switch's end is
 /// passed over, as gcc's lowering gives them.
+/// `longjmp` does not return on any target, whether the header binds it to
+/// the C library or lowers it as an intrinsic (C99 7.13.2.1p4).
+#[test]
+fn longjmp_ends_control_flow_on_every_target() {
+    let src = "#include <setjmp.h>\njmp_buf jb;\n\
+               int f(int x) { switch (x) { case 0: longjmp(jb, 1); case 1: return 2; } return 0; }\n\
+               int h(int x) { if (x) return 1; longjmp(jb, 2); }\n\
+               int main(void) { return 0; }\n";
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        let options = crate::CompileOptions::default().with_diag(super::diag_config(&[
+            "implicit-fallthrough=5",
+            "return-type",
+        ]));
+        let prog = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert!(prog.warnings.is_empty(), "{target:?}: {:?}", prog.warnings);
+    }
+}
+
 #[test]
 fn implicit_fallthrough_reports_where_gcc_does() {
     let units = [

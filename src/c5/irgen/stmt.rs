@@ -35,16 +35,15 @@ impl<'a> Walker<'a> {
                 }
                 let _ = self.walk_expr_rvalue(b, e)?;
                 // A direct call to a `noreturn` function ends the block
-                // (C11 6.7.4p8). The seal is `Unreachable`, not a return,
-                // so `if (x) noreturn_fn(); return v;` stays a
-                // single-return function.
-                if let Expr::Call { callee, .. } = self.ast.expr(e)
-                    && let Expr::Ident { sym, .. } = self.ast.expr(*callee)
-                    && self
-                        .symbols
-                        .get(*sym as usize)
-                        .is_some_and(|s| s.is_noreturn)
-                {
+                // (C11 6.7.4p8), as a non-returning intrinsic does. The seal
+                // is `Unreachable`, not a return, so `if (x) noreturn_fn();
+                // return v;` stays a single-return function.
+                let noreturn_call = matches!(self.ast.expr(e), Expr::Call { callee, .. }
+                    if matches!(self.ast.expr(*callee), Expr::Ident { sym, .. }
+                        if self.symbols.get(*sym as usize).is_some_and(|s| s.is_noreturn)));
+                let noreturn_intrinsic = matches!(self.ast.expr(e), Expr::Intrinsic { kind, .. }
+                    if crate::c5::op::Intrinsic::is_noreturn(*kind));
+                if noreturn_call || noreturn_intrinsic {
                     b.unreachable();
                     return Ok(true);
                 }

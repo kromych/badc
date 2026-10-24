@@ -183,7 +183,7 @@ impl Compiler {
         match self.ast.expr(e) {
             Expr::Cast { child, .. } => self.never_returns(*child),
             Expr::Comma { rhs, .. } => self.never_returns(*rhs),
-            Expr::Intrinsic { kind, .. } => *kind == crate::c5::op::Intrinsic::Trap as i64,
+            Expr::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
             Expr::Call { callee, .. } => match self.ast.expr(*callee) {
                 Expr::Ident { sym, .. } => self.symbols[*sym as usize].is_noreturn,
                 _ => false,

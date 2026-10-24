@@ -67,7 +67,7 @@ _Noreturn void longjmp(long long *env, int val);
 #pragma intrinsic("__c5_aarch64_setjmp")
 #pragma intrinsic("__c5_aarch64_longjmp")
 int __c5_aarch64_setjmp(long long *env);
-void __c5_aarch64_longjmp(long long *env, int val);
+_Noreturn void __c5_aarch64_longjmp(long long *env, int val);
 #define setjmp(env)        __c5_aarch64_setjmp((long long *)(env))
 #define longjmp(env, val)  __c5_aarch64_longjmp((long long *)(env), (val))
 #else
@@ -90,7 +90,7 @@ typedef long long jmp_buf[34];
 #pragma binding(msvcrt::__c5_msvcrt_setjmp,  "_setjmp")
 #pragma binding(msvcrt::__c5_msvcrt_longjmp, "longjmp")
 int  __c5_msvcrt_setjmp(long long *env, void *frame);
-void __c5_msvcrt_longjmp(long long *env, int val);
+_Noreturn void __c5_msvcrt_longjmp(long long *env, int val);
 
 // C99 7.1.4 paragraph 1: a standard library function may also be
 // implemented as a macro, and the macro fires only when the

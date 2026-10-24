@@ -284,7 +284,7 @@ impl Compiler {
                     .get(*sym as usize)
                     .is_some_and(|s| s.is_noreturn)
             }
-            Expr::Intrinsic { kind, .. } => *kind == crate::c5::op::Intrinsic::Trap as i64,
+            Expr::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
             _ => false,
         }
     }

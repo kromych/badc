@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against the Lua 5.5.0 interpreter and
+"""End-to-end smoke for badc against the Lua 5.5.1 interpreter and
 official test suite.
 
 Builds every ``demos/lua/src/*.c`` translation unit through badc at

@@ -104,7 +104,7 @@ file-backed scenarios at both -O and noO. See
 
 ## lua/
 
-End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release, fetched on
+End-to-end of the upstream Lua 5.5.1 interpreter. Pinned release, fetched on
 demand by `demos/lua/setup.py`; builds the interpreter with badc at both -O and
 noO and runs a curated subset of the upstream test suite (`bitwise`, `calls`,
 `closure`, `constructs`, `coroutine`, `cstack`, `errors`, `events`, `goto`,

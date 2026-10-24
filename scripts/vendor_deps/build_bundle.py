@@ -183,10 +183,10 @@ SOURCES = [
         # (Lua is published as standalone tarballs, with no public
         # VCS or commit identifier).
         name="lua",
-        version="5.5.0",
-        url="https://www.lua.org/ftp/lua-5.5.0.tar.gz",
+        version="5.5.1",
+        url="https://www.lua.org/ftp/lua-5.5.1.tar.gz",
         ext=".tar.gz",
-        upstream_sha="57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d",
+        upstream_sha="1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -205,10 +205,10 @@ SOURCES = [
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.
         name="lua-tests",
-        version="5.5.0",
-        url="https://www.lua.org/tests/lua-5.5.0-tests.tar.gz",
+        version="5.5.1",
+        url="https://www.lua.org/tests/lua-5.5.1-tests.tar.gz",
         ext=".tar.gz",
-        upstream_sha="5e47bbfad7db2965d69580e918ee64edeb8d8d32de404b8dae9ce5c6d76a1472",
+        upstream_sha="da07b543872dc0bb2ff12aabd0c248578d78df3eb6b67efdc537a46d455c7f31",
         sha_kind="tarball-sha256",
     ),
     Source(

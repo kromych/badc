@@ -4350,7 +4350,7 @@ impl Compiler {
     /// C99 6.7.9p17: a union takes one initializer, so once the alternative
     /// holding `i` is complete the rest of the union is skipped -- its
     /// members share the same storage. Anonymous members nest, so the test
-    /// runs from the innermost aggregate holding `i` outwards.
+    /// runs from the innermost aggregate holding `i` out to `struct_id`.
     fn positional_next(&self, struct_id: usize, i: usize) -> usize {
         // (aggregate, index of its first field, index one past its last)
         let mut levels = alloc::vec![(struct_id, 0usize, self.structs[struct_id].fields.len())];
@@ -4365,7 +4365,7 @@ impl Compiler {
             levels.push((m.inner, start, start + m.count as usize));
         }
         let mut pos = i + 1;
-        for k in (1..levels.len()).rev() {
+        for k in (0..levels.len()).rev() {
             let (agg, _, end) = levels[k];
             // The direct member of `agg` holding `i` ends where the next
             // level down ends, or at `i` itself for a plain field.

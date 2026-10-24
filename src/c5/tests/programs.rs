@@ -4167,6 +4167,13 @@ fn designator_resumes_in_subobject() {
 }
 
 #[test]
+fn designator_completes_a_union() {
+    // C99 6.7.8p17: after a designated union member, the next positional
+    // initializer takes the member after the union.
+    assert_eq!(run_fixture("designator_completes_a_union.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

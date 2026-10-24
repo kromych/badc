@@ -9730,6 +9730,190 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
     }
 }
 
+// A COFF object reaching a DLL through `__declspec(dllimport)` and an import
+// library, exporting a definition (`/EXPORT:` / `-export:`), and, from the
+// compilers that take `#pragma comment`, naming a library to search
+// (`/DEFAULTLIB:`) and a member to pull (`/INCLUDE:`).
+#[cfg(windows)]
+const COFF_IMPORTING_PEER_SRC: &str = r#"
+__declspec(dllimport) int lib_add(int);
+__declspec(dllimport) extern int lib_obj;
+__declspec(dllexport) int peer_exported(int x) { return lib_add(x) + lib_obj; }
+int extra_fn(void);
+int peer_extra(void) { return extra_fn(); }
+#ifdef _MSC_VER
+#pragma comment(lib, "extra")
+#pragma comment(linker, "/include:extra_forced")
+#endif
+"#;
+
+/// A badc `main` links with each Windows compiler's object that imports from
+/// a badc DLL through an import library, exports a function from the
+/// executable, and names a library and a member through `.drectve`; the
+/// program runs. The member `/INCLUDE:` names runs a constructor, so it is
+/// pulled exactly when the directive is there.
+#[cfg(windows)]
+#[test]
+fn coff_directives_and_import_libraries_reach_their_targets() {
+    let dir = tempdir("coff-imports");
+    let arch = if cfg!(target_arch = "aarch64") {
+        ("aarch64", "ARM64")
+    } else {
+        ("x86_64", "X64")
+    };
+    let dll_src = write_source(
+        &dir,
+        "implib.c",
+        "__declspec(dllexport) int lib_obj = 41;\n\
+         __declspec(dllexport) int lib_add(int x) { return x + 1; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-shared", "-o", "implib.dll"])
+            .arg(&dll_src)
+            .current_dir(&dir),
+        "build the DLL",
+    );
+    let def = dir.join("implib.def");
+    std::fs::write(
+        &def,
+        "LIBRARY implib.dll\nEXPORTS\n  lib_add\n  lib_obj DATA\n",
+    )
+    .unwrap();
+    let libs = dir.join("libs");
+    std::fs::create_dir_all(&libs).unwrap();
+    let extra = [
+        write_source(
+            &dir,
+            "extra1.c",
+            "int extra_flag;\nint extra_fn(void) { return 7; }\n",
+        ),
+        write_source(
+            &dir,
+            "extra2.c",
+            "extern int extra_flag;\nint extra_forced;\n\
+             __attribute__((constructor)) static void extra_init(void) { extra_flag = 1; }\n",
+        ),
+    ];
+    run(
+        Command::new(badc())
+            .args(["--ar", "-o"])
+            .arg(libs.join("extra.lib"))
+            .args(&extra)
+            .current_dir(&dir),
+        "archive the extra library",
+    );
+    let peer = write_source(&dir, "peer.c", COFF_IMPORTING_PEER_SRC);
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n\
+         int peer_exported(int);\nint peer_extra(void);\nextern int extra_flag;\n\
+         int main(void)\n\
+         { if (peer_exported(1) != 43) return 1;\n\
+           if (peer_extra() != 7) return 2;\n\
+           if (extra_flag != FORCED) return 3;\n\
+           FARPROC p = GetProcAddress(GetModuleHandleA(0), \"peer_exported\");\n\
+           if ((void *)p != (void *)peer_exported) return 4;\n\
+           return 0; }\n",
+    );
+    // The import library, from lib.exe or llvm-lib, and each compiler's
+    // object with whether it names the extra library itself.
+    let mut implib: Option<Command> = None;
+    let mut objects: Vec<(String, PathBuf, bool)> = Vec::new();
+    let target = format!("--target={}", arch.0);
+    let clang = windows_clang();
+    if let Some(clang) = &clang {
+        for (triple, msc) in [("pc-windows-msvc", true), ("w64-windows-gnu", false)] {
+            let obj = dir.join(format!("peer-{triple}.obj"));
+            run(
+                Command::new(clang)
+                    .args([&format!("{target}-{triple}"), "-O2", "-c", "-o"])
+                    .arg(&obj)
+                    .arg(&peer)
+                    .current_dir(&dir),
+                &format!("compile the peer for {triple}"),
+            );
+            objects.push((format!("clang-{triple}"), obj, msc));
+        }
+        let mut c = Command::new(Path::new(clang).with_file_name("llvm-lib.exe"));
+        c.arg("/nologo");
+        implib = Some(c);
+    }
+    if let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() {
+        let obj = dir.join("peer-cl.obj");
+        run(
+            Command::new(&cl)
+                .envs(env.iter().map(|(k, v)| (k, v)))
+                .args(["/nologo", "/c", "/O2"])
+                .arg(format!("/Fo{}", obj.display()))
+                .arg(&peer)
+                .current_dir(&dir),
+            "compile the peer with cl",
+        );
+        objects.push(("cl".to_string(), obj, true));
+        let mut c = Command::new(cl.with_file_name("lib.exe"));
+        c.envs(env.iter().map(|(k, v)| (k, v))).arg("/nologo");
+        implib = Some(c);
+    }
+    if let Some((gcc, path)) = mingw_gcc() {
+        let obj = dir.join("peer-gcc.obj");
+        run(
+            Command::new(&gcc)
+                .env("PATH", &path)
+                .args(["-O2", "-c", "-o"])
+                .arg(&obj)
+                .arg(&peer)
+                .current_dir(&dir),
+            "compile the peer with gcc",
+        );
+        objects.push(("gcc".to_string(), obj, false));
+    }
+    let Some(mut implib) = implib else {
+        eprintln!("skipping coff_directives_and_import_libraries_reach_their_targets: no lib.exe");
+        return;
+    };
+    run(
+        implib
+            .arg(format!("/def:{}", def.display()))
+            .arg(format!("/machine:{}", arch.1))
+            .arg(format!("/out:{}", dir.join("implib.lib").display()))
+            .current_dir(&dir),
+        "write the import library",
+    );
+    for (label, obj, msc) in &objects {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("{label}{opt}.exe"));
+            let mut link = Command::new(badc());
+            link.arg(opt)
+                .arg(format!("-DFORCED={}", u8::from(*msc)))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&main)
+                .arg(obj)
+                .arg(dir.join("implib.lib"));
+            if *msc {
+                link.arg(format!("-L{}", libs.display()));
+            } else {
+                link.arg(libs.join("extra.lib"));
+            }
+            run(
+                link.current_dir(&dir),
+                &format!("link with the {label} object"),
+            );
+            let out = Command::new(&exe)
+                .current_dir(&dir)
+                .output()
+                .expect("run the program");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{label}, badc {opt}: a check failed"
+            );
+        }
+    }
+}
+
 /// An object the linker reads but the link cannot take is refused by name:
 /// another architecture's, and a COFF object outside a PE image.
 #[test]

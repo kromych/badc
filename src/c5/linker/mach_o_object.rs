@@ -528,6 +528,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         extern_data_names: Vec::new(),
         alternate_names: Vec::new(),
         comdats: Vec::new(),
+        default_libs: Vec::new(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),

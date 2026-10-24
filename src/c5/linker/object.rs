@@ -1071,6 +1071,8 @@ pub struct NativeObject {
     pub alternate_names: Vec<(String, String)>,
     /// COFF COMDAT groups; one group per key keeps its definitions.
     pub comdats: Vec<Comdat>,
+    /// A COFF object's `/DEFAULTLIB:` libraries, searched after the inputs.
+    pub default_libs: Vec<String>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1277,6 +1279,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
         comdats: Vec::new(),
+        default_libs: Vec::new(),
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

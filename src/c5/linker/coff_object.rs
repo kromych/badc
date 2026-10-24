@@ -355,7 +355,9 @@ fn is_tls(name: &str) -> bool {
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
     // Unwind tables are rebuilt by the image writer from the merged code.
+    // GNU as gives `.drectve` data flags, not LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
+        || s.name == ".drectve"
         || s.name.starts_with(".debug")
         || s.name.starts_with(".pdata")
         || s.name.starts_with(".xdata")
@@ -532,6 +534,11 @@ struct Directives {
     alternate_names: Vec<(String, String)>,
     /// `-aligncomm:name,log2`: a common symbol's alignment.
     align_common: BTreeMap<String, u64>,
+    /// `/EXPORT:` / `-export:`: a definition the image exports.
+    exports: Vec<String>,
+    /// `/INCLUDE:`: a name the link resolves as if referenced.
+    includes: Vec<String>,
+    default_libs: Vec<String>,
 }
 
 /// The directive string's options, split as link.exe splits them: on
@@ -558,10 +565,7 @@ fn directive_tokens(text: &str) -> Vec<String> {
 
 fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> {
     let mut d = Directives::default();
-    for s in sects
-        .iter()
-        .filter(|s| s.name == ".drectve" && s.flags & IMAGE_SCN_LNK_INFO != 0)
-    {
+    for s in sects.iter().filter(|s| s.name == ".drectve") {
         let body = s.content(bytes)?;
         let text = core::str::from_utf8(body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(body))
             .map_err(|_| bad("`.drectve` is not UTF-8"))?;
@@ -573,8 +577,23 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
             };
             let (key, arg) = opt.split_once(':').unwrap_or((opt, ""));
             match key.to_ascii_lowercase().as_str() {
-                // The C library resolves through badc's own bindings.
-                "defaultlib" => {}
+                "defaultlib" => d.default_libs.push(arg.to_string()),
+                "include" => d.includes.push(arg.to_string()),
+                // `DATA` and `PRIVATE` (no import library entry) change nothing
+                // here; an ordinal and an alias are refused.
+                "export" => {
+                    let mut parts = arg.split(',');
+                    let name = parts.next().unwrap_or("");
+                    let plain =
+                        |f: &str| matches!(f.to_ascii_lowercase().as_str(), "data" | "private");
+                    if name.is_empty() || name.contains('=') || !parts.all(plain) {
+                        return Err(unsupported(&format!(
+                            "`.drectve` option `{tok}` exports by ordinal or under another \
+                             name, which the linker does not carry out"
+                        )));
+                    }
+                    d.exports.push(name.to_string());
+                }
                 "alternatename" => {
                     let (from, to) = arg.split_once('=').ok_or_else(|| {
                         bad(&format!("`.drectve` option `{tok}` names no alternate"))
@@ -1166,6 +1185,105 @@ fn translate_relocs(
     Ok(out)
 }
 
+/// A short-format import-library member (PE/COFF specification 7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportMember {
+    pub machine: NativeMachine,
+    pub symbol: String,
+    pub dll: String,
+    pub import_name: String,
+    /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
+    pub data: bool,
+}
+
+/// True when `bytes` is a short-format import member (`IMPORT_OBJECT_HEADER`).
+pub fn is_coff_import_member(bytes: &[u8]) -> bool {
+    u16le(bytes, 0) == Some(0) && u16le(bytes, 2) == Some(0xFFFF) && u16le(bytes, 4) == Some(0)
+}
+
+/// Read a short-format import member. The name type decides the name the DLL
+/// is asked for: the symbol's, without a leading `?`, `@` or `_`, that without
+/// its `@` decoration, or a stated one; an import by ordinal is refused.
+pub fn parse_import_member(bytes: &[u8]) -> Result<ImportMember, C5Error> {
+    let machine = match need_u16(bytes, 6, "import header")? {
+        IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
+        IMAGE_FILE_MACHINE_ARM64 => NativeMachine::Aarch64,
+        other => {
+            return Err(unsupported(&format!(
+                "import member for COFF machine {other:#06x}, which the linker does not read"
+            )));
+        }
+    };
+    let size = need_u32(bytes, 12, "import header")? as usize;
+    let kinds = need_u16(bytes, 18, "import header")?;
+    let names = bytes
+        .get(20..20 + size)
+        .ok_or_else(|| bad("import member names run past end of file"))?;
+    let mut strings = names
+        .split(|&b| b == 0)
+        .map(|s| core::str::from_utf8(s).ok());
+    let (Some(Some(symbol)), Some(Some(dll))) = (strings.next(), strings.next()) else {
+        return Err(bad("import member names no symbol and DLL"));
+    };
+    let stripped = symbol
+        .strip_prefix(|c| matches!(c, '?' | '@' | '_'))
+        .unwrap_or(symbol);
+    let import_name = match (kinds >> 2) & 7 {
+        1 => symbol.to_string(),
+        2 => stripped.to_string(),
+        3 => stripped.split('@').next().unwrap_or(stripped).to_string(),
+        4 => match strings.next() {
+            Some(Some(n)) => n.to_string(),
+            _ => return Err(bad("import member states no export name")),
+        },
+        _ => {
+            return Err(unsupported(&format!(
+                "`{symbol}` is imported from `{dll}` by ordinal, which the linker does not bind"
+            )));
+        }
+    };
+    Ok(ImportMember {
+        machine,
+        symbol: symbol.to_string(),
+        dll: dll.to_string(),
+        import_name,
+        data: kinds & 3 != 0,
+    })
+}
+
+/// The DLLs an import library's members name, as shared libraries exporting each
+/// member's symbol and `__imp_` slot; a data import exports the slot only.
+pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLibrary> {
+    let mut libs: BTreeMap<&str, super::object::SharedLibrary> = BTreeMap::new();
+    for m in members {
+        let lib = libs
+            .entry(m.dll.as_str())
+            .or_insert_with(|| super::object::SharedLibrary {
+                soname: m.dll.clone(),
+                machine: m.machine,
+                exports: Default::default(),
+                data_exports: Default::default(),
+                tls_exports: Default::default(),
+                object_sizes: Default::default(),
+                export_symbols: Default::default(),
+                export_versions: Default::default(),
+                references: Default::default(),
+                protected_exports: Default::default(),
+                from_image: true,
+            });
+        lib.exports.insert(m.symbol.clone());
+        lib.exports.insert(format!("__imp_{}", m.symbol));
+        if m.data {
+            lib.data_exports.insert(m.symbol.clone());
+        }
+        if m.import_name != m.symbol {
+            lib.export_symbols
+                .insert(m.symbol.clone(), m.import_name.clone());
+        }
+    }
+    libs.into_values().collect()
+}
+
 /// Parse a COFF relocatable into the linker's native object model.
 pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let h = read_header(bytes)?;
@@ -1206,8 +1324,16 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let blobs = concat_families(bytes, &mut sects)?;
     let comdats = comdat_groups(&comdat, &sects);
     let mut alternate_names = directives.alternate_names.clone();
-    let symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
+    let mut symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
+    // A forced reference archive selection resolves, as `ld -u` does.
+    for name in &directives.includes {
+        symbols.push(NativeSymbol {
+            name: name.clone(),
+            binding: STB_GLOBAL,
+            ..null_symbol()
+        });
+    }
     let tls_symbols = symbols
         .iter()
         .filter(|s| s.section == NativeSymSection::Tls && s.binding != STB_LOCAL)
@@ -1240,7 +1366,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         init_funcs: relocs.init_funcs,
         dylibs: Vec::new(),
         import_dylib_map: Vec::new(),
-        exports: Vec::new(),
+        exports: directives.exports.clone(),
         tls_index_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
         macho_tlv_fixups: Vec::new(),
@@ -1253,6 +1379,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         extern_data_names: Vec::new(),
         alternate_names,
         comdats,
+        default_libs: directives.default_libs.clone(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -1536,9 +1663,8 @@ mod tests {
     }
 
     /// `.drectve`: `/alternatename:` names a stand-in, `-aligncomm:` a
-    /// common symbol's alignment, `/DEFAULTLIB:` the C library badc binds
-    /// on its own; an option the linker does not carry out is refused by
-    /// name.
+    /// common symbol's alignment; an option the linker does not carry out
+    /// is refused by name.
     #[test]
     fn directives_name_stand_ins_and_common_alignment() {
         let drectve = IMAGE_SCN_LNK_INFO | IMAGE_SCN_LNK_REMOVE;
@@ -1558,8 +1684,69 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
-        let err = parse(&[sec(".drectve", drectve, b"/EXPORT:f")], &[]).unwrap_err();
-        assert!(err.to_string().contains("`/EXPORT:f`"), "{err}");
+        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@1,NONAME", "/EXPORT:f=g"] {
+            let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
+            assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");
+        }
+    }
+
+    /// `/EXPORT:`, `-export:` (gcc quotes the name), `/INCLUDE:` and `/DEFAULTLIB:`
+    /// reach the link, whatever the section's flags.
+    #[test]
+    fn directives_export_include_and_name_libraries() {
+        // GNU as gives `.drectve` the flags of writable data.
+        let gnu_as = DATA;
+        let text = b" /INCLUDE:forced /DEFAULTLIB:\"user32\" /EXPORT:f /EXPORT:d,DATA \
+                     -export:\"g\",data /defaultlib:extra.lib";
+        let o = parse(&[sec(".drectve", gnu_as, text)], &[]).unwrap();
+        assert!(o.data.is_empty() && o.discarded.len() == 1);
+        assert_eq!(o.exports, ["f", "d", "g"]);
+        assert_eq!(o.default_libs, ["user32", "extra.lib"]);
+        let forced = o.symbols.last().unwrap();
+        assert_eq!(
+            (forced.name.as_str(), forced.section, forced.binding),
+            ("forced", NativeSymSection::Undef, STB_GLOBAL)
+        );
+    }
+
+    /// An import member names its DLL and the name asked for; an ordinal is refused.
+    #[test]
+    fn import_members_name_their_dll_and_export() {
+        let member = |kinds: u16, names: &[u8]| {
+            let mut m = alloc::vec![0, 0, 0xFF, 0xFF, 0, 0];
+            m.extend_from_slice(&AMD64.to_le_bytes());
+            m.extend_from_slice(&[0; 4]);
+            m.extend_from_slice(&(names.len() as u32).to_le_bytes());
+            m.extend_from_slice(&[0; 2]);
+            m.extend_from_slice(&kinds.to_le_bytes());
+            m.extend_from_slice(names);
+            m
+        };
+        let code = member(1 << 2, b"GetTickCount\0KERNEL32.dll\0");
+        let data = member(1 | (3 << 2), b"_obj@4\0lib.dll\0");
+        assert!(is_coff_import_member(&code) && !is_coff_object(&code));
+        let (c, d) = (
+            parse_import_member(&code).unwrap(),
+            parse_import_member(&data).unwrap(),
+        );
+        assert_eq!(
+            (c.dll.as_str(), c.import_name.as_str(), c.data),
+            ("KERNEL32.dll", "GetTickCount", false)
+        );
+        assert_eq!(
+            (d.symbol.as_str(), d.import_name.as_str(), d.data),
+            ("_obj@4", "obj", true)
+        );
+        let libs = import_libraries(&[c, d]);
+        let names: Vec<_> = libs.iter().map(|l| l.soname.as_str()).collect();
+        assert_eq!(names, ["KERNEL32.dll", "lib.dll"]);
+        assert!(libs[0].exports.contains("__imp_GetTickCount"));
+        assert!(libs[1].data_exports.contains("_obj@4"));
+        assert_eq!(libs[1].export_symbols["_obj@4"], "obj");
+        let err = parse_import_member(&member(0, b"f\0a.dll\0"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("by ordinal"), "{err}");
     }
 
     /// A common symbol without `-aligncomm` aligns to its size's power of

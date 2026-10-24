@@ -148,14 +148,18 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     stats.mark("runtime");
     let mut source_slots = vec![0; sources.len()];
     for input in ordered {
-        slots.push(match input {
+        let slot = match input {
             LinkInput::Source(i) => {
                 source_slots[i] = slots.len();
                 Slot::Fixed(source_objs[i].take().into_iter().collect())
             }
             LinkInput::Object(path) => Slot::Fixed(vec![read_object_input(&path, cli.target)]),
             LinkInput::Archive { path, whole } => {
-                let members = read_archive_members(&path, cli.target);
+                let (members, imports) = read_archive_members(&path, cli.target);
+                for lib in imports {
+                    shared_libs.push(lib);
+                    slots.push(Slot::Shared(shared_libs.len() - 1));
+                }
                 if whole {
                     Slot::Fixed(members)
                 } else {
@@ -164,7 +168,8 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             }
             LinkInput::Shared(i) => Slot::Shared(i),
             LinkInput::Group(open) => Slot::Group(open),
-        });
+        };
+        slots.push(slot);
     }
     stats.mark("parse");
     rebind_auto_includes(
@@ -453,8 +458,11 @@ fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject
     parse_input_object(&bytes, obj_path.to_string(), target)
 }
 
-/// Read and parse an `.a` input's members.
-fn read_archive_members(a_path: &str, target: badc::Target) -> Vec<badc::NativeObject> {
+/// An `.a` / `.lib` input's objects, and the DLLs its import members name.
+fn read_archive_members(
+    a_path: &str,
+    target: badc::Target,
+) -> (Vec<badc::NativeObject>, Vec<badc::SharedLibrary>) {
     let bytes = match std::fs::read(a_path) {
         Ok(b) => b,
         Err(e) => {
@@ -485,10 +493,32 @@ fn read_archive_members(a_path: &str, target: badc::Target) -> Vec<badc::NativeO
         }
     };
     let mut out = Vec::with_capacity(members.len());
+    let mut imports = Vec::new();
     for m in members {
         // A member may itself be a fat object (`lipo` output
         // archived as-is).
         let member_bytes = fat_slice_for_target(m.bytes, target);
+        if badc::is_coff_import_member(&member_bytes) {
+            match badc::parse_import_member(&member_bytes) {
+                Ok(i) if i.machine == target_machine(target) => imports.push(i),
+                Ok(i) => {
+                    eprint_diagnostic(format!(
+                        "badc: error: archive `{a_path}` member `{}` imports `{}` for {}; the \
+                         link targets {}",
+                        m.name,
+                        i.symbol,
+                        machine_label(i.machine),
+                        machine_label(target_machine(target))
+                    ));
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
+                    std::process::exit(1);
+                }
+            }
+            continue;
+        }
         if !badc::is_native_object(&member_bytes) {
             eprint_diagnostic(format!(
                 "badc: error: archive `{a_path}` member `{}`: {}",
@@ -500,7 +530,7 @@ fn read_archive_members(a_path: &str, target: badc::Target) -> Vec<badc::NativeO
         let label = format!("{a_path}({})", m.name);
         out.push(parse_input_object(&member_bytes, label, target));
     }
-    out
+    (out, badc::import_libraries(&imports))
 }
 
 /// One link input in command-line order, read.
@@ -773,6 +803,7 @@ fn select_archive_members(
     if !in_order {
         let span = all_lazy(&slots);
         sel.pull(&mut slots, &span);
+        pull_default_libraries(embedded.cli, &mut sel, &mut slots, shared_libs);
     }
     // The inputs stalled; offer the on-demand sources once, as the last
     // archive. A name a `-l` shared library or the target's C library
@@ -850,6 +881,62 @@ fn select_archive_members(
         }
     }
     (native_objs, sel.inclusions)
+}
+
+/// A COFF object's `/DEFAULTLIB:` libraries join the link after its inputs, as
+/// link.exe adds them: `<name>[.lib]` or `lib<name>.a` on the `-L` paths, searched
+/// with every archive until nothing changes. One not found is skipped: badc's
+/// runtime stands in for the C runtime libraries compilers name.
+fn pull_default_libraries(
+    cli: &Cli,
+    sel: &mut Selection,
+    slots: &mut Vec<Slot>,
+    shared_libs: &mut Vec<badc::SharedLibrary>,
+) {
+    let mut dirs: Vec<String> = cli.link.library_paths.clone();
+    if let Some(root) = &cli.sysroot {
+        dirs.extend(super::paths::sysroot_library_paths(cli.target, root));
+    }
+    let mut searched = std::collections::HashSet::<String>::new();
+    loop {
+        let named: Vec<String> = (slots.iter())
+            .flat_map(|slot| match slot {
+                Slot::Fixed(objs) => objs.iter().collect::<Vec<_>>(),
+                Slot::Lazy { pulled, .. } => pulled.iter().collect(),
+                Slot::Shared(_) | Slot::Group(_) => Vec::new(),
+            })
+            .flat_map(|o| o.default_libs.iter().cloned())
+            .filter(|n| searched.insert(n.to_ascii_lowercase()))
+            .collect();
+        let mut added = false;
+        for name in named {
+            let file = if std::path::Path::new(&name).extension().is_some() {
+                vec![name.clone()]
+            } else {
+                vec![format!("{name}.lib"), format!("lib{name}.a")]
+            };
+            let Some(path) = (dirs.iter())
+                .flat_map(|d| file.iter().map(move |f| std::path::Path::new(d).join(f)))
+                .find(|p| p.is_file())
+            else {
+                continue;
+            };
+            let (members, imports) = read_archive_members(&path.to_string_lossy(), cli.target);
+            for lib in imports {
+                shared_libs.push(lib);
+                slots.push(Slot::Shared(shared_libs.len() - 1));
+            }
+            slots.push(Slot::lazy(members));
+            added = true;
+        }
+        if !added {
+            return;
+        }
+        let span: Vec<usize> = (0..slots.len())
+            .filter(|&k| matches!(slots[k], Slot::Lazy { .. }))
+            .collect();
+        sel.pull(slots, &span);
+    }
 }
 
 /// What the image writer needs once member selection is done.

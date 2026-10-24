@@ -525,6 +525,22 @@ pub(crate) struct LiveSets {
     pub data_live: Vec<bool>,
 }
 
+impl LiveSets {
+    /// Every function and data object of `program` live.
+    pub(crate) fn everything(program: &Program) -> Self {
+        let starts = data_object_starts(program);
+        LiveSets {
+            func_pcs: program
+                .finished_functions
+                .iter()
+                .map(|f| f.ent_pc)
+                .collect(),
+            data_live: alloc::vec![true; starts.len()],
+            starts,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum Node {
     Func(usize),

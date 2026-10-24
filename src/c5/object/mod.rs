@@ -581,10 +581,7 @@ fn compact_and_lower(
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    if program.data.is_empty()
-        || program.finished_functions.is_empty()
-        || shadow::data_dce_disabled()
-    {
+    if program.data.is_empty() {
         let mut build = crate::c5::codegen::lower_for_with_prebuilt(
             &program,
             target,
@@ -594,6 +591,22 @@ fn compact_and_lower(
         )?;
         crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((program, 0, build));
+    }
+    // With no function to probe, or the prune turned off, every object
+    // stays and only the placement into regions and zero-fill applies.
+    if program.finished_functions.is_empty() || shadow::data_dce_disabled() {
+        let sets = shadow::LiveSets::everything(&program);
+        let (laid, bss_size, _map) =
+            shadow::apply_data_liveness(program, &sets, &sets.func_pcs, segregate, None);
+        let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+            &laid,
+            target,
+            options,
+            None,
+            LowerMode::Full,
+        )?;
+        crate::c5::codegen::emit_ssa_dump(&mut build);
+        return Ok((laid, bss_size, build));
     }
     let probe = crate::c5::codegen::lower_for_with_prebuilt(
         &program,

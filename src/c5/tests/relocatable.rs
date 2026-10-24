@@ -470,6 +470,33 @@ fn a_zero_length_object_ends_the_objects_of_its_own_section() {
 }
 
 #[test]
+fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
+    // Each object takes the section its constness, initializer and
+    // relocated slots give it whether or not the unit defines a function:
+    // a zero-filled one is `.bss`, the slot a copy relocation fills.
+    let objs = "const int k = 5;\nint x;\nlong y[4];\nint i = 3;\nint *const p = &x;\n";
+    let with_fn = alloc::format!("{objs}int f(void) {{ return 0; }}\n");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let sections = |src: &str| {
+            let a = parse_et_rel(&compile_bytes(src, target), "o.o").expect("parse");
+            ["k", "x", "y", "i", "p"].map(|n| {
+                match a.symbols.iter().find(|s| s.name == n).expect(n).sec {
+                    EtSymRef::Section(i) => a.sections[i].name.clone(),
+                    _ => panic!("{n} is not defined in a section"),
+                }
+            })
+        };
+        let alone = sections(objs);
+        assert_eq!(
+            alone[..4],
+            [".rodata", ".bss", ".bss", ".data"],
+            "{target:?}"
+        );
+        assert_eq!(alone, sections(&with_fn), "{target:?}");
+    }
+}
+
+#[test]
 fn a_block_scope_extern_thread_local_is_referenced_as_one() {
     // C11 6.7.1p3: `_Thread_local` belongs to the object a block-scope
     // `extern` declaration names, which another unit defines. Its access

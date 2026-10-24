@@ -99,10 +99,10 @@ SOURCES = [
         # Version uses the commit's author date so the asset name
         # carries enough provenance to retrace a bump.
         name="stb",
-        version="20260415",
-        url="https://github.com/nothings/stb/archive/31c1ad37456438565541f4919958214b6e762fb4.zip",
+        version="20261023",
+        url="https://github.com/nothings/stb/archive/003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5.zip",
         ext=".zip",
-        upstream_sha="31c1ad37456438565541f4919958214b6e762fb4",
+        upstream_sha="003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5",
         sha_kind="git",
     ),
     Source(

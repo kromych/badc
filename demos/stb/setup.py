@@ -28,11 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "20260415"
-UPSTREAM_SHA = "31c1ad37456438565541f4919958214b6e762fb4"  # github nothings/stb @ master
+VERSION = "20261023"
+UPSTREAM_SHA = "003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5"  # github nothings/stb @ master
 ASSET = f"stb-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "617266695cf191a45bec2405427207011a09b057133134594b0db6ccbf9ee0b2"
+SHA256 = "a1e19ce41ddf380fd2291937d9c5616f64a9c224f1f455a8195f87b75b19ba03"
 
 # Every stb_*.h header (plus stb_vorbis.c) the upstream archive
 # ships at top level. The smoke compiles a #include-everything TU
@@ -42,7 +42,10 @@ SHA256 = "617266695cf191a45bec2405427207011a09b057133134594b0db6ccbf9ee0b2"
 # server / audio device. Headers that can't compile yet are
 # gated off inline in smoke_main.c with their own
 # `/* TODO(stb-<name>): blocked on ... */` comment so the gap
-# stays visible.
+# stays visible. Each entry is the member's path in the archive; it is
+# extracted under its base name. Upstream keeps stb_image_resize2.h and
+# stb_sprintf.h under `deprecated/` since they moved to repositories of
+# their own.
 WANTED = (
     "stb_c_lexer.h",
     "stb_connected_components.h",
@@ -53,13 +56,13 @@ WANTED = (
     "stb_herringbone_wang_tile.h",
     "stb_hexwave.h",
     "stb_image.h",
-    "stb_image_resize2.h",
+    "deprecated/stb_image_resize2.h",
     "stb_image_write.h",
     "stb_include.h",
     "stb_leakcheck.h",
     "stb_perlin.h",
     "stb_rect_pack.h",
-    "stb_sprintf.h",
+    "deprecated/stb_sprintf.h",
     "stb_textedit.h",
     "stb_tilemap_editor.h",
     "stb_truetype.h",
@@ -90,13 +93,14 @@ def main(argv: list[str] | None = None) -> int:
     # changes the layout, bump it here alongside the SHA.
     prefix = f"stb-{UPSTREAM_SHA}"
     with zipfile.ZipFile(zip_path) as zf:
-        for name in WANTED:
-            with zf.open(f"{prefix}/{name}") as src, (stb_dir / name).open("wb") as dst:
+        for member in WANTED:
+            dst_path = stb_dir / Path(member).name
+            with zf.open(f"{prefix}/{member}") as src, dst_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
 
     if args.verbose:
-        for name in WANTED:
-            p = stb_dir / name
+        for member in WANTED:
+            p = stb_dir / Path(member).name
             log(f"done -- {p} {p.stat().st_size}")
 
     # Generate alarm_ogg.h from the repo-root alarm.ogg payload.

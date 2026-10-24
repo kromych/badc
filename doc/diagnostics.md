@@ -16,7 +16,9 @@ a selector is accepted:
   back, `-Werror` raises every warning, `-w` silences every warning.
   `-Wall`, `-Wextra` and `-Wpedantic` turn on the groups of the same
   names, following gcc's split. A code spelled `B2001` is accepted
-  wherever a name is.
+  wherever a name is. A gcc or clang warning badc does not implement is
+  accepted, and turning it on reports B7012; any other unknown name is
+  refused, except in `-Wno-<name>`, which gcc accepts for any name.
 * `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
   `pop`), `#pragma clang diagnostic ...` and MSVC's
   `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`
@@ -123,5 +125,5 @@ regenerates.
 | B7009 | `cross-target-output` | warning | note | - | the image is for another host and will not run where it was built |
 | B7010 | `freestanding-import` | warning | controllable | default | a freestanding image binds a shared-library symbol, so it runs through the dynamic loader |
 | B7011 | `dwarf-output` | warning | controllable | default | a `-gdwarf` option asks for a DWARF version or format the emitter does not produce |
-| B7012 | `unimplemented-warning-option` | warning | controllable | default | a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect |
+| B7012 | `unimplemented-warning-option` | warning | controllable | default | a diagnostic pragma or a `-W` option turns on a gcc or clang warning that badc does not implement, so it has no effect |
 | B9001 | `internal-error` | error | hard | - | an invariant inside badc did not hold |

@@ -548,6 +548,9 @@ struct Parser {
     /// The `-gdwarf` family's request, checked against what the
     /// emitter produces once the whole line is read.
     dwarf: DwarfRequest,
+    /// The `-W` / `-Werror=` spellings that turn on a gcc or clang warning
+    /// badc does not implement, reported once the whole line is read.
+    unimplemented_warnings: Vec<String>,
     #[cfg(feature = "codegen_test")]
     pressure_caps: Vec<(&'static str, String)>,
 }
@@ -584,11 +587,17 @@ fn byte_size(spec: &str) -> Option<u64> {
     number.parse::<u64>().ok()?.checked_mul(scale)
 }
 
-/// What a `-W` option's selector names. `arg` is the option as written,
-/// so the rejection quotes what the user typed.
-fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
-    badc::diag::Selector::parse(sel)
-        .ok_or_else(|| ParseError::diag(format!("badc: error: unknown warning option `{arg}`")))
+/// What a `-W` option's selector names: a catalogue selector, or `None`
+/// for a warning gcc or clang defines that badc does not implement. `arg`
+/// is the option as written, so the rejection quotes what the user typed.
+fn selector(sel: &str, arg: &str) -> Result<Option<badc::diag::Selector>, ParseError> {
+    match badc::diag::Selector::parse(sel) {
+        Some(s) => Ok(Some(s)),
+        None if badc::diag::defined_elsewhere(sel) => Ok(None),
+        None => Err(ParseError::diag(format!(
+            "badc: error: unknown warning option `{arg}`"
+        ))),
+    }
 }
 
 /// Read the argument vector, which is the whole input. Every
@@ -812,14 +821,26 @@ impl Parser {
     }
 
     /// `-W<sel>` / `-Wno-<sel>`: set the level of one row, or of every
-    /// row a group holds.
+    /// row a group holds. A `-Wno-` of a name badc never reports holds
+    /// already; gcc takes it whatever the name.
     fn diag_level(
         &mut self,
         sel: &str,
         arg: &str,
         level: badc::diag::Level,
     ) -> Result<(), ParseError> {
-        match selector(sel, arg)? {
+        let silenced = level == badc::diag::Level::Ignore;
+        let named = match selector(sel, arg) {
+            Err(_) if silenced => return Ok(()),
+            named => named?,
+        };
+        let Some(named) = named else {
+            if !silenced {
+                self.unimplemented_warnings.push(arg.to_string());
+            }
+            return Ok(());
+        };
+        match named {
             badc::diag::Selector::Group(g) if level >= badc::diag::Level::Warning => {
                 self.front.diag.enable_group(g);
             }
@@ -839,7 +860,13 @@ impl Parser {
 
     /// `-Werror=<sel>` / `-Wno-error=<sel>`.
     fn diag_error(&mut self, sel: &str, arg: &str, on: bool) -> Result<(), ParseError> {
-        match selector(sel, arg)? {
+        let Some(named) = selector(sel, arg)? else {
+            if on {
+                self.unimplemented_warnings.push(arg.to_string());
+            }
+            return Ok(());
+        };
+        match named {
             badc::diag::Selector::Group(g) => {
                 for row in badc::diag::rows().filter(|r| r.groups.contains(g)) {
                     self.front.diag.error_for(row.code, on);
@@ -1861,18 +1888,28 @@ impl Parser {
         Ok(Some(out))
     }
 
-    /// Report what the `-gdwarf` family asked for and the emitter does
-    /// not produce. Resolved after the whole line is read, so a
-    /// `-Wno-dwarf-output` or `-Werror=dwarf-output` written later on it
-    /// applies; a row that resolves to an error rejects the line, as
-    /// `-Werror` does at any other phase boundary.
-    fn report_dwarf_request(&self, mode: Mode) -> Result<Vec<String>, ParseError> {
-        if !self.codegen.emit_debug_info || !mode.writes_debug_info() {
-            // Nothing is written, so nothing can differ from the request.
-            return Ok(Vec::new());
-        }
+    /// Report the options the line asked for and badc does not honor: a
+    /// warning it does not implement, and what the `-gdwarf` family asked
+    /// of the emitter. Resolved after the whole line is read, so a `-Wno-`
+    /// or `-Werror=` of the row written later on it applies; a row that
+    /// resolves to an error rejects the line, as `-Werror` does at any
+    /// other phase boundary.
+    fn report_option_requests(&self, mode: Mode) -> Result<Vec<String>, ParseError> {
         let mut sink = badc::diag::Sink::new(self.front.diag.clone(), Default::default());
-        if let Some((version, spelling)) = &self.dwarf.version
+        for spelling in &self.unimplemented_warnings {
+            sink.emit(
+                badc::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
+                None,
+                format!(
+                    "`{spelling}` names a gcc or clang warning badc does not implement; \
+                     it has no effect"
+                ),
+            );
+        }
+        // Nothing is written without debug information, so nothing can
+        // differ from a DWARF request.
+        let dwarf = self.codegen.emit_debug_info && mode.writes_debug_info();
+        if let Some((version, spelling)) = self.dwarf.version.as_ref().filter(|_| dwarf)
             && *version != badc::DWARF_VERSION
         {
             sink.emit(
@@ -1884,7 +1921,7 @@ impl Parser {
                 ),
             );
         }
-        if let Some((bits, spelling)) = &self.dwarf.format_bits
+        if let Some((bits, spelling)) = self.dwarf.format_bits.as_ref().filter(|_| dwarf)
             && *bits != badc::DWARF_FORMAT_BITS
         {
             sink.emit(
@@ -1923,7 +1960,7 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
-        let diagnostics = self.report_dwarf_request(mode)?;
+        let diagnostics = self.report_option_requests(mode)?;
         let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
             let names = Target::ALL
                 .iter()
@@ -2921,19 +2958,76 @@ mod tests {
 
     #[test]
     fn an_unknown_warning_selector_is_refused() {
-        assert_eq!(
-            reject(&["-Wno-such-warning", "a.c"]),
-            (
-                "badc: error: unknown warning option `-Wno-such-warning`".to_string(),
-                1
-            )
+        // gcc refuses a name it does not define, except in `-Wno-`, which
+        // asks for nothing it reports.
+        for arg in [
+            "-Wsuch-warning",
+            "-Werror=such-warning",
+            "-Wno-error=such-warning",
+        ] {
+            assert_eq!(
+                reject(&[arg, "a.c"]),
+                (format!("badc: error: unknown warning option `{arg}`"), 1),
+            );
+        }
+        let cli = parse(&["-Wno-such-warning", "a.c"]);
+        assert!(cli.diagnostics.is_empty(), "{:?}", cli.diagnostics);
+    }
+
+    /// A warning gcc or clang defines and badc does not implement is taken:
+    /// turned on, it reports that it has no effect, under the `-W` grammar
+    /// of its row; turned off, it already holds.
+    #[test]
+    fn a_warning_badc_does_not_implement_is_taken_and_reported() {
+        let reported = |args: &[&str]| parse(args).diagnostics;
+        for arg in [
+            "-Wshadow",
+            "-Werror=strict-prototypes",
+            "-Wimplicit-fallthrough=5",
+        ] {
+            let lines = reported(&[arg, "a.c"]);
+            assert_eq!(lines.len(), 1, "{arg}: {lines:?}");
+            assert!(
+                lines[0].contains(&format!("`{arg}` names a gcc or clang warning"))
+                    && lines[0].ends_with("[B7012] [-Wunimplemented-warning-option]"),
+                "{arg}: {lines:?}"
+            );
+        }
+        for args in [
+            &["-Wno-shadow", "a.c"][..],
+            &["-Wno-error=shadow", "a.c"],
+            &["-Wshadow", "-Wno-unimplemented-warning-option", "a.c"],
+        ] {
+            assert!(reported(args).is_empty(), "{args:?}");
+        }
+        let (text, status) = reject(&["-Werror", "-Wshadow", "a.c"]);
+        assert!(
+            text.contains("[B7012]") && text.contains("warnings treated as errors"),
+            "{text}"
         );
+        assert_eq!(status, 1);
+    }
+
+    /// gcc's `-Wunused` names the `-Wunused-*` rows; `-Wunused-parameter`
+    /// takes `-Wextra` beside it, as gcc documents.
+    #[test]
+    fn wunused_selects_the_unused_rows() {
+        use badc::diag::Level;
+        for row in [
+            "unused-variable",
+            "unused-but-set-variable",
+            "unused-function",
+        ] {
+            assert_eq!(level(&["-Wunused", "a.c"], row), Level::Warning, "{row}");
+            assert_eq!(
+                level(&["-Wall", "-Wno-unused", "a.c"], row),
+                Level::Ignore,
+                "{row}"
+            );
+        }
         assert_eq!(
-            reject(&["-Werror=no-such-warning", "a.c"]),
-            (
-                "badc: error: unknown warning option `-Werror=no-such-warning`".to_string(),
-                1
-            )
+            level(&["-Wunused", "a.c"], "unused-parameter"),
+            Level::Ignore
         );
     }
 

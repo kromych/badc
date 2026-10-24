@@ -261,7 +261,10 @@ Compile knobs:
                            group each row belongs to.
   -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
                            is its name, an alias, its `B` code, or a
-                           group name; an unknown one is refused.
+                           group name. A gcc or clang warning badc does
+                           not implement is taken: turned on, it reports
+                           B7012; any other unknown name is refused,
+                           except in -Wno-<sel>, as in gcc.
   -Werror / -Wno-error     Report every warning as an error, or undo
                            that. The unit still parses whole and fails
                            at the end of the phase, as gcc does.

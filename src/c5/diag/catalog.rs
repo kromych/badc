@@ -89,16 +89,16 @@ catalog! {
     1014, "macro", [], Error, Hard,
         [], Live,
         "a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list";
-    2001, "unused-variable", ["C4101"], Ignore, Controllable,
+    2001, "unused-variable", ["C4101", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
     2002, "unused-parameter", ["C4100"], Ignore, Controllable,
         [EXTRA], Live,
         "a parameter never used in the function body";
-    2003, "unused-but-set-variable", ["C4189"], Ignore, Controllable,
+    2003, "unused-but-set-variable", ["C4189", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable that is only ever assigned to";
-    2004, "unused-function", ["C4505"], Ignore, Controllable,
+    2004, "unused-function", ["C4505", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
     2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
@@ -319,7 +319,7 @@ catalog! {
         "a `-gdwarf` option asks for a DWARF version or format the emitter does not produce";
     7012, "unimplemented-warning-option", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect";
+        "a diagnostic pragma or a `-W` option turns on a gcc or clang warning that badc does not implement, so it has no effect";
 
     9001, "internal-error", [], Error, Hard,
         [], Live,

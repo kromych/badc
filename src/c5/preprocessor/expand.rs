@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use super::text::{MAX_LITERAL_PREFIX, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
 use crate::c5::codegen::Target;
-use crate::c5::ident::{self, key};
+use crate::c5::ident::{self, Dollar, key};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum TokKind {
@@ -102,7 +102,7 @@ pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     if PUNCT1.contains(&rest[0]) { 1 } else { 0 }
 }
 
-fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
+fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>, dollar: Dollar) {
     let bytes = text.as_bytes();
     let mut i = 0;
     let mut space = false;
@@ -131,11 +131,11 @@ fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
                 TokKind::Char
             };
         } else {
-            let np = pp_number_len(bytes, i);
+            let np = pp_number_len(bytes, i, dollar);
             if np > 0 {
                 i += np;
                 kind = TokKind::Number;
-            } else if let len @ 1.. = ident::ident_len(bytes, i) {
+            } else if let len @ 1.. = ident::ident_len(bytes, i, dollar) {
                 i += len;
                 kind = TokKind::Ident;
             } else {
@@ -438,7 +438,13 @@ impl<'a> Exp<'a> {
             let text = self.text(t);
             if out.len() > first_at
                 && (t.space
-                    || (relex_safe && pp_tokens_would_merge(prev_kind, prev_text, text.as_bytes())))
+                    || (relex_safe
+                        && pp_tokens_would_merge(
+                            prev_kind,
+                            prev_text,
+                            text.as_bytes(),
+                            self.pp.dollar(),
+                        )))
             {
                 out.push(' ');
             }
@@ -459,7 +465,12 @@ impl<'a> Exp<'a> {
         text.push_str(self.text(right));
         let buf = self.add_buf(Rc::from(text));
         let mut toks = Vec::new();
-        lex_into(&self.ar.bufs[buf as usize].clone(), buf, &mut toks);
+        lex_into(
+            &self.ar.bufs[buf as usize].clone(),
+            buf,
+            &mut toks,
+            self.pp.dollar(),
+        );
         if let Some(f) = toks.first_mut() {
             f.space = left.space;
         }
@@ -1141,7 +1152,7 @@ impl Preprocessor {
         }
         let buf: Rc<str> = Rc::from(body);
         let mut toks = Vec::new();
-        lex_into(&buf, 0, &mut toks);
+        lex_into(&buf, 0, &mut toks, self.dollar());
         let has_paste = toks.iter().any(|t| {
             t.kind == TokKind::Punct
                 && self.primary_spelling(&buf[t.start as usize..t.end as usize]) == "##"
@@ -1215,7 +1226,12 @@ impl Preprocessor {
         debug_assert_eq!(bid, LINE_BUF);
         let mut toks = ex.take_vec();
         toks.reserve(line.len() / 4 + 4);
-        lex_into(&ex.ar.bufs[bid as usize].clone(), bid, &mut toks);
+        lex_into(
+            &ex.ar.bufs[bid as usize].clone(),
+            bid,
+            &mut toks,
+            self.dollar(),
+        );
         let expanded = ex.expand_tokens(toks, 0);
         // Keep the line's own indentation: warning echoes and `-E`
         // output quote it.
@@ -1242,12 +1258,12 @@ impl Preprocessor {
                 i = skip_literal(bytes, i);
                 continue;
             }
-            let np = pp_number_len(bytes, i);
+            let np = pp_number_len(bytes, i, self.dollar());
             if np > 0 {
                 i += np;
                 continue;
             }
-            let len = ident::ident_len(bytes, i);
+            let len = ident::ident_len(bytes, i, self.dollar());
             if len > 0 {
                 let name = key(&line[i..i + len]);
                 i += len;
@@ -1322,7 +1338,7 @@ impl Preprocessor {
             return;
         }
         let mut toks = Vec::new();
-        lex_into(body, 0, &mut toks);
+        lex_into(body, 0, &mut toks, self.dollar());
         let is_paste = |t: Option<&Tok>| {
             t.is_some_and(|t| {
                 t.kind == TokKind::Punct
@@ -1404,21 +1420,28 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
 /// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
 /// encoding prefixes `literal_prefix_len` accepts (6.4.4.4 / 6.4.5),
 /// the punctuator table `punct_len` matches, and the merge-only pairs.
-pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next_text: &[u8]) -> bool {
+pub(super) fn pp_tokens_would_merge(
+    prev_kind: TokKind,
+    prev: &[u8],
+    next_text: &[u8],
+    dollar: Dollar,
+) -> bool {
     let (Some(&last), Some(&next)) = (prev.last(), next_text.first()) else {
         return false;
     };
     // 6.4.2.1 / 6.4.8: an identifier or pp-number runs on through any
     // identifier character, and `\` before `u` or `U` and hex digits spells
     // a universal character name.
-    if matches!(prev_kind, TokKind::Ident | TokKind::Number) && ident::char_len(next_text, 0) > 0 {
+    if matches!(prev_kind, TokKind::Ident | TokKind::Number)
+        && ident::char_len(next_text, 0, dollar) > 0
+    {
         return true;
     }
     if last == b'\\' && matches!(next, b'u' | b'U') {
         let mut probe = [b'\\'; 10];
         let n = next_text.len().min(9);
         probe[1..=n].copy_from_slice(&next_text[..n]);
-        if ident::char_len(&probe[..=n], 0) > 0 {
+        if ident::char_len(&probe[..=n], 0, dollar) > 0 {
             return true;
         }
     }
@@ -1442,7 +1465,7 @@ pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next_text: 
     }
     let pair = [last, next];
     // A `.` before a digit opens a pp-number.
-    if last == b'.' && pp_number_len(&pair, 0) == 2 {
+    if last == b'.' && pp_number_len(&pair, 0, dollar) == 2 {
         return true;
     }
     punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)
@@ -1573,12 +1596,12 @@ impl JoinScan {
                 }
                 // Skip a pp-number whole (C99 6.4.8) so its
                 // identifier-shaped tail is not read as a head.
-                let np = pp_number_len(bytes, i);
+                let np = pp_number_len(bytes, i, pp.dollar());
                 if np > 0 {
                     i += np;
                     continue;
                 }
-                let len = ident::ident_len(bytes, i);
+                let len = ident::ident_len(bytes, i, pp.dollar());
                 if len > 0 {
                     let start = i;
                     i += len;

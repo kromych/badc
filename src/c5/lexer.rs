@@ -5,7 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::error::C5Error;
-use super::ident;
+use super::ident::{self, Dollar};
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
@@ -1503,7 +1503,7 @@ impl Lexer {
         while p < self.src.len() && self.src[p].is_ascii_whitespace() {
             p += 1;
         }
-        ident::ident_len(&self.src, p) > 0
+        ident::ident_len(&self.src, p, Dollar::Ident) > 0
     }
 
     /// Whether the bytes after the current `__attribute__` token spell
@@ -1641,7 +1641,9 @@ impl Lexer {
         match self.src.get(p) {
             Some(b'}') => InitEntry::Close,
             Some(b'[') => InitEntry::Designator,
-            Some(b'.') if ident::ident_len(&self.src, self.skip_trivia(p + 1)) > 0 => {
+            Some(b'.')
+                if ident::ident_len(&self.src, self.skip_trivia(p + 1), Dollar::Ident) > 0 =>
+            {
                 InitEntry::Designator
             }
             _ => InitEntry::Value,
@@ -1774,7 +1776,7 @@ impl Lexer {
     fn end_number(&self) -> Result<(), C5Error> {
         if self.pos < self.src.len() {
             let c = self.src[self.pos];
-            let len = ident::char_len(&self.src, self.pos);
+            let len = ident::char_len(&self.src, self.pos, Dollar::Ident);
             if len > 0 && !c.is_ascii_digit() {
                 let shown = String::from_utf8_lossy(&self.src[self.pos..self.pos + len]);
                 return Err(C5Error::at(
@@ -1956,25 +1958,26 @@ impl Lexer {
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic()
                 || c == '_'
+                || c == '$'
                 || ((c == '\\' || c as u32 >= 0x80)
-                    && ident::ident_len(&self.src, self.pos - 1) > 0)
+                    && ident::ident_len(&self.src, self.pos - 1, Dollar::Ident) > 0)
             {
                 let start = self.pos - 1;
                 let mut hash: i64 = c as i64;
                 // A universal character name or a UTF-8 character sends the
                 // spelling through the 6.4.2.1p3 check and the name key.
-                let mut extended = !(c.is_ascii_alphabetic() || c == '_');
+                let mut extended = !(c.is_ascii_alphabetic() || c == '_' || c == '$');
                 if extended {
-                    self.pos = start + ident::char_len(&self.src, start);
+                    self.pos = start + ident::char_len(&self.src, start, Dollar::Ident);
                 }
                 while self.pos < self.src.len() {
                     let nc = self.src[self.pos];
-                    if nc.is_ascii_alphanumeric() || nc == b'_' {
+                    if nc.is_ascii_alphanumeric() || nc == b'_' || nc == b'$' {
                         hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                         self.pos += 1;
                         continue;
                     }
-                    match ident::char_len(&self.src, self.pos) {
+                    match ident::char_len(&self.src, self.pos, Dollar::Ident) {
                         0 => break,
                         len => {
                             extended = true;
@@ -3030,10 +3033,10 @@ mod tests {
     #[test]
     fn unrecognized_bytes_are_lex_errors() {
         // A byte that cannot start a preprocessing token (C99 6.4) must
-        // be diagnosed, not dropped -- `*$p` re-synchronizing as `*p`
+        // be diagnosed, not dropped -- `*@p` re-synchronizing as `*p`
         // compiles a different program.
         for (src, shown) in [
-            ("int b = *$p;", "`$`"),
+            ("int b = *@p;", "`@`"),
             ("int a = `3`;", "``"),
             ("int a @ b;", "`@`"),
             ("int caf\u{d7};", "`\u{d7}` (U+00D7)"),

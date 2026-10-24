@@ -6,7 +6,7 @@ use super::text::{literal_prefix_len, pp_number_len, skip_literal, strip_c_comme
 use crate::c5::codegen::Target;
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
-use crate::c5::ident;
+use crate::c5::ident::{self, Dollar};
 use crate::c5::lexer::{Ucn, decode_utf8, encode_utf8, scan_ucn};
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -25,11 +25,13 @@ impl Preprocessor {
             // resolve before substitution: `substitute` would expand a
             // name away, and for `__has_include` (C23 6.10.1) it would
             // insert re-lex separators into the header name.
-            if let Some((name, next)) = operator_operand(s, i, "defined", Parens::Optional) {
+            let dollar = self.dollar();
+            if let Some((name, next)) = operator_operand(s, i, "defined", Parens::Optional, dollar)
+            {
                 out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
                 return Some(next);
             }
-            resolve_has_operator(s, i, self.target, out)
+            resolve_has_operator(s, i, self.target, dollar, out)
                 .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
         });
         // Expand the remaining identifiers, then strip comments from the
@@ -39,7 +41,7 @@ impl Preprocessor {
         let substituted = self.substitute(&out, "<#if>", line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
         // alias expanded into; the pre-pass above handled the literal ones.
-        replace_has_operators(&strip_c_comments(&substituted), self.target)
+        replace_has_operators(&strip_c_comments(&substituted), self.target, self.dollar())
     }
 
     /// Resolve a `__has_include` / `__has_include_next` at `i`,
@@ -57,7 +59,7 @@ impl Preprocessor {
         out: &mut String,
     ) -> Option<usize> {
         for (kw, next) in [("__has_include_next", true), ("__has_include", false)] {
-            let Some((operand, after)) = balanced_operand(s, i, kw) else {
+            let Some((operand, after)) = balanced_operand(s, i, kw, self.dollar()) else {
                 continue;
             };
             let found = self.has_include_answer(operand, next, filename, line_no)?;
@@ -263,7 +265,7 @@ impl<'a> IfExprParser<'a> {
     /// Shares the pp-token identifier rule with the text scanners.
     fn scan_ident(&mut self) -> &'a str {
         let start = self.pos;
-        self.pos += ident::ident_len(self.src.as_bytes(), start);
+        self.pos += ident::ident_len(self.src.as_bytes(), start, self.pp.dollar());
         &self.src[start..self.pos]
     }
 
@@ -894,7 +896,7 @@ impl<'a> IfExprParser<'a> {
             if b.is_ascii_digit() {
                 return self.parse_int_literal();
             }
-            if ident::ident_len(self.src.as_bytes(), self.pos) > 0 {
+            if ident::ident_len(self.src.as_bytes(), self.pos, self.pp.dollar()) > 0 {
                 return self.parse_ident_or_defined();
             }
         }
@@ -916,7 +918,7 @@ impl<'a> IfExprParser<'a> {
     fn parse_int_literal(&mut self) -> Result<IfValue, C5Error> {
         let bytes = self.src.as_bytes();
         let start = self.pos;
-        let token_end = start + pp_number_len(bytes, start);
+        let token_end = start + pp_number_len(bytes, start, self.pp.dollar());
         let mut radix: u32 = 10;
         if bytes.get(self.pos) == Some(&b'0') {
             if bytes.get(self.pos + 1) == Some(&b'x') || bytes.get(self.pos + 1) == Some(&b'X') {
@@ -1134,8 +1136,10 @@ impl<'a> IfExprParser<'a> {
 /// with `1` or `0`. Run after macro substitution as well as before, so a
 /// header that reaches the operator through a macro alias
 /// (`#define ALIAS __has_attribute`) still resolves.
-pub(super) fn replace_has_operators(s: &str, target: Target) -> String {
-    scan_operators(s, |s, i, out| resolve_has_operator(s, i, target, out))
+pub(super) fn replace_has_operators(s: &str, target: Target, dollar: Dollar) -> String {
+    scan_operators(s, |s, i, out| {
+        resolve_has_operator(s, i, target, dollar, out)
+    })
 }
 
 /// Walk `s`, offering each byte position to `resolve`, which appends its
@@ -1175,12 +1179,13 @@ enum Parens {
 
 /// Index just past `kw` when it sits at `at` as a whole preprocessing
 /// token (C99 6.10), else `None`.
-fn keyword_end(bytes: &[u8], at: usize, kw: &str) -> Option<usize> {
+fn keyword_end(bytes: &[u8], at: usize, kw: &str, dollar: Dollar) -> Option<usize> {
     if !bytes[at..].starts_with(kw.as_bytes()) {
         return None;
     }
     let after = at + kw.len();
-    let bounded = !ident::char_ends_at(bytes, at) && ident::char_len(bytes, after) == 0;
+    let bounded =
+        !ident::char_ends_at(bytes, at, dollar) && ident::char_len(bytes, after, dollar) == 0;
     bounded.then_some(after)
 }
 
@@ -1201,9 +1206,10 @@ fn operator_operand<'a>(
     at: usize,
     kw: &str,
     parens: Parens,
+    dollar: Dollar,
 ) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    let after = keyword_end(bytes, at, kw)?;
+    let after = keyword_end(bytes, at, kw, dollar)?;
     let skip_ws = |j: usize| skip_ws(bytes, j);
     let mut j = skip_ws(after);
     let open = bytes.get(j) == Some(&b'(');
@@ -1213,7 +1219,7 @@ fn operator_operand<'a>(
         return None;
     }
     let name_start = j;
-    j += ident::ident_len(bytes, j);
+    j += ident::ident_len(bytes, j, dollar);
     let name = &s[name_start..j];
     if name.is_empty() {
         return None;
@@ -1234,9 +1240,14 @@ fn operator_operand<'a>(
 /// Match `kw ( operand )` at `at`, the operand running to the balancing
 /// `)`. Returns the operand text and the index just past the call.
 /// String and char literals inside the operand are skipped opaquely.
-fn balanced_operand<'a>(s: &'a str, at: usize, kw: &str) -> Option<(&'a str, usize)> {
+fn balanced_operand<'a>(
+    s: &'a str,
+    at: usize,
+    kw: &str,
+    dollar: Dollar,
+) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
-    let mut j = skip_ws(bytes, keyword_end(bytes, at, kw)?);
+    let mut j = skip_ws(bytes, keyword_end(bytes, at, kw, dollar)?);
     if bytes.get(j) != Some(&b'(') {
         return None;
     }
@@ -1275,9 +1286,15 @@ const HAS_OPERATORS: [HasOperator; 2] = [
 /// Resolve a `__has_*` operator at `i`, appending `1` or `0` to `out`.
 /// Returns the index just past the call, or `None` when no operator
 /// starts there.
-fn resolve_has_operator(s: &str, i: usize, target: Target, out: &mut String) -> Option<usize> {
+fn resolve_has_operator(
+    s: &str,
+    i: usize,
+    target: Target,
+    dollar: Dollar,
+    out: &mut String,
+) -> Option<usize> {
     for (op, is_known) in HAS_OPERATORS {
-        if let Some((name, next)) = operator_operand(s, i, op, Parens::Required) {
+        if let Some((name, next)) = operator_operand(s, i, op, Parens::Required, dollar) {
             out.push_str(if is_known(name, target) { "1" } else { "0" });
             return Some(next);
         }

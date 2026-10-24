@@ -1555,6 +1555,31 @@ fn process_asm(source: &str) -> String {
     pp.process(source).expect("preprocessor failed")
 }
 
+/// `$` is an identifier character in C and not in assembler-with-cpp, as
+/// gcc 16 and clang 22 take it (`-fdollars-in-identifiers` is on for C):
+/// `$FOO` is one name in C, while assembly expands the `FOO` of `$FOO`.
+/// The expansions are theirs for the same lines.
+#[test]
+fn dollar_forms_identifiers_in_c_and_not_in_assembly() {
+    let lines = "#define FOO 5\n#define CAT(a, b) a##b\n\
+                 movl $FOO, %eax\na$FOO FOO$ 1$FOO CAT($, FOO)\n";
+    let c = process(&format!(
+        "#define __$allowed_on_parameter\n#define __allowed(p) __$allowed_##p\n\
+         #ifdef __$allowed_on_parameter\n__allowed(on_parameter) int x;\n#endif\n{lines}"
+    ));
+    assert!(c.contains("int x;\n") && !c.contains("allowed"), "{c}");
+    assert!(
+        c.contains("movl $FOO, %eax\na$FOO FOO$ 1$FOO $FOO\n"),
+        "{c}"
+    );
+    let asm = process_asm(lines);
+    assert!(asm.contains("movl $5, %eax\na$5 5$ 1$5 $5\n"), "{asm}");
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_asm_source(true);
+    let err = pp.process("#define $x 1\n").unwrap_err().to_string();
+    assert!(err.contains("macro name must be an identifier"), "{err}");
+}
+
 /// Assembler-with-cpp: a `#` line naming no directive is text, passed
 /// through with the surrounding phase-3 rules intact, as GNU cpp emits
 /// it for assembler input: an apostrophe in such a line, then a comment
@@ -4029,7 +4054,12 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], &[b]),
+                    pp_tokens_would_merge(
+                        super::expand::TokKind::Punct,
+                        &[a],
+                        &[b],
+                        crate::c5::ident::Dollar::Ident
+                    ),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );

@@ -1412,6 +1412,16 @@ impl Preprocessor {
         self.asm_source = on;
     }
 
+    /// Whether `$` forms identifiers in this unit: in C, not in
+    /// assembler-with-cpp.
+    pub(super) fn dollar(&self) -> Dollar {
+        if self.asm_source {
+            Dollar::Punct
+        } else {
+            Dollar::Ident
+        }
+    }
+
     /// What follows the `#`, or its digraph `%:`, that opens a directive
     /// line (C99 6.10p2); `None` for a text line.
     fn directive_text<'l>(&self, line: &'l str) -> Option<&'l str> {
@@ -1502,17 +1512,20 @@ impl Preprocessor {
     /// an error of the pass. Late definitions in source still win.
     pub fn define(&mut self, name: &str, body: &str) {
         let operand = format!("{name} {body}");
-        let error = match directive::define_operand(&operand) {
-            Directive::DefineFn(name, params, body) => directive::macro_name_error(name)
-                .or_else(|| directive::macro_params_error(&params))
+        let dollar = self.dollar();
+        let error = match directive::define_operand(&operand, dollar) {
+            Directive::DefineFn(name, params, body) => directive::macro_name_error(name, dollar)
+                .or_else(|| directive::macro_params_error(&params, dollar))
                 .or_else(|| {
                     self.apply_define_fn(name, &params, body);
                     None
                 }),
-            Directive::Define(name, body) => directive::macro_name_error(name).or_else(|| {
-                self.apply_define(name, body);
-                None
-            }),
+            Directive::Define(name, body) => {
+                directive::macro_name_error(name, dollar).or_else(|| {
+                    self.apply_define(name, body);
+                    None
+                })
+            }
             _ => None,
         };
         if let Some(text) = error {
@@ -1875,7 +1888,7 @@ impl Preprocessor {
         let next_active = match directive {
             Directive::Define(name, body) => {
                 if active {
-                    if let Some(text) = directive::macro_name_error(name) {
+                    if let Some(text) = directive::macro_name_error(name, self.dollar()) {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
@@ -1885,8 +1898,8 @@ impl Preprocessor {
             }
             Directive::DefineFn(name, params, body) => {
                 if active {
-                    let error = directive::macro_name_error(name)
-                        .or_else(|| directive::macro_params_error(params));
+                    let error = directive::macro_name_error(name, self.dollar())
+                        .or_else(|| directive::macro_params_error(params, self.dollar()));
                     if let Some(text) = error {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
@@ -1977,7 +1990,7 @@ impl Preprocessor {
                 params = &params[..params.len() - 1];
             } else if let Some(prefix) = last.strip_suffix("...") {
                 let prefix = prefix.trim();
-                if ident::is_ident(prefix) {
+                if ident::is_ident(prefix, self.dollar()) {
                     is_variadic = true;
                     va_name = Some(ident::key(prefix).into_owned());
                     params = &params[..params.len() - 1];
@@ -2163,11 +2176,12 @@ impl<'p, 's> LinePass<'p, 's> {
             let depth = self.cond.len();
             match hash {
                 Some((spelling, parsed)) if !asm_text => {
-                    self.guard.line(line, Some(&parsed), depth);
+                    self.guard
+                        .line(line, Some(&parsed), depth, self.pp.dollar());
                     self.directive(&parsed, spelling, line_no)?;
                 }
                 _ => {
-                    self.guard.line(line, None, depth);
+                    self.guard.line(line, None, depth, self.pp.dollar());
                     self.content(line)?;
                 }
             }
@@ -2355,8 +2369,8 @@ impl<'p, 's> LinePass<'p, 's> {
             // through and the lexer folds it into its state in place.
             PragmaDirective::Other
                 if pragma_is_pack(args)
-                    || pragma_is_visibility(args)
-                    || pragma_is_fp_contract(args) =>
+                    || pragma_is_visibility(args, self.pp.dollar())
+                    || pragma_is_fp_contract(args, self.pp.dollar()) =>
             {
                 self.pass_through(spelling);
                 return Ok(Emitted::Yes);
@@ -2671,7 +2685,7 @@ mod text;
 #[cfg(test)]
 mod tests;
 
-use crate::c5::ident;
+use crate::c5::ident::{self, Dollar};
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,

@@ -3789,6 +3789,30 @@ fn extended_identifiers() {
 }
 
 #[test]
+fn dollar_signs_form_identifiers() {
+    // C99 6.4.2.1p1 leaves other identifier characters to the
+    // implementation; gcc and clang take `$` (`-fdollars-in-identifiers`),
+    // in macro names as in objects, functions and members.
+    let src = "#define __$allowed_on_parameter\n\
+               #define __allowed(p) __$allowed_##p\n\
+               struct s { int $m, a$; };\n\
+               static int $f(__allowed(on_parameter) int x) { return x; }\n\
+               int $count = 2;\n\
+               int main(void) {\n\
+                 struct s v = { 3, 4 };\n\
+                 int a$b$ = $f($count) + v.$m * v.a$;\n\
+                 return a$b$ - 14; }\n";
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        assert_eq!(super::run_str_for(src, target), 0, "{target:?}");
+    }
+}
+
+#[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
     // expression, so it works as an array bound (a fixed array, not a VLA)

@@ -7,7 +7,7 @@ use super::{
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
-use crate::c5::ident::{self, is_ident};
+use crate::c5::ident::{self, Dollar, is_ident};
 use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -55,8 +55,8 @@ impl Preprocessor {
             }
             let is_operator = c == b'_'
                 && bytes[i..].starts_with(b"_Pragma")
-                && !ident::char_ends_at(bytes, i)
-                && ident::char_len(bytes, i + 7) == 0;
+                && !ident::char_ends_at(bytes, i, self.dollar())
+                && ident::char_len(bytes, i + 7, self.dollar()) == 0;
             if let Some((args, next)) = is_operator
                 .then(|| parse_pragma_operator_args(text, i + 7))
                 .flatten()
@@ -71,8 +71,8 @@ impl Preprocessor {
             // the operand is raw tokens rather than a string literal.
             let is_msvc_operator = c == b'_'
                 && bytes[i..].starts_with(b"__pragma")
-                && !ident::char_ends_at(bytes, i)
-                && ident::char_len(bytes, i + 8) == 0;
+                && !ident::char_ends_at(bytes, i, self.dollar())
+                && ident::char_len(bytes, i + 8, self.dollar()) == 0;
             if let Some((args, next)) = is_msvc_operator
                 .then(|| parse_msvc_pragma_args(text, i + 8))
                 .flatten()
@@ -108,8 +108,8 @@ impl Preprocessor {
             }
             PragmaDirective::Other => {
                 let lexer_reads = pragma_is_pack(args)
-                    || pragma_is_visibility(args)
-                    || pragma_is_fp_contract(args);
+                    || pragma_is_visibility(args, self.dollar())
+                    || pragma_is_fp_contract(args, self.dollar());
                 if !lexer_reads {
                     self.parse_pragma(args, site)?;
                 }
@@ -605,7 +605,7 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let name = inner.trim();
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -665,7 +665,7 @@ impl Preprocessor {
                 continue;
             }
             if let Some(name) = item.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-                if !is_ident(name) {
+                if !is_ident(name, self.dollar()) {
                     return Err(C5Error::at(
                         Code::INVALID_PRAGMA,
                         filename,
@@ -690,7 +690,7 @@ impl Preprocessor {
                 if let Some(id) = self.registered_intrinsic(name) {
                     self.intrinsics.insert(name.to_string(), id);
                 }
-            } else if is_ident(item) {
+            } else if is_ident(item, self.dollar()) {
                 if let Some(id) = self.registered_intrinsic(item) {
                     self.intrinsics.insert(item.to_string(), id);
                 } else if !builtins::is_builtin(item) {
@@ -791,7 +791,7 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let name = inner.trim();
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -815,7 +815,8 @@ impl Preprocessor {
             Some((n, t)) => (n.trim(), Some(t.trim())),
             None => (operand, None),
         };
-        if !is_ident(name) || target.is_some_and(|t| !is_ident(t)) {
+        let dollar = self.dollar();
+        if !is_ident(name, dollar) || target.is_some_and(|t| !is_ident(t, dollar)) {
             let text = format!("malformed `#pragma weak {operand}` -- ignored");
             self.warn(PRAGMA_SYNTAX, site, text);
             return;
@@ -881,7 +882,7 @@ impl Preprocessor {
                 "`#pragma dylib(...)` arg is empty",
             ));
         }
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -1176,19 +1177,19 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
 /// True when `args` is `STDC FP_CONTRACT ...` (C99 7.12.2), whose state
 /// holds from its position, so like `pack` the line goes through to the
 /// lexer.
-pub(super) fn pragma_is_fp_contract(args: &str) -> bool {
+pub(super) fn pragma_is_fp_contract(args: &str, dollar: Dollar) -> bool {
     let Some(rest) = args.trim_start().strip_prefix("STDC") else {
         return false;
     };
     let rest = rest.trim_start();
     rest.strip_prefix("FP_CONTRACT")
-        .is_some_and(|r| ident::char_len(r.as_bytes(), 0) == 0)
+        .is_some_and(|r| ident::char_len(r.as_bytes(), 0, dollar) == 0)
 }
 
 /// True when `args` is the head of a `GCC visibility` pragma. Its extent
 /// is a source range, so like `pack` the line goes through to the lexer
 /// rather than being consumed here.
-pub(super) fn pragma_is_visibility(args: &str) -> bool {
+pub(super) fn pragma_is_visibility(args: &str, dollar: Dollar) -> bool {
     let Some(rest) = args.trim_start().strip_prefix("GCC") else {
         return false;
     };
@@ -1198,5 +1199,5 @@ pub(super) fn pragma_is_visibility(args: &str) -> bool {
     // A following `push` / `pop` must be a separate token, so anything
     // that continues the identifier (`visibility_mode`) is a different
     // pragma.
-    ident::char_len(rest.as_bytes(), 0) == 0
+    ident::char_len(rest.as_bytes(), 0, dollar) == 0
 }

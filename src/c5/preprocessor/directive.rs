@@ -1,6 +1,6 @@
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
-use crate::c5::ident::{self, key};
+use crate::c5::ident::{self, Dollar, key};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -59,7 +59,13 @@ enum GuardState {
 impl IncludeGuardScan {
     /// Observe one line. `directive` is its parse when the line is one,
     /// `depth` the conditional-nesting depth before the line is applied.
-    pub(super) fn line(&mut self, line: &str, directive: Option<&Directive<'_>>, depth: usize) {
+    pub(super) fn line(
+        &mut self,
+        line: &str,
+        directive: Option<&Directive<'_>>,
+        depth: usize,
+        dollar: Dollar,
+    ) {
         if self.state == GuardState::Open && depth == 0 {
             self.state = GuardState::Closed;
         }
@@ -67,7 +73,7 @@ impl IncludeGuardScan {
             return;
         }
         match self.state {
-            GuardState::Leading => match guard_opened_by(directive) {
+            GuardState::Leading => match guard_opened_by(directive, dollar) {
                 Some(name) if depth == 0 => {
                     self.name = Some(name.into());
                     self.state = GuardState::Open;
@@ -101,10 +107,10 @@ impl IncludeGuardScan {
 
 /// The macro a conditional tests for absence, for the two spellings a
 /// header guard takes: `#ifndef X` and `#if !defined X` / `!defined(X)`.
-fn guard_opened_by<'a>(directive: Option<&'a Directive<'a>>) -> Option<&'a str> {
+fn guard_opened_by<'a>(directive: Option<&'a Directive<'a>>, dollar: Dollar) -> Option<&'a str> {
     match directive? {
         Directive::Ifndef(name) => Some(name),
-        Directive::If(expr) => super::text::if_operand_undefined_name(expr),
+        Directive::If(expr) => super::text::if_operand_undefined_name(expr, dollar),
         _ => None,
     }
 }
@@ -307,8 +313,8 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
 /// against the name (C99 6.10.3p10; a space makes it object-like with
 /// `(` opening the body). An unclosed parameter list falls back to the
 /// object-like reading, as the lexer would see a broken `#define`.
-pub(super) fn define_operand(after: &str) -> Directive<'_> {
-    let (name, rest_after_name) = split_ident(after.trim_start());
+pub(super) fn define_operand(after: &str, dollar: Dollar) -> Directive<'_> {
+    let (name, rest_after_name) = split_ident(after.trim_start(), dollar);
     // Comments were removed in translation phase 3 (C99 5.1.1.2) before
     // directives execute, so a `//` or `/*` still here can only be
     // string- or char-literal content and must stay.
@@ -329,18 +335,18 @@ pub(super) fn define_operand(after: &str) -> Directive<'_> {
 /// The first macro parameter C99 6.10.3 rejects: each is an identifier
 /// (6.4.2.1) declared once (p6), and the last may instead be `...` or GNU
 /// `name...` (p1).
-pub(super) fn macro_params_error(params: &[&str]) -> Option<String> {
+pub(super) fn macro_params_error(params: &[&str], dollar: Dollar) -> Option<String> {
     let last = params.len().checked_sub(1)?;
     for (i, &p) in params.iter().enumerate() {
         let name = match p.strip_suffix("...") {
             Some("") if i == last => continue,
-            Some(n) if i == last && ident::is_ident(n.trim_end()) => n.trim_end(),
-            _ if ident::is_ident(p) => p,
+            Some(n) if i == last && ident::is_ident(n.trim_end(), dollar) => n.trim_end(),
+            _ if ident::is_ident(p, dollar) => p,
             _ => {
                 let close = if i == last { ')' } else { ',' };
                 return Some(match p.split_whitespace().next() {
                     None => format!("macro parameter expected before `{close}`"),
-                    Some(head) if ident::is_ident(head) => {
+                    Some(head) if ident::is_ident(head, dollar) => {
                         format!("expected `,` or `)` after macro parameter `{head}`")
                     }
                     Some(_) => format!("`{p}` is not a macro parameter"),
@@ -358,8 +364,8 @@ pub(super) fn macro_params_error(params: &[&str]) -> Option<String> {
 }
 
 /// Why `name` cannot be the identifier a `#define` names, if it cannot.
-pub(super) fn macro_name_error(name: &str) -> Option<String> {
-    if !ident::is_ident(name) {
+pub(super) fn macro_name_error(name: &str, dollar: Dollar) -> Option<String> {
+    if !ident::is_ident(name, dollar) {
         return Some(String::from("macro name must be an identifier"));
     }
     ident::ident_error(name)
@@ -411,9 +417,10 @@ fn line_operand(after: &str) -> Option<Directive<'_>> {
 /// exclusive whatever order they appear in: `include_next` never reads
 /// as `include`, nor `ifdef` as `if`.
 pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
-    let (name, after) = split_ident(rest);
+    let dollar = if asm { Dollar::Punct } else { Dollar::Ident };
+    let (name, after) = split_ident(rest, dollar);
     let parsed = match name {
-        "define" => Some(define_operand(after)),
+        "define" => Some(define_operand(after, dollar)),
         "undef" => Some(Directive::Undef(after.trim())),
         "ifdef" => Some(Directive::Ifdef(after.trim())),
         "ifndef" => Some(Directive::Ifndef(after.trim())),
@@ -481,6 +488,6 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
 
 /// Split off the leading identifier in `s`, returning `(ident,
 /// rest)`. Used to peel the macro name from its replacement text.
-pub(super) fn split_ident(s: &str) -> (&str, &str) {
-    s.split_at(ident::ident_len(s.as_bytes(), 0))
+pub(super) fn split_ident(s: &str, dollar: Dollar) -> (&str, &str) {
+    s.split_at(ident::ident_len(s.as_bytes(), 0, dollar))
 }

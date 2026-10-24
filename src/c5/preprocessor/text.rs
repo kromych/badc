@@ -1,4 +1,4 @@
-use crate::c5::ident;
+use crate::c5::ident::{self, Dollar};
 use alloc::string::String;
 
 /// Phase-3 comment removal: strip `/* ... */` block comments and
@@ -699,7 +699,7 @@ pub(super) fn unfold_ref(source: &str) -> String {
 /// `!defined(X)` with arbitrary white space. `#ifndef X` is the other
 /// spelling of the same test and is matched by its own directive
 /// variant. `None` for every other operand.
-pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
+pub(super) fn if_operand_undefined_name(expr: &str, dollar: Dollar) -> Option<&str> {
     let rest = expr.trim().strip_prefix('!')?.trim_start();
     let rest = rest.strip_prefix("defined")?;
     let name = match rest.trim_start().strip_prefix('(') {
@@ -708,7 +708,7 @@ pub(super) fn if_operand_undefined_name(expr: &str) -> Option<&str> {
         None if rest.starts_with(|c: char| c.is_whitespace()) => rest.trim(),
         None => return None,
     };
-    ident::is_ident(name).then_some(name)
+    ident::is_ident(name, dollar).then_some(name)
 }
 
 /// Longest prefix [`literal_prefix_len`] accepts.
@@ -768,16 +768,20 @@ pub(super) fn skip_literal(bytes: &[u8], at: usize) -> usize {
 /// opaquely: its identifier-shaped tail is not a candidate macro or
 /// parameter name.
 #[inline]
-pub(super) fn pp_number_len(bytes: &[u8], at: usize) -> usize {
+pub(super) fn pp_number_len(bytes: &[u8], at: usize, dollar: Dollar) -> usize {
     let starts = bytes[at].is_ascii_digit()
         || (bytes[at] == b'.' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit));
-    if starts { pp_number_tail(bytes, at) } else { 0 }
+    if starts {
+        pp_number_tail(bytes, at, dollar)
+    } else {
+        0
+    }
 }
 
 /// [`pp_number_len`] past a byte that starts a pp-number, out of line so the
 /// test above inlines into the per-byte scanners.
 #[inline(never)]
-fn pp_number_tail(bytes: &[u8], at: usize) -> usize {
+fn pp_number_tail(bytes: &[u8], at: usize, dollar: Dollar) -> usize {
     let n = bytes.len();
     let mut i = at + 1;
     while i < n {
@@ -790,7 +794,7 @@ fn pp_number_tail(bytes: &[u8], at: usize) -> usize {
         } else if b == b'.' {
             i += 1;
         } else {
-            match ident::char_len(bytes, i) {
+            match ident::char_len(bytes, i, dollar) {
                 0 => break,
                 len => i += len,
             }

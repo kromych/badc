@@ -169,6 +169,18 @@
 #pragma binding(libc::llroundl, "_llround")
 #pragma binding(libc::lrintl, "_lrint")
 #pragma binding(libc::llrintl, "_llrint")
+#pragma binding(libc::logb, "_logb")
+#pragma binding(libc::logbf, "_logbf")
+#pragma binding(libc::logbl, "_logb")
+#pragma binding(libc::lgamma, "_lgamma")
+#pragma binding(libc::lgammaf, "_lgammaf")
+#pragma binding(libc::lgammal, "_lgamma")
+#pragma binding(libc::remquo, "_remquo")
+#pragma binding(libc::remquof, "_remquof")
+#pragma binding(libc::remquol, "_remquo")
+#pragma binding(libc::nexttoward, "_nexttoward")
+#pragma binding(libc::nexttowardf, "_nexttowardf")
+#pragma binding(libc::nexttowardl, "_nexttoward")
 #endif
 
 #ifdef __linux__
@@ -329,6 +341,18 @@
 #pragma binding(libm::copysignl, "copysignl")
 #pragma binding(libm::fdiml, "fdiml")
 #pragma binding(libm::fmal, "fmal")
+#pragma binding(libm::logb, "logb")
+#pragma binding(libm::logbf, "logbf")
+#pragma binding(libm::logbl, "logbl")
+#pragma binding(libm::lgamma, "lgamma")
+#pragma binding(libm::lgammaf, "lgammaf")
+#pragma binding(libm::lgammal, "lgammal")
+#pragma binding(libm::remquo, "remquo")
+#pragma binding(libm::remquof, "remquof")
+#pragma binding(libm::remquol, "remquol")
+#pragma binding(libm::nexttoward, "nexttoward")
+#pragma binding(libm::nexttowardf, "nexttowardf")
+#pragma binding(libm::nexttowardl, "nexttowardl")
 #endif
 
 #ifdef _WIN32
@@ -835,6 +859,22 @@ long lroundl(long double x);
 long long llroundl(long double x);
 long lrintl(long double x);
 long long llrintl(long double x);
+#ifndef _WIN32
+// C99 7.12.6.11 logb, 7.12.8.3 lgamma, 7.12.10.3 remquo, 7.12.11.4 nexttoward.
+// TODO: the Universal CRT exports all twelve; declare them on Windows once bound.
+double logb(double x);
+float logbf(float x);
+long double logbl(long double x);
+double lgamma(double x);
+float lgammaf(float x);
+long double lgammal(long double x);
+double remquo(double x, double y, int *quo);
+float remquof(float x, float y, int *quo);
+long double remquol(long double x, long double y, int *quo);
+double nexttoward(double x, long double y);
+float nexttowardf(float x, long double y);
+long double nexttowardl(long double x, long double y);
+#endif
 #ifdef __linux__
 long double scalbnl(long double x, int n);
 long double scalblnl(long double x, long n);

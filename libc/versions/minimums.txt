@@ -103,3 +103,14 @@ libc.so.6 pthread_kill
     destructor so registered tells them apart. <stdlib.h> declares no
     way to register one, so the interface it states is the same for both.
 libc.so.6 quick_exit
+
+[-] lgamma, lgammaf and lgammal have a GLIBC_2.23 definition, and
+    lgammaf one at GLIBC_2.43, at addresses other than the floor's.
+    Contrasted through dlvsym on glibc 2.43, x86_64 and aarch64, over
+    the poles, zeros, infinities, NaN, subnormals and -40 to 40 in steps
+    of 0.37, and lgammaf over 1045763 inputs spread across the finite
+    floats: identical results, errno and signgam. <math.h> declares
+    neither signgam nor _LIB_VERSION.
+libm.so.6 lgamma
+libm.so.6 lgammaf
+libm.so.6 lgammal

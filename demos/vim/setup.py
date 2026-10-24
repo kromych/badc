@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Fetch Vim from the badc vendor-deps mirror.
 
-Pins tag v9.1.0800 of `vim/vim`. The asset on the `kromych/badc`
+Pins tag v9.2.1226 of `vim/vim`. The asset on the `kromych/badc`
 release is the upstream GitHub archive of that tag, named after the
 release and the first 8 hex digits of the tarball's sha256; ``_fetch``
 verifies the full digest before extraction, and the tree lands under
-``demos/vim/.cache/vim-9.1.0800/``, used as upstream ships it. See
+``demos/vim/.cache/vim-9.2.1226/``, used as upstream ships it. See
 ``scripts/vendor_deps/README.md`` for the auth model.
 
 Exits with status ``MISSING_ASSET``, naming the asset, when the release
@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "9.1.0800"
-SHA256 = "3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303"
+VERSION = "9.2.1226"
+SHA256 = "c23d04422e829ed43beadd2ece18715580184a7340e5ec5abb569cd202a440d0"
 ASSET = f"vim-{VERSION}-{SHA256[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
 SRC_DIRNAME = f"vim-{VERSION}"

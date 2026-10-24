@@ -313,12 +313,12 @@ SOURCES = [
     ),
     Source(
         # Vim -- the editor. The asset is the upstream GitHub archive of
-        # the v9.1.0800 tag, pinned by its own sha256.
+        # the v9.2.1226 tag, pinned by its own sha256.
         name="vim",
-        version="9.1.0800",
-        url="https://github.com/vim/vim/archive/refs/tags/v9.1.0800.tar.gz",
+        version="9.2.1226",
+        url="https://github.com/vim/vim/archive/refs/tags/v9.2.1226.tar.gz",
         ext=".tar.gz",
-        upstream_sha="3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303",
+        upstream_sha="c23d04422e829ed43beadd2ece18715580184a7340e5ec5abb569cd202a440d0",
         sha_kind="tarball-sha256",
     ),
     Source(

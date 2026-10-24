@@ -3847,6 +3847,31 @@ mod tests {
     }
 
     #[test]
+    fn a_static_initializer_naming_an_undefined_object_is_undefined_reference() {
+        expect_runtime_err(
+            "extern int nowhere; int *p = &nowhere; int main(void) { return p != 0; }",
+            "undefined reference to `nowhere`",
+        );
+    }
+
+    #[test]
+    fn an_undefined_weak_name_is_the_null_address() {
+        // The address of a weak function or object nothing defines is 0
+        // in code and in a static initializer, as a link resolves it; the
+        // call the address guards is not made.
+        let src = "extern int wv __attribute__((weak));\n\
+                   extern int wf(void) __attribute__((weak));\n\
+                   extern long pv;\n#pragma weak pv\n\
+                   int *pw = &wv;\nint (*fw)(void) = wf;\nlong *pp = &pv + 1;\n\
+                   int main(void) {\n\
+                     if (&wv || wf || &pv || pw || fw || pp != (long *)0 + 1) return 1;\n\
+                     return wf ? wf() : 0;\n\
+                   }\n";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        assert_eq!(crate::Vm::new(program).run().expect("run"), 0);
+    }
+
+    #[test]
     fn undefined_extern_fn_pointer_is_undefined_reference() {
         expect_runtime_err(
             "int bar(int); int main(void) { int (*fp)(int) = bar; return fp(1); }",

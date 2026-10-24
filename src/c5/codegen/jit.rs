@@ -139,6 +139,7 @@ mod jit_impl {
     use super::super::{AddrPart, Build, NativeOptions, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
+    use crate::c5::object::weak_undef;
     use alloc::format;
     use alloc::string::String;
     // Only the POSIX bind_imports path uses `to_string` (for the
@@ -609,13 +610,28 @@ mod jit_impl {
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
         // An extern call site left has no link step to resolve it, and would
-        // branch to the zeroed placeholder: refuse it as the linker would.
-        if let Some(site) = build.user_extern_call_sites.first() {
-            return Err(undefined_reference(&site.symbol_name));
+        // branch to the zeroed placeholder: refuse it as the linker would,
+        // unless the name is weak, which resolves to a null address.
+        let weak = program.weak_link_names();
+        let machine = if target.is_aarch64() {
+            super::super::Machine::Aarch64
+        } else {
+            super::super::Machine::X86_64
+        };
+        for site in core::mem::take(&mut build.user_extern_call_sites) {
+            if !weak.contains(site.symbol_name.as_str()) {
+                return Err(undefined_reference(&site.symbol_name));
+            }
+            if !weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset) {
+                return Err(C5Error::internal(format!(
+                    "JIT: the call to `{}` is not a branch",
+                    site.symbol_name
+                )));
+            }
         }
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
-        route_jit_data_imports(&mut build)?;
+        route_jit_data_imports(&mut build, &weak, machine)?;
 
         // One slot per import, holding what dlsym finds, read as a loader's GOT.
         let mut got_region = GotRegion::new(build.imports.imports.len())?;
@@ -1130,15 +1146,30 @@ mod jit_impl {
 
     /// Route `#pragma binding(data ...)` references, asm operands included,
     /// through flat-lookup imports in the fake GOT. A leftover reference has
-    /// no binding and no definition anywhere: refuse it like the linker would.
-    fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
+    /// no binding and no definition anywhere: it is the null address if the
+    /// name is weak, and refused like the linker would otherwise.
+    fn route_jit_data_imports(
+        build: &mut Build,
+        weak: &alloc::collections::BTreeSet<&str>,
+        machine: super::super::Machine,
+    ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmSectionTarget;
         let mut slots = super::super::DataImportSlots::new(build, true, "the JIT");
         for r in core::mem::take(&mut build.user_extern_data_refs) {
-            if !slots.binds(&r.symbol_name) {
+            if slots.binds(&r.symbol_name) {
+                slots.route_ref(build, &r)?;
+            } else if !weak.contains(r.symbol_name.as_str()) {
                 return Err(undefined_reference(&r.symbol_name));
+            } else if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
+                return Err(C5Error::hard(
+                    Code::RELOCATION,
+                    format!(
+                        "unresolved weak reference to `{}`: cannot resolve the referencing \
+                         instruction to address 0",
+                        r.symbol_name
+                    ),
+                ));
             }
-            slots.route_ref(build, &r)?;
         }
         for fx in core::mem::take(&mut build.asm_sym_fixups) {
             match &fx.target {

@@ -58,8 +58,8 @@ pub struct Vm<H: Host> {
     /// because `with_host` doesn't return `Result`.
     ssa_funcs: Result<Vec<FunctionSsa>, C5Error>,
     /// Cross-TU placeholder ent_pc -> symbol name for every
-    /// declared-but-undefined extern function. `run` refuses any
-    /// reference to these, mirroring the linker.
+    /// declared-but-undefined extern function that is not weak. `run`
+    /// refuses any reference to these, mirroring the linker.
     extern_fn_names: alloc::collections::BTreeMap<usize, String>,
     /// `(name, defined_here)` per parser symbol, indexed by the
     /// sym idx the `FunctionSsa::extern_*_refs` tables carry.
@@ -69,6 +69,9 @@ pub struct Vm<H: Host> {
     /// `target_ent_pc` of every static-initializer function
     /// pointer, checked against `extern_fn_names` at `run`.
     code_reloc_pcs: Vec<usize>,
+    /// The objects static initializers name that nothing defines and
+    /// that are not weak, refused at `run`.
+    extern_slot_names: Vec<String>,
     /// Constructor entry pcs (`__attribute__((constructor))`), ordered as
     /// they run before the entry: prioritized ascending, then
     /// unprioritized. The native path runs these through `.init_array`;
@@ -107,10 +110,26 @@ impl<H: Host> Vm<H> {
         // Execution is the link step: bind import placeholders a
         // function alias of the unit resolves, in the lifted bodies
         // and in the data-slot function addresses.
+        // A weak function nothing defines is the null address, as a link
+        // resolves it; only a call to it, when made, fails.
+        let weak: alloc::collections::BTreeSet<String> = (program.weak_link_names().into_iter())
+            .map(String::from)
+            .collect();
+        let weak_fn_pcs: alloc::collections::BTreeSet<usize> = (program.extern_function_imports)
+            .iter()
+            .filter(|(_, name)| weak.contains(name.as_str()))
+            .map(|&(pc, _)| pc)
+            .collect();
         let ssa_funcs =
             super::codegen::ssa::shadow::produce_ssa_funcs(&program, program.target, false, true)
                 .map(|mut funcs| {
                     super::codegen::ssa::shadow::bind_alias_imports(&program, &mut funcs);
+                    for inst in funcs.iter_mut().flat_map(|f| f.insts.iter_mut()) {
+                        if matches!(inst, super::ir::Inst::ImmCode(pc) if weak_fn_pcs.contains(pc))
+                        {
+                            *inst = super::ir::Inst::Imm(0);
+                        }
+                    }
                     funcs
                 });
         let mut code_relocs = core::mem::take(&mut program.code_relocs);
@@ -127,6 +146,7 @@ impl<H: Host> Vm<H> {
         let extern_fn_names = program
             .extern_function_imports
             .iter()
+            .filter(|(pc, _)| !weak_fn_pcs.contains(pc))
             .map(|(pc, name)| (*pc, name.clone()))
             .collect();
         let symbol_defs = program
@@ -174,6 +194,7 @@ impl<H: Host> Vm<H> {
                 .find(|t| t.0 == r.target_ent_pc);
             let raw = match binding {
                 Some(&(_, b)) => (ssa::IMPORT_ADDR_TAG | b) as u64,
+                None if weak_fn_pcs.contains(&(r.target_ent_pc as usize)) => 0,
                 None => ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc,
             };
             raw.wrapping_add_signed(r.addend)
@@ -190,6 +211,17 @@ impl<H: Host> Vm<H> {
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
             data[off..off + 8].copy_from_slice(&slot_value(r).to_le_bytes());
+        }
+        // A slot naming a weak object nothing defines holds the null
+        // address plus its offset, as a link fills it.
+        let mut extern_slot_names = Vec::new();
+        for r in &program.extern_data_relocs {
+            if weak.contains(r.symbol_name.as_str()) {
+                let off = r.data_offset as usize;
+                data[off..off + 8].copy_from_slice(&r.addend.to_le_bytes());
+            } else {
+                extern_slot_names.push(r.symbol_name.clone());
+            }
         }
         // A `&&label` initializer slot holds the value a runtime label
         // address has: the code position `Inst::BlockAddr` materializes
@@ -233,6 +265,7 @@ impl<H: Host> Vm<H> {
             symbol_defs,
             data_binding_locals,
             code_reloc_pcs,
+            extern_slot_names,
             init_pcs,
             fini_pcs,
             target: program.target,
@@ -263,8 +296,9 @@ impl<H: Host> Vm<H> {
             // parser sym; the sentinel is ambiguous (the first
             // function's ent_pc is also 0), so consult the symbol.
             for &(_, sym) in f.extern_call_refs.iter().chain(&f.extern_imm_code_refs) {
-                if let Some((name, defined, _)) = self.symbol_defs.get(sym as usize)
+                if let Some((name, defined, weak)) = self.symbol_defs.get(sym as usize)
                     && !defined
+                    && !weak
                 {
                     return Err(undef(name));
                 }
@@ -278,13 +312,7 @@ impl<H: Host> Vm<H> {
                 if *defined || *weak {
                     continue;
                 }
-                if self.data_binding_locals.contains(name) {
-                    return Err(C5Error::Runtime(alloc::format!(
-                        "`{name}` is bound to host data; the interpreter cannot \
-                         reach host memory (use --jit or compile natively)"
-                    )));
-                }
-                return Err(undef(name));
+                return Err(self.unreachable_object(name));
             }
         }
         for pc in &self.code_reloc_pcs {
@@ -292,7 +320,22 @@ impl<H: Host> Vm<H> {
                 return Err(undef(name));
             }
         }
-        Ok(())
+        match self.extern_slot_names.first() {
+            Some(name) => Err(self.unreachable_object(name)),
+            None => Ok(()),
+        }
+    }
+
+    /// An object nothing in the unit defines: host data the interpreter
+    /// cannot reach, or an undefined reference.
+    fn unreachable_object(&self, name: &str) -> C5Error {
+        if self.data_binding_locals.contains(name) {
+            return C5Error::Runtime(alloc::format!(
+                "`{name}` is bound to host data; the interpreter cannot \
+                 reach host memory (use --jit or compile natively)"
+            ));
+        }
+        C5Error::Runtime(alloc::format!("undefined reference to `{name}`"))
     }
 
     /// Enable per-instruction trace output. Mirrors

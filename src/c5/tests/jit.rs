@@ -2310,6 +2310,25 @@ fn undefined_function_in_an_initializer_is_a_link_error() {
     assert!(msg.contains("undefined reference to `svd`"), "{msg}");
 }
 
+/// A weak name nothing defines is the null address, as a link resolves it:
+/// its address in code and in a static initializer is 0 and the call it
+/// guards is not made; `#pragma weak` declares one, a weak definition binds.
+#[test]
+fn an_undefined_weak_name_is_the_null_address() {
+    let src = "extern int wv __attribute__((weak));\n\
+               extern int wf(void) __attribute__((weak));\n\
+               extern long pv;\n#pragma weak pv\n\
+               int dv __attribute__((weak)) = 5;\n\
+               int *pw = &wv;\nint (*fw)(void) = wf;\nlong *pp = &pv;\n\
+               int main(void) {\n\
+                 if (&wv || wf || &pv || pw || fw || pp) return 1;\n\
+                 if (wf) return wf();\n\
+                 return dv == 5 ? 0 : 2;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["weak-undef"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["weak-undef-opt"]), 0);
+}
+
 #[test]
 fn undefined_extern_object_is_a_link_error() {
     let program = Compiler::new(

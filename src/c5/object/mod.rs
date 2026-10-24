@@ -204,12 +204,7 @@ fn resolve_single_image_asm_sym_fixups(
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
         return Ok(());
     }
-    let weak_names: alloc::collections::BTreeSet<&str> = program
-        .symbols
-        .iter()
-        .filter(|s| s.is_weak && s.is_link_entity())
-        .map(|s| s.link_name())
-        .collect();
+    let weak_names = program.weak_link_names();
     let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     enum Loc {
         Def(UnitDef),
@@ -338,12 +333,7 @@ fn resolve_single_tu_extern_refs(
     {
         return Ok(());
     }
-    let weak_names: alloc::collections::BTreeSet<&str> = program
-        .symbols
-        .iter()
-        .filter(|s| s.is_weak && s.is_link_entity())
-        .map(|s| s.link_name())
-        .collect();
+    let weak_names = program.weak_link_names();
     let data_bindings: alloc::collections::BTreeSet<String> = build
         .imports
         .data_bindings
@@ -407,14 +397,7 @@ fn resolve_single_tu_extern_refs(
         if !weak_names.contains(r.symbol_name.as_str()) {
             return Err(undefined(&r.symbol_name));
         }
-        let ok = match machine {
-            Machine::X86_64 => weak_undef::x86_64_lea_to_zero(&mut build.text, r.instr_offset),
-            Machine::Aarch64 => {
-                weak_undef::aarch64_adrp_to_zero(&mut build.text, r.instr_offset)
-                    && weak_undef::aarch64_add_lo12_to_zero(&mut build.text, r.instr_offset + 4)
-            }
-        };
-        if !ok {
+        if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
             return Err(unsupported(&r.symbol_name));
         }
     }
@@ -425,13 +408,7 @@ fn resolve_single_tu_extern_refs(
         if !weak_names.contains(site.symbol_name.as_str()) {
             return Err(undefined(&site.symbol_name));
         }
-        let ok = match machine {
-            Machine::X86_64 => weak_undef::x86_64_branch_to_nop(&mut build.text, site.instr_offset),
-            Machine::Aarch64 => {
-                weak_undef::aarch64_branch_to_nop(&mut build.text, site.instr_offset)
-            }
-        };
-        if !ok {
+        if !weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset) {
             return Err(unsupported(&site.symbol_name));
         }
     }

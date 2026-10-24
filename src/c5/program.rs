@@ -522,6 +522,14 @@ pub struct Program {
 }
 
 impl Program {
+    /// The link names the unit declares or defines weak.
+    pub(crate) fn weak_link_names(&self) -> alloc::collections::BTreeSet<&str> {
+        (self.symbols.iter())
+            .filter(|s| s.is_weak && s.is_link_entity())
+            .map(|s| s.link_name())
+            .collect()
+    }
+
     /// Data slots holding a `&&label` address, each paired with the
     /// `ent_pc` of the function the label lives in. The slot needs a
     /// relocation and keeps that function reachable.

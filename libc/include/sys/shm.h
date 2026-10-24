@@ -1,42 +1,30 @@
-// sys/shm.h -- System V shared memory. Declared so headers that include it
-// unconditionally (e.g. a platform-portability header) resolve; the segment
-// calls bind to libc. Constants that reach the host libc diverge per platform
-// and are guarded accordingly.
+// sys/shm.h -- XSI shared memory. The segment calls bind to the C library;
+// <sys/ipc.h> supplies struct ipc_perm, key_t and the IPC_* commands, as
+// POSIX has this header include it.
 
 #pragma once
 
-#include <sys/types.h>
-
-// Control commands shared with <sys/ipc.h>.
-#define IPC_CREAT 01000
-#define IPC_EXCL 02000
-#define IPC_NOWAIT 04000
-#define IPC_RMID 0
-#define IPC_SET 1
-#define IPC_STAT 2
-#define IPC_PRIVATE 0
+#include <sys/ipc.h>
 
 // shmat flags.
 #define SHM_RDONLY 010000
 #define SHM_RND 020000
 
 #ifdef __linux__
-// The kernel's ipc64_perm and shmid64_ds from <asm-generic/ipcbuf.h> and
-// <asm-generic/shmbuf.h>.
-typedef unsigned long shmatt_t;
+#define SHM_R 0400
+#define SHM_W 0200
+#define SHM_REMAP 040000
+#define SHM_EXEC 0100000
+#define SHM_LOCK 11
+#define SHM_UNLOCK 12
+#define SHM_STAT 13
+#define SHM_INFO 14
+#define SHM_STAT_ANY 15
+#define SHM_DEST 01000
+#define SHM_LOCKED 02000
+#define SHMLBA (__getpagesize())
 
-struct ipc_perm {
-    key_t __key;
-    uid_t uid;
-    gid_t gid;
-    uid_t cuid;
-    gid_t cgid;
-    mode_t mode;
-    unsigned short __seq;
-    unsigned short __pad2;
-    unsigned long __unused1;
-    unsigned long __unused2;
-};
+typedef unsigned long shmatt_t;
 
 struct shmid_ds {
     struct ipc_perm shm_perm;
@@ -47,22 +35,36 @@ struct shmid_ds {
     pid_t shm_cpid;
     pid_t shm_lpid;
     shmatt_t shm_nattch;
-    unsigned long __unused4;
-    unsigned long __unused5;
+    unsigned long __glibc_reserved5;
+    unsigned long __glibc_reserved6;
 };
+
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::__getpagesize, "__getpagesize")
+int __getpagesize(void);
+#elif defined(__APPLE__)
+#define SHM_R IPC_R
+#define SHM_W IPC_W
+#define SHMLBA (16 * 1024)
+
+typedef unsigned short shmatt_t;
+
+#pragma pack(4)
+struct shmid_ds {
+    struct ipc_perm shm_perm;
+    size_t shm_segsz;
+    pid_t shm_lpid;
+    pid_t shm_cpid;
+    shmatt_t shm_nattch;
+    time_t shm_atime;
+    time_t shm_dtime;
+    time_t shm_ctime;
+    void *shm_internal;
+};
+#pragma pack()
+#define __shmid_ds_new shmid_ds
 #else
 typedef long shmatt_t;
-
-struct ipc_perm {
-    int __key;
-    unsigned int uid;
-    unsigned int gid;
-    unsigned int cuid;
-    unsigned int cgid;
-    unsigned short mode;
-    unsigned short __seq;
-    char __pad[16];
-};
 
 struct shmid_ds {
     struct ipc_perm shm_perm;
@@ -78,6 +80,7 @@ struct shmid_ds {
 #endif
 
 #ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::shmget, "_shmget")
 #pragma binding(libc::shmat, "_shmat")
 #pragma binding(libc::shmdt, "_shmdt")
@@ -91,7 +94,7 @@ struct shmid_ds {
 #endif
 
 #ifndef _WIN32
-int shmget(key_t key, unsigned long size, int shmflg);
+int shmget(key_t key, size_t size, int shmflg);
 void *shmat(int shmid, const void *shmaddr, int shmflg);
 int shmdt(const void *shmaddr);
 int shmctl(int shmid, int cmd, struct shmid_ds *buf);

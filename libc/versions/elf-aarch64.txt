@@ -22,6 +22,7 @@ __cxa_at_quick_exit                      GLIBC_2.17
 __cxa_atexit                             GLIBC_2.17
 __environ                                GLIBC_2.17
 __errno_location                         GLIBC_2.17
+__getpagesize                            GLIBC_2.17
 __h_errno_location                       GLIBC_2.17
 __register_atfork                        GLIBC_2.17
 _exit                                    GLIBC_2.17
@@ -162,6 +163,7 @@ fstatvfs                                 GLIBC_2.17
 fsync                                    GLIBC_2.17
 ftell                                    GLIBC_2.17
 ftello                                   GLIBC_2.17
+ftok                                     GLIBC_2.17
 ftruncate                                GLIBC_2.17
 ftrylockfile                             GLIBC_2.17
 fts_close                                GLIBC_2.17

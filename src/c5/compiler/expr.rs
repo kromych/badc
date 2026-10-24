@@ -82,6 +82,21 @@ impl Compiler {
     pub(super) fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
+        // A Microsoft sized suffix names the type outright; `i8` is plain
+        // `char`, as clang types it.
+        let sized = match self.lex.int_suffix_width {
+            8 if !is_unsigned => {
+                return super::types::plain_char_ty(self.lex.char_signed);
+            }
+            8 => Some(Ty::Char as i64),
+            16 => Some(Ty::Short as i64),
+            32 => Some(Ty::Int as i64),
+            64 => Some(Ty::LongLong as i64),
+            _ => None,
+        };
+        if let Some(ty) = sized {
+            return if is_unsigned { ty | UNSIGNED_BIT } else { ty };
+        }
         // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
         // an unsigned type at a rank when no signed type at that rank
         // fits; a decimal constant with no `u` suffix never does.

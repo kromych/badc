@@ -334,6 +334,13 @@ impl Target {
         self.is_windows()
     }
 
+    /// Whether the Microsoft C extensions apply, as clang enables them by
+    /// default for a windows-msvc triple (`-fms-extensions`), on the PE
+    /// targets.
+    pub fn ms_extensions(self) -> bool {
+        self.is_windows()
+    }
+
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.

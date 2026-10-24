@@ -1966,6 +1966,60 @@ fn valid_numeric_literals_still_compile() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
 
+/// MSVC's sized integer suffixes on the PE targets, as clang 22 reads them
+/// for a windows-msvc triple: `[u]i8` ... `[u]i64` name `char` (unsigned
+/// `char`), `short`, `int` and `long long`, the value must fit the width
+/// and is read at the suffix's signedness, and `#if` takes them unchanged.
+/// clang accepts the unit and rejects the four erroneous constants; the
+/// other targets reject the suffixes, as gcc and clang do there.
+#[test]
+fn microsoft_sized_integer_suffixes_type_the_constant_on_the_pe_targets() {
+    use crate::c5::Target;
+    let src = "#define T(x) _Generic((x), char: 1, unsigned char: 3, short: 4,\\\n\
+                 unsigned short: 5, int: 6, unsigned int: 7, long long: 10,\\\n\
+                 unsigned long long: 11, default: 99)\n\
+               #define UCHAR_C(x) (x##ui8)\n\
+               _Static_assert(T(1i8) == 1 && T(1ui8) == 3 && T(UCHAR_C(7)) == 3, \"8\");\n\
+               _Static_assert(T(1i16) == 4 && T(07ui16) == 5 && T(1I32) == 6, \"16, 32\");\n\
+               _Static_assert(T(1ui32) == 7 && T(1i64) == 10 && T(1Ui64) == 11, \"32, 64\");\n\
+               _Static_assert(0xffi8 == -1 && 0xffui8 == 255 && 4000000000i32 < 0, \"value\");\n\
+               _Static_assert(0b101i8 == 5 && 0x8000000000000000i64 < 0, \"bases\");\n\
+               #if !(0xffffffffffffffffui64 > 0 && -1i64 < 0 && 300i8 == 300 && -1ui8 > 0)\n\
+               #error \"#if\"\n\
+               #endif\n\
+               int main(void) { unsigned long long m = 0xffffffffffffffffui64;\n\
+                 return m + 1 == 0 && -1i64 < 0 && sizeof(1i8) == 1 ? 0 : 1; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let prog = crate::c5::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{target:?}");
+        for (bad, text) in [
+            ("300i8", "does not fit the 8 bits of its `i8` suffix"),
+            ("1i64u", "unexpected `u` after the number"),
+            ("1Li64", "unexpected `i` after the number"),
+            ("1.0i64", "unexpected `i` after the number"),
+        ] {
+            let unit = format!("long long v = {bad};\n");
+            let err = crate::c5::Compiler::with_target(unit, target)
+                .compile()
+                .expect_err(bad)
+                .to_string();
+            assert!(err.contains(text), "{target:?} {bad}: {err}");
+        }
+    }
+    for target in [Target::LinuxX64, Target::MacOSAarch64] {
+        let err = crate::c5::Compiler::with_target("long long v = 1i64;\n".to_string(), target)
+            .compile()
+            .expect_err("1i64")
+            .to_string();
+        assert!(
+            err.contains("unexpected `i` after the number"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn deeply_nested_if_expression_is_rejected_not_a_stack_overflow() {
     // A deeply nested `#if` controlling expression must yield a

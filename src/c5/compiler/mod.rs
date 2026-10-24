@@ -2901,6 +2901,7 @@ impl Compiler {
             l.wchar_bytes = wchar.bytes;
             l.wchar_signed = wchar.signed;
             l.char_signed = opts.plain_char_signed(target);
+            l.ms_int_suffixes = target.ms_extensions();
             l.fp_contract_default = opts.fp_contract == FpContract::On;
             l.fp_contract = l.fp_contract_default;
             l

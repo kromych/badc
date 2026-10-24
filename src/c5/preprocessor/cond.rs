@@ -944,8 +944,10 @@ impl<'a> IfExprParser<'a> {
             }
             self.pos += 1;
         }
-        // Eat any integer suffix (uUlL combinations) without
-        // touching the value; a u/U suffix marks the literal unsigned.
+        // Eat any integer suffix (uUlL combinations, or a Microsoft sized
+        // suffix where the target takes one) without touching the value;
+        // a u/U suffix marks the literal unsigned.
+        let digits_end = self.pos;
         let mut has_u = false;
         while let Some(b) = self.peek_byte() {
             if matches!(b, b'u' | b'U' | b'l' | b'L') {
@@ -954,6 +956,12 @@ impl<'a> IfExprParser<'a> {
             } else {
                 break;
             }
+        }
+        if self.pp.target.ms_extensions()
+            && !self.src[digits_end..self.pos].contains(['l', 'L'])
+            && let Some((_, len)) = crate::c5::lexer::ms_sized_suffix(&bytes[self.pos..])
+        {
+            self.pos += len;
         }
         if self.pos != token_end {
             let token = &self.src[start..token_end];
@@ -965,7 +973,7 @@ impl<'a> IfExprParser<'a> {
                 alloc::format!("preprocessor: `{token}` is not an integer constant in `#if`",),
             ));
         }
-        let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
+        let body = &self.src[start..digits_end];
         // C99 6.10.1p4: preprocessor expressions evaluate in
         // (u)intmax_t. A literal that does not fit `i64` (the
         // signed widest type) but does fit `u64` is parsed

@@ -390,6 +390,7 @@ pub(crate) struct LexerSnapshot {
     curr_id_idx: usize,
     int_suffix_long: u8,
     int_suffix_unsigned: bool,
+    int_suffix_width: u8,
     int_is_decimal: bool,
     float_suffix_f32: bool,
     float_suffix_long: bool,
@@ -512,6 +513,12 @@ pub(crate) struct Lexer {
     /// true if any `u`/`U` appeared in the suffix.
     pub int_suffix_long: u8,
     pub int_suffix_unsigned: bool,
+    /// The bit width a Microsoft sized suffix (`i8`, `ui16`, `i32`, `i64`)
+    /// gives the most recent `Token::Num`; 0 without one.
+    pub int_suffix_width: u8,
+    /// Whether the Microsoft sized integer suffixes are taken (the PE
+    /// targets). Set from the target after construction.
+    pub ms_int_suffixes: bool,
     /// `true` when the most recent `Token::Num` was written in decimal.
     /// C99 6.4.4.1 lets a hexadecimal, octal, or binary constant take
     /// an unsigned type when no signed type at its rank fits, while a
@@ -788,6 +795,8 @@ impl Lexer {
             curr_id_idx: 0,
             int_suffix_long: 0,
             int_suffix_unsigned: false,
+            int_suffix_width: 0,
+            ms_int_suffixes: false,
             int_is_decimal: true,
             float_suffix_f32: false,
             float_suffix_long: false,
@@ -1577,6 +1586,7 @@ impl Lexer {
             curr_id_idx: self.curr_id_idx,
             int_suffix_long: self.int_suffix_long,
             int_suffix_unsigned: self.int_suffix_unsigned,
+            int_suffix_width: self.int_suffix_width,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
             float_suffix_long: self.float_suffix_long,
@@ -1602,6 +1612,7 @@ impl Lexer {
         self.curr_id_idx = s.curr_id_idx;
         self.int_suffix_long = s.int_suffix_long;
         self.int_suffix_unsigned = s.int_suffix_unsigned;
+        self.int_suffix_width = s.int_suffix_width;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
         self.float_suffix_long = s.float_suffix_long;
@@ -1751,9 +1762,15 @@ impl Lexer {
 
     /// Consume the C99 6.4.4.1 integer suffix (`u`/`U` and one or two
     /// `l`/`L` in any combination) and record it in the suffix fields
-    /// the expression parser types the literal from. Shared by every
-    /// integer base so no base drops the suffix.
-    fn lex_int_suffix(&mut self) {
+    /// the expression parser types the literal from, then set `ival` to
+    /// `val`. Shared by every integer base so no base drops the suffix.
+    ///
+    /// Where `ms_int_suffixes` holds, `[u]i8`, `[u]i16`, `[u]i32` and
+    /// `[u]i64` in place of the `l`s fix the width (MSVC's sized
+    /// suffixes, as clang reads them under `-fms-extensions`): the value
+    /// must fit the width's bits and is read at the signedness the `u`
+    /// gives, so `0x80000000i32` is negative.
+    fn lex_int_suffix(&mut self, val: i64) -> Result<(), C5Error> {
         let mut l_count: u8 = 0;
         let mut u_seen = false;
         while self.pos < self.src.len() && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L') {
@@ -1765,6 +1782,33 @@ impl Lexer {
         }
         self.int_suffix_long = l_count.min(2);
         self.int_suffix_unsigned = u_seen;
+        self.ival = val;
+        let Some((width, len)) = self.ms_int_width(self.pos).filter(|_| l_count == 0) else {
+            return Ok(());
+        };
+        let bits = u32::from(width);
+        if bits < 64 && (val as u64) >> bits != 0 {
+            let suffix = String::from_utf8_lossy(&self.src[self.pos..self.pos + len]);
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                format!("integer constant does not fit the {bits} bits of its `{suffix}` suffix"),
+            ));
+        }
+        self.pos += len;
+        self.int_suffix_width = width;
+        if !u_seen && bits < 64 {
+            self.ival = (val << (64 - bits)) >> (64 - bits);
+        }
+        Ok(())
+    }
+
+    /// [`ms_sized_suffix`] at `at`, where the target takes the suffixes.
+    fn ms_int_width(&self, at: usize) -> Option<(u8, usize)> {
+        self.ms_int_suffixes
+            .then(|| ms_sized_suffix(&self.src[at..]))
+            .flatten()
     }
 
     /// Finalise a numeric constant: a digit/suffix run must not be
@@ -1894,6 +1938,7 @@ impl Lexer {
         // explicitly before returning a `Token::Num`.
         self.int_suffix_long = 0;
         self.int_suffix_unsigned = false;
+        self.int_suffix_width = 0;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
         self.float_suffix_long = false;
@@ -2049,8 +2094,7 @@ impl Lexer {
                         val = val.wrapping_mul(8).wrapping_add(digit);
                         self.pos += 1;
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -2088,8 +2132,7 @@ impl Lexer {
                             ),
                         ));
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -2153,8 +2196,7 @@ impl Lexer {
                             "hex literal `0x` has no digits",
                         ));
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -2183,10 +2225,10 @@ impl Lexer {
                 // no float-suffix `f`/`F` can follow because the
                 // standard doesn't allow it on integer literals.
                 if self.pos < self.src.len()
-                    && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    && (matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                        || self.ms_int_width(self.pos).is_some())
                 {
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     return self.end_number();
                 }
@@ -2779,6 +2821,23 @@ const KEYWORDS: &[(&str, Token)] = &[
 /// future tooling that wants to enumerate the badc prelude.
 ///
 /// Constants like `PROT_READ` used to live here too, but they were
+/// The width and length of the Microsoft sized integer suffix (`i8`,
+/// `I16`, `i32`, `i64`) opening `bytes`.
+pub(crate) fn ms_sized_suffix(bytes: &[u8]) -> Option<(u8, usize)> {
+    if !matches!(bytes.first(), Some(b'i' | b'I')) {
+        return None;
+    }
+    let digits = bytes[1..].iter().take_while(|b| b.is_ascii_digit()).count();
+    let width = match &bytes[1..1 + digits] {
+        b"8" => 8,
+        b"16" => 16,
+        b"32" => 32,
+        b"64" => 64,
+        _ => return None,
+    };
+    Some((width, 1 + digits))
+}
+
 /// moved into `headers/badc-{target}.h` and now reach the compiler
 /// through the preprocessor's `#define` table instead. The
 /// `Constant` variant is retained because it's part of the public

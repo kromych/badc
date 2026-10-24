@@ -210,6 +210,13 @@ input through the rawfb software renderer and `nk_convert`, and requires
 every frame's digests to agree between badc -O0, badc -O and the host
 compiler. All five targets. See [`nuklear/README.md`](./nuklear/README.md).
 
+## openssl/
+
+[OpenSSL](https://openssl-library.org/) 4.1.0: Configure with a badc target,
+`make`, and OpenSSL's own `make test` over every recipe at -O0 and -O.
+Waits on header gaps the build reaches; see
+[`openssl/README.md`](./openssl/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the

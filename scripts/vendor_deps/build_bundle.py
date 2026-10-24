@@ -354,6 +354,16 @@ SOURCES = [
         upstream_sha="834bf30974a294e996f7b1222aa59f1eb4ee259bd8d7d7967e8a2fb213d82dde",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # OpenSSL -- the release tarball, pinned by the sha256 the release
+        # publishes beside it.
+        name="openssl",
+        version="4.1.0",
+        url="https://github.com/openssl/openssl/releases/download/openssl-4.1.0/openssl-4.1.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd",
+        sha_kind="tarball-sha256",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

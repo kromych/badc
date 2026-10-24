@@ -3,7 +3,7 @@
 Demos that pull a third-party library (`miniz`, `kissfft`,
 `bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
 `monocypher`, `bearssl`, `lua`, `curl`, `picocom`, `screen`, `vim`,
-`simplevisor`, `nuklear`)
+`simplevisor`, `nuklear`, `openssl`)
 fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
 produced `RemoteDisconnected` failures from the GitHub release
@@ -47,6 +47,7 @@ project's identifier for the release:
 | vim        | github vim/vim tag tarball              | tarball-sha256  |
 | simplevisor| github ionescu007/SimpleVisor commit    | git             |
 | nuklear    | github Immediate-Mode-UI tag tarball    | tarball-sha256  |
+| openssl    | openssl release tarball                 | tarball-sha256  |
 | kconfig-*  | `/boot/config` of a pinned cloud image  | file-sha256     |
 
 The full sha is recorded in `manifest.json` and in each

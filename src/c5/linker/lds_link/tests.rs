@@ -5245,6 +5245,74 @@ fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
     }
 }
 
+/// `.symtab` as `(name, st_info, st_other)`, in table order.
+fn symtab_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
+    let (_, syms) = image_section(image, ".symtab");
+    let (_, strtab) = image_section(image, ".strtab");
+    (syms.as_chunks::<24>().0.iter())
+        .map(|e| {
+            let name = u32::from_le_bytes(e[..4].try_into().unwrap()) as usize;
+            (strz(&strtab, name), e[4], e[5])
+        })
+        .collect()
+}
+
+/// In a shared object's `.symtab`, a global forced local by a hidden or
+/// internal visibility is written LOCAL DEFAULT, and a definition a
+/// reference declares protected GLOBAL PROTECTED, as GNU ld 2.46.1 writes
+/// them.
+#[test]
+fn a_shared_objects_symtab_states_the_merged_visibility_as_gnu_ld_does() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3; 16],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sym("hfunc", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .vis(STV_HIDDEN)
+        .sym("ifunc_", STB_GLOBAL, STT_FUNC, 0, 4, 1)
+        .vis(STV_INTERNAL)
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 8, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .build(EM_X86_64);
+    let refs = TestObj::new()
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 16])
+        // Symtab: null(0), the section(1), data(2), func(3).
+        .sym("data", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+        .vis(STV_HIDDEN)
+        .sym("func", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+        .vis(STV_PROTECTED)
+        .reloc(0, 0, 2, rt::R_X86_64_64, 0)
+        .reloc(0, 8, 3, rt::R_X86_64_64, 0)
+        .build(EM_X86_64);
+    let objs = alloc::vec![
+        parse_lds_object("defs.o", defs).expect("parses"),
+        parse_lds_object("refs.o", refs).expect("parses"),
+    ];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let symtab = symtab_entries(&res.image);
+    let row = |name: &str| {
+        let e = symtab
+            .iter()
+            .find(|e| e.0 == name)
+            .unwrap_or_else(|| panic!("{name}"));
+        (e.1 >> 4, e.2 & 0x3)
+    };
+    for (name, want) in [
+        ("hfunc", (STB_LOCAL, STV_DEFAULT)),
+        ("ifunc_", (STB_LOCAL, STV_DEFAULT)),
+        ("data", (STB_LOCAL, STV_DEFAULT)),
+        ("func", (STB_GLOBAL, STV_PROTECTED)),
+    ] {
+        assert_eq!(row(name), want, "{name}");
+    }
+}
+
 /// `.rela.dyn` as `(offset, type, symbol, addend)`, the symbol by name.
 fn dyn_relocs(image: &[u8]) -> Vec<(u64, u32, String, i64)> {
     let syms = dynsym_entries(image);

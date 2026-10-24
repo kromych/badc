@@ -13,8 +13,8 @@ use hashbrown::HashMap;
 use super::{
     Att, EM_AARCH64, EmittedReloc, FinalSym, LdsEmit, LdsLinker, MODULE, Piece, SHF_EXECINSTR,
     SHF_MERGE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FILE, STT_FUNC,
-    STT_NOTYPE, STT_OBJECT, STT_SECTION, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, ScriptSym, SecFate,
-    SymIndex, machine_uses_rela,
+    STT_NOTYPE, STT_OBJECT, STT_SECTION, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, STV_PROTECTED,
+    ScriptSym, SecFate, SymIndex, machine_uses_rela,
 };
 
 /// Name bfd gives a synthesized file symbol: the input's base name,
@@ -214,9 +214,10 @@ impl<'a> LdsLinker<'a> {
             });
         }
         // Hidden or internal globals cannot be preempted and are
-        // emitted with local binding. bfd applies the forcing from the
-        // dynamic-symbol adjustment, so only links with dynamic
-        // sections see it.
+        // emitted with local binding and default visibility, as bfd
+        // writes them; a protected one keeps its binding and states the
+        // visibility. bfd applies both from the dynamic-symbol
+        // adjustment, so only links with dynamic sections see them.
         let forced = |name: &str| {
             let vis = self.visibility_of(name);
             (self.opts.emit == LdsEmit::Dyn && matches!(vis, STV_INTERNAL | STV_HIDDEN))
@@ -232,9 +233,13 @@ impl<'a> LdsLinker<'a> {
                 continue; // script assignment overrides
             }
             if let Some(mut fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
-                if let Some(vis) = forced(name) {
+                if forced(name).is_some() {
                     fs.info = (STB_LOCAL << 4) | (fs.info & 0xf);
-                    fs.other = vis;
+                    fs.other = STV_DEFAULT;
+                } else if self.opts.emit == LdsEmit::Dyn
+                    && self.visibility_of(name) == STV_PROTECTED
+                {
+                    fs.other = STV_PROTECTED;
                 }
                 if track {
                     index.by_name.insert(name.clone(), syms.len());

@@ -976,6 +976,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fenv_raise_test_clear.c", 0),
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
+    ("getopt_long_permutes_operands.c", 0),
     ("exit_from_nested_call.c", 3),
     ("constant_condition_unsigned_operands.c", 0),
     ("constant_conditional_result_type.c", 0),
@@ -3806,6 +3807,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("fenv_raise_test_clear.c", 0),
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
+    ("getopt_long_permutes_operands.c", 0),
     ("posix_module_headers.c", 0),
     ("exit_from_nested_call.c", 3),
     ("constant_condition_unsigned_operands.c", 0),
@@ -4163,8 +4165,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
     // Registered from the compile-only sweep; see the module comment.
-    // `getopt_unistd_globals.c` and `syscall_ptr_table.c` have no
-    // Win32 binding for the entry point they call;
+    // `syscall_ptr_table.c` has no Win32 binding for the entry point it
+    // calls, and `getopt_unistd_globals.c` is out as the module comment says;
     // `sizeof_pointer_to_array_subscript.c` and
     // `zero_sign_extension_32bit.c` assert 64-bit `long`, which
     // LLP64 does not provide.
@@ -4605,6 +4607,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("fenv_raise_test_clear.c", 0),
     ("wctype_mapping_round_trip.c", 0),
     ("chmod_mktemp_file_mode.c", 0),
+    ("getopt_long_permutes_operands.c", 0),
     ("posix_module_headers.c", 0),
     ("exit_from_nested_call.c", 3),
     ("constant_condition_unsigned_operands.c", 0),

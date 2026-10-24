@@ -2,7 +2,8 @@
 // getopt_long extension). `getopt` itself and its per-target binding come
 // from <unistd.h>; this header adds the parser's global state variables
 // and the long-option interface. The globals are libc data symbols, bound
-// through the GOT the same way <unistd.h> binds `environ`.
+// through the GOT the same way <unistd.h> binds `environ`; on Windows
+// libc/lib/getopt_ext.c defines the parser and its state.
 
 #pragma once
 

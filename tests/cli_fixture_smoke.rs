@@ -522,6 +522,9 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    // Stores to the C library's getopt state, a data import, which only the
+    // object-then-link path writes correctly on ELF.
+    ("getopt_long_permutes_operands.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot

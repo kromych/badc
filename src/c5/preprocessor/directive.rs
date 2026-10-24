@@ -307,7 +307,7 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
 /// against the name (C99 6.10.3p10; a space makes it object-like with
 /// `(` opening the body). An unclosed parameter list falls back to the
 /// object-like reading, as the lexer would see a broken `#define`.
-fn define_operand(after: &str) -> Directive<'_> {
+pub(super) fn define_operand(after: &str) -> Directive<'_> {
     let (name, rest_after_name) = split_ident(after.trim_start());
     // Comments were removed in translation phase 3 (C99 5.1.1.2) before
     // directives execute, so a `//` or `/*` still here can only be

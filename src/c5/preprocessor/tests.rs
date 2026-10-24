@@ -848,6 +848,46 @@ fn cli_empty_define_expands_to_nothing() {
     assert!(out.contains("int x = 1;"));
 }
 
+/// gcc and clang read `-D NAME[=BODY]` as `#define NAME BODY` (`1` without
+/// `=`), so a name with a parameter list defines a function-like macro and
+/// an operand the directive rejects is an error. The expansions are gcc
+/// 16's and clang 22's for the same options.
+#[test]
+fn cli_define_takes_the_define_directives_operand() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    for (name, body) in [
+        ("SQ(x)", "((x)*(x))"),
+        ("ONE(x)", "1"),
+        ("ADD(a,b)", "a+b"),
+        ("V(...)", "f(__VA_ARGS__)"),
+        ("E()", "e=1"),
+        ("OBJ", "a=b"),
+    ] {
+        pp.define(name, body);
+    }
+    let out = pp
+        .process("#ifdef SQ\nint a = SQ(7), b = ONE(5), c = ADD(2, 3);\n#endif\nV(1, 2) E() OBJ\n")
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("int a = ((7)*(7)), b = 1, c = 2+3;"),
+        "got: {out:?}"
+    );
+    assert!(out.contains("f(1, 2) e=1 a=b"), "got: {out:?}");
+    for (name, text) in [
+        ("1X", "macro name must be an identifier"),
+        ("F(1)", "`1` is not a macro parameter"),
+        ("F(x,x)", "duplicate macro parameter `x`"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.define(name, "x");
+        let err = pp.process("int i;\n").unwrap_err().to_string();
+        assert!(
+            err.contains(&format!("<command-line>:1: error: `-D {name}`: {text}")),
+            "{name}: {err}"
+        );
+    }
+}
+
 #[test]
 fn macro_to_macro_substitution_chains() {
     let out = process("#define A B\n#define B 5\nint x = A;\n");

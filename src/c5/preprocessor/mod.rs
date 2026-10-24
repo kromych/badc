@@ -1494,17 +1494,32 @@ impl Preprocessor {
         self.force_includes.push(name.to_string());
     }
 
-    /// Predefine an object-like macro from the build driver --
-    /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
-    /// `-D NAME` (no `=`) reaches here with body `"1"` per cpp's
-    /// convention; `-D NAME=` (with `=`, empty value) reaches here
-    /// with an empty body and must stay empty, matching the `#define
-    /// NAME` directive -- e.g. `-DPRIVATE=` expands to nothing,
-    /// not `1`. Late definitions in source still win, so a `-D X=0`
-    /// followed by `#define X 1` in source ends up with `X = 1`.
+    /// Predefine a macro from the build driver -- the CLI's `-D NAME` /
+    /// `-D NAME=VALUE` plumbs through here, `-D NAME` with body `"1"` and
+    /// `-D NAME=` with an empty one. As gcc and clang read the option, the
+    /// pair is the operand `NAME BODY` of a `#define`, so `-D 'F(x)=x+1'`
+    /// defines a function-like macro; an operand the directive rejects is
+    /// an error of the pass. Late definitions in source still win.
     pub fn define(&mut self, name: &str, body: &str) {
-        self.macros
-            .insert(ident::key(name).into_owned(), body.to_string());
+        let operand = format!("{name} {body}");
+        let error = match directive::define_operand(&operand) {
+            Directive::DefineFn(name, params, body) => directive::macro_name_error(name)
+                .or_else(|| directive::macro_params_error(&params))
+                .or_else(|| {
+                    self.apply_define_fn(name, &params, body);
+                    None
+                }),
+            Directive::Define(name, body) => directive::macro_name_error(name).or_else(|| {
+                self.apply_define(name, body);
+                None
+            }),
+            _ => None,
+        };
+        if let Some(text) = error {
+            let loc = Some(Loc::new("<command-line>", 1));
+            self.sink
+                .emit(Code::MACRO, loc, format!("`-D {name}`: {text}"));
+        }
     }
 
     /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes

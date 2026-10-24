@@ -40,6 +40,7 @@ use crate::c5::codegen::{
     EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, ImportKind,
     OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
@@ -52,11 +53,11 @@ use crate::c5::object::elf_reloc_types::{
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::internal_err;
 use super::link::{
     DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline, exports_definition,
 };
 use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT};
+use super::{internal_err, link_err};
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
@@ -552,15 +553,15 @@ fn x86_64_unwind(
 }
 
 /// Each data-import copy relocation against the merged symbol table.
-/// On ELF the local data object named in the binding must be defined
-/// in the image (e.g. runtime.c's `tzname`); its section + offset let
-/// the writer place the host symbol and the R_*_COPY at the object's
-/// runtime address. A binding whose local symbol the image does not
-/// define is dropped silently. PE and Mach-O have no copy semantics:
-/// the reference must stay undefined so it routes through a
-/// loader-filled import slot; a definition anywhere in the image wins
-/// symbol resolution and silently shadows the binding with a slot
-/// nothing populates, so the collision is rejected.
+/// A `#pragma binding(data ...)` names a C-library object. A definition of
+/// the name with an initializer is the image's own object and takes
+/// precedence over the binding, as on the paths with no link step. A
+/// zero-filled one in an ELF image is the slot a copy relocation fills with
+/// the library's object and binds every reference to (the runtime's
+/// `environ` and `tzname`), as GNU ld resolves a common symbol a shared
+/// library defines; a PE or Mach-O image reaches a library object only
+/// through a loader-filled slot, so there the definition would leave the
+/// binding naming a slot nothing fills, and is refused.
 fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRelocReq>, C5Error> {
     let elf_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
     let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
@@ -568,23 +569,23 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
         let Some(sym) = merged.defined.get(local) else {
             continue;
         };
+        if sym.section != NativeSymSection::Bss {
+            continue;
+        }
         if !elf_target {
-            return Err(internal_err(
+            return Err(link_err(
+                Code::INVALID_DECLARATION,
                 MODULE,
                 &alloc::format!(
                     "`{local}` is bound as a data import of `{host}` but the image also \
-                 defines it; remove the definition or the `#pragma binding(data ...)`"
+                     defines it; remove the definition or the `#pragma binding(data ...)`"
                 ),
             ));
-        }
-        let is_bss = matches!(sym.section, NativeSymSection::Bss);
-        if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
-            continue;
         }
         copy_relocs.push(CopyRelocReq {
             host_symbol: host.clone(),
             local_offset: sym.value,
-            is_bss,
+            is_bss: true,
             size: sym.size.max(1),
         });
     }

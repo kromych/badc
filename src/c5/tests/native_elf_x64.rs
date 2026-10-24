@@ -287,6 +287,39 @@ fn main_return_flushes_stdout() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), "flushed\n");
 }
 
+/// A `#pragma binding(data ...)` object the unit does not define is the C
+/// library's: the image binds every reference to it, asm operands included,
+/// and a definition under the binding's name is the unit's own object.
+#[test]
+fn a_data_binding_reaches_the_library_object_or_the_units_definition() {
+    let imported = r#"
+        #pragma binding(data libc::my_env, "environ")
+        extern char **my_env;
+        int main(void) {
+            char ***p;
+            __asm__("lea my_env(%%rip), %0" : "=r"(p));
+            return !(p == &my_env && *p == environ && environ[0] != 0);
+        }
+    "#;
+    let defined = r#"
+        #pragma binding(data libc::dup_env, "environ")
+        char **dup_env = (char **)0x1234;
+        int main(void) { return dup_env != (char **)0x1234; }
+    "#;
+    for (src, stem) in [
+        (imported, "data-binding-import"),
+        (defined, "data-binding-def"),
+    ] {
+        for opts in [
+            NativeOptions::default(),
+            NativeOptions::new().with_optimize(),
+        ] {
+            let outcome = build_and_run_outcome_with_options(src, stem, opts);
+            assert!(outcome.matches(0), "{stem}: {outcome:?}");
+        }
+    }
+}
+
 #[test]
 fn printf_through_libc_got() {
     let src = r#"int main() { printf("%d\n", 42); return 0; }"#;

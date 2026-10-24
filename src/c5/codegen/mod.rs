@@ -1741,9 +1741,9 @@ impl ResolvedImports {
         // appears as an `Inst::CallExt`; it is collected here instead.
         // Every such binding in scope is carried through, and its
         // library with it; synth_build emits a COPY relocation only
-        // when the final image defines the local symbol (the runtime
-        // supplies `environ` for every hosted image, so the binding
-        // binds it to the host's data object).
+        // when the final ELF image defines the local symbol zero-filled
+        // (the runtime supplies `environ` for every hosted image, so the
+        // binding binds it to the host's data object).
         let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
         for spec in &program.dylibs {
             for b in &spec.bindings {

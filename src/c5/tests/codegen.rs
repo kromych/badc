@@ -1379,11 +1379,11 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
     );
 }
 
-/// PE has no COPY-relocation semantics: a symbol both bound as a data
-/// import and defined in the image would resolve to the local slot and
-/// silently drop the binding, so the link must reject the collision.
-/// (On ELF the same dual is the design: the local definition is the
-/// COPY destination.)
+/// PE has no COPY-relocation semantics: a zero-filled definition of a
+/// name bound as a data import would resolve the references to the local
+/// slot and silently drop the binding, so the link rejects the collision
+/// as a diagnostic. (On ELF the same dual is the design: the local
+/// definition is the COPY destination.)
 #[test]
 fn data_binding_with_local_definition_is_a_link_error_on_windows_x64() {
     use crate::{CompileOptions, Compiler, NativeOptions, Target};
@@ -1402,7 +1402,7 @@ fn data_binding_with_local_definition_is_a_link_error_on_windows_x64() {
         super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
             .expect_err("a data binding shadowed by a local definition must fail the link");
     assert!(
-        err.contains("bound as a data import"),
+        err.contains("bound as a data import") && !err.contains("internal compiler error"),
         "diagnostic must name the collision; got: {err}"
     );
 }

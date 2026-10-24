@@ -1484,6 +1484,69 @@ fn a_pc_relative_text_word_naming_data_is_fixed_at_link() {
 }
 
 #[test]
+fn a_definition_takes_precedence_over_a_data_binding_of_its_name() {
+    // A `#pragma binding(data ...)` names a C-library object; a definition
+    // with an initializer under the binding's name is the image's own, on
+    // every output format, as on the paths with no link step.
+    let (lib, host) = if cfg!(windows) {
+        ("msvcrt", "_environ")
+    } else if cfg!(target_os = "macos") {
+        ("libc", "_environ")
+    } else {
+        ("libc", "environ")
+    };
+    let dir = tempdir("data-binding-definition");
+    write_source(
+        &dir,
+        "d.c",
+        &format!(
+            "#include <stdlib.h>\n#pragma binding(data {lib}::dup_env, \"{host}\")\n\
+             char **dup_env = (char **)0x1234;\n\
+             int main(void) {{ return dup_env != (char **)0x1234; }}\n"
+        ),
+    );
+    let exe = dir.join(format!("prog{}", std::env::consts::EXE_SUFFIX));
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("d.c"))
+            .current_dir(&dir),
+        "link a definition under a data binding",
+    );
+    let out = Command::new(&exe).output().expect("run");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+/// A data binding whose C name differs from the library's symbol links as
+/// data in a position-dependent executable: no PLT entry, no function
+/// symbol for it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_renamed_data_binding_links_as_data_without_pie() {
+    let dir = tempdir("renamed-data-binding");
+    write_source(
+        &dir,
+        "o.c",
+        "#include <stdio.h>\n#pragma binding(data libc::my_optind, \"optind\")\n\
+         extern int my_optind;\n\
+         int main(void) { printf(\"%d\\n\", my_optind); return my_optind != 1; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-no-pie", "-o"])
+            .arg(&exe)
+            .arg(dir.join("o.c"))
+            .current_dir(&dir),
+        "link a renamed data binding",
+    );
+    let out = Command::new(&exe).output().expect("run");
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "1\n");
+}
+
+#[test]
 fn duplicate_thread_local_definition_fails_link() {
     // C99 6.9p5: two units each defining one `_Thread_local` object fail
     // the link with `multiple definition`, whatever the target.

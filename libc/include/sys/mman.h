@@ -83,6 +83,8 @@
 #pragma binding(libc::shm_unlink, "_shm_unlink")
 #pragma binding(libc::mlockall,   "_mlockall")
 #pragma binding(libc::munlockall, "_munlockall")
+#pragma binding(libc::mlock,      "_mlock")
+#pragma binding(libc::munlock,    "_munlock")
 #endif
 
 #ifdef __linux__
@@ -102,6 +104,8 @@
 #pragma binding(libc::shm_unlink, "shm_unlink")
 #pragma binding(libc::mlockall,   "mlockall")
 #pragma binding(libc::munlockall, "munlockall")
+#pragma binding(libc::mlock,      "mlock")
+#pragma binding(libc::munlock,    "munlock")
 #pragma binding(libc::memfd_create, "memfd_create")
 // The MFD_* flags live in their canonical kernel header.
 #include <linux/memfd.h>
@@ -134,4 +138,7 @@ int shm_unlink(const char *name);
 // Lock/unlock the whole address space (POSIX); flags are the MCL_* set.
 int mlockall(int flags);
 int munlockall(void);
+// Lock/unlock the pages a range touches (POSIX).
+int mlock(const void *addr, unsigned long len);
+int munlock(const void *addr, unsigned long len);
 #endif

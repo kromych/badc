@@ -207,6 +207,26 @@ struct ipv6_mreq {
     unsigned int ipv6mr_interface; // interface index
 };
 
+// Packet information: the interface and addresses of a datagram, set or
+// received as IP_PKTINFO / IPV6_PKTINFO ancillary data (ip(7), RFC 3542
+// section 6.1). glibc declares in6_pktinfo under _GNU_SOURCE.
+#ifdef __linux__
+#define IP_PKTINFO       8
+#define IPV6_2292PKTINFO 2
+#define IPV6_RECVPKTINFO 49
+#define IPV6_PKTINFO     50
+struct in_pktinfo {
+    int ipi_ifindex;
+    struct in_addr ipi_spec_dst;
+    struct in_addr ipi_addr;
+};
+#ifdef _GNU_SOURCE
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    unsigned int ipi6_ifindex;
+};
+#endif
+#endif
 
 // IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is
 // the all-zero unspecified address (POSIX guarantees its value), provided here

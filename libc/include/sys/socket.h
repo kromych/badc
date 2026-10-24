@@ -116,6 +116,14 @@ struct ucred {
 };
 #endif
 
+// SO_LINGER's argument; the same two ints in glibc and the macOS SDK.
+#if defined(__APPLE__) || defined(__linux__)
+struct linger {
+    int l_onoff;
+    int l_linger;
+};
+#endif
+
 // `struct sockaddr` is the address header passed by reference to bind /
 // connect / accept and pointed at by `addrinfo.ai_addr`. It is 16 bytes on
 // all three targets; the leading family field differs (BSD/macOS prefix a
@@ -198,9 +206,35 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_BROADCAST  0x0020
 #define SO_REUSEPORT  0x0200
 #define SO_NOSIGPIPE  0x1022  // suppress SIGPIPE on writes to a broken socket
+#define SO_DEBUG      0x0001
+#define SO_ACCEPTCONN 0x0002
+#define SO_DONTROUTE  0x0010
+// The SDK's SO_LINGER counts ticks unless the program selects strict POSIX.
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define SO_LINGER     0x0080
+#define SO_LINGER_SEC 0x1080
+#else
+#define SO_LINGER     0x1080
+#endif
+#define SO_SNDLOWAT   0x1003
+#define SO_RCVLOWAT   0x1004
+#define SO_SNDTIMEO   0x1005
+#define SO_RCVTIMEO   0x1006
+#define SO_TYPE       0x1008
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2
+
+// send()/recv() flag bits (the SDK's sys/socket.h).
+#define MSG_OOB       0x1
+#define MSG_PEEK      0x2
+#define MSG_DONTROUTE 0x4
+#define MSG_EOR       0x8
+#define MSG_TRUNC     0x10
+#define MSG_CTRUNC    0x20
+#define MSG_WAITALL   0x40
+#define MSG_DONTWAIT  0x80
+#define MSG_NOSIGNAL  0x80000
 
 // macOS sockaddr_in includes a 1-byte sin_len at offset 0; the
 // portable thing is to memset to zero and then set bytes by name.
@@ -234,6 +268,12 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_REUSEADDR  2
 #define SO_KEEPALIVE  9
 #define SO_BROADCAST  6
+#define SO_DEBUG      1
+#define SO_DONTROUTE  5
+#define SO_LINGER     13
+#define SO_RCVLOWAT   18
+#define SO_SNDLOWAT   19
+#define SO_ACCEPTCONN 30
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2

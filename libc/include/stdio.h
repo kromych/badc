@@ -150,6 +150,8 @@ typedef struct __c5_fpos_t fpos_t;
 // on every `fflush` / `fclose`. Available on macOS 10.13+
 // and every recent Linux C library / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
+// POSIX.1-2008 `fmemopen`: a stream over a caller buffer.
+#pragma binding(libc::fmemopen, "_fmemopen")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
@@ -230,6 +232,7 @@ typedef struct __c5_fpos_t fpos_t;
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
+#pragma binding(libc::fmemopen, "fmemopen")
 // X/Open `cuserid` -- a glibc export; absent from libSystem and msvcrt.
 #pragma binding(libc::cuserid, "cuserid")
 // POSIX `popen` / `pclose` -- not in C89 but universally
@@ -582,6 +585,7 @@ int rename(const char *old_path, const char *new_path);
 // POSIX open_memstream(3). Caller passes addresses of (char *,
 // size_t) slots the libc updates as bytes are written.
 FILE *open_memstream(char **bufp, size_t *sizep);
+FILE *fmemopen(void *restrict buf, size_t size, const char *restrict mode);
 #endif
 // POSIX.1-2008 delimited line input: read through the next `delim`
 // (newline for `getline`) into a heap buffer `*lineptr` of capacity

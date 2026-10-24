@@ -114,3 +114,13 @@ libc.so.6 quick_exit
 libm.so.6 lgamma
 libm.so.6 lgammaf
 libm.so.6 lgammal
+
+[GLIBC_2.22] fmemopen, as POSIX.1-2008 specifies it. Contrasted through
+    dlvsym on glibc 2.43, x86_64 and aarch64: for a stream opened "r"
+    on a 16-byte buffer holding "abc", fseek(SEEK_END) lands at 3 at the
+    floor's definition and at 16, the size, at GLIBC_2.22, which POSIX
+    requires; and "wb" writes no terminating null byte at the floor's
+    definition, where POSIX gives `b` no effect and GLIBC_2.22 writes
+    it. Both write the null byte in "w" mode, start "a" at the first
+    null byte and read back a NULL-buffer "w+" stream.
+libc.so.6 fmemopen

@@ -137,6 +137,7 @@ fileno                                   GLIBC_2.2.5
 flistxattr                               GLIBC_2.3
 flock                                    GLIBC_2.2.5
 flockfile                                GLIBC_2.2.5
+fmemopen                                 GLIBC_2.22  # minimum from libc/versions/minimums.txt
 fnmatch                                  GLIBC_2.2.5
 fopen                                    GLIBC_2.2.5
 fork                                     GLIBC_2.2.5
@@ -348,6 +349,7 @@ mkstemp                                  GLIBC_2.2.5
 mkstemps                                 GLIBC_2.11
 mktemp                                   GLIBC_2.2.5
 mktime                                   GLIBC_2.2.5
+mlock                                    GLIBC_2.2.5
 mlockall                                 GLIBC_2.2.5
 mmap                                     GLIBC_2.2.5
 mount                                    GLIBC_2.2.5
@@ -355,6 +357,7 @@ mprotect                                 GLIBC_2.2.5
 mrand48                                  GLIBC_2.2.5
 mremap                                   GLIBC_2.2.5
 msync                                    GLIBC_2.2.5
+munlock                                  GLIBC_2.2.5
 munlockall                               GLIBC_2.2.5
 munmap                                   GLIBC_2.2.5
 nanosleep                                GLIBC_2.2.5

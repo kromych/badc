@@ -78,3 +78,16 @@ demo for the POSIX lanes.
 2. Update `VERSION`, `UPSTREAM_SHA`, and `SHA256` in `setup.py` (and
    `UPSTREAM_SHA` in `smoke.py`).
 3. Run `python setup.py -v` followed by `python smoke.py`.
+
+TODO: master at `325a8e97` (2026-08-06; mirrored as
+`uemacs-20260806-325a8e97.tar.gz`) is not taken. It uses `bool`, `true`
+and `false` as C23 keywords, without `<stdbool.h>`, which badc does not
+accept, and it no longer builds on macOS: `file.c` reads `st_mtim` and
+`posix.c` clears `OLCUC` and `XCASE`, none of which the macOS SDK has, so
+Apple clang 21 fails both units even under `-std=gnu23`. Its Makefile
+lists 28 units (`ansi`, `crypt`, `ibmpc`, `pklock`, `termio`, `util`,
+`vmsvt` and `vt52` are gone, `spell` is new) and compiles them with
+`-DPOSIX -D_GNU_SOURCE` on every OS, plus `pkg-config --cflags ncurses`
+(`-D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600` on Fedora) and `-DHUNSPELL` when
+pkg-config finds hunspell, so the bump replaces `UNITS` and `DEFINES` in
+`smoke.py` and makes the demo Linux-only.

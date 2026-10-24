@@ -37,6 +37,7 @@ project's identifier for the release:
 | qemu       | git v11.1.1 tag; bundle assembled off   | git (assembled) |
 | pc-bios-x86| qemu 11.1.1 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
+| edk2-mdepkg| edk2-stable tag; MdePkg subset packed   | packed-sha256   |
 | uemacs     | github torvalds/uemacs `master` commit  | git             |
 | picocom    | github npat-efault/picocom tag tarball  | tarball-sha256  |
 | screen     | ftp.gnu.org screen release tarball      | tarball-sha256  |
@@ -102,6 +103,25 @@ libfdt headers (Fedora: `libfdt-devel`); the smoke links the
 system `-lfdt`. A bump diffs each target's `config-host.h` and
 `<arch>-softmmu-config-{target,devices}.h` against the previous
 capture; what differs should be only what upstream changed.
+
+## EDK II MdePkg subset (`edk2-mdepkg`)
+
+`demos/edk2` builds against `License.txt`, `MdePkg/MdePkg.dec`, the
+whole `MdePkg/Include` tree and the top-level sources of the seven
+libraries its application links, not the 200 MB tree.
+`build_edk2_subset.py` packs that subset from the GitHub archive of an
+`edk2-stable<YYYYMM>` tag into a reproducible tarball; the asset name
+carries the tag's `YYYYMM` and the first 8 hex digits of the packed
+file's own sha256, which `demos/edk2/setup.py` pins:
+
+```sh
+curl -LO https://github.com/tianocore/edk2/archive/refs/tags/edk2-stable202608.tar.gz
+python3 scripts/vendor_deps/build_edk2_subset.py \
+    --archive edk2-stable202608.tar.gz --version 202608 --out /tmp/edk2
+```
+
+The `202502` assets predate the packer and are kept for the commits
+that name them.
 
 ## x86 ROM set (`pc-bios-x86`)
 

@@ -24,7 +24,7 @@ impl Compiler {
             return;
         }
         let mut lines = alloc::vec::Vec::new();
-        self.fallthrough_sites(body, &mut lines);
+        self.fallthrough_sites(body, true, &mut lines);
         for line in lines {
             let text = "this statement may fall through".into();
             self.warn_at(Code::IMPLICIT_FALLTHROUGH, line as usize, text);
@@ -32,7 +32,8 @@ impl Compiler {
     }
 
     /// The lines of the statements in `id` falling into a label of its switch.
-    fn fallthrough_sites(&self, id: StmtId, out: &mut alloc::vec::Vec<u32>) {
+    /// What precedes the first label of the switch body is never reached.
+    fn fallthrough_sites(&self, id: StmtId, body: bool, out: &mut alloc::vec::Vec<u32>) {
         match self.ast.stmt(id) {
             Stmt::Compound(items) => {
                 let stmts: alloc::vec::Vec<StmtId> = items
@@ -42,8 +43,13 @@ impl Compiler {
                         BlockItem::Decl(_) => None,
                     })
                     .collect();
+                let reached = match body {
+                    true => (stmts.iter()).position(|&s| self.is_label_site(s)),
+                    false => Some(0),
+                };
                 for (i, pair) in stmts.windows(2).enumerate() {
-                    if self.is_label_site(pair[1])
+                    if reached.is_some_and(|first| i >= first)
+                        && self.is_label_site(pair[1])
                         && !self.is_empty_label(pair[0])
                         && !self.lands_on_exit(pair[1], i + 2 == stmts.len())
                         && self.exit_of(pair[0]) == Exit::Falls
@@ -52,20 +58,20 @@ impl Compiler {
                     }
                 }
                 for &s in &stmts {
-                    self.fallthrough_sites(s, out);
+                    self.fallthrough_sites(s, false, out);
                 }
             }
             Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
-                self.fallthrough_sites(*body, out)
+                self.fallthrough_sites(*body, false, out)
             }
             Stmt::If { then_s, else_s, .. } => {
-                self.fallthrough_sites(*then_s, out);
+                self.fallthrough_sites(*then_s, false, out);
                 if let Some(e) = else_s {
-                    self.fallthrough_sites(*e, out);
+                    self.fallthrough_sites(*e, false, out);
                 }
             }
             Stmt::While { body, .. } | Stmt::DoWhile { body, .. } | Stmt::For { body, .. } => {
-                self.fallthrough_sites(*body, out)
+                self.fallthrough_sites(*body, false, out)
             }
             _ => {}
         }

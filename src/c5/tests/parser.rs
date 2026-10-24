@@ -6167,6 +6167,16 @@ fn implicit_fallthrough_reports_where_gcc_does() {
                }\n",
             &[6, 8, 14, 18, 20, 26, 34, 36, 38, 40],
         ),
+        // What precedes a switch body's first label is never reached, so it
+        // falls into nothing; gcc reports none of these.
+        (
+            "void g(void);\n\
+               int a(int x) { switch (x) { int c; case 1: c = 2; return c; default: return 0; } }\n\
+               int b(int x) { switch (x) { static const char s[] = \"x\"; default: return s[0]; } }\n\
+               int d(int x) { switch (x) { g(); case 1: return 1; } return 0; }\n\
+               int e(int x) { switch (x) { int c = 3; case 1: return c; } return 0; }\n",
+            &[],
+        ),
     ];
     for (src, want) in units {
         let lines = |selectors: &[&str]| -> Vec<u32> {

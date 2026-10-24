@@ -129,6 +129,18 @@ SOURCES = [
         sha_kind="git",
     ),
     Source(
+        # Claude's C Compiler (ccc), a reference leg of the perf table built
+        # by tests/perf/build_ccc.py. No releases; pinned to the `main` head,
+        # author-date version. The asset is the upstream GitHub archive of
+        # the commit.
+        name="claudes-c-compiler",
+        version="20260205",
+        url="https://github.com/anthropics/claudes-c-compiler/archive/6f1b99acb2f4ec2414592136c2009fe7713deec3.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="6f1b99acb2f4ec2414592136c2009fe7713deec3",
+        sha_kind="git",
+    ),
+    Source(
         # TweetNaCl -- the auditable NaCl implementation. Upstream
         # ships only `tweetnacl.c` + `tweetnacl.h` on a static web
         # page, no tarball, no VCS. Pinned by the sha256 of

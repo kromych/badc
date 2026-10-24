@@ -30,6 +30,7 @@ project's identifier for the release:
 | stb        | github nothings/stb pinned commit       | git             |
 | chibicc    | github rui314/chibicc last `main` commit| git             |
 | tinycc     | github TinyCC/tinycc `mob` HEAD commit  | git             |
+| ccc        | github anthropics/claudes-c-compiler `main` commit | git     |
 | tweetnacl  | tweetnacl.cr.yp.to static `.c` page     | content-sha256  |
 | monocypher | github LoupVaillant/Monocypher tag      | tarball-sha256  |
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |

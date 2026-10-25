@@ -66,4 +66,4 @@ Disassembly of section .text:
                	udf	#0x0
 
 <asm_x_word>:
-  4005a8: 66 66 55 55  	.word	0x55556666
+  <addr>: 66 66 55 55  	.word	0x55556666

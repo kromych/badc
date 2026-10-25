@@ -100,12 +100,12 @@ Disassembly of section .text:
                	udf	#0x0
 
 <text_tbl>:
-  4005b8: b8 fe ff ff  	.word	0xfffffeb8
-  4005bc: 5c 0a 01 00  	.word	0x00010a5c
-  4005c0: 10 00 00 00  	.word	0x00000010
-  4005c4: 00 00 00 00  	.word	0x00000000
-  4005c8: 50 0a 01 00  	.word	0x00010a50
-  4005cc: 00 00 00 00  	.word	0x00000000
+  <addr>: b8 fe ff ff  	.word	0xfffffeb8
+  <addr>: 5c 0a 01 00  	.word	0x00010a5c
+  <addr>: 10 00 00 00  	.word	0x00000010
+  <addr>: 00 00 00 00  	.word	0x00000000
+  <addr>: 50 0a 01 00  	.word	0x00010a50
+  <addr>: 00 00 00 00  	.word	0x00000000
 
 <text_end>:
-  4005d0: 00 00 00 00  	.word	0x00000000
+  <addr>: 00 00 00 00  	.word	0x00000000

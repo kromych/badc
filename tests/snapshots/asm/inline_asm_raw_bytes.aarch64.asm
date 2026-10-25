@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-  400470: 1f 20 03 d5  	.word	0xd503201f
+  <addr>: 1f 20 03 d5  	.word	0xd503201f
                	nop
                	mov	x0, #0x0                // =0
                	ret

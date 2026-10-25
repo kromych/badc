@@ -115,6 +115,13 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # sets, so once the offset reads `<rip>` the padding measures nothing
     # but the displacement's digit count: one space separates the two.
     (re.compile(r"(<rip>[^\n#]*?)[ \t]+#"), r"\1 #"),
+    # Bytes of .text objdump does not decode -- data the unit put there --
+    # print after their absolute address, right-aligned, --no-addresses
+    # notwithstanding: `  400540: 04 04 ...` or `  4005b8: b8 fe ff ff`.
+    (
+        re.compile(r"^[ \t]*[0-9a-f]+:(?=(?: [0-9a-f]{2})+(?:[ \t]|$))", re.MULTILINE),
+        "  <addr>:",
+    ),
     # aarch64 ADRP / load-symbol pairs: `adrp x16, 0x410000` then
     # `ldr x16, [x16, #0xc0]`. The page address + offset together name
     # a fixed symbol; treat the pair as a single placeholder.
@@ -803,6 +810,16 @@ def self_test() -> int:
     far = "\tleaq\t0x12345(%rip), %rax        # 0x413348 <x>\n"
     want = "\tleaq\t<rip>, %rax # <addr>\n"
     assert normalise_asm(near) == normalise_asm(far) == want, normalise_asm(near)
+    runs = [
+        ("  400540: 04 04 04 07 07 07 07 07         ........\n",
+         "  400560: 04 04 04 07 07 07 07 07         ........\n"),
+        ("  4005b8: b8 fe ff ff  \t.word\t0xfffffeb8\n",
+         " 10005b8: b8 fe ff ff  \t.word\t0xfffffeb8\n"),
+    ]
+    for before, after in runs:
+        got = normalise_asm(before)
+        assert got == normalise_asm(after) and got.startswith("  <addr>: "), got
+    assert normalise_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
 

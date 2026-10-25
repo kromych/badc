@@ -231,15 +231,20 @@ impl Preprocessor {
         // vendor pragmas (diagnostic selection, `optimize`, `target`,
         // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
         // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
-        // / evaluation modes c5 does not act on. Accept them silently
-        // rather than warning on every occurrence; everything else falls
-        // through to the unknown-pragma warning.
+        // / evaluation modes c5 does not act on, and `region` / `endregion`
+        // mark an editor's outline, which gcc and clang accept silently
+        // on every target. Accept them rather than warning on every
+        // occurrence; everything else falls through to the unknown-pragma
+        // warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
         let head = directive.split_whitespace().next().unwrap_or("");
         if matches!(head, "GCC" | "clang") && self.parse_pragma_diagnostic(args, site) {
             return Ok(());
         }
-        if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
+        if matches!(
+            head,
+            "pack" | "once" | "STDC" | "GCC" | "clang" | "region" | "endregion"
+        ) {
             return Ok(());
         }
         self.warn(
@@ -471,7 +476,9 @@ impl Preprocessor {
                 continue;
             };
             let action = action.trim();
-            let ids = rest;
+            // MSVC expands macros in the IDs, as its own headers rely on
+            // (`#pragma warning(disable: _VCRUNTIME_DISABLED_WARNINGS)`).
+            let ids = self.substitute(rest, site.file, site.line);
             let mut ids_parsed: Vec<u32> = Vec::new();
             let mut had_bad_token = false;
             for tok in ids.split_whitespace() {

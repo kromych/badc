@@ -2179,6 +2179,31 @@ fn pragma_warning_disable_silences_the_ids_it_names() {
     assert_eq!(codes(&pp), Vec::<Code>::new());
 }
 
+/// MSVC expands macros in a `#pragma warning` action's IDs, which its own
+/// headers rely on, and documents `#pragma region` / `#pragma endregion`
+/// as outline markers, which gcc 16 and clang 22 accept silently on every
+/// target; clang for a windows-msvc triple accepts the unit with `-Wall`.
+#[test]
+fn pragma_warning_expands_its_ids_and_region_is_silent() {
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let src = format!(
+        "#define DISABLED_WARNINGS 4514 4068\n\
+         #pragma warning(push)\n\
+         #pragma warning(disable : DISABLED_WARNINGS)\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma region Desktop Family\n\
+         int x;\n\
+         #pragma endregion\n\
+         #pragma warning(pop)\n\
+         #pragma region\n\
+         #pragma endregion trailing text\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+    assert_eq!(pp.sink.diagnostics()[0].loc.as_ref().unwrap().line, 11);
+}
+
 #[test]
 fn an_msvc_number_with_no_row_silences_nothing() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");

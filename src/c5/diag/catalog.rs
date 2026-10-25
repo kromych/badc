@@ -299,6 +299,9 @@ catalog! {
     6006, "local-import", [], Warning, Controllable,
         [DEFAULT], Live,
         "a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition";
+    6007, "text-relocation", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`)";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -372,6 +375,7 @@ impl Code {
     pub const EXEC_STACK: Code = Code::new(6004);
     pub const RWX_SEGMENT: Code = Code::new(6005);
     pub const LOCAL_IMPORT: Code = Code::new(6006);
+    pub const TEXT_RELOCATION: Code = Code::new(6007);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);

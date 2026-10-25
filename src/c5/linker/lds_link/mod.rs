@@ -270,6 +270,16 @@ pub enum OrphanHandling {
     Discard,
 }
 
+/// What a dynamic relocation against read-only memory draws, which the
+/// image then carries with `DT_TEXTREL`: a warning, as `--warn-textrel`
+/// asks, an error under `-z text`, nothing under `-z notext`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextRelCheck {
+    Warn,
+    Error,
+    Allow,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LdsEmit {
     Exec,
@@ -320,9 +330,8 @@ pub struct LdsOptions {
     /// Cleared by `--no-warn-rwx-segments`: a segment the image loads
     /// readable, writable and executable draws a warning.
     pub warn_rwx_segments: bool,
-    /// `-z text`: a dynamic relocation against read-only memory is an
-    /// error rather than a `DT_TEXTREL`.
-    pub text: bool,
+    /// What a dynamic relocation against read-only memory draws.
+    pub textrel: TextRelCheck,
     /// `-z common-page-size=`: `CONSTANT (COMMONPAGESIZE)`; `None` keeps
     /// the machine's.
     pub common_page_size: Option<u64>,
@@ -398,7 +407,7 @@ impl Default for LdsOptions {
             exec_stack: None,
             warn_execstack: None,
             warn_rwx_segments: true,
-            text: false,
+            textrel: TextRelCheck::Warn,
             common_page_size: None,
             allow_multiple_definition: false,
             dynamic_flags: 0,
@@ -439,7 +448,13 @@ impl LdsOptions {
                 ZKeyword::PackRelativeRelocs(on) => self.pack_relative_relocs = on,
                 ZKeyword::MaxPageSize(n) => self.max_page_size = n,
                 ZKeyword::CommonPageSize(n) => self.common_page_size = Some(n),
-                ZKeyword::Text(on) => self.text = on,
+                ZKeyword::Text(on) => {
+                    self.textrel = if on {
+                        TextRelCheck::Error
+                    } else {
+                        TextRelCheck::Allow
+                    }
+                }
                 ZKeyword::Muldefs => self.allow_multiple_definition = true,
                 _ => {}
             }
@@ -1162,12 +1177,27 @@ impl<'a> LdsLinker<'a> {
         if let Some(e) = self.preinit_array_in_shared_object() {
             return Err(link_err(Code::LINK, MODULE, &e));
         }
-        if self.opts.text && self.has_readonly_dynamic_reloc() {
-            return Err(link_err(
-                Code::RELOCATION,
-                MODULE,
-                "read-only segment has dynamic relocations (-z text)",
-            ));
+        if self.has_readonly_dynamic_reloc() {
+            let sites = self.text_relocation_sites();
+            match self.opts.textrel {
+                TextRelCheck::Error => {
+                    let error = String::from("read-only segment has dynamic relocations");
+                    let text = sites.into_iter().chain([error]).collect::<Vec<_>>();
+                    return Err(link_err(Code::RELOCATION, MODULE, &text.join("\n")));
+                }
+                TextRelCheck::Warn => {
+                    let image = match (self.opts.shared, self.opts.emit) {
+                        (true, _) => "a shared object",
+                        (false, LdsEmit::Dyn) => "a PIE",
+                        (false, _) => "a PDE",
+                    };
+                    let summary = format!("creating DT_TEXTREL in {image}");
+                    for site in sites.into_iter().chain([summary]) {
+                        self.sink.emit(Code::TEXT_RELOCATION, None, site);
+                    }
+                }
+                TextRelCheck::Allow => {}
+            }
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self

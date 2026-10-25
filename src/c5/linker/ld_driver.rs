@@ -420,6 +420,9 @@ impl LdArgs {
                 // the linker's own, and the only veneers, the AArch64
                 // erratum ones, address their targets PC-relative.
                 "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+                // A text relocation warns unless `-z text` or `-z notext`
+                // comes later.
+                "--warn-textrel" | "--warn-shared-textrel" => a.z.clear_kind(ZKeyword::Text(true)),
                 "--eh-frame-hdr" => a.eh_frame_hdr = true,
                 "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
                 // `-n`: a segment aligns to its sections, not to a page.

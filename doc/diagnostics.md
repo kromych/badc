@@ -119,6 +119,7 @@ regenerates.
 | B6004 | `execstack` | warning | controllable | default | the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack` |
 | B6005 | `rwx-segment` | warning | controllable | default | a segment the image loads is readable, writable and executable, or its thread-local segment executable |
 | B6006 | `local-import` | warning | controllable | default | a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition |
+| B6007 | `text-relocation` | warning | controllable | default | a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`) |
 | B6010 | `undefined-symbol` | error | hard | - | a reference no input object, archive or shared library defines |
 | B6011 | `duplicate-symbol` | error | hard | - | more than one input defines the same symbol |
 | B6012 | `relocation` | error | hard | - | a relocation the linker cannot apply, or a value its field cannot hold |

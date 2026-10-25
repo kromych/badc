@@ -13516,6 +13516,78 @@ fn a_weak_function_an_executable_calls_binds_to_the_library_found_at_run_time() 
     }
 }
 
+// A dynamic relocation into read-only memory draws GNU ld's warnings for
+// the input sections it writes into and the DT_TEXTREL the image takes;
+// `-z text` makes it an error, `-z notext` and `-z textoff` silence it,
+// and a later `--warn-textrel` restores the warning.
+#[test]
+fn a_text_relocation_warns_unless_z_text_or_z_notext_says_otherwise() {
+    let dir = tempdir("textrel");
+    write_source(
+        &dir,
+        "a.s",
+        ".globl _start\n_start: ret\nhere: .quad here\n",
+    );
+    write_source(
+        &dir,
+        "g.s",
+        ".globl _start, g\n_start: ret\ng: ret\n.quad g\n",
+    );
+    for (src, obj) in [("a.s", "a.o"), ("g.s", "g.o")] {
+        run(
+            Command::new(badc())
+                .args(["-q", "-c", "--target=linux-x64", src, "-o", obj])
+                .current_dir(&dir),
+            "assemble",
+        );
+    }
+    let link = |args: &[&str]| {
+        let out = Command::new(badc())
+            .args(["--ld", "-e", "_start"])
+            .args(args)
+            .args(["-o", "out"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), err)
+    };
+    let local = "a.o: relocation in read-only section `.text'";
+    let named = "g.o: relocation against `g' in read-only section `.text'";
+    for (args, site, image) in [
+        (&["-pie", "a.o"][..], local, "a PIE"),
+        (
+            &["-z", "notext", "--warn-textrel", "-pie", "a.o"],
+            local,
+            "a PIE",
+        ),
+        (&["-shared", "g.o"], named, "a shared object"),
+    ] {
+        let (ok, err) = link(args);
+        assert!(ok, "{args:?}: {err}");
+        assert!(
+            err.contains(&format!("warning: {site} [B6007]")),
+            "{args:?}: {err}"
+        );
+        let summary = format!("warning: creating DT_TEXTREL in {image} [B6007]");
+        assert!(err.contains(&summary), "{args:?}: {err}");
+    }
+    for z in ["notext", "textoff"] {
+        let (ok, err) = link(&["-z", z, "-pie", "a.o"]);
+        assert!(ok && !err.contains("B6007"), "{z}: {err}");
+    }
+    let (ok, err) = link(&["-z", "text", "-pie", "a.o"]);
+    assert!(!ok, "{err}");
+    let lines: Vec<&str> = err.lines().collect();
+    assert_eq!(
+        lines,
+        [
+            format!("badc-ld: error: {local}"),
+            String::from("read-only segment has dynamic relocations [B6012] [relocation]"),
+        ]
+    );
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

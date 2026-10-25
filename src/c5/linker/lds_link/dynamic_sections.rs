@@ -699,6 +699,49 @@ impl<'a> LdsLinker<'a> {
             .map(|o| (o.addr, o.size))
     }
 
+    /// GNU ld's line for each input section a dynamic relocation writes
+    /// into read-only memory: one per symbol a relocation names, at the
+    /// first such section, and one per section a load-address fixup
+    /// writes into.
+    pub(super) fn text_relocation_sites(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        let mut named: HashSet<&str> = HashSet::new();
+        for i in 0..self.insecs.len() {
+            let SecFate::Placed { out } = self.fates[i] else {
+                continue;
+            };
+            let o = &self.outs[out];
+            if !o.alloc || o.removed || o.flags & SHF_WRITE != 0 || !self.placements[i].placed {
+                continue;
+            }
+            let id = self.insecs[i];
+            let sec = &self.objects[id.obj].sections[id.sec];
+            let lo = o.addr + self.placements[i].off;
+            let within = |a: u64| a >= lo && a < lo + sec.size;
+            let at = || format!("{}: ", self.objects[id.obj].source);
+            let mut fixup = self.relr_addrs.iter().any(|&a| within(a));
+            for d in self.dyn_relas.iter().filter(|d| within(d.offset)) {
+                match &d.sym {
+                    Some(n) if named.insert(n) => lines.push(format!(
+                        "{}relocation against `{n}' in read-only section `{}'",
+                        at(),
+                        sec.name
+                    )),
+                    Some(_) => {}
+                    None => fixup = true,
+                }
+            }
+            if fixup {
+                lines.push(format!(
+                    "{}relocation in read-only section `{}'",
+                    at(),
+                    sec.name
+                ));
+            }
+        }
+        lines
+    }
+
     /// True when a dynamic relocation applies to a section the loader
     /// maps read-only. `DT_TEXTREL` is what tells it to make the
     /// segment writable first; without the tag the write faults.

@@ -1590,6 +1590,89 @@ fn unresolved_extern_function_fails_link() {
     );
 }
 
+/// The ar persona follows POSIX ar: two `q` calls build the library one `rcs`
+/// call does, and `t`, `r`, `d` and `x` list, replace, delete and extract;
+/// argv[0] `*-ar` and `*-ranlib` select the personas beside `--ar -o`.
+#[test]
+fn the_ar_persona_builds_a_library_over_several_calls() {
+    let dir = tempdir("ar-persona");
+    write_source(&dir, "a1.c", "int f(void) { return 1; }\n");
+    write_source(&dir, "b1.c", "int g(void) { return 2; }\n");
+    write_source(
+        &dir,
+        "m.c",
+        "int f(void); int g(void);\nint main(void) { return f() + g(); }\n",
+    );
+    let badc_in = |args: &[&str]| {
+        let mut c = Command::new(badc());
+        c.args(args).current_dir(&dir);
+        run(&mut c, &format!("badc {args:?}"))
+    };
+    let links = std::cell::Cell::new(0);
+    let status_with = |lib: &str| {
+        // A new image per link: rewriting the one just run failed on Windows
+        // arm64 with os error 5.
+        links.set(links.get() + 1);
+        let exe = dir.join(format!("m{}{}", links.get(), std::env::consts::EXE_SUFFIX));
+        let mut c = Command::new(badc());
+        c.args(["-q", "m.c", "-L."])
+            .arg(format!("-l{lib}"))
+            .arg("-o")
+            .arg(&exe);
+        run(c.current_dir(&dir), "link");
+        Command::new(&exe).status().expect("run").code()
+    };
+    for unit in ["a1", "b1"] {
+        badc_in(&["-q", "-c", &format!("{unit}.c"), "-o", &format!("{unit}.o")]);
+    }
+    badc_in(&["--ar", "qc", "libab.a", "a1.o"]);
+    badc_in(&["--ar", "q", "libab.a", "b1.o"]);
+    badc_in(&["--ar", "rcs", "libone.a", "a1.o", "b1.o"]);
+    let list =
+        |lib: &str| String::from_utf8_lossy(&badc_in(&["--ar", "t", lib]).stdout).into_owned();
+    assert_eq!(list("libab.a"), "a1.o\nb1.o\n");
+    assert_eq!(status_with("ab"), Some(3));
+    assert_eq!(status_with("one"), Some(3));
+    write_source(&dir, "a1.c", "int f(void) { return 10; }\n");
+    badc_in(&["-q", "-c", "a1.c", "-o", "a1.o"]);
+    let out = badc_in(&["--ar", "rv", "libab.a", "a1.o"]);
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "r - a1.o\n");
+    assert_eq!(status_with("ab"), Some(12));
+    badc_in(&["--ar", "d", "libab.a", "b1.o"]);
+    assert_eq!(list("libab.a"), "a1.o\n");
+    std::fs::create_dir_all(dir.join("x")).unwrap();
+    run(
+        Command::new(badc())
+            .args(["--ar", "x", "../libab.a", "a1.o"])
+            .current_dir(dir.join("x")),
+        "extract",
+    );
+    assert_eq!(
+        std::fs::read(dir.join("x/a1.o")).unwrap(),
+        std::fs::read(dir.join("a1.o")).unwrap()
+    );
+    // The personas by program name, on a link or a copy of the binary.
+    for name in ["cross-ar", "cross-ranlib"] {
+        let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        if std::fs::hard_link(badc(), &path).is_err() {
+            std::fs::copy(badc(), &path).unwrap();
+        }
+    }
+    let persona = |name: &str, args: &[&str]| {
+        let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        run(Command::new(path).args(args).current_dir(&dir), name)
+    };
+    persona("cross-ar", &["rcs", "libz.a", "b1.o", "a1.o"]);
+    persona("cross-ranlib", &["libz.a"]);
+    assert_eq!(
+        String::from_utf8_lossy(&persona("cross-ar", &["t", "libz.a"]).stdout),
+        "b1.o\na1.o\n"
+    );
+    assert_eq!(status_with("z"), Some(12));
+    badc_in(&["-q", "--ar", "-o", "libsrc.a", "a1.c", "b1.c"]);
+    assert_eq!(status_with("src"), Some(12));
+}
+
 /// `-dM -E` prints gcc's `#define` lines for the macros the unit ends with,
 /// `-pthread` defines `_REENTRANT` and links, and `-arch arm64` builds for
 /// the macOS target, as `CC=badc` builds pass them.

@@ -34,6 +34,13 @@ pub(crate) fn run() {
         std::process::exit(badc::run_ld(&raw[skip..]));
     }
 
+    // Archiver dispatch: as `ar` / `ranlib` (argv[0]) or `--ar <key>`.
+    let arg = |k: usize| raw.get(k).map(String::as_str);
+    if let Some(ranlib) = super::ar::persona(arg(0).unwrap_or(""), arg(1), arg(2)) {
+        let skip = if arg(1) == Some("--ar") { 2 } else { 1 };
+        std::process::exit(super::ar::run(ranlib, &raw[skip..]));
+    }
+
     let mut cli = match parse_args(raw) {
         Ok(Parsed::Run(cli)) => cli,
         Ok(Parsed::Print(text)) => {

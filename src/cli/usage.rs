@@ -74,6 +74,12 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
+  --ar -o <lib>.a <inputs> Compile the sources and archive them with
+                           the objects, with a symbol index.
+  --ar <key> <lib>.a [file...]
+                           POSIX ar: d p q r t x with c s S u v D, as
+                           badc runs when named `ar` / `*-ar`; named
+                           `ranlib` / `*-ranlib` it indexes archives.
   -L <dir>                 Library search path for `-l<name>`.
                            Repeatable; probed in declared order, ahead
                            of the --sysroot directories.

@@ -268,7 +268,7 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
-            let id = self.parse_aggregate_body(&name, is_union, packed)?;
+            let (id, prior) = self.parse_aggregate_body(&name, is_union, packed)?;
             self.structs[id].is_anonymous = anonymous;
             // `struct name { ... } __attribute__((...))`: the attributes
             // follow the body and apply to the aggregate just laid out.
@@ -279,7 +279,7 @@ impl Compiler {
             if head_designated {
                 self.mark_designated_init(id)?;
             }
-            id
+            self.settle_tag_redefinition(id, prior)?
         } else {
             // A trailing attribute on a tag use without a body
             // (`struct name __attribute__((...))`); consume it.

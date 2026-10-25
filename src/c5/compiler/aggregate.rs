@@ -118,12 +118,17 @@ impl Compiler {
     /// union places every member at offset 0 and takes the maximum size.
     ///
     /// On entry `tk` is `{`; on exit it is the token after the closing `}`.
+    ///
+    /// Returns the entry the body filled and, for a C23 redefinition of a
+    /// tag the scope already defined, that definition, which
+    /// [`Self::settle_tag_redefinition`] compares once the attributes after
+    /// the body applied.
     pub(super) fn parse_aggregate_body(
         &mut self,
         name: &str,
         is_union: bool,
         packed: bool,
-    ) -> Result<usize, C5Error> {
+    ) -> Result<(usize, Option<usize>), C5Error> {
         // The attributes preceding the tag (`__declspec(align(16)) struct S
         // { ... } s;`) and the type carriers belong to the enclosing
         // declaration; each member declaration starts from its own, so a
@@ -167,8 +172,8 @@ impl Compiler {
         name: &str,
         is_union: bool,
         packed: bool,
-    ) -> Result<usize, C5Error> {
-        let struct_id = self.register_aggregate_tag(name, is_union)?;
+    ) -> Result<(usize, Option<usize>), C5Error> {
+        let (struct_id, prior) = self.register_aggregate_tag(name, is_union)?;
         self.next()?; // consume `{`
 
         let mut layout = AggregateLayout::default();
@@ -207,7 +212,62 @@ impl Compiler {
         }
         self.next()?; // consume `}`
         self.finish_aggregate_layout(struct_id, &layout, packed);
-        Ok(struct_id)
+        Ok((struct_id, prior))
+    }
+
+    /// The type a body read into `id` defines: `id`, or for a redefinition
+    /// of `prior` that definition when the two are compatible.
+    pub(super) fn settle_tag_redefinition(
+        &self,
+        id: usize,
+        prior: Option<usize>,
+    ) -> Result<usize, C5Error> {
+        let Some(prior) = prior else {
+            return Ok(id);
+        };
+        if !self.aggregates_compatible(prior, id) {
+            let p = &self.structs[prior];
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "{} `{}` redefined with different members",
+                    p.keyword(),
+                    p.name
+                ),
+            ));
+        }
+        Ok(prior)
+    }
+
+    /// C23 6.2.7p1: two structure or union definitions are compatible when
+    /// their members correspond one to one, in order, with the same names,
+    /// compatible types and bit-field widths. As in gcc, a member of an
+    /// untagged type each definition spells anew has two distinct types;
+    /// an anonymous member's members compare as members. The layouts,
+    /// which follow from that and from the attributes, must also agree.
+    fn aggregates_compatible(&self, a: usize, b: usize) -> bool {
+        let (x, y) = (&self.structs[a], &self.structs[b]);
+        let same_shape = x.name == y.name
+            && (x.is_union, x.is_vector, x.is_array) == (y.is_union, y.is_vector, y.is_array)
+            && (x.size, x.align, x.fields.len()) == (y.size, y.align, y.fields.len());
+        same_shape
+            && x.fields.iter().zip(&y.fields).all(|(f, g)| {
+                (
+                    &f.name,
+                    f.ty,
+                    f.offset,
+                    f.bit_offset,
+                    f.bit_width,
+                    f.array_size,
+                ) == (
+                    &g.name,
+                    g.ty,
+                    g.offset,
+                    g.bit_offset,
+                    g.bit_width,
+                    g.array_size,
+                ) && f.array_dims == g.array_dims
+            })
     }
 
     /// The comma-separated declarators sharing one type prefix. Each is
@@ -792,7 +852,16 @@ impl Compiler {
     /// self-referential pointer member finds the aggregate mid-definition.
     /// C99 6.2.1: only a tag in the same scope makes this a redefinition; one
     /// in an outer scope is shadowed by the declaration here.
-    fn register_aggregate_tag(&mut self, name: &str, is_union: bool) -> Result<usize, C5Error> {
+    ///
+    /// From C23 a definition of a tag the scope already defined is taken
+    /// when the two are compatible (C23 6.7.2.3, as gcc 15 and clang 22
+    /// take it under `-std=c23` and not before): the body is read into an
+    /// entry no tag names, returned with the prior definition to compare.
+    fn register_aggregate_tag(
+        &mut self,
+        name: &str,
+        is_union: bool,
+    ) -> Result<(usize, Option<usize>), C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
@@ -803,6 +872,11 @@ impl Compiler {
             Some(id) => {
                 self.check_tag_kind(id, keyword)?;
                 if !self.structs[id].fields.is_empty() {
+                    if self.std.c23_keywords() {
+                        self.structs
+                            .push(super::StructDef::incomplete_tag(name, is_union, false));
+                        return Ok((self.structs.len() - 1, Some(id)));
+                    }
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
                         format!("{keyword} `{name}` already defined"),
@@ -812,7 +886,7 @@ impl Compiler {
             }
             None => self.declare_tag(name, is_union, false),
         };
-        Ok(struct_id)
+        Ok((struct_id, None))
     }
 
     /// The type prefix of one member group: the specifiers, the type they
@@ -1026,10 +1100,11 @@ impl Compiler {
             );
         };
         let inner_id = if self.lex.tk == '{' {
-            let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+            let (id, prior) =
+                self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
             self.structs[id].is_anonymous = inner_anonymous;
             self.apply_post_body_attributes(id)?;
-            id
+            self.settle_tag_redefinition(id, prior)?
         } else {
             self.find_or_forward_declare_struct(&inner_name, nested_is_union, false)?
         };

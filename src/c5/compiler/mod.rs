@@ -2414,6 +2414,8 @@ pub struct Compiler {
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
+    /// Mirror of [`CompileOptions::std`].
+    std: CStd,
     vla_larger_than: Option<u64>,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
@@ -3095,6 +3097,7 @@ impl Compiler {
             fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
+            std: opts.std,
             vla_larger_than: opts.vla_larger_than,
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {

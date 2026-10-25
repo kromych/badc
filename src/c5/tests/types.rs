@@ -2179,6 +2179,52 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// C23 6.7.2.3 (tag compatibility): from `-std=c23` a structure, union or
+/// enumeration redefined in its scope with compatible content declares the
+/// same type, and before C23 any redefinition is an error, as gcc 16 gates
+/// it (its default gnu23 included). The accepted and rejected cases are
+/// gcc's: a member of an untagged type each definition spells anew, other
+/// member types, bit-field widths, alignment, `packed`, union member order
+/// and enumerator values make the definitions differ.
+#[test]
+fn a_compatible_tag_redefinition_is_taken_from_c23() {
+    use crate::{CStd, CompileOptions, Compiler, Target};
+    const SAME: &str = "struct S { int a; struct S *next; union { int u; float f; }; int b[3]; };\n\
+        struct S { int a; struct S *next; union { int u; float f; }; int b[3]; };\n\
+        union U { int i; float f; }; union U { int i; float f; };\n\
+        enum E { E0, E1 = 5 }; enum E { E0, E1 = 5 };\n\
+        struct timeval { long tv_sec; long tv_usec; };\n\
+        void f(void) { struct timeval { long s; }; struct timeval { long s; }; }\n\
+        int main(void) { struct S s; s.a = 1; s.next = &s; s.u = E1;\n\
+          return s.next->a + s.u - 6; }\n";
+    let differ = [
+        "struct S { struct { int x; } m; }; struct S { struct { int x; } m; };",
+        "struct T { long a; }; struct T { int a; };",
+        "struct V { int a : 3; }; struct V { int a : 4; };",
+        "struct X { char c; int i; }; struct X { char c; _Alignas(8) int i; };",
+        "struct W { char c; int i; }; struct W { char c; int i; } __attribute__((packed));",
+        "union U { int a; float b; }; union U { float b; int a; };",
+        "enum F { F0, F1 }; enum F { F0, F1 = 3 };",
+        "enum G { G0, G1 }; enum G { G0 };",
+    ];
+    let compile = |src: &str, std: &str| {
+        let opts = CompileOptions::default().with_std(CStd::from_dialect(std).unwrap());
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    for std in ["c23", "gnu2x"] {
+        let program = compile(SAME, std).unwrap_or_else(|e| panic!("{std}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{std}");
+        for src in differ {
+            let err = compile(src, std).map(|_| ()).expect_err(src).to_string();
+            assert!(err.contains("redefined with different"), "{src}: {err}");
+        }
+    }
+    for std in ["c17", "gnu11"] {
+        let err = compile(SAME, std).map(|_| ()).expect_err(std).to_string();
+        assert!(err.contains("struct `S` already defined"), "{std}: {err}");
+    }
+}
+
 /// On the PE targets an enum named before its definition is complete with
 /// `int`'s layout, as MSVC and clang's Microsoft compatibility mode (the
 /// windows-msvc default) complete it, so it may type a member; the

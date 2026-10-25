@@ -171,7 +171,6 @@ struct __c5_FILE;
 #pragma binding(msvcrt::wcscat, "wcscat")
 #pragma binding(msvcrt::wcstol, "wcstol")
 #pragma binding(msvcrt::wcstoul, "wcstoul")
-#pragma binding(msvcrt::wcstod, "wcstod")
 #pragma binding(msvcrt::wcstok, "wcstok")
 #pragma binding(msvcrt::wcsicmp, "_wcsicmp")
 #pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
@@ -476,7 +475,8 @@ wchar_t *wmemmove(wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
 #endif
 
-// Wide-string numeric conversion (C99 7.24.4.1).
+// Wide-string numeric conversion (C99 7.24.4.1). On Windows
+// libc/lib/strtod_ext.c defines wcstod, wcstof and wcstold.
 long wcstol(const wchar_t *nptr, wchar_t **endptr, int base);
 unsigned long wcstoul(const wchar_t *nptr, wchar_t **endptr, int base);
 long long wcstoll(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);

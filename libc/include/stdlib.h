@@ -172,7 +172,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::atol,    "atol")
 // MSVC spells the long-long parse `_atoi64`.
 #pragma binding(msvcrt::atoll,   "_atoi64")
-#pragma binding(msvcrt::atof,    "atof")
 #pragma binding(msvcrt::strtol,  "strtol")
 #pragma binding(msvcrt::strtoul, "strtoul")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
@@ -184,7 +183,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 // what every other libc calls `strtoull`.
 #pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::_strtoui64, "_strtoui64")
-#pragma binding(msvcrt::strtod,  "strtod")
 #pragma binding(msvcrt::abs,     "abs")
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
@@ -371,11 +369,13 @@ long long strtoll(const char *s, char **endp, int base);
 long long _strtoi64(const char *s, char **endp, int base);
 #endif
 double strtod(const char *s, char **endp);
-// C99 7.20.1.3. msvcrt.dll exports neither; libc/lib/strtod_ext.c defines
-// both over strtod on Windows. Elsewhere `long double` falls back to f64 in
-// c5 (16-byte storage, 8-byte precision) -- the return value flows through
-// the long-double load/store pipeline; the libc-side conversion happens at
-// full 80-bit precision and gets narrowed on the way back.
+// C99 7.20.1.3. On Windows libc/lib/strtod_ext.c defines these, strtod and
+// atof: msvcrt.dll's strtod reads no C99 infinity, NaN or hexadecimal form,
+// and it has no float or long double one. Elsewhere `long double` falls
+// back to f64 in c5 (16-byte storage, 8-byte precision) -- the return value
+// flows through the long-double load/store pipeline; the libc-side
+// conversion happens at full 80-bit precision and gets narrowed on the way
+// back.
 float strtof(const char *restrict s, char **restrict endp);
 long double strtold(const char *restrict s, char **restrict endp);
 int abs(int x);

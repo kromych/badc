@@ -3,10 +3,9 @@
 // through %hh, read no infinity, NaN or hexadecimal floating input, know no
 // %a or %F, and store wide characters through a wide function's %s; it
 // exports no vfscanf, vscanf or vsscanf. One scanner here reads strings and
-// streams of either width; floating input converts through ucrtbase.dll's
-// _strtod_l and _strtof_l in its "C" locale, the decimal point being
-// msvcrt's. Elsewhere the file is empty; the link offers it like an archive
-// member.
+// streams of either width; floating input converts through strtof, strtod
+// and strtold. Elsewhere the file is empty; the link offers it like an
+// archive member.
 
 #ifdef _WIN32
 
@@ -21,29 +20,6 @@
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
-
-#pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::__c5_ucrt_create_locale, "_create_locale")
-#pragma binding(ucrtbase::__c5_ucrt_free_locale, "_free_locale")
-#pragma binding(ucrtbase::__c5_ucrt_strtod_l, "_strtod_l")
-#pragma binding(ucrtbase::__c5_ucrt_strtof_l, "_strtof_l")
-void *__c5_ucrt_create_locale(int category, const char *locale);
-void __c5_ucrt_free_locale(void *locale);
-double __c5_ucrt_strtod_l(const char *s, char **end, void *locale);
-float __c5_ucrt_strtof_l(const char *s, char **end, void *locale);
-
-static void *c_locale(void) {
-    static void *cached;
-    void *none = NULL, *l = __atomic_load_n(&cached, __ATOMIC_ACQUIRE);
-    if (l)
-        return l;
-    l = __c5_ucrt_create_locale(LC_ALL, "C");
-    if (!__atomic_compare_exchange_n(&cached, &none, l, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-        __c5_ucrt_free_locale(l);
-        l = none;
-    }
-    return l;
-}
 
 // A stream, or a string of narrow or `wide` characters; `count` characters
 // read so far, for %n.
@@ -178,8 +154,8 @@ static int put(struct text *t, int c) {
     return 1;
 }
 
-// strtod's subject sequence (C99 7.20.1.3p3) into `t`, the decimal point
-// `point` read as '.'. 0 when the field holds no complete one.
+// strtod's subject sequence (C99 7.20.1.3p3), with the decimal point
+// `point`, into `t`. 0 when the field holds no complete one.
 static int scan_float(struct input *in, size_t width, struct text *t, int point) {
     int c = next(in, &width), digits = 0, hex = 0, ok = 1;
     if (c == '+' || c == '-') {
@@ -220,7 +196,7 @@ static int scan_float(struct input *in, size_t width, struct text *t, int point)
         if (digit(c) < (hex ? 16 : 10))
             digits = 1;
         else if (c == point && !frac)
-            frac = 1, c = '.';
+            frac = 1;
         else
             break;
         ok &= put(t, c);
@@ -442,11 +418,11 @@ static int scan(struct input *in, const void *format, va_list ap) {
             t.cap = sizeof t.local;
             ok = scan_float(in, width, &t, point) && put(&t, 0);
             if (ok && p && fkind == 0)
-                *(float *)p = __c5_ucrt_strtof_l(t.p, NULL, c_locale());
+                *(float *)p = strtof(t.p, NULL);
             else if (ok && p && fkind == 1)
-                *(double *)p = __c5_ucrt_strtod_l(t.p, NULL, c_locale());
+                *(double *)p = strtod(t.p, NULL);
             else if (ok && p)
-                *(long double *)p = __c5_ucrt_strtod_l(t.p, NULL, c_locale());
+                *(long double *)p = strtold(t.p, NULL);
             if (t.p != t.local)
                 free(t.p);
             break;

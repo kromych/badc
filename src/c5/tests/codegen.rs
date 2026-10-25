@@ -2144,10 +2144,13 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wcstoull", "_wcstoui64", M),
         ("swprintf", "_vsnwprintf", M),
         ("vswprintf", "_vsnwprintf", M),
-        ("wcstof", "wcstod", M),
-        ("wcstold", "wcstod", M),
-        ("strtof", "strtod", M),
-        ("strtold", "strtod", M),
+        ("wcstod", "_wcstod_l", U),
+        ("wcstof", "_wcstof_l", U),
+        ("wcstold", "_wcstod_l", U),
+        ("strtod", "_strtod_l", U),
+        ("strtof", "_strtof_l", U),
+        ("strtold", "_strtod_l", U),
+        ("atof", "_strtod_l", U),
     ];
     for (target, own) in [
         (

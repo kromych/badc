@@ -20,9 +20,6 @@ use super::{
     STT_COMMON, STT_GNU_IFUNC, STT_OBJECT, STT_TLS, STV_DEFAULT, SYNTH_DYNSYM, SecFate,
 };
 
-/// `R_AARCH64_ADR_PREL_PG_HI21_NC`, which `elf_reloc_types` does not name.
-const R_AARCH64_ADR_PREL_PG_HI21_NC: u32 = 276;
-
 /// How a reference reaches a preemptible definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Reach {
@@ -63,7 +60,7 @@ pub(super) fn reach(machine: u16, rtype: u32, writable: bool, noted: bool, adden
             // The noted `adrp` addresses the slot's page.
             _ if noted && rt::aarch64_ldst_lo12_scale(rtype).is_some() => Reach::Refused,
             rt::R_AARCH64_ADR_PREL_PG_HI21
-            | R_AARCH64_ADR_PREL_PG_HI21_NC
+            | rt::R_AARCH64_ADR_PREL_PG_HI21_NC
             | rt::R_AARCH64_ADR_PREL_LO21
             | rt::R_AARCH64_LD_PREL_LO19
             | rt::R_AARCH64_ABS32

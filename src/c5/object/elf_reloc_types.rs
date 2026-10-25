@@ -103,6 +103,7 @@ pub(crate) const R_AARCH64_MOVW_SABS_G2: u32 = 272;
 pub(crate) const R_AARCH64_LD_PREL_LO19: u32 = 273;
 pub(crate) const R_AARCH64_ADR_PREL_LO21: u32 = 274;
 pub(crate) const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+pub(crate) const R_AARCH64_ADR_PREL_PG_HI21_NC: u32 = 276;
 pub(crate) const R_AARCH64_TSTBR14: u32 = 279;
 pub(crate) const R_AARCH64_CONDBR19: u32 = 280;
 pub(crate) const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;

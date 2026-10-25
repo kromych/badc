@@ -66,7 +66,9 @@ impl<'a> LdsLinker<'a> {
                     );
                 }
                 let reach = self.reach_at(id.obj, id.sec, r);
-                if let Some(e) = self.narrow_import_refusal(id.obj, id.sec, r) {
+                let refusal = (self.narrow_import_refusal(id.obj, id.sec, r))
+                    .or_else(|| self.weak_pc_refusal(id.obj, id.sec, r));
+                if let Some(e) = refusal {
                     errors.push(e);
                     continue;
                 }
@@ -112,6 +114,7 @@ impl<'a> LdsLinker<'a> {
                     }
                 };
                 let Some(s_plus_a) = target else { continue };
+                let s_plus_a = self.weak_pc_value(id.obj, r, p, s_plus_a);
                 if errors.len() > 40 {
                     break;
                 }

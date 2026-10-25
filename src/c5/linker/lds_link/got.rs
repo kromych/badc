@@ -2,7 +2,7 @@
 //! previous pass.
 
 use crate::c5::linker::object::{
-    absolute_in_pie_body, elf_reloc_desc, locate_reloc, narrow_import_body,
+    absolute_in_pie_body, elf_reloc_desc, locate_reloc, narrow_import_body, weak_pc_in_pie_body,
 };
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::collections::BTreeSet;
@@ -85,6 +85,22 @@ pub(super) fn x86_pc_field(machine: u16, rtype: u32) -> bool {
         ),
         _ => false,
     }
+}
+
+/// An aarch64 field holding a PC-relative distance.
+fn aarch64_pc_field(rtype: u32) -> bool {
+    matches!(
+        rtype,
+        rt::R_AARCH64_PREL16
+            | rt::R_AARCH64_PREL32
+            | rt::R_AARCH64_PREL64
+            | rt::R_AARCH64_ADR_PREL_LO21
+            | rt::R_AARCH64_ADR_PREL_PG_HI21
+            | rt::R_AARCH64_ADR_PREL_PG_HI21_NC
+            | rt::R_AARCH64_LD_PREL_LO19
+            | rt::R_AARCH64_CONDBR19
+            | rt::R_AARCH64_TSTBR14
+    )
 }
 
 /// A relocation naming a GOT slot rather than the symbol's own address.
@@ -480,6 +496,67 @@ impl<'a> LdsLinker<'a> {
             &sym.name,
             kind,
         ))
+    }
+
+    /// Whether symbol `si` of object `oi` is an undefined weak reference
+    /// the link resolves to 0: nothing defines it and no library binds it.
+    pub(super) fn weak_resolves_to_zero(&self, oi: usize, si: usize) -> bool {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return false;
+        };
+        sym.shndx as u16 == SHN_UNDEF
+            && sym.binding() == STB_WEAK
+            && !sym.name.is_empty()
+            && !self.globals.contains_key(&sym.name)
+            && !self.script_now.contains_key(&sym.name)
+            && !self.import_of.contains_key(&sym.name)
+    }
+
+    /// Refusal for a PIE's PC-relative field naming an undefined weak name
+    /// the link resolves to 0, as GNU ld refuses one: on x86-64 in
+    /// read-only memory, and on aarch64, in a dynamically linked PIE, for a
+    /// default-visibility name.
+    pub(super) fn weak_pc_refusal(&self, oi: usize, si: usize, r: &RawReloc) -> Option<String> {
+        let obj = &self.objects[oi];
+        let sec = &obj.sections[si];
+        let pie = self.opts.emit == LdsEmit::Dyn && !self.opts.shared;
+        if !pie || sec.flags & SHF_ALLOC == 0 || !self.weak_resolves_to_zero(oi, r.sym as usize) {
+            return None;
+        }
+        let name = &obj.symbols[r.sym as usize].name;
+        let dynamic = self.opts.interp.is_some() || !self.opts.shared_libs.is_empty();
+        let refused = match self.machine {
+            EM_X86_64 => x86_pc_field(self.machine, r.rtype) && sec.flags & SHF_WRITE == 0,
+            EM_AARCH64 => {
+                aarch64_pc_field(r.rtype) && dynamic && self.visibility_of(name) == STV_DEFAULT
+            }
+            _ => false,
+        };
+        refused.then(|| {
+            weak_pc_in_pie_body(
+                &locate_reloc(&obj.source, &sec.name, r.offset),
+                &elf_reloc_desc(self.machine, r.rtype),
+                name,
+            )
+        })
+    }
+
+    /// The value an aarch64 PC-relative field at `p` takes for an undefined
+    /// weak name the link resolves to 0: GNU ld places the name at the
+    /// field, the page of it for `adrp`, so that the field holds 0.
+    pub(super) fn weak_pc_value(&self, oi: usize, r: &RawReloc, p: u64, sa: u64) -> u64 {
+        if self.machine != EM_AARCH64
+            || !aarch64_pc_field(r.rtype)
+            || !self.weak_resolves_to_zero(oi, r.sym as usize)
+        {
+            return sa;
+        }
+        let page = matches!(
+            r.rtype,
+            rt::R_AARCH64_ADR_PREL_PG_HI21 | rt::R_AARCH64_ADR_PREL_PG_HI21_NC
+        );
+        let at = if page { p & !0xfff } else { p };
+        at.wrapping_add(r.addend as u64)
     }
 
     pub(super) fn resolve_sym_prevpass(&self, oi: usize, si: usize, addend: i64) -> Option<u64> {

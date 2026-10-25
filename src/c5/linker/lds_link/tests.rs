@@ -7554,9 +7554,132 @@ fn a_narrow_absolute_field_naming_a_library_object_is_refused_where_gnu_ld_refus
                         EM_AARCH64 => rt::R_AARCH64_COPY,
                         _ => rt::R_X86_64_COPY,
                     };
-                    assert!(dyn_relocs(&img).iter().any(|r| r.1 == copy), "{what}: a copy");
+                    assert!(
+                        dyn_relocs(&img).iter().any(|r| r.1 == copy),
+                        "{what}: a copy"
+                    );
                 }
             }
         }
+    }
+}
+
+/// `_start` taking the address of the undefined weak name `wf` PC-relative
+/// (`lea wf(%rip), %rax`), and `.data` holding `wf - .`.
+fn weak_pc_user() -> Vec<u8> {
+    let text = [0x48, 0x8d, 0x05, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 3, 4, rt::R_X86_64_PC32, -4)
+        .reloc(1, 0, 4, rt::R_X86_64_PC32, 0)
+        .build(EM_X86_64)
+}
+
+/// An x86-64 PIE's PC-relative reference in code to an undefined weak name
+/// would yield the load base rather than 0, so GNU ld 2.46.1 refuses it,
+/// with or without libraries; a position-dependent executable resolves it
+/// to 0.
+#[test]
+fn a_pies_pc_relative_reference_in_code_to_an_undefined_weak_name_is_refused() {
+    for (emit, libs) in [
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Dyn, true),
+        (LdsEmit::Exec, true),
+    ] {
+        let what = alloc::format!("{emit:?} libs={libs}");
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", weak_pc_user()).expect("parses");
+        let opts = match libs {
+            true => LdsOptions {
+                emit,
+                ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])])
+            },
+            false => LdsOptions {
+                emit,
+                ..LdsOptions::default()
+            },
+        };
+        let res = link_with_script(&script, alloc::vec![o], &opts);
+        if emit == LdsEmit::Exec {
+            let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+            let (t, text) = image_section(&img, ".text");
+            assert_eq!(t as i64 + 7 + u32_at(&text, 3) as i32 as i64, 0, "{what}");
+            continue;
+        }
+        let e = alloc::format!("{}", res.expect_err("refused"));
+        let want = "a.o(.text+0x3): R_X86_64_PC32 (2) against undefined symbol `wf` can not be \
+                    used when making a position-independent executable";
+        assert!(e.contains(want), "{what}: {e}");
+        assert!(!e.contains(".data"), "{what}: the data word links: {e}");
+    }
+}
+
+/// aarch64 code and data reaching the undefined weak name `wf`
+/// PC-relative: `adr`, `adrp` + `add`, and `.word wf - .`.
+fn aarch64_weak_pc_user() -> Vec<u8> {
+    let text: Vec<u8> = [0x1000_0000u32, 0x9000_0000, 0x9100_0000, 0xd65f_03c0]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+        .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 4, &[0xff; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_AARCH64_ADR_PREL_LO21, 0)
+        .reloc(0, 4, 4, rt::R_AARCH64_ADR_PREL_PG_HI21, 0)
+        .reloc(0, 8, 4, rt::R_AARCH64_ADD_ABS_LO12_NC, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_PREL32, 0)
+        .build(EM_AARCH64)
+}
+
+/// GNU ld 2.46.1 resolves an aarch64 PC-relative field naming an undefined
+/// weak name as if the name were at the field, the page of it for `adrp`,
+/// so each field holds 0, in a position-dependent executable and a PIE
+/// linked against no library; a dynamically linked PIE refuses one for a
+/// name a library may bind.
+#[test]
+fn an_aarch64_pc_relative_field_naming_an_undefined_weak_name_holds_0() {
+    for (emit, libs) in [
+        (LdsEmit::Exec, false),
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Dyn, true),
+    ] {
+        let what = alloc::format!("{emit:?} libs={libs}");
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", aarch64_weak_pc_user()).expect("parses");
+        let mut opts = LdsOptions {
+            emit,
+            max_page_size: 0x10000,
+            ..LdsOptions::default()
+        };
+        if libs {
+            let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+            lib.lib.machine = EM_AARCH64;
+            opts.shared_libs = alloc::vec![lib];
+            opts.interp = Some(String::from("/lib/ld-linux-aarch64.so.1"));
+        }
+        let res = link_with_script(&script, alloc::vec![o], &opts);
+        if libs {
+            let e = alloc::format!("{}", res.expect_err("refused"));
+            assert!(e.contains("R_AARCH64_ADR_PREL_LO21"), "{what}: {e}");
+            assert!(e.contains("R_AARCH64_PREL32"), "{what}: {e}");
+            continue;
+        }
+        let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+        let (_, text) = image_section(&img, ".text");
+        assert_eq!(u32_at(&text, 0), 0x1000_0000, "{what}: adr x0, .");
+        assert_eq!(
+            u32_at(&text, 4),
+            0x9000_0000,
+            "{what}: adrp x0, the page of ."
+        );
+        let (_, data) = image_section(&img, ".rodata");
+        assert_eq!(u32_at(&data, 0), 0, "{what}");
     }
 }

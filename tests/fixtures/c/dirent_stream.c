@@ -50,8 +50,14 @@ int main(void) {
     struct dirent *e;
     if (!tmp) tmp = getenv("TEMP");
     if (!tmp) tmp = "/tmp";
-    snprintf(dir, sizeof dir, "%s/badc_dirent_%ld_%d", tmp, (long)time(NULL), rand());
-    if (MKDIR(dir) != 0) return 1;
+    // A concurrent run (another process, or another JIT thread sharing
+    // this pid) may hold the name; take the next one, as mkdtemp does.
+    for (int k = 0;; k++) {
+        snprintf(dir, sizeof dir, "%s/badc_dirent_%ld_%ld_%d", tmp, (long)getpid(),
+                 (long)time(NULL), k);
+        if (MKDIR(dir) == 0) break;
+        if (errno != EEXIST || k == 1000) return 1;
+    }
     if (!(f = fopen(in_dir("one.txt"), "w"))) return 2;
     fclose(f);
     if (!(f = fopen(in_dir("two.dat"), "w"))) return 3;

@@ -4,6 +4,9 @@
 // wint_t holds every wchar_t value besides.
 
 #include <stdio.h>
+#ifdef _WIN32
+#include <unistd.h>
+#endif
 #include <wchar.h>
 #include <wctype.h>
 
@@ -17,7 +20,10 @@ int main(void) {
     if (btowc('a') != L'a' || towupper(L'a') != L'A')
         return 4;
 #ifdef _WIN32
-    FILE *f = fopen("wide_eof.tmp", "w+b");
+    // Named per process: the parity runs execute this fixture concurrently.
+    char name[32];
+    snprintf(name, sizeof name, "wide_eof_%d.tmp", (int)getpid());
+    FILE *f = fopen(name, "w+b");
     if (!f)
         return 5;
     if (fputwc(L'x', f) != L'x')
@@ -26,7 +32,7 @@ int main(void) {
     if (fgetwc(f) != L'x' || fgetwc(f) != WEOF || !feof(f))
         return 7;
     fclose(f);
-    remove("wide_eof.tmp");
+    remove(name);
 #endif
     return 0;
 }

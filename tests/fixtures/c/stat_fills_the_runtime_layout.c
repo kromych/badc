@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <wchar.h>
 
 int main(void) {
@@ -25,37 +26,43 @@ int main(void) {
         return 2;
     if (offsetof(struct _stati64, st_size) != 24 || offsetof(struct _stati64, st_mtime) != 40)
         return 3;
-    if (!(f = fopen("stat_probe.txt", "wb")))
+    // Named per process: the parity runs execute this fixture concurrently.
+    char name[32];
+    wchar_t wname[32];
+    snprintf(name, sizeof name, "stat_probe_%d.txt", (int)getpid());
+    swprintf(wname, 32, L"stat_probe_%d.txt", (int)getpid());
+    if (!(f = fopen(name, "wb")))
         return 4;
     fwrite("abc", 1, 3, f);
     fclose(f);
-    if (stat("stat_probe.txt", &st) || !S_ISREG(st.st_mode) || st.st_size != 3 ||
+    if (stat(name, &st) || !S_ISREG(st.st_mode) || st.st_size != 3 ||
         st.st_mtime <= 0)
         rc = 5;
-    else if (_stat("stat_probe.txt", &sb) || sb.st_size != 3 ||
+    else if (_stat(name, &sb) || sb.st_size != 3 ||
              (sb.st_mode & _S_IFMT) != _S_IFREG)
         rc = 6;
-    else if (_stati64("stat_probe.txt", &si) || si.st_size != 3 || si.st_mtime != st.st_mtime)
+    else if (_stati64(name, &si) || si.st_size != 3 || si.st_mtime != st.st_mtime)
         rc = 7;
-    else if (_wstat(L"stat_probe.txt", &sb) || sb.st_size != 3)
+    else if (_wstat(wname, &sb) || sb.st_size != 3)
         rc = 8;
-    else if ((fd = _open("stat_probe.txt", _O_RDONLY)) < 0)
+    else if ((fd = _open(name, _O_RDONLY)) < 0)
         rc = 9;
     else {
         if (fstat(fd, &st) || st.st_size != 3 || !S_ISREG(st.st_mode))
             rc = 10;
         _close(fd);
     }
-    remove("stat_probe.txt");
+    remove(name);
     if (rc)
         return rc;
-    if (mkdir("stat_probe.dir"))
+    snprintf(name, sizeof name, "stat_probe_%d.dir", (int)getpid());
+    if (mkdir(name))
         return 11;
-    if (stat("stat_probe.dir", &st) || !S_ISDIR(st.st_mode) || S_ISREG(st.st_mode))
+    if (stat(name, &st) || !S_ISDIR(st.st_mode) || S_ISREG(st.st_mode))
         rc = 12;
-    else if (stat64("stat_probe.dir", &s64) || !S_ISDIR(s64.st_mode))
+    else if (stat64(name, &s64) || !S_ISDIR(s64.st_mode))
         rc = 13;
-    rmdir("stat_probe.dir");
+    rmdir(name);
     return rc;
 }
 #else

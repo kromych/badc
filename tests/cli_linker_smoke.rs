@@ -8589,6 +8589,29 @@ fn windows_clang() -> Option<std::ffi::OsString> {
         .find(|cc| runs(cc))
 }
 
+/// Whether `gcc` reaches a thread-local through libgcc's emulation
+/// (`-femulated-tls`, the default of a mingw-w64 gcc built without native
+/// TLS) rather than the TEB's TLS slots.
+#[cfg(windows)]
+fn gcc_emulates_tls(gcc: &Path, path: &std::ffi::OsStr, dir: &Path) -> bool {
+    let src = write_source(
+        dir,
+        "tls-probe.c",
+        "_Thread_local int t;\nint f(void) { return t; }\n",
+    );
+    let obj = dir.join("tls-probe.o");
+    run(
+        Command::new(gcc)
+            .env("PATH", path)
+            .args(["-c", "-o"])
+            .arg(&obj)
+            .arg(&src),
+        "compile the thread-local probe",
+    );
+    let bytes = std::fs::read(&obj).expect("read the probe");
+    bytes.windows(20).any(|w| w == b"__emutls_get_address")
+}
+
 /// mingw-w64 gcc for x86-64: on the path, else in an msys2 installation's
 /// `mingw64` / `ucrt64` environment at a drive's root. Its `bin` directory
 /// joins the path its tools run with, as msys2's shell sets. msys2 builds
@@ -9528,12 +9551,15 @@ long long peer_sum(int n)
 }
 int *badc_ptr_from_peer(void) { return &badc_counter; }
 int (*peer_badc_fn)(int) = badc_twice;
-#ifdef _MSC_VER
+#if defined(NO_PEER_TLS)
+#elif defined(_MSC_VER)
 __declspec(thread) int peer_tls = 3;
 #else
 _Thread_local int peer_tls = 3;
 #endif
+#ifndef NO_PEER_TLS
 int peer_tls_bump(void) { return ++peer_tls; }
+#endif
 int peer_big_frame(int k)
 {
     volatile char buf[8192];
@@ -9593,8 +9619,10 @@ extern int *peer_into;
 extern long long peer_sum(int);
 extern int *badc_ptr_from_peer(void);
 extern int (*peer_badc_fn)(int);
+#ifndef NO_PEER_TLS
 extern _Thread_local int peer_tls;
 extern int peer_tls_bump(void);
+#endif
 extern int peer_big_frame(int);
 extern int peer_ctor_ran(void);
 extern int peer_call_overridden(void);
@@ -9618,7 +9646,9 @@ int main(void)
     if (peer_into != &peer_pairs[1].a || peer_sum(2) != 10 || peer_sum(64) != 320) return 11;
     if (badc_ptr_from_peer() != &badc_counter || peer_badc_fn != badc_twice) return 12;
     if (peer_badc_fn(4) != 8 || peer_mul(6, 7) != 42) return 13;
+#ifndef NO_PEER_TLS
     if (peer_tls != 3 || peer_tls_bump() != 4 || peer_tls != 4) return 14;
+#endif
     if (peer_big_frame(100) != 100) return 15;
     if (peer_ctor_ran() != 1) return 16;
     if (peer_call_overridden() != 2) return 17;
@@ -9648,12 +9678,14 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
     } else {
         "x86_64"
     };
-    // Each build: its label, its two objects and the archive of them.
-    let mut builds: Vec<(String, Vec<PathBuf>, PathBuf)> = Vec::new();
+    // Each build: its label, its two objects, the archive of them, and the
+    // defines the badc main takes with them.
+    let mut builds: Vec<(String, Vec<PathBuf>, PathBuf, Vec<&str>)> = Vec::new();
     let mut build = |label: String,
                      compile: &dyn Fn(&PathBuf, &PathBuf) -> Command,
                      archive: &dyn Fn(&PathBuf, &[PathBuf]) -> Command,
-                     lib: &str| {
+                     lib: &str,
+                     defines: Vec<&'static str>| {
         let objs: Vec<PathBuf> = (units.iter().enumerate())
             .map(|(k, src)| {
                 let obj = dir.join(format!("{label}-{k}.obj"));
@@ -9669,7 +9701,7 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
             archive(&lib, &objs).current_dir(&dir),
             &format!("archive the {label} objects"),
         );
-        builds.push((label, objs, lib));
+        builds.push((label, objs, lib, defines));
     };
     let mut found = Vec::new();
     if let Some(clang) = windows_clang() {
@@ -9699,7 +9731,13 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
                     c.args(objs);
                     c
                 };
-                build(format!("clang-{triple}{opt}"), &compile, &archive, "lib");
+                build(
+                    format!("clang-{triple}{opt}"),
+                    &compile,
+                    &archive,
+                    "lib",
+                    Vec::new(),
+                );
             }
         }
         found.push("clang");
@@ -9722,16 +9760,38 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
                     .args(objs);
                 c
             };
-            build(format!("cl{}", &opt[1..]), &compile, &archive, "lib");
+            build(
+                format!("cl{}", &opt[1..]),
+                &compile,
+                &archive,
+                "lib",
+                Vec::new(),
+            );
         }
         found.push("cl");
     }
     if let Some((gcc, path)) = mingw_gcc() {
+        // A gcc built without native TLS emulates a thread-local through
+        // libgcc's `__emutls_get_address`, which no native-TLS code can
+        // share a variable with; its peer then leaves the thread-local out.
+        let emulated = gcc_emulates_tls(&gcc, &path, &dir);
+        let defines = if emulated {
+            vec!["-DNO_PEER_TLS"]
+        } else {
+            Vec::new()
+        };
+        if emulated {
+            eprintln!(
+                "coff interop: {} emulates thread-locals; no thread-local check",
+                gcc.display()
+            );
+        }
         for opt in ["-O0", "-O2"] {
             let compile = |src: &PathBuf, obj: &PathBuf| {
                 let mut c = Command::new(&gcc);
                 c.env("PATH", &path)
                     .args([opt, "-c", "-o"])
+                    .args(&defines)
                     .arg(obj)
                     .arg(src);
                 c
@@ -9741,12 +9801,18 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
                 c.env("PATH", &path).arg("rcs").arg(lib).args(objs);
                 c
             };
-            build(format!("gcc{opt}"), &compile, &archive, "a");
+            build(
+                format!("gcc{opt}"),
+                &compile,
+                &archive,
+                "a",
+                defines.clone(),
+            );
         }
         found.push("gcc");
     }
     eprintln!("coff interop: compilers {found:?}");
-    for (label, objs, lib) in &builds {
+    for (label, objs, lib, defines) in &builds {
         let inputs: [(&str, Vec<&PathBuf>); 2] =
             [("objects", objs.iter().collect()), ("archive", vec![lib])];
         for (form, inputs) in &inputs {
@@ -9757,6 +9823,7 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
                         .arg(opt)
                         .arg("-o")
                         .arg(&exe)
+                        .args(defines)
                         .arg(&main)
                         .args(inputs)
                         .current_dir(&dir),

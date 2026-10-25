@@ -28,8 +28,6 @@ REPO_ROOT = RAYLIB_DIR.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-# TODO(#1643): 6.2's RGFW calls GetUpdateRect, which <windows.h> does
-# not declare.
 VERSION = "6.0"
 # sha256 of the GitHub archive of refs/tags/6.0 (tag commit dbc56a87).
 UPSTREAM_SHA = "2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b"

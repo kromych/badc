@@ -29,11 +29,6 @@ REPO_ROOT = CURL_DIR.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-# TODO(#1648): from 8.14.1, the last release with the BearSSL backend, the
-# Windows build needs _tcsncmp from <tchar.h>. TODO(#1637, #1649, #1674):
-# 8.23.0's HTTPS lane over Mbed TLS needs _POSIX_VERSION from <unistd.h>,
-# and its Windows build <intsafe.h>, <share.h> and more of the Win32 and
-# msvcrt surface.
 VERSION = "8.11.1"
 UPSTREAM_SHA = "a889ac9dbba3644271bd9d1302b5c22a088893719b72be3487bc3d401e5c4e80"  # tarball sha256
 ASSET = f"curl-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"

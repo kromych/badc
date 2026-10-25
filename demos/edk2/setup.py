@@ -26,10 +26,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-# TODO(#1629): edk2-mdepkg-202608-2949648e.tar.gz, packed from the
-# edk2-stable202608 tag by scripts/vendor_deps/build_edk2_subset.py, is on
-# the mirror; its MemLibGeneric.c enables `_ReadWriteBarrier` through
-# `#pragma intrinsic`, which badc does not lower, so the X64 link fails.
 VERSION = "202502"
 SRC_UPSTREAM_SHA = "9339354d6f5714f4bda85441577221f1e804b3643e3919d23a4366c021b9bc46"
 SRC_ASSET = f"edk2-mdepkg-{VERSION}-{SRC_UPSTREAM_SHA[:8]}.tar.gz"

@@ -30,7 +30,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-# TODO(#1639): 3.02 includes <stringapiset.h> on Windows.
 VERSION = "2.16.03"
 
 # sha256 of the upstream www.nasm.us release tarball nasm-2.16.03.tar.xz.

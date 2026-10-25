@@ -1124,8 +1124,6 @@ jobs:
         # taken within this run on this runner, so the runner class
         # cancels; `--check` fails on a committed ceiling. This is the
         # only step in the job that gates on a measured value.
-        # TODO(#1382): Windows, once badc compiles quickjs-libc.c there
-        # (its own setenv conflicts with the one <stdlib.h> declares).
         if: runner.os == 'Linux'
         run: |
           rc=0

@@ -75,8 +75,8 @@ NUKE_OUTRO = "LICENSE CHANGELOG CREDITS".split()
 # .github/ci_compile_sources.sh's CFLAGS and CPPFLAGS. Its `-x c` is left
 # out (the .c suffix selects the same language) and its `-pedantic` is
 # spelled -Wpedantic, gcc's other name for it.
-# TODO: pass upstream's `-x c` and `-pedantic` once the driver takes them
-# (https://github.com/kromych/badc/issues/1326, issues/1633).
+# TODO: pass upstream's `-x c` once the driver takes it
+# (https://github.com/kromych/badc/issues/1326).
 COMPILE_SOURCES_FLAGS = (
     "-std=c89", "-Wall", "-Wextra", "-Wpedantic",
     "-DNK_INCLUDE_FIXED_TYPES", "-DNK_INCLUDE_DEFAULT_ALLOCATOR",
@@ -143,12 +143,10 @@ def compile_sources(badc: Path, work: Path) -> None:
     print(f"sources: {len(units)} units compile at -O0 and -O")
 
 
-# Demos a badc gap keeps from building, with the issue that tracks it.
-# TODO: build them once the gaps are closed.
+# Demos that do not build, with the reason.
 BLOCKED_DEMOS = {
-    "rawfb-x11": "no bundled <sys/ipc.h>, and <sys/shm.h> redefines struct ipc_perm "
-                 "(https://github.com/kromych/badc/issues/1636)",
-    "gdi": "no bundled <wingdi.h> (https://github.com/kromych/badc/issues/1638)",
+    "gdi": "upstream demo/gdi/main.c does not compile: line 141 has an `else` "
+           "with no `if` (gcc 16 rejects it too)",
 }
 
 

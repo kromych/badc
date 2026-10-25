@@ -948,3 +948,52 @@ fn dllimport_follows_gcc_on_redeclarations_and_misuse() {
         prog.warnings
     );
 }
+
+/// C99 6.2.2p7: an identifier declared with both external and internal
+/// linkage is undefined, which gcc 16 and clang 22 reject; a later
+/// `extern`, or a function declaration with no storage class, takes the
+/// earlier linkage (6.2.2p4-5). For a windows-msvc triple clang, as MSVC,
+/// lets a `static` declaration make an external one internal, and still
+/// rejects an external object after a `static` one.
+#[test]
+fn an_identifier_declared_with_both_linkages_is_rejected() {
+    for (src, needle) in [
+        (
+            "int b(void);\nstatic inline int b(void) { return 1; }\n",
+            "static declaration of `b` follows non-static declaration",
+        ),
+        (
+            "extern int x;\nstatic int x;\n",
+            "static declaration of `x` follows non-static declaration",
+        ),
+        (
+            "void g(void) { extern int y; }\nstatic int y;\n",
+            "static declaration of `y` follows non-static declaration",
+        ),
+        (
+            "static int x;\nint x;\n",
+            "non-static declaration of `x` follows static declaration",
+        ),
+    ] {
+        expect_conflict(src, &[needle, "previous: <source>:"]);
+    }
+    let inherited = "static int b(void);\nint b(void) { return 3; }\nstatic int x;\n\
+                     extern int x;\nint f(void) { extern int x; return x; }\n\
+                     int main(void) { return b() + f(); }\n";
+    assert_eq!(run_without_warnings(inherited), 3);
+    let msvc = "int b(void);\nint u(void) { return b(); }\nstatic int b(void) { return 7; }\n\
+                int x;\nstatic int x = 5;\nint main(void) { return u() + x; }\n";
+    for t in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let prog = Compiler::with_target(msvc.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(prog.warnings.is_empty(), "{t:?}: {:?}", prog.warnings);
+        assert_eq!(Vm::new(prog).run().unwrap(), 12, "{t:?}");
+    }
+    let err = Compiler::with_target("static int x;\nint x;\n".into(), crate::Target::WindowsX64)
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("non-static declaration of `x`"), "{err}");
+}

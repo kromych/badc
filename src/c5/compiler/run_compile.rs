@@ -16,7 +16,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
-use super::redeclaration::{DeclaredType, Definition, Params, Spelled};
+use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
 use super::types::{
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
     struct_ptr_depth,
@@ -1061,7 +1061,12 @@ impl Compiler {
                 .clone()
                 .map(|(r, d)| (*r, d));
             let declared = DeclaredType::Function(ret, Params::of(&params, false), named, ret_fn);
-            self.declare_linked(id_idx, declared, declarator_line, false)?;
+            let claim = if static_seen {
+                LinkClaim::Internal
+            } else {
+                LinkClaim::Prior
+            };
+            self.declare_linked(id_idx, declared, declarator_line, false, claim)?;
         }
         // For Sys symbols (header-bound libc functions),
         // also fold the variadic flag onto the matching
@@ -1102,6 +1107,11 @@ impl Compiler {
             line: declarator_line,
             implicit_int,
             extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
+            claim: if static_seen {
+                LinkClaim::Internal
+            } else {
+                LinkClaim::Prior
+            },
         };
         self.parse_function_definition(id_idx, params, def)
     }
@@ -2178,11 +2188,17 @@ impl Compiler {
         };
         let leads_to = (b.fn_ptr_indirection > 0)
             .then(|| (self.symbols[id_idx].fn_type.clone(), b.fn_ptr_indirection));
+        let claim = match (static_seen, extern_seen) {
+            (true, _) => LinkClaim::Internal,
+            (false, true) => LinkClaim::Prior,
+            (false, false) => LinkClaim::External,
+        };
         self.declare_linked(
             id_idx,
             DeclaredType::Object(spelled, bounds, leads_to),
             signature_line,
             thread_local,
+            claim,
         )?;
         self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
         let dll = super::dllimport::DllImportDecl {

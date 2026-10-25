@@ -79,6 +79,16 @@ pub(super) enum DeclaredType {
     Function(Spelled, Params, Option<CallConv>, FnSig),
 }
 
+/// The linkage a declaration states (C99 6.2.2p3-p5): `static` at file
+/// scope; a file-scope object with no storage-class specifier; or `extern`
+/// and a function with none, which take the prior declaration's.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum LinkClaim {
+    Internal,
+    External,
+    Prior,
+}
+
 /// What a function definition adds to its type: its line and its GNU forms.
 pub(super) struct Definition {
     pub(super) ret: Spelled,
@@ -87,15 +97,18 @@ pub(super) struct Definition {
     pub(super) line: usize,
     pub(super) implicit_int: bool,
     pub(super) extern_inline: bool,
+    pub(super) claim: LinkClaim,
 }
 
 /// Composite type, first declaration, body position with its `extern inline`,
-/// and whether the declarations name a thread-local object.
+/// whether the declarations name a thread-local object, and whether its
+/// linkage is internal.
 pub(super) struct LinkedEntity {
     ty: DeclaredType,
     at: (usize, u16),
     body: Option<((usize, u16), bool)>,
     thread_local: bool,
+    internal: bool,
 }
 
 impl LinkedEntity {
@@ -196,8 +209,9 @@ impl Compiler {
         new: DeclaredType,
         line: usize,
         thread_local: bool,
+        claim: LinkClaim,
     ) -> Result<(), C5Error> {
-        self.fold_linked(idx, new, line, false, thread_local)
+        self.fold_linked(idx, new, line, (false, thread_local), claim)
     }
 
     /// A function definition: its type, then the one body 6.9p3 and 6.9p5 admit;
@@ -209,7 +223,7 @@ impl Compiler {
         params: Params,
     ) -> Result<(), C5Error> {
         let new = DeclaredType::Function(def.ret, params, def.conv, def.ret_fn);
-        self.fold_linked(idx, new, def.line, def.implicit_int, false)?;
+        self.fold_linked(idx, new, def.line, (def.implicit_int, false), def.claim)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
             && let Some(LinkedEntity {
@@ -319,17 +333,18 @@ impl Compiler {
         idx: usize,
         new: DeclaredType,
         line: usize,
-        implicit_int: bool,
-        thread_local: bool,
+        (implicit_int, thread_local): (bool, bool),
+        claim: LinkClaim,
     ) -> Result<(), C5Error> {
         let at = (line, self.intern_source_file());
         let key = self.symbols[idx].name.clone();
-        let Some(prior) = self.linked_entities.remove(&key) else {
+        let Some(mut prior) = self.linked_entities.remove(&key) else {
             let entity = LinkedEntity {
                 ty: new,
                 at,
                 body: None,
                 thread_local,
+                internal: claim == LinkClaim::Internal,
             };
             self.linked_entities.insert(key, entity);
             return Ok(());
@@ -411,6 +426,26 @@ impl Compiler {
                 ),
             );
         }
+        // C99 6.2.2p7: one identifier with both linkages is undefined, which
+        // gcc and clang reject, after a type conflict as gcc orders them. MSVC
+        // and clang for a windows-msvc triple let a `static` declaration make
+        // an external one internal.
+        let conflict = match claim {
+            LinkClaim::Internal if !prior.internal && !self.target.ms_extensions() => {
+                Some(("static", "non-static"))
+            }
+            LinkClaim::External if prior.internal => Some(("non-static", "static")),
+            _ => None,
+        };
+        if let Some((now, was)) = conflict {
+            let (prior_line, file) = prior.at;
+            let text = format!(
+                "{now} declaration of `{}` follows {was} declaration\n  previous: {}:{prior_line}",
+                self.symbols[idx].name, self.source_files[file as usize]
+            );
+            return Err(self.compile_err_at(Code::INVALID_DECLARATION, line, text));
+        }
+        prior.internal |= claim == LinkClaim::Internal;
         let ty = compose(prior.ty, new);
         self.linked_entities
             .insert(key, LinkedEntity { ty, ..prior });

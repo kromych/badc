@@ -624,7 +624,8 @@ impl Compiler {
                     bounds,
                     leads_to.map(|f| (f, fn_ptr_indirection)),
                 );
-                self.declare_linked(loc_idx, declared, self.lex.line, is_thread_local)?;
+                let claim = super::redeclaration::LinkClaim::Prior;
+                self.declare_linked(loc_idx, declared, self.lex.line, is_thread_local, claim)?;
             }
             // A block-scope `extern` allocates no storage (C11 6.7.5).
             let decl_align = if is_extern {
@@ -945,7 +946,12 @@ impl Compiler {
         let listed = super::redeclaration::Params::of(&f.params, false);
         let ret_fn = f.ret_fn.clone().map(|(r, d)| (*r, d));
         let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv, ret_fn);
-        self.declare_linked(ent, declared, self.lex.line, false)?;
+        let claim = if is_static {
+            super::redeclaration::LinkClaim::Internal
+        } else {
+            super::redeclaration::LinkClaim::Prior
+        };
+        self.declare_linked(ent, declared, self.lex.line, false, claim)?;
         let prototyped = f.params.form == super::function::ParamForm::Prototype;
         let fresh = super::stmt::FnEntity {
             class: Token::Fun as i64,

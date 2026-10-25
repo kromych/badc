@@ -334,35 +334,35 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xb6, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xb6, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xc6e, %rax            # imm = 0xC6E
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0x3fc00000, %rax       # imm = 0x3FC00000
                	je	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %r11 # imm = 0x3FF8000000000000
                	cmpq	%r11, %rax

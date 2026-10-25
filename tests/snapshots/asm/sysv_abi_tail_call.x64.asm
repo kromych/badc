@@ -82,21 +82,21 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rcx
                	movq	%rsi, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r12
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r13
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r14
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r15
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r10
                	movq	%r10, 0x48(%rsp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r10
                	movq	%r10, 0x40(%rsp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r10
                	movq	%r10, 0x38(%rsp)
                	subq	$0x20, %rsp
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	movsd	%xmm1, 0x48(%rsp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	(%rax), %xmm14
                	movsd	%xmm14, 0x40(%rsp)
                	movsd	0x8(%rax), %xmm14

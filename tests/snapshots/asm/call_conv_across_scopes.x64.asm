@@ -28,7 +28,7 @@ Disassembly of section .text:
 <block_first>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	leaq	0xe(%rax), %rcx
                	subq	$0x20, %rsp
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
                	movq	0x8(%rax), %r12
                	movq	0x10(%rax), %r13
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	movq	%r10, 0x40(%rsp)
                	movq	0x38(%rax), %r10
                	movq	%r10, 0x38(%rsp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	subq	$0x20, %rsp
                	callq	<addr>
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	pushq	%rsi
                	movq	$-0x1, %rsi
                	movq	$-0x1, %rdi
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %edx
                	movl	(%rcx), %ecx
                	addq	%rdx, %rcx
@@ -247,7 +247,7 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	movl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	setne	%al

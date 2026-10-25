@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <touch>:
                	movb	$0xa, (%rdi)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	addq	$0xa, %rcx
                	movl	%ecx, (%rax)

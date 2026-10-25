@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	<rip>, %rax      # <addr>
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	callq	*%rax
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax      # <addr>
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	jl	<addr>
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax      # <addr>
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	jg	<addr>
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movq	<rip>, %rax      # <addr>
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	testl	%eax, %eax
                	je	<addr>

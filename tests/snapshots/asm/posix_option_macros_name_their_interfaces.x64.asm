@@ -36,7 +36,7 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx       # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax

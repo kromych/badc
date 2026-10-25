@@ -310,7 +310,7 @@ Disassembly of section .text:
                	retq
 
 <ret_global>:
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
                	retq
@@ -480,7 +480,7 @@ Disassembly of section .text:
                	retq
 
 <sink>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rdi, (%rax)
                	leaq	0x1(%rdi), %rax
                	retq
@@ -1293,7 +1293,7 @@ Disassembly of section .text:
                	movq	-0xc8(%rbp), %rax
                	cmpq	$0x8, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x3, %rax
                	je	<addr>
@@ -1317,7 +1317,7 @@ Disassembly of section .text:
                	movq	-0xc8(%rbp), %rax
                	cmpq	$0x8, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x5, %rax
                	je	<addr>

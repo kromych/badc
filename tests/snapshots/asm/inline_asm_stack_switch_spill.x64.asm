@@ -75,8 +75,8 @@ Disassembly of section .text:
                	imulq	$0x13, %rdi, %rax
                	leaq	0x3(%rax), %r10
                	movq	%r10, -0x58(%rbp)
-               	leaq	<rip>, %rax     # <addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	leaq	0xff00(%rcx), %rcx
                	movq	%rsp, (%rax)
                	movq	%rcx, %rsp
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	shlq	$0x4, %rdx
                	addq	%rdx, %rcx
                	addq	%rax, %rcx
-               	leaq	<rip>, %rax     # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rsp
                	movq	%rcx, %rax
                	leaq	-0x90(%rbp), %rsp
@@ -236,7 +236,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
                	movq	%rbx, %rdi
                	callq	<addr>

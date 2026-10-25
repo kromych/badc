@@ -111,7 +111,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x10(%rbp)
                	movl	$0x0, -0x8(%rbp)
                	callq	<addr>

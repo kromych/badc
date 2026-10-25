@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <movable>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	retq
 
 <enable>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
@@ -59,16 +59,16 @@ Disassembly of section .text:
 <check>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	callq	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x40, %edi
-               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	testq	%rsi, %rsi
                	je	<addr>
                	callq	<addr>
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
                	movq	0x8(%rax), %r12
                	movq	0x10(%rax), %r13
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	addq	0x40(%rsp), %rcx
                	addq	0x38(%rsp), %rcx
                	addq	%rax, %rcx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	jne	<addr>

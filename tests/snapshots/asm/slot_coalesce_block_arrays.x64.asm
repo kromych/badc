@@ -155,7 +155,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %r12d
                	movl	$0x3e8, %ebx            # imm = 0x3E8
                	xorl	%edi, %edi

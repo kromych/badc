@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <dispatch>:
                	movl	$0x5, %eax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	andq	$0x3, %rdi
                	movq	(%rcx,%rdi,8), %rcx
                	jmpq	*%rcx
@@ -390,7 +390,7 @@ Disassembly of section .text:
                	movl	$0x24, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdx       # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movzbq	(%rdx,%rax), %rsi
@@ -405,7 +405,7 @@ Disassembly of section .text:
                	movl	$0x25, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdx       # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movslq	(%rdx,%rax,4), %rsi
@@ -418,7 +418,7 @@ Disassembly of section .text:
                	movl	$0x28, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
@@ -427,7 +427,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rcx       # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
@@ -436,7 +436,7 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	leaq	<rip>, %rcx       # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
@@ -494,7 +494,7 @@ Disassembly of section .text:
                	movl	$0x2e, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$-0x3c, %rax
                	je	<addr>

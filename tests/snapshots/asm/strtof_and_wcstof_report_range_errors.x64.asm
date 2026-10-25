@@ -106,7 +106,7 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movq	$0x0, -0x10(%rbp)
                	movq	$0x0, -0x8(%rbp)
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -114,28 +114,28 @@ Disassembly of section .text:
                	incq	%rax
                	leave
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x18(%rax), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x30(%rax), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x48(%rax), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x60(%rax), %rdi
                	callq	<addr>
                	testl	%eax, %eax

@@ -28,13 +28,13 @@ Disassembly of section .text:
 <direct>:
                	testl	%edi, %edi
                	jne	<addr>
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
                	movl	$0xa, %eax
                	retq
                	movl	$0x14, %eax
                	retq
-               	leaq	-<rip>, %rax        # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	jmpq	*%rax
 
 <interp>:
@@ -43,11 +43,11 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x18(%rbp)
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x10(%rbp)
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x8(%rbp)
                	movl	$0x1, %ecx
                	movslq	(%rdi), %rsi
@@ -78,9 +78,9 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x10(%rbp), %rsi
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rax        # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	<rip>, %rax        # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movq	%rcx, %rax
                	incq	%rax

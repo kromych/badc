@@ -122,7 +122,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r15
                	pushq	%rbx
-               	leaq	-<rip>, %rbx      # <addr>
+               	leaq	-<rip>, %rbx # <addr>
                	movq	$0x6, %rax
                	movq	%rax, %xmm6
                	movq	$0x7, %rax
@@ -154,9 +154,9 @@ Disassembly of section .text:
                	movq	$0x2222, %rdi           # imm = 0x2222
                	callq	*%rbx
                	movq	%r15, %rsp
-               	movq	%rax, <rip>      # <addr>
-               	movq	%rsi, <rip>      # <addr>
-               	movq	%rdi, <rip>      # <addr>
+               	movq	%rax, <rip> # <addr>
+               	movq	%rsi, <rip> # <addr>
+               	movq	%rdi, <rip> # <addr>
                	xorl	%ecx, %ecx
                	movq	%xmm6, %rax
                	xorq	$0x6, %rax
@@ -188,8 +188,8 @@ Disassembly of section .text:
                	movq	%xmm15, %rax
                	xorq	$0xf, %rax
                	orq	%rax, %rcx
-               	movq	%rcx, <rip>      # <addr>
-               	leaq	<rip>, %rax      # <addr>
+               	movq	%rcx, <rip> # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x4d2, %rax            # imm = 0x4D2
                	je	<addr>
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	popq	%r15
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	je	<addr>
@@ -209,7 +209,7 @@ Disassembly of section .text:
                	popq	%r15
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	je	<addr>
@@ -219,7 +219,7 @@ Disassembly of section .text:
                	popq	%r15
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	cmpq	$0x0, (%rax)
                	je	<addr>
                	movl	$0x4, %eax

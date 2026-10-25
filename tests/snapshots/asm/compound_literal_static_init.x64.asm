@@ -26,18 +26,18 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	imulq	$0xa, %rax, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %ecx
                	leaq	(%rax,%rcx), %rsi
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movl	(%rcx), %edx
                	incq	%rdx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rdx
                	movl	0x4(%rdx), %edi
                	addq	$0xa, %rdi
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movl	0x4(%rax), %eax
                	addq	%rcx, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	movl	(%rcx), %ecx
                	addq	%rcx, %rax

@@ -32,7 +32,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%ebx, %ebx
                	movl	%ebx, -0x8(%rbp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	cmpl	$0x2a, %ecx
                	je	<addr>

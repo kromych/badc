@@ -330,7 +330,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xdd6, %rax            # imm = 0xDD6
                	je	<addr>

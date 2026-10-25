@@ -30,10 +30,10 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax       # <addr>
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movslq	(%rax), %rsi
-               	leaq	-<rip>, %rcx       # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	addq	%rax, %rsi
                	subq	%rcx, %rsi
                	testq	%rsi, %rsi
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movslq	(%rax), %rdx
                	addq	%rax, %rdx
                	subq	%rcx, %rdx
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x4, %rax
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	addq	$0x3, %rax
                	cmpl	$0x7, %eax
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	0x4(%rax), %rdx
                	movslq	0x4(%rax), %rsi
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	addq	%rsi, %rdx
                	subq	%rdi, %rdx
                	testq	%rdx, %rdx

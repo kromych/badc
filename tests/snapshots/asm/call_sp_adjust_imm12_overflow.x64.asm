@@ -2632,7 +2632,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movq	%rax, %rcx
                	shlq	$0x4, %rcx
                	addq	%rdx, %rcx
@@ -2643,7 +2643,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x105, %eax            # imm = 0x105
                	jl	<addr>
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	leaq	0x10(%rdi), %rdx
                	leaq	0x20(%rdi), %r8
                	leaq	0x30(%rdi), %rax
@@ -5487,7 +5487,7 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	leaq	0x10(%rdi), %rdx
                	leaq	0x20(%rdi), %r8
                	leaq	0x30(%rdi), %rax

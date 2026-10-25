@@ -33,9 +33,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rdx)
-               	leaq	<rip>, %rsi      # <addr>
-               	leaq	<rip>, %rcx      # <addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	(%rsi), %xmm0
                	movabsq	$0x4004000000000000, %rdi # imm = 0x4004000000000000
                	movq	%rdi, %xmm15

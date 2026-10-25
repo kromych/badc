@@ -38,7 +38,7 @@ Disassembly of section .text:
 <lookup>:
                	cmpq	$0x7, %rdi
                	jne	<addr>
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
                	xorl	%eax, %eax
                	jmp	<addr>
@@ -46,7 +46,7 @@ Disassembly of section .text:
 <lookup2>:
                	cmpq	$0x8, %rdi
                	jne	<addr>
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
                	xorl	%eax, %eax
                	jmp	<addr>
@@ -168,7 +168,7 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
                	movl	$0x7, %edi
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	subq	$0x20, %rsp
@@ -251,7 +251,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi        # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x4, %esi
                	callq	<addr>
                	cmpq	$0x17, %rax
@@ -268,12 +268,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	cmpq	$0x7, %rdi
                	jne	<addr>
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <get_sv>:
                	xorl	%eax, %eax
                	cmpq	$0x8, %rdi
                	jne	<addr>
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq

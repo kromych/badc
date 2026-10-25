@@ -33,12 +33,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
-               	leaq	-<rip>, %r10        # <addr>
+               	leaq	-<rip>, %r10 # <addr>
                	movl	(%r10), %eax
                	retq
 
 <address_modifier>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	retq
 
@@ -50,13 +50,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
-               	leaq	-<rip>, %r10        # <addr>
+               	leaq	-<rip>, %r10 # <addr>
                	movl	(%r10), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x21, %eax
                	je	<addr>

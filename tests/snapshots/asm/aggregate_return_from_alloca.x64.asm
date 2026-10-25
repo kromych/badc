@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <touch>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rdi, (%rax)
                	retq
 
@@ -469,9 +469,9 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r12
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movq	%r12, %r13
                	imulq	%rcx, %r13
@@ -689,7 +689,7 @@ Disassembly of section .text:
                	movsbq	%cl, %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	imulq	%r12, %rcx
                	cmpq	%rcx, %r13
@@ -702,7 +702,7 @@ Disassembly of section .text:
                	imulq	%r12, %rax
                	cmpq	%rax, %r15
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x18(%rax), %rax
                	imulq	%r12, %rax
                	movq	%rax, %r10

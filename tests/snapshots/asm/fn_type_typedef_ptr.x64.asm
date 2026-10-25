@@ -32,7 +32,7 @@ Disassembly of section .text:
 
 <my_realloc>:
                	movq	%rsi, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rdx, (%rcx)
                	retq
 
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	movl	$0x2a, %edx
                	callq	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	cmpq	$0x2a, %rcx
                	jne	<addr>
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movl	$0x3, %edi
                	movq	-0x8(%rbp), %rax
@@ -131,7 +131,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x6, %edi
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpl	$0x7, %eax

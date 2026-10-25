@@ -56,7 +56,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
                	cmpl	$0x0, (%rcx)

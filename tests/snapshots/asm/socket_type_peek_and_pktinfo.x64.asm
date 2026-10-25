@@ -125,7 +125,7 @@ Disassembly of section .text:
                	leaq	-0x58(%rbp), %rax
                	movq	%rax, -0x28(%rbp)
                	movq	$0x1, -0x20(%rbp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	xorl	%edx, %edx
                	movq	%rax, -0x18(%rbp)
                	movq	$0x28, -0x10(%rbp)

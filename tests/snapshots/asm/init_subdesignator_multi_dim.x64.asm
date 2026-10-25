@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x148, %rsp            # imm = 0x148
                	pushq	%rbx
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movzwq	(%rdi), %rax
                	movzwq	0x2(%rdi), %rcx
                	movzwq	0xa(%rdi), %rdx
@@ -172,7 +172,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	0x54(%rax), %ecx
                	cmpl	$0x4, %ecx
                	jne	<addr>

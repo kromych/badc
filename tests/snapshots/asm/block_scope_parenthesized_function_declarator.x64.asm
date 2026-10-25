@@ -29,7 +29,7 @@ Disassembly of section .text:
                	subq	%rsi, %rdi
                	imulq	$0x3e8, %rdi, %rax      # imm = 0x3E8
                	addq	$0xc8, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	retq
 
 <where>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	retq
 
 <msf>:
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	imulq	$0xa, %rax, %rax
                	addq	$0x898, %rax            # imm = 0x898

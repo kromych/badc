@@ -476,7 +476,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
-               	movq	<rip>, %rcx      # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
@@ -485,7 +485,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	movl	$0x40400000, %eax       # imm = 0x40400000
-               	movq	<rip>, %rcx      # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	%rax, %xmm0
                	callq	*%rcx
                	movsd	%xmm0, 0x38(%rsp)
@@ -519,7 +519,7 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x50(%rbp)
-               	movq	<rip>, %rcx      # <addr>
+               	movq	<rip>, %rcx # <addr>
                	subq	$0x20, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
@@ -560,7 +560,7 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x40(%rbp)
-               	movq	<rip>, %rcx      # <addr>
+               	movq	<rip>, %rcx # <addr>
                	subq	$0x10, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11

@@ -111,6 +111,10 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # measured from the next instruction's address and shifts whenever
     # any earlier code or .rodata moves.
     (re.compile(r"0x[0-9a-fA-F]+\(%rip\)"), "<rip>"),
+    # objdump pads the comment after an operand to a column its own text
+    # sets, so once the offset reads `<rip>` the padding measures nothing
+    # but the displacement's digit count: one space separates the two.
+    (re.compile(r"(<rip>[^\n#]*?)[ \t]+#"), r"\1 #"),
     # aarch64 ADRP / load-symbol pairs: `adrp x16, 0x410000` then
     # `ldr x16, [x16, #0xc0]`. The page address + offset together name
     # a fixed symbol; treat the pair as a single placeholder.
@@ -795,6 +799,10 @@ def self_test() -> int:
     for arch, text, want in cases:
         got = frame_bytes(text, arch)
         assert got == want, f"{arch} frame decode: {got} != {want}"
+    near = "\tleaq\t0x2f(%rip), %rax           # 0x401030 <x>\n"
+    far = "\tleaq\t0x12345(%rip), %rax        # 0x413348 <x>\n"
+    want = "\tleaq\t<rip>, %rax # <addr>\n"
+    assert normalise_asm(near) == normalise_asm(far) == want, normalise_asm(near)
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
 

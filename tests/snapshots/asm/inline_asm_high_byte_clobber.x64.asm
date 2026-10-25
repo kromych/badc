@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <touch>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	incq	%rcx
                	movq	%rcx, (%rax)
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
                	movq	%rbx, %rsi
                	shlq	%rsi
@@ -205,7 +205,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	jmp	<addr>
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	(%rax), %xmm0
                	movq	%rcx, %xmm14
                	vmulsd	%xmm0, %xmm14, %xmm0

@@ -88,7 +88,7 @@ Disassembly of section .text:
                	retq
 
 <declared_in_an_outer_block>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movslq	(%rax), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	$0x3, %rax
@@ -96,7 +96,7 @@ Disassembly of section .text:
 
 <outer_block_double>:
                	movl	$0x1, %eax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movslq	(%rcx), %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
@@ -109,11 +109,11 @@ Disassembly of section .text:
                	retq
 
 <outer_block_pointer>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	subq	$0x4, %rax
                	movslq	%eax, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	retq
 
@@ -155,7 +155,7 @@ Disassembly of section .text:
 
 <at>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	addq	%rdi, %rax
                	retq
 
@@ -295,7 +295,7 @@ Disassembly of section .text:
                	shlq	$0xa, %rax
                	orq	%rax, %rbx
                	callq	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	incq	%rcx
                	cmpq	%rcx, %rax
                	setne	%al

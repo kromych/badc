@@ -58,14 +58,14 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	-<rip>, %rax        # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	nopl	(%rax)
                	nopw	%cs:(%rax,%rax)
-               	leaq	-<rip>, %rax        # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x2, %eax

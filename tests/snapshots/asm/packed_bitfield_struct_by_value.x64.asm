@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movabsq	$-0x7ffffffe0000001, %r11 # imm = 0xF80000001FFFFFFF
                	andq	%r11, %rcx
@@ -38,11 +38,11 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%rcx, -0x8(%rbp)
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	movq	(%rax), %r10
                	movq	%r10, (%rcx)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	sarq	$0x1d, %rax
                	andq	$0x3fffffff, %rax       # imm = 0x3FFFFFFF
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	andq	$-0x20000000, %rcx      # imm = 0xE0000000
                	orq	$0x1ffffffb, %rcx       # imm = 0x1FFFFFFB
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movabsq	$0x9a0000000, %r11      # imm = 0x9A0000000
                	orq	%r11, %rcx
                	movq	%rcx, (%rax)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rcx, (%rax)
                	movl	(%rax), %ecx
                	shlq	$0x23, %rcx
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	andq	$-0x100000, %rcx        # imm = 0xFFF00000
                	orq	$0xfffff, %rcx          # imm = 0xFFFFF

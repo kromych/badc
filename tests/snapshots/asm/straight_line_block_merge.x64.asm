@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <note>:
                	movq	%rdi, %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %edx
                	addq	%rax, %rdx
                	movl	%edx, (%rcx)
@@ -243,7 +243,7 @@ Disassembly of section .text:
 <ladder>:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx,%rdi,8), %rcx
                	jmpq	*%rcx
                	movl	$0x1, %eax
@@ -257,14 +257,14 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	$0x5, %ecx
                	jmpq	*%rax
                	movl	$0xf, %ecx
                	leaq	0x1(%rcx), %rax
                	retq
                	jmp	<addr>
-               	leaq	-<rip>, %rax        # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	jmp	<addr>
 
 <lift>:
@@ -519,7 +519,7 @@ Disassembly of section .text:
                	jl	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	%ecx, %eax
                	je	<addr>
@@ -642,7 +642,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x7, %esi
                	movl	$0x3, %edx
                	movq	%rsi, %rcx
@@ -653,7 +653,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x7, %esi
                	xorl	%edx, %edx
                	movl	$0x64, %ecx
@@ -664,7 +664,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movl	$0x64, %ecx
                	movq	%rsi, %rdx

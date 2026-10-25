@@ -1852,6 +1852,10 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
                 ("_tcsncpy", "wcsncpy", M),
                 ("_tcslen", "wcslen", M),
                 ("__wcsncnt", "__wcsncnt", M),
+                ("_ftprintf", "fwprintf", M),
+                ("_fgettc", "fgetwc", M),
+                ("_tcsspn", "wcsspn", M),
+                ("_tcstoll", "_wcstoi64", M),
             ],
         );
         for map in ["", "#define _MB_MAP_DIRECT\n"] {
@@ -1910,8 +1914,10 @@ fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
 /// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
 /// and `<wctype.h>` declare under their POSIX and C99 names import an entry
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
-/// target's msvcrt.dll lacks. `<unistd.h>` binds the exec family as
-/// `<process.h>` does.
+/// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
+/// not export reach the ones it does through the header's and the C-library
+/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
+/// does.
 #[test]
 fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     use crate::Target;
@@ -1937,6 +1943,29 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wctype", "wctype", U),
         ("wctrans", "wctrans", U),
         ("towctrans", "towctrans", U),
+        ("fwprintf", "fwprintf", M),
+        ("vfwprintf", "vfwprintf", M),
+        ("vwprintf", "vwprintf", M),
+        ("fwscanf", "fwscanf", M),
+        ("swscanf", "swscanf", M),
+        ("wscanf", "wscanf", M),
+        ("fgetws", "fgetws", M),
+        ("fputws", "fputws", M),
+        ("wcsncat", "wcsncat", M),
+        ("wcscspn", "wcscspn", M),
+        ("wcspbrk", "wcspbrk", M),
+        ("wcsspn", "wcsspn", M),
+        ("wcsstr", "wcsstr", M),
+        ("mbrlen", "mbrlen", M),
+        ("wcstoll", "_wcstoi64", M),
+        ("wcstoull", "_wcstoui64", M),
+        ("swprintf", "_vsnwprintf", M),
+        ("vswprintf", "_vsnwprintf", M),
+        ("vfwscanf", "fwscanf", M),
+        ("vswscanf", "swscanf", M),
+        ("vwscanf", "fwscanf", M),
+        ("wcstof", "wcstod", M),
+        ("wcstold", "wcstod", M),
     ];
     for (target, own) in [
         (

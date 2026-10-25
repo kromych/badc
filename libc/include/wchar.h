@@ -54,6 +54,39 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wcscoll,  "_wcscoll")
 #pragma binding(libc::wcsxfrm,  "_wcsxfrm")
 #pragma binding(libc::wcsftime, "_wcsftime")
+#pragma binding(libc::fwprintf,  "_fwprintf")
+#pragma binding(libc::swprintf,  "_swprintf")
+#pragma binding(libc::vfwprintf, "_vfwprintf")
+#pragma binding(libc::vswprintf, "_vswprintf")
+#pragma binding(libc::vwprintf,  "_vwprintf")
+#pragma binding(libc::wprintf,   "_wprintf")
+#pragma binding(libc::fgetwc,    "_fgetwc")
+#pragma binding(libc::fgetws,    "_fgetws")
+#pragma binding(libc::fputwc,    "_fputwc")
+#pragma binding(libc::fputws,    "_fputws")
+#pragma binding(libc::fwide,     "_fwide")
+#pragma binding(libc::getwc,     "_getwc")
+#pragma binding(libc::getwchar,  "_getwchar")
+#pragma binding(libc::putwc,     "_putwc")
+#pragma binding(libc::putwchar,  "_putwchar")
+#pragma binding(libc::ungetwc,   "_ungetwc")
+#pragma binding(libc::wcstof,    "_wcstof")
+#pragma binding(libc::wcstold,   "_wcstold")
+#pragma binding(libc::wcstoll,   "_wcstoll")
+#pragma binding(libc::wcstoull,  "_wcstoull")
+#pragma binding(libc::wcsncat,   "_wcsncat")
+#pragma binding(libc::wcscspn,   "_wcscspn")
+#pragma binding(libc::wcspbrk,   "_wcspbrk")
+#pragma binding(libc::wcsspn,    "_wcsspn")
+#pragma binding(libc::wcsstr,    "_wcsstr")
+#pragma binding(libc::mbrlen,    "_mbrlen")
+#pragma binding(libc::mbsinit,   "_mbsinit")
+#pragma binding(libc::fwscanf,   "_fwscanf")
+#pragma binding(libc::swscanf,   "_swscanf")
+#pragma binding(libc::wscanf,    "_wscanf")
+#pragma binding(libc::vfwscanf,  "_vfwscanf")
+#pragma binding(libc::vswscanf,  "_vswscanf")
+#pragma binding(libc::vwscanf,   "_vwscanf")
 #endif
 
 #ifdef __linux__
@@ -86,7 +119,45 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wcscoll,  "wcscoll")
 #pragma binding(libc::wcsxfrm,  "wcsxfrm")
 #pragma binding(libc::wcsftime, "wcsftime")
+#pragma binding(libc::fwprintf,  "fwprintf")
+#pragma binding(libc::swprintf,  "swprintf")
+#pragma binding(libc::vfwprintf, "vfwprintf")
+#pragma binding(libc::vswprintf, "vswprintf")
+#pragma binding(libc::vwprintf,  "vwprintf")
+#pragma binding(libc::wprintf,   "wprintf")
+#pragma binding(libc::fgetwc,    "fgetwc")
+#pragma binding(libc::fgetws,    "fgetws")
+#pragma binding(libc::fputwc,    "fputwc")
+#pragma binding(libc::fputws,    "fputws")
+#pragma binding(libc::fwide,     "fwide")
+#pragma binding(libc::getwc,     "getwc")
+#pragma binding(libc::getwchar,  "getwchar")
+#pragma binding(libc::putwc,     "putwc")
+#pragma binding(libc::putwchar,  "putwchar")
+#pragma binding(libc::ungetwc,   "ungetwc")
+#pragma binding(libc::wcstof,    "wcstof")
+#pragma binding(libc::wcstold,   "wcstold")
+#pragma binding(libc::wcstoll,   "wcstoll")
+#pragma binding(libc::wcstoull,  "wcstoull")
+#pragma binding(libc::wcsncat,   "wcsncat")
+#pragma binding(libc::wcscspn,   "wcscspn")
+#pragma binding(libc::wcspbrk,   "wcspbrk")
+#pragma binding(libc::wcsspn,    "wcsspn")
+#pragma binding(libc::wcsstr,    "wcsstr")
+#pragma binding(libc::mbrlen,    "mbrlen")
+#pragma binding(libc::mbsinit,   "mbsinit")
+// The C99 scanners glibc's <wchar.h> selects through C17; its C23 and
+// _GNU_SOURCE ones, __isoc23_*, also read the 0b prefix and %b.
+#pragma binding(libc::fwscanf,   "__isoc99_fwscanf")
+#pragma binding(libc::swscanf,   "__isoc99_swscanf")
+#pragma binding(libc::wscanf,    "__isoc99_wscanf")
+#pragma binding(libc::vfwscanf,  "__isoc99_vfwscanf")
+#pragma binding(libc::vswscanf,  "__isoc99_vswscanf")
+#pragma binding(libc::vwscanf,   "__isoc99_vwscanf")
 #endif
+
+// <stdio.h>'s FILE; the prototypes below need only its tag.
+struct __c5_FILE;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
@@ -119,14 +190,24 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(msvcrt::ungetwc,  "ungetwc")
 #pragma binding(msvcrt::getwchar, "getwchar")
 #pragma binding(msvcrt::putwchar, "putwchar")
-struct __c5_FILE;
-wint_t fgetwc(struct __c5_FILE *stream);
-wint_t fputwc(wchar_t c, struct __c5_FILE *stream);
-wint_t getwc(struct __c5_FILE *stream);
-wint_t putwc(wchar_t c, struct __c5_FILE *stream);
-wint_t ungetwc(wint_t c, struct __c5_FILE *stream);
-wint_t getwchar(void);
-wint_t putwchar(wchar_t c);
+#pragma binding(msvcrt::fgetws,   "fgetws")
+#pragma binding(msvcrt::fputws,   "fputws")
+#pragma binding(msvcrt::fwprintf,  "fwprintf")
+#pragma binding(msvcrt::vfwprintf, "vfwprintf")
+#pragma binding(msvcrt::vwprintf,  "vwprintf")
+#pragma binding(msvcrt::wprintf,   "wprintf")
+#pragma binding(msvcrt::fwscanf,   "fwscanf")
+#pragma binding(msvcrt::swscanf,   "swscanf")
+#pragma binding(msvcrt::wscanf,    "wscanf")
+#pragma binding(msvcrt::wcsncat,  "wcsncat")
+#pragma binding(msvcrt::wcscspn,  "wcscspn")
+#pragma binding(msvcrt::wcspbrk,  "wcspbrk")
+#pragma binding(msvcrt::wcsspn,   "wcsspn")
+#pragma binding(msvcrt::wcsstr,   "wcsstr")
+#pragma binding(msvcrt::mbrlen,   "mbrlen")
+// msvcrt.dll spells wcstoll / wcstoull as it spells strtoll / strtoull.
+#pragma binding(msvcrt::wcstoll,  "_wcstoi64")
+#pragma binding(msvcrt::wcstoull, "_wcstoui64")
 wchar_t *_itow(int value, wchar_t *dst, int radix);
 wchar_t *_ltow(long value, wchar_t *dst, int radix);
 wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
@@ -157,21 +238,40 @@ int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
 #pragma binding(msvcrt::wctob,     "wctob")
 
 // Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
-// functions (7.24.4.4 / 7.24.4.5), count-based swprintf (7.24.2.3), or
-// wcsnlen_s; the Microsoft SDK defines them inline over the exported
-// primitives _vsnwprintf and wcsnlen. Mirror that so a reference
-// resolves without a separate support library.
+// functions (7.24.4.4 / 7.24.4.5) or wcsnlen_s, and msvcrt.dll's swprintf
+// and vswprintf take no count; the Microsoft SDK defines the first inline
+// over the exported primitives, and libmsvcrt.a defines swprintf and
+// vswprintf over _vsnwprintf, ending the text at the count's last element
+// and returning a negative value when it does not fit (C99 7.24.2.3).
+// mingw-w64 defines fwide as a request granted, msvcrt streams having no
+// orientation, and mbsinit over msvcrt's int-sized conversion state.
 #include <stdarg.h>
 #pragma binding(msvcrt::_vsnwprintf, "_vsnwprintf")
 #pragma binding(msvcrt::wcsnlen,     "wcsnlen")
 int _vsnwprintf(wchar_t *buffer, size_t count, const wchar_t *format, va_list ap);
 size_t wcsnlen(const wchar_t *s, size_t maxlen);
-static inline int swprintf(wchar_t *buffer, size_t count, const wchar_t *format, ...) {
+static inline int vswprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format,
+                            va_list ap) {
+    if (n == 0)
+        return -1;
+    int r = _vsnwprintf(s, n - 1, format, ap);
+    if (r < 0 || (size_t)r == n - 1)
+        s[n - 1] = 0;
+    return r;
+}
+static inline int swprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, ...) {
     va_list ap;
     va_start(ap, format);
-    int r = _vsnwprintf(buffer, count, format, ap);
+    int r = vswprintf(s, n, format, ap);
     va_end(ap);
     return r;
+}
+static inline int fwide(struct __c5_FILE *stream, int mode) {
+    (void)stream;
+    return mode;
+}
+static inline int mbsinit(const mbstate_t *ps) {
+    return !ps || !(ps->__opaque[0] | ps->__opaque[1] | ps->__opaque[2] | ps->__opaque[3]);
 }
 static inline size_t wcsnlen_s(const wchar_t *s, size_t n) {
     return s ? wcsnlen(s, n) : 0;
@@ -209,6 +309,41 @@ static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
 }
 #endif
 
+// Formatted wide-character input/output (C99 7.24.2). On Windows swprintf
+// and vswprintf are the definitions above.
+int fwprintf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
+int fwscanf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
+int swscanf(const wchar_t *restrict s, const wchar_t *restrict format, ...);
+int vfwprintf(struct __c5_FILE *restrict stream, const wchar_t *restrict format,
+              __builtin_va_list arg);
+int vfwscanf(struct __c5_FILE *restrict stream, const wchar_t *restrict format,
+             __builtin_va_list arg);
+int vswscanf(const wchar_t *restrict s, const wchar_t *restrict format, __builtin_va_list arg);
+int vwprintf(const wchar_t *restrict format, __builtin_va_list arg);
+int vwscanf(const wchar_t *restrict format, __builtin_va_list arg);
+int wprintf(const wchar_t *restrict format, ...);
+int wscanf(const wchar_t *restrict format, ...);
+#ifndef _WIN32
+int swprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, ...);
+int vswprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format,
+              __builtin_va_list arg);
+#endif
+
+// Wide-character input/output (C99 7.24.3). On Windows fwide is the
+// definition above.
+wint_t fgetwc(struct __c5_FILE *stream);
+wchar_t *fgetws(wchar_t *restrict s, int n, struct __c5_FILE *restrict stream);
+wint_t fputwc(wchar_t c, struct __c5_FILE *stream);
+int fputws(const wchar_t *restrict s, struct __c5_FILE *restrict stream);
+#ifndef _WIN32
+int fwide(struct __c5_FILE *stream, int mode);
+#endif
+wint_t getwc(struct __c5_FILE *stream);
+wint_t getwchar(void);
+wint_t putwc(wchar_t c, struct __c5_FILE *stream);
+wint_t putwchar(wchar_t c);
+wint_t ungetwc(wint_t c, struct __c5_FILE *stream);
+
 // Wide-string handling (C99 7.24.4). `size_t` comes from <stddef.h>.
 size_t wcslen(const wchar_t *s);
 int wcscmp(const wchar_t *s1, const wchar_t *s2);
@@ -218,6 +353,11 @@ wchar_t *wcsrchr(const wchar_t *s, wchar_t c);
 wchar_t *wcscpy(wchar_t *dest, const wchar_t *src);
 wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wcscat(wchar_t *dest, const wchar_t *src);
+wchar_t *wcsncat(wchar_t *restrict s1, const wchar_t *restrict s2, size_t n);
+size_t wcscspn(const wchar_t *s1, const wchar_t *s2);
+wchar_t *wcspbrk(const wchar_t *s1, const wchar_t *s2);
+size_t wcsspn(const wchar_t *s1, const wchar_t *s2);
+wchar_t *wcsstr(const wchar_t *s1, const wchar_t *s2);
 
 // Wide-character array handling (C99 7.24.4.4). On Windows these have
 // inline definitions in the target block above, since no system CRT
@@ -233,10 +373,19 @@ wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
 // Wide-string numeric conversion (C99 7.24.4.1).
 long wcstol(const wchar_t *nptr, wchar_t **endptr, int base);
 unsigned long wcstoul(const wchar_t *nptr, wchar_t **endptr, int base);
+long long wcstoll(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
+unsigned long long wcstoull(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
 double wcstod(const wchar_t *nptr, wchar_t **endptr);
+float wcstof(const wchar_t *restrict nptr, wchar_t **restrict endptr);
+long double wcstold(const wchar_t *restrict nptr, wchar_t **restrict endptr);
 wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
 
-// Restartable multibyte / wide conversion (C99 7.24.6.3).
+// Conversion state (C99 7.24.6.2; on Windows the definition above) and
+// restartable multibyte / wide conversion (C99 7.24.6.3).
+#ifndef _WIN32
+int mbsinit(const mbstate_t *ps);
+#endif
+size_t mbrlen(const char *restrict s, size_t n, mbstate_t *restrict ps);
 size_t mbrtowc(wchar_t *pwc, const char *s, size_t n, mbstate_t *ps);
 size_t wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
 size_t wcsrtombs(char *dst, const wchar_t **src, size_t len, mbstate_t *ps);

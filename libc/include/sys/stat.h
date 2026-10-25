@@ -484,3 +484,46 @@ int fstatfs(int fd, struct statfs *buf);
 int mknod(const char *path, mode_t mode, dev_t dev);
 int mknodat(int fd, const char *path, mode_t mode, dev_t dev);
 #endif
+
+// The file-mode and directory-relative functions of <sys/stat.h> (POSIX).
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::chmod,     "_chmod")
+#pragma binding(libc::fchmod,    "_fchmod")
+#pragma binding(libc::fchmodat,  "_fchmodat")
+#pragma binding(libc::fstatat,   "_fstatat")
+#pragma binding(libc::futimens,  "_futimens")
+#pragma binding(libc::mkdir,     "_mkdir")
+#pragma binding(libc::mkdirat,   "_mkdirat")
+#pragma binding(libc::mkfifo,    "_mkfifo")
+#pragma binding(libc::mkfifoat,  "_mkfifoat")
+#pragma binding(libc::umask,     "_umask")
+#pragma binding(libc::utimensat, "_utimensat")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::chmod,     "chmod")
+#pragma binding(libc::fchmod,    "fchmod")
+#pragma binding(libc::fchmodat,  "fchmodat")
+#pragma binding(libc::fstatat,   "fstatat")
+#pragma binding(libc::futimens,  "futimens")
+#pragma binding(libc::mkdir,     "mkdir")
+#pragma binding(libc::mkdirat,   "mkdirat")
+#pragma binding(libc::mkfifo,    "mkfifo")
+#pragma binding(libc::mkfifoat,  "mkfifoat")
+#pragma binding(libc::umask,     "umask")
+#pragma binding(libc::utimensat, "utimensat")
+#endif
+int chmod(const char *path, mode_t mode);
+int fchmod(int fd, mode_t mode);
+int fchmodat(int fd, const char *path, mode_t mode, int flag);
+int fstatat(int fd, const char *restrict path, struct stat *restrict buf, int flag);
+int futimens(int fd, const struct timespec times[2]);
+int mkdir(const char *path, mode_t mode);
+int mkdirat(int fd, const char *path, mode_t mode);
+int mkfifo(const char *path, mode_t mode);
+int mkfifoat(int fd, const char *path, mode_t mode);
+mode_t umask(mode_t cmask);
+int utimensat(int fd, const char *path, const struct timespec times[2], int flag);
+#endif

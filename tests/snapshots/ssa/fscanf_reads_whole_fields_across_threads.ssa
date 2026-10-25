@@ -18,7 +18,7 @@ fn ent_pc=14 n_params=1 variadic=false locals=1
     v19  Load { addr=v18, disp=0, kind=I64 }              -> x7
     v20  ImmData(48)                                      -> x6
     v21  LocalAddr(-1)                                    -> x2
-    v22  CallExt { binding_idx=390, args=[v19, v20, v21], fp_arg_mask=0x0 } -> x0
+    v22  CallExt { binding_idx=391, args=[v19, v20, v21], fp_arg_mask=0x0 } -> x0
     v23  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> x0
     v24  Imm(0)                                           -> x1
     terminator Jmp(b3)   (exit_acc=v23)
@@ -118,7 +118,7 @@ fn ent_pc=15 n_params=1 variadic=false locals=2
     v49  Imm(100000)                                      -> x0
     v50  Imm(0)                                           -> x0
     v51  BinopI { op=add, lhs=v25, rhs_imm=100000 }       -> x2
-    v52  CallExt { binding_idx=363, args=[v47, v48, v51], fp_arg_mask=0x0 } -> x0
+    v52  CallExt { binding_idx=364, args=[v47, v48, v51], fp_arg_mask=0x0 } -> x0
     v53  Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v52)
   block 5  start_pc=0

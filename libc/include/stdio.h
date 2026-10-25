@@ -144,6 +144,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::setvbuf,   "_setvbuf")
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
+#pragma binding(libc::renameat,  "_renameat")
 #pragma binding(libc::dlsym,     "_dlsym")
 // POSIX.1-2008 `open_memstream` -- creates a FILE * backed
 // by a heap buffer the libc grows as the program writes
@@ -234,6 +235,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::setvbuf,   "setvbuf")
 #pragma binding(libc::remove,    "remove")
 #pragma binding(libc::rename,    "rename")
+#pragma binding(libc::renameat,  "renameat")
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
@@ -561,6 +563,10 @@ void clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, size_t size);
 int remove(const char *path);
 int rename(const char *old_path, const char *new_path);
+#ifndef _WIN32
+// POSIX: rename relative to the directory descriptors `oldfd` and `newfd`.
+int renameat(int oldfd, const char *old_path, int newfd, const char *new_path);
+#endif
 #ifndef _WIN32
 // POSIX open_memstream(3). Caller passes addresses of (char *,
 // size_t) slots the libc updates as bytes are written.

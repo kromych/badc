@@ -233,9 +233,6 @@
 #pragma binding(libc::usleep,    "_usleep")
 #pragma binding(libc::isatty,    "_isatty")
 #pragma binding(libc::readlink,  "_readlink")
-#pragma binding(libc::mkdir,     "_mkdir")
-#pragma binding(libc::mknod,     "_mknod")
-#pragma binding(libc::mkfifo,    "_mkfifo")
 #pragma binding(libc::dup,       "_dup")
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
@@ -250,28 +247,17 @@
 #pragma binding(libc::setgid,    "_setgid")
 #pragma binding(libc::setuid,    "_setuid")
 #pragma binding(libc::_exit,     "__exit")
-#pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
-#pragma binding(libc::umask,     "_umask")
-#pragma binding(libc::chmod,     "_chmod")
 #pragma binding(libc::chown,     "_chown")
 #pragma binding(libc::truncate,  "_truncate")
 #pragma binding(libc::link,      "_link")
 #pragma binding(libc::symlink,   "_symlink")
-#pragma binding(libc::fstatat,   "_fstatat")
-#pragma binding(libc::mkdirat,   "_mkdirat")
-#pragma binding(libc::mknodat,   "_mknodat")
-#pragma binding(libc::mkfifoat,  "_mkfifoat")
-#pragma binding(libc::fchmodat,  "_fchmodat")
 #pragma binding(libc::fchownat,  "_fchownat")
 #pragma binding(libc::unlinkat,  "_unlinkat")
 #pragma binding(libc::linkat,    "_linkat")
 #pragma binding(libc::symlinkat, "_symlinkat")
 #pragma binding(libc::readlinkat,"_readlinkat")
 #pragma binding(libc::faccessat, "_faccessat")
-#pragma binding(libc::renameat,  "_renameat")
-#pragma binding(libc::utimensat, "_utimensat")
-#pragma binding(libc::futimens,  "_futimens")
 #pragma binding(libc::ttyname,   "_ttyname")
 #pragma binding(libc::ttyname_r, "_ttyname_r")
 #pragma binding(libc::ctermid,   "_ctermid")
@@ -376,9 +362,6 @@ extern char **environ;
 #pragma binding(libc::usleep,    "usleep")
 #pragma binding(libc::isatty,    "isatty")
 #pragma binding(libc::readlink,  "readlink")
-#pragma binding(libc::mkdir,     "mkdir")
-#pragma binding(libc::mknod,     "mknod")
-#pragma binding(libc::mkfifo,    "mkfifo")
 #pragma binding(libc::dup,       "dup")
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::dup3,      "dup3")
@@ -401,28 +384,17 @@ extern char **environ;
 #pragma binding(libc::setgid,    "setgid")
 #pragma binding(libc::setuid,    "setuid")
 #pragma binding(libc::_exit,     "_exit")
-#pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
-#pragma binding(libc::umask,     "umask")
-#pragma binding(libc::chmod,     "chmod")
 #pragma binding(libc::chown,     "chown")
 #pragma binding(libc::truncate,  "truncate")
 #pragma binding(libc::link,      "link")
 #pragma binding(libc::symlink,   "symlink")
-#pragma binding(libc::fstatat,   "fstatat")
-#pragma binding(libc::mkdirat,   "mkdirat")
-#pragma binding(libc::mknodat,   "mknodat")
-#pragma binding(libc::mkfifoat,  "mkfifoat")
-#pragma binding(libc::fchmodat,  "fchmodat")
 #pragma binding(libc::fchownat,  "fchownat")
 #pragma binding(libc::unlinkat,  "unlinkat")
 #pragma binding(libc::linkat,    "linkat")
 #pragma binding(libc::symlinkat, "symlinkat")
 #pragma binding(libc::readlinkat,"readlinkat")
 #pragma binding(libc::faccessat, "faccessat")
-#pragma binding(libc::renameat,  "renameat")
-#pragma binding(libc::utimensat, "utimensat")
-#pragma binding(libc::futimens,  "futimens")
 #pragma binding(libc::ttyname,   "ttyname")
 #pragma binding(libc::ttyname_r, "ttyname_r")
 #pragma binding(libc::ctermid,   "ctermid")
@@ -601,11 +573,6 @@ int pause(void);
 int isatty(int fd);
 #ifndef _WIN32
 ssize_t readlink(const char *path, char *buf, size_t n);
-int mkdir(const char *path, mode_t mode);
-// POSIX: create a filesystem node. The device argument is unused for
-// regular / FIFO nodes; callers pass 0.
-int mknod(const char *path, mode_t mode, dev_t dev);
-int mkfifo(const char *path, mode_t mode);
 #endif
 int dup(int fd);
 int dup2(int oldfd, int newfd);
@@ -653,36 +620,25 @@ int setuid(uid_t uid);
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
-#ifndef _WIN32
-int fchmod(int fd, mode_t mode);
-int fchown(int fd, uid_t uid, gid_t gid);
-#endif
+#ifdef _WIN32
 mode_t umask(mode_t mode);
-#ifndef _WIN32
-int chmod(const char *path, mode_t mode);
+#else
+int fchown(int fd, uid_t uid, gid_t gid);
 int chown(const char *path, uid_t uid, gid_t gid);
 #endif
 int truncate(const char *path, off_t len);
 #ifndef _WIN32
 int link(const char *from, const char *to);
 int symlink(const char *from, const char *to);
-// The *at family (POSIX): operate relative to a directory descriptor
-// `dirfd` (or AT_FDCWD from <fcntl.h>). The stat / timespec buffers are
-// opaque to c5, matching the plain stat() convention above.
-int fstatat(int dirfd, char *path, char *buf, int flag);
-int mkdirat(int dirfd, const char *path, mode_t mode);
-int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev);
-int mkfifoat(int dirfd, const char *path, mode_t mode);
-int fchmodat(int dirfd, const char *path, mode_t mode, int flag);
-int fchownat(int dirfd, const char *path, uid_t uid, gid_t gid, int flag);
-int unlinkat(int dirfd, char *path, int flag);
-int linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, int flag);
-int symlinkat(char *target, int newdirfd, char *linkpath);
-int readlinkat(int dirfd, char *path, char *buf, int bufsiz);
-int faccessat(int dirfd, char *path, int mode, int flag);
-int renameat(int olddirfd, char *oldpath, int newdirfd, char *newpath);
-int utimensat(int dirfd, char *path, char *times, int flag);
-int futimens(int fd, char *times);
+// The *at family of <unistd.h> (POSIX): each path is relative to the
+// directory descriptor `fd`, or AT_FDCWD from <fcntl.h>. <sys/stat.h> and
+// <stdio.h> declare the rest.
+int fchownat(int fd, const char *path, uid_t owner, gid_t group, int flag);
+int unlinkat(int fd, const char *path, int flag);
+int linkat(int fd1, const char *path1, int fd2, const char *path2, int flag);
+int symlinkat(const char *path1, int fd, const char *path2);
+ssize_t readlinkat(int fd, const char *restrict path, char *restrict buf, size_t bufsize);
+int faccessat(int fd, const char *path, int amode, int flag);
 // Terminal and login identity (POSIX).
 char *ttyname(int fd);
 int ttyname_r(int fd, char *buf, unsigned long len);

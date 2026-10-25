@@ -1605,6 +1605,7 @@ impl Compiler {
         self.func_local_addr_taken = false;
         self.uses_alloca_in_current_fn = false;
         self.func_vla_decls = 0;
+        self.vla_type_sizes.clear();
         self.ast_reset();
 
         let ent_pc = self.next_ent_pc;
@@ -1764,17 +1765,17 @@ impl Compiler {
                 // level (and the inner blocks reached
                 // through parse_block_stmt).
                 self.parse_static_assert()?;
-            } else if self.lex.tk == Token::Typedef {
-                // C99 6.7.7: a typedef may appear at the
-                // function-body top level. `lex_is_type_start`
-                // does not cover the `typedef` storage-class
-                // keyword, so dispatch it here (the nested
-                // blocks reach the same handler through
-                // parse_block_stmt).
-                self.parse_block_typedef()?;
-            } else if self.lex_is_block_decl_start() {
+            } else if self.lex.tk == Token::Typedef || self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
-                self.parse_local_decl()?;
+                // C99 6.7.7: a typedef may appear at the function-body top
+                // level; `lex_is_block_decl_start` does not cover the
+                // `typedef` keyword. A variably modified one stores its
+                // array's size.
+                if self.lex.tk == Token::Typedef {
+                    self.parse_block_typedef()?;
+                } else {
+                    self.parse_local_decl()?;
+                }
                 let item_after = self.ast.stmts.len();
                 // Skip any statement-expression sub-statements
                 // interleaved by an initializer; they are

@@ -53,6 +53,64 @@ fn vla_array_type_runs_under_the_interpreter() {
     }
 }
 
+/// A block-scope typedef of a variable-length array type (C99 6.7.7p2)
+/// under the interpreter, for both data models.
+#[test]
+fn vla_typedef_runs_under_the_interpreter() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            super::run_fixture_for("vla_typedef_block_scope.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
+/// What a variably modified typedef may not declare: an object of static
+/// storage duration or with linkage (C99 6.7.5.2p2) and a member
+/// (6.7.2.1p8), which gcc 16 and clang 22 reject; a jump into its scope
+/// (6.8.6.1p1); and an array of it, which badc does not lay out.
+#[test]
+fn vla_typedef_constraints_are_diagnosed() {
+    for (body, text) in [
+        (
+            "static U u;",
+            "variable-length array `u` may not have static storage duration",
+        ),
+        (
+            "extern U u;",
+            "variable-length array `u` may not have linkage",
+        ),
+        (
+            "struct S { U m; } s;",
+            "field `m` has a variably modified type",
+        ),
+        (
+            "U a[2];",
+            "a non-constant inner array dimension is not supported",
+        ),
+        (
+            "typedef U W[3];",
+            "a non-constant inner array dimension is not supported",
+        ),
+    ] {
+        let src = alloc::format!("int f(int n) {{ typedef char U[n]; {body} return n; }}\n");
+        match Compiler::new(src).compile() {
+            Ok(_) => panic!("{body}: compiled"),
+            Err(e) => {
+                let msg = alloc::format!("{e}");
+                assert!(msg.contains(text), "{body}: {msg}");
+            }
+        }
+    }
+    let src = "int f(int n) { goto l; typedef char U[n]; l: return n; }\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("jumps into the scope of `U`"), "{msg}");
+    let src = "int n = 3; typedef char U[n];\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("only allowed at block scope"), "{msg}");
+}
+
 /// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
 /// is no constant: an array bound of it declares a variable-length array
 /// (`int b[sizeof a]`), and a context that requires a constant rejects it,

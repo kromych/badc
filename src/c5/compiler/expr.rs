@@ -5823,6 +5823,7 @@ impl Compiler {
             } + dims.len(),
             f: base_fn.unwrap_or_default(),
         });
+        let vla_value = dims.is_empty() && self.vla_value_slot(base).is_some();
         let mut t = DerivedType {
             ty: base,
             own_bounds: dims.len(),
@@ -5832,7 +5833,7 @@ impl Compiler {
             fn_ptr_indirection,
             ptr_levels: 0,
             vla: None,
-            vla_value: false,
+            vla_value,
         };
         // The leading pointers are the declarator's last derivations, so
         // they apply to the base type first (C99 6.7.5.1).
@@ -6071,6 +6072,26 @@ impl Compiler {
         } else {
             self.array_agg_type(t.ty, &t.dims)
         };
+        let (ty, bound) = self.vla_bound_type(elem, dim);
+        t.ty = ty;
+        t.dims.clear();
+        t.own_bounds = 0;
+        t.vla_value = true;
+        t.vla = Some(bound);
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
+    /// The variable-length array type of `dim` elements of `elem`, and the
+    /// store of its byte count into the frame slot the type reads, which
+    /// runs where the declaration or type name is evaluated (C99 6.7.5.2p4).
+    pub(super) fn vla_bound_type(
+        &mut self,
+        elem: i64,
+        dim: super::super::ast::ExprId,
+    ) -> (i64, VmBound) {
         let elem_size = self.size_of_type(elem) as i64;
         let slot = self.reserve_slots(1);
         let size_t = self.size_t_ty();
@@ -6108,15 +6129,8 @@ impl Compiler {
             },
             pos,
         );
-        t.ty = self.vla_array_type(elem, slot);
-        t.dims.clear();
-        t.own_bounds = 0;
-        t.vla_value = true;
-        t.vla = Some(VmBound { slot, store });
-        if let Some(f) = t.fn_ty.as_mut() {
-            f.ptr_depth += 1;
-        }
-        Ok(())
+        self.vla_type_sizes.insert(slot, size);
+        (self.vla_array_type(elem, slot), VmBound { slot, store })
     }
 
     /// A function returning the type `t` holds, on convention `conv`, which

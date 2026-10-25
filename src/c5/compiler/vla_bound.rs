@@ -124,6 +124,10 @@ impl Compiler {
                     None => self.type_range(*ty),
                 }
             }
+            Expr::VlaSizeof { size_slot } => {
+                let size = *self.vla_type_sizes.get(size_slot)?;
+                self.value_range(size, known)
+            }
             Expr::Ternary {
                 cond,
                 then_e,

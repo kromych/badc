@@ -683,6 +683,14 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
+    /// The byte-count slot of `ty` when it is a variable-length array type.
+    pub(super) fn vla_value_slot(&self, ty: i64) -> Option<i64> {
+        let id = struct_id_of(ty);
+        is_struct_value_ty(ty)
+            .then(|| self.structs.get(id)?.vla_size_slot)
+            .flatten()
+    }
+
     /// The byte-count slot of the variable-length array `ty` points to.
     pub(super) fn vla_pointee_slot(&self, ty: i64) -> Option<i64> {
         self.ptr_array_id_depth1(ty)

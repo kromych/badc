@@ -484,6 +484,8 @@ impl Compiler {
             self.pending.fn_params = None;
             let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
+            let (ty, array_size_vla) = self.vla_typed_object(ty, array_size)?;
+            array_size = array_size_vla;
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
                 self.report_implicit_int(what, declarator_line)?;
@@ -567,6 +569,20 @@ impl Compiler {
                 ));
             }
 
+            // C99 6.7.5.2p2: an object of variable-length array type has no
+            // linkage and automatic storage duration.
+            if array_size == super::VLA_ARRAY_SIZE && (is_static || is_extern) {
+                let name = self.symbols[loc_idx].name.clone();
+                let what = if is_extern {
+                    "linkage"
+                } else {
+                    "static storage duration"
+                };
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("variable-length array `{name}` may not have {what}"),
+                ));
+            }
             if is_extern {
                 let bounds = self.declared_bounds(loc_idx, array_size, zero_len);
                 let spelled = super::redeclaration::Spelled {
@@ -1701,6 +1717,46 @@ impl Compiler {
         }
         self.ast_acc = None;
         Ok(())
+    }
+
+    /// An object declared with a variable-length array type (through a
+    /// variably modified typedef, C99 6.7.7p3) is a variable-length array
+    /// of the type's length: its element type and the `VLA_ARRAY_SIZE`
+    /// marker, the element count read back from the byte count the type's
+    /// slot holds. Any other declarator passes through.
+    fn vla_typed_object(&mut self, ty: i64, array_size: i64) -> Result<(i64, i64), C5Error> {
+        use super::super::ast::Expr;
+        let Some(slot) = self.vla_value_slot(ty) else {
+            return Ok((ty, array_size));
+        };
+        if array_size != 0 {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a non-constant inner array dimension is not supported",
+            ));
+        }
+        let elem = self.structs[super::types::struct_id_of(ty)].fields[0].ty;
+        let size_t = self.size_t_ty();
+        let pos = self.ast_src_pos();
+        let bytes = self.ast.push_expr(Expr::VlaSizeof { size_slot: slot }, pos);
+        let elem_size = self.ast.push_expr(
+            Expr::IntLit {
+                val: self.size_of_type(elem) as i64,
+                ty: size_t,
+            },
+            pos,
+        );
+        let count = self.ast.push_expr(
+            Expr::Binary {
+                op: crate::c5::ir::BinOp::Divu,
+                lhs: bytes,
+                rhs: elem_size,
+                ty: size_t,
+            },
+            pos,
+        );
+        self.pending.vla_dim_expr = Some(count);
+        Ok((elem, super::VLA_ARRAY_SIZE))
     }
 
     /// C99 6.7.6.2 variable-length array local. Reserves two hidden

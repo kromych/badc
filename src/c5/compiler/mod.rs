@@ -1889,6 +1889,11 @@ pub struct Compiler {
     /// exit. Reset on each new function definition.
     func_vla_decls: usize,
 
+    /// The byte count expression of each variable-length array type, by
+    /// the slot the count is stored in: the `-Wvla-larger-than=` bound of
+    /// an object declared through the type.
+    vla_type_sizes: hashbrown::HashMap<i64, super::ast::ExprId>,
+
     /// Half-open `self.ast.stmts` ranges owned by statement
     /// expressions `({ ... })` parsed in the current function. A
     /// statement expression pushes its block's statements into the
@@ -2939,6 +2944,7 @@ impl Compiler {
             func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
+            vla_type_sizes: hashbrown::HashMap::new(),
             stmt_expr_arena_ranges: Vec::new(),
             const_unevaluated: 0,
             unevaluated: 0,

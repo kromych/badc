@@ -804,9 +804,35 @@ impl Compiler {
                 self.pending.base_is_function_type,
             ) = base_fn.clone();
             let declarator_line = self.lex.line;
-            let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
+            // C99 6.7.7p3: a variably modified typedef's size expression is
+            // evaluated when the declaration is reached; the type keeps the
+            // byte count that evaluation stores.
+            let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
+            let declared = self.parse_declarator(lbt);
+            self.pending.vla_allowed = saved_vla;
+            let (id_idx, mut ty, mut td_array, mut td_zero_len) = declared?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
+            }
+            if td_array != 0 && self.vla_value_slot(ty).is_some() {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "a non-constant inner array dimension is not supported",
+                ));
+            }
+            if td_array == super::VLA_ARRAY_SIZE {
+                let dim = self.pending.vla_dim_expr.take().ok_or_else(|| {
+                    self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "variable-length array has no dimension",
+                    )
+                })?;
+                let (vla_ty, bound) = self.vla_bound_type(ty, dim);
+                let pos = self.ast_src_pos();
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
+                self.note_jump_barrier(id_idx, true);
+                (ty, td_array) = (vla_ty, 0);
             }
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
@@ -1184,16 +1210,21 @@ impl Compiler {
             if self.lex.tk == '}' {
                 break;
             }
-            if self.lex.tk == Token::Typedef {
-                self.parse_block_typedef()?;
-            } else if self.lex.tk == Token::StaticAssert {
+            if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
-            } else if self.lex_is_block_decl_start() && !self.at_fallthrough_statement() {
+            } else if self.lex.tk == Token::Typedef
+                || (self.lex_is_block_decl_start() && !self.at_fallthrough_statement())
+            {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl()?;
+                // A variably modified typedef stores its array's size.
+                if self.lex.tk == Token::Typedef {
+                    self.parse_block_typedef()?;
+                } else {
+                    self.parse_local_decl()?;
+                }
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }

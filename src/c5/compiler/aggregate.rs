@@ -403,6 +403,13 @@ impl Compiler {
                     format!("field `{field_name}` has incomplete type"),
                 ));
             }
+            // C99 6.7.2.1p8: no member has a variably modified type.
+            if self.vla_value_slot(field_ty).is_some() {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("field `{field_name}` has a variably modified type"),
+                ));
+            }
 
             if bit_width > 0 && field_array_size != 0 {
                 return Err(self.compile_err(

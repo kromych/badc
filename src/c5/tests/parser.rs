@@ -6322,6 +6322,38 @@ fn vla_larger_than_reports_the_arrays_gcc_does() {
     assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
 }
 
+/// An object declared through a variably modified typedef is bounded by
+/// the typedef's size expression, so `-Wvla-larger-than=` reports it where
+/// it reports the array that expression declares directly. (gcc 16 -O2
+/// reports either form or neither depending on how the array's address
+/// is passed on, so its lines are not the reference here.)
+#[test]
+fn vla_larger_than_reads_a_typedef_bound() {
+    let src = "void use(char *);\n\
+               void b(unsigned char n) { char v[n]; use(v); }\n\
+               void tb(unsigned char n) { typedef char U[n]; U v; use(v); }\n\
+               void mu(unsigned char n) { int v[n]; use((char *)v); }\n\
+               void tm(unsigned char n) { typedef int U[n]; U v; use((char *)v); }\n\
+               int main(void) { return 0; }\n";
+    let lines = |bound: u64| -> Vec<u32> {
+        let options = crate::CompileOptions::default()
+            .with_optimize(true)
+            .with_vla_larger_than(Some(bound))
+            .with_diag(super::diag_config(&["vla-larger-than"]));
+        Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::VLA_LARGER_THAN)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    for (bound, want) in [(100, &[2, 3, 4, 5][..]), (255, &[4, 5]), (1020, &[])] {
+        assert_eq!(lines(bound), want, "-Wvla-larger-than={bound}");
+    }
+}
+
 /// gcc's `-Wenum-conversion` (in `-Wextra`): an assignment, initializer,
 /// prototyped argument or return converting a value of one enumerated type
 /// to another, the type compared being gcc's original one: an enumeration

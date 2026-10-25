@@ -94,7 +94,9 @@ pub use linker::{
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
-pub use linker::{ArchiveMember, is_arm64x_archive, read_archive, write_archive};
+pub use linker::{
+    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+};
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{is_ld_invocation, run_ld};

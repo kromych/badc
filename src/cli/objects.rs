@@ -96,13 +96,12 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     }
 }
 
-/// `--ar` mode: bundle each `.c` input (compiled to native
-/// ELF64 ET_REL) plus any passed-in `.o` into a single
+/// `--ar` mode: bundle each `.c` input (compiled to a native
+/// relocatable object) plus any passed-in `.o` into a single
 /// SysV `ar` archive named by `-o`. Member bytes are the
 /// exact same blob `-c` would have written to disk; the
-/// SysV symbol index lists every `STB_GLOBAL`-defined name
-/// so the linker's archive pull-in can resolve undefined
-/// references without re-parsing each member.
+/// symbol index lists the names [`native_defined_globals`]
+/// gives for each member.
 pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,

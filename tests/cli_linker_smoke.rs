@@ -12768,26 +12768,7 @@ fn the_ld_persona_searches_past_an_incompatible_library() {
             "link a library",
         );
     }
-    // An `ar` archive of one member, in the common format.
-    let archive = |obj: &str, out: &str| {
-        let body = std::fs::read(dir.join(obj)).expect("read the object");
-        let name = format!("{obj}/");
-        let head = format!(
-            "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
-            0,
-            0,
-            0,
-            644,
-            body.len()
-        );
-        let mut a = b"!<arch>\n".to_vec();
-        a.extend(head.bytes());
-        a.extend(&body);
-        if a.len() % 2 == 1 {
-            a.push(b'\n');
-        }
-        std::fs::write(dir.join(out), a).expect("write the archive");
-    };
+    let archive = |obj: &str, out: &str| tool(&["-q", "--ar", "-o", out, obj], "archive");
     archive("f64.o", "d64/liby.a");
     archive("f32.o", "d32/liby.a");
     archive("f32.o", "mix/libz.a");
@@ -13259,6 +13240,78 @@ fn a_shared_objects_init_function_runs_before_its_init_array() {
         "run the executable",
     );
     assert_eq!(String::from_utf8_lossy(&out.stdout), "12\n");
+}
+
+// `--ar` archives i386 and x86-64 objects alike, its symbol index naming
+// each member's global and weak definitions and absolute symbols at the
+// member's header, as GNU ar indexes them; where GNU ld is installed it
+// pulls the member a program calls into.
+#[test]
+fn an_archive_of_either_elf_class_indexes_its_members_at_their_headers() {
+    let dir = tempdir("ar-index");
+    write_source(
+        &dir,
+        "lib.s",
+        ".text\n.globl g_func\n.type g_func,@function\ng_func: ret\n.weak w_func\n\
+         .type w_func,@function\nw_func: ret\nl_func: ret\n.data\n.globl d_obj\n\
+         .type d_obj,@object\nd_obj: .long 1\n.globl a_sym\n.set a_sym, 0x1234\n\
+         .long undef_ref\n",
+    );
+    write_source(
+        &dir,
+        "main.s",
+        ".globl _start, undef_ref\n_start: call g_func\nundef_ref: ret\n",
+    );
+    let gnu_ld = Command::new("ld")
+        .arg("-V")
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("elf_i386"));
+    for (m, emulation) in [("-m64", "elf_x86_64"), ("-m32", "elf_i386")] {
+        let tool = |args: &[&str], what: &str| {
+            run(Command::new(badc()).args(args).current_dir(&dir), what);
+        };
+        let (obj, lib, prog) = (
+            format!("lib{m}.o"),
+            format!("lib{m}.a"),
+            format!("main{m}.o"),
+        );
+        for (src, out) in [("lib.s", &obj), ("main.s", &prog)] {
+            tool(
+                &["-q", "-c", "--target=linux-x64", m, src, "-o", out],
+                "assemble",
+            );
+        }
+        tool(&["-q", "--ar", "-o", &lib, &obj], "archive the object");
+        let blob = std::fs::read(dir.join(&lib)).expect("read the archive");
+        assert_eq!(&blob[8..10], b"/ ", "{m}: the index leads");
+        let be = |at: usize| u32::from_be_bytes(blob[at..at + 4].try_into().unwrap()) as usize;
+        let count = be(68);
+        let names: Vec<&[u8]> = blob[72 + 4 * count..]
+            .split(|&b| b == 0)
+            .take(count)
+            .collect();
+        assert_eq!(
+            names,
+            [&b"g_func"[..], b"w_func", b"d_obj", b"a_sym"],
+            "{m}"
+        );
+        for k in 0..count {
+            let at = be(72 + 4 * k);
+            assert_eq!(
+                &blob[at..at + obj.len() + 1],
+                format!("{obj}/").as_bytes(),
+                "{m}"
+            );
+        }
+        if gnu_ld {
+            run(
+                Command::new("ld")
+                    .args(["-m", emulation, &prog, &lib, "-o", &format!("prog{m}")])
+                    .current_dir(&dir),
+                "link the archive with GNU ld",
+            );
+        }
+    }
 }
 
 // An object the system compiler built references its thread-locals by

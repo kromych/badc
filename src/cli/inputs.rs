@@ -348,18 +348,18 @@ fn ingest_linker_input(
     Ok(())
 }
 
-/// The `STB_GLOBAL` names a relocatable object defines in a section.
-/// They populate the SysV `ar` symbol index when `--ar` bundles native
-/// objects: a name listed there resolves -- via the archive's `/`
-/// member -- to the containing member's file offset, which is how the
-/// linker's archive pull-in decides which members to load. Only a
-/// section-resident definition is visible at pull-in time, so undefined
-/// and absolute symbols are dropped. `Err` is the parse diagnostic.
+/// The names a relocatable object's entries in an archive's symbol
+/// index list, each resolving to the member that holds it. An ELF
+/// object of either class lists what GNU ar lists; another format its
+/// `STB_GLOBAL` definitions in a section. `Err` is the parse diagnostic.
 pub(crate) fn native_defined_globals(
     bytes: &[u8],
     path: &str,
     target: Target,
 ) -> Result<Vec<String>, String> {
+    if badc::is_elf_object(bytes) {
+        return badc::elf_archive_symbols(bytes).map_err(|e| format!("badc: {path}: {e}"));
+    }
     let obj = badc::parse_native_object_for(bytes, target_machine(target))
         .map_err(|e| format!("badc: {path}: {e}"))?;
     Ok(obj

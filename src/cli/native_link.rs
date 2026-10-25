@@ -730,9 +730,8 @@ impl Selection {
     }
 
     /// Pull the members of the archives at `span` that define a name
-    /// still undefined, until a pass over all of them pulls none. The
-    /// archive symbol index lists strong section-resident definitions; a
-    /// member is pulled on exactly those.
+    /// still undefined, until a pass over all of them pulls none. A
+    /// member is pulled on its strong section-resident definitions.
     fn pull(&mut self, slots: &mut [Slot], span: &[usize]) {
         loop {
             let mut progress = false;

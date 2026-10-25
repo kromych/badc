@@ -10,8 +10,9 @@
 //!
 //! SysV / GNU. The first member, if present, is the symbol index
 //! (name `"/"`): `u32 big-endian count` + `count u32 big-endian
-//! offsets` (of the containing member's body, from start of file) +
-//! the concatenated NUL-terminated symbol names. Names longer than 15
+//! offsets` (of the containing member's header, from start of file) +
+//! the concatenated NUL-terminated symbol names; `"/SYM64/"` holds the
+//! same with 64-bit numbers. Names longer than 15
 //! bytes spill through the `"//"` string-table member: the header
 //! carries `/<offset>` and the table's body holds the names, each
 //! terminated by `\n`.
@@ -272,112 +273,56 @@ pub fn read_archive_at(
     Ok(out)
 }
 
-/// Build an archive from `members`. Lays out the SysV symbol
-/// index as the first member -- `symbols_by_member` is an
-/// iterator of `(member_index, &[symbol_name])` pairs; every
-/// name pointing at member i resolves to the same archive
-/// offset, namely the start of member i's body.
+/// Build an archive from `members`, with a symbol index of the names
+/// `symbols_by_member` lists as `(member_index, names)` as its first
+/// member: each name points at its member's header, as SysV ar(5)
+/// defines the index. The index holds 32-bit offsets (`/`) unless an
+/// indexed member's header lies past them, where GNU ar writes 64-bit
+/// ones (`/SYM64/`).
 ///
-/// Names longer than 15 bytes spill through a GNU `//` string
-/// table. We emit the table only when needed.
+/// Names longer than 15 bytes spill through a GNU `//` string table,
+/// which is emitted only when one does.
 pub fn write_archive(
     members: &[ArchiveMember],
     symbols_by_member: &[(usize, Vec<String>)],
 ) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    out.extend_from_slice(b"!<arch>\n");
-
-    // Decide whether any name spills into the string table.
     let mut long_table: Vec<u8> = Vec::new();
     let mut name_form: Vec<String> = Vec::with_capacity(members.len());
     for m in members {
-        let raw = m.name.clone();
-        if raw.len() <= 15 {
-            name_form.push(format!("{raw}/"));
+        if m.name.len() <= 15 {
+            name_form.push(format!("{}/", m.name));
         } else {
-            let off = long_table.len();
-            long_table.extend_from_slice(raw.as_bytes());
+            name_form.push(format!("/{}", long_table.len()));
+            long_table.extend_from_slice(m.name.as_bytes());
             long_table.push(b'\n');
-            name_form.push(format!("/{off}"));
         }
     }
+    let names: Vec<(usize, &str)> = (symbols_by_member.iter())
+        .flat_map(|(mi, ns)| ns.iter().map(move |n| (*mi, n.as_str())))
+        .collect();
+    let sizes: Vec<u64> = members.iter().map(|m| m.bytes.len() as u64).collect();
+    let (wide, headers) = index_layout(&names, &sizes, long_table.len() as u64);
+    let entries: Vec<(u64, &str)> = names.iter().map(|&(mi, n)| (headers[mi], n)).collect();
+    let (index_name, index) = symbol_index(wide, &entries);
 
-    // Pre-compute body offsets so the symbol index can record
-    // absolute file offsets. The layout is:
-    //   [global header 8 bytes]
-    //   [/   header 60 bytes][/   body padded]
-    //   [//  header 60 bytes][//  body padded]    (only if long_table nonempty)
-    //   [member 1 header 60 bytes][body padded]
-    //   ...
-    //
-    // We don't know the symbol-index body size until we know
-    // the offsets... but the offsets depend on the symbol-index
-    // size. Two-pass: assume symbol-index size, compute, then
-    // patch.
-
-    // Pass 1: symbol-index body size.
-    let total_syms: usize = symbols_by_member.iter().map(|(_, s)| s.len()).sum();
-    let mut sym_body_size: usize = 4 + total_syms * 4;
-    for (_, names) in symbols_by_member {
-        for n in names {
-            sym_body_size += n.len() + 1;
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(b"!<arch>\n");
+    for (name, body) in [(index_name, &index), ("//", &long_table)] {
+        if name == "//" && body.is_empty() {
+            continue;
         }
-    }
-    // Pad to even.
-    let sym_body_padded = (sym_body_size + 1) & !1;
-
-    // Pass 2: compute each member's body file offset.
-    let mut cursor: usize = 8 + 60 + sym_body_padded;
-    if !long_table.is_empty() {
-        let lt_padded = (long_table.len() + 1) & !1;
-        cursor += 60 + lt_padded;
-    }
-    let mut body_offsets: Vec<usize> = Vec::with_capacity(members.len());
-    let mut tmp_cursor = cursor;
-    for m in members {
-        // Header for this member.
-        tmp_cursor += 60;
-        body_offsets.push(tmp_cursor);
-        let padded = (m.bytes.len() + 1) & !1;
-        tmp_cursor += padded;
-    }
-
-    // Pass 3: actually emit.
-    // Symbol-index member.
-    let mut sym_body = Vec::with_capacity(sym_body_size);
-    sym_body.extend_from_slice(&(total_syms as u32).to_be_bytes());
-    // First write offsets in symbol order; record positions of
-    // each name's offset slot so we can pair name <-> offset.
-    let mut name_index: Vec<(String, u32)> = Vec::with_capacity(total_syms);
-    for (mi, names) in symbols_by_member {
-        for n in names {
-            name_index.push((n.clone(), body_offsets[*mi] as u32));
-        }
-    }
-    for (_, off) in &name_index {
-        sym_body.extend_from_slice(&off.to_be_bytes());
-    }
-    for (n, _) in &name_index {
-        sym_body.extend_from_slice(n.as_bytes());
-        sym_body.push(0);
-    }
-    write_ar_header(&mut out, "/", sym_body.len());
-    out.extend_from_slice(&sym_body);
-    if !sym_body.len().is_multiple_of(2) {
-        out.push(b'\n');
-    }
-
-    // GNU long-name table.
-    if !long_table.is_empty() {
-        write_ar_header(&mut out, "//", long_table.len());
-        out.extend_from_slice(&long_table);
-        if !long_table.len().is_multiple_of(2) {
+        write_ar_header(&mut out, name, body.len());
+        out.extend_from_slice(body);
+        if !body.len().is_multiple_of(2) {
             out.push(b'\n');
         }
     }
-
-    // Real members.
-    for (m, name_field) in members.iter().zip(name_form.iter()) {
+    for ((m, name_field), &header) in members.iter().zip(name_form.iter()).zip(&headers) {
+        debug_assert_eq!(
+            out.len() as u64,
+            header,
+            "the index names the member's header"
+        );
         write_ar_header(&mut out, name_field, m.bytes.len());
         out.extend_from_slice(&m.bytes);
         if !m.bytes.len().is_multiple_of(2) {
@@ -385,6 +330,137 @@ pub fn write_archive(
         }
     }
     out
+}
+
+/// Whether the symbol index takes 64-bit offsets, and the header offset
+/// of each member of `sizes`, behind the index of `names` and a long-name
+/// table of `long_names` bytes.
+fn index_layout(names: &[(usize, &str)], sizes: &[u64], long_names: u64) -> (bool, Vec<u64>) {
+    let padded = |n: u64| n + (n & 1);
+    let strings: u64 = names.iter().map(|(_, n)| n.len() as u64 + 1).sum();
+    let headers = |wide: bool| -> Vec<u64> {
+        let width = if wide { 8 } else { 4 };
+        let index = index_size(wide, width * (1 + names.len() as u64) + strings);
+        let mut at = 8 + AR_HEADER_SIZE as u64 + padded(index);
+        if long_names > 0 {
+            at += AR_HEADER_SIZE as u64 + padded(long_names);
+        }
+        (sizes.iter())
+            .map(|&size| {
+                let header = at;
+                at += AR_HEADER_SIZE as u64 + padded(size);
+                header
+            })
+            .collect()
+    };
+    let narrow = headers(false);
+    if names.iter().all(|&(mi, _)| narrow[mi] <= u32::MAX as u64) {
+        return (false, narrow);
+    }
+    (true, headers(true))
+}
+
+/// The index body size: GNU ar pads a 64-bit index to 8 bytes.
+fn index_size(wide: bool, raw: u64) -> u64 {
+    if wide { raw.next_multiple_of(8) } else { raw }
+}
+
+/// The symbol index member's name and body for `(header offset, name)`
+/// entries: a big-endian count, the offsets and the NUL-terminated
+/// names, each number 32 or, where `wide`, 64 bits.
+fn symbol_index(wide: bool, entries: &[(u64, &str)]) -> (&'static str, Vec<u8>) {
+    let mut body: Vec<u8> = Vec::new();
+    let number = |n: u64, body: &mut Vec<u8>| {
+        if wide {
+            body.extend_from_slice(&n.to_be_bytes());
+        } else {
+            body.extend_from_slice(&(n as u32).to_be_bytes());
+        }
+    };
+    number(entries.len() as u64, &mut body);
+    for &(at, _) in entries {
+        number(at, &mut body);
+    }
+    for &(_, name) in entries {
+        body.extend_from_slice(name.as_bytes());
+        body.push(0);
+    }
+    body.resize(index_size(wide, body.len() as u64) as usize, 0);
+    (if wide { "/SYM64/" } else { "/" }, body)
+}
+
+/// The names GNU ar's index lists for an ELF relocatable object of
+/// either class and byte order: each symbol a section, `SHN_COMMON` or
+/// `SHN_ABS` defines with global, weak or GNU-unique binding, in table
+/// order.
+pub fn elf_archive_symbols(bytes: &[u8]) -> Result<Vec<String>, C5Error> {
+    let bad = || link_err(Code::MALFORMED_INPUT, MODULE, "ELF object is truncated");
+    let (wide, big) = match (bytes.get(..4), bytes.get(4), bytes.get(5)) {
+        (Some(b"\x7fELF"), Some(&c @ 1..=2), Some(&d @ 1..=2)) => (c == 2, d == 2),
+        _ => return Err(link_err(Code::MALFORMED_INPUT, MODULE, "not an ELF object")),
+    };
+    let num = |at: u64, n: usize| -> Result<u64, C5Error> {
+        let at = usize::try_from(at).map_err(|_| bad())?;
+        let b = bytes.get(at..at.checked_add(n).ok_or_else(bad)?);
+        Ok(
+            (b.ok_or_else(bad)?.iter().enumerate()).fold(0, |v, (i, &x)| {
+                v | (x as u64) << (8 * if big { n - 1 - i } else { i })
+            }),
+        )
+    };
+    let (shoff, shentsize, shnum) = if wide {
+        (num(0x28, 8)?, num(0x3a, 2)?, num(0x3c, 2)?)
+    } else {
+        (num(0x20, 4)?, num(0x2e, 2)?, num(0x30, 2)?)
+    };
+    // `(sh_type, sh_offset, sh_size, sh_link)` of section `i`.
+    let header = |i: u64| -> Result<[u64; 4], C5Error> {
+        let at = shoff.wrapping_add(i.wrapping_mul(shentsize));
+        Ok(if wide {
+            [
+                num(at + 4, 4)?,
+                num(at + 0x18, 8)?,
+                num(at + 0x20, 8)?,
+                num(at + 0x28, 4)?,
+            ]
+        } else {
+            [
+                num(at + 4, 4)?,
+                num(at + 0x10, 4)?,
+                num(at + 0x14, 4)?,
+                num(at + 0x18, 4)?,
+            ]
+        })
+    };
+    // `e_shnum` 0 leaves the count to section 0's `sh_size`.
+    let shnum = if shnum == 0 { header(0)?[2] } else { shnum };
+    let entry = if wide { 24 } else { 16 };
+    let mut names = Vec::new();
+    for sec in 0..shnum {
+        let [kind, off, size, link] = header(sec)?;
+        if kind != 2 {
+            continue; // SHT_SYMTAB
+        }
+        let strings = header(link)?[1];
+        for k in 1..size / entry {
+            let at = off.wrapping_add(k * entry);
+            let (info, shndx) = if wide {
+                (num(at + 4, 1)?, num(at + 6, 2)?)
+            } else {
+                (num(at + 12, 1)?, num(at + 14, 2)?)
+            };
+            // STB_GLOBAL, STB_WEAK or STB_GNU_UNIQUE, and neither
+            // STT_SECTION nor STT_FILE.
+            if shndx == 0 || !matches!(info >> 4, 1 | 2 | 10) || matches!(info & 0xf, 3 | 4) {
+                continue;
+            }
+            let start = usize::try_from(strings.wrapping_add(num(at, 4)?)).map_err(|_| bad())?;
+            let tail = bytes.get(start..).ok_or_else(bad)?;
+            let end = tail.iter().position(|&c| c == 0).ok_or_else(bad)?;
+            names.push(String::from_utf8_lossy(&tail[..end]).into_owned());
+        }
+    }
+    Ok(names)
 }
 
 fn write_ar_header(out: &mut Vec<u8>, name_field: &str, size: usize) {
@@ -549,6 +625,58 @@ mod tests {
         assert!(text.contains("ar header truncated"), "{text}");
         assert!(text.ends_with("[B6014] [malformed-input]"), "{text}");
         assert!(!text.contains("internal compiler error"), "{text}");
+    }
+
+    /// Each index entry is the offset of its member's header, as SysV
+    /// ar(5) defines the index, past a long-name table too.
+    #[test]
+    fn the_symbol_index_names_each_members_header() {
+        let members = alloc::vec![
+            ArchiveMember {
+                name: "a_member_name_past_sixteen.o".into(),
+                bytes: alloc::vec![1, 2, 3]
+            },
+            ArchiveMember {
+                name: "b.o".into(),
+                bytes: alloc::vec![4]
+            },
+        ];
+        let symbols = [
+            (0, alloc::vec![String::from("sa")]),
+            (1, alloc::vec![String::from("sb"), String::from("sc")]),
+        ];
+        let blob = write_archive(&members, &symbols);
+        let index = &blob[8 + AR_HEADER_SIZE..];
+        let be = |at: usize| u32::from_be_bytes(index[at..at + 4].try_into().unwrap()) as usize;
+        assert_eq!((&blob[8..10], be(0)), (&b"/ "[..], 3));
+        let names: Vec<&[u8]> = [1, 2, 2]
+            .iter()
+            .map(|&k| {
+                let at = be(4 * k);
+                &blob[at..at + 3]
+            })
+            .collect();
+        assert_eq!(names, [&b"/0 "[..], b"b.o", b"b.o"]);
+        assert_eq!(&index[16..25], b"sa\0sb\0sc\0");
+    }
+
+    /// GNU ar 2.46.1 writes `/SYM64/`, with 64-bit numbers padded to 8
+    /// bytes, where an indexed member's header lies past 4 GiB, and `/`
+    /// where only an unindexed one does.
+    #[test]
+    fn an_index_past_four_gib_takes_64_bit_offsets() {
+        let sizes = [1u64 << 32, 10];
+        let (wide, headers) = index_layout(&[(1, "b")], &sizes, 0);
+        assert!(wide && headers[1] > u32::MAX as u64, "{headers:?}");
+        assert!(!index_layout(&[(0, "a")], &sizes, 0).0);
+        let (name, body) = symbol_index(true, &[(headers[1], "b")]);
+        assert_eq!(name, "/SYM64/");
+        assert_eq!(body.len(), 24);
+        assert_eq!(
+            &body[..16],
+            [&1u64.to_be_bytes()[..], &headers[1].to_be_bytes()].concat()
+        );
+        assert_eq!(&body[16..], b"b\0\0\0\0\0\0\0");
     }
 
     /// A regular `!<arch>` round-trips: write members, read them back.

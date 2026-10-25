@@ -163,8 +163,9 @@ pub use c5::{StdHost, write_output_file};
 
 #[cfg(feature = "full")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_compiler_rt, embedded_libc,
-    embedded_runtime, is_arm64x_archive, read_archive, write_archive,
+    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, elf_archive_symbols,
+    embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, read_archive,
+    write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]

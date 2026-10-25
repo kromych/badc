@@ -178,6 +178,8 @@ impl TestObj {
                 0
             } else if *sec == usize::MAX - 1 {
                 SHN_ABS
+            } else if *sec == usize::MAX - 2 {
+                SHN_COMMON
             } else {
                 (*sec + 1) as u16
             };
@@ -7193,5 +7195,36 @@ fn the_symbol_table_lists_the_imports() {
             ],
             "{emit:?}"
         );
+    }
+}
+
+/// An archive's symbol index lists what GNU ar 2.46.1 lists for an ELF
+/// object of either class: global, weak and GNU-unique definitions in a
+/// section, commons and absolute symbols, in table order; not locals or
+/// undefined names.
+#[test]
+fn the_archive_index_lists_an_elf_objects_definitions_in_either_class() {
+    for class in [ElfClass::Elf64, ElfClass::Elf32] {
+        let o = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc3; 4],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+            .sym("l", STB_LOCAL, STT_FUNC, 0, 0, 1)
+            .sym("g", STB_GLOBAL, STT_FUNC, 0, 1, 1)
+            .sym("w", STB_WEAK, STT_FUNC, 0, 2, 1)
+            .sym("u", 10, STT_OBJECT, 1, 0, 4)
+            .sym("c", STB_GLOBAL, STT_OBJECT, usize::MAX - 2, 8, 8)
+            .sym("a", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x1234, 0)
+            .sym("undef", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .sym("wundef", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0);
+        let wide = class == ElfClass::Elf64;
+        let bytes = o.build_class(if wide { EM_X86_64 } else { EM_386 }, class, wide);
+        let names = crate::c5::linker::archive::elf_archive_symbols(&bytes).expect("reads");
+        assert_eq!(names, ["g", "w", "u", "c", "a"], "{class:?}");
     }
 }

@@ -271,14 +271,17 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Whether a PC-relative field naming the import `name` takes a
-    /// dynamic relocation of its own type: in a shared object, for a
-    /// function in an i386 PIE, and for an undefined weak name in a PIE,
-    /// as GNU ld links them.
+    /// dynamic relocation of its own type: in a shared object, in an
+    /// executable for a data object it holds no copy of, and in a PIE for
+    /// an i386 function or an undefined weak name, as GNU ld links them.
     pub(super) fn import_pc_dynamic(&self, name: &str, rtype: u32) -> bool {
         let pie = self.opts.emit == LdsEmit::Dyn;
         let i386_function = self.machine == EM_386 && self.is_function_export(name);
+        let uncopied = self.is_data_export(name) && !self.copy_of.contains_key(name);
         x86_pc_field(self.machine, rtype)
-            && (self.opts.shared || pie && (i386_function || self.undefined_weak_import(name)))
+            && (self.opts.shared
+                || uncopied
+                || pie && (i386_function || self.undefined_weak_import(name)))
     }
 
     /// Whether an address-width word naming the canonical import `name`

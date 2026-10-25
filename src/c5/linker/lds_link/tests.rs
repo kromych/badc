@@ -7373,3 +7373,107 @@ fn an_aarch64_pie_exports_an_undefined_weak_name_a_data_word_holds() {
         }
     }
 }
+
+/// `.data` holding `bar - .` in a field of `rtype`; where `code`, `.text`
+/// also loads `bar` PC-relative, a reference that needs the object at a
+/// fixed address.
+fn pc_word_data_user(rtype: u32, code: bool) -> Vec<u8> {
+    let text = [0x8b, 0x05, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rtype, 0);
+    if code {
+        o.reloc(0, 2, 4, rt::R_X86_64_PC32, -4)
+    } else {
+        o
+    }
+    .build(EM_X86_64)
+}
+
+/// An executable whose only references to a library's data object are
+/// address-width PC-relative words in writable data leaves each to a
+/// relocation of its type naming the object and takes no copy, as GNU ld
+/// 2.46.1 links them. One that code also reaches at a fixed address
+/// copies the object and binds the word to the copy, and so does a
+/// narrower `R_X86_64_PC32` word, which the loader could not fill with a
+/// library's address more than 2 GiB away.
+#[test]
+fn a_writable_pc_relative_word_takes_a_dynamic_relocation_rather_than_a_copy() {
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        for (rtype, code) in [
+            (rt::R_X86_64_PC64, false),
+            (rt::R_X86_64_PC64, true),
+            (rt::R_X86_64_PC32, false),
+        ] {
+            let what = alloc::format!("{emit:?} {rtype} code={code}");
+            let script =
+                parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+            let o = parse_lds_object("a.o", pc_word_data_user(rtype, code)).expect("parses");
+            let opts = LdsOptions {
+                emit,
+                ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])])
+            };
+            let img = link_with_script(&script, alloc::vec![o], &opts)
+                .expect("links")
+                .image;
+            let (data, word) = image_section(&img, ".data");
+            let relocs = dyn_relocs(&img);
+            let dynamic = (data, rtype, String::from("bar"), 0);
+            if rtype == rt::R_X86_64_PC64 && !code {
+                assert!(relocs.contains(&dynamic), "{what}: {relocs:?}");
+                assert!(section_addr(&img, ".dynbss").is_none(), "{what}: no copy");
+                continue;
+            }
+            let bar = (image_dynsyms(&img).into_iter())
+                .find(|s| s.0 == "bar")
+                .unwrap();
+            assert!(!relocs.contains(&dynamic), "{what}: {relocs:?}");
+            assert!(relocs.contains(&(bar.1, rt::R_X86_64_COPY, String::from("bar"), 0)));
+            assert_eq!(
+                data as i64 + u32_at(&word, 0) as i32 as i64,
+                bar.1 as i64,
+                "{what}"
+            );
+        }
+    }
+}
+
+/// An i386 executable leaves a writable `R_386_PC32` word naming a
+/// library's data object to a relocation naming it, with no copy, as GNU
+/// ld 2.46.1 links one.
+#[test]
+fn an_i386_writable_pc_relative_word_takes_a_dynamic_relocation_rather_than_a_copy() {
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    let unit = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    for pic in [Some(false), None] {
+        let mut lib = shared_input("libone.so", &[], &["bar"]);
+        lib.lib.machine = EM_386;
+        let opts = LdsOptions {
+            shared_libs: alloc::vec![lib],
+            interp: Some(String::from("/lib/ld-linux.so.2")),
+            ..i386_opts(pic)
+        };
+        let res = link_i386_with(alloc::vec![("u.o", unit.clone())], &opts).expect("links");
+        let data = elf32_section(&res.image, ".data").2;
+        let relocs = elf32_dyn_relocs(&res.image);
+        let want = (data, rt::R_386_PC32, String::from("bar"));
+        assert!(relocs.contains(&want), "{pic:?}: {relocs:?}");
+        assert!(relocs.iter().all(|r| r.1 != rt::R_386_COPY), "{pic:?}");
+    }
+}

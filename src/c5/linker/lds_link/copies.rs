@@ -16,6 +16,15 @@ use super::{
     STB_LOCAL, SYNTH_DYNBSS, SYNTH_DYNRELRO,
 };
 
+/// An x86 PC-relative field as wide as an address.
+fn x86_pc_word(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_386 => rtype == rt::R_386_PC32,
+        EM_AARCH64 => false,
+        _ => rtype == rt::R_X86_64_PC64,
+    }
+}
+
 /// An imported object an executable holds a copy of.
 #[derive(Debug, Clone)]
 pub(super) struct ObjectCopy {
@@ -31,9 +40,12 @@ pub(super) struct ObjectCopy {
 impl<'a> LdsLinker<'a> {
     /// Whether `r`, in a section with `flags`, needs its target's address
     /// at link time: not a call, not a load through the GOT, and not an
-    /// address-width word in writable data, which a dynamic relocation
-    /// carries. x86 reads a PC-relative field in code naming a function as
-    /// a call, as bfd does.
+    /// address-width field in writable data, which a dynamic relocation
+    /// carries -- a word, or for a data object a PC-relative one. A
+    /// narrower PC-relative field keeps the copy: the loader cannot fill
+    /// it with a library's address more than 2 GiB away, where bfd's
+    /// relocation fails to load. x86 reads a PC-relative field in code
+    /// naming a function as a call, as bfd does.
     pub(super) fn direct_reference(&self, r: &RawReloc, flags: u64, function: bool) -> bool {
         let pc_call = function && flags & SHF_EXECINSTR != 0;
         let call = match self.machine {
@@ -41,7 +53,8 @@ impl<'a> LdsLinker<'a> {
             EM_386 => r.rtype == rt::R_386_PLT32 || r.rtype == rt::R_386_PC32 && pc_call,
             _ => r.rtype == rt::R_X86_64_PLT32 || r.rtype == rt::R_X86_64_PC32 && pc_call,
         };
-        let word = r.rtype == self.dyn_reloc_types().0 && flags & SHF_WRITE != 0;
+        let pc_word = !function && x86_pc_word(self.machine, r.rtype);
+        let word = (r.rtype == self.dyn_reloc_types().0 || pc_word) && flags & SHF_WRITE != 0;
         flags & SHF_ALLOC != 0
             && r.rtype != R_NONE
             && !call

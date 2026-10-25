@@ -3788,6 +3788,19 @@ fn extended_identifiers() {
     assert_eq!(run_fixture("extended_identifiers.c"), 0);
 }
 
+/// An unnamed member spelled with a structure or union typedef name, the
+/// `-fms-extensions` form, promotes like a tagged one, for LP64 and LLP64.
+#[test]
+fn unnamed_typedef_name_members_promote() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("unnamed_field_typedef_name.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
 #[test]
 fn dollar_signs_form_identifiers() {
     // C99 6.4.2.1p1 leaves other identifier characters to the

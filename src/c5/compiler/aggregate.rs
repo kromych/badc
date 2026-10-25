@@ -928,6 +928,14 @@ impl Compiler {
             // A member takes what a variable declared through the alias does.
             let (ty, tag) = self.typedef_name_base_type()?;
             incomplete_enum_tag = tag;
+            // A structure or union typedef with no declarator promotes its
+            // members as the tagged form does (`-fms-extensions`).
+            if is_struct_value_ty(ty)
+                && self.pending.typedef_base_array_size == 0
+                && !self.structs[struct_id_of(ty)].is_vector
+            {
+                anon_aggregate_inner_id = Some(struct_id_of(ty));
+            }
             ty
         } else if mods.saw_int_mod {
             mods.int_base()

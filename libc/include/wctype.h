@@ -121,3 +121,74 @@ wint_t towlower(wint_t wc);
 wint_t towupper(wint_t wc);
 wint_t towctrans(wint_t wc, wctrans_t desc);
 wctrans_t wctrans(const char *property);
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::iswalnum_l, "_iswalnum_l")
+#pragma binding(libc::iswalpha_l, "_iswalpha_l")
+#pragma binding(libc::iswblank_l, "_iswblank_l")
+#pragma binding(libc::iswcntrl_l, "_iswcntrl_l")
+#pragma binding(libc::iswdigit_l, "_iswdigit_l")
+#pragma binding(libc::iswgraph_l, "_iswgraph_l")
+#pragma binding(libc::iswlower_l, "_iswlower_l")
+#pragma binding(libc::iswprint_l, "_iswprint_l")
+#pragma binding(libc::iswpunct_l, "_iswpunct_l")
+#pragma binding(libc::iswspace_l, "_iswspace_l")
+#pragma binding(libc::iswupper_l, "_iswupper_l")
+#pragma binding(libc::iswxdigit_l, "_iswxdigit_l")
+#pragma binding(libc::iswctype_l, "_iswctype_l")
+#pragma binding(libc::towctrans_l, "_towctrans_l")
+#pragma binding(libc::towlower_l, "_towlower_l")
+#pragma binding(libc::towupper_l, "_towupper_l")
+#pragma binding(libc::wctrans_l, "_wctrans_l")
+#pragma binding(libc::wctype_l, "_wctype_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::iswalnum_l, "iswalnum_l")
+#pragma binding(libc::iswalpha_l, "iswalpha_l")
+#pragma binding(libc::iswblank_l, "iswblank_l")
+#pragma binding(libc::iswcntrl_l, "iswcntrl_l")
+#pragma binding(libc::iswdigit_l, "iswdigit_l")
+#pragma binding(libc::iswgraph_l, "iswgraph_l")
+#pragma binding(libc::iswlower_l, "iswlower_l")
+#pragma binding(libc::iswprint_l, "iswprint_l")
+#pragma binding(libc::iswpunct_l, "iswpunct_l")
+#pragma binding(libc::iswspace_l, "iswspace_l")
+#pragma binding(libc::iswupper_l, "iswupper_l")
+#pragma binding(libc::iswxdigit_l, "iswxdigit_l")
+#pragma binding(libc::iswctype_l, "iswctype_l")
+#pragma binding(libc::towctrans_l, "towctrans_l")
+#pragma binding(libc::towlower_l, "towlower_l")
+#pragma binding(libc::towupper_l, "towupper_l")
+#pragma binding(libc::wctrans_l, "wctrans_l")
+#pragma binding(libc::wctype_l, "wctype_l")
+#endif
+int iswalnum_l(wint_t wc, locale_t locale);
+int iswalpha_l(wint_t wc, locale_t locale);
+int iswblank_l(wint_t wc, locale_t locale);
+int iswcntrl_l(wint_t wc, locale_t locale);
+int iswdigit_l(wint_t wc, locale_t locale);
+int iswgraph_l(wint_t wc, locale_t locale);
+int iswlower_l(wint_t wc, locale_t locale);
+int iswprint_l(wint_t wc, locale_t locale);
+int iswpunct_l(wint_t wc, locale_t locale);
+int iswspace_l(wint_t wc, locale_t locale);
+int iswupper_l(wint_t wc, locale_t locale);
+int iswxdigit_l(wint_t wc, locale_t locale);
+int iswctype_l(wint_t wc, wctype_t charclass, locale_t locale);
+wint_t towctrans_l(wint_t wc, wctrans_t desc, locale_t locale);
+wint_t towlower_l(wint_t wc, locale_t locale);
+wint_t towupper_l(wint_t wc, locale_t locale);
+wctrans_t wctrans_l(const char *charclass, locale_t locale);
+wctype_t wctype_l(const char *property, locale_t locale);
+#endif

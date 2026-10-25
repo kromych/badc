@@ -521,3 +521,33 @@ size_t wcsxfrm(wchar_t *s1, const wchar_t *s2, size_t n);
 struct tm;
 size_t wcsftime(wchar_t *s, size_t maxsize, const wchar_t *format,
                 const struct tm *timeptr);
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::wcscasecmp_l, "_wcscasecmp_l")
+#pragma binding(libc::wcsncasecmp_l, "_wcsncasecmp_l")
+#pragma binding(libc::wcscoll_l, "_wcscoll_l")
+#pragma binding(libc::wcsxfrm_l, "_wcsxfrm_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::wcscasecmp_l, "wcscasecmp_l")
+#pragma binding(libc::wcsncasecmp_l, "wcsncasecmp_l")
+#pragma binding(libc::wcscoll_l, "wcscoll_l")
+#pragma binding(libc::wcsxfrm_l, "wcsxfrm_l")
+#endif
+int wcscasecmp_l(const wchar_t *ws1, const wchar_t *ws2, locale_t locale);
+int wcsncasecmp_l(const wchar_t *ws1, const wchar_t *ws2, size_t n, locale_t locale);
+int wcscoll_l(const wchar_t *ws1, const wchar_t *ws2, locale_t locale);
+size_t wcsxfrm_l(wchar_t *restrict ws1, const wchar_t *restrict ws2, size_t n,
+                 locale_t locale);
+#endif

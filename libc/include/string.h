@@ -376,3 +376,31 @@ static inline void *mempcpy(void *dst, const void *src, size_t n) {
 #endif
 void *memccpy(void *restrict s1, const void *restrict s2, int c, size_t n);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strcoll_l, "_strcoll_l")
+#pragma binding(libc::strxfrm_l, "_strxfrm_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strcoll_l, "strcoll_l")
+#pragma binding(libc::strxfrm_l, "strxfrm_l")
+#pragma binding(libc::strerror_l, "strerror_l")
+#endif
+int strcoll_l(const char *s1, const char *s2, locale_t locale);
+size_t strxfrm_l(char *restrict s1, const char *restrict s2, size_t n, locale_t locale);
+#ifdef __linux__
+// libSystem has no strerror_l.
+char *strerror_l(int errnum, locale_t locale);
+#endif
+#endif

@@ -65,3 +65,26 @@ char *rindex(const char *s, int c);
 #endif
 int ffs(int i);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strcasecmp_l, "_strcasecmp_l")
+#pragma binding(libc::strncasecmp_l, "_strncasecmp_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strcasecmp_l, "strcasecmp_l")
+#pragma binding(libc::strncasecmp_l, "strncasecmp_l")
+#endif
+int strcasecmp_l(const char *s1, const char *s2, locale_t locale);
+int strncasecmp_l(const char *s1, const char *s2, size_t n, locale_t locale);
+#endif

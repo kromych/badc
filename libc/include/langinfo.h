@@ -421,3 +421,23 @@ char *nl_langinfo(nl_item item);
 #define YESSTR 54
 #endif
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::nl_langinfo_l, "_nl_langinfo_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::nl_langinfo_l, "nl_langinfo_l")
+#endif
+char *nl_langinfo_l(nl_item item, locale_t locale);
+#endif

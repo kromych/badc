@@ -37,7 +37,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=32
     v48  LocalAddr(-16)                                   -> x7
     v49  Imm(0)                                           -> x6
     v50  Imm(128)                                         -> x2
-    v51  CallExt { binding_idx=8, args=[v48, v49, v50], fp_arg_mask=0x0 } -> x0
+    v51  CallExt { binding_idx=10, args=[v48, v49, v50], fp_arg_mask=0x0 } -> x0
     v52  LocalAddr(-16)                                   -> x0
     v53  Imm(3)                                           -> x1
     v54  Store { addr=v52, disp=0, value=v53, kind=I32, align=1 } -> -

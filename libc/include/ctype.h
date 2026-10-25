@@ -104,3 +104,63 @@ static inline int isblank(int c) {
 static inline int toascii(int c) {
     return c & 0x7f;
 }
+
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX.1-2008 classification and case mapping in a given locale.
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::isalnum_l, "_isalnum_l")
+#pragma binding(libc::isalpha_l, "_isalpha_l")
+#pragma binding(libc::isblank_l, "_isblank_l")
+#pragma binding(libc::iscntrl_l, "_iscntrl_l")
+#pragma binding(libc::isdigit_l, "_isdigit_l")
+#pragma binding(libc::isgraph_l, "_isgraph_l")
+#pragma binding(libc::islower_l, "_islower_l")
+#pragma binding(libc::isprint_l, "_isprint_l")
+#pragma binding(libc::ispunct_l, "_ispunct_l")
+#pragma binding(libc::isspace_l, "_isspace_l")
+#pragma binding(libc::isupper_l, "_isupper_l")
+#pragma binding(libc::isxdigit_l, "_isxdigit_l")
+#pragma binding(libc::tolower_l, "_tolower_l")
+#pragma binding(libc::toupper_l, "_toupper_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::isalnum_l, "isalnum_l")
+#pragma binding(libc::isalpha_l, "isalpha_l")
+#pragma binding(libc::isblank_l, "isblank_l")
+#pragma binding(libc::iscntrl_l, "iscntrl_l")
+#pragma binding(libc::isdigit_l, "isdigit_l")
+#pragma binding(libc::isgraph_l, "isgraph_l")
+#pragma binding(libc::islower_l, "islower_l")
+#pragma binding(libc::isprint_l, "isprint_l")
+#pragma binding(libc::ispunct_l, "ispunct_l")
+#pragma binding(libc::isspace_l, "isspace_l")
+#pragma binding(libc::isupper_l, "isupper_l")
+#pragma binding(libc::isxdigit_l, "isxdigit_l")
+#pragma binding(libc::tolower_l, "tolower_l")
+#pragma binding(libc::toupper_l, "toupper_l")
+#endif
+int isalnum_l(int c, locale_t locale);
+int isalpha_l(int c, locale_t locale);
+int isblank_l(int c, locale_t locale);
+int iscntrl_l(int c, locale_t locale);
+int isdigit_l(int c, locale_t locale);
+int isgraph_l(int c, locale_t locale);
+int islower_l(int c, locale_t locale);
+int isprint_l(int c, locale_t locale);
+int ispunct_l(int c, locale_t locale);
+int isspace_l(int c, locale_t locale);
+int isupper_l(int c, locale_t locale);
+int isxdigit_l(int c, locale_t locale);
+int tolower_l(int c, locale_t locale);
+int toupper_l(int c, locale_t locale);
+#endif

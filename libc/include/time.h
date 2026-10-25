@@ -351,3 +351,24 @@ extern int daylight;
 extern int getdate_err;
 struct tm *getdate(const char *string);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strftime_l, "_strftime_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strftime_l, "strftime_l")
+#endif
+size_t strftime_l(char *restrict s, size_t maxsize, const char *restrict format,
+                  const struct tm *restrict timeptr, locale_t locale);
+#endif

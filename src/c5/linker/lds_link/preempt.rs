@@ -13,7 +13,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::PLT_ENTRY_SIZE;
+use super::got::{GotKey, PLT_ENTRY_SIZE};
 use super::inputs::RawReloc;
 use super::{
     EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS, SHT_NOTE, STB_LOCAL,
@@ -105,8 +105,7 @@ impl<'a> LdsLinker<'a> {
             })
             .collect();
         // TODO: #1672 an i386 shared object binds its own definitions
-        // directly: the engine writes neither the GOT32X form nor a PIC
-        // PLT stub.
+        // directly: the engine writes no PIC PLT stub.
         if self.opts.emit != LdsEmit::Dyn
             || !self.opts.shared
             || self.opts.symbolic
@@ -263,16 +262,8 @@ impl<'a> LdsLinker<'a> {
             let k = *self.plt_of.get(name)?;
             return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
         }
-        let k = *self.got_map.get(name)?;
+        let k = *self.got_map.get(&GotKey::Global(String::from(name)))?;
         Some(self.got_slot_base()? + k as u64 * self.class.addr_size())
-    }
-
-    /// The value `name`'s GOT slot holds, `None` where the loader binds it.
-    pub(super) fn slot_value(&self, name: &str) -> Option<u64> {
-        if self.preemptible.contains(name) {
-            return None;
-        }
-        self.resolve_name(name)
     }
 
     pub(super) fn preempted_refusal(&self, oi: usize, si: usize, r: &RawReloc) -> String {

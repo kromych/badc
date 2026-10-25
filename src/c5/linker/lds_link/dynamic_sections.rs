@@ -8,15 +8,15 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::{PLT_ENTRY_SIZE, index_map};
+use super::got::{GotKey, PLT_ENTRY_SIZE};
 use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
     SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_NOTYPE, STT_OBJECT,
     STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
-    SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA, SYNTH_RELR,
-    SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate, machine_uses_rela,
+    SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA,
+    SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -96,27 +96,31 @@ impl<'a> LdsLinker<'a> {
             // each takes one whether or not an input names the GOT. So
             // does a preemptible definition a reference reaches through
             // a stub or a slot.
-            let mut slots: Vec<String> = self.imports.clone();
-            let mut map: HashMap<String, usize> = index_map(&slots);
+            let mut slots: Vec<GotKey> = (self.imports.iter())
+                .map(|n| GotKey::Global(n.clone()))
+                .collect();
+            let mut map: HashMap<GotKey, usize> = slots
+                .iter()
+                .enumerate()
+                .map(|(i, k)| (k.clone(), i))
+                .collect();
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
                 };
                 let id = self.insecs[i];
                 for r in &self.objects[id.obj].sections[id.sec].relocs {
-                    if matches!(
-                        r.rtype,
-                        rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
-                    ) || matches!(
-                        self.reach_at(id.obj, id.sec, r),
-                        Reach::Plt | Reach::Got | Reach::NotedPair
-                    ) {
-                        let name = self.objects[id.obj].symbols[r.sym as usize].name.clone();
-                        if name.is_empty() {
+                    if self.got_slot_ref(id.obj, id.sec, r)
+                        || matches!(
+                            self.reach_at(id.obj, id.sec, r),
+                            Reach::Plt | Reach::Got | Reach::NotedPair
+                        )
+                    {
+                        let Some(key) = self.got_key(id.obj, r.sym) else {
                             continue;
-                        }
-                        map.entry(name.clone()).or_insert_with(|| {
-                            slots.push(name);
+                        };
+                        map.entry(key.clone()).or_insert_with(|| {
+                            slots.push(key);
                             slots.len() - 1
                         });
                     }
@@ -194,17 +198,22 @@ impl<'a> LdsLinker<'a> {
         // GLOB_DAT instead.
         let slot_size = self.class.addr_size();
         if let Some(got_base) = self.got_slot_base() {
-            for (k, name) in self.got_slots.clone().iter().enumerate() {
+            for (k, key) in self.got_slots.iter().enumerate() {
                 let slot = got_base + k as u64 * slot_size;
-                if let Some(v) = self.slot_value(name) {
-                    rel_addrs.push((slot, v as i64, true));
-                } else {
-                    sym_relas.push(DynReloc {
+                match (self.slot_value(key), key) {
+                    (Some(v), _) if self.slot_holds_load_address(key) => {
+                        rel_addrs.push((slot, v as i64, true))
+                    }
+                    // The slot holds a number the load base leaves alone.
+                    (Some(_), _) => {}
+                    (None, GotKey::Global(name)) => sym_relas.push(DynReloc {
                         offset: slot,
                         rtype: glob_dat,
                         addend: 0,
                         sym: Some(name.clone()),
-                    });
+                    }),
+                    // A local in a discarded section: the slot stays zero.
+                    (None, GotKey::Local(..)) => {}
                 }
             }
         }
@@ -271,25 +280,28 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// A static image's GOT, as GNU ld lays it out: after the header it
-    /// reserves, a slot per symbol an aarch64 GOT reference names, which
-    /// the link fills with the symbol's address.
+    /// reserves, a slot per symbol a GOT reference that keeps one names,
+    /// which the link fills with the symbol's address. On x86 bfd drops
+    /// `.got.plt` from an image with no slot and no stub that does not
+    /// name `_GLOBAL_OFFSET_TABLE_`.
     fn size_static_got(&mut self) {
         if self.got_slots.is_empty() {
-            let mut slots: Vec<String> = Vec::new();
-            let mut map: HashMap<String, usize> = HashMap::new();
+            let mut slots: Vec<GotKey> = Vec::new();
+            let mut map: HashMap<GotKey, usize> = HashMap::new();
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
                 };
                 let id = self.insecs[i];
                 for r in &self.objects[id.obj].sections[id.sec].relocs {
-                    if !rt::aarch64_got_slot_ref(r.rtype) {
+                    if !self.got_slot_ref(id.obj, id.sec, r) {
                         continue;
                     }
-                    let name = &self.objects[id.obj].symbols[r.sym as usize].name;
-                    if !name.is_empty() && !map.contains_key(name) {
-                        map.insert(name.clone(), slots.len());
-                        slots.push(name.clone());
+                    if let Some(key) = self.got_key(id.obj, r.sym)
+                        && !map.contains_key(&key)
+                    {
+                        map.insert(key.clone(), slots.len());
+                        slots.push(key);
                     }
                 }
             }
@@ -305,10 +317,17 @@ impl<'a> LdsLinker<'a> {
             0
         };
         let size = header + self.got_slots.len() as u64 * slot;
+        let got_plt = if !self.got_on_got_plt() || reserve || !self.plt_syms.is_empty() {
+            3 * slot
+        } else {
+            0
+        };
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
-            if sec.name == SYNTH_GOT {
-                sec.size = size;
+            match sec.name.as_str() {
+                SYNTH_GOT => sec.size = size,
+                SYNTH_GOTPLT => sec.size = got_plt,
+                _ => {}
             }
         }
     }

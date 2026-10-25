@@ -21,12 +21,12 @@
 //! `sections` flattens and claims them, `pools` merges SHF_MERGE and
 //! `.eh_frame`, `layout` walks the statements, `eval` evaluates script
 //! expressions, `veneers` reserves erratum stubs, `dynamic_sections`
-//! and `got` size the dynamic tables and slots, `reloc` /
-//! `reloc_aarch64` apply relocations, `preempt` decides which of a
-//! shared object's definitions the loader may preempt and how each
-//! reference reaches one, `synth` fills synthetic content,
-//! `phdrs` and `symtab` build the program headers and the symbol
-//! table, and `write` assembles the image.
+//! and `got` size the dynamic tables and slots, `reloc`,
+//! `reloc_aarch64` and `reloc_i386` apply relocations, `preempt`
+//! decides which of a shared object's definitions the loader may
+//! preempt and how each reference reaches one, `synth` fills synthetic
+//! content, `phdrs` and `symtab` build the program headers and the
+//! symbol table, and `write` assembles the image.
 
 #![cfg(feature = "std")]
 #![allow(dead_code)]
@@ -41,6 +41,7 @@ mod pools;
 mod preempt;
 mod reloc;
 mod reloc_aarch64;
+mod reloc_i386;
 mod sections;
 mod symtab;
 mod synth;
@@ -744,10 +745,10 @@ pub struct LdsLinker<'a> {
     /// `count_reserved_none_slots`), computed once per link.
     dyn_nones: Option<u64>,
     relr_addrs: Vec<u64>,
-    /// GOT slots, keyed by referenced symbol name (a GOT reference to
-    /// an undefined symbol still needs a slot).
-    got_slots: Vec<String>,
-    got_map: HashMap<String, usize>,
+    /// GOT slots, keyed by the symbol each holds (a GOT reference to an
+    /// undefined symbol still needs a slot).
+    got_slots: Vec<got::GotKey>,
+    got_map: HashMap<got::GotKey, usize>,
     /// Dynamic tables, rebuilt each pass from the current placement.
     dyn_tables: Option<DynTables>,
     /// Version definitions from the script's `VERSION` command, base

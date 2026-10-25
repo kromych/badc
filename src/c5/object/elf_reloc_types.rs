@@ -81,6 +81,7 @@ pub(crate) const R_386_16: u32 = 20;
 pub(crate) const R_386_PC16: u32 = 21;
 pub(crate) const R_386_8: u32 = 22;
 pub(crate) const R_386_PC8: u32 = 23;
+pub(crate) const R_386_GOT32X: u32 = 43;
 
 // ---- aarch64 ----
 pub(crate) const R_AARCH64_ABS64: u32 = 257;
@@ -492,7 +493,7 @@ pub(crate) fn i386_field_width(rtype: u32) -> Option<u32> {
         R_386_8 | R_386_PC8 => Some(1),
         R_386_16 | R_386_PC16 => Some(2),
         R_386_32 | R_386_PC32 | R_386_GOT32 | R_386_PLT32 | R_386_GLOB_DAT | R_386_JUMP_SLOT
-        | R_386_RELATIVE | R_386_GOTOFF | R_386_GOTPC | R_386_COPY => Some(4),
+        | R_386_RELATIVE | R_386_GOTOFF | R_386_GOTPC | R_386_COPY | R_386_GOT32X => Some(4),
         _ => None,
     }
 }

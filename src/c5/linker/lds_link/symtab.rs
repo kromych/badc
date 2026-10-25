@@ -304,7 +304,11 @@ impl<'a> LdsLinker<'a> {
         // on x86 the entry names `.got.plt` in every mode, on aarch64
         // it names `.got` for non-PIC output and is absolute for PIE
         // and shared objects.
-        if let (Some(value), Some(out)) = (self.got_symbol_addr(), self.got_symbol_out()) {
+        if let (Some(value), Some(out), true) = (
+            self.got_symbol_addr(),
+            self.got_symbol_out(),
+            self.got_symbol_kept(),
+        ) {
             let abs = self.machine == EM_AARCH64 && self.opts.emit == LdsEmit::Dyn;
             if track {
                 index.by_name.insert(GOT_SYMBOL.to_string(), syms.len());

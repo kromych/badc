@@ -81,7 +81,24 @@ impl<'a> LdsLinker<'a> {
                         }
                         at.map(|v| v.wrapping_add(r.addend as u64))
                     }
-                    _ => self.resolve_reloc_target(id.obj, r, tolerant, &mut errors),
+                    _ => {
+                        let sa = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
+                        // A GOT reference that keeps its slot reaches the slot.
+                        if sa.is_some()
+                            && self.machine == EM_386
+                            && self.i386_got_slot_ref(id.obj, id.sec, r)
+                        {
+                            let slot = self.got_slot_addr(id.obj, r);
+                            if slot.is_none() {
+                                let source = &self.objects[id.obj].source;
+                                let name = self.objects[id.obj].symbol_name(r.sym as usize);
+                                errors.push(format!("{source}: no GOT slot for `{name}'"));
+                            }
+                            slot.map(|v| v.wrapping_add(r.addend as u64))
+                        } else {
+                            sa
+                        }
+                    }
                 };
                 let Some(s_plus_a) = target else { continue };
                 if errors.len() > 40 {
@@ -130,7 +147,7 @@ impl<'a> LdsLinker<'a> {
                     alloc,
                     relr_set,
                     &mut errors,
-                    id.obj,
+                    (id.obj, id.sec),
                 );
             }
         }
@@ -262,7 +279,7 @@ impl<'a> LdsLinker<'a> {
         alloc: bool,
         relr_set: &HashSet<u64>,
         errors: &mut Vec<String>,
-        oi: usize,
+        (oi, si): (usize, usize),
     ) {
         let machine = self.machine;
         let name = || self.objects[oi].symbol_name(r.sym as usize);
@@ -392,79 +409,12 @@ impl<'a> LdsLinker<'a> {
                     ));
                 }
             },
-            EM_386 => self.apply_i386(buf, site, p, sa, r, errors, oi),
+            EM_386 => self.apply_i386(buf, site, p, sa, r, (oi, si), errors),
             EM_AARCH64 => self.apply_aarch64(buf, site, p, sa, r, alloc, relr_set, errors, oi),
             _ => errors.push(format!(
                 "unsupported machine {}",
                 crate::c5::linker::relocatable::elf_machine_desc(machine)
             )),
-        }
-    }
-
-    /// Intel386 psABI: every type is `S + A`, `S + A - P` or a GOT-base
-    /// form, written at the field's own width. bfd complains on
-    /// overflow only where the field is narrower than an address.
-    #[allow(clippy::too_many_arguments)]
-    fn apply_i386(
-        &self,
-        buf: &mut [u8],
-        site: usize,
-        p: u64,
-        sa: u64,
-        r: &RawReloc,
-        errors: &mut Vec<String>,
-        oi: usize,
-    ) {
-        let name = || self.objects[oi].symbol_name(r.sym as usize);
-        let v = match r.rtype {
-            rt::R_386_32 | rt::R_386_16 | rt::R_386_8 => sa,
-            // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is
-            // already the GOT base plus the addend.
-            rt::R_386_PC32 | rt::R_386_PC16 | rt::R_386_PC8 | rt::R_386_GOTPC | rt::R_386_PLT32 => {
-                sa.wrapping_sub(p)
-            }
-            rt::R_386_GOTOFF => match self.got_symbol_addr() {
-                Some(g) => sa.wrapping_sub(g),
-                None => {
-                    errors.push(format!(
-                        "{} against `{}' with no GOT",
-                        rt::i386_reloc_desc(r.rtype),
-                        name()
-                    ));
-                    return;
-                }
-            },
-            other => {
-                errors.push(format!(
-                    "unsupported relocation {} against `{}'",
-                    rt::i386_reloc_desc(other),
-                    name()
-                ));
-                return;
-            }
-        };
-        let Some(width) = rt::i386_field_width(r.rtype) else {
-            return;
-        };
-        // bfd's `complain_overflow_bitfield` accepts a value that fits
-        // the field read either as signed or as unsigned. A 32-bit
-        // field holds every address of an ELF32 image.
-        let sv = v as i64;
-        let fits = match width {
-            1 => (-0x80..=0xff).contains(&sv),
-            2 => (-0x8000..=0xffff).contains(&sv),
-            _ => true,
-        };
-        if !fits {
-            errors.push(format!(
-                "relocation truncated: {} against `{}' (0x{v:x})",
-                rt::i386_reloc_desc(r.rtype),
-                name()
-            ));
-        }
-        let n = width as usize;
-        if site + n <= buf.len() {
-            buf[site..site + n].copy_from_slice(&v.to_le_bytes()[..n]);
         }
     }
 }

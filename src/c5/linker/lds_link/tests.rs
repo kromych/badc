@@ -5850,3 +5850,412 @@ fn a_noted_page_pair_loads_a_preemptible_definitions_slot() {
         "{e}"
     );
 }
+
+/// A script placing every section an i386 dynamic link builds.
+const I386_DYN_SCRIPT: &str = r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rel.dyn : { *(.rel.*) }
+  .plt : { *(.plt) }
+  .text : { *(.text*) }
+  . = ALIGN(0x1000);
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data*) }
+  .bss : { *(.bss*) }
+}
+"#;
+
+/// `.rel.dyn` of an ELF32 image as `(offset, type, symbol)`.
+fn elf32_dyn_relocs(image: &[u8]) -> Vec<(u64, u32, String)> {
+    let names = elf32_symbols_of(image, ".dynsym", ".dynstr");
+    let Some(rel) = elf32_sections(image)
+        .into_iter()
+        .find(|s| s.0 == ".rel.dyn")
+    else {
+        return Vec::new();
+    };
+    let body = &image[rel.3 as usize..(rel.3 + rel.4) as usize];
+    (body.as_chunks::<8>().0.iter())
+        .map(|c| {
+            let info = u32_at(c, 4);
+            let sym = names.get((info >> 8) as usize).map(|s| s.0.clone());
+            (u32_at(c, 0) as u64, info & 0xff, sym.unwrap_or_default())
+        })
+        .collect()
+}
+
+/// `(name, value)` of every entry of the ELF32 symbol table `table`.
+fn elf32_symbols_of(image: &[u8], table: &str, strings: &str) -> Vec<(String, u64)> {
+    let secs = elf32_sections(image);
+    let (Some(t), Some(s)) = (
+        secs.iter().find(|s| s.0 == table),
+        secs.iter().find(|s| s.0 == strings),
+    ) else {
+        return Vec::new();
+    };
+    let names = &image[s.3 as usize..(s.3 + s.4) as usize];
+    let body = &image[t.3 as usize..(t.3 + t.4) as usize];
+    (body.as_chunks::<16>().0.iter())
+        .map(|e| (strz(names, u32_at(e, 0) as usize), u32_at(e, 4) as u64))
+        .collect()
+}
+
+fn i32_at(bytes: &[u8], at: usize) -> i64 {
+    u32_at(bytes, at) as i32 as i64
+}
+
+/// Opcode and ModRM of the loads [`i386_got_unit`] holds, in order.
+const I386_GOT_INSNS: [[u8; 2]; 10] = [
+    [0x8b, 0x83],
+    [0x85, 0x8b],
+    [0x03, 0x8b],
+    [0x3b, 0x93],
+    [0xff, 0x93],
+    [0xff, 0xa3],
+    [0xff, 0xb3],
+    [0x8b, 0x83],
+    [0x8b, 0x83],
+    [0x8b, 0x83],
+];
+
+/// i386 loads through the GOT as gas encodes them, each with `rtype`:
+/// `mov`, `test`, `add`, `cmp` and `push` of `loc`, a call and a jump
+/// through `fn`'s slot, `mov` of `loc + 4`'s slot, and `mov` of an
+/// absolute `abs` and of a hidden `hid`. `fn` is at 61 of `.text`;
+/// `.data` holds `loc` and, at 8, `hid`. Symtab: null(0), sections(1,
+/// 2), _start(3), fn(4), loc(5), hid(6), abs(7).
+fn i386_got_unit(rtype: u32) -> Vec<u8> {
+    let mut text = Vec::new();
+    for i in I386_GOT_INSNS {
+        text.extend_from_slice(&i);
+        text.extend_from_slice(&[0; 4]);
+    }
+    text.extend_from_slice(&[0xc3, 0xc3]);
+    let mut o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 12])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 61)
+        .sym("fn", STB_GLOBAL, STT_FUNC, 0, 61, 1)
+        .sym("loc", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .sym("hid", STB_GLOBAL, STT_OBJECT, 1, 8, 4)
+        .vis(STV_HIDDEN)
+        .sym("abs", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x1234, 0);
+    for (k, sym, addend) in [
+        (0, 5, 0),
+        (1, 5, 0),
+        (2, 5, 0),
+        (3, 5, 0),
+        (4, 4, 0),
+        (5, 4, 0),
+        (6, 5, 0),
+        (7, 5, 4),
+        (8, 7, 0),
+        (9, 6, 0),
+    ] {
+        o = o.reloc(0, 6 * k + 2, sym, rtype, addend);
+    }
+    o.build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// `-shared` (`Some(true)`), `-pie` (`Some(false)`) or a
+/// position-dependent executable (`None`).
+fn i386_opts(pic: Option<bool>) -> LdsOptions {
+    LdsOptions {
+        emit: if pic.is_some() {
+            LdsEmit::Dyn
+        } else {
+            LdsEmit::Exec
+        },
+        shared: pic == Some(true),
+        ..Default::default()
+    }
+}
+
+fn link_i386_with(objs: Vec<(&str, Vec<u8>)>, opts: &LdsOptions) -> Result<LdsResult, C5Error> {
+    let script = parse_linker_script(I386_DYN_SCRIPT).expect("script parses");
+    let objs = (objs.into_iter())
+        .map(|(n, b)| parse_lds_object(n, b).expect("parses"))
+        .collect();
+    link_with_script(&script, objs, opts)
+}
+
+/// [`link_i386_with`] under [`i386_opts`], a shared object linked
+/// `-Bsymbolic` so that its definitions bind in place.
+fn link_i386(objs: Vec<(&str, Vec<u8>)>, pic: Option<bool>) -> Result<LdsResult, C5Error> {
+    let opts = LdsOptions {
+        symbolic: pic == Some(true),
+        ..i386_opts(pic)
+    };
+    link_i386_with(objs, &opts)
+}
+
+/// The address of each of `names` in the image's `.symtab`.
+fn i386_addrs<const N: usize>(image: &[u8], names: [&str; N]) -> [i64; N] {
+    let syms = elf32_symbols_of(image, ".symtab", ".strtab");
+    names.map(|n| {
+        let s = syms.iter().find(|s| s.0 == n);
+        s.unwrap_or_else(|| panic!("no `{n}'")).1 as i64
+    })
+}
+
+/// GNU ld 2.46.1 relaxes `R_386_GOT32X` loads of a symbol the link
+/// resolves locally, measured on gas's encodings of each form: a
+/// position-dependent executable turns `mov`, `test`, an ALU op and
+/// `push` into immediates and a call or jump into a direct branch; a
+/// position-independent image turns only `mov` into `lea` of the
+/// GOT-relative offset, and `mov` of an absolute symbol into an
+/// immediate, and keeps the other loads on a slot `R_386_RELATIVE`
+/// fills. A nonzero addend keeps the slot in both.
+#[test]
+fn i386_got32x_loads_relax_as_gnu_ld_relaxes_them() {
+    for pic in [None, Some(false), Some(true)] {
+        let res = link_i386(alloc::vec![("u.o", i386_got_unit(rt::R_386_GOT32X))], pic)
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [t, f, l, h] = i386_addrs(img, ["_start", "fn", "loc", "hid"]);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let got = elf32_section(img, ".got");
+        assert_eq!(got.4, 4, "{pic:?}: one slot, for `loc + 4`");
+        let s = got.2 as i64;
+        let imm = |op: [u8; 2], v: i64| [op[0], op[1]].into_iter().chain((v as u32).to_le_bytes());
+        let mut want: Vec<u8> = Vec::new();
+        if pic.is_none() {
+            want.extend(imm([0xc7, 0xc0], l));
+            want.extend(imm([0xf7, 0xc1], l));
+            want.extend(imm([0x81, 0xc1], l));
+            want.extend(imm([0x81, 0xfa], l));
+        } else {
+            want.extend(imm([0x8d, 0x83], l - g));
+            want.extend(imm([0x85, 0x8b], s - g));
+            want.extend(imm([0x03, 0x8b], s - g));
+            want.extend(imm([0x3b, 0x93], s - g));
+        }
+        want.extend(imm([0x67, 0xe8], f - (t + 30)));
+        want.push(0xe9);
+        want.extend(((f - (t + 35)) as u32).to_le_bytes());
+        want.push(0x90);
+        if pic.is_none() {
+            want.extend(imm([0x2e, 0x68], l));
+        } else {
+            want.extend(imm([0xff, 0xb3], s - g));
+        }
+        want.extend(imm([0x8b, 0x83], s + 4 - g));
+        want.extend(imm([0xc7, 0xc0], 0x1234));
+        if pic.is_none() {
+            want.extend(imm([0xc7, 0xc0], h));
+        } else {
+            want.extend(imm([0x8d, 0x83], h - g));
+        }
+        want.extend([0xc3, 0xc3]);
+        assert_eq!(elf32_body(img, ".text"), want, "{pic:?}");
+        let slot = u32_at(elf32_body(img, ".got"), 0) as i64;
+        assert_eq!(slot, l, "{pic:?}: the slot holds `loc`");
+        if pic.is_some() {
+            let relocs = elf32_dyn_relocs(img);
+            assert_eq!(
+                relocs,
+                [(s as u64, rt::R_386_RELATIVE, String::new())],
+                "{pic:?}"
+            );
+        }
+    }
+}
+
+/// GNU ld 2.46.1 keeps every `R_386_GOT32` load on a slot: the field is
+/// the slot's offset from `_GLOBAL_OFFSET_TABLE_` plus the addend and
+/// the slot holds the address. A position-independent image fills each
+/// slot with an `R_386_RELATIVE` but the absolute symbol's, which holds
+/// a number, as bfd leaves it in a PIE.
+#[test]
+fn i386_got32_keeps_every_load_on_a_slot() {
+    for pic in [None, Some(false), Some(true)] {
+        let res = link_i386(alloc::vec![("u.o", i386_got_unit(rt::R_386_GOT32))], pic)
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [f, l, h] = i386_addrs(img, ["fn", "loc", "hid"]);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let (got_addr, got) = (elf32_section(img, ".got").2 as i64, elf32_body(img, ".got"));
+        assert_eq!(got.len(), 16, "{pic:?}: slots for loc, fn, abs and hid");
+        let text = elf32_body(img, ".text");
+        for (k, want, addend) in [
+            (0, l, 0),
+            (1, l, 0),
+            (2, l, 0),
+            (3, l, 0),
+            (4, f, 0),
+            (5, f, 0),
+            (6, l, 0),
+            (7, l, 4),
+            (8, 0x1234, 0),
+            (9, h, 0),
+        ] {
+            assert_eq!(text[6 * k..6 * k + 2], I386_GOT_INSNS[k], "kept form");
+            let slot = g + i32_at(text, 6 * k + 2) - addend - got_addr;
+            assert_eq!(i32_at(got, slot as usize), want, "{pic:?}: load {k}");
+        }
+        if pic.is_some() {
+            let relocs = elf32_dyn_relocs(img);
+            let abs_slot = (g + i32_at(text, 6 * 8 + 2)) as u64;
+            assert_eq!(relocs.len(), 3, "{relocs:?}");
+            assert!(
+                (relocs.iter()).all(|r| r.1 == rt::R_386_RELATIVE && r.0 != abs_slot),
+                "{relocs:?}"
+            );
+        }
+    }
+}
+
+/// A GOT load with no base register, as GNU ld 2.46.1 links it: a
+/// position-dependent executable relaxes `mov` and `call` and gives
+/// `lea foo@GOT` the slot's GOT-relative offset; a position-independent
+/// image refuses the `mov`, having no GOT address to give, and still
+/// takes the `lea`.
+#[test]
+fn an_i386_got_load_without_a_base_register_follows_gnu_ld() {
+    // mov loc@GOT, %eax; lea loc@GOT, %eax; call *fn@GOT; ret; fn: ret;
+    // the `mov` with `mov`, the call where `call`. Symtab: null(0),
+    // sections(1, 2), loc(3), _start(4), fn(5).
+    let unit = |mov: Option<u32>, call: bool| {
+        let text = [
+            0x8b, 0x05, 0, 0, 0, 0, 0x8d, 0x05, 0, 0, 0, 0, 0xff, 0x15, 0, 0, 0, 0, 0xc3, 0xc3,
+        ];
+        let mut o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+            .sym("loc", STB_LOCAL, STT_OBJECT, 1, 0, 4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 19)
+            .sym("fn", STB_GLOBAL, STT_FUNC, 0, 19, 1)
+            .reloc(0, 8, 3, rt::R_386_GOT32, 0);
+        if let Some(t) = mov {
+            o = o.reloc(0, 2, 3, t, 0);
+        }
+        if call {
+            o = o.reloc(0, 14, 5, rt::R_386_GOT32X, 0);
+        }
+        o.build_class(EM_386, ElfClass::Elf32, false)
+    };
+    let res = link_i386(
+        alloc::vec![("b.o", unit(Some(rt::R_386_GOT32X), true))],
+        None,
+    )
+    .expect("links");
+    let img = &res.image;
+    let [t, f, l] = i386_addrs(img, ["_start", "fn", "loc"]);
+    let (g, s) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got").2 as i64,
+    );
+    let text = elf32_body(img, ".text");
+    assert_eq!(text[..2], [0xc7, 0xc0]);
+    assert_eq!(i32_at(text, 2), l);
+    assert_eq!(text[6..8], [0x8d, 0x05]);
+    assert_eq!(i32_at(text, 8), s - g, "lea takes the offset");
+    assert_eq!(text[12..14], [0x67, 0xe8]);
+    assert_eq!(i32_at(text, 14), f - (t + 18));
+    for t in [rt::R_386_GOT32X, rt::R_386_GOT32] {
+        let e = link_i386(alloc::vec![("b.o", unit(Some(t), false))], Some(false))
+            .expect_err("refused");
+        let want = alloc::format!(
+            "b.o: direct GOT relocation {} against `loc' without base register can not be \
+             used when making a shared object",
+            rt::i386_reloc_desc(t)
+        );
+        assert!(alloc::format!("{e}").contains(&want), "{e}");
+    }
+    let res = link_i386(alloc::vec![("b.o", unit(None, false))], Some(false)).expect("links");
+    let img = &res.image;
+    let (g, got) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got"),
+    );
+    let text = elf32_body(img, ".text");
+    let lea = g + i32_at(text, 8);
+    assert!(
+        (got.2 as i64..(got.2 + got.4) as i64).contains(&lea),
+        "the lea names a slot"
+    );
+}
+
+/// Two objects' locals of one name are two symbols, and a GOT reference
+/// to each reaches a slot of its own.
+#[test]
+fn same_named_locals_take_a_got_slot_each() {
+    // mov loc@GOT(%ebx), %eax at 0; `loc` at `off` in `.data`.
+    // Symtab: null(0), sections(1, 2), loc(3).
+    let unit = |off: u64, entry: bool| {
+        let mut o = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0x8b, 0x83, 0, 0, 0, 0, 0xc3],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 16])
+            .sym("loc", STB_LOCAL, STT_OBJECT, 1, off, 4)
+            .reloc(0, 2, 3, rt::R_386_GOT32, 0);
+        if entry {
+            o = o.sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7);
+        }
+        o.build_class(EM_386, ElfClass::Elf32, false)
+    };
+    let res = link_i386(
+        alloc::vec![("a.o", unit(0, true)), ("b.o", unit(8, false))],
+        None,
+    )
+    .expect("links");
+    let img = &res.image;
+    let (g, got) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got"),
+    );
+    let (data, text) = (
+        elf32_section(img, ".data").2 as i64,
+        elf32_body(img, ".text"),
+    );
+    let body = elf32_body(img, ".got");
+    let held: Vec<i64> = [2, 10]
+        .iter()
+        .map(|&at| i32_at(body, (g + i32_at(text, at) - got.2 as i64) as usize))
+        .collect();
+    assert_eq!(held, [data, data + 16 + 8], "each object's `loc`");
+}
+
+/// GNU ld 2.46.1 builds neither `.got`, `.got.plt` nor
+/// `_GLOBAL_OFFSET_TABLE_` for a position-dependent executable whose
+/// every GOT load relaxes.
+#[test]
+fn an_i386_executable_whose_got_loads_all_relax_has_no_got() {
+    // mov loc@GOT(%ebx), %eax; ret. Symtab: null(0), sections(1, 2),
+    // _start(3), loc(4).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0x8b, 0x83, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7)
+        .sym("loc", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .reloc(0, 2, 4, rt::R_386_GOT32X, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let res = link_i386(alloc::vec![("a.o", o)], None).expect("links");
+    let img = &res.image;
+    let secs = elf32_sections(img);
+    assert!(
+        !secs.iter().any(|s| s.0.starts_with(".got")),
+        "{:?}",
+        secs.iter().map(|s| &s.0).collect::<Vec<_>>()
+    );
+    let syms = elf32_symbols_of(img, ".symtab", ".strtab");
+    assert!(!syms.iter().any(|s| s.0 == GOT_SYMBOL), "{syms:?}");
+    assert_eq!(elf32_body(img, ".text")[..2], [0xc7, 0xc0]);
+}

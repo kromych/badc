@@ -11,10 +11,11 @@ use hashbrown::{HashMap, HashSet};
 use super::got::PLT_ENTRY_SIZE;
 use super::inputs::RawSection;
 use super::{
-    EM_AARCH64, LdsEmit, LdsLinker, OUT_EH_FRAME, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE, SHT_NOTE,
-    SHT_PROGBITS, SHT_RELR, SHT_STRTAB, SYNTH_BUILD_ID, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
-    SYNTH_EH_FRAME_HDR, SYNTH_GNU_HASH, SYNTH_GNU_PROPERTY, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH,
-    SYNTH_INTERP, SYNTH_PLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, SecFate, machine_uses_rela,
+    EM_386, EM_AARCH64, LdsEmit, LdsLinker, OUT_EH_FRAME, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE,
+    SHT_NOTE, SHT_PROGBITS, SHT_RELR, SHT_STRTAB, SYNTH_BUILD_ID, SYNTH_DYNAMIC, SYNTH_DYNSTR,
+    SYNTH_DYNSYM, SYNTH_EH_FRAME_HDR, SYNTH_GNU_HASH, SYNTH_GNU_PROPERTY, SYNTH_GOT, SYNTH_GOTPLT,
+    SYNTH_HASH, SYNTH_INTERP, SYNTH_PLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, SecFate,
+    machine_uses_rela,
 };
 use crate::c5::object::relr::encode_relr;
 
@@ -95,7 +96,11 @@ impl<'a> LdsLinker<'a> {
         // `_GLOBAL_OFFSET_TABLE_` still has an address to give it.
         let got_refs = (self.objects.iter())
             .flat_map(|o| o.sections.iter().flat_map(|s| &s.relocs))
-            .any(|r| self.machine == EM_AARCH64 && rt::aarch64_got_slot_ref(r.rtype));
+            .any(|r| match self.machine {
+                EM_AARCH64 => rt::aarch64_got_slot_ref(r.rtype),
+                EM_386 => matches!(r.rtype, rt::R_386_GOT32 | rt::R_386_GOT32X),
+                _ => false,
+            });
         if self.opts.emit == LdsEmit::Dyn || self.referenced.contains(GOT_SYMBOL) || got_refs {
             let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
@@ -264,12 +269,13 @@ impl<'a> LdsLinker<'a> {
                             );
                         }
                         let base = self.got_slot_base().unwrap_or(0);
-                        for (k, gname) in self.got_slots.clone().iter().enumerate() {
-                            let v = self.slot_value(gname).unwrap_or(0);
+                        for (k, key) in self.got_slots.iter().enumerate() {
+                            let v = self.slot_value(key).unwrap_or(0);
                             let slot_addr = base + k as u64 * slot;
                             let write = relr_set.contains(&slot_addr)
                                 || self.opts.apply_dynamic_relocs
-                                || self.opts.emit != LdsEmit::Dyn;
+                                || self.opts.emit != LdsEmit::Dyn
+                                || !self.slot_holds_load_address(key);
                             bytes.extend_from_slice(
                                 &class.addr_bytes(if write { v } else { 0 })[..aw],
                             );

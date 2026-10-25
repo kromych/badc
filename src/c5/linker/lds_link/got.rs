@@ -38,8 +38,14 @@ fn narrow_absolute(machine: u16, rtype: u32) -> bool {
 /// One PLT stub, on both targets.
 pub(super) const PLT_ENTRY_SIZE: u64 = 16;
 
-/// i386's relaxable GOT form, which `elf_reloc_types` does not name.
-const R_386_GOT32X: u32 = 43;
+/// The symbol a GOT slot holds the address of: a global by name, a named
+/// local by its object and symbol index, as two objects' locals may share
+/// a name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) enum GotKey {
+    Global(String),
+    Local(usize, u32),
+}
 
 /// Name -> position, for a list whose order is its index space.
 pub(super) fn index_map(names: &[String]) -> HashMap<String, usize> {
@@ -67,7 +73,7 @@ fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
             rtype,
             rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
         ),
-        EM_386 => matches!(rtype, rt::R_386_GOT32 | R_386_GOT32X),
+        EM_386 => matches!(rtype, rt::R_386_GOT32 | rt::R_386_GOT32X),
         _ => matches!(
             rtype,
             rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
@@ -230,7 +236,8 @@ impl<'a> LdsLinker<'a> {
         let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
         for (k, name) in self.plt_syms.iter().enumerate() {
             let at = plt + k as u64 * PLT_ENTRY_SIZE;
-            let slot = got + *self.got_map.get(name).unwrap_or(&0) as u64 * slot_size;
+            let key = GotKey::Global(name.clone());
+            let slot = got + *self.got_map.get(&key).unwrap_or(&0) as u64 * slot_size;
             out.extend_from_slice(&plt_entry(self.machine, at, slot));
         }
         out
@@ -436,14 +443,72 @@ impl<'a> LdsLinker<'a> {
         self.kept_synth(SYNTH_GOT)
     }
 
+    /// Whether the image keeps the section `_GLOBAL_OFFSET_TABLE_` names:
+    /// an x86 `.got.plt` sized empty goes, and the symbol with it.
+    pub(super) fn got_symbol_kept(&self) -> bool {
+        let synth = &self.objects[self.synth_obj];
+        !self.got_on_got_plt()
+            || (synth.sections.iter()).any(|s| s.name == SYNTH_GOTPLT && s.size != 0)
+    }
+
     /// The address of the first GOT entry, past the reserved header.
     pub(super) fn got_slot_base(&self) -> Option<u64> {
         Some(self.got_addr_prevpass()? + self.got_reserved() * self.class.addr_size())
     }
 
     pub(super) fn got_slot_addr(&self, oi: usize, r: &RawReloc) -> Option<u64> {
-        let name = &self.objects[oi].symbols[r.sym as usize].name;
-        let idx = *self.got_map.get(name)?;
+        let idx = *self.got_map.get(&self.got_key(oi, r.sym)?)?;
         Some(self.got_slot_base()? + idx as u64 * self.class.addr_size())
+    }
+
+    /// The slot key of symbol `sym` of object `oi`; a section symbol,
+    /// which has no name, takes none.
+    pub(super) fn got_key(&self, oi: usize, sym: u32) -> Option<GotKey> {
+        let s = self.objects[oi].symbols.get(sym as usize)?;
+        if s.name.is_empty() {
+            return None;
+        }
+        Some(if s.binding() == STB_LOCAL {
+            GotKey::Local(oi, sym)
+        } else {
+            GotKey::Global(s.name.clone())
+        })
+    }
+
+    /// True where a relocation names a GOT slot whatever its target
+    /// resolves to: an aarch64 GOT reference, and an i386 one that does
+    /// not relax. x86-64 relaxes every local one.
+    pub(super) fn got_slot_ref(&self, oi: usize, si: usize, r: &RawReloc) -> bool {
+        match self.machine {
+            EM_AARCH64 => rt::aarch64_got_slot_ref(r.rtype),
+            EM_386 => self.i386_got_slot_ref(oi, si, r),
+            _ => false,
+        }
+    }
+
+    /// Whether `key`'s slot holds a load address, which a
+    /// position-independent image relocates; an absolute symbol's holds
+    /// a number.
+    pub(super) fn slot_holds_load_address(&self, key: &GotKey) -> bool {
+        match key {
+            GotKey::Global(name) => match self.globals.get(name) {
+                Some(&(oi, si)) => self.reloc_is_relative(oi, si),
+                None => (self
+                    .script_now
+                    .get(name)
+                    .or_else(|| self.script_prev.get(name)))
+                .is_some_and(|s| matches!(s.val.att, Att::Out(_)) || s.final_out.is_some()),
+            },
+            GotKey::Local(oi, si) => self.reloc_is_relative(*oi, *si as usize),
+        }
+    }
+
+    /// The value `key`'s slot holds, `None` where the loader binds it.
+    pub(super) fn slot_value(&self, key: &GotKey) -> Option<u64> {
+        match key {
+            GotKey::Global(name) if self.preemptible.contains(name) => None,
+            GotKey::Global(name) => self.resolve_name(name),
+            GotKey::Local(oi, si) => self.resolve_sym_prevpass(*oi, *si as usize, 0),
+        }
     }
 }

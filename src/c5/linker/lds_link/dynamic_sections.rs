@@ -2,7 +2,7 @@
 
 use crate::c5::linker::dynamic::{self, DynSym, VerDef};
 use crate::c5::linker::lds::glob_match;
-use crate::c5::object::elf_reloc_types as rt;
+use crate::c5::object::elf_reloc_types::{self as rt, GOT_BASE_SYMBOL as GOT_SYMBOL};
 use crate::c5::object::relr::encode_relr;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -84,6 +84,7 @@ impl<'a> LdsLinker<'a> {
     /// synthetic input sections' sizes for this pass.
     pub(super) fn size_dynamic_sections(&mut self) {
         if self.opts.emit != LdsEmit::Dyn {
+            self.size_static_got();
             return;
         }
         self.dyn_relas.clear();
@@ -265,6 +266,49 @@ impl<'a> LdsLinker<'a> {
                 }
                 SYNTH_PLT => sec.size = self.plt_syms.len() as u64 * PLT_ENTRY_SIZE,
                 _ => {}
+            }
+        }
+    }
+
+    /// A static image's GOT, as GNU ld lays it out: after the header it
+    /// reserves, a slot per symbol an aarch64 GOT reference names, which
+    /// the link fills with the symbol's address.
+    fn size_static_got(&mut self) {
+        if self.got_slots.is_empty() {
+            let mut slots: Vec<String> = Vec::new();
+            let mut map: HashMap<String, usize> = HashMap::new();
+            for i in 0..self.insecs.len() {
+                let SecFate::Placed { .. } = self.fates[i] else {
+                    continue;
+                };
+                let id = self.insecs[i];
+                for r in &self.objects[id.obj].sections[id.sec].relocs {
+                    if !rt::aarch64_got_slot_ref(r.rtype) {
+                        continue;
+                    }
+                    let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                    if !name.is_empty() && !map.contains_key(name) {
+                        map.insert(name.clone(), slots.len());
+                        slots.push(name.clone());
+                    }
+                }
+            }
+            self.got_slots = slots;
+            self.got_map = map;
+        }
+        let slot = self.class.addr_size();
+        // bfd reserves the header for a slot or a reference to the GOT base.
+        let reserve = !self.got_slots.is_empty() || self.referenced.contains(GOT_SYMBOL);
+        let header = if self.got_reserved() != 0 && reserve {
+            slot
+        } else {
+            0
+        };
+        let size = header + self.got_slots.len() as u64 * slot;
+        let synth = self.synth_obj;
+        for sec in &mut self.objects[synth].sections {
+            if sec.name == SYNTH_GOT {
+                sec.size = size;
             }
         }
     }

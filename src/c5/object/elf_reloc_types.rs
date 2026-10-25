@@ -307,6 +307,12 @@ pub(crate) fn aarch64_tprel_field(rtype: u32) -> Option<TprelField> {
     })
 }
 
+/// An aarch64 reference to the symbol's GOT slot: the `adrp` page of the
+/// slot and the `ldr` that reads it.
+pub(crate) const fn aarch64_got_slot_ref(rtype: u32) -> bool {
+    matches!(rtype, R_AARCH64_ADR_GOT_PAGE | R_AARCH64_LD64_GOT_LO12_NC)
+}
+
 /// [`TprelField`] of an aarch64 local-dynamic relocation type, whose
 /// value is the offset into the module's block (`DTPREL(S + A)`).
 pub(crate) fn aarch64_dtprel_field(rtype: u32) -> Option<TprelField> {

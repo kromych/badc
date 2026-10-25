@@ -4492,6 +4492,53 @@ fn aarch64_got_symbol_follows_ld() {
     }
 }
 
+/// A static aarch64 image gives each symbol a GOT reference names a `.got`
+/// slot holding its address, after the reserved header, and keeps the
+/// `adrp` + `ldr` reading it, as GNU ld 2.46.1 links it.
+#[test]
+fn a_static_aarch64_image_fills_a_got_slot_per_referenced_symbol() {
+    let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+    // adrp x0, :got:target; ldr x0, [x0, :got_lo12:target]; ret
+    let code: Vec<u8> = [0x9000_0000u32, 0xf940_0000, 0xd65f_03c0]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+    let a = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &code)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .sym("target", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        // Symtab: null(0), sections(1, 2), _start(3), target(4).
+        .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
+        .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
+        .build(EM_AARCH64);
+    let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+    let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+    let (got, bytes) = image_section(&res.image, ".got");
+    let (data, _) = image_section(&res.image, ".data");
+    assert_eq!(bytes.len(), 16, "the header and one slot");
+    assert_eq!(
+        u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+        data,
+        "the slot holds `target`"
+    );
+    let (text, insns) = image_section(&res.image, ".text");
+    let word = |k: usize| u32::from_le_bytes(insns[4 * k..4 * k + 4].try_into().unwrap());
+    let imm = ((word(0) >> 29) & 3) | ((word(0) >> 5) & 0x7_ffff) << 2;
+    let slot = got + 8;
+    assert_eq!(
+        (text & !0xfff) + ((imm as u64) << 12),
+        slot & !0xfff,
+        "adrp reaches the slot's page"
+    );
+    assert_eq!(word(1) & 0xffc0_0000, 0xf940_0000, "the ldr stays a load");
+    assert_eq!(
+        ((word(1) >> 10) & 0xfff) as u64 * 8,
+        slot & 0xfff,
+        "ldr reads the slot"
+    );
+}
+
 /// bfd emits no `_GLOBAL_OFFSET_TABLE_` where the link built no
 /// GOT, so a static link that never names it carries neither the
 /// symbol nor the sections.

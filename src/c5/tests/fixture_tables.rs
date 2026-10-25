@@ -37,11 +37,13 @@
 //!     `NATIVE_PE_X64_FIXTURES`, which links, and run by the CLI list
 //!     in `tests/cli_fixture_smoke.rs`.
 //!   * `byteswap_glibc.c`, `sysexits_codes.c`, `fd_set_macros.c`,
-//!     `posix_unix_headers.c`, `netinet_addr_class_macros.c` and
-//!     `get_cpuid_leaf_checks.c` -- each includes a header only some
-//!     targets ship (glibc's `<byteswap.h>`, the POSIX `<sysexits.h>`,
-//!     `<sys/select.h>`, `<grp.h>` and `<netinet/in.h>`, gcc's x86
-//!     `<cpuid.h>`), so the tables of the others leave it out.
+//!     `posix_unix_headers.c`, `netinet_addr_class_macros.c`,
+//!     `get_cpuid_leaf_checks.c` and
+//!     `xlocale_extended_functions_take_a_locale.c` -- each includes a
+//!     header only some targets ship (glibc's `<byteswap.h>`, the POSIX
+//!     `<sysexits.h>`, `<sys/select.h>`, `<grp.h>` and `<netinet/in.h>`,
+//!     gcc's x86 `<cpuid.h>`, the macOS SDK's `<xlocale.h>`), so the tables
+//!     of the others leave it out.
 //!   * `aarch64_hwcap_auxv.c` -- `<sys/auxv.h>` and the `HWCAP_*`
 //!     macros are Linux-only: the macOS-hosted tables reject the
 //!     compile, and on Windows every check sits behind `__linux__` /
@@ -466,6 +468,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("locale_objects_and_the_l_functions.c", 0),
     ("xsi_interfaces_reach_the_c_library.c", 0),
     ("stat_and_at_functions_have_their_posix_types.c", 0),
+    ("xlocale_extended_functions_take_a_locale.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
     ("scanf_family_stores_c99_conversions_alike.c", 0),
     ("strtof_and_wcstof_report_range_errors.c", 0),

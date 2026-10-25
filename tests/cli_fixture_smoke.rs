@@ -52,9 +52,10 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // linux-x64 only. Snapshotted via its `// snapshot-flags:`
     // directive; the relocation shape is locked by linker tests.
     "kernel_model_extern_data.c",
-    // <sys/syslimits.h> is the macOS SDK's; glibc ships none, so the
-    // include fails with B1010 on both swept targets.
+    // <sys/syslimits.h> and <xlocale.h> are the macOS SDK's; glibc ships
+    // neither, so the include fails with B1010 on both swept targets.
     "syslimits_path_max.c",
+    "xlocale_extended_functions_take_a_locale.c",
 ];
 
 /// Each calls a declared-but-undefined function from a statically dead

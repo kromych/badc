@@ -350,6 +350,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("os/log.h", MACOS),
     header!("os/lock.h", MACOS),
     header!("crt_externs.h", MACOS),
+    header!("xlocale.h", MACOS),
     header!("windows.h", WINDOWS),
     header!("winbase.h", WINDOWS),
     header!("stringapiset.h", WINDOWS),

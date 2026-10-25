@@ -1459,12 +1459,16 @@ fn windows_event_log_registry_tree_and_crt_wide_calls_compile_silently() {
 /// A generic Win32 name selects the W form under `UNICODE` and the A form
 /// otherwise, as mingw-w64's `__MINGW_NAME_AW` / `__MINGW_TYPEDEF_AW` do:
 /// each function imports its suffixed entry point, each type is its
-/// suffixed struct, and `TEXT` / `MAKEINTRESOURCE` follow.
+/// suffixed struct, and `TEXT` / `MAKEINTRESOURCE` follow. `<winsock2.h>`
+/// and `<rpc.h>` map their names the same way.
 #[test]
 fn windows_generic_names_follow_unicode() {
     const K: &str = "kernel32.dll";
     const U: &str = "user32.dll";
     const A: &str = "advapi32.dll";
+    const V: &str = "version.dll";
+    const R: &str = "rpcrt4.dll";
+    const S: &str = "ws2_32.dll";
     let functions = [
         ("CompareString", K),
         ("CreateDirectory", K),
@@ -1534,20 +1538,72 @@ fn windows_generic_names_follow_unicode() {
         ("RegDeleteTree", A),
         ("RegisterEventSource", A),
         ("ReportEvent", A),
+        ("CreateHardLink", K),
+        ("CreateSymbolicLink", K),
+        ("GetComputerNameEx", K),
+        ("GetDiskFreeSpaceEx", K),
+        ("GetDriveType", K),
+        ("GetFileAttributesEx", K),
+        ("GetFinalPathNameByHandle", K),
+        ("GetLongPathName", K),
+        ("GetNamedPipeHandleState", K),
+        ("NeedCurrentDirectoryForExePath", K),
+        ("SetEnvironmentVariable", K),
+        ("ChangeDisplaySettingsEx", U),
+        ("CharLower", U),
+        ("CharLowerBuff", U),
+        ("CharUpper", U),
+        ("EnumDisplaySettings", U),
+        ("GetKeyNameText", U),
+        ("GetProp", U),
+        ("LoadImage", U),
+        ("RemoveProp", U),
+        ("SetClassLongPtr", U),
+        ("SetProp", U),
+        ("ConvertStringSecurityDescriptorToSecurityDescriptor", A),
+        ("GetUserName", A),
+        ("RegConnectRegistry", A),
+        ("RegCreateKey", A),
+        ("RegCreateKeyEx", A),
+        ("RegDeleteKey", A),
+        ("RegDeleteKeyEx", A),
+        ("RegDeleteValue", A),
+        ("RegEnumKeyEx", A),
+        ("RegEnumValue", A),
+        ("RegGetValue", A),
+        ("RegLoadKey", A),
+        ("RegOpenKeyEx", A),
+        ("RegQueryInfoKey", A),
+        ("RegQueryValueEx", A),
+        ("RegSaveKey", A),
+        ("RegSetValueEx", A),
+        ("GetFileVersionInfo", V),
+        ("GetFileVersionInfoSize", V),
+        ("VerQueryValue", V),
+        ("RpcStringFree", R),
+        ("UuidFromString", R),
+        ("UuidToString", R),
+        ("WSADuplicateSocket", S),
+        ("WSASocket", S),
+        ("WSAStringToAddress", S),
     ];
     let types = [
+        "DEVMODE",
         "DISPLAY_DEVICE",
         "MONITORINFOEX",
         "OSVERSIONINFO",
         "OSVERSIONINFOEX",
         "STARTUPINFO",
+        "STARTUPINFOEX",
         "WIN32_FIND_DATA",
         "WNDCLASS",
+        "WSAPROTOCOL_INFO",
     ];
     for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
         for (unicode, s, ch) in [("", "A", "CHAR"), ("#define UNICODE\n", "W", "WCHAR")] {
             let mut src = alloc::format!(
-                "{unicode}#include <windows.h>\n#include <wincrypt.h>\n\
+                "{unicode}#include <winsock2.h>\n#include <windows.h>\n#include <wincrypt.h>\n\
+                 #include <rpc.h>\n\
                  _Static_assert(sizeof(TEXT(\"ab\")) == 3 * sizeof({ch}), \"\");\n\
                  _Static_assert(sizeof(*MAKEINTRESOURCE(1)) == sizeof({ch}), \"\");\n\
                  _Static_assert(sizeof(*IDC_ARROW) == sizeof({ch}), \"\");\n"

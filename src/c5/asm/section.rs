@@ -312,11 +312,21 @@ pub(crate) struct AsmSectionBlock {
     pub entsize: u32,
     /// The section the `o` flag orders this one after.
     pub link: Option<alloc::string::String>,
+    /// The section group the `G` flag names.
+    pub group: Option<AsmSectionGroup>,
     /// `.subsection` number. Subsections share the section's identity and
     /// space; layout orders a section's blocks by this number, so
     /// subsection 1 lands after every subsection-0 block.
     pub subsection: u32,
     pub items: alloc::vec::Vec<AsmSectionItem>,
+}
+
+/// A `G` section's group: its signature name, and whether the `comdat`
+/// linkage makes it a `GRP_COMDAT` group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSectionGroup {
+    pub name: alloc::string::String,
+    pub comdat: bool,
 }
 
 impl AsmSectionBlock {
@@ -328,6 +338,7 @@ impl AsmSectionBlock {
             sh_type: self.sh_type.clone(),
             entsize: self.entsize,
             link: self.link.clone(),
+            group: self.group.clone(),
             subsection: 0,
             items: alloc::vec::Vec::new(),
         }
@@ -550,7 +561,7 @@ pub(crate) enum LabelLoc {
 pub(crate) enum AsmSpace {
     Text,
     Deferred(u32),
-    /// A named section, by its `(name, flags, sh_type)` key.
+    /// A named section, by its `(name, flags, sh_type, group)` key.
     Section(alloc::string::String),
     /// A run of parse-time fixed-size items, numbered by [`AsmParseFold`].
     /// Two labels of one run are a constant apart in every layout.
@@ -686,16 +697,17 @@ pub(crate) fn store_asm_insn_const(
 
 /// A materialized named section: bytes plus relocations, accumulated
 /// across the unit's inline-asm statements. The object writers append
-/// one output section per distinct `(name, flags, sh_type)`.
+/// one output section per distinct `(name, group)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmSection {
     pub name: alloc::string::String,
     pub flags: alloc::string::String,
     pub sh_type: Option<alloc::string::String>,
-    /// The `M` flag's entry size and the `o` flag's ordering section, as
-    /// the directive gave them.
+    /// The `M` flag's entry size, the `o` flag's ordering section and the
+    /// `G` flag's group, as the directive gave them.
     pub entsize: u32,
     pub link: Option<alloc::string::String>,
+    pub group: Option<AsmSectionGroup>,
     pub bytes: alloc::vec::Vec<u8>,
     pub relocs: alloc::vec::Vec<AsmSectionReloc>,
     /// Labels defined in the section; each becomes a symbol whose section
@@ -807,11 +819,17 @@ pub(crate) struct AsmSectionsSnapshot {
     pub(crate) per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool, Option<MapClass>)>,
 }
 
-/// The `(name, flags, sh_type)` identity key of a section block, as the
-/// measurement map and the expression spaces use it. Subsections share the
-/// key: they are ordered blocks of one section.
+/// The `(name, flags, sh_type, group)` identity key of a section block, as
+/// the measurement map and the expression spaces use it. Subsections share
+/// the key: they are ordered blocks of one section.
 pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
-    alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
+    alloc::format!(
+        "{}\u{0}{}\u{0}{:?}\u{0}{:?}",
+        b.name,
+        b.flags,
+        b.sh_type,
+        b.group
+    )
 }
 
 /// Identity of the AArch64 literal pool a block's `ldr Rt, =value` loads
@@ -823,7 +841,13 @@ pub(crate) fn literal_pool_key(b: &AsmSectionBlock) -> alloc::string::String {
 
 /// The same identity key for a section already in the sink.
 pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
-    alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)
+    alloc::format!(
+        "{}\u{0}{}\u{0}{:?}\u{0}{:?}",
+        s.name,
+        s.flags,
+        s.sh_type,
+        s.group
+    )
 }
 
 /// Block processing order: stable by subsection number, so a section's

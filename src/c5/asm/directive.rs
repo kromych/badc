@@ -605,10 +605,11 @@ fn is_code_mode_directive(tok: &str) -> bool {
 }
 
 /// Parse the argument list of `.pushsection` / `.section`:
-/// `name[,"flags"[,@type][,entsize][,link]]`. The entry size follows when
-/// the flags hold `M` and the ordering section when they hold `o`, in that
-/// order, as GNU as reads them; `M` without an entry size is dropped, as
-/// GNU as drops it.
+/// `name[,"flags"[,@type][,entsize][,link][,group[,comdat]]]`. The entry
+/// size follows when the flags hold `M`, the ordering section when they
+/// hold `o` and the group name when they hold `G`, in that order, as GNU as
+/// reads them; `M` without an entry size and `G` without a group name are
+/// dropped, as GNU as drops them.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
     let bad = |p: &str| alloc::format!("inline asm: bad section argument `{p}`");
     fn unquote(p: &str) -> Option<&str> {
@@ -647,6 +648,21 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     } else {
         None
     };
+    // GNU as makes a `.gnu.linkonce` group without a linkage a COMDAT one.
+    let mut group = None;
+    if flags.contains('G') {
+        match parts.next().map(|g| unquote(g).unwrap_or(g)) {
+            Some(g) if !g.is_empty() => {
+                let comdat = parts.next_if(|p| *p == "comdat").is_some()
+                    || name.starts_with(".gnu.linkonce");
+                group = Some(AsmSectionGroup {
+                    name: alloc::string::String::from(g),
+                    comdat,
+                });
+            }
+            _ => flags.retain(|c| c != 'G'),
+        }
+    }
     if let Some(p) = parts.next() {
         return Err(bad(p));
     }
@@ -659,6 +675,7 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         sh_type,
         entsize,
         link,
+        group,
         subsection: 0,
         items: alloc::vec::Vec::new(),
     })

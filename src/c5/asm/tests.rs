@@ -2603,3 +2603,48 @@ fn section_arguments_carry_the_entry_size_and_the_link() {
     assert_eq!((insn.flags.as_str(), insn.entsize), ("M", 8));
     assert_eq!(section(".text.hot").link.as_deref(), Some(".text"));
 }
+
+/// The `G` flag's group name follows the entry size and the ordering
+/// section, with an optional `comdat` linkage; a `.gnu.linkonce` name makes
+/// the group COMDAT without one, and `G` without a group name is dropped,
+/// as GNU as reads them. Members of distinct groups are distinct sections.
+#[test]
+fn section_arguments_carry_the_group() {
+    let text = ".section .text.t,\"axG\",@progbits,t,comdat\n.byte 0\n\
+                .section .rodata.m,\"aMG\",@progbits,4,\"grp\"\n.long 1\n\
+                .section .gnu.linkonce.t.f,\"axG\",@progbits,f\n.byte 0\n\
+                .section .nogroup,\"aG\",@progbits\n.byte 0\n\
+                .section .text.t,\"axG\",@progbits,t2\n.byte 0\n";
+    let blocks = extract_file_scope_asm_sections(text, false).unwrap();
+    let group = |n: &str, at: usize| {
+        let b = blocks.iter().filter(|b| b.name == n).nth(at).expect(n);
+        (
+            b.flags.as_str(),
+            b.entsize,
+            b.group.as_ref().map(|g| (g.name.as_str(), g.comdat)),
+        )
+    };
+    assert_eq!(group(".text.t", 0), ("axG", 0, Some(("t", true))));
+    assert_eq!(group(".rodata.m", 0), ("aMG", 4, Some(("grp", false))));
+    assert_eq!(group(".gnu.linkonce.t.f", 0), ("axG", 0, Some(("f", true))));
+    assert_eq!(group(".nogroup", 0), ("a", 0, None));
+    assert_eq!(group(".text.t", 1), ("axG", 0, Some(("t2", false))));
+    let err = extract_file_scope_asm_sections(".section .x,\"aG\",@progbits,g,unique\n", false)
+        .unwrap_err();
+    assert!(err.contains("bad section argument `unique`"), "{err}");
+    let mut sink = AsmSectionSink::default();
+    materialize_asm_sections(
+        &blocks,
+        &AsmOperandResolver::NONE,
+        &|_| None,
+        &|_| None,
+        false,
+        &mut sink,
+    )
+    .unwrap();
+    let groups: Vec<_> = (sink.sections().iter())
+        .filter(|s| s.name == ".text.t")
+        .map(|s| s.group.as_ref().map(|g| g.name.as_str()))
+        .collect();
+    assert_eq!(groups, [Some("t"), Some("t2")]);
+}

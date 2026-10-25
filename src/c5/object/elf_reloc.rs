@@ -71,6 +71,8 @@ const SHT_NOBITS: u32 = 8;
 const SHT_INIT_ARRAY: u32 = 14;
 const SHT_FINI_ARRAY: u32 = 15;
 const SHT_PREINIT_ARRAY: u32 = 16;
+const SHT_GROUP: u32 = 17;
+const GRP_COMDAT: u32 = 1;
 const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 
 // `.note.badc` record types and the `desc` each one carries. The linker
@@ -153,6 +155,7 @@ const SHF_MERGE: u64 = 0x10;
 const SHF_STRINGS: u64 = 0x20;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHF_LINK_ORDER: u64 = 0x80;
+const SHF_GROUP: u64 = 0x200;
 const SHF_TLS: u64 = 0x400;
 
 const STB_LOCAL: u8 = 0;
@@ -953,6 +956,19 @@ struct Layout {
     text_shadowed: bool,
     data_shadowed: bool,
     bss_shadowed: bool,
+    /// The section groups, whose `.group` sections precede the named
+    /// entries as the gABI places a group ahead of its members.
+    groups: Vec<SectionGroup>,
+}
+
+/// A section group (System V gABI, "Section Groups").
+struct SectionGroup {
+    name: String,
+    comdat: bool,
+    /// The carve entries the group holds.
+    members: Vec<usize>,
+    /// The signature symbol's `.symtab` index.
+    sym: u32,
 }
 
 /// Positions in the `.strtab` name list, one per symbol class.
@@ -1120,6 +1136,7 @@ struct Output {
     count: usize,
     shstrtab: Vec<u8>,
     shstrtab_offs: Vec<u32>,
+    group_names_start: usize,
     named_names_start: usize,
     named_rela_names_start: usize,
     named_rela_pos: Vec<usize>,
@@ -1193,6 +1210,7 @@ pub(super) fn write_relocatable(
     w.build_tail_sections()?;
     w.emit_debug_relocs()?;
     w.drop_unreferenced_section_symbols()?;
+    w.bind_group_signatures();
     w.plan_sections();
     w.build_shstrtab();
     w.emit_text_section()?;
@@ -1508,7 +1526,7 @@ impl<'a> RelocWriter<'a> {
                     b'M' => flags |= SHF_MERGE,
                     b'S' => flags |= SHF_STRINGS,
                     b'o' => flags |= SHF_LINK_ORDER,
-                    b'G' => {}
+                    b'G' => flags |= SHF_GROUP,
                     b'T' => {
                         return Err(asm_section_err(&s.name, "the `T` (TLS) section flag"));
                     }
@@ -1540,7 +1558,7 @@ impl<'a> RelocWriter<'a> {
                 .layout
                 .carve
                 .table
-                .get_or_insert(&s.name, sh_type, flags, align)
+                .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
                 .map_err(Self::internal)?;
             // The first block to give an entry size or an ordering section
             // sets it, as GNU as keeps a section's first attributes.
@@ -1647,12 +1665,29 @@ impl<'a> RelocWriter<'a> {
             self.layout.literal_placements[k] = Some((e, base));
         }
         let layout = &mut self.layout;
+        let mut group_of: BTreeMap<&str, usize> = BTreeMap::new();
+        for (k, e) in layout.carve.table.entries.iter().enumerate() {
+            let Some(g) = &e.group else { continue };
+            let at = *group_of.entry(g.name.as_str()).or_insert_with(|| {
+                layout.groups.push(SectionGroup {
+                    name: g.name.clone(),
+                    comdat: false,
+                    members: Vec::new(),
+                    sym: 0,
+                });
+                layout.groups.len() - 1
+            });
+            layout.groups[at].comdat |= g.comdat;
+            layout.groups[at].members.push(k);
+        }
+        let named_base = self.base_sections + layout.groups.len();
         for k in 0..layout.carve.table.entries.len() {
-            layout.carve.shndx.push((self.base_sections + k) as u16);
+            layout.carve.shndx.push((named_base + k) as u16);
             layout.carve.sym_idx.push(0);
         }
         let shadowed = |name: &str, empty: bool| -> bool {
-            empty && layout.carve.table.entries.iter().any(|e| e.name == name)
+            empty
+                && (layout.carve.table.entries.iter()).any(|e| e.name == name && e.group.is_none())
         };
         layout.text_shadowed = shadowed(".text", build.text.is_empty());
         layout.data_shadowed =
@@ -1735,7 +1770,10 @@ impl<'a> RelocWriter<'a> {
                 (".bss", layout.bss_shadowed, syms.bss_sym_idx),
             ]
             .into_iter()
-            .find(|&(name, dropped, _)| dropped && carve.table.entries[k].name == name)
+            .find(|&(name, dropped, _)| {
+                let e = &carve.table.entries[k];
+                dropped && e.name == name && e.group.is_none()
+            })
             .map(|(_, _, sym)| sym);
             if let Some(sym) = inherited {
                 carve.sym_idx[k] = sym;
@@ -4074,6 +4112,12 @@ impl<'a> RelocWriter<'a> {
         }
         syms.first_global -= (syms.symbols.len() - kept.len()) as u32;
         syms.symbols = kept;
+        Self::renumber_relocation_symbols(relocs, carve, &remap);
+        Ok(())
+    }
+
+    /// Point every relocation at the symbol `remap` moves its own to.
+    fn renumber_relocation_symbols(relocs: &mut RelocTables, carve: &mut CarvePlan, remap: &[u64]) {
         let rewrite = |table: &mut [u8]| {
             for rec in table.as_chunks_mut::<ELF64_RELA_SIZE>().0.iter_mut() {
                 let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
@@ -4098,7 +4142,66 @@ impl<'a> RelocWriter<'a> {
                 r.sym = remap[r.sym as usize];
             }
         }
-        Ok(())
+    }
+
+    /// Each group's signature: the unit's symbol of the group's name, or,
+    /// when the unit has none, a local one at the start of the group
+    /// section, as GNU as defines it.
+    fn bind_group_signatures(&mut self) {
+        if self.layout.groups.is_empty() {
+            return;
+        }
+        let (syms, names) = (&mut self.syms, &mut self.names);
+        let name_at = |off: u32| -> &[u8] {
+            let tail = names.strtab.get(off as usize..).unwrap_or_default();
+            &tail[..tail.iter().position(|&b| b == 0).unwrap_or(tail.len())]
+        };
+        let mut sym_of: BTreeMap<&[u8], u32> = BTreeMap::new();
+        for (i, s) in syms.symbols.iter().enumerate() {
+            if s.st_name != 0 && !matches!(s.st_info & 0xf, STT_SECTION | STT_FILE) {
+                sym_of.entry(name_at(s.st_name)).or_insert(i as u32);
+            }
+        }
+        let found: Vec<Option<u32>> = (self.layout.groups.iter())
+            .map(|g| sym_of.get(g.name.as_bytes()).copied())
+            .collect();
+        let added = found.iter().filter(|f| f.is_none()).count() as u32;
+        let first_global = syms.first_global;
+        let mut locals: Vec<Elf64Sym> = Vec::new();
+        for (gi, (g, f)) in self.layout.groups.iter_mut().zip(found).enumerate() {
+            g.sym = match f {
+                Some(i) if i >= first_global => i + added,
+                Some(i) => i,
+                None => {
+                    let st_name = names.strtab.len() as u32;
+                    names.strtab.extend_from_slice(g.name.as_bytes());
+                    names.strtab.push(0);
+                    locals.push(Elf64Sym {
+                        st_name,
+                        st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+                        st_shndx: (self.base_sections + gi) as u16,
+                        ..Default::default()
+                    });
+                    first_global + locals.len() as u32 - 1
+                }
+            };
+        }
+        if added == 0 {
+            return;
+        }
+        let remap: Vec<u64> = (0..syms.symbols.len() as u64)
+            .map(|i| {
+                if i >= first_global as u64 {
+                    i + added as u64
+                } else {
+                    i
+                }
+            })
+            .collect();
+        let at = first_global as usize;
+        syms.symbols.splice(at..at, locals);
+        syms.first_global += added;
+        Self::renumber_relocation_symbols(&mut self.relocs, &mut self.layout.carve, &remap);
     }
 
     /// Every relocation table of the fixed set is final here.
@@ -4183,6 +4286,7 @@ impl<'a> RelocWriter<'a> {
             .count();
         let out = &mut self.out;
         out.count = self.base_sections - shndx.dropped_sections as usize
+            + self.layout.groups.len()
             + self.layout.carve.table.entries.len()
             + named_rela_count
             + 2 * self.relocs.tail_sections.len()
@@ -4229,6 +4333,8 @@ impl<'a> RelocWriter<'a> {
         if !self.relocs.tdata.is_empty() {
             names.push(format!("{rp}.tdata"));
         }
+        out.group_names_start = names.len();
+        names.extend(self.layout.groups.iter().map(|_| ".group".to_string()));
         let entries = &self.layout.carve.table.entries;
         out.named_names_start = names.len();
         names.extend(entries.iter().map(|e| e.name.clone()));
@@ -4593,8 +4699,9 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// The named sections at the indices planned right after the fixed set,
-    /// then their `.rela` companions for the entries carrying relocations.
+    /// The `.group` sections right after the fixed set, the named sections,
+    /// then their `.rela` companions for the entries carrying relocations;
+    /// a member's `.rela` belongs to the member's group.
     fn emit_named_sections(&mut self) -> Result<(), C5Error> {
         let class = self.class;
         for e in self.layout.carve.table.entries.iter_mut() {
@@ -4621,6 +4728,30 @@ impl<'a> RelocWriter<'a> {
                 _ => None,
             }
         };
+        let rela_base = carve.shndx.first().map_or(0, |&s| s as u32) + carve.shndx.len() as u32;
+        for (gi, g) in self.layout.groups.iter().enumerate() {
+            let flags = if g.comdat { GRP_COMDAT } else { 0 };
+            let mut body: Vec<u8> = flags.to_le_bytes().to_vec();
+            for &k in &g.members {
+                body.extend_from_slice(&(carve.shndx[k] as u32).to_le_bytes());
+                if !carve.table.entries[k].relas.is_empty() {
+                    let rela = rela_base + out.named_rela_pos[k] as u32;
+                    body.extend_from_slice(&rela.to_le_bytes());
+                }
+            }
+            out.place(
+                Elf64Shdr {
+                    sh_name: out.shstrtab_offs[out.group_names_start + gi],
+                    sh_type: SHT_GROUP,
+                    sh_link: out.shndx.map(SHIDX_SYMTAB) as u32,
+                    sh_info: g.sym,
+                    sh_addralign: 4,
+                    sh_entsize: 4,
+                    ..Default::default()
+                },
+                &body,
+            );
+        }
         for (k, e) in carve.table.entries.iter().enumerate() {
             debug_assert_eq!(out.sh.len(), carve.shndx[k] as usize);
             let sh_link = match e.link.as_deref() {
@@ -4657,6 +4788,9 @@ impl<'a> RelocWriter<'a> {
             }
             let name = out.shstrtab_offs[out.named_rela_names_start + out.named_rela_pos[k]];
             out.place_rela(class, name, &table, carve.shndx[k] as u32);
+            if e.group.is_some() {
+                out.sh.last_mut().expect("placed").sh_flags |= SHF_GROUP;
+            }
         }
         Ok(())
     }

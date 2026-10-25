@@ -1512,6 +1512,88 @@ fn asm_emit(
     emit_native_with_options(&program, target, opts).map_err(|e| e.to_string())
 }
 
+/// An assembled `G` section joins the group its argument names (System V
+/// gABI, "Section Groups"), as GNU as 2.46.1 writes it: one `SHT_GROUP`
+/// section per group ahead of its members, linked to `.symtab`,
+/// `GRP_COMDAT` under `comdat`; each member and its `.rela` flagged
+/// `SHF_GROUP` and listed; the signature the unit's symbol of the group's
+/// name or, without one, a local `STT_NOTYPE` defined in the group section.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_g_section_joins_its_section_group() {
+    use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, Elf64Sym, read_struct};
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SHT_SYMTAB: u32 = 2;
+    const SHT_GROUP: u32 = 17;
+    const SHF_GROUP: u64 = 0x200;
+    let src = ".section .bss.u,\"awG\",@nobits,u,comdat\n.weak u\nu:\n.zero 4\n\
+               .section .text.t,\"axG\",@progbits,t,comdat\n.globl t\nt:\ncall ext\nret\n\
+               .section .rodata.g,\"aG\",@progbits,grp\n.long 1\n\
+               .section .text.t,\"axG\",@progbits,t2\n.globl t2\nt2:\nret\n";
+    let copts = CompileOptions::default().with_no_entry_point(true);
+    let program = crate::Compiler::assemble(src, crate::Target::LinuxX64, copts).expect("assemble");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let o = emit_native_with_options(&program, crate::Target::LinuxX64, opts).expect("emit");
+    let ehdr: Elf64Ehdr = read_struct(&o, 0).unwrap();
+    let shdrs: Vec<Elf64Shdr> = (0..ehdr.e_shnum as usize)
+        .map(|i| read_struct(&o, ehdr.e_shoff as usize + i * 64).unwrap())
+        .collect();
+    let cstr = |at: usize| {
+        let end = at + o[at..].iter().position(|&b| b == 0).unwrap();
+        core::str::from_utf8(&o[at..end]).unwrap()
+    };
+    let shstr = shdrs[ehdr.e_shstrndx as usize].sh_offset as usize;
+    let sec_name = |i: usize| cstr(shstr + shdrs[i].sh_name as usize);
+    let symtab = shdrs.iter().position(|s| s.sh_type == SHT_SYMTAB).unwrap();
+    let strtab = shdrs[shdrs[symtab].sh_link as usize].sh_offset as usize;
+    let sym = |i: u32| -> Elf64Sym {
+        read_struct(&o, shdrs[symtab].sh_offset as usize + i as usize * 24).unwrap()
+    };
+    let (mut rows, mut firsts) = (Vec::new(), Vec::new());
+    for (gi, g) in shdrs
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.sh_type == SHT_GROUP)
+    {
+        assert_eq!((g.sh_link as usize, g.sh_entsize), (symtab, 4));
+        let words: Vec<u32> = (o[g.sh_offset as usize..][..g.sh_size as usize].chunks(4))
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect();
+        let members: Vec<usize> = words[1..].iter().map(|&m| m as usize).collect();
+        assert!(
+            members.iter().all(|&m| m > gi),
+            "a group precedes its members"
+        );
+        assert!(members.iter().all(|&m| shdrs[m].sh_flags & SHF_GROUP != 0));
+        let signature = sym(g.sh_info);
+        let (bind, kind) = (signature.st_info >> 4, signature.st_info & 0xf);
+        let in_group = signature.st_shndx as usize == gi;
+        let names: Vec<&str> = members.iter().map(|&m| sec_name(m)).collect();
+        firsts.push(members[0]);
+        rows.push((
+            cstr(strtab + signature.st_name as usize),
+            words[0],
+            names,
+            bind,
+            kind,
+            in_group,
+        ));
+    }
+    assert_eq!(
+        rows,
+        [
+            ("u", 1, vec![".bss.u"], 2, 0, false),
+            ("t", 1, vec![".text.t", ".rela.text.t"], 1, 0, false),
+            ("grp", 0, vec![".rodata.g"], 0, 0, true),
+            ("t2", 0, vec![".text.t"], 1, 0, false),
+        ]
+    );
+    assert_ne!(firsts[1], firsts[3], "each group has its own `.text.t`");
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]

@@ -1410,7 +1410,7 @@ pub(crate) struct MaterializedLabel {
 
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
-/// `(name, flags, sh_type)`. `operands` resolves an `i`-class operand to
+/// `(name, flags, sh_type, group)`. `operands` resolves an `i`-class operand to
 /// its constant, or to the relocation target of the link-time address it
 /// names instead (`.long %c0 - .`); `label_off` resolves a template-label
 /// name to its location -- an emitted-stream text offset or a deferred

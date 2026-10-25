@@ -17,7 +17,7 @@ use crate::c5::codegen::ssa::cfi;
 #[derive(Debug, Default)]
 pub(crate) struct AsmSectionSink {
     pub(crate) sections: asm_sections::AsmSections,
-    /// `(name, flags, sh_type)` identity -> index into `sections`.
+    /// `(name, flags, sh_type, group)` identity -> index into `sections`.
     pub(crate) by_key: hashbrown::HashMap<alloc::string::String, usize>,
     /// Section name -> the identity keys carrying it, in push order. A
     /// name pushed under different attributes is several sections; the
@@ -389,6 +389,7 @@ impl AsmSectionSink {
             sh_type: b.sh_type.clone(),
             entsize: b.entsize,
             link: b.link.clone(),
+            group: b.group.clone(),
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
             labels: alloc::vec::Vec::new(),

@@ -2,13 +2,15 @@
 //!
 //! Carries every section that is not part of the writer's fixed set:
 //! `__attribute__((section("name")))` placements and assembler
-//! `.pushsection` payloads. Entries are keyed by name; the writer
+//! `.pushsection` payloads. Entries are keyed by name and group; the writer
 //! assigns section indices, emits one STT_SECTION symbol per entry,
 //! and appends each entry's bytes plus a companion relocation
 //! section when it carries relocations.
 
 use alloc::string::String;
 use alloc::vec::Vec;
+
+use crate::c5::asm::AsmSectionGroup;
 
 /// One relocation within a named section. Offsets and addends are
 /// relative to the owning section's start.
@@ -38,11 +40,13 @@ pub(crate) struct SectionSpec {
     pub entsize: u64,
     /// The section `sh_link` names under `SHF_LINK_ORDER`.
     pub link: Option<String>,
+    /// The section group an assembler `G` section belongs to.
+    pub group: Option<AsmSectionGroup>,
     pub bytes: Vec<u8>,
     pub relas: Vec<SectionRela>,
 }
 
-/// The table itself: ordered, deduplicated by (name, type, flags).
+/// The table itself: ordered, deduplicated by (name, group).
 /// Entries are appended only through [`SectionTable::get_or_insert`],
 /// which keeps `by_name` in step: a unit's asm can push a section per
 /// exported symbol, so a scan for the name would make the writer
@@ -50,7 +54,7 @@ pub(crate) struct SectionSpec {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SectionTable {
     pub entries: Vec<SectionSpec>,
-    by_name: hashbrown::HashMap<String, usize>,
+    by_name: hashbrown::HashMap<(String, Option<String>), usize>,
 }
 
 impl SectionTable {
@@ -68,8 +72,22 @@ impl SectionTable {
         flags: u64,
         align: u64,
     ) -> Result<usize, String> {
+        self.get_or_insert_in(name, None, sh_type, flags, align)
+    }
+
+    /// [`Self::get_or_insert`] for a member of `group`, a section apart
+    /// from the ungrouped one of its name.
+    pub(crate) fn get_or_insert_in(
+        &mut self,
+        name: &str,
+        group: Option<&AsmSectionGroup>,
+        sh_type: u32,
+        flags: u64,
+        align: u64,
+    ) -> Result<usize, String> {
         debug_assert_eq!(self.by_name.len(), self.entries.len());
-        if let Some(&i) = self.by_name.get(name) {
+        let key = (String::from(name), group.map(|g| g.name.clone()));
+        if let Some(&i) = self.by_name.get(&key) {
             let e = &mut self.entries[i];
             if e.sh_type != sh_type {
                 return Err(alloc::format!(
@@ -89,10 +107,11 @@ impl SectionTable {
             align,
             entsize: 0,
             link: None,
+            group: group.cloned(),
             bytes: Vec::new(),
             relas: Vec::new(),
         });
-        self.by_name.insert(name.into(), self.entries.len() - 1);
+        self.by_name.insert(key, self.entries.len() - 1);
         Ok(self.entries.len() - 1)
     }
 

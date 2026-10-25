@@ -714,6 +714,7 @@ fn encode_table(fdes: &[Fde], t: CfiTarget, eh: bool) -> Result<AsmSection, Stri
         sh_type: None,
         entsize: 0,
         link: None,
+        group: None,
         bytes,
         relocs,
         labels: Vec::new(),

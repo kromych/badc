@@ -158,14 +158,19 @@ def x11_demos(badc: Path, work: Path) -> None:
     demos = (
         ("x11", SRC / "demo" / "x11" / "main.c",
          ["-std=c89", "-Wall", "-Wextra", "-Wpedantic", "-Wno-unused-function",
-          "-D_POSIX_C_SOURCE=200809L"], ("X11",)),
+          "-D_POSIX_C_SOURCE=200809L"], ("X11",), ()),
         ("rawfb-x11", SRC / "demo" / "rawfb" / "x11" / "main.c",
          ["-std=c89", "-Wall", "-Wextra", "-Wpedantic", "-Wno-unused-function",
-          "-D_GNU_SOURCE", "-D_POSIX_C_SOURCE=200809L"], ("X11", "Xext")),
+          "-D_GNU_SOURCE", "-D_POSIX_C_SOURCE=200809L"], ("X11", "Xext"),
+         ("X11/extensions/XShm.h",)),
     )
-    for name, main, flags, libs in demos:
+    for name, main, flags, libs, headers in demos:
         if name in BLOCKED_DEMOS:
             print(f"demos: {name} skipped: {BLOCKED_DEMOS[name]}")
+            continue
+        absent = [h for h in headers if not (Path("/usr/include") / h).is_file()]
+        if absent:
+            print(f"demos: {name} skipped (no {', '.join(absent)})")
             continue
         missing = [lib for lib in libs if _syslib.shared_library((lib,), lib) is None]
         if missing:

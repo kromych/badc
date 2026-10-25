@@ -885,7 +885,7 @@ jobs:
         run: python demos/stb/smoke.py
       - name: X11 development headers for the nuklear demos (linux only)
         if: runner.os == 'Linux'
-        run: ./scripts/apt_resilient_install.sh libx11-dev
+        run: ./scripts/apt_resilient_install.sh libx11-dev libxext-dev
       - name: nuklear smoke (header regen + per-source compile + demos + headless frames)
         # Nuklear has no unit tests; this checks what its own CI checks with
         # badc as the compiler (nuklear.h regenerated from src/, each src/*.c

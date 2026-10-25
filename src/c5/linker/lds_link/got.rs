@@ -81,8 +81,17 @@ fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
     }
 }
 
-/// A stub at `at` jumping through the GOT slot at `slot`.
-fn plt_entry(machine: u16, at: u64, slot: u64) -> [u8; PLT_ENTRY_SIZE as usize] {
+/// A stub at `at` jumping through the GOT slot at `slot`. An i386 stub
+/// in a position-independent image reaches the slot from the GOT base
+/// `%ebx` holds at the call, `got_base` (Intel386 psABI, procedure
+/// linkage table), as bfd's `ff a3` entries do; elsewhere it names the
+/// slot's address.
+fn plt_entry(
+    machine: u16,
+    at: u64,
+    slot: u64,
+    got_base: Option<u64>,
+) -> [u8; PLT_ENTRY_SIZE as usize] {
     let mut e = [0u8; PLT_ENTRY_SIZE as usize];
     if machine == EM_AARCH64 {
         let page = (slot & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12;
@@ -94,10 +103,16 @@ fn plt_entry(machine: u16, at: u64, slot: u64) -> [u8; PLT_ENTRY_SIZE as usize] 
         }
         return e;
     }
-    // jmp *disp32(%rip), then a one-byte pad to the entry size.
+    // jmp *disp32(%rip), *disp32(%ebx) or *addr32, then a pad to the
+    // entry size.
+    let (modrm, field) = match (machine, got_base) {
+        (EM_386, Some(base)) => (0xa3, slot.wrapping_sub(base)),
+        (EM_386, None) => (0x25, slot),
+        _ => (0x25, slot.wrapping_sub(at + 6)),
+    };
     e[0] = 0xff;
-    e[1] = 0x25;
-    e[2..6].copy_from_slice(&(slot.wrapping_sub(at + 6) as u32).to_le_bytes());
+    e[1] = modrm;
+    e[2..6].copy_from_slice(&(field as u32).to_le_bytes());
     e[6..].fill(0xcc);
     e
 }
@@ -233,12 +248,15 @@ impl<'a> LdsLinker<'a> {
             return Vec::new();
         };
         let slot_size = self.class.addr_size();
+        let got_base = (self.opts.emit == LdsEmit::Dyn)
+            .then(|| self.got_symbol_addr())
+            .flatten();
         let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
         for (k, name) in self.plt_syms.iter().enumerate() {
             let at = plt + k as u64 * PLT_ENTRY_SIZE;
             let key = GotKey::Global(name.clone());
             let slot = got + *self.got_map.get(&key).unwrap_or(&0) as u64 * slot_size;
-            out.extend_from_slice(&plt_entry(self.machine, at, slot));
+            out.extend_from_slice(&plt_entry(self.machine, at, slot, got_base));
         }
         out
     }

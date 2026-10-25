@@ -78,6 +78,14 @@ struct Elf64Dyn {
     d_val: u64,
 }
 
+/// ELF32 counterpart of [`Elf64Dyn`].
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf32Dyn {
+    d_tag: i32,
+    d_val: u32,
+}
+
 /// ELF note header: the fixed prefix before a note's name and
 /// descriptor payloads.
 #[repr(C)]
@@ -91,6 +99,7 @@ struct Elf64Nhdr {
 const _: () = {
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
     assert!(core::mem::size_of::<Elf64Dyn>() == 16);
+    assert!(core::mem::size_of::<Elf32Dyn>() == 8);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
@@ -259,8 +268,46 @@ pub struct SharedLibrary {
 /// the exports are every `.dynsym` entry that is defined (not
 /// `SHN_UNDEF`) and externally bound (`STB_GLOBAL` / `STB_WEAK`).
 pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
-    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
-    let machine = elf_machine(ehdr.e_machine)?;
+    let image = read_dynamic_image(bytes)?;
+    Ok(SharedLibrary {
+        soname: image.soname,
+        machine: elf_machine(image.machine)?,
+        exports: image.exports,
+        data_exports: image.data_exports,
+        tls_exports: image.tls_exports,
+        object_sizes: image.object_sizes,
+        export_symbols: alloc::collections::BTreeMap::new(),
+        export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
+        from_image: true,
+        references: image.references,
+        protected_exports: image.protected_exports,
+    })
+}
+
+/// The dynamic interface an ELF shared object of either class states:
+/// what [`SharedLibrary`] records of it, and the `e_machine` it is
+/// built for.
+#[derive(Debug, Clone, Default)]
+pub struct DynamicImage {
+    pub machine: u16,
+    pub soname: String,
+    pub exports: alloc::collections::BTreeSet<String>,
+    pub data_exports: alloc::collections::BTreeSet<String>,
+    pub tls_exports: alloc::collections::BTreeSet<String>,
+    pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
+    pub references: alloc::collections::BTreeSet<String>,
+    pub protected_exports: alloc::collections::BTreeSet<String>,
+}
+
+/// Read [`DynamicImage`] from a little-endian ELF image of either class.
+pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
+    let class = bytes.get(4).copied().and_then(ElfClass::from_ei_class);
+    let elf32 = class == Some(ElfClass::Elf32);
+    let ehdr: Elf64Ehdr = if elf32 {
+        read_struct::<Elf32Ehdr>(bytes, 0)?.into()
+    } else {
+        read_struct(bytes, 0)?
+    };
     let read_cstr = |off: usize| -> String {
         let start = off.min(bytes.len());
         let mut end = start;
@@ -270,15 +317,24 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         String::from_utf8_lossy(&bytes[start..end]).into_owned()
     };
     let shdr = |i: usize| -> Result<Elf64Shdr, C5Error> {
-        read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)
+        let at = ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize;
+        if elf32 {
+            Ok(read_struct::<Elf32Shdr>(bytes, at)?.into())
+        } else {
+            read_struct(bytes, at)
+        }
     };
-    let mut soname = String::new();
-    let mut exports = alloc::collections::BTreeSet::new();
-    let mut data_exports = alloc::collections::BTreeSet::new();
-    let mut tls_exports = alloc::collections::BTreeSet::new();
-    let mut object_sizes = alloc::collections::BTreeMap::new();
-    let mut references = alloc::collections::BTreeSet::new();
-    let mut protected_exports = alloc::collections::BTreeSet::new();
+    let sym_at = |at: usize| -> Result<Elf64Sym, C5Error> {
+        if elf32 {
+            Ok(read_struct::<Elf32Sym>(bytes, at)?.into())
+        } else {
+            read_struct(bytes, at)
+        }
+    };
+    let mut image = DynamicImage {
+        machine: ehdr.e_machine,
+        ..DynamicImage::default()
+    };
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -288,7 +344,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 continue;
             }
             for j in 0..(sh.sh_size as usize / entsize) {
-                let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+                let sym = sym_at(sh.sh_offset as usize + j * entsize)?;
                 // STB_LOCAL (0) has no external linkage. Of the STB_GLOBAL
                 // (1) / STB_WEAK (2) entries, SHN_UNDEF (0) is a reference
                 // and the rest are definitions.
@@ -301,11 +357,11 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                     continue;
                 }
                 if sym.st_shndx == 0 {
-                    references.insert(name);
+                    image.references.insert(name);
                     continue;
                 }
                 if sym.st_other & 3 == STV_PROTECTED {
-                    protected_exports.insert(name.clone());
+                    image.protected_exports.insert(name.clone());
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.
@@ -314,47 +370,44 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 match sym.st_info & 0xf {
                     STT_OBJECT => {
                         let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
-                        object_sizes.insert(name.clone(), (sym.st_size, align));
-                        data_exports.insert(name.clone());
+                        image
+                            .object_sizes
+                            .insert(name.clone(), (sym.st_size, align));
+                        image.data_exports.insert(name.clone());
                     }
                     STT_TLS => {
-                        tls_exports.insert(name.clone());
+                        image.tls_exports.insert(name.clone());
                     }
                     _ => {}
                 }
-                exports.insert(name);
+                image.exports.insert(name);
             }
         } else if sh.sh_type == SHT_DYNAMIC {
             let strtab = shdr(sh.sh_link as usize)?;
-            let entsize = if sh.sh_entsize == 0 {
-                core::mem::size_of::<Elf64Dyn>()
-            } else {
-                sh.sh_entsize as usize
+            let entsize = match (sh.sh_entsize, elf32) {
+                (0, true) => core::mem::size_of::<Elf32Dyn>(),
+                (0, false) => core::mem::size_of::<Elf64Dyn>(),
+                (n, _) => n as usize,
             };
             for j in 0..(sh.sh_size as usize / entsize) {
-                let ent: Elf64Dyn = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
-                if ent.d_tag == 0 {
+                let at = sh.sh_offset as usize + j * entsize;
+                let (tag, val) = if elf32 {
+                    let d: Elf32Dyn = read_struct(bytes, at)?;
+                    (d.d_tag as i64, d.d_val as u64)
+                } else {
+                    let d: Elf64Dyn = read_struct(bytes, at)?;
+                    (d.d_tag, d.d_val)
+                };
+                if tag == 0 {
                     break; // DT_NULL terminates the array
                 }
-                if ent.d_tag == DT_SONAME {
-                    soname = read_cstr(strtab.sh_offset as usize + ent.d_val as usize);
+                if tag == DT_SONAME {
+                    image.soname = read_cstr(strtab.sh_offset as usize + val as usize);
                 }
             }
         }
     }
-    Ok(SharedLibrary {
-        soname,
-        machine,
-        exports,
-        data_exports,
-        tls_exports,
-        object_sizes,
-        export_symbols: alloc::collections::BTreeMap::new(),
-        export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
-        from_image: true,
-        references,
-        protected_exports,
-    })
+    Ok(image)
 }
 
 /// The architecture an ELF `e_machine` names.

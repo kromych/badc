@@ -2,7 +2,7 @@ use super::inputs::{RawReloc, strz};
 use super::*;
 use crate::c5::linker::default_script::default_script;
 use crate::c5::linker::lds::parse_linker_script;
-use crate::c5::linker::object::NativeMachine;
+use crate::c5::linker::object::DynamicImage;
 use crate::c5::linker::object::{Elf32Shdr, Elf64Shdr, read_struct};
 use crate::c5::linker::zkeyword::{ZKeywords, parse_z_keyword};
 use crate::c5::linker::{comdat, dynamic};
@@ -2680,18 +2680,12 @@ fn merge_fixed_pool_dedupes_and_rejects_underaligned() {
 
 fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
     SharedInput {
-        lib: SharedLibrary {
+        lib: DynamicImage {
             soname: soname.to_string(),
-            machine: NativeMachine::X86_64,
+            machine: EM_X86_64,
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
-            tls_exports: Default::default(),
-            object_sizes: Default::default(),
-            export_symbols: Default::default(),
-            export_versions: Default::default(),
-            from_image: true,
-            references: Default::default(),
-            protected_exports: Default::default(),
+            ..Default::default()
         },
         as_needed: false,
     }
@@ -6258,4 +6252,111 @@ fn an_i386_executable_whose_got_loads_all_relax_has_no_got() {
     let syms = elf32_symbols_of(img, ".symtab", ".strtab");
     assert!(!syms.iter().any(|s| s.0 == GOT_SYMBOL), "{syms:?}");
     assert_eq!(elf32_body(img, ".text")[..2], [0xc7, 0xc0]);
+}
+
+/// An i386 unit calling `foo`, loading `bar`'s address through the GOT
+/// and holding `&bar` and `&_start` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), foo(4), bar(5).
+fn i386_import_user() -> Vec<u8> {
+    // call foo; mov bar@GOT(%ebx), %eax; ret
+    let text = [0xe8, 0, 0, 0, 0, 0x8b, 0x83, 0, 0, 0, 0, 0xc3];
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(0, 1, 4, rt::R_386_PLT32, -4)
+        .reloc(0, 7, 5, rt::R_386_GOT32X, 0)
+        .reloc(1, 0, 5, rt::R_386_32, 0)
+        .reloc(1, 4, 3, rt::R_386_32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// An i386 executable, position-independent where `pic`, against a
+/// library exporting `foo` and the object `bar`.
+fn i386_import_opts(pic: bool) -> LdsOptions {
+    let mut lib = shared_input("libone.so", &["foo"], &["bar"]);
+    lib.lib.machine = EM_386;
+    LdsOptions {
+        shared_libs: alloc::vec![lib],
+        interp: Some(String::from("/lib/ld-linux.so.2")),
+        ..i386_opts(pic.then_some(false))
+    }
+}
+
+/// The GOT slot `.rel.dyn` binds to `name` by `R_386_GLOB_DAT`.
+fn i386_glob_dat(relocs: &[(u64, u32, String)], name: &str) -> i64 {
+    let slot = relocs
+        .iter()
+        .find(|r| r.1 == rt::R_386_GLOB_DAT && r.2 == name);
+    slot.unwrap_or_else(|| panic!("{name}'s slot: {relocs:?}"))
+        .0 as i64
+}
+
+/// An i386 shared object the engine links reads back as a library: its
+/// machine, its soname, and the objects among its exports.
+#[test]
+fn an_i386_shared_object_reads_back_as_a_library() {
+    // f: ret; .data: d. Symtab: null(0), sections(1, 2), f(3), d(4).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("f", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("d", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let opts = LdsOptions {
+        soname: Some(String::from("libone.so")),
+        ..i386_opts(Some(true))
+    };
+    let res = link_i386_with(alloc::vec![("l.o", o)], &opts).expect("links");
+    let lib = crate::c5::linker::object::read_dynamic_image(&res.image).expect("reads");
+    assert_eq!((lib.machine, lib.soname.as_str()), (EM_386, "libone.so"));
+    assert!(
+        ["f", "d"].iter().all(|n| lib.exports.contains(*n)),
+        "{lib:?}"
+    );
+    assert_eq!(lib.data_exports.iter().collect::<Vec<_>>(), ["d"]);
+}
+
+/// An i386 PIE calls an import through a stub that jumps through the
+/// import's GOT slot at its offset from `%ebx`, which holds the GOT base
+/// at the call (Intel386 psABI, procedure linkage table), as GNU ld
+/// 2.46.1 encodes it (`ff a3`). A load through the GOT keeps the slot,
+/// `R_386_GLOB_DAT` fills both slots, and an address-width field naming
+/// the import takes an `R_386_32` against it.
+#[test]
+fn an_i386_pie_reaches_an_import_through_a_stub_off_ebx() {
+    let res = link_i386_with(
+        alloc::vec![("u.o", i386_import_user())],
+        &i386_import_opts(true),
+    )
+    .expect("links");
+    let img = &res.image;
+    let relocs = elf32_dyn_relocs(img);
+    let (foo, bar) = (i386_glob_dat(&relocs, "foo"), i386_glob_dat(&relocs, "bar"));
+    let g = elf32_section(img, ".got.plt").2 as i64;
+    let (plt_addr, plt) = (elf32_section(img, ".plt").2 as i64, elf32_body(img, ".plt"));
+    assert_eq!(plt[..2], [0xff, 0xa3]);
+    assert_eq!(i32_at(plt, 2), foo - g, "jmp *foo@GOT(%ebx)");
+    let (t, text) = (
+        elf32_section(img, ".text").2 as i64,
+        elf32_body(img, ".text"),
+    );
+    assert_eq!(
+        t + 5 + i32_at(text, 1),
+        plt_addr,
+        "the call reaches the stub"
+    );
+    assert_eq!(text[5..7], [0x8b, 0x83], "the load is kept");
+    assert_eq!(i32_at(text, 7), bar - g);
+    let data = elf32_section(img, ".data").2;
+    assert!(
+        relocs.contains(&(data, rt::R_386_32, String::from("bar"))),
+        "{relocs:?}"
+    );
+    assert!(
+        relocs.contains(&(data + 4, rt::R_386_RELATIVE, String::new())),
+        "{relocs:?}"
+    );
 }

@@ -11199,6 +11199,59 @@ fn a_script_linked_shared_librarys_references_are_preemptible() {
     }
 }
 
+// GNU ld refuses a shared library built for another machine than the
+// link's: "error adding symbols: file in wrong format". The link's machine
+// is the emulation's, or without -m the first object's.
+#[test]
+fn the_ld_persona_refuses_a_library_built_for_another_machine() {
+    let dir = tempdir("lib-machine");
+    let lib = write_source(&dir, "lib.s", ".globl f\n.type f,@function\nf: ret\n");
+    let main = write_source(&dir, "main.s", ".globl _start\n_start: call f\n");
+    let (lib_o, lib_so, main_o) = (dir.join("lib.o"), dir.join("lib64.so"), dir.join("main.o"));
+    run(
+        Command::new(badc())
+            .args(["-q", "-c", "--target=linux-x64"])
+            .arg(&lib)
+            .arg("-o")
+            .arg(&lib_o),
+        "assemble the x86-64 library",
+    );
+    run(
+        Command::new(badc())
+            .args(["--ld", "-m", "elf_x86_64", "-shared"])
+            .arg(&lib_o)
+            .arg("-o")
+            .arg(&lib_so),
+        "link the x86-64 library",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-c", "--target=linux-x64", "-m32"])
+            .arg(&main)
+            .arg("-o")
+            .arg(&main_o),
+        "assemble the i386 program",
+    );
+    for emulation in [&["-m", "elf_i386"][..], &[]] {
+        let out = Command::new(badc())
+            .arg("--ld")
+            .args(emulation)
+            .arg("-pie")
+            .arg(&main_o)
+            .arg(&lib_so)
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .output()
+            .expect("run badc --ld");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{emulation:?}: linked");
+        assert!(
+            err.contains("lib64.so: error adding symbols: file in wrong format"),
+            "{emulation:?}: {err}"
+        );
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

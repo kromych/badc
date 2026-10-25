@@ -58,7 +58,7 @@ pub(super) const MODULE: &str = "";
 use super::dynamic::{self, DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
-use super::object::{ElfClass, SharedLibrary};
+use super::object::{DynamicImage, ElfClass};
 use super::zkeyword::{ZKeyword, ZKeywords};
 use crate::c5::codegen::BuildId;
 use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
@@ -275,7 +275,7 @@ pub enum LdsEmit {
 /// A shared library input and how the link named it.
 #[derive(Debug, Clone)]
 pub struct SharedInput {
-    pub lib: SharedLibrary,
+    pub lib: DynamicImage,
     /// Named under a linker script's `AS_NEEDED`: it takes a dependency
     /// record only where the link binds to it.
     pub as_needed: bool,

@@ -23,7 +23,7 @@ use super::lds::parse_linker_script;
 use super::lds_link::{
     LdsEmit, LdsObject, LdsOptions, OrphanHandling, SharedInput, parse_lds_object,
 };
-use super::object::parse_shared_library;
+use super::object::read_dynamic_image;
 use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     link_relocatable_with_map, parse_et_rel, parse_module_script,
@@ -684,6 +684,7 @@ fn collect_inputs<T: InputObject>(
     }
     let mut objs: Vec<T> = Vec::new();
     let mut libs: Vec<SharedInput> = Vec::new();
+    let mut lib_paths: Vec<PathBuf> = Vec::new();
     let mut search_shared = true;
     let mut as_needed = false;
     let mut as_needed_before: Vec<bool> = Vec::new();
@@ -856,7 +857,7 @@ fn collect_inputs<T: InputObject>(
             let bytes = std::fs::read(path)
                 .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
             if is_shared_object(&bytes) {
-                let mut lib = parse_shared_library(&bytes)
+                let mut lib = read_dynamic_image(&bytes)
                     .map_err(|e| ld_err(format!("`{}`: {e}", path.display())))?;
                 if lib.soname.is_empty() {
                     lib.soname = path
@@ -864,6 +865,7 @@ fn collect_inputs<T: InputObject>(
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_default();
                 }
+                lib_paths.push(path.to_path_buf());
                 libs.push(SharedInput { lib, as_needed });
                 continue;
             }
@@ -897,6 +899,17 @@ fn collect_inputs<T: InputObject>(
                     "{}: machine {} is incompatible with the requested emulation",
                     o.source(),
                     o.machine()
+                )));
+            }
+        }
+    }
+    // bfd refuses a library built for another machine than the link's.
+    if let Some(m) = machine.or_else(|| objs.first().map(|o| o.machine())) {
+        for (lib, path) in libs.iter().zip(&lib_paths) {
+            if lib.lib.machine != m {
+                return Err(ld_err(format!(
+                    "{}: error adding symbols: file in wrong format",
+                    path.display()
                 )));
             }
         }

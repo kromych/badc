@@ -105,7 +105,7 @@ impl<'a> LdsLinker<'a> {
             })
             .collect();
         // TODO: #1672 an i386 shared object binds its own definitions
-        // directly: the engine writes no PIC PLT stub.
+        // directly: `reach` has no i386 forms.
         if self.opts.emit != LdsEmit::Dyn
             || !self.opts.shared
             || self.opts.symbolic

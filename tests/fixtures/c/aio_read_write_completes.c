@@ -67,13 +67,15 @@ int main(void) {
     list[0] = &t;
     list[1] = &nop;
     if (lio_listio(LIO_WAIT, list, 2, 0) != 0) return 7;
-    // macOS keeps a LIO_NOP entry, counted against the process's aio
-    // limit, until it is returned; the JIT runs fixtures in one process.
-    aio_return(&nop);
     if (aio_error(&t) != 0 || aio_return(&t) != 4 || memcmp(tail, "tail", 4) != 0) return 8;
     if (aio_fsync(O_SYNC, &w) != 0) return 9;
     if (finish(&w, 0)) return 10;
     if (aio_cancel(fd, 0) != AIO_ALLDONE) return 11;
+    // macOS keeps a LIO_NOP entry, counted against the process's aio limit,
+    // until it is returned (the JIT runs fixtures in one process). It is
+    // returned after the cancel: with no entry left on the descriptor, macOS's
+    // aio_cancel reports EBADF while another process has aio work queued.
+    aio_return(&nop);
     close(fd);
     return 0;
 }

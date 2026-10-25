@@ -8,7 +8,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dlfcn.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 _Thread_local int ys[];
 

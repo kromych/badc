@@ -36,6 +36,12 @@
 //!     symbol the template names as undefined. It is registered in
 //!     `NATIVE_PE_X64_FIXTURES`, which links, and run by the CLI list
 //!     in `tests/cli_fixture_smoke.rs`.
+//!   * `byteswap_glibc.c`, `sysexits_codes.c`, `fd_set_macros.c`,
+//!     `posix_unix_headers.c`, `netinet_addr_class_macros.c` and
+//!     `get_cpuid_leaf_checks.c` -- each includes a header only some
+//!     targets ship (glibc's `<byteswap.h>`, the POSIX `<sysexits.h>`,
+//!     `<sys/select.h>`, `<grp.h>` and `<netinet/in.h>`, gcc's x86
+//!     `<cpuid.h>`), so the tables of the others leave it out.
 //!   * `aarch64_hwcap_auxv.c` -- `<sys/auxv.h>` and the `HWCAP_*`
 //!     macros are Linux-only: the macOS-hosted tables reject the
 //!     compile, and on Windows every check sits behind `__linux__` /
@@ -628,7 +634,6 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("tentative_deferred_array_ref_before_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
-    ("byteswap_glibc.c", 0),
     ("builtin_bswap_reversal.c", 0),
     ("byte_load_wide_merge.c", 0),
     ("byte_store_wide_merge.c", 0),
@@ -1502,7 +1507,6 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("vla_loop_stack_restore.c", 42),
     ("vla_param_decay.c", 0),
     ("arithmetic.c", 60),
-    ("get_cpuid_leaf_checks.c", 0),
     ("register_var_stack_pointer.c", 0),
     ("register_var_typeof_stmt_expr.c", 0),
     ("attribute_weak_alias.c", 0),
@@ -3810,7 +3814,6 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("static_init_struct_fp_call.c", 0),
     ("libc_data_globals.c", 0),
     ("stdint_widths.c", 0),
-    ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
     ("fn_ptr_decay_inside_block.c", 0),
     ("switch_nested_case_in_compound.c", 0),
@@ -4078,11 +4081,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_bit_count.c", 0),
     ("builtin_bit_count_edges.c", 0),
     ("builtin_bswap_expect.c", 0),
-    ("byteswap_glibc.c", 0),
     ("builtin_bswap_reversal.c", 0),
     ("byte_load_wide_merge.c", 0),
     ("byte_store_wide_merge.c", 0),
-    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("builtin_frame_address_levels.c", 0),
     ("builtin_return_address_levels.c", 0),
@@ -4103,7 +4104,6 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
-    ("posix_unix_headers.c", 0),
     ("socket_headers_abi.c", 0),
     ("posix_utime_errno_headers.c", 0),
     ("cast_fn_typedef_ptr_in_initializer.c", 0),
@@ -4282,7 +4282,6 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("large_struct_copy.c", 0),
     ("local_array_runtime_init.c", 0),
     ("negative_float_in_array_init.c", 0),
-    ("netinet_addr_class_macros.c", 0),
     ("object_macro_to_fn_macro_rescan.c", 0),
     ("pointer_to_array_struct_field.c", 0),
     ("predefined_macros_are_defined.c", 0),
@@ -4628,7 +4627,6 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("static_init_struct_fp_call.c", 0),
     ("libc_data_globals.c", 0),
     ("stdint_widths.c", 0),
-    ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
     ("fn_ptr_decay_inside_block.c", 0),
     ("switch_nested_case_in_compound.c", 0),
@@ -4894,11 +4892,9 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_bit_count.c", 0),
     ("builtin_bit_count_edges.c", 0),
     ("builtin_bswap_expect.c", 0),
-    ("byteswap_glibc.c", 0),
     ("builtin_bswap_reversal.c", 0),
     ("byte_load_wide_merge.c", 0),
     ("byte_store_wide_merge.c", 0),
-    ("sysexits_codes.c", 0),
     ("builtin_frame_address.c", 0),
     ("builtin_frame_address_levels.c", 0),
     ("builtin_return_address_levels.c", 0),
@@ -4919,7 +4915,6 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
-    ("posix_unix_headers.c", 0),
     ("socket_headers_abi.c", 0),
     ("posix_utime_errno_headers.c", 0),
     ("cast_fn_typedef_ptr_in_initializer.c", 0),
@@ -5839,7 +5834,6 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("tentative_deferred_array_ref_before_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
     ("builtin_bswap_expect.c", 0),
-    ("byteswap_glibc.c", 0),
     ("builtin_bswap_reversal.c", 0),
     ("byte_load_wide_merge.c", 0),
     ("byte_store_wide_merge.c", 0),

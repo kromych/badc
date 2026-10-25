@@ -468,8 +468,15 @@ fn cpuid_xgetbv_output_width() {
 fn get_cpuid_leaf_checks() {
     // <cpuid.h> __get_cpuid / __get_cpuid_count range-check the leaf against
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
-    // and leave the outputs untouched when they reject one.
-    assert_eq!(run_fixture("get_cpuid_leaf_checks.c"), 0);
+    // and leave the outputs untouched when they reject one. gcc installs the
+    // header for x86 alone.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("get_cpuid_leaf_checks.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 /// The interpreter runs an inline asm template in the assembler syntax of
@@ -2055,8 +2062,15 @@ fn integer_negate_shift_overflow() {
 
 #[test]
 fn posix_unix_headers() {
-    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h.
-    assert_eq!(run_fixture("posix_unix_headers.c"), 0);
+    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h, on the POSIX
+    // targets that ship them.
+    for target in [crate::Target::MacOSAarch64, crate::Target::LinuxX64] {
+        assert_eq!(
+            run_fixture_for("posix_unix_headers.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -3936,7 +3950,9 @@ fn builtin_bswap_expect() {
 fn byteswap_glibc() {
     // glibc <byteswap.h>: bswap_16/32/64 and the __bswap_N spellings,
     // including the truncation to the operand width and the fold.
-    assert_eq!(run_fixture("byteswap_glibc.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(run_fixture_for("byteswap_glibc.c", target), 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -3972,8 +3988,11 @@ fn inline_byte_access_leaf() {
 
 #[test]
 fn sysexits_codes() {
-    // <sysexits.h>: the BSD exit-status codes, same on every target.
-    assert_eq!(run_fixture("sysexits_codes.c"), 0);
+    // <sysexits.h>: the BSD exit-status codes, the same on the POSIX
+    // targets that ship the header.
+    for target in [crate::Target::MacOSAarch64, crate::Target::LinuxX64] {
+        assert_eq!(run_fixture_for("sysexits_codes.c", target), 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -6657,16 +6676,31 @@ fn ipproto_case_labels() {
 
 #[test]
 fn elf_header_types() {
-    // <elf.h> specification-fixed type and struct layouts.
-    assert_eq!(run_fixture("elf_header_types.c"), 0);
+    // <elf.h> specification-fixed type and struct layouts, on the glibc
+    // targets that ship the header.
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(
+            run_fixture_for("elf_header_types.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
 fn syscall_numbers_on_every_target() {
     // <sys/syscall.h>, <asm/unistd.h> and <linux/unistd.h> on every target
-    // from any host: the kernel table on Linux, no number elsewhere.
+    // shipping them, from any host: the kernel table on Linux, no number on
+    // macOS, whose SDK has <sys/syscall.h> alone.
     for target in crate::Target::ALL {
-        for header in [None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")] {
+        let headers: &[Option<&str>] = match target {
+            crate::Target::LinuxX64 | crate::Target::LinuxAarch64 => {
+                &[None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")]
+            }
+            crate::Target::MacOSAarch64 => &[None],
+            crate::Target::WindowsX64 | crate::Target::WindowsAarch64 => &[],
+        };
+        for &header in headers {
             let defines = header.map(|h| ("UNISTD_HEADER".to_string(), h.to_string()));
             let opts = crate::CompileOptions::default().with_defines(defines.into_iter().collect());
             assert_eq!(
@@ -7601,14 +7635,20 @@ fn fnmatch_flags_follow_each_platform_libc() {
 fn byteswap_header_needs_no_platform_library() {
     // glibc's spelling over badc's byte-reversal builtins, which fold in
     // a constant expression, so the values are checked at compile time.
+    // The other targets' C libraries have no <byteswap.h>.
     let src = "#include <byteswap.h>\n\
         int ck[(bswap_16(0x0102)==0x0201 && bswap_32(0x01020304u)==0x04030201u \
              && bswap_64(0x0102030405060708ull)==0x0807060504030201ull \
              && __bswap_16(0x0102)==0x0201 && __bswap_32(0x01020304u)==0x04030201u \
              && __bswap_64(0x0102030405060708ull)==0x0807060504030201ull)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        let glibc = matches!(
+            target,
+            crate::Target::LinuxX64 | crate::Target::LinuxAarch64
+        );
+        assert_eq!(
             header_snippet_compiles(src, target),
+            glibc,
             "<byteswap.h> on {target:?}"
         );
     }
@@ -7617,7 +7657,8 @@ fn byteswap_header_needs_no_platform_library() {
 #[test]
 fn sysexits_codes_are_target_independent() {
     // sysexits(3) is a set of integer constants with no library, syscall
-    // or target dependency behind it.
+    // or target dependency behind it, in the C libraries of macOS and glibc;
+    // mingw-w64 has no <sysexits.h>.
     let src = "#include <sysexits.h>\n\
         int ck[(EX_OK==0 && EX__BASE==64 && EX_USAGE==64 && EX_DATAERR==65 \
              && EX_NOINPUT==66 && EX_NOUSER==67 && EX_NOHOST==68 \
@@ -7626,8 +7667,10 @@ fn sysexits_codes_are_target_independent() {
              && EX_TEMPFAIL==75 && EX_PROTOCOL==76 && EX_NOPERM==77 \
              && EX_CONFIG==78 && EX__MAX==78)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        let posix = !target.is_windows();
+        assert_eq!(
             header_snippet_compiles(src, target),
+            posix,
             "<sysexits.h> on {target:?}"
         );
     }
@@ -7723,8 +7766,8 @@ fn the_mach_process_inspection_headers_are_macos_only() {
         );
     }
 
-    // The file-format layouts describe fixed on-disk records, so they are
-    // readable from any host. Sizes are what clang reports against the
+    // The file-format layouts describe fixed on-disk records, and the SDK
+    // alone ships their headers. Sizes are what clang reports against the
     // macOS SDK; `struct nlist` keeps its 12-byte on-disk shape because
     // the SDK gates the in-core `char *n_name` on !__LP64__.
     let layout = "#include <mach-o/fat.h>\n#include <mach-o/nlist.h>\n\
@@ -7739,8 +7782,9 @@ fn the_mach_process_inspection_headers_are_macos_only() {
              && CPU_TYPE_X86_64==0x01000007 && CPU_TYPE_ARM64==0x0100000c \
              && CPU_SUBTYPE_ARM64E==2 && CPU_SUBTYPE_X86_64_ALL==3)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        assert_eq!(
             header_snippet_compiles(layout, target),
+            target == Target::MacOSAarch64,
             "the Mach-O record layouts on {target:?}"
         );
     }

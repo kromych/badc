@@ -4433,6 +4433,33 @@ fn static_initializer_diagnostic_names_what_failed() {
     );
 }
 
+/// The include hint and the auto-include retry name a header only on a
+/// target served it: `epoll_create1` is declared by `<sys/epoll.h>`, which
+/// glibc alone ships.
+#[test]
+fn the_include_hint_names_only_a_header_the_target_ships() {
+    use crate::{CompileOptions, Target};
+    for target in Target::ALL {
+        let linux = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+        let id = target.id_str();
+        let src = "static int x = epoll_create1(0); int main(void) { return x; }";
+        let opts = CompileOptions::default();
+        let err = Compiler::with_options(src.into(), target, opts.clone())
+            .compile()
+            .expect_err("not a constant expression");
+        let hinted = err.to_string().contains("try `#include <sys/epoll.h>`");
+        assert_eq!(hinted, linux, "{id}: {err}");
+        let src = "int main(void) { return epoll_create1(0); }";
+        match Compiler::with_options(src.into(), target, opts).compile() {
+            Ok(program) => assert!(linux && program.auto_includes == ["epoll_create1"], "{id}"),
+            Err(e) => assert!(
+                !linux && !e.to_string().contains("sys/epoll.h"),
+                "{id}: {e}"
+            ),
+        }
+    }
+}
+
 #[test]
 fn an_address_constant_initializes_only_an_object_that_holds_it() {
     // A static object narrower than a pointer, a floating one and a

@@ -52,6 +52,9 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // linux-x64 only. Snapshotted via its `// snapshot-flags:`
     // directive; the relocation shape is locked by linker tests.
     "kernel_model_extern_data.c",
+    // <sys/syslimits.h> is the macOS SDK's; glibc ships none, so the
+    // include fails with B1010 on both swept targets.
+    "syslimits_path_max.c",
 ];
 
 /// Each calls a declared-but-undefined function from a statically dead
@@ -83,9 +86,10 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "scoped_state_loop_dead_arm.c",
 ];
 
-/// Fixtures whose body carries inline asm specific to one ISA. The
-/// paired target lacks the instruction and rejects the compile by
-/// design; the native target still compiles and is checked. (TODO:
+/// Fixtures whose body carries inline asm specific to one ISA, or
+/// includes a header only that ISA's compiler installs. The paired
+/// target lacks the instruction or the header and rejects the compile
+/// by design; the native target still compiles and is checked. (TODO:
 /// lower these recognized asm intrinsics on the foreign target so the
 /// fixtures compile everywhere.)
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
@@ -169,6 +173,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_patch_site.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
     ("inline_asm_x64_m_global_call.c", "linux-aarch64"), // x86-64 indirect call through an "m" operand
     ("inline_asm_a64_trap_site_labels.c", "linux-x64"),  // aarch64 brk trap-table entry
+    ("get_cpuid_leaf_checks.c", "linux-aarch64"),        // gcc's x86 <cpuid.h>, absent on aarch64
 ];
 
 /// Targets the sweep below builds every fixture for. Also the set the

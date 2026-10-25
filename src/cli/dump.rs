@@ -102,7 +102,7 @@ pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
 /// into `./include` and let `-I.` plus future filesystem search
 /// override the embedded copy).
 pub(crate) fn dump_bundled_headers() {
-    for (name, body) in badc::embedded_headers() {
+    for (name, _, body) in badc::embedded_headers() {
         println!("// ===== {name} =====");
         // Bodies already end with `\n`; `print!` rather than
         // `println!` so we don't add a stray blank line between

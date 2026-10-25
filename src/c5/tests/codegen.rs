@@ -1250,15 +1250,24 @@ fn windows_headers_leave_posix_fallbacks_to_the_program() {
 
 /// The POSIX functions mingw-w64's headers do not declare are undeclared on
 /// the Windows targets, so a program's own function of the name compiles
-/// whatever its type. The same unit is a conflicting redeclaration where the
-/// headers declare POSIX's.
+/// whatever its type; the POSIX headers that declare the rest are not found
+/// there. The same unit is a conflicting redeclaration where the headers
+/// declare POSIX's.
 #[test]
 fn windows_headers_leave_undeclared_posix_names_to_the_program() {
     use crate::{Compiler, Target};
-    const HEADERS: &str = "#include <unistd.h>\n#include <stdlib.h>\n#include <signal.h>\n\
-        #include <sys/stat.h>\n#include <termios.h>\n#include <sys/mman.h>\n\
-        #include <pwd.h>\n#include <grp.h>\n#include <poll.h>\n#include <sys/wait.h>\n\
-        #include <sys/socket.h>\n#include <netdb.h>\n";
+    const MINGW: &str = "#include <unistd.h>\n#include <stdlib.h>\n#include <signal.h>\n\
+        #include <sys/stat.h>\n";
+    const POSIX: &[&str] = &[
+        "termios.h",
+        "sys/mman.h",
+        "pwd.h",
+        "grp.h",
+        "poll.h",
+        "sys/wait.h",
+        "sys/socket.h",
+        "netdb.h",
+    ];
     const NAMES: &[&str] = &[
         "fork",
         "pipe",
@@ -1276,21 +1285,33 @@ fn windows_headers_leave_undeclared_posix_names_to_the_program() {
         "socketpair",
         "hstrerror",
     ];
-    let mut src = alloc::string::String::from(HEADERS);
+    let mut body = alloc::string::String::new();
     for n in NAMES {
-        src += &alloc::format!("static void {n}(void) {{}}\n");
+        body += &alloc::format!("static void {n}(void) {{}}\n");
     }
-    src += "int main(void) {\n";
+    body += "int main(void) {\n";
     for n in NAMES {
-        src += &alloc::format!("    {n}();\n");
+        body += &alloc::format!("    {n}();\n");
     }
-    src += "    return 0;\n}\n";
+    body += "    return 0;\n}\n";
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
-        if let Err(e) = Compiler::with_target(src.clone(), target).compile() {
+        if let Err(e) = Compiler::with_target(alloc::format!("{MINGW}{body}"), target).compile() {
             panic!("{target:?}: {e}");
         }
+        for h in POSIX {
+            let src = alloc::format!("#include <{h}>\n");
+            let err = Compiler::with_target(src, target).compile().expect_err(h);
+            assert!(
+                alloc::format!("{err}").contains("[B1010]"),
+                "{target:?}: {err}"
+            );
+        }
     }
-    let err = Compiler::with_target(src, Target::LinuxX64)
+    let posix: alloc::string::String = POSIX
+        .iter()
+        .map(|h| alloc::format!("#include <{h}>\n"))
+        .collect();
+    let err = Compiler::with_target(alloc::format!("{MINGW}{posix}{body}"), Target::LinuxX64)
         .compile()
         .expect_err("POSIX <unistd.h> declares fork");
     assert!(
@@ -2025,8 +2046,9 @@ fn link_definitions(target: crate::Target) -> alloc::collections::BTreeSet<Strin
 /// the startup runtime or a C-library source the link offers like an archive
 /// member, which a unit naming all of those then links against.
 /// `own_library` names what a program's own `-l` library supplies. Each
-/// header is compiled alone with the feature macros that widen its surface;
-/// one that stops at an `#error` serves another target.
+/// header served on `target` is compiled alone with the feature macros that
+/// widen its surface; one that stops at an `#error` serves another
+/// configuration.
 fn assert_header_declarations_resolve(target: crate::Target, own_library: &[&str]) {
     use crate::c5::preprocessor::Preprocessor;
     use crate::c5::symbol::Linkage;
@@ -2037,7 +2059,10 @@ fn assert_header_declarations_resolve(target: crate::Target, own_library: &[&str
     let mut library = TargetCLibrary::new(target);
     let mut unresolved = alloc::vec::Vec::new();
     let mut from_sources = alloc::collections::BTreeMap::new();
-    for (header, _) in crate::embedded_headers() {
+    for (header, targets, _) in crate::embedded_headers() {
+        if !targets.contains(target) {
+            continue;
+        }
         let src = alloc::format!("{MACROS}#include <{header}>\n");
         let opts = CompileOptions::default().with_no_entry_point(true);
         let program = match Compiler::with_options(src.clone(), target, opts).compile() {
@@ -9603,7 +9628,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
         .auto_includes
         .iter()
         .map(|n| {
-            crate::c5::headers::header_declaring(n)
+            crate::c5::headers::header_declaring(n, target)
                 .expect("the recovered name names a header")
                 .to_string()
         })

@@ -15,7 +15,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 static int single(void) {
     char *p = (char *)alloca(32);

@@ -4,7 +4,11 @@
  * near-8K allocation stays locked in as a size regression. */
 
 #include <string.h>
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 int main(void) {
     /* 8000 < 8192: in bounds. Touch every byte so the buffer is live. */

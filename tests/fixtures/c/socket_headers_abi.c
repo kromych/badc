@@ -1,13 +1,19 @@
-// The bundled socket headers (sys/socket.h, netinet/in.h, arpa/inet.h,
-// netdb.h) expose the address structures with the platform's ABI. The sizes
+// The bundled socket headers (sys/socket.h, netinet/in.h and netdb.h;
+// winsock2.h and ws2tcpip.h on Windows) expose the address structures with
+// the platform's ABI. The sizes
 // and the sin_port / sin_addr offsets below are identical on every supported
 // target; the family-region shape (the BSD/macOS length byte) differs but does
 // not move these fields. Asserted by return code.
 
 #include <stddef.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#endif
 
 int main(void) {
     if (sizeof(struct in_addr) != 4) return 1;

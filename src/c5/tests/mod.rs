@@ -789,7 +789,9 @@ pub const TEST_PRELUDE: &str = "\
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 #include <dlfcn.h>
 ";
 

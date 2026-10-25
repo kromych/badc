@@ -3,7 +3,11 @@
    addresses them with one scaled-offset instruction per access, where
    the fp form would build the address first. Returns 0 when the
    values round-trip. */
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 static long use(void *p, long n) {
     (void)p;

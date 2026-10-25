@@ -2,7 +2,11 @@
    drawing from any fixed per-frame reservation. Both ends of the block
    are written and read back, and every page is touched so demand-commit
    stacks (Windows guard pages) are exercised too. Returns 42. */
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 int main(void) {
     long n = 1L << 20;

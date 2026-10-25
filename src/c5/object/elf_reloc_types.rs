@@ -928,9 +928,9 @@ mod tests {
         use alloc::string::ToString;
         let header = crate::c5::headers::embedded_headers()
             .iter()
-            .find(|(name, _)| *name == "elf.h")
+            .find(|(name, _, _)| *name == "elf.h")
             .expect("elf.h is part of the embedded set")
-            .1;
+            .2;
         let mut checked = 0;
         for line in header.lines() {
             let rest = match line.strip_prefix("#define R_") {

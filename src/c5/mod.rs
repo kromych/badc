@@ -56,7 +56,7 @@ pub use {
     },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
-    headers::embedded_headers,
+    headers::{TargetSet, embedded_headers},
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},

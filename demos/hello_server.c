@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/select.h>
 #include <fcntl.h>
 
 #ifdef _WIN32
-#include <windows.h>
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <sys/select.h>
 #endif
 
 // Async "Hello, World!" HTTP server.
@@ -25,17 +26,18 @@
 //   curl http://localhost:8080/       # -> Hello, World!
 //
 // The byte-level constants (AF_INET, SOL_SOCKET, ...) and the
-// libc / Winsock symbol bindings come from <sys/socket.h>; the
-// dialect-driven choices that don't fit in a header (the macOS
-// sin_len byte, the close vs closesocket spelling, the fcntl vs
-// ioctlsocket non-blocking dance) sit behind the few #ifdefs
-// below.
+// libc / Winsock symbol bindings come from <sys/socket.h> (on
+// Windows, <winsock2.h>); the dialect-driven choices that don't fit
+// in a header (the macOS sin_len byte, the close vs closesocket
+// spelling, the fcntl vs ioctlsocket non-blocking dance) sit behind
+// the few #ifdefs below.
 
 // htons(8080): high byte 0x1F, low byte 0x90.
 #define PORT_HI       0x1F
 #define PORT_LO       0x90
 #define BACKLOG       16
 #define MAX_CLIENTS   8
+#define FDSET_BYTES   (1024 / 8)
 
 #define SLOT_FREE     0
 #define SLOT_READING  1
@@ -49,7 +51,7 @@ int *slot_state;
 int *slot_written;
 
 void fdset_zero(char *fds) {
-    memset(fds, 0, FD_SET_BYTES);
+    memset(fds, 0, FDSET_BYTES);
 }
 
 void fdset_set(char *fds, int fd) {
@@ -189,8 +191,8 @@ int main() {
         i = i + 1;
     }
 
-    rfds = malloc(FD_SET_BYTES);
-    wfds = malloc(FD_SET_BYTES);
+    rfds = malloc(FDSET_BYTES);
+    wfds = malloc(FDSET_BYTES);
     scratch = malloc(1024);
 
     printf("hello_server: listening on 0.0.0.0:8080 (Ctrl-C to quit)\n");

@@ -151,14 +151,6 @@ fn epoll_event_is_packed_on_linux_x86_64() {
             align: 8,
             members: &[("events", 0), ("data", 8), ("data.u64", 8)],
         },
-        Layout {
-            target: Target::WindowsX64,
-            headers: H,
-            ty: T,
-            size: 16,
-            align: 8,
-            members: &[("events", 0), ("data", 8)],
-        },
     ]);
 }
 
@@ -567,7 +559,7 @@ fn sigset_t_is_unsigned_long_words_on_linux() {
 }
 
 /// <sys/ucontext.h> declares the context types without <ucontext.h>, as
-/// glibc's does, and both parse on every target.
+/// glibc's does, and both parse on every target that ships them.
 #[test]
 fn sys_ucontext_declares_the_machine_context() {
     check_values(
@@ -589,12 +581,7 @@ fn sys_ucontext_declares_the_machine_context() {
             ("sizeof(ucontext_t)", 4560),
         ],
     );
-    for target in [
-        Target::LinuxX64,
-        Target::LinuxAarch64,
-        Target::MacOSAarch64,
-        Target::WindowsX64,
-    ] {
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
         check_values(
             target,
             &["signal.h", "ucontext.h", "sys/ucontext.h"],

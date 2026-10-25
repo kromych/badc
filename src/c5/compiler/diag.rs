@@ -651,10 +651,10 @@ impl Compiler {
         self.compile_err_line(code, self.lex.line, message.as_ref())
     }
 
-    /// The `-- try #include` suffix for a name a bundled header declares;
-    /// empty for any other name.
+    /// The `-- try #include` suffix for a name a bundled header served on
+    /// the target declares; empty for any other name.
     pub(super) fn include_hint(&self, name: &str) -> alloc::string::String {
-        match super::super::headers::header_declaring(name) {
+        match super::super::headers::header_declaring(name, self.target) {
             Some(h) => alloc::format!(" -- try `#include <{h}>`"),
             None => alloc::string::String::new(),
         }

@@ -1930,6 +1930,94 @@ fn has_include_operator_in_if() {
     assert!(!out.contains("int bogus;"), "{out:?}");
 }
 
+/// A bundled header is found only on the targets whose C library, SDK or
+/// compiler ships it, by `__has_include` and by `#include` alike: Apple
+/// clang finds `<mach/mach.h>` and none of `<sys/epoll.h>`, `<windows.h>`
+/// and `<sys/inotify.h>`, and gcc installs `<immintrin.h>` for x86 alone.
+#[test]
+fn bundled_headers_are_found_only_where_the_target_ships_them() {
+    const NAMES: [&str; 9] = [
+        "sys/epoll.h",
+        "windows.h",
+        "mach/mach.h",
+        "sys/inotify.h",
+        "immintrin.h",
+        "arm_neon.h",
+        "malloc.h",
+        "dlfcn.h",
+        "stdio.h",
+    ];
+    let probe: String = (NAMES.iter().enumerate())
+        .map(|(i, n)| format!("#if __has_include(<{n}>)\nfound_{i}\n#endif\n"))
+        .collect();
+    let shared = ["dlfcn.h", "stdio.h"];
+    let expect = [
+        (Target::MacOSAarch64, &["mach/mach.h", "arm_neon.h"][..]),
+        (
+            Target::LinuxX64,
+            &["sys/epoll.h", "sys/inotify.h", "immintrin.h", "malloc.h"],
+        ),
+        (
+            Target::LinuxAarch64,
+            &["sys/epoll.h", "sys/inotify.h", "arm_neon.h", "malloc.h"],
+        ),
+        (
+            Target::WindowsX64,
+            &["windows.h", "immintrin.h", "malloc.h"],
+        ),
+        (
+            Target::WindowsAarch64,
+            &["windows.h", "arm_neon.h", "malloc.h"],
+        ),
+    ];
+    for (target, own) in expect {
+        let id = target.id_str();
+        let out = Preprocessor::new(id, target, "0").process(&probe).unwrap();
+        for (i, name) in NAMES.iter().enumerate() {
+            let ships = own.contains(name) || shared.contains(name);
+            let has = out.lines().any(|l| l.trim() == format!("found_{i}"));
+            assert_eq!(has, ships, "{id}: __has_include(<{name}>)");
+            let include =
+                Preprocessor::new(id, target, "0").process(&format!("#include <{name}>\n"));
+            match include {
+                Ok(_) => assert!(ships, "{id}: <{name}> found"),
+                Err(e) => assert!(
+                    !ships && e.to_string().contains("[B1010]"),
+                    "{id}: <{name}>: {e}"
+                ),
+            }
+        }
+    }
+}
+
+/// A name the target is not served stays unfound when the installed header
+/// tree carries it, since that tree serves every target; a bundled header
+/// still reaches it, as `<winsock2.h>` reaches `<sys/socket.h>` on Windows.
+#[test]
+fn a_withheld_bundled_name_is_reached_only_from_the_bundled_headers() {
+    let root = std::env::temp_dir().join(format!("badc-withheld-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("sys")).unwrap();
+    std::fs::write(root.join("sys/epoll.h"), "int installed_epoll;\n").unwrap();
+    std::fs::write(root.join("extra.h"), "int installed_extra;\n").unwrap();
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0");
+    pp.add_own_header_root(root.to_str().unwrap());
+    let out = pp
+        .process("#if __has_include(<sys/epoll.h>)\nint epoll;\n#endif\n#include <extra.h>\n")
+        .unwrap();
+    std::fs::remove_dir_all(&root).ok();
+    assert!(!out.contains("epoll"), "{out}");
+    assert!(out.contains("int installed_extra;"), "{out}");
+    let windows =
+        |src: &str| Preprocessor::new("windows-x64", Target::WindowsX64, "0").process(src);
+    let socket = windows("#include <sys/socket.h>\n").expect_err("not a mingw-w64 header");
+    assert!(socket.to_string().contains("[B1010]"), "{socket}");
+    let out = windows("#include <winsock2.h>\n").unwrap();
+    assert!(
+        out.contains("SOCK_STREAM") || out.contains("socket"),
+        "{out}"
+    );
+}
+
 #[test]
 fn unknown_include_is_a_hard_error() {
     // A header that resolves nowhere aborts the compile, as in
@@ -3319,7 +3407,7 @@ fn fuzz_source(seed: u64, len: usize) -> String {
 /// over 6000 generated sources.
 #[test]
 fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             strip_c_comments(body),
             strip_c_comments_ref(body),
@@ -3341,7 +3429,7 @@ fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
 /// full-rescan reference over the same corpus and generated sources.
 #[test]
 fn unfold_matches_reference_over_corpus_and_fuzz() {
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             unfold_line_continuations(body),
             unfold_ref(body),
@@ -3365,7 +3453,7 @@ fn unfold_matches_reference_over_corpus_and_fuzz() {
 #[test]
 fn unfold_and_strip_matches_composition_over_corpus_and_fuzz() {
     let reference = |s: &str| strip_c_comments(&unfold_line_continuations(s));
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             unfold_and_strip(body),
             reference(body),

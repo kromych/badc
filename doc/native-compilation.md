@@ -229,7 +229,12 @@ for every OS.
 Unknown `#pragma`s and unknown preprocessor directives warn rather than
 failing the build. An `#include` that resolves through neither the search paths
 nor the embedded headers is an error, as in gcc / clang; pass `-H` /
-`--show-includes` for the gcc-`-H`-shape resolution trace on stderr.
+`--show-includes` for the gcc-`-H`-shape resolution trace on stderr. A bundled
+header is served on the targets whose C library, SDK or compiler ships it, as
+`libc/header-targets.txt` records them, so `<sys/epoll.h>` is not found for
+macOS and `__has_include(<windows.h>)` is 0 for Linux, as with the system
+compilers; the installed tree holds every target's headers and follows the same
+rule.
 
 ## Reaching beyond the predefined set
 

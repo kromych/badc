@@ -2,7 +2,11 @@
    host-stack overflow beyond the argument-register window -- are staged
    at the moved stack pointer, and the callee reads storage the caller
    carved at runtime. Returns 42. */
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 static long sum10(long a, long b, long c, long d, long e, long f, long g, long h, long i, long j) {
     return a + b + c + d + e + f + g + h + i + j;

@@ -200,7 +200,7 @@ impl TargetCLibrary {
 /// `--dump-bindings` prints it.
 pub fn library_bindings(target: Target) -> alloc::vec::Vec<(String, String)> {
     let mut out = alloc::vec::Vec::new();
-    for (name, _) in headers::embedded_headers() {
+    for (name, _, _) in headers::embedded_headers() {
         let source = alloc::format!("#define _GNU_SOURCE 1\n#include <{name}>\n");
         let mut pp = Preprocessor::new(target.id_str(), target, "0");
         if pp.process(&source).is_err() {
@@ -225,7 +225,7 @@ mod tests {
     /// The whole export set, from a walk over every bundled header.
     fn full_set(target: Target) -> TargetCLibrary {
         let mut lib = TargetCLibrary::new(target);
-        for (name, _) in headers::embedded_headers() {
+        for (name, _, _) in headers::embedded_headers() {
             if lib.scanned.insert(name) {
                 lib.scan(name);
             }

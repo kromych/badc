@@ -222,14 +222,19 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
 #define STB_VOXEL_RENDER_IMPLEMENTATION
 #include "stb_voxel_render.h"
 
-/* `<alloca.h>` declares `alloca` and `__builtin_alloca` as
+/* `<alloca.h>` (`<malloc.h>` on Windows, where mingw-w64 has no
+ * `<alloca.h>`) declares `alloca` and `__builtin_alloca` as
  * compiler intrinsics tagged with `#pragma intrinsic`. The c5
  * frontend lowers their call sites to `Op::Intrinsic(Alloca)`,
  * which decrements a per-frame arena pointer reserved by
  * `Op::Ent` and returns the new top -- no runtime SP bump, so
  * outstanding `Op::Psh` values stay where they are. stb_vorbis
  * uses this when the caller passes NULL alloc_buffer. */
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 /* c5 now reports `sizeof(float) == 4` (issue #29: real IEEE 754
  * single-precision). stb_vorbis's `FAST_SCALED_FLOAT_TO_INT`

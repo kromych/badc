@@ -3281,7 +3281,7 @@ impl Compiler {
             if opts.declines_auto_include(&name) {
                 return Err(e);
             }
-            let header = match super::headers::header_declaring(&name) {
+            let header = match super::headers::header_declaring(&name, target) {
                 Some(h) => h,
                 None => return Err(e),
             };

@@ -93,7 +93,9 @@ Every issue carries:
   `assembler`, `driver`, `archiver`, `libc`, `vm`, `jit`, `diagnostics`,
   `tooling`;
 * `conformance` for a C99 or POSIX deviation, `memory-safety` for memory
-  corruption, and `os:` / `arch:` when only some targets are affected.
+  corruption, and `os:` / `arch:` when only some targets are affected;
+* `upstream` for a defect in an upstream project (its code, its tests'
+  timing, its build) that badc's validation runs into.
 
 An i386 item takes `severity:low` and `leverage:low` unless it breaks
 linking the x86-64 kernel.

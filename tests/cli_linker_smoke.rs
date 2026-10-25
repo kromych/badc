@@ -4410,7 +4410,7 @@ fn pe_import_directory(pe: &[u8]) -> Vec<(String, Vec<String>)> {
                 break;
             }
             symbols.push(if entry & (1 << 63) != 0 {
-                String::new()
+                format!("#{}", entry & 0xffff)
             } else {
                 // A hint/name entry is a 2-byte hint then the name.
                 cstr(rva2off((entry & 0x7fff_ffff) as u32).expect("hint/name rva") + 2)
@@ -4443,19 +4443,19 @@ fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
         .collect()
 }
 
-/// An import library of short import members (PE/COFF specification,
-/// "Import Library Format"), each `(machine, name)` importing a function by
-/// name from `dll`.
-fn short_import_library(dll: &str, members: &[(u16, &str)]) -> Vec<u8> {
+/// An import library of short import members (PE/COFF specification), each
+/// `(machine, name, ordinal)` importing a function from `dll`.
+fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {
     let mut out = b"!<arch>\n".to_vec();
-    for &(machine, name) in members {
+    for &(machine, name, ordinal) in members {
         let payload = [name.as_bytes(), b"\0", dll.as_bytes(), b"\0"].concat();
         let mut member = [0u16.to_le_bytes(), 0xffffu16.to_le_bytes(), [0, 0]].concat();
         member.extend(machine.to_le_bytes());
         member.extend(0u32.to_le_bytes());
         member.extend((payload.len() as u32).to_le_bytes());
-        // Ordinal hint 0; IMPORT_OBJECT_CODE, IMPORT_OBJECT_NAME.
-        member.extend([0, 0, 1 << 2, 0]);
+        // The ordinal or hint, then the import type and the name type.
+        member.extend(ordinal.unwrap_or(0).to_le_bytes());
+        member.extend([u8::from(ordinal.is_none()) << 2, 0]);
         member.extend(&payload);
         let header = format!(
             "{:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
@@ -4481,8 +4481,8 @@ fn short_import_library(dll: &str, members: &[(u16, &str)]) -> Vec<u8> {
 /// (link.exe, lld-link); `-l<name>` probing GNU ld's Windows spellings,
 /// `<name>.lib` among them; and a DLL itself, positional or by `-l`, whose
 /// export table gives the names, data in a non-executable section. The
-/// import library also holds an ARM64EC member, as the Windows SDK's arm64
-/// ones do, which the link passes over.
+/// import library's ARM64EC member is passed over, and its import by ordinal
+/// takes `IMAGE_ORDINAL_FLAG64` in the lookup table.
 #[test]
 fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
     let dir = tempdir("pe-import-inputs");
@@ -4502,6 +4502,12 @@ fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
     );
     write_source(
         &dir,
+        "ord.c",
+        "long NtClose(void *);\nlong NtByOrdinal(void);\n\
+         int main(void) { return (int)(NtClose((void *)0) + NtByOrdinal()); }\n",
+    );
+    write_source(
+        &dir,
         "lib.c",
         "__declspec(dllexport) int lib_add(int x) { return x + 1; }\n\
          __declspec(dllexport) int lib_obj = 41;\n",
@@ -4517,11 +4523,23 @@ fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
         ("libsq.dll".to_string(), "lib_add".to_string()),
         ("libsq.dll".to_string(), "lib_obj".to_string()),
     ];
+    let by_ordinal = [
+        ("ntdll.dll".to_string(), "NtClose".to_string()),
+        ("ntdll.dll".to_string(), "#7".to_string()),
+    ];
+    let wants = [&nt_close[..], &lib_imports[..], &by_ordinal[..]];
     for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
         let t = format!("--target={target}");
         std::fs::write(
             libs.join("ntdll.lib"),
-            short_import_library("ntdll.dll", &[(0xa641, "NtClose"), (machine, "NtClose")]),
+            short_import_library(
+                "ntdll.dll",
+                &[
+                    (0xa641, "NtClose", None),
+                    (machine, "NtClose", None),
+                    (machine, "NtByOrdinal", Some(7)),
+                ],
+            ),
         )
         .unwrap();
         run(
@@ -4536,22 +4554,19 @@ fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
                 .current_dir(&dir),
             "build the DLL",
         );
-        // The inputs, the `LIB` value, and whether the image imports from ntdll.
-        let links: [(&[&str], &str, bool); 7] = [
-            (&["imp.c", "-Llibs"], "", true),
-            (&["imp.o", "-Llibs"], "", true),
-            (&["imp.o"], "absent;libs", true),
-            (&["plain.c", "-Llibs", "-lntdll"], "", true),
-            (&["uselib.c", "libs/libsq.dll"], "", false),
-            (&["uselib.c", "-Llibs", "-lsq"], "", false),
-            (&["uselib.c", "-Llibs", "-llibsq"], "", false),
+        // The inputs, the `LIB` value, and the index of the imports wanted.
+        let links: [(&[&str], &str, usize); 8] = [
+            (&["imp.c", "-Llibs"], "", 0),
+            (&["imp.o", "-Llibs"], "", 0),
+            (&["imp.o"], "absent;libs", 0),
+            (&["plain.c", "-Llibs", "-lntdll"], "", 0),
+            (&["uselib.c", "libs/libsq.dll"], "", 1),
+            (&["uselib.c", "-Llibs", "-lsq"], "", 1),
+            (&["uselib.c", "-Llibs", "-llibsq"], "", 1),
+            (&["ord.c", "-Llibs", "-lntdll"], "", 2),
         ];
-        for (args, lib, ntdll) in links {
-            let want = if ntdll {
-                &nt_close[..]
-            } else {
-                &lib_imports[..]
-            };
+        for (args, lib, want) in links {
+            let want = wants[want];
             let exe = dir.join("out.exe");
             run(
                 Command::new(badc())
@@ -4582,7 +4597,7 @@ fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
         };
         std::fs::write(
             libs.join("ntdll.lib"),
-            short_import_library("ntdll.dll", &[(machine, "NtClose")]),
+            short_import_library("ntdll.dll", &[(machine, "NtClose", None)]),
         )
         .unwrap();
         run(

@@ -241,6 +241,8 @@ pub struct SharedLibrary {
     /// the leading underscore; an ELF or PE image's export names are
     /// already the loader's, so it states none.
     pub export_symbols: alloc::collections::BTreeMap<String, String>,
+    /// The ordinal a PE import library imports a name by (`IMPORT_OBJECT_ORDINAL`).
+    pub export_ordinals: alloc::collections::BTreeMap<String, u16>,
     /// The default symbol version of each export the library versions,
     /// read from the same bytes as the export set. The image records it
     /// as the import's version requirement, so the loader binds the
@@ -280,6 +282,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
+        export_ordinals: Default::default(),
         references: image.references,
         protected_exports: image.protected_exports,
     })

@@ -1322,6 +1322,8 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
+    /// The ordinal a PE import names in place of [`Self::real_symbol`].
+    pub ordinal: Option<u16>,
     /// What the symbol is; the ELF writer republishes it on the
     /// undefined `.dynsym` entry.
     pub kind: ImportKind,
@@ -1566,6 +1568,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
+            ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
@@ -1592,6 +1595,7 @@ impl ResolvedImports {
             real_symbol: "exit".to_string(),
             dylib_index,
             flat_lookup: false,
+            ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
             fixed_args: 1,
@@ -1728,6 +1732,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
+                ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
@@ -3557,6 +3562,7 @@ impl DataImportSlots {
             real_symbol,
             dylib_index,
             flat_lookup: self.flat,
+            ordinal: None,
             kind: if self.flat {
                 ImportKind::Function
             } else {

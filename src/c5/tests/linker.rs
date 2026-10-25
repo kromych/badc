@@ -4544,6 +4544,7 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -5632,6 +5633,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -7465,6 +7467,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
+        export_ordinals: Default::default(),
         references: Default::default(),
         protected_exports: Default::default(),
     };
@@ -14621,6 +14624,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };

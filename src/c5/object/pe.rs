@@ -161,6 +161,7 @@ fn headers_raw_size(plan: &SectionPlan) -> usize {
 
 const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
 const IAT_ENTRY_SIZE: usize = 8;
+const IMAGE_ORDINAL_FLAG64: u64 = 1 << 63;
 
 const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
@@ -289,7 +290,8 @@ struct PeWriter<'a> {
     subsystem: u16,
     passthrough_entry: bool,
     stub: EntryStub,
-    imports: Vec<(String, String)>,
+    /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
+    imports: Vec<(String, String, Option<u16>)>,
     dlls: Vec<DllGroup>,
     /// The stub occupies a span rounded up to the alignment `build.text`'s
     /// own input sections claim; SectionAlignment covers it, so the span
@@ -345,7 +347,7 @@ impl<'a> PeWriter<'a> {
         // Index N becomes IAT slot N. The CRT / kernel32 entries the stub
         // relies on ride the embedded runtime TU's `#pragma binding`, so
         // they already sit in `build.imports`.
-        let imports: Vec<(String, String)> = build
+        let imports: Vec<(String, String, Option<u16>)> = build
             .imports
             .imports
             .iter()
@@ -353,6 +355,7 @@ impl<'a> PeWriter<'a> {
                 (
                     imp.real_symbol.clone(),
                     build.imports.dylibs[imp.dylib_index].path.clone(),
+                    imp.ordinal,
                 )
             })
             .collect();
@@ -2128,9 +2131,9 @@ struct DllGroup {
     members: Vec<usize>,
 }
 
-fn group_imports_by_dll(imports: &[(String, String)]) -> Vec<DllGroup> {
+fn group_imports_by_dll(imports: &[(String, String, Option<u16>)]) -> Vec<DllGroup> {
     let mut groups: Vec<DllGroup> = Vec::new();
-    for (idx, (_, dll)) in imports.iter().enumerate() {
+    for (idx, (_, dll, _)) in imports.iter().enumerate() {
         if let Some(g) = groups.iter_mut().find(|g| g.dll_name == *dll) {
             g.members.push(idx);
         } else {
@@ -2153,7 +2156,11 @@ struct IDataLayout {
     iat_rva_for_import: Vec<u32>,
 }
 
-fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) -> IDataLayout {
+fn plan_idata(
+    dlls: &[DllGroup],
+    imports: &[(String, String, Option<u16>)],
+    base_rva: u32,
+) -> IDataLayout {
     let n_dlls = dlls.len();
     let n_imports = imports.len();
 
@@ -2174,8 +2181,11 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     let hint_table_off = ilt_off + ilt_size;
     let mut hint_table_size = 0usize;
     let mut hint_offsets: Vec<usize> = Vec::with_capacity(n_imports);
-    for (sym, _) in imports {
+    for (sym, _, ordinal) in imports {
         hint_offsets.push(hint_table_off + hint_table_size);
+        if ordinal.is_some() {
+            continue;
+        }
         hint_table_size += 2 + sym.len() + 1;
         if hint_table_size & 1 != 0 {
             hint_table_size += 1; // align to 2
@@ -2233,8 +2243,10 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     }
     for (g_idx, group) in dlls.iter().enumerate() {
         for (member_pos, &global_idx) in group.members.iter().enumerate() {
-            let entry_value = base_rva + hint_offsets[global_idx] as u32; // RVA -> hint/name
-            let entry = entry_value as u64; // high bit clear -> name import
+            let entry = match imports[global_idx].2 {
+                Some(ordinal) => IMAGE_ORDINAL_FLAG64 | u64::from(ordinal),
+                None => u64::from(base_rva + hint_offsets[global_idx] as u32),
+            };
             let iat_slot = iat_off + group_iat_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
             let ilt_slot = ilt_off + group_ilt_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
             bytes[iat_slot..iat_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
@@ -2242,7 +2254,7 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         }
     }
 
-    for (i, (sym, _)) in imports.iter().enumerate() {
+    for (i, (sym, _, _)) in imports.iter().enumerate().filter(|(_, i)| i.2.is_none()) {
         let off = hint_offsets[i];
         bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
         bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());

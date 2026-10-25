@@ -981,6 +981,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
+            ordinal: merged.import_ordinals.get(name).copied(),
             kind: if merged.tls_imports.contains(&i) {
                 ImportKind::ThreadLocal
             } else if merged.object_imports.contains(&i) {
@@ -1764,6 +1765,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
+            import_ordinals: alloc::collections::BTreeMap::new(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],

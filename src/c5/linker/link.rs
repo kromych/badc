@@ -221,6 +221,8 @@ pub struct MergedNative {
     /// resolves against a shared library whose description states the
     /// spelling, as the target's C library does.
     pub import_symbols: BTreeMap<String, String>,
+    /// The ordinal a PE import names instead of a symbol.
+    pub import_ordinals: BTreeMap<String, u16>,
     /// The symbol version an import binds, for a library the link read.
     /// `Some(None)` records a library that was read and versions nothing;
     /// an absent entry means no input supplied that library, and the
@@ -958,6 +960,7 @@ struct MergedDylibs {
     dylibs: Vec<String>,
     import_dylib_map: BTreeMap<String, u32>,
     import_symbols: BTreeMap<String, String>,
+    import_ordinals: BTreeMap<String, u16>,
     import_versions: BTreeMap<String, Option<String>>,
 }
 
@@ -4358,6 +4361,7 @@ impl<'a> Link<'a> {
         // No binding map or library routes a preemptible definition.
         routing.retain(|name, _| !self.preemptible.contains(name));
         let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
+        let mut import_ordinals: BTreeMap<String, u16> = BTreeMap::new();
         for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
             if let Some(&idx) = routing.get(name.as_str()) {
                 bound[idx as usize] = true;
@@ -4376,6 +4380,9 @@ impl<'a> Link<'a> {
                     routing.insert(name.as_str(), *at as u32);
                     if let Some(symbol) = lib.export_symbols.get(name) {
                         import_symbols.insert(name.clone(), symbol.clone());
+                    }
+                    if let Some(&ordinal) = lib.export_ordinals.get(name) {
+                        import_ordinals.insert(name.clone(), ordinal);
                     }
                     break;
                 }
@@ -4425,6 +4432,7 @@ impl<'a> Link<'a> {
             dylibs,
             import_dylib_map,
             import_symbols,
+            import_ordinals,
             import_versions,
         })
     }
@@ -4936,6 +4944,7 @@ impl<'a> Link<'a> {
             dylibs: merged_dylibs.dylibs,
             import_dylib_map: merged_dylibs.import_dylib_map,
             import_symbols: merged_dylibs.import_symbols,
+            import_ordinals: merged_dylibs.import_ordinals,
             import_versions: merged_dylibs.import_versions,
             flat_imports,
             exports,
@@ -6761,6 +6770,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -6874,6 +6884,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -6915,6 +6926,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -8465,6 +8477,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         }
@@ -8858,6 +8871,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };
@@ -8959,6 +8973,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
             references: Default::default(),
             protected_exports: Default::default(),
         };

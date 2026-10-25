@@ -1272,6 +1272,8 @@ pub struct ImportMember {
     pub symbol: String,
     pub dll: String,
     pub import_name: String,
+    /// `IMPORT_OBJECT_ORDINAL`: the ordinal the DLL is asked for instead of a name.
+    pub ordinal: Option<u16>,
     /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
     pub data: bool,
 }
@@ -1282,8 +1284,8 @@ pub fn is_coff_import_member(bytes: &[u8]) -> bool {
 }
 
 /// Read a short-format import member. The name type decides what the DLL is
-/// asked for: the symbol's name, that without a leading `?`, `@` or `_`, that
-/// without its `@` decoration, or a stated one; an import by ordinal is refused.
+/// asked for: the ordinal the header states, the symbol's name, that without a
+/// leading `?`, `@` or `_`, that without its `@` decoration, or a stated one.
 /// `None` for an ARM64EC member (the SDK's arm64 libraries are ARM64X).
 pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error> {
     let machine = match need_u16(bytes, 6, "import header")? {
@@ -1310,17 +1312,19 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
     let stripped = symbol
         .strip_prefix(|c| matches!(c, '?' | '@' | '_'))
         .unwrap_or(symbol);
+    let ordinal = ((kinds >> 2) & 7 == 0).then(|| u16le(bytes, 16).unwrap_or(0));
     let import_name = match (kinds >> 2) & 7 {
-        1 => symbol.to_string(),
+        0 | 1 => symbol.to_string(),
         2 => stripped.to_string(),
         3 => stripped.split('@').next().unwrap_or(stripped).to_string(),
         4 => match strings.next() {
             Some(Some(n)) => n.to_string(),
             _ => return Err(bad("import member states no export name")),
         },
-        _ => {
+        other => {
             return Err(unsupported(&format!(
-                "`{symbol}` is imported from `{dll}` by ordinal, which the linker does not bind"
+                "`{symbol}` is imported from `{dll}` under name type {other}, which the \
+                 PE/COFF specification does not define"
             )));
         }
     };
@@ -1329,6 +1333,7 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
         symbol: symbol.to_string(),
         dll: dll.to_string(),
         import_name,
+        ordinal,
         data: kinds & 3 != 0,
     }))
 }
@@ -1352,13 +1357,16 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 references: Default::default(),
                 protected_exports: Default::default(),
                 from_image: true,
+                export_ordinals: Default::default(),
             });
         lib.exports.insert(m.symbol.clone());
         lib.exports.insert(format!("__imp_{}", m.symbol));
         if m.data {
             lib.data_exports.insert(m.symbol.clone());
         }
-        if m.import_name != m.symbol {
+        if let Some(ordinal) = m.ordinal {
+            lib.export_ordinals.insert(m.symbol.clone(), ordinal);
+        } else if m.import_name != m.symbol {
             lib.export_symbols
                 .insert(m.symbol.clone(), m.import_name.clone());
         }
@@ -1432,6 +1440,7 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         references: Default::default(),
         protected_exports: Default::default(),
         from_image: true,
+        export_ordinals: Default::default(),
     };
     let dir_rva = need_u32(bytes, opt + 112, "export directory")?;
     let dir_size = need_u32(bytes, opt + 116, "export directory")?;
@@ -1891,7 +1900,6 @@ mod tests {
         );
     }
 
-    /// An import member names its DLL and the name asked for; an ordinal is refused.
     #[test]
     fn import_members_name_their_dll_and_export() {
         let member = |kinds: u16, names: &[u8]| {
@@ -1925,10 +1933,11 @@ mod tests {
         assert!(libs[0].exports.contains("__imp_GetTickCount"));
         assert!(libs[1].data_exports.contains("_obj@4"));
         assert_eq!(libs[1].export_symbols["_obj@4"], "obj");
-        let err = parse_import_member(&member(0, b"f\0a.dll\0"))
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("by ordinal"), "{err}");
+        let mut by_ordinal = member(0, b"f\0a.dll\0");
+        by_ordinal[16] = 7;
+        let o = parse_import_member(&by_ordinal).unwrap().unwrap();
+        assert_eq!(o.ordinal, Some(7));
+        assert_eq!(import_libraries(&[o])[0].export_ordinals["f"], 7);
     }
 
     /// A common symbol without `-aligncomm` aligns to its size's power of

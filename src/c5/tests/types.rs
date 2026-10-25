@@ -460,6 +460,36 @@ fn call_with_return_prototype_is_silent() {
     );
 }
 
+/// A `#pragma binding` is not a declaration (C99 6.7): a unit's typedef of
+/// the bound name declares it, as an object or an enumerator of that name
+/// does, while a name a prototype has claimed stays a function the typedef
+/// clashes with.
+#[test]
+fn typedef_takes_a_name_only_a_binding_names() {
+    use crate::{Compiler, Target};
+    let unclaimed = "#pragma dylib(gdi32, \"gdi32.dll\")\n\
+        #pragma binding(gdi32::Rectangle, \"Rectangle\")\n\
+        typedef struct { int x; } Rectangle;\n\
+        int main(void) { Rectangle r = {1}; return r.x - 1; }\n";
+    let claimed = unclaimed.replace(
+        "typedef",
+        "int Rectangle(void *dc, int l, int t, int r, int b);\ntypedef",
+    );
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        Compiler::with_target(unclaimed.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let err = Compiler::with_target(claimed.clone(), target)
+            .compile()
+            .expect_err("a prototyped name is a function");
+        assert!(
+            err.to_string()
+                .contains("clashes with prior non-typedef declaration"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn shadowing_fnptr_param_does_not_clobber_signature() {
     // A prototype whose fn-ptr parameter reuses a bound library

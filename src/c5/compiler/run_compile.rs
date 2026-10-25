@@ -785,7 +785,10 @@ impl Compiler {
             };
         let prior_class = self.symbols[id_idx].class;
         let prior_type = self.symbols[id_idx].type_;
-        if prior_class != 0 && prior_class != Token::Typedef as i64 {
+        // A `#pragma binding` no prototype has claimed declares nothing.
+        let unclaimed_binding =
+            prior_class == Token::Sys as i64 && self.symbols[id_idx].implicit_return_int;
+        if prior_class != 0 && prior_class != Token::Typedef as i64 && !unclaimed_binding {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(

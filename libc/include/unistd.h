@@ -22,15 +22,164 @@
 #include <io.h>
 #endif
 
-// POSIX threads / semaphores option macros (POSIX.1 2.1.3). The
-// supported non-Windows targets bind a host libc that implements
-// pthreads and POSIX semaphores, so advertise both; code commonly
-// selects its threading backend on `_POSIX_THREADS`. Windows is not a
-// POSIX host and leaves them undefined.
-#ifndef __BADC_WINDOWS__
-#define _POSIX_THREADS              200809L
-#define _POSIX_SEMAPHORES           200809L
-#define _POSIX_THREAD_ATTR_STACKSIZE 200809L
+// POSIX.1-2008 <unistd.h> version and option macros (XBD 2.1.6): each C
+// library's values, as glibc 2.43's and the macOS SDK's headers define
+// them, for the options whose interfaces the bundled headers declare. -1
+// is an option the library does not support; one it supports whose
+// interfaces are not declared here is left undefined. TODO: <aio.h>
+// (_POSIX_ASYNCHRONOUS_IO, _POSIX_PRIORITIZED_IO, _POSIX_ASYNC_IO),
+// <mqueue.h> (_POSIX_MESSAGE_PASSING), <sys/sem.h> and <sys/msg.h>
+// (_XOPEN_SHM), and the XSI conformance macros (_XOPEN_UNIX,
+// _XOPEN_VERSION and the rest).
+#if defined(__linux__)
+#define _POSIX_VERSION                     200809L
+#define _POSIX2_VERSION                    200809L
+#define _POSIX2_C_VERSION                  200809L
+#define _POSIX2_C_BIND                     200809L
+#define _POSIX2_C_DEV                      200809L
+#define _POSIX2_SW_DEV                     200809L
+#define _POSIX2_LOCALEDEF                  200809L
+#define _POSIX2_CHAR_TERM                  200809L
+#define _POSIX_ADVISORY_INFO               200809L
+#define _POSIX_BARRIERS                    200809L
+#define _POSIX_CHOWN_RESTRICTED            0
+#define _POSIX_CLOCK_SELECTION             200809L
+#define _POSIX_CPUTIME                     0
+#define _POSIX_FSYNC                       200809L
+#define _POSIX_IPV6                        200809L
+#define _POSIX_JOB_CONTROL                 1
+#define _POSIX_MAPPED_FILES                200809L
+#define _POSIX_MEMLOCK                     200809L
+#define _POSIX_MEMLOCK_RANGE               200809L
+#define _POSIX_MEMORY_PROTECTION           200809L
+#define _POSIX_MONOTONIC_CLOCK             0
+#define _POSIX_NO_TRUNC                    1
+#define _POSIX_PRIORITY_SCHEDULING         200809L
+#define _POSIX_RAW_SOCKETS                 200809L
+#define _POSIX_READER_WRITER_LOCKS         200809L
+#define _POSIX_REALTIME_SIGNALS            200809L
+#define _POSIX_REENTRANT_FUNCTIONS         1
+#define _POSIX_REGEXP                      1
+#define _POSIX_SAVED_IDS                   1
+#define _POSIX_SEMAPHORES                  200809L
+#define _POSIX_SHARED_MEMORY_OBJECTS       200809L
+#define _POSIX_SHELL                       1
+#define _POSIX_SPAWN                       200809L
+#define _POSIX_SPIN_LOCKS                  200809L
+#define _POSIX_SPORADIC_SERVER             -1
+#define _POSIX_SYNCHRONIZED_IO             200809L
+#define _POSIX_THREADS                     200809L
+#define _POSIX_THREAD_ATTR_STACKADDR       200809L
+#define _POSIX_THREAD_ATTR_STACKSIZE       200809L
+#define _POSIX_THREAD_CPUTIME              0
+#define _POSIX_THREAD_PRIORITY_SCHEDULING  200809L
+#define _POSIX_THREAD_PRIO_INHERIT         200809L
+#define _POSIX_THREAD_PRIO_PROTECT         200809L
+#define _POSIX_THREAD_PROCESS_SHARED       200809L
+#define _POSIX_THREAD_ROBUST_PRIO_INHERIT  200809L
+#define _POSIX_THREAD_ROBUST_PRIO_PROTECT  -1
+#define _POSIX_THREAD_SAFE_FUNCTIONS       200809L
+#define _POSIX_THREAD_SPORADIC_SERVER      -1
+#define _POSIX_TIMEOUTS                    200809L
+#define _POSIX_TIMERS                      200809L
+#define _POSIX_TRACE                       -1
+#define _POSIX_TRACE_EVENT_FILTER          -1
+#define _POSIX_TRACE_INHERIT               -1
+#define _POSIX_TRACE_LOG                   -1
+#define _POSIX_TYPED_MEMORY_OBJECTS        -1
+#define _POSIX_V6_LP64_OFF64               1
+#define _POSIX_V6_LPBIG_OFFBIG             -1
+#define _POSIX_V7_LP64_OFF64               1
+#define _POSIX_V7_LPBIG_OFFBIG             -1
+#define _XOPEN_REALTIME_THREADS            1
+#ifdef __aarch64__
+#define _POSIX_V6_ILP32_OFF32              -1
+#define _POSIX_V6_ILP32_OFFBIG             -1
+#define _POSIX_V7_ILP32_OFF32              -1
+#define _POSIX_V7_ILP32_OFFBIG             -1
+#endif
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE 0
+#endif
+#elif defined(__APPLE__)
+#define _POSIX_VERSION                     200112L
+#define _POSIX2_VERSION                    200112L
+#define _POSIX2_C_BIND                     200112L
+#define _POSIX2_C_DEV                      200112L
+#define _POSIX2_CHAR_TERM                  200112L
+#define _POSIX2_FORT_DEV                   -1
+#define _POSIX2_FORT_RUN                   200112L
+#define _POSIX2_LOCALEDEF                  200112L
+#define _POSIX2_PBS                        -1
+#define _POSIX2_PBS_ACCOUNTING             -1
+#define _POSIX2_PBS_CHECKPOINT             -1
+#define _POSIX2_PBS_LOCATE                 -1
+#define _POSIX2_PBS_MESSAGE                -1
+#define _POSIX2_PBS_TRACK                  -1
+#define _POSIX2_SW_DEV                     200112L
+#define _POSIX2_UPE                        200112L
+#define _POSIX_ADVISORY_INFO               -1
+#define _POSIX_ASYNCHRONOUS_IO             -1
+#define _POSIX_BARRIERS                    -1
+#define _POSIX_CHOWN_RESTRICTED            200112L
+#define _POSIX_CLOCK_SELECTION             -1
+#define _POSIX_CPUTIME                     -1
+#define _POSIX_FSYNC                       200112L
+#define _POSIX_IPV6                        200112L
+#define _POSIX_JOB_CONTROL                 200112L
+#define _POSIX_MAPPED_FILES                200112L
+#define _POSIX_MEMLOCK                     -1
+#define _POSIX_MEMLOCK_RANGE               -1
+#define _POSIX_MEMORY_PROTECTION           200112L
+#define _POSIX_MESSAGE_PASSING             -1
+#define _POSIX_MONOTONIC_CLOCK             -1
+#define _POSIX_NO_TRUNC                    200112L
+#define _POSIX_PRIORITIZED_IO              -1
+#define _POSIX_PRIORITY_SCHEDULING         -1
+#define _POSIX_RAW_SOCKETS                 -1
+#define _POSIX_READER_WRITER_LOCKS         200112L
+#define _POSIX_REALTIME_SIGNALS            -1
+#define _POSIX_REGEXP                      200112L
+#define _POSIX_SAVED_IDS                   200112L
+#define _POSIX_SEMAPHORES                  -1
+#define _POSIX_SHARED_MEMORY_OBJECTS       -1
+#define _POSIX_SHELL                       200112L
+#define _POSIX_SPAWN                       200112L
+#define _POSIX_SPIN_LOCKS                  -1
+#define _POSIX_SPORADIC_SERVER             -1
+#define _POSIX_SYNCHRONIZED_IO             -1
+#define _POSIX_THREADS                     200112L
+#define _POSIX_THREAD_ATTR_STACKADDR       200112L
+#define _POSIX_THREAD_ATTR_STACKSIZE       200112L
+#define _POSIX_THREAD_CPUTIME              -1
+#define _POSIX_THREAD_PRIORITY_SCHEDULING  -1
+#define _POSIX_THREAD_PRIO_INHERIT         -1
+#define _POSIX_THREAD_PRIO_PROTECT         -1
+#define _POSIX_THREAD_PROCESS_SHARED       200112L
+#define _POSIX_THREAD_SAFE_FUNCTIONS       200112L
+#define _POSIX_THREAD_SPORADIC_SERVER      -1
+#define _POSIX_TIMEOUTS                    -1
+#define _POSIX_TIMERS                      -1
+#define _POSIX_TRACE                       -1
+#define _POSIX_TRACE_EVENT_FILTER          -1
+#define _POSIX_TRACE_INHERIT               -1
+#define _POSIX_TRACE_LOG                   -1
+#define _POSIX_TYPED_MEMORY_OBJECTS        -1
+#define _POSIX_V6_ILP32_OFF32              -1
+#define _POSIX_V6_ILP32_OFFBIG             -1
+#define _POSIX_V6_LP64_OFF64               1
+#define _POSIX_V6_LPBIG_OFFBIG             1
+#define _POSIX_V7_ILP32_OFF32              -1
+#define _POSIX_V7_ILP32_OFFBIG             -1
+#define _POSIX_V7_LP64_OFF64               1
+#define _POSIX_V7_LPBIG_OFFBIG             1
+#define _XOPEN_LEGACY                      -1
+#define _XOPEN_REALTIME                    -1
+#define _XOPEN_REALTIME_THREADS            -1
+#define _XOPEN_STREAMS                     -1
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE 255
+#endif
 #endif
 
 #define STDIN_FILENO  0

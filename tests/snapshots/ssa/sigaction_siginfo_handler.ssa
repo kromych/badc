@@ -60,7 +60,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=38
     v1   LocalAddr(-38)                                   -> x7
     v2   Imm(0)                                           -> x6
     v3   Imm(152)                                         -> x2
-    v4   CallExt { binding_idx=30, args=[v1, v2, v3], fp_arg_mask=0x0 } -> x0
+    v4   CallExt { binding_idx=33, args=[v1, v2, v3], fp_arg_mask=0x0 } -> x0
     v5   LocalAddr(-38)                                   -> x0
     v6   ImmCode(ent_pc=5)                                -> x1
     v7   StoreLocal { off=-38, value=v6, kind=I64 }       -> -
@@ -86,7 +86,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=38
     v23  LocalAddr(-19)                                   -> x7
     v24  Imm(0)                                           -> x6
     v25  Imm(152)                                         -> x2
-    v26  CallExt { binding_idx=30, args=[v23, v24, v25], fp_arg_mask=0x0 } -> x0
+    v26  CallExt { binding_idx=33, args=[v23, v24, v25], fp_arg_mask=0x0 } -> x0
     v27  Imm(10)                                          -> x7
     v28  Imm(0)                                           -> x6
     v29  LocalAddr(-19)                                   -> x2

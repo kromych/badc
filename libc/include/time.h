@@ -151,6 +151,8 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::ctime,         "_ctime")
+#pragma binding(libc::asctime,       "_asctime")
+#pragma binding(libc::asctime_r,     "_asctime_r")
 #pragma binding(libc::strftime,      "_strftime")
 #pragma binding(libc::strptime,      "_strptime")
 #pragma binding(libc::tzset,         "_tzset")
@@ -184,6 +186,9 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "gmtime_r")
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::ctime,         "ctime")
+#pragma binding(libc::asctime,       "asctime")
+#pragma binding(libc::asctime_r,     "asctime_r")
+#pragma binding(libc::clock_getcpuclockid, "clock_getcpuclockid")
 #pragma binding(libc::strftime,      "strftime")
 #pragma binding(libc::strptime,      "strptime")
 #pragma binding(libc::tzset,         "tzset")
@@ -265,6 +270,15 @@ char *ctime_r(const time_t *t, char *buf);
 #endif
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
 char *ctime(const time_t *t);
+#ifndef _WIN32
+// C89 7.12.3.1 asctime, and POSIX asctime_r into a 26-byte buffer.
+char *asctime(const struct tm *tm);
+char *asctime_r(const struct tm *restrict tm, char *restrict buf);
+#endif
+#ifdef __linux__
+// POSIX: the CPU-time clock of a process.
+int clock_getcpuclockid(int pid, clockid_t *clock_id);
+#endif
 size_t strftime(char *buf, size_t max, const char *fmt, const struct tm *tm);
 #ifdef __linux__
 // POSIX per-process timers. `timer_t` is an opaque handle glibc defines

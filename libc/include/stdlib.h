@@ -65,6 +65,7 @@
 #pragma binding(libc::bsearch, "_bsearch")
 #pragma binding(libc::rand,    "_rand")
 #pragma binding(libc::srand,   "_srand")
+#pragma binding(libc::rand_r,  "_rand_r")
 #pragma binding(libc::atexit,  "_atexit")
 #pragma binding(libc::strtoul, "_strtoul")
 #pragma binding(libc::strtoull, "_strtoull")
@@ -129,6 +130,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
+#pragma binding(libc::rand_r,  "rand_r")
 // The Linux C library doesn't export `atexit` as a regular dynamic symbol --
 // it's an inline that calls per-DSO `__cxa_atexit(handler, NULL,
 // dso_handle)`, so `dlsym(libc.so.6, "atexit")` returns NULL and
@@ -408,6 +410,10 @@ void *bsearch(const void *key, const void *base, size_t n, size_t size,
               int (*cmp)(const void *, const void *));
 int rand(void);
 void srand(unsigned int seed);
+#ifndef _WIN32
+// POSIX: rand's sequence over a caller-held state.
+int rand_r(unsigned int *seed);
+#endif
 #ifdef __linux__
 // See the binding-block comment above. `__cxa_atexit` takes a
 // 1-arg handler signature `void (*)(void *)`; c5 callees with

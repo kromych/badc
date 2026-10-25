@@ -79,6 +79,42 @@
 #pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
 #pragma binding(libc::pthread_getspecific,      "_pthread_getspecific")
 #pragma binding(libc::pthread_once,             "_pthread_once")
+#pragma binding(libc::pthread_attr_getdetachstate,      "_pthread_attr_getdetachstate")
+#pragma binding(libc::pthread_attr_getinheritsched,     "_pthread_attr_getinheritsched")
+#pragma binding(libc::pthread_attr_getschedpolicy,      "_pthread_attr_getschedpolicy")
+#pragma binding(libc::pthread_attr_getscope,            "_pthread_attr_getscope")
+#pragma binding(libc::pthread_attr_getstacksize,        "_pthread_attr_getstacksize")
+#pragma binding(libc::pthread_attr_setguardsize,        "_pthread_attr_setguardsize")
+#pragma binding(libc::pthread_attr_setstack,            "_pthread_attr_setstack")
+#pragma binding(libc::pthread_condattr_getpshared,      "_pthread_condattr_getpshared")
+#pragma binding(libc::pthread_condattr_setpshared,      "_pthread_condattr_setpshared")
+#pragma binding(libc::pthread_getconcurrency,           "_pthread_getconcurrency")
+#pragma binding(libc::pthread_setconcurrency,           "_pthread_setconcurrency")
+#pragma binding(libc::pthread_mutex_getprioceiling,     "_pthread_mutex_getprioceiling")
+#pragma binding(libc::pthread_mutex_setprioceiling,     "_pthread_mutex_setprioceiling")
+#pragma binding(libc::pthread_mutexattr_getprioceiling, "_pthread_mutexattr_getprioceiling")
+#pragma binding(libc::pthread_mutexattr_getprotocol,    "_pthread_mutexattr_getprotocol")
+#pragma binding(libc::pthread_mutexattr_getpshared,     "_pthread_mutexattr_getpshared")
+#pragma binding(libc::pthread_mutexattr_gettype,        "_pthread_mutexattr_gettype")
+#pragma binding(libc::pthread_mutexattr_setprioceiling, "_pthread_mutexattr_setprioceiling")
+#pragma binding(libc::pthread_mutexattr_setprotocol,    "_pthread_mutexattr_setprotocol")
+#pragma binding(libc::pthread_mutexattr_setpshared,     "_pthread_mutexattr_setpshared")
+#pragma binding(libc::pthread_rwlock_init,              "_pthread_rwlock_init")
+#pragma binding(libc::pthread_rwlock_destroy,           "_pthread_rwlock_destroy")
+#pragma binding(libc::pthread_rwlock_rdlock,            "_pthread_rwlock_rdlock")
+#pragma binding(libc::pthread_rwlock_wrlock,            "_pthread_rwlock_wrlock")
+#pragma binding(libc::pthread_rwlock_tryrdlock,         "_pthread_rwlock_tryrdlock")
+#pragma binding(libc::pthread_rwlock_trywrlock,         "_pthread_rwlock_trywrlock")
+#pragma binding(libc::pthread_rwlock_unlock,            "_pthread_rwlock_unlock")
+#pragma binding(libc::pthread_rwlockattr_init,          "_pthread_rwlockattr_init")
+#pragma binding(libc::pthread_rwlockattr_destroy,       "_pthread_rwlockattr_destroy")
+#pragma binding(libc::pthread_rwlockattr_getpshared,    "_pthread_rwlockattr_getpshared")
+#pragma binding(libc::pthread_rwlockattr_setpshared,    "_pthread_rwlockattr_setpshared")
+#pragma binding(libc::pthread_setcancelstate,           "_pthread_setcancelstate")
+#pragma binding(libc::pthread_setcanceltype,            "_pthread_setcanceltype")
+#pragma binding(libc::pthread_testcancel,               "_pthread_testcancel")
+#pragma binding(libc::pthread_condattr_init,            "_pthread_condattr_init")
+#pragma binding(libc::pthread_condattr_destroy,         "_pthread_condattr_destroy")
 
 // pthread_mutex_t = 64 bytes on macOS (8-byte sig + 56-byte body).
 #define PTHREAD_MUTEX_SIZE 64
@@ -152,6 +188,59 @@
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
 #pragma binding(libc::pthread_getspecific,      "pthread_getspecific")
 #pragma binding(libc::pthread_once,             "pthread_once")
+#pragma binding(libc::pthread_attr_getdetachstate,      "pthread_attr_getdetachstate")
+#pragma binding(libc::pthread_attr_getinheritsched,     "pthread_attr_getinheritsched")
+#pragma binding(libc::pthread_attr_getschedpolicy,      "pthread_attr_getschedpolicy")
+#pragma binding(libc::pthread_attr_getscope,            "pthread_attr_getscope")
+#pragma binding(libc::pthread_attr_getstacksize,        "pthread_attr_getstacksize")
+#pragma binding(libc::pthread_attr_setguardsize,        "pthread_attr_setguardsize")
+#pragma binding(libc::pthread_attr_setstack,            "pthread_attr_setstack")
+#pragma binding(libc::pthread_condattr_getpshared,      "pthread_condattr_getpshared")
+#pragma binding(libc::pthread_condattr_setpshared,      "pthread_condattr_setpshared")
+#pragma binding(libc::pthread_getconcurrency,           "pthread_getconcurrency")
+#pragma binding(libc::pthread_setconcurrency,           "pthread_setconcurrency")
+#pragma binding(libc::pthread_mutex_getprioceiling,     "pthread_mutex_getprioceiling")
+#pragma binding(libc::pthread_mutex_setprioceiling,     "pthread_mutex_setprioceiling")
+#pragma binding(libc::pthread_mutexattr_getprioceiling, "pthread_mutexattr_getprioceiling")
+#pragma binding(libc::pthread_mutexattr_getprotocol,    "pthread_mutexattr_getprotocol")
+#pragma binding(libc::pthread_mutexattr_getpshared,     "pthread_mutexattr_getpshared")
+#pragma binding(libc::pthread_mutexattr_gettype,        "pthread_mutexattr_gettype")
+#pragma binding(libc::pthread_mutexattr_setprioceiling, "pthread_mutexattr_setprioceiling")
+#pragma binding(libc::pthread_mutexattr_setprotocol,    "pthread_mutexattr_setprotocol")
+#pragma binding(libc::pthread_mutexattr_setpshared,     "pthread_mutexattr_setpshared")
+#pragma binding(libc::pthread_rwlock_init,              "pthread_rwlock_init")
+#pragma binding(libc::pthread_rwlock_destroy,           "pthread_rwlock_destroy")
+#pragma binding(libc::pthread_rwlock_rdlock,            "pthread_rwlock_rdlock")
+#pragma binding(libc::pthread_rwlock_wrlock,            "pthread_rwlock_wrlock")
+#pragma binding(libc::pthread_rwlock_tryrdlock,         "pthread_rwlock_tryrdlock")
+#pragma binding(libc::pthread_rwlock_trywrlock,         "pthread_rwlock_trywrlock")
+#pragma binding(libc::pthread_rwlock_unlock,            "pthread_rwlock_unlock")
+#pragma binding(libc::pthread_rwlockattr_init,          "pthread_rwlockattr_init")
+#pragma binding(libc::pthread_rwlockattr_destroy,       "pthread_rwlockattr_destroy")
+#pragma binding(libc::pthread_rwlockattr_getpshared,    "pthread_rwlockattr_getpshared")
+#pragma binding(libc::pthread_rwlockattr_setpshared,    "pthread_rwlockattr_setpshared")
+#pragma binding(libc::pthread_setcancelstate,           "pthread_setcancelstate")
+#pragma binding(libc::pthread_setcanceltype,            "pthread_setcanceltype")
+#pragma binding(libc::pthread_testcancel,               "pthread_testcancel")
+#pragma binding(libc::pthread_condattr_getclock,        "pthread_condattr_getclock")
+#pragma binding(libc::pthread_mutexattr_getrobust,      "pthread_mutexattr_getrobust")
+#pragma binding(libc::pthread_mutexattr_setrobust,      "pthread_mutexattr_setrobust")
+#pragma binding(libc::pthread_mutex_consistent,         "pthread_mutex_consistent")
+#pragma binding(libc::pthread_mutex_timedlock,          "pthread_mutex_timedlock")
+#pragma binding(libc::pthread_rwlock_timedrdlock,       "pthread_rwlock_timedrdlock")
+#pragma binding(libc::pthread_rwlock_timedwrlock,       "pthread_rwlock_timedwrlock")
+#pragma binding(libc::pthread_barrier_init,             "pthread_barrier_init")
+#pragma binding(libc::pthread_barrier_destroy,          "pthread_barrier_destroy")
+#pragma binding(libc::pthread_barrier_wait,             "pthread_barrier_wait")
+#pragma binding(libc::pthread_barrierattr_init,         "pthread_barrierattr_init")
+#pragma binding(libc::pthread_barrierattr_destroy,      "pthread_barrierattr_destroy")
+#pragma binding(libc::pthread_barrierattr_getpshared,   "pthread_barrierattr_getpshared")
+#pragma binding(libc::pthread_barrierattr_setpshared,   "pthread_barrierattr_setpshared")
+#pragma binding(libc::pthread_spin_init,                "pthread_spin_init")
+#pragma binding(libc::pthread_spin_destroy,             "pthread_spin_destroy")
+#pragma binding(libc::pthread_spin_lock,                "pthread_spin_lock")
+#pragma binding(libc::pthread_spin_trylock,             "pthread_spin_trylock")
+#pragma binding(libc::pthread_spin_unlock,              "pthread_spin_unlock")
 
 // On Linux pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
 // 64 covers both with room.
@@ -227,6 +316,30 @@ typedef struct __c5_pthread_condattr pthread_condattr_t;
 #endif
 typedef struct __c5_pthread_attr pthread_attr_t;
 
+// Reader-writer locks, and on Linux spin locks and barriers, sized as
+// glibc's <bits/pthreadtypes-arch.h> and the SDK's <sys/_pthread/*> lay
+// them out.
+#if defined(__APPLE__)
+struct __c5_pthread_rwlock { long __sig; char __opaque[192]; };     // 200
+struct __c5_pthread_rwlockattr { long __sig; char __opaque[16]; };  // 24
+#elif defined(__linux__)
+struct __c5_pthread_rwlock { long __align; char __size[48]; };      // 56
+struct __c5_pthread_rwlockattr { long __size; };                    // 8
+struct __c5_pthread_barrier { long __align; char __size[24]; };     // 32
+#ifdef __aarch64__
+struct __c5_pthread_barrierattr { int __align; char __size[4]; };   // 8
+#else
+struct __c5_pthread_barrierattr { int __size; };                    // 4
+#endif
+typedef volatile int pthread_spinlock_t;
+typedef struct __c5_pthread_barrier pthread_barrier_t;
+typedef struct __c5_pthread_barrierattr pthread_barrierattr_t;
+#endif
+#if defined(__APPLE__) || defined(__linux__)
+typedef struct __c5_pthread_rwlock pthread_rwlock_t;
+typedef struct __c5_pthread_rwlockattr pthread_rwlockattr_t;
+#endif
+
 // Static-storage initialisers. macOS seeds the signature word; Linux
 // takes an all-zero object. Both forms match the leading-word + buffer
 // shape above.
@@ -234,6 +347,7 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
 #define PTHREAD_ONCE_INIT         { 0x30B1BCBA, {0} }
+#define PTHREAD_RWLOCK_INITIALIZER { 0x2DA8B3B4, {0} }
 #elif defined(_WIN32)
 // The all-zero lock and condition variable are SRWLOCK_INIT and
 // CONDITION_VARIABLE_INIT.
@@ -246,6 +360,7 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0, {0} }
 #define PTHREAD_ONCE_INIT          0
+#define PTHREAD_RWLOCK_INITIALIZER { 0, {0} }
 #endif
 
 // The thread handle is the platform's type, which POSIX leaves open:
@@ -447,3 +562,103 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 #define PTHREAD_MUTEX_ERRORCHECK    2
 #endif
 #define PTHREAD_MUTEX_DEFAULT       0
+
+// Cancellation, process-shared and priority-protocol constants, with each
+// C library's numbering.
+#if defined(__APPLE__)
+#define PTHREAD_CANCEL_ENABLE       0x01
+#define PTHREAD_CANCEL_DISABLE      0x00
+#define PTHREAD_CANCEL_DEFERRED     0x02
+#define PTHREAD_CANCEL_ASYNCHRONOUS 0x00
+#define PTHREAD_CANCELED            ((void *) 1)
+#define PTHREAD_PROCESS_SHARED      1
+#define PTHREAD_PROCESS_PRIVATE     2
+#elif defined(__linux__)
+#define PTHREAD_CANCEL_ENABLE       0
+#define PTHREAD_CANCEL_DISABLE      1
+#define PTHREAD_CANCEL_DEFERRED     0
+#define PTHREAD_CANCEL_ASYNCHRONOUS 1
+#define PTHREAD_CANCELED            ((void *) -1)
+#define PTHREAD_PROCESS_PRIVATE     0
+#define PTHREAD_PROCESS_SHARED      1
+#define PTHREAD_MUTEX_STALLED       0
+#define PTHREAD_MUTEX_ROBUST        1
+#define PTHREAD_BARRIER_SERIAL_THREAD (-1)
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#define PTHREAD_PRIO_NONE    0
+#define PTHREAD_PRIO_INHERIT 1
+#define PTHREAD_PRIO_PROTECT 2
+
+int pthread_setcancelstate(int state, int *oldstate);
+int pthread_setcanceltype(int type, int *oldtype);
+void pthread_testcancel(void);
+int pthread_getconcurrency(void);
+int pthread_setconcurrency(int level);
+int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate);
+int pthread_attr_getinheritsched(const pthread_attr_t *restrict attr, int *restrict inheritsched);
+int pthread_attr_getschedpolicy(const pthread_attr_t *restrict attr, int *restrict policy);
+int pthread_attr_getscope(const pthread_attr_t *restrict attr, int *restrict contentionscope);
+int pthread_attr_getstacksize(const pthread_attr_t *restrict attr, size_t *restrict stacksize);
+int pthread_attr_setguardsize(pthread_attr_t *attr, size_t guardsize);
+int pthread_attr_setstack(pthread_attr_t *attr, void *stackaddr, size_t stacksize);
+int pthread_mutex_getprioceiling(const pthread_mutex_t *restrict mutex, int *restrict prioceiling);
+int pthread_mutex_setprioceiling(pthread_mutex_t *restrict mutex, int prioceiling,
+                                 int *restrict old_ceiling);
+int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *restrict attr,
+                                     int *restrict prioceiling);
+int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling);
+int pthread_mutexattr_getprotocol(const pthread_mutexattr_t *restrict attr,
+                                  int *restrict protocol);
+int pthread_mutexattr_setprotocol(pthread_mutexattr_t *attr, int protocol);
+int pthread_mutexattr_getpshared(const pthread_mutexattr_t *restrict attr, int *restrict pshared);
+int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared);
+int pthread_mutexattr_gettype(const pthread_mutexattr_t *restrict attr, int *restrict type);
+int pthread_condattr_getpshared(const pthread_condattr_t *restrict attr, int *restrict pshared);
+int pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared);
+int pthread_rwlock_init(pthread_rwlock_t *restrict rwlock,
+                        const pthread_rwlockattr_t *restrict attr);
+int pthread_rwlock_destroy(pthread_rwlock_t *rwlock);
+int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_unlock(pthread_rwlock_t *rwlock);
+int pthread_rwlockattr_init(pthread_rwlockattr_t *attr);
+int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);
+int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *restrict attr,
+                                  int *restrict pshared);
+int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared);
+#endif
+#ifdef __APPLE__
+int pthread_condattr_init(pthread_condattr_t *attr);
+int pthread_condattr_destroy(pthread_condattr_t *attr);
+#endif
+#ifdef __linux__
+int pthread_condattr_getclock(const pthread_condattr_t *restrict attr,
+                              clockid_t *restrict clock_id);
+int pthread_mutexattr_getrobust(const pthread_mutexattr_t *restrict attr, int *restrict robust);
+int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust);
+int pthread_mutex_consistent(pthread_mutex_t *mutex);
+int pthread_mutex_timedlock(pthread_mutex_t *restrict mutex,
+                            const struct timespec *restrict abstime);
+int pthread_rwlock_timedrdlock(pthread_rwlock_t *restrict rwlock,
+                               const struct timespec *restrict abstime);
+int pthread_rwlock_timedwrlock(pthread_rwlock_t *restrict rwlock,
+                               const struct timespec *restrict abstime);
+int pthread_barrier_init(pthread_barrier_t *restrict barrier,
+                         const pthread_barrierattr_t *restrict attr, unsigned count);
+int pthread_barrier_destroy(pthread_barrier_t *barrier);
+int pthread_barrier_wait(pthread_barrier_t *barrier);
+int pthread_barrierattr_init(pthread_barrierattr_t *attr);
+int pthread_barrierattr_destroy(pthread_barrierattr_t *attr);
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *restrict attr,
+                                   int *restrict pshared);
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
+int pthread_spin_init(pthread_spinlock_t *lock, int pshared);
+int pthread_spin_destroy(pthread_spinlock_t *lock);
+int pthread_spin_lock(pthread_spinlock_t *lock);
+int pthread_spin_trylock(pthread_spinlock_t *lock);
+int pthread_spin_unlock(pthread_spinlock_t *lock);
+#endif

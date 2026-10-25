@@ -143,6 +143,9 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigwaitinfo, "sigwaitinfo")
 #pragma binding(libc::sigtimedwait,"sigtimedwait")
 #pragma binding(libc::sigaltstack, "sigaltstack")
+#pragma binding(libc::sigqueue,    "sigqueue")
+#pragma binding(libc::__libc_current_sigrtmin, "__libc_current_sigrtmin")
+#pragma binding(libc::__libc_current_sigrtmax, "__libc_current_sigrtmax")
 #endif
 
 #ifdef _WIN32
@@ -167,6 +170,15 @@ typedef unsigned int sigset_t;
 typedef struct { unsigned long __val[1024 / (8 * sizeof(unsigned long))]; } sigset_t;
 #endif
 
+// The value a queued signal carries (POSIX), the same in glibc and the
+// macOS SDK.
+#if defined(__APPLE__) || defined(__linux__)
+union sigval {
+    int   sival_int;
+    void *sival_ptr;
+};
+#endif
+
 // siginfo_t carries a signal's details (POSIX 7.14; also filled by
 // waitid). The kernel writes it, so the leading fields sit at the host's
 // offsets and the trailing padding covers the platform's full size
@@ -181,7 +193,9 @@ typedef struct {
     unsigned int si_uid;
     int          si_status;
     void         *si_addr; // faulting address (offset 24 on 64-bit)
-    unsigned char __pad[104 - 32];
+    union sigval si_value;
+    long         si_band;
+    unsigned long __pad[7];
 } siginfo_t;
 #else
 typedef struct {
@@ -206,6 +220,12 @@ typedef struct {
         // offset 16.
         struct {
             void        *si_addr;
+        };
+        // A queued signal's value follows the sender's pid and uid.
+        struct {
+            int          __rt_pid;
+            unsigned int __rt_uid;
+            union sigval si_value;
         };
         unsigned char __pad[128 - 16];
     };
@@ -255,11 +275,6 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 // and the SIGEV_THREAD pair at offset 16, which glibc reaches through
 // its `sigev_notify_function` / `sigev_notify_attributes` macros.
 #ifdef __linux__
-union sigval {
-    int   sival_int;
-    void *sival_ptr;
-};
-
 struct sigevent {
     union sigval sigev_value;                     /* offset  0 */
     int          sigev_signo;                     /* offset  8 */
@@ -427,6 +442,13 @@ struct timespec;
 int sigwaitinfo(const sigset_t *set, siginfo_t *info);
 int sigtimedwait(const sigset_t *set, siginfo_t *info,
                  const struct timespec *timeout);
+// POSIX realtime signals: the range is the C library's, which keeps the
+// lowest kernel numbers for its own use.
+int sigqueue(int pid, int sig, const union sigval value);
+int __libc_current_sigrtmin(void);
+int __libc_current_sigrtmax(void);
+#define SIGRTMIN (__libc_current_sigrtmin())
+#define SIGRTMAX (__libc_current_sigrtmax())
 #endif
 
 // `sa_flags` bits. The numeric values are target-specific: macOS and

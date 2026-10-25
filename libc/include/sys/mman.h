@@ -84,6 +84,7 @@
 #pragma binding(libc::mlockall,   "_mlockall")
 #pragma binding(libc::munlockall, "_munlockall")
 #pragma binding(libc::mlock,      "_mlock")
+#pragma binding(libc::posix_madvise, "_posix_madvise")
 #pragma binding(libc::munlock,    "_munlock")
 #endif
 
@@ -105,6 +106,7 @@
 #pragma binding(libc::mlockall,   "mlockall")
 #pragma binding(libc::munlockall, "munlockall")
 #pragma binding(libc::mlock,      "mlock")
+#pragma binding(libc::posix_madvise, "posix_madvise")
 #pragma binding(libc::munlock,    "munlock")
 #pragma binding(libc::memfd_create, "memfd_create")
 // The MFD_* flags live in their canonical kernel header.
@@ -141,4 +143,11 @@ int munlockall(void);
 // Lock/unlock the pages a range touches (POSIX).
 int mlock(const void *addr, unsigned long len);
 int munlock(const void *addr, unsigned long len);
+// POSIX advice; the values are the same in glibc and the macOS SDK.
+#define POSIX_MADV_NORMAL     0
+#define POSIX_MADV_RANDOM     1
+#define POSIX_MADV_SEQUENTIAL 2
+#define POSIX_MADV_WILLNEED   3
+#define POSIX_MADV_DONTNEED   4
+int posix_madvise(void *addr, unsigned long len, int advice);
 #endif

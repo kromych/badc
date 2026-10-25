@@ -20,6 +20,8 @@
 //! file, and measure its targets with `scripts/measure_header_targets.py`.
 
 use crate::c5::codegen::Target;
+use crate::c5::preprocessor::Preprocessor;
+use alloc::string::String;
 
 /// A set of targets, one bit per [`Target`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -427,15 +429,111 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
 // in priority-then-lexicographic scan order.
 include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 
-/// Look up a function name in the build-time-generated index and
-/// return the first header declaring it that `target` is served, or
-/// `None` for a name we don't recognise. O(log N) over the binding
-/// index. Used by the compiler's "unknown function" diagnostic to
-/// suggest the right `#include`, and by `Compiler::compile_with_options`
-/// to drive the auto-include retry (force-include the header naming the
-/// missing symbol, then re-compile).
+/// The header the B2022 hint names and the auto-include retry includes:
+/// the first of the build-time index, which reads every target's
+/// declarations at once, that `target` is served and declares `name` on.
 pub(super) fn header_declaring(name: &str, target: Target) -> Option<&'static str> {
-    (headers_declaring(name).iter().copied()).find(|h| !withheld(h, target))
+    first_declaring(name, target, |h| declarations(h, target).contains(name))
+}
+
+fn first_declaring(
+    name: &str,
+    target: Target,
+    mut declares: impl FnMut(&'static str) -> bool,
+) -> Option<&'static str> {
+    (headers_declaring(name).iter().copied()).find(|&h| !withheld(h, target) && declares(h))
+}
+
+/// The macros, bindings and file-scope functions and objects of
+/// `#include <header>` on `target`, `_GNU_SOURCE` widening glibc's.
+fn declarations(header: &str, target: Target) -> alloc::collections::BTreeSet<String> {
+    let src = alloc::format!("#define _GNU_SOURCE 1\n#include <{header}>\n");
+    let mut pp = Preprocessor::new(target.id_str(), target, "0");
+    let Ok(text) = pp.process_probe(&src) else {
+        return Default::default();
+    };
+    let bindings = pp.dylibs.iter().flat_map(|d| d.bindings.iter());
+    (pp.macro_names().map(String::from))
+        .chain(bindings.map(|b| b.local_name.clone()))
+        .chain(file_scope_names(&text).map(String::from))
+        .collect()
+}
+
+/// The declarators at file scope of preprocessed `text` outside a
+/// `typedef`: a name after a specifier, `*`, `)` or a list's `,`, before
+/// `(` (a function) or `;`, `,`, `=`, `[` (an object).
+fn file_scope_names(text: &str) -> impl Iterator<Item = &str> {
+    let mut out = alloc::vec::Vec::new();
+    let bytes = text.as_bytes();
+    let (mut i, mut braces, mut parens) = (0, 0usize, 0usize);
+    let (mut typedef, mut line_start) = (false, true);
+    let mut prev: Result<&str, u8> = Err(b';');
+    while i < bytes.len() {
+        let c = bytes[i];
+        if line_start && c == b'#' {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        line_start = c == b'\n' || (line_start && c.is_ascii_whitespace());
+        match c {
+            _ if c.is_ascii_whitespace() => i += 1,
+            b'"' | b'\'' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != c {
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+                prev = Err(c);
+            }
+            b'0'..=b'9' => {
+                i = word_end(bytes, i);
+                prev = Err(c);
+            }
+            b'_' | b'a'..=b'z' | b'A'..=b'Z' => {
+                let start = i;
+                i = word_end(bytes, i);
+                let w = &text[start..i];
+                if braces == 0 && w == "typedef" {
+                    typedef = true;
+                } else if braces == 0 && !typedef {
+                    let next = text[i..].trim_start().bytes().next();
+                    let after = matches!(prev, Ok(p) if p != "typedef")
+                        || prev == Err(b'*')
+                        || prev == Err(b')')
+                        || (prev == Err(b',') && parens == 0);
+                    let function = next == Some(b'(');
+                    let object = parens == 0 && matches!(next, Some(b';' | b',' | b'=' | b'['));
+                    if after && (function || object) {
+                        out.push(w);
+                    }
+                }
+                prev = Ok(w);
+            }
+            _ => {
+                match c {
+                    b'{' => braces += 1,
+                    b'}' => braces = braces.saturating_sub(1),
+                    b'(' if braces == 0 => parens += 1,
+                    b')' if braces == 0 => parens = parens.saturating_sub(1),
+                    b';' if braces == 0 => (typedef, parens) = (false, 0),
+                    _ => {}
+                }
+                prev = Err(c);
+                i += 1;
+            }
+        }
+    }
+    out.into_iter()
+}
+
+/// The end of the identifier or pp-number starting at `i`.
+fn word_end(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && (bytes[i] == b'_' || bytes[i].is_ascii_alphanumeric()) {
+        i += 1;
+    }
+    i
 }
 
 /// Every header declaring `name`, in scan order -- the conventional
@@ -542,6 +640,95 @@ mod tests {
         // `printf` but the trailing `(` and the binding ` ::printf,`
         // pattern guard against false hits.
         assert_eq!(header_declaring("print", Target::LinuxX64), None);
+    }
+
+    /// `header`, then each name's address taken, or (`!declared`) the name
+    /// defined anew, which conflicts with a declaration or macro of it.
+    fn probe(header: &str, names: &[&str], declared: bool) -> alloc::string::String {
+        let mut s = alloc::format!("#define _GNU_SOURCE 1\n#include <{header}>\n");
+        for (k, n) in names.iter().enumerate() {
+            s += &if declared {
+                alloc::format!(
+                    "#ifndef {n}\nvoid *__badc_probe_{k}(void) {{ return (void *)&{n}; }}\n#endif\n"
+                )
+            } else {
+                alloc::format!(
+                    "#ifdef {n}\n#error {n}\n#endif\nstruct __badc_probe_{k} {{ char c; }} {n};\n"
+                )
+            };
+        }
+        s
+    }
+
+    /// The names whose probe does not compile, found by halving.
+    fn failing<'a>(
+        target: Target,
+        header: &str,
+        names: &[&'a str],
+        declared: bool,
+    ) -> alloc::vec::Vec<&'a str> {
+        use crate::{CompileOptions, Compiler};
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let src = probe(header, names, declared);
+        if names.is_empty() || Compiler::with_options(src, target, opts).compile().is_ok() {
+            return alloc::vec::Vec::new();
+        }
+        if names.len() == 1 {
+            return names.to_vec();
+        }
+        let (a, b) = names.split_at(names.len() / 2);
+        let mut out = failing(target, header, a, declared);
+        out.extend(failing(target, header, b, declared));
+        out
+    }
+
+    /// For every name of the build-time index and every target, the header
+    /// the hint names declares the name there, and every served header the
+    /// index lists ahead of it, or at all when no hint is given, does not,
+    /// as the compiler's own declarations decide.
+    #[test]
+    fn include_hints_name_a_header_declaring_the_name_on_the_target() {
+        use alloc::collections::BTreeMap;
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL {
+            let mut declaring: BTreeMap<&str, alloc::vec::Vec<&str>> = BTreeMap::new();
+            let mut passed_over: BTreeMap<&str, alloc::vec::Vec<&str>> = BTreeMap::new();
+            let mut seen = BTreeMap::new();
+            for &(name, headers) in BINDING_TO_HEADER {
+                let hint = first_declaring(name, target, |h| {
+                    (seen.entry(h).or_insert_with(|| declarations(h, target))).contains(name)
+                });
+                for &h in headers.iter().filter(|h| !withheld(h, target)) {
+                    if Some(h) == hint {
+                        declaring.entry(h).or_default().push(name);
+                        break;
+                    }
+                    passed_over.entry(h).or_default().push(name);
+                }
+            }
+            for (h, names) in &declaring {
+                for n in failing(target, h, names, true) {
+                    failures.push(alloc::format!(
+                        "{}: <{h}> hinted, not declaring {n}",
+                        target.id_str()
+                    ));
+                }
+            }
+            // A type's name conflicts too, and has no address.
+            for (h, names) in &passed_over {
+                let conflicting = failing(target, h, names, false);
+                for n in conflicting
+                    .iter()
+                    .filter(|n| failing(target, h, &[n], true).is_empty())
+                {
+                    failures.push(alloc::format!(
+                        "{}: <{h}> passed over, declaring {n}",
+                        target.id_str()
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
     fn ids(set: TargetSet) -> alloc::vec::Vec<&'static str> {

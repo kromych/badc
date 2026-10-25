@@ -1628,6 +1628,16 @@ impl Preprocessor {
         Ok(out)
     }
 
+    /// [`Self::process`] over a unit that is no program's source, one
+    /// reading what a header declares, which the source-pass count omits.
+    pub(crate) fn process_probe(&mut self, unit: &str) -> Result<String, C5Error> {
+        let mut out = String::with_capacity(unit.len());
+        let label = self.source_label.clone();
+        (self.process_named(unit, &label, &mut out)).map_err(|e| self.failed(e))?;
+        self.fail_on_errors()?;
+        Ok(out)
+    }
+
     /// A hard error leaves the pass with the diagnostics reported
     /// before it, which the sink would otherwise keep for a caller that
     /// never comes.
@@ -1990,6 +2000,13 @@ impl Preprocessor {
             _ => return Ok(None),
         };
         Ok(Some(next_active))
+    }
+
+    /// The macros the processed source left defined, of either kind.
+    pub(crate) fn macro_names(&self) -> impl Iterator<Item = &str> {
+        (self.macros.keys())
+            .chain(self.fn_macros.keys())
+            .map(String::as_str)
     }
 
     /// C99 6.10.1 `defined`: any macro of either kind, plus the

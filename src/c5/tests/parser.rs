@@ -4525,6 +4525,50 @@ fn the_include_hint_names_only_a_header_the_target_ships() {
     }
 }
 
+/// A served header declaring a name under another target's conditions is
+/// not hinted, and the retry does not include it: `<unistd.h>` declares
+/// `pipe2` on Linux alone, also where the unit includes it already, and
+/// `<intrin.h>` `__cpuid` on x86-64 and `_CountLeadingZeros` on AArch64.
+#[test]
+fn the_include_hint_names_a_header_declaring_the_name_on_the_target() {
+    use crate::{CompileOptions, Target};
+    let cases: [(&str, &str, &str, &[Target]); 4] = [
+        (
+            "",
+            "pipe2(0, 0)",
+            "unistd.h",
+            &[Target::LinuxX64, Target::LinuxAarch64],
+        ),
+        ("#include <unistd.h>\n", "pipe2(0, 0)", "unistd.h", &[]),
+        ("", "__cpuid(0, 0)", "intrin.h", &[Target::WindowsX64]),
+        (
+            "",
+            "_CountLeadingZeros(1)",
+            "intrin.h",
+            &[Target::WindowsAarch64],
+        ),
+    ];
+    for (prefix, call, header, hinted) in cases {
+        for target in Target::ALL {
+            let id = target.id_str();
+            let src =
+                alloc::format!("{prefix}static int x = {call}; int main(void) {{ return x; }}");
+            let opts = CompileOptions::default();
+            let msg = match Compiler::with_options(src, target, opts.clone()).compile() {
+                Ok(_) => continue,
+                Err(e) => e.to_string(),
+            };
+            let hint = msg.contains(&alloc::format!("try `#include <{header}>`"));
+            assert_eq!(hint, hinted.contains(&target), "{id} {call}: {msg}");
+            let src = alloc::format!("{prefix}int main(void) {{ return {call}; }}");
+            if let Ok(program) = Compiler::with_options(src, target, opts).compile() {
+                let retried = !program.auto_includes.is_empty();
+                assert!(!retried || hinted.contains(&target), "{id} {call}");
+            }
+        }
+    }
+}
+
 #[test]
 fn an_address_constant_initializes_only_an_object_that_holds_it() {
     // A static object narrower than a pointer, a floating one and a

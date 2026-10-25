@@ -13760,6 +13760,101 @@ fn the_ld_persona_names_gnu_lds_default_interpreter_in_a_dynamic_executable() {
     }
 }
 
+// An i386 PIE's PC-relative word naming an undefined weak function takes
+// a relocation against the name, so it holds the distance to the function
+// a library found at run time defines. The executable runs where an i386
+// loader is installed.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_i386_pies_pc_relative_word_reaches_the_weak_function_found_at_run_time() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping: no system C compiler");
+        return;
+    };
+    let dir = tempdir("i386-weak-pc");
+    write_source(&dir, "none.c", "int lf(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "def.c",
+        "int lf(void) { return 1; }\nint wf(void) { return 7; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int w;\n\
+         __asm__(\".data\\n.globl w\\n.weak wf\\nw: .long wf - .\\n.text\\n\");\n\
+         static int sys3(int n, int a, int b, int c) {\n  int r;\n\
+           __asm__ volatile(\"int $0x80\" : \"=a\"(r) : \"a\"(n), \"b\"(a), \"c\"(b), \"d\"(c) \
+             : \"memory\");\n  return r;\n}\n\
+         void _start(void) {\n\
+           int (*p)(void) = (int (*)(void))((char *)&w + w);\n\
+           char b[2] = {'0' + (p ? p() : 0), '\\n'};\n\
+           sys3(4, 1, (int)b, 2);\n  sys3(1, 0, 0, 0);\n}\n",
+    );
+    let cflags = ["-m32", "-O1", "-ffreestanding", "-fno-stack-protector"];
+    for (src, pic, obj) in [
+        ("none.c", "-fPIC", "none.o"),
+        ("def.c", "-fPIC", "def.o"),
+        ("main.c", "-fPIE", "main.o"),
+    ] {
+        let built = Command::new(&cc)
+            .args(cflags)
+            .args(["-fno-asynchronous-unwind-tables", pic, "-c", src, "-o", obj])
+            .current_dir(&dir)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !built {
+            eprintln!("skipping: the system C compiler does not build for i386");
+            return;
+        }
+    }
+    let ld = |args: &[&str]| {
+        run(
+            Command::new(badc())
+                .args(["--ld", "-m", "elf_i386"])
+                .args(args)
+                .current_dir(&dir),
+            "link",
+        )
+    };
+    for (obj, sub) in [("none.o", "none"), ("def.o", "def")] {
+        std::fs::create_dir_all(dir.join(sub)).expect("mkdir");
+        ld(&[
+            "-shared",
+            "-soname",
+            "libone.so",
+            obj,
+            "-o",
+            &format!("{sub}/libone.so"),
+        ]);
+    }
+    let interp = "/lib/ld-linux.so.2";
+    ld(&[
+        "-pie",
+        "-dynamic-linker",
+        interp,
+        "main.o",
+        "none/libone.so",
+        "-o",
+        "prog",
+    ]);
+    let Some(loader) = [interp, "/usr/lib32/ld-linux.so.2"]
+        .into_iter()
+        .find(|p| Path::new(p).exists())
+    else {
+        eprintln!("no i386 loader: the executable is linked, not run");
+        return;
+    };
+    let out = run(
+        Command::new(loader)
+            .arg("--library-path")
+            .arg(dir.join("def"))
+            .arg(dir.join("prog")),
+        "run the executable",
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "7\n");
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

@@ -161,7 +161,7 @@ impl<'a> LdsLinker<'a> {
             .map(|a| a.symbol.as_str())
             .filter(|s| *s != ".")
             .collect();
-        let weak_dynamic = self.dynamic_weak_names();
+        let (weak_dynamic, weak_pc) = self.dynamic_weak_names();
         let mut names: BTreeSet<&str> = BTreeSet::new();
         let mut strong: BTreeSet<&str> = BTreeSet::new();
         for (oi, o) in self.objects.iter().enumerate() {
@@ -172,7 +172,9 @@ impl<'a> LdsLinker<'a> {
                     && !self.globals.contains_key(&s.name)
                     && !script_defined.contains(s.name.as_str())
                     && (self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(&s.name))
-                    || (self.opts.shared || weak_dynamic.contains(s.name.as_str()))
+                    || (self.opts.shared
+                        || weak_dynamic.contains(s.name.as_str())
+                        || weak_pc.contains(s.name.as_str()))
                         && self.undefweak_dynamic(oi, si)
                 {
                     names.insert(&s.name);
@@ -199,10 +201,17 @@ impl<'a> LdsLinker<'a> {
                     }
                     let pointer = self.function_pointer(&sym.name, r, sec.flags);
                     // A shared object's PC-relative field takes a dynamic
-                    // relocation instead.
+                    // relocation instead; an executable calls an undefined
+                    // weak name through a PLT entry only where it makes the
+                    // name dynamic for the call.
                     let carried = self.opts.shared && x86_pc_field(self.machine, r.rtype);
+                    let unbound_weak = !self.opts.shared
+                        && !(self.opts.shared_libs.iter())
+                            .any(|l| l.lib.exports.contains(&sym.name))
+                        && !(branch(self.machine, r.rtype) && weak_dynamic.contains(&sym.name));
                     if reloc_needs_plt(self.machine, r.rtype)
                         && !carried
+                        && !unbound_weak
                         && !self.is_data_export(&sym.name)
                         || pointer.is_some()
                     {
@@ -224,11 +233,14 @@ impl<'a> LdsLinker<'a> {
     /// makes dynamic, as bfd does, so that a component the loader finds
     /// can define them: those it reaches through the GOT or a call, and in
     /// an aarch64 PIE through an address-width word. x86 resolves one
-    /// that code also addresses directly to 0 instead.
-    fn dynamic_weak_names(&self) -> HashSet<String> {
+    /// that code also addresses directly to 0 instead. Second, the names
+    /// an i386 PIE's `R_386_PC32` names, which bfd leaves to a dynamic
+    /// relocation against the name wherever the field lies.
+    fn dynamic_weak_names(&self) -> (HashSet<String>, HashSet<String>) {
         let pie = self.opts.emit == LdsEmit::Dyn;
         let mut reached: HashSet<&str> = HashSet::new();
         let mut addressed: HashSet<&str> = HashSet::new();
+        let mut pc: HashSet<String> = HashSet::new();
         for o in &self.objects {
             for s in &o.sections {
                 let code = s.flags & (SHF_ALLOC | SHF_EXECINSTR) == SHF_ALLOC | SHF_EXECINSTR;
@@ -240,6 +252,9 @@ impl<'a> LdsLinker<'a> {
                         && self.machine == EM_AARCH64
                         && r.rtype == rt::R_AARCH64_ABS64
                         && s.flags & SHF_ALLOC != 0;
+                    if pie && self.machine == EM_386 && r.rtype == rt::R_386_PC32 {
+                        pc.insert(sym.name.clone());
+                    }
                     if reloc_uses_got(self.machine, r.rtype)
                         || branch(self.machine, r.rtype)
                         || word
@@ -251,10 +266,11 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         }
-        (reached.into_iter())
+        let reached = (reached.into_iter())
             .filter(|n| !addressed.contains(n))
             .map(String::from)
-            .collect()
+            .collect();
+        (reached, pc)
     }
 
     /// Whether `name` is an import no library defines: an undefined weak

@@ -7740,3 +7740,58 @@ fn z_lazy_is_taken_and_the_later_of_it_and_z_now_stands() {
         assert_eq!(flags_1 != 0, now, "{keywords:?}");
     }
 }
+
+/// An i386 PIE leaves each `R_386_PC32` naming an undefined weak name to a
+/// relocation against it, in code (a text relocation) and in data alike,
+/// so that the field holds the distance to the name's final address, 0
+/// where nothing defines it; its code's call, a direct reference beside
+/// the field, takes no PLT entry and reaches 0. A position-dependent
+/// executable resolves the fields itself. GNU ld 2.46.1 links them so.
+#[test]
+fn an_i386_pies_pc_relative_field_naming_an_undefined_weak_name_takes_a_relocation() {
+    // .text: `.long wf - .`, `call wf@PLT`; .data: `.long wf - .`.
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    let text = [0, 0, 0, 0, 0xe8, 0xfc, 0xff, 0xff, 0xff, 0xc3];
+    let unit = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 10)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_386_PC32, 0)
+        .reloc(0, 5, 4, rt::R_386_PLT32, -4)
+        .reloc(1, 0, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    for pic in [Some(false), None] {
+        let opts = LdsOptions {
+            interp: Some(String::from("/lib/ld-linux.so.2")),
+            textrel: TextRelCheck::Allow,
+            ..i386_opts(pic)
+        };
+        let res = link_i386_with(alloc::vec![("u.o", unit.clone())], &opts).expect("links");
+        let img = &res.image;
+        let relocs = elf32_dyn_relocs(img);
+        let (t, data) = (elf32_section(img, ".text").2, elf32_section(img, ".data").2);
+        let text = elf32_body(img, ".text");
+        assert_eq!(
+            t as i64 + 9 + i32_at(text, 5),
+            0,
+            "{pic:?}: the call reaches 0"
+        );
+        let dynsym = elf32_symbols_of(img, ".dynsym", ".dynstr");
+        if pic.is_none() {
+            assert!(relocs.iter().all(|r| r.2 != "wf"), "{relocs:?}");
+            assert!(dynsym.iter().all(|s| s.0 != "wf"), "not dynamic");
+            continue;
+        }
+        let pc32 = |at: u64| (at, rt::R_386_PC32, String::from("wf"));
+        assert!(
+            relocs.contains(&pc32(t)) && relocs.contains(&pc32(data)),
+            "{relocs:?}"
+        );
+        assert!(
+            relocs.iter().all(|r| r.1 != rt::R_386_JUMP_SLOT),
+            "no PLT entry: {relocs:?}"
+        );
+        assert!(dynsym.iter().any(|s| s.0 == "wf"), "a dynamic symbol");
+    }
+}

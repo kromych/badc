@@ -848,6 +848,70 @@ fn cli_empty_define_expands_to_nothing() {
     assert!(out.contains("int x = 1;"));
 }
 
+/// C99 6.10.3p2: a macro redefined with another kind, parameter list or
+/// replacement list draws a warning, the new definition replacing the old;
+/// an identical list (white-space separation alike, 6.10.3p1) and a
+/// redefinition inside a system header do not. The lines are the ones gcc
+/// 16 and clang 22 report for the same unit.
+#[test]
+fn a_macro_redefined_differently_is_reported() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = pp
+        .process(
+            "#define A(x) x\n#define A(x) L##x\n\
+             #define B 1\n#define B 2\n\
+             #define C(x, y) x + y\n#define C(x,  y)   x   +   y\n\
+             #define D a+b\n#define D a + b\n\
+             #define E \"a  b\"\n#define E \"a b\"\n\
+             #define F(x) x\n#define F(y) y\n\
+             #define G 1\n#define G(x) 1\n\
+             #define H(...) __VA_ARGS__\n#define H(...) __VA_ARGS__\n\
+             #define EXIT_SUCCESS 1\n#include <stdlib.h>\n\
+             int b = B, s = EXIT_SUCCESS;\n",
+        )
+        .expect("preprocessor failed");
+    assert!(out.contains("int b = 2, s = 0;"), "{out}");
+    let lines: Vec<u32> = pp
+        .sink
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code == super::MACRO_REDEFINED)
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 4, 8, 10, 12, 14]);
+    assert_eq!(
+        pp.sink.diagnostics()[0].text,
+        "`A` redefined",
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+/// The empty `__counted_by` family is badc's fallback for an attribute it
+/// does not implement, which neither gcc nor clang predefines, so a
+/// definition replaces it with no diagnostic; a definition replacing that
+/// one, or a predefine gcc and clang also make, is reported as theirs is.
+#[test]
+fn a_definition_replaces_a_fallback_predefine_silently() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.process(
+        "#define __counted_by(member) __attribute__((__counted_by__(member)))\n\
+         #define __counted_by_le(member) __counted_by(member)\n\
+         #define __counted_by_be\n\
+         #define __counted_by(member) member\n\
+         #define __CHAR_BIT__ 9\n",
+    )
+    .expect("preprocessor failed");
+    let lines: Vec<u32> = pp
+        .sink
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code == super::MACRO_REDEFINED)
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4, 5]);
+}
+
 /// gcc and clang read `-D NAME[=BODY]` as `#define NAME BODY` (`1` without
 /// `=`), so a name with a parameter list defines a function-like macro and
 /// an operand the directive rejects is an error. The expansions are gcc
@@ -4982,6 +5046,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         IGNORED_PRAGMA_INTRINSIC,
         DATE_TIME,
         UNDEF,
+        super::MACRO_REDEFINED,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {

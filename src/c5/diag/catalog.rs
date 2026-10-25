@@ -95,6 +95,9 @@ catalog! {
     1014, "macro", [], Error, Hard,
         [], Live,
         "a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list";
+    1015, "macro-redefined", ["C4005"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old";
     2001, "unused-variable", ["C4101", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";

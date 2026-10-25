@@ -1172,6 +1172,19 @@ static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
     ("__counted_by_be", &["m"], ""),
 ];
 
+/// Whether `old` is still the fallback [`PREDEFINED_FN_MACROS`] gives `name`.
+fn is_fallback_predefine(name: &str, old: &FnMacro) -> bool {
+    PREDEFINED_FN_MACROS.iter().any(|&(n, params, body)| {
+        n == name
+            && old.body == body
+            && old
+                .params
+                .iter()
+                .map(String::as_str)
+                .eq(params.iter().copied())
+    })
+}
+
 impl Preprocessor {
     /// Build a preprocessor with the standard predefines installed:
     /// the [`PREDEFINES`] table for this target, the derived rows, the
@@ -1910,6 +1923,7 @@ impl Preprocessor {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
+                    self.check_macro_redefinition(name, None, body, site);
                     self.apply_define(name, body);
                 }
                 active
@@ -1922,6 +1936,7 @@ impl Preprocessor {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
+                    self.check_macro_redefinition(name, Some(params), body, site);
                     self.apply_define_fn(name, params, body);
                 }
                 active
@@ -1999,6 +2014,13 @@ impl Preprocessor {
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
         let name = ident::key(name).into_owned();
         self.obs_note(&name);
+        let f = self.fn_macro(params, body);
+        self.macros.remove(&name);
+        self.fn_macros.insert(name, f);
+    }
+
+    /// The function-like macro `params` and `body` define.
+    fn fn_macro(&self, params: &[&str], body: &str) -> FnMacro {
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -2015,16 +2037,47 @@ impl Preprocessor {
                 }
             }
         }
-        self.macros.remove(&name);
-        self.fn_macros.insert(
-            name,
-            FnMacro {
-                params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
-                body: body.to_string(),
-                is_variadic,
-                va_name,
-            },
-        );
+        FnMacro {
+            params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
+            body: body.to_string(),
+            is_variadic,
+            va_name,
+        }
+    }
+
+    /// C99 6.10.3p2: a macro may be redefined only as the same kind with
+    /// the same parameters and an identical replacement list, white-space
+    /// separation aside (6.10.3p1). gcc and clang warn on any other
+    /// redefinition outside a system header; the new definition wins. A
+    /// fallback of [`PREDEFINED_FN_MACROS`] is no macro of theirs, so a
+    /// definition replaces it silently.
+    fn check_macro_redefinition(
+        &mut self,
+        name: &str,
+        params: Option<&[&str]>,
+        body: &str,
+        site: Site<'_>,
+    ) {
+        if self.include_stack.last().is_some_and(|f| !f.user()) {
+            return;
+        }
+        let key = ident::key(name);
+        let dollar = self.dollar();
+        let same = match (self.macros.get(&*key), self.fn_macros.get(&*key), params) {
+            (None, None, _) => true,
+            (_, Some(old), _) if is_fallback_predefine(name, old) => true,
+            (Some(old), _, None) => expand::replacement_lists_identical(old, body, dollar),
+            (_, Some(old), Some(params)) => {
+                let new = self.fn_macro(params, body);
+                (&old.params, old.is_variadic, &old.va_name)
+                    == (&new.params, new.is_variadic, &new.va_name)
+                    && expand::replacement_lists_identical(&old.body, body, dollar)
+            }
+            _ => false,
+        };
+        if !same {
+            self.warn(MACRO_REDEFINED, site, format!("`{name}` redefined"));
+        }
     }
 
     /// Remove a macro definition of either kind.
@@ -2082,6 +2135,7 @@ pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
 pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
 pub(crate) const DATE_TIME: Code = Code::new(1008);
 pub(crate) const UNDEF: Code = Code::new(1009);
+pub(crate) const MACRO_REDEFINED: Code = Code::new(1015);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the

@@ -102,6 +102,23 @@ pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     if PUNCT1.contains(&rest[0]) { 1 } else { 0 }
 }
 
+/// C99 6.10.3p1: two replacement lists are identical when their tokens
+/// have the same number, order, spelling and white-space separation, any
+/// white space counting as one.
+pub(super) fn replacement_lists_identical(a: &str, b: &str, dollar: Dollar) -> bool {
+    let (mut ta, mut tb) = (Vec::new(), Vec::new());
+    lex_into(a, 0, &mut ta, dollar);
+    lex_into(b, 0, &mut tb, dollar);
+    let spelling =
+        |text: &'_ str, t: &Tok| (text[t.start as usize..t.end as usize].to_string(), t.space);
+    ta.len() == tb.len()
+        && ta.iter().zip(&tb).enumerate().all(|(i, (x, y))| {
+            let (sx, px) = spelling(a, x);
+            let (sy, py) = spelling(b, y);
+            sx == sy && (i == 0 || px == py)
+        })
+}
+
 fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>, dollar: Dollar) {
     let bytes = text.as_bytes();
     let mut i = 0;

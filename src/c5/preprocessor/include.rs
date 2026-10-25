@@ -95,6 +95,11 @@ impl IncludeFrame {
     pub(super) fn own(&self) -> bool {
         self.step.origin() == IncludeOrigin::Own
     }
+
+    /// The file came from a user directory, not a system header.
+    pub(super) fn user(&self) -> bool {
+        self.step.origin() == IncludeOrigin::User
+    }
 }
 
 /// Where a header search begins.

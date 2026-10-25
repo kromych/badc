@@ -40,9 +40,12 @@ __isoc99_wscanf                          GLIBC_2.7
 __libc_current_sigrtmax                  GLIBC_2.2.5
 __libc_current_sigrtmin                  GLIBC_2.2.5
 __register_atfork                        GLIBC_2.3.2
+__sigsetjmp                              GLIBC_2.2.5
 __xpg_basename                           GLIBC_2.2.5
 __xpg_sigpause                           GLIBC_2.2.5
 _exit                                    GLIBC_2.2.5
+_longjmp                                 GLIBC_2.2.5
+_setjmp                                  GLIBC_2.2.5
 a64l                                     GLIBC_2.2.5
 abort                                    GLIBC_2.2.5
 abs                                      GLIBC_2.2.5
@@ -773,6 +776,7 @@ sighold                                  GLIBC_2.2.5
 sigignore                                GLIBC_2.2.5
 siginterrupt                             GLIBC_2.2.5
 sigismember                              GLIBC_2.2.5
+siglongjmp                               GLIBC_2.2.5
 signal                                   GLIBC_2.2.5
 signalfd                                 GLIBC_2.7
 sigpending                               GLIBC_2.2.5

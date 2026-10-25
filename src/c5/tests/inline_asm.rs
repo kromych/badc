@@ -9,6 +9,7 @@ use crate::c5::ir::AsmConstraint;
 /// assemble it: `E8 F5 FF FF FF` back over `movl $7, %eax; ret`, and
 /// `E8 02 00 00 00` forward over a two-byte `jmp`. The fixture runs it in
 /// the x86_64 tables.
+#[cfg(feature = "native-emit")]
 #[test]
 fn a_call_to_a_local_label_is_a_rel32_near_call() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};

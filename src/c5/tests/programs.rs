@@ -1484,6 +1484,7 @@ fn builtin_overflow() {
 /// and the barrier emits nothing (clang for a windows-msvc triple emits no
 /// call for it either). The fixture runs under the interpreter here and
 /// natively in the PE tables.
+#[cfg(feature = "full")]
 #[test]
 fn msvc_intrinsics_lower_at_the_call_site() {
     use crate::Target;
@@ -1516,6 +1517,7 @@ fn msvc_intrinsics_lower_at_the_call_site() {
     }
 }
 
+#[cfg(feature = "full")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {
     use crate::{CompileOptions, Target};
@@ -1547,6 +1549,7 @@ fn msvc_scalar_intrinsics_give_the_documented_values() {
     }
 }
 
+#[cfg(feature = "native-emit")]
 #[test]
 fn msvc_instruction_intrinsics_encode_their_instructions() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};

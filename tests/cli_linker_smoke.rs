@@ -9829,8 +9829,9 @@ fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
             let compile = |src: &PathBuf, obj: &PathBuf| {
                 let mut c = Command::new(&gcc);
                 c.env("PATH", &path)
-                    .args([opt, "-c", "-o"])
+                    .args([opt, "-c"])
                     .args(&defines)
+                    .arg("-o")
                     .arg(obj)
                     .arg(src);
                 c

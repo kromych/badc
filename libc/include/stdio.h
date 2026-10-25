@@ -274,32 +274,13 @@ typedef struct __c5_fpos_t fpos_t;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::printf,    "printf")
-#pragma binding(msvcrt::wprintf,   "wprintf")
-#pragma binding(msvcrt::fprintf,   "fprintf")
-#pragma binding(msvcrt::sprintf,   "sprintf")
-// The original `snprintf` only landed in msvcrt circa VS2015, and
-// `_snprintf` deviates from C99 7.19.6.5 (returns -1 and omits the
-// NUL on truncation). The standard `snprintf` / `vsnprintf`
-// spellings carry no binding here: they resolve at link time against
-// the conforming definitions in the auto-linked runtime, which wrap
-// `_vsnprintf` + `_vscprintf`. The underscored spellings keep the
-// msvcrt entry points for source written against msvcrt semantics.
-// Note that msvcrt's printf family prints infinity / NaN as
-// `1.#INF` / `1.#IND` / `1.#QNAN` rather than C99 `inf` / `nan`;
-// programs that classify formatted output by a digit-prefix regex
-// misclassify the msvcrt output as numeric.
-// Routing through `ucrtbase` would emit the C99 spelling but its
-// entry points fail with STATUS_ENTRYPOINT_NOT_FOUND at PE load
-// time on the GitHub Windows runners -- the documented UCRT import
-// path is via the `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not
-// ucrtbase directly. Tracked under the TODO marker until c5 grows
-// support for the UCRT proxy DLLs.
+// The C99 printf family carries no binding here: libc/lib/printf_ext.c
+// defines it, msvcrt.dll's printing 1.#INF / 1.#IND / 1.#QNAN for an
+// infinity or NaN, ignoring %hh and returning -1 from _vsnprintf for a
+// truncated output. The underscored spellings keep the msvcrt entry points
+// for source written against msvcrt semantics.
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
-#pragma binding(msvcrt::vprintf,   "vprintf")
-#pragma binding(msvcrt::vfprintf,  "vfprintf")
-#pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
 #pragma binding(msvcrt::fclose,    "fclose")

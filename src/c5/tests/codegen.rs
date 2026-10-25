@@ -1102,22 +1102,22 @@ fn pe_switch_tables_ride_rdata_not_text() {
 /// labels).
 ///
 /// Cross-target structural check: a tiny program that calls
-/// `printf` emits a binary whose bytes contain the import name
+/// `puts` emits a binary whose bytes contain the import name
 /// at least twice -- once in the dynamic-import table and once
 /// in the static symtab (PE COFF symtab / ELF `.symtab` /
 /// Mach-O `__LINKEDIT` symbol entries).
 #[test]
 fn plt_trampoline_local_names_appear_in_every_target() {
     use crate::{NativeOptions, Target};
-    // Call `printf` so the resolver pulls it in as an import on
+    // Call `puts` so the resolver pulls it in as an import on
     // every target (the test prelude `#include <stdio.h>` is
     // already wired up via `compile_str`). With the import in
     // hand, the assertions below check that the binary's bytes
     // contain the import name at least twice -- once in the
     // dynamic-import table and once in the static (PLT-trampoline)
     // symbol table the linker emits per target.
-    let program = super::compile_str("int main() { printf(\"x\"); return 0; }");
-    let needle = b"printf";
+    let program = super::compile_str("int main() { puts(\"x\"); return 0; }");
+    let needle = b"puts";
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -1134,7 +1134,7 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         let occurrences = bytes.windows(needle.len()).filter(|w| *w == needle).count();
         assert!(
             occurrences >= 2,
-            "{target:?}: expected `printf` byte sequence at least twice (dynamic \
+            "{target:?}: expected `puts` byte sequence at least twice (dynamic \
              import + local PLT-trampoline symbol), found {occurrences}"
         );
     }
@@ -1873,7 +1873,7 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
                 ("_tcsncpy", "wcsncpy", M),
                 ("_tcslen", "wcslen", M),
                 ("__wcsncnt", "__wcsncnt", M),
-                ("_ftprintf", "fwprintf", M),
+                ("_ftprintf", "__stdio_common_vswprintf", "ucrtbase.dll"),
                 ("_fgettc", "fgetwc", M),
                 ("_tcsspn", "wcsspn", M),
                 ("_tcstoll", "_wcstoi64", M),
@@ -2129,9 +2129,9 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wctype", "wctype", U),
         ("wctrans", "wctrans", U),
         ("towctrans", "towctrans", U),
-        ("fwprintf", "fwprintf", M),
-        ("vfwprintf", "vfwprintf", M),
-        ("vwprintf", "vwprintf", M),
+        ("fwprintf", "__stdio_common_vswprintf", U),
+        ("vfwprintf", "__stdio_common_vswprintf", U),
+        ("vwprintf", "__stdio_common_vswprintf", U),
         ("fgetws", "fgetws", M),
         ("fputws", "fputws", M),
         ("wcsncat", "wcsncat", M),
@@ -2142,8 +2142,8 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("mbrlen", "mbrlen", M),
         ("wcstoll", "_wcstoi64", M),
         ("wcstoull", "_wcstoui64", M),
-        ("swprintf", "_vsnwprintf", M),
-        ("vswprintf", "_vsnwprintf", M),
+        ("swprintf", "__stdio_common_vswprintf", U),
+        ("vswprintf", "__stdio_common_vswprintf", U),
         ("wcstod", "_wcstod_l", U),
         ("wcstof", "_wcstof_l", U),
         ("wcstold", "_wcstod_l", U),
@@ -2224,10 +2224,7 @@ fn link_definitions(target: crate::Target) -> alloc::collections::BTreeSet<Strin
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
     use crate::{CompileOptions, Compiler};
-    let crt = alloc::vec![
-        ("__BADC_C5_CRT__".to_string(), "1".to_string()),
-        ("__BADC_C5_START__".to_string(), "1".to_string()),
-    ];
+    let crt = alloc::vec![("__BADC_C5_START__".to_string(), "1".to_string())];
     let mut defined = alloc::collections::BTreeSet::new();
     let sources = crate::embedded_runtime().iter();
     for (name, body) in sources
@@ -2707,80 +2704,60 @@ fn data_import_routes_to_declaring_dylib_on_windows_x64() {
     );
 }
 
-/// C99 7.19.6.5p3 / 7.19.6.12p3: snprintf / vsnprintf return the
-/// untruncated length and NUL-terminate a nonempty buffer; msvcrt's
-/// `_snprintf` / `_vsnprintf` return -1 and omit the NUL. The standard
-/// spellings therefore carry no msvcrt binding on Windows: they resolve
-/// against the runtime's conforming definitions, which wrap
-/// `_vsnprintf` + `_vscprintf`.
+/// The C99 printf family is libc/lib/printf_ext.c's on Windows: an image
+/// taking each one's address imports none of msvcrt's formatters, and
+/// formats through ucrtbase.dll's `__stdio_common_vsprintf` and
+/// `__stdio_common_vswprintf`.
 #[test]
-fn windows_snprintf_resolves_to_the_runtime_definition() {
-    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+fn windows_printf_family_formats_through_ucrtbase() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <wchar.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {(fn)printf, (fn)fprintf, (fn)sprintf, (fn)snprintf,\n\
+          (fn)vprintf, (fn)vfprintf, (fn)vsprintf, (fn)vsnprintf, (fn)wprintf, (fn)fwprintf,\n\
+          (fn)swprintf, (fn)vwprintf, (fn)vfwprintf, (fn)vswprintf};\n\
+        int main(void) { return used[0] == 0; }\n";
+    const MSVCRT_FORMATTERS: [&str; 14] = [
+        "printf",
+        "fprintf",
+        "sprintf",
+        "vprintf",
+        "vfprintf",
+        "vsprintf",
+        "_vsnprintf",
+        "_vscprintf",
+        "wprintf",
+        "fwprintf",
+        "vwprintf",
+        "vfwprintf",
+        "_vsnwprintf",
+        "_vscwprintf",
+    ];
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
-        let program = Compiler::with_options(
-            "#include <stdio.h>\n\
-             int main(void){char b[4]; return snprintf(b, 4, \"%d\", 123456);}\n"
-                .to_string(),
-            target,
-            CompileOptions::default().with_no_entry_point(true),
-        )
-        .compile()
-        .expect("compile snprintf TU");
-        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
-            .expect("link Windows executable");
-        for imported in ["_vscprintf", "_vsnprintf"] {
-            assert_eq!(
-                pe_import_dll_of(&image, imported).as_deref(),
-                Some("msvcrt.dll"),
-                "{target:?}: the runtime definition must import `{imported}`"
-            );
-        }
-        for absent in ["_snprintf", "snprintf", "vsnprintf"] {
-            assert!(
-                pe_iat_slot_rva(&image, absent).is_none(),
-                "{target:?}: `{absent}` must not appear in the import table"
-            );
-        }
-    }
-}
-
-/// A shared library compiles the runtime with `__BADC_C5_CRT__` but
-/// without the startup gate; the CRT section alone must still define
-/// the C99 snprintf / vsnprintf so a DLL's calls resolve locally.
-#[test]
-fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
-    use crate::{
-        CompileOptions, Compiler, NativeOptions, OutputKind, Target, embedded_runtime,
-        link_native_objects, parse_native_elf,
-    };
-    let target = Target::WindowsX64;
-    let reloc = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..Default::default()
-    };
-    let mut objs = Vec::new();
-    for (name, body) in embedded_runtime() {
-        let copts = CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_defines(vec![("__BADC_C5_CRT__".to_string(), "1".to_string())]);
-        let rt = Compiler::with_options(body.to_string(), target, copts)
+        let program = Compiler::with_target(SRC.to_string(), target)
             .compile()
-            .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
-        let bytes = crate::emit_native_with_options(&rt, target, reloc.clone())
-            .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
-        objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for symbol in MSVCRT_FORMATTERS {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol),
+                None,
+                "{target:?}: {symbol}"
+            );
+        }
+        for symbol in [
+            "__stdio_common_vsprintf",
+            "__stdio_common_vswprintf",
+            "_set_printf_count_output",
+        ] {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol).as_deref(),
+                Some("ucrtbase.dll"),
+                "{target:?}: {symbol}"
+            );
+        }
     }
-    let merged = link_native_objects(&objs).expect("link CRT-only runtime");
-    for def in ["snprintf", "vsnprintf"] {
-        assert!(
-            merged.defined.contains_key(def),
-            "the CRT section must define `{def}`"
-        );
-    }
-    assert!(
-        !merged.defined.contains_key("__c5_entry"),
-        "the startup section must stay gated out"
-    );
 }
 
 /// Return the `(VirtualAddress, raw bytes)` of the PE `.text`

@@ -191,10 +191,6 @@ struct __c5_FILE;
 #pragma binding(msvcrt::putwchar, "putwchar")
 #pragma binding(msvcrt::fgetws,   "fgetws")
 #pragma binding(msvcrt::fputws,   "fputws")
-#pragma binding(msvcrt::fwprintf,  "fwprintf")
-#pragma binding(msvcrt::vfwprintf, "vfwprintf")
-#pragma binding(msvcrt::vwprintf,  "vwprintf")
-#pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::wcsncat,  "wcsncat")
 #pragma binding(msvcrt::wcscspn,  "wcscspn")
 #pragma binding(msvcrt::wcspbrk,  "wcspbrk")
@@ -233,34 +229,14 @@ int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
 #pragma binding(msvcrt::wctob,     "wctob")
 
 // Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
-// functions (7.24.4.4 / 7.24.4.5) or wcsnlen_s, and msvcrt.dll's swprintf
-// and vswprintf take no count; the Microsoft SDK defines the first inline
-// over the exported primitives, and libmsvcrt.a defines swprintf and
-// vswprintf over _vsnwprintf, ending the text at the count's last element
-// and returning a negative value when it does not fit (C99 7.24.2.3).
-// mingw-w64 defines fwide as a request granted, msvcrt streams having no
+// functions (7.24.4.4 / 7.24.4.5) or wcsnlen_s; the Microsoft SDK defines
+// the first inline over the exported primitives. mingw-w64 defines fwide as a request granted, msvcrt streams having no
 // orientation, and mbsinit over msvcrt's int-sized conversion state.
 #include <stdarg.h>
 #pragma binding(msvcrt::_vsnwprintf, "_vsnwprintf")
 #pragma binding(msvcrt::wcsnlen,     "wcsnlen")
 int _vsnwprintf(wchar_t *buffer, size_t count, const wchar_t *format, va_list ap);
 size_t wcsnlen(const wchar_t *s, size_t maxlen);
-static inline int vswprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format,
-                            va_list ap) {
-    if (n == 0)
-        return -1;
-    int r = _vsnwprintf(s, n - 1, format, ap);
-    if (r < 0 || (size_t)r == n - 1)
-        s[n - 1] = 0;
-    return r;
-}
-static inline int swprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, ...) {
-    va_list ap;
-    va_start(ap, format);
-    int r = vswprintf(s, n, format, ap);
-    va_end(ap);
-    return r;
-}
 static inline int fwide(struct __c5_FILE *stream, int mode) {
     (void)stream;
     return mode;
@@ -413,8 +389,8 @@ static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
 }
 #endif
 
-// Formatted wide-character input/output (C99 7.24.2). On Windows swprintf
-// and vswprintf are the definitions above, and libc/lib/scanf_ext.c defines
+// Formatted wide-character input/output (C99 7.24.2). On Windows
+// libc/lib/printf_ext.c defines the six formatters and libc/lib/scanf_ext.c
 // the six scanners.
 int fwprintf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
 int fwscanf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
@@ -428,11 +404,9 @@ int vwprintf(const wchar_t *restrict format, __builtin_va_list arg);
 int vwscanf(const wchar_t *restrict format, __builtin_va_list arg);
 int wprintf(const wchar_t *restrict format, ...);
 int wscanf(const wchar_t *restrict format, ...);
-#ifndef _WIN32
 int swprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, ...);
 int vswprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format,
               __builtin_va_list arg);
-#endif
 
 // Wide-character input/output (C99 7.24.3). On Windows fwide is the
 // definition above.

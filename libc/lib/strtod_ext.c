@@ -1,11 +1,9 @@
-// strtod, strtof, strtold, atof and the wide wcstod, wcstof and wcstold on
-// the Windows targets (C99 7.20.1.2, 7.20.1.3, 7.24.4.1.1). msvcrt.dll's
-// strtod and wcstod read no infinity, NaN or hexadecimal form and round
-// 2.5e-324 to zero, and it exports no float or long double form. Each
-// converts a hexadecimal subject here and any other through ucrtbase.dll's
-// _strtod_l, _strtof_l, _wcstod_l or _wcstof_l in a locale whose LC_NUMERIC
-// is msvcrt's, and sets msvcrt's errno; `long double` is `double` there.
-// Elsewhere the file is empty; the link offers it like an archive member.
+// strtod, strtof, strtold, atof, wcstod, wcstof and wcstold on Windows (C99
+// 7.20.1.2, 7.20.1.3, 7.24.4.1.1): msvcrt.dll's strtod reads no infinity, NaN
+// or hexadecimal form. A hexadecimal subject converts here, any other through
+// ucrtbase.dll's _strtod_l family in ucrt_locale.c's locale, setting msvcrt's
+// errno; `long double` is `double`. Elsewhere the file is empty; the link
+// offers it like an archive member.
 
 #ifdef _WIN32
 
@@ -20,49 +18,15 @@
 #include <wctype.h>
 
 #pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::__c5_ucrt_create_locale, "_create_locale")
 #pragma binding(ucrtbase::__c5_ucrt_strtod_l, "_strtod_l")
 #pragma binding(ucrtbase::__c5_ucrt_strtof_l, "_strtof_l")
 #pragma binding(ucrtbase::__c5_ucrt_wcstod_l, "_wcstod_l")
 #pragma binding(ucrtbase::__c5_ucrt_wcstof_l, "_wcstof_l")
-void *__c5_ucrt_create_locale(int category, const char *locale);
 double __c5_ucrt_strtod_l(const char *s, char **end, void *locale);
 float __c5_ucrt_strtof_l(const char *s, char **end, void *locale);
 double __c5_ucrt_wcstod_l(const wchar_t *s, wchar_t **end, void *locale);
 float __c5_ucrt_wcstof_l(const wchar_t *s, wchar_t **end, void *locale);
-
-// ucrtbase's locale for each LC_NUMERIC name msvcrt's setlocale reports,
-// made once and kept for the process.
-struct numeric {
-    struct numeric *next;
-    void *locale;
-    char name[];
-};
-
-static void *numeric_locale(const char *name) {
-    static struct numeric *known;
-    struct numeric *head = __atomic_load_n(&known, __ATOMIC_ACQUIRE);
-    for (struct numeric *e = head; e; e = e->next)
-        if (!strcmp(e->name, name))
-            return e->locale;
-    size_t len = strlen(name) + 1;
-    struct numeric *e = malloc(sizeof *e + len);
-    if (!e)
-        return NULL;
-    memcpy(e->name, name, len);
-    e->locale = __c5_ucrt_create_locale(LC_NUMERIC, name);
-    e->next = head;
-    while (!__atomic_compare_exchange_n(&known, &e->next, e, 0, __ATOMIC_ACQ_REL,
-                                        __ATOMIC_ACQUIRE))
-        ;
-    return e->locale;
-}
-
-static void *locale(void) {
-    if (*localeconv()->decimal_point == '.')
-        return numeric_locale("C");
-    return numeric_locale(setlocale(LC_NUMERIC, NULL));
-}
+void *__c5_ucrt_numeric_locale(void);
 
 static unsigned at(const void *s, int wide, size_t i) {
     return wide ? (unsigned)((const wchar_t *)s)[i] : ((const unsigned char *)s)[i];
@@ -96,10 +60,9 @@ static double scaled(unsigned long long q, long e) {
     return v;
 }
 
-// The hexadecimal significand and binary exponent at `s`, past its 0x,
-// rounded to nearest even at `bits` bits, the least at exponent `lsb_min` or
-// above and the greatest finite exponent `emax`. The units read go through
-// *n, and *range is set for an overflow or an inexact subnormal or zero.
+// The hexadecimal significand and exponent at `s` past its 0x, rounded to
+// nearest even at `bits` bits with the least exponent `lsb_min` and greatest
+// `emax`; *n units read, *range for an overflow or inexact subnormal or zero.
 static double hex(const void *s, int wide, unsigned point, int bits, long lsb_min, long emax,
                   size_t *n, int *range) {
     unsigned long long m = 0, q;
@@ -166,9 +129,8 @@ static double hex(const void *s, int wide, unsigned point, int bits, long lsb_mi
     return scaled(q, lsb);
 }
 
-// C99 7.20.1.3p10: the `n` units ucrtbase read at `s` are a finite decimal
-// subject with a nonzero significand whose value `mag` overflows, or
-// underflows below `min` to a subnormal or zero: ERANGE.
+// C99 7.20.1.3p10: ERANGE for a finite decimal subject of `n` units at `s`
+// with a nonzero significand whose `mag` overflows or underflows below `min`.
 static void range(const void *s, int wide, size_t n, double mag, double min) {
     size_t i = 0;
     if (!isinf(mag) && mag >= min)
@@ -185,10 +147,9 @@ static void range(const void *s, int wide, size_t n, double mag, double min) {
         }
 }
 
-// The subject at `s`, a float's value when `is_float`; the units read go
-// through *used. ucrtbase gives a hexadecimal subject whose rounding carries
-// from the subnormal into the normal range a wrong exponent
-// (0x1.fffffffffffff8p-1023 reads as 0x1p-1019), so that form converts here.
+// The subject at `s` as a double, or a float's value; *used units read.
+// ucrtbase reads 0x1.fffffffffffff8p-1023 as 0x1p-1019, so a hexadecimal
+// subject converts here.
 static double convert(const void *s, int wide, int is_float, size_t *used) {
     unsigned point = (unsigned char)*localeconv()->decimal_point;
     size_t i = 0, n;
@@ -208,7 +169,7 @@ static double convert(const void *s, int wide, int is_float, size_t *used) {
         *used = i + 2 + n;
         return neg ? -v : v;
     }
-    void *loc = locale();
+    void *loc = __c5_ucrt_numeric_locale();
     double v;
     if (wide) {
         wchar_t *e;

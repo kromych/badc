@@ -255,8 +255,7 @@ impl EmbeddedSources<'_> {
         let cli = self.cli;
         let reloc_opts = self.reloc_opts.clone();
         // The embedded runtime gates its sections on macros the
-        // driver sets per image: `__BADC_C5_CRT__` (the image may
-        // import the user-mode C library), `__BADC_C5_START__`
+        // driver sets per image: `__BADC_C5_START__`
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
         // `wmain` / `wWinMain` entry).
@@ -300,11 +299,8 @@ impl EmbeddedSources<'_> {
         subsystem_override: Option<badc::Subsystem>,
         objs: &mut Vec<badc::NativeObject>,
     ) {
-        // The runtime's CRT section (the C99 snprintf / vsnprintf
-        // definitions on Windows) links into any image that may
-        // import the user-mode C library -- hosted executables and
-        // shared libraries, but not passthrough-entry subsystems
-        // (native / EFI) or freestanding images.
+        // An image may import the user-mode C library unless it is
+        // freestanding or a passthrough-entry subsystem (native / EFI).
         let links_crt = !self.cli.freestanding
             && !matches!(
                 subsystem_override,
@@ -324,9 +320,6 @@ impl EmbeddedSources<'_> {
         // macro is set; the GUI / wide-entry macros select the
         // matching `__c5_entry` body on Windows.
         let mut runtime_defines: Vec<(&str, &str)> = Vec::new();
-        if links_crt {
-            runtime_defines.push(("__BADC_C5_CRT__", "1"));
-        }
         if emits_start_stub {
             runtime_defines.push(("__BADC_C5_START__", "1"));
             // `__c5_entry` calls this symbol; default `main`,

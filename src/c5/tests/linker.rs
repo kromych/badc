@@ -8347,10 +8347,13 @@ fn elf_section_offsets_respect_their_claimed_alignment() {
         emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::new(alloc::format!(
-        "{TEST_PRELUDE}\
-         int main(void) {{ printf(\"x\"); return 0; }}\n"
-    ))
+    let program = Compiler::with_target(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             int main(void) {{ printf(\"x\"); return 0; }}\n"
+        ),
+        Target::LinuxAarch64,
+    )
     .compile()
     .expect("compile");
     let opts = NativeOptions {

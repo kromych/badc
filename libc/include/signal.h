@@ -163,11 +163,15 @@ int killpg(int pgrp, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
 // The signal set as the target's C library declares it: the macOS SDK's
-// 32-bit mask, glibc's 1024 bits in `unsigned long` words.
+// 32-bit mask, glibc's 1024 bits in `unsigned long` words. <sys/select.h>
+// defines it too, as POSIX has it there.
+#ifndef __BADC_SIGSET_T
+#define __BADC_SIGSET_T
 #ifdef __APPLE__
 typedef unsigned int sigset_t;
 #else
 typedef struct { unsigned long __val[1024 / (8 * sizeof(unsigned long))]; } sigset_t;
+#endif
 #endif
 
 // The value a queued signal carries (POSIX), the same in glibc and the

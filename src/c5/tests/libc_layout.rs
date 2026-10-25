@@ -179,7 +179,7 @@ fn rusage_counters_are_long() {
     let targets = [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64];
     check(&targets.map(|target| Layout {
         target,
-        headers: &["sys/time.h", "unistd.h"],
+        headers: &["sys/resource.h"],
         ty: "struct rusage",
         size: 144,
         align: 8,

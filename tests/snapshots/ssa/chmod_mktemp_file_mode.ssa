@@ -78,7 +78,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=2
     v35  CallExt { binding_idx=18, args=[v29], fp_arg_mask=0x0 } -> x0
     v36  LocalAddr(-2)                                    -> x7
     v37  Imm(256)                                         -> x6
-    v38  CallExt { binding_idx=267, args=[v36, v37], fp_arg_mask=0x0 } -> x0
+    v38  CallExt { binding_idx=268, args=[v36, v37], fp_arg_mask=0x0 } -> x0
     v39  Imm(0)                                           -> x1
     terminator Bnz { cond=v38, target=b8, fall=b7 }   (exit_acc=v38)
   block 7  start_pc=0
@@ -97,7 +97,7 @@ fn ent_pc=12 n_params=0 variadic=false locals=2
   block 9  start_pc=0
     v49  LocalAddr(-2)                                    -> x7
     v50  Imm(384)                                         -> x6
-    v51  CallExt { binding_idx=267, args=[v49, v50], fp_arg_mask=0x0 } -> x0
+    v51  CallExt { binding_idx=268, args=[v49, v50], fp_arg_mask=0x0 } -> x0
     v52  Imm(0)                                           -> x1
     terminator Bnz { cond=v51, target=b11, fall=b10 }   (exit_acc=v51)
   block 10  start_pc=0

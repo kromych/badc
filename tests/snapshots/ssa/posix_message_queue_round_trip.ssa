@@ -49,7 +49,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=31
     v19  LocalAddr(-28)                                   -> x12
     v20  Imm(32)                                          -> x14
     v21  ImmData(8)                                       -> x0
-    v22  CallExt { binding_idx=178, args=[], fp_arg_mask=0x0 } -> x1
+    v22  CallExt { binding_idx=179, args=[], fp_arg_mask=0x0 } -> x1
     v23  Extend { value=v17, kind=I32 }                   -> x0
     v24  CallExt { binding_idx=11, args=[v19, v20, v15, v22, v17], fp_arg_mask=0x0 } -> x0
     v25  LocalAddr(-28)                                   -> x7

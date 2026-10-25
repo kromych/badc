@@ -497,6 +497,7 @@ printf                                   GLIBC_2.17
 prlimit64                                GLIBC_2.17
 process_vm_readv                         GLIBC_2.17
 process_vm_writev                        GLIBC_2.17
+pselect                                  GLIBC_2.17
 pthread_attr_destroy                     GLIBC_2.17
 pthread_attr_getdetachstate              GLIBC_2.17
 pthread_attr_getguardsize                GLIBC_2.17

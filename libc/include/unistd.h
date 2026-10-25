@@ -7,9 +7,6 @@
 
 #pragma once
 
-/* Pull in the canonical `struct timeval` definition so the
-** `struct rusage` declaration below references the same type
-** that `<time.h>` and the bound libc functions agree on. */
 #include <time.h>
 /* POSIX-2017 mandates that `<unistd.h>` make `ssize_t`,
 ** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
@@ -30,7 +27,7 @@
 // conformance macros (_XOPEN_UNIX, _XOPEN_VERSION and the rest), which
 // need the XSI interfaces still undeclared: nftw, the Bessel functions, the
 // System V signal calls, the 48-bit generators, a64l, initstate, memccpy,
-// ffs, getpriority, getrusage in <sys/resource.h>, mknod, utimes,
+// ffs, getpriority, mknod, utimes,
 // tcgetsid, getdate, gethostid, swab, encrypt and setkey; glibc ships no
 // <ndbm.h>.
 #if defined(__linux__)
@@ -307,7 +304,6 @@
 #pragma binding(libc::getdtablesize, "_getdtablesize")
 #pragma binding(libc::crypt,     "_crypt")
 #pragma binding(libc::getentropy, "_getentropy")
-#pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
 #pragma binding(libc::getenv,    "_getenv")
 #pragma binding(libc::setenv,    "_setenv")
@@ -462,7 +458,6 @@ extern char **environ;
 #pragma binding(libc::getpagesize, "getpagesize")
 #pragma binding(libc::getdtablesize, "getdtablesize")
 #pragma binding(libc::getentropy, "getentropy")
-#pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
 #pragma binding(libc::getenv,    "getenv")
 #pragma binding(libc::setenv,    "setenv")
@@ -761,7 +756,6 @@ int getdtablesize(void);
 // libcrypt's, so the declaration is left unbound and the caller's -lcrypt
 // resolves it.
 char *crypt(char *key, char *salt);
-int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 #endif
 char *getenv(const char *name);
@@ -793,36 +787,6 @@ int confstr(int name, char *buf, int len);
 #define LOCK_EX 2
 #define LOCK_UN 8
 #define LOCK_NB 4
-
-// getrusage(2) selectors and the per-process resource shape.
-#define RUSAGE_SELF      0
-#define RUSAGE_CHILDREN -1
-#define RUSAGE_THREAD    1
-
-/* `struct timeval` is also defined in <time.h>; the two
-** definitions must stay in sync. The `struct rusage` shape
-** below references it by tag name so getrusage()'s `ru_utime`
-** / `ru_stime` typecheck as `struct timeval *` callers expect.
-** Earlier this header carried a private `struct __c5_timeval`
-** alias that broke that type-check. */
-struct rusage {
-    struct timeval ru_utime;
-    struct timeval ru_stime;
-    long ru_maxrss;
-    long ru_ixrss;
-    long ru_idrss;
-    long ru_isrss;
-    long ru_minflt;
-    long ru_majflt;
-    long ru_nswap;
-    long ru_inblock;
-    long ru_oublock;
-    long ru_msgsnd;
-    long ru_msgrcv;
-    long ru_nsignals;
-    long ru_nvcsw;
-    long ru_nivcsw;
-};
 
 #ifndef _WIN32
 // sysconf(3) selectors. Names match POSIX; the numeric value is the

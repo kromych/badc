@@ -83,7 +83,8 @@ int waitpid(int pid, int *status, int options);
 #endif
 #if defined(__APPLE__) || defined(__linux__)
 int waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options);
-// BSD wait variants returning resource usage (opaque `rusage` buffer).
-int wait3(int *status, int options, char *rusage);
-int wait4(int pid, int *status, int options, char *rusage);
+// BSD wait variants returning the child's <sys/resource.h> usage.
+struct rusage;
+int wait3(int *status, int options, struct rusage *rusage);
+int wait4(int pid, int *status, int options, struct rusage *rusage);
 #endif

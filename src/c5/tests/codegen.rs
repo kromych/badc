@@ -1935,9 +1935,9 @@ fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
 /// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
 /// and `<wctype.h>` declare under their POSIX and C99 names import an entry
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
-/// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
-/// not export reach the ones it does through the header's and the C-library
-/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
+/// target's msvcrt.dll lacks. The scanners and wide-character functions
+/// msvcrt.dll does not export reach the ones it does through the header's and
+/// the C-library sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
 /// does.
 #[test]
 fn windows_crt_names_import_the_entry_points_their_dlls_export() {
@@ -1982,6 +1982,8 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wcstoull", "_wcstoui64", M),
         ("swprintf", "_vsnwprintf", M),
         ("vswprintf", "_vsnwprintf", M),
+        ("vfscanf", "fscanf", M),
+        ("vscanf", "fscanf", M),
         ("vfwscanf", "fwscanf", M),
         ("vswscanf", "swscanf", M),
         ("vwscanf", "fwscanf", M),

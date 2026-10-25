@@ -108,6 +108,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::fscanf,    "_fscanf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::vsscanf,   "_vsscanf")
+#pragma binding(libc::vfscanf,   "_vfscanf")
+#pragma binding(libc::vscanf,    "_vscanf")
 #pragma binding(libc::fopen,     "_fopen")
 #pragma binding(libc::freopen,   "_freopen")
 #pragma binding(libc::fclose,    "_fclose")
@@ -192,6 +194,9 @@ typedef struct __c5_fpos_t fpos_t;
 // va_list input scan + GNU allocating printf variants; their prototypes
 // follow the bindings.
 #pragma binding(libc::vsscanf,   "vsscanf")
+// The C99 stream scanners glibc's <stdio.h> selects through C17.
+#pragma binding(libc::vfscanf,   "__isoc99_vfscanf")
+#pragma binding(libc::vscanf,    "__isoc99_vscanf")
 #pragma binding(libc::asprintf,  "asprintf")
 #pragma binding(libc::vasprintf, "vasprintf")
 #pragma binding(libc::fopen,     "fopen")
@@ -514,6 +519,10 @@ static inline int vsscanf(const char *src, const char *fmt, __builtin_va_list ap
 #else
 int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
 #endif
+// C99 7.19.6.9 vfscanf and 7.19.6.11 vscanf; libc/lib/vscanf_ext.c defines
+// them on Windows, where msvcrt.dll exports neither.
+int vfscanf(FILE *restrict stream, const char *restrict format, __builtin_va_list arg);
+int vscanf(const char *restrict format, __builtin_va_list arg);
 FILE *fopen(const char *path, const char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by
 // programs that re-route stdin / stdout / stderr to a file.

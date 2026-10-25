@@ -2494,9 +2494,10 @@ mod tests {
     /// interpreter dispatch loop -- thousands of blocks, an object per
     /// handler -- turned one translation unit's compile into fifteen
     /// seconds. The shape below is that one in miniature: a long chain
-    /// closed into a cycle, with objects in its head. The bound is 30x
-    /// the measured sweep and a quarter of what the fixed point cost on
-    /// the same shape.
+    /// closed into a cycle, with objects in its head. The work is counted
+    /// in CFG edge-list reads, which no host load moves: the sweep reads
+    /// 56 per block here, the bound is four times that, and the fixed
+    /// point took about 120 times the sweep's time on the same shape.
     #[test]
     fn group_lifetimes_do_not_iterate_per_block() {
         const BLOCKS: usize = 16000;
@@ -2526,15 +2527,16 @@ mod tests {
         }
         let mut f = multi_block(insts, blocks, 2 * GROUPS as i64);
         f.multi_cell_slots = cells;
-        let start = std::time::Instant::now();
+        use crate::c5::codegen::ssa::mem2reg::EDGE_LIST_READS;
+        let before = EDGE_LIST_READS.with(|n| n.get());
         coalesce(&mut f, true, false);
-        let elapsed = start.elapsed();
+        let reads = EDGE_LIST_READS.with(|n| n.get()) - before;
         // Every object is live around the cycle, so none share.
         assert_eq!(f.locals, 2 * GROUPS as i64);
         assert!(
-            elapsed.as_secs() < 3,
-            "{BLOCKS} blocks took {elapsed:?}: the group lifetimes are being \
-             iterated rather than swept over the condensation"
+            reads <= 4 * 56 * BLOCKS as u64,
+            "{BLOCKS} blocks took {reads} edge-list reads: the group lifetimes \
+             are being iterated rather than swept over the condensation"
         );
     }
 }

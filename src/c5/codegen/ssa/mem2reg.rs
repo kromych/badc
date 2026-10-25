@@ -173,6 +173,13 @@ pub(crate) struct SuccGraph {
     pred_offsets: Vec<u32>,
 }
 
+// Edge lists read on this thread, so a test can bound a walk's work by
+// count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static EDGE_LIST_READS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
 impl SuccGraph {
     pub(crate) fn new(func: &FunctionSsa) -> Self {
         let n = func.blocks.len();
@@ -216,10 +223,14 @@ impl SuccGraph {
     }
 
     pub(crate) fn of(&self, b: BlockId) -> &[BlockId] {
+        #[cfg(test)]
+        EDGE_LIST_READS.with(|n| n.set(n.get() + 1));
         &self.targets[self.offsets[b as usize] as usize..self.offsets[b as usize + 1] as usize]
     }
 
     pub(crate) fn preds_of(&self, b: BlockId) -> &[u32] {
+        #[cfg(test)]
+        EDGE_LIST_READS.with(|n| n.set(n.get() + 1));
         &self.preds
             [self.pred_offsets[b as usize] as usize..self.pred_offsets[b as usize + 1] as usize]
     }

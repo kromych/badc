@@ -302,11 +302,13 @@ impl InitTarget {
     }
 }
 
-/// Lengths of the append-only initializer output buffers plus the lexer
-/// position, captured so a speculative measuring parse can be undone
-/// exactly. See [`Compiler::init_checkpoint`].
+/// Lengths of the append-only initializer output buffers, the lexer
+/// position and the diagnostics reported so far, captured so a speculative
+/// parse can be undone exactly; the parse that follows reports what
+/// applies again. See [`Compiler::init_checkpoint`].
 pub(super) struct InitCheckpoint {
     lex: LexerSnapshot,
+    reported: (usize, usize),
     next_ent_pc: usize,
     data: usize,
     data_object_starts: usize,
@@ -3324,6 +3326,7 @@ impl Compiler {
     pub(super) fn init_checkpoint(&self) -> InitCheckpoint {
         InitCheckpoint {
             lex: self.lex.snapshot(),
+            reported: self.sink.mark(),
             next_ent_pc: self.next_ent_pc,
             data: self.data.len(),
             data_object_starts: self.data_object_starts.len(),
@@ -3372,6 +3375,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);
         self.pending_label_relocs.truncate(cp.pending_label_relocs);
+        self.sink.rollback(cp.reported);
         // Last: a restored string literal re-records its boundary, which
         // has to land on the truncated list (`rewind_speculation`).
         self.restore_lex(cp.lex);

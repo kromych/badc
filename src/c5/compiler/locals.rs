@@ -1831,7 +1831,7 @@ impl Compiler {
         let items = self.lex.count_top_level_items_in_array() as i64;
         let bound = self.designated_array_count(items, 1, None)?.max(items);
         let span = inner_dims.iter().product::<i64>().max(1);
-        let (cp, reported) = (self.init_checkpoint(), self.sink.mark());
+        let cp = self.init_checkpoint();
         let (literals, overruns) = (
             self.next_compound_literal_id,
             self.warned_string_overruns.clone(),
@@ -1847,7 +1847,6 @@ impl Compiler {
             .and_then(|()| self.collect_struct_array_entries(elem_ty, scratch as i64, &dims));
         self.measuring_init = measuring;
         self.restore_init_checkpoint(cp);
-        self.sink.rollback(reported);
         (self.next_compound_literal_id, self.warned_string_overruns) = (literals, overruns);
         Ok(reached.map_or(bound, |high| (high + span - 1) / span))
     }

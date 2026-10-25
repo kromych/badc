@@ -6322,6 +6322,44 @@ fn vla_larger_than_reports_the_arrays_gcc_does() {
     assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
 }
 
+/// A diagnostic in an initializer of static storage duration is reported
+/// once, though the initializer may be parsed twice (as an address
+/// constant first, then as arithmetic): the checkpoint the first parse is
+/// undone to also drops what it reported. gcc 16 reports each line once.
+#[test]
+fn a_static_initializers_diagnostic_is_reported_once() {
+    let src = "int *gp;\n\
+               int gi = sizeof(gp = 5);\n\
+               void f(void) { static int s = sizeof(gp = 5); (void)s; }\n\
+               int *ga = &gi + sizeof(gp = 5);\n\
+               struct S { int a, b; } gs = { sizeof(gp = 5), 2 };\n\
+               int garr[] = { 1, sizeof(gp = 5) };\n\
+               static unsigned char uc = (unsigned char){ 300 };\n\
+               int main(void) { return 0; }\n";
+    let options = crate::CompileOptions::default().with_diag(super::diag_config(&[
+        "int-conversion",
+        "constant-conversion",
+    ]));
+    let program = Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+        .compile()
+        .expect("compile");
+    let lines = |code| -> Vec<u32> {
+        program
+            .warnings
+            .iter()
+            .filter(|w| w.code == code)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    assert_eq!(
+        lines(crate::c5::diag::Code::INT_CONVERSION),
+        [2, 3, 4, 5, 6]
+    );
+    // The arithmetic parse reports the compound literal's conversion as the
+    // undone one did, as clang 22 reports it (-Wconstant-conversion).
+    assert_eq!(lines(crate::c5::diag::Code::CONSTANT_CONVERSION), [7]);
+}
+
 /// An object declared through a variably modified typedef is bounded by
 /// the typedef's size expression, so `-Wvla-larger-than=` reports it where
 /// it reports the array that expression declares directly. (gcc 16 -O2

@@ -3122,7 +3122,12 @@ impl Compiler {
                     self.next()?;
                 }
                 let v = if braced_scalar {
+                    let line = self.lex.line;
                     let inner = self.parse_const_expr_cond_val()?;
+                    // The value initializes the literal (C99 6.5.2.5p6).
+                    if let ConstVal::Int { val, ty, .. } = inner {
+                        self.check_constant_conversion(val, ty, target_ty, 0, line);
+                    }
                     self.accept(',')?;
                     if self.lex.tk != '}' {
                         return Err(self.compile_err(

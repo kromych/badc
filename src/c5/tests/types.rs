@@ -2179,6 +2179,46 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// The Microsoft declarator modifiers on the PE targets, as clang 22 takes
+/// them for both windows-msvc triples (which accept the unit): `__ptr64`,
+/// `__w64`, `__sptr` and `__uptr` leave the type as it is, an `__unaligned`
+/// access reads and writes misaligned data, and `__builtin_alignof` is
+/// `_Alignof`. The other targets do not take them, as gcc and clang do not.
+#[test]
+fn microsoft_declarator_modifiers_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef void *__ptr64 HANDLE64;\n\
+        typedef int __w64 INT_W64;\n\
+        typedef void * __sptr __ptr64 SP64;\n\
+        typedef void * __uptr __ptr64 UP64;\n\
+        typedef struct { unsigned int s_addr; } IN_ADDR;\n\
+        int read_unaligned(const char *p) { return *(const int __unaligned *)(p + 1); }\n\
+        _Static_assert(sizeof(HANDLE64) == 8 && sizeof(INT_W64) == 4 && sizeof(UP64) == 8, \"\");\n\
+        _Static_assert(__builtin_alignof(IN_ADDR) == 4 && __builtin_alignof(char) == 1, \"\");\n\
+        _Static_assert(_Generic((int *__ptr64)0, int *: 1, default: 0), \"\");\n\
+        _Static_assert(_Generic((INT_W64)0, int: 1, default: 0), \"\");\n\
+        int main(void) {\n\
+          char b[12] = {0, 8, 7, 6, 5, 4, 3, 2, 1};\n\
+          __unaligned long long *pw = (__unaligned long long *)(b + 1);\n\
+          long long w = *pw;\n\
+          *pw = 0x1112131415161718LL;\n\
+          return !(w == 0x0102030405060708LL && read_unaligned(b) == 0x15161718); }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+    let err = Compiler::with_target(SRC.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("`__ptr64` on linux-x64")
+        .to_string();
+    assert!(
+        err.contains("expected `,` or `;` after declarator"),
+        "{err}"
+    );
+}
+
 /// C23 6.4.1: under `-std=c23` / `gnu23` `bool` names `_Bool`, and `true`
 /// and `false` are its constants 1 and 0 (6.4.4.6), with or without
 /// `<stdbool.h>`, which then defines none of them as a macro. Before C23

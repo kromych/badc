@@ -2917,6 +2917,9 @@ impl Compiler {
         if opts.std.c23_keywords() {
             lexer::init_c23_keywords(&mut symbols, &mut symbol_index);
         }
+        if target.ms_extensions() {
+            lexer::init_ms_keywords(&mut symbols, &mut symbol_index);
+        }
         // The dead-store bookkeeping is a cost the parser pays only when
         // the row reports somewhere, which a pragma decides as much as
         // the command line does.

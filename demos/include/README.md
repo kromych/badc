@@ -26,5 +26,5 @@ implementation is linked in as usual.
   libcurses; `curses.h` is the empty prerequisite ncurses' `term.h` requires).
 - **Platform / windowing / graphics**: the objc runtime and Cocoa, Core*,
   OpenGL/CGL frameworks (macOS); win32 / WGL surfaces (Windows); X11 / GLX
-  (Linux); plus `GL/`, `dirent.h`, and the RGFW framework-binding headers.
+  (Linux); plus `GL/` and the RGFW framework-binding headers.
   These back the windowed demos (e.g. `demos/raylib`).

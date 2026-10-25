@@ -10,6 +10,7 @@
 #pragma once
 
 #ifdef _WIN32
+#define _WINDOWS_
 
 // `NULL` and `size_t` (C99 7.17) -- included so consumers
 // that only pull in `<windows.h>` get them too.
@@ -57,6 +58,7 @@
 #define NEAR
 #define VOID void
 #define CONST const
+#define UNALIGNED
 #define IN
 #define OUT
 #define OPTIONAL
@@ -3373,8 +3375,6 @@ typedef struct _IMAGE_RESOURCE_DATA_ENTRY {
 // Word extraction from message parameters (minwindef.h).
 #define LOWORD(l) ((WORD)((DWORD_PTR)(l) & 0xffff))
 #define HIWORD(l) ((WORD)(((DWORD_PTR)(l) >> 16) & 0xffff))
-#define RGB(r, g, b) \
-    ((COLORREF)(((BYTE)(r)) | (((WORD)((BYTE)(g))) << 8) | (((DWORD)(BYTE)(b)) << 16)))
 #define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
 #define MAKEINTRESOURCEW(i) ((LPWSTR)((ULONG_PTR)((WORD)(i))))
 #define MAKEINTRESOURCE __MINGW_NAME_AW(MAKEINTRESOURCE)
@@ -3388,7 +3388,32 @@ struct tagRECT { LONG left; LONG top; LONG right; LONG bottom; };
 typedef struct tagRECT RECT;
 typedef struct tagRECT *LPRECT;
 typedef struct tagRECT *PRECT;
+typedef struct tagRECT *NPRECT;
 typedef const RECT *LPCRECT;
+typedef struct tagPOINT *NPPOINT;
+
+// The other windef.h geometry types.
+typedef struct _RECTL {
+    LONG left;
+    LONG top;
+    LONG right;
+    LONG bottom;
+} RECTL, *PRECTL, *LPRECTL;
+typedef const RECTL *LPCRECTL;
+typedef struct _POINTL {
+    LONG x;
+    LONG y;
+} POINTL, *PPOINTL;
+typedef struct tagSIZE {
+    LONG cx;
+    LONG cy;
+} SIZE, *PSIZE, *LPSIZE;
+typedef SIZE SIZEL;
+typedef SIZE *PSIZEL, *LPSIZEL;
+typedef struct tagPOINTS {
+    SHORT x;
+    SHORT y;
+} POINTS, *PPOINTS, *LPPOINTS;
 
 struct tagMSG {
     HWND   hwnd;
@@ -3401,6 +3426,10 @@ struct tagMSG {
 typedef struct tagMSG MSG;
 typedef struct tagMSG *LPMSG;
 typedef struct tagMSG *PMSG;
+
+#ifndef NOGDI
+#include <wingdi.h>
+#endif
 
 // WndProc and enumeration callback shapes.
 typedef LRESULT (*WNDPROC)(HWND, UINT, WPARAM, LPARAM);
@@ -3436,38 +3465,6 @@ struct tagWNDCLASSW {
 typedef struct tagWNDCLASSW WNDCLASSW;
 typedef struct tagWNDCLASSW *LPWNDCLASSW;
 
-// Pixel format descriptor (wingdi.h) -- 40 bytes, all fields BYTE/WORD/DWORD.
-struct tagPIXELFORMATDESCRIPTOR {
-    WORD  nSize;
-    WORD  nVersion;
-    DWORD dwFlags;
-    BYTE  iPixelType;
-    BYTE  cColorBits;
-    BYTE  cRedBits;
-    BYTE  cRedShift;
-    BYTE  cGreenBits;
-    BYTE  cGreenShift;
-    BYTE  cBlueBits;
-    BYTE  cBlueShift;
-    BYTE  cAlphaBits;
-    BYTE  cAlphaShift;
-    BYTE  cAccumBits;
-    BYTE  cAccumRedBits;
-    BYTE  cAccumGreenBits;
-    BYTE  cAccumBlueBits;
-    BYTE  cAccumAlphaBits;
-    BYTE  cDepthBits;
-    BYTE  cStencilBits;
-    BYTE  cAuxBuffers;
-    BYTE  iLayerType;
-    BYTE  bReserved;
-    DWORD dwLayerMask;
-    DWORD dwVisibleMask;
-    DWORD dwDamageMask;
-};
-typedef struct tagPIXELFORMATDESCRIPTOR PIXELFORMATDESCRIPTOR;
-typedef struct tagPIXELFORMATDESCRIPTOR *LPPIXELFORMATDESCRIPTOR;
-
 struct tagMINMAXINFO {
     POINT ptReserved;
     POINT ptMaxSize;
@@ -3499,7 +3496,9 @@ struct tagMONITORINFO {
 typedef struct tagMONITORINFO MONITORINFO;
 typedef struct tagMONITORINFO *LPMONITORINFO;
 
+#ifndef CCHDEVICENAME
 #define CCHDEVICENAME 32
+#endif
 typedef struct tagMONITORINFOEXW {
     DWORD cbSize;
     RECT  rcMonitor;
@@ -3514,17 +3513,6 @@ typedef struct tagMONITORINFOEXA {
     DWORD dwFlags;
     char  szDevice[CCHDEVICENAME];
 } MONITORINFOEXA, *LPMONITORINFOEXA;
-
-struct _DISPLAY_DEVICEA {
-    DWORD cb;
-    CHAR  DeviceName[32];
-    CHAR  DeviceString[128];
-    DWORD StateFlags;
-    CHAR  DeviceID[128];
-    CHAR  DeviceKey[128];
-};
-typedef struct _DISPLAY_DEVICEA DISPLAY_DEVICEA;
-typedef struct _DISPLAY_DEVICEA *PDISPLAY_DEVICEA;
 
 // Raw input (winuser.h).
 struct tagRAWINPUTHEADER {
@@ -3645,72 +3633,10 @@ struct _ICONINFO {
 typedef struct _ICONINFO ICONINFO;
 typedef struct _ICONINFO *PICONINFO;
 
-// DIB / icon bitmap structures (wingdi.h).
-typedef struct tagRGBQUAD {
-    BYTE rgbBlue;
-    BYTE rgbGreen;
-    BYTE rgbRed;
-    BYTE rgbReserved;
-} RGBQUAD;
-typedef struct tagBITMAPINFOHEADER {
-    DWORD biSize;
-    LONG  biWidth;
-    LONG  biHeight;
-    WORD  biPlanes;
-    WORD  biBitCount;
-    DWORD biCompression;
-    DWORD biSizeImage;
-    LONG  biXPelsPerMeter;
-    LONG  biYPelsPerMeter;
-    DWORD biClrUsed;
-    DWORD biClrImportant;
-} BITMAPINFOHEADER;
-typedef struct tagBITMAPINFO {
-    BITMAPINFOHEADER bmiHeader;
-    RGBQUAD          bmiColors[1];
-} BITMAPINFO;
-// 14-byte on-disk BMP file header; bfSize/bfOffBits are unaligned, so it is
-// packed to match the file format the OS clipboard produces.
-#pragma pack(push, 1)
-typedef struct tagBITMAPFILEHEADER {
-    WORD  bfType;
-    DWORD bfSize;
-    WORD  bfReserved1;
-    WORD  bfReserved2;
-    DWORD bfOffBits;
-} BITMAPFILEHEADER;
-#pragma pack(pop)
-typedef struct tagCIEXYZ { LONG ciexyzX; LONG ciexyzY; LONG ciexyzZ; } CIEXYZ;
-typedef struct tagCIEXYZTRIPLE { CIEXYZ ciexyzRed; CIEXYZ ciexyzGreen; CIEXYZ ciexyzBlue; } CIEXYZTRIPLE;
-typedef struct {
-    DWORD        bV5Size;
-    LONG         bV5Width;
-    LONG         bV5Height;
-    WORD         bV5Planes;
-    WORD         bV5BitCount;
-    DWORD        bV5Compression;
-    DWORD        bV5SizeImage;
-    LONG         bV5XPelsPerMeter;
-    LONG         bV5YPelsPerMeter;
-    DWORD        bV5ClrUsed;
-    DWORD        bV5ClrImportant;
-    DWORD        bV5RedMask;
-    DWORD        bV5GreenMask;
-    DWORD        bV5BlueMask;
-    DWORD        bV5AlphaMask;
-    DWORD        bV5CSType;
-    CIEXYZTRIPLE bV5Endpoints;
-    DWORD        bV5GammaRed;
-    DWORD        bV5GammaGreen;
-    DWORD        bV5GammaBlue;
-    DWORD        bV5Intent;
-    DWORD        bV5ProfileData;
-    DWORD        bV5ProfileSize;
-    DWORD        bV5Reserved;
-} BITMAPV5HEADER;
 
 // Window messages (winuser.h).
 #define WM_NULL         0x0000
+#define WM_DESTROY      0x0002
 #define WM_MOVE         0x0003
 #define WM_SIZE         0x0005
 #define WM_ACTIVATE     0x0006
@@ -3720,6 +3646,24 @@ typedef struct {
 #define WM_GETMINMAXINFO 0x0024
 #define WM_DEVICECHANGE 0x0219
 #define WM_INPUT        0x00FF
+
+// The CreateWindow position and size that picks the default (winuser.h).
+#define CW_USEDEFAULT ((int)0x80000000)
+
+// Window class styles (winuser.h).
+#define CS_VREDRAW         0x0001
+#define CS_HREDRAW         0x0002
+#define CS_DBLCLKS         0x0008
+#define CS_OWNDC           0x0020
+#define CS_CLASSDC         0x0040
+#define CS_PARENTDC        0x0080
+#define CS_NOCLOSE         0x0200
+#define CS_SAVEBITS        0x0800
+#define CS_BYTEALIGNCLIENT 0x1000
+#define CS_BYTEALIGNWINDOW 0x2000
+#define CS_GLOBALCLASS     0x4000
+#define CS_IME             0x00010000
+#define CS_DROPSHADOW      0x00020000
 
 // Window messages, styles, virtual keys and metrics RGFW's win32 backend
 // reads. Canonical Win32 values; guarded so this augments the surface above.
@@ -3829,9 +3773,6 @@ typedef struct {
 #ifndef KF_EXTENDED
 #define KF_EXTENDED 0x0100
 #endif
-#ifndef PFD_STEREO
-#define PFD_STEREO 0x00000002
-#endif
 #ifndef HTCLIENT
 #define HTCLIENT 1
 #endif
@@ -3855,19 +3796,9 @@ typedef struct {
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 #define GET_XBUTTON_WPARAM(wp) (HIWORD(wp))
 #endif
-#ifndef BI_RGB
-#define BI_RGB 0
-#endif
-#ifndef HORZSIZE
-#define HORZSIZE 4
-#define VERTSIZE 6
-#endif
 #ifndef ICON_SMALL
 #define ICON_SMALL 0
 #define ICON_BIG 1
-#endif
-#ifndef SRCCOPY
-#define SRCCOPY 0x00CC0020
 #endif
 #ifndef WMSZ_LEFT
 #define WMSZ_LEFT 1
@@ -3897,9 +3828,6 @@ typedef struct {
 #ifndef ENUM_CURRENT_SETTINGS
 #define ENUM_CURRENT_SETTINGS ((DWORD)-1)
 #endif
-#ifndef DISPLAY_DEVICE_ACTIVE
-#define DISPLAY_DEVICE_ACTIVE 0x00000001
-#endif
 #ifndef DISP_CHANGE_SUCCESSFUL
 #define DISP_CHANGE_SUCCESSFUL 0
 #endif
@@ -3908,18 +3836,6 @@ typedef struct {
 #endif
 #ifndef CDS_TEST
 #define CDS_TEST 0x00000002
-#endif
-#ifndef DM_BITSPERPEL
-#define DM_BITSPERPEL 0x00040000
-#endif
-#ifndef DM_PELSWIDTH
-#define DM_PELSWIDTH 0x00080000
-#endif
-#ifndef DM_PELSHEIGHT
-#define DM_PELSHEIGHT 0x00100000
-#endif
-#ifndef DM_DISPLAYFREQUENCY
-#define DM_DISPLAYFREQUENCY 0x00400000
 #endif
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -3935,6 +3851,11 @@ typedef struct {
 #endif
 
 // Virtual-key codes (winuser.h).
+#define VK_BACK      0x08
+#define VK_TAB       0x09
+#define VK_ESCAPE    0x1B
+#define VK_DELETE    0x2E
+#define VK_SEPARATOR 0x6C
 #ifndef VK_RETURN
 #define VK_RETURN 0x0D
 #endif
@@ -4047,6 +3968,7 @@ typedef struct {
 #define WM_MOUSEMOVE    0x0200
 #define WM_LBUTTONDOWN  0x0201
 #define WM_LBUTTONUP    0x0202
+#define WM_LBUTTONDBLCLK 0x0203
 #define WM_RBUTTONDOWN  0x0204
 #define WM_RBUTTONUP    0x0205
 #define WM_MBUTTONDOWN  0x0207
@@ -4073,13 +3995,6 @@ typedef struct {
 #define WS_EX_LAYERED      0x00080000
 
 // Pixel format flags / types (wingdi.h).
-#define PFD_DOUBLEBUFFER        0x00000001
-#define PFD_DRAW_TO_WINDOW      0x00000004
-#define PFD_SUPPORT_OPENGL      0x00000020
-#define PFD_GENERIC_FORMAT      0x00000040
-#define PFD_GENERIC_ACCELERATED 0x00001000
-#define PFD_TYPE_RGBA           0
-#define PFD_MAIN_PLANE          0
 
 #define PM_REMOVE       0x0001
 #define SW_HIDE         0
@@ -4122,17 +4037,11 @@ typedef struct {
 #define CF_DIB          8
 #define GMEM_MOVEABLE   0x0002
 #define LWA_ALPHA       0x00000002
-#define BI_BITFIELDS    3
-#define DIB_RGB_COLORS  0
-#define LOGPIXELSX      88
-#define LOGPIXELSY      90
 #define SWP_NOSIZE      0x0001
 #define SWP_NOMOVE      0x0002
 #define SWP_NOZORDER    0x0004
 #define SWP_FRAMECHANGED 0x0020
 #define SWP_SHOWWINDOW  0x0040
-#define HORZRES         8
-#define VERTRES         10
 #define HWND_TOP        ((HWND)0)
 
 // kernel32 movable-memory allocation (used for clipboard transfers).
@@ -4165,6 +4074,17 @@ SIZE_T GlobalSize(HGLOBAL hMem);
 #pragma binding(user32::DestroyIcon,                "DestroyIcon")
 #pragma binding(user32::DestroyWindow,              "DestroyWindow")
 #pragma binding(user32::DispatchMessageA,           "DispatchMessageA")
+#pragma binding(user32::DispatchMessageW,           "DispatchMessageW")
+#pragma binding(user32::GetMessageA,                "GetMessageA")
+#pragma binding(user32::GetMessageW,                "GetMessageW")
+#pragma binding(user32::IsClipboardFormatAvailable, "IsClipboardFormatAvailable")
+#pragma binding(user32::PeekMessageW,               "PeekMessageW")
+#pragma binding(user32::PostQuitMessage,            "PostQuitMessage")
+#pragma binding(user32::ReleaseCapture,             "ReleaseCapture")
+#pragma binding(user32::SetCapture,                 "SetCapture")
+#pragma binding(user32::SetRect,                    "SetRect")
+#pragma binding(user32::UnregisterClassA,           "UnregisterClassA")
+#pragma binding(user32::UnregisterClassW,           "UnregisterClassW")
 #pragma binding(user32::EmptyClipboard,             "EmptyClipboard")
 #pragma binding(user32::EndPaint,                   "EndPaint")
 #pragma binding(user32::EnumDisplayDevicesA,        "EnumDisplayDevicesA")
@@ -4274,65 +4194,6 @@ LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags
 // The display, paint and timer surface.
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
 
-typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
-
-typedef struct _devicemodeW {
-    WCHAR dmDeviceName[32];
-    WORD  dmSpecVersion;
-    WORD  dmDriverVersion;
-    WORD  dmSize;
-    WORD  dmDriverExtra;
-    DWORD dmFields;
-    union {
-        struct {
-            short dmOrientation;
-            short dmPaperSize;
-            short dmPaperLength;
-            short dmPaperWidth;
-            short dmScale;
-            short dmCopies;
-            short dmDefaultSource;
-            short dmPrintQuality;
-        };
-        struct {
-            POINTL dmPosition;
-            DWORD  dmDisplayOrientation;
-            DWORD  dmDisplayFixedOutput;
-        };
-    };
-    short dmColor;
-    short dmDuplex;
-    short dmYResolution;
-    short dmTTOption;
-    short dmCollate;
-    WCHAR dmFormName[32];
-    WORD  dmLogPixels;
-    DWORD dmBitsPerPel;
-    DWORD dmPelsWidth;
-    DWORD dmPelsHeight;
-    union {
-        DWORD dmDisplayFlags;
-        DWORD dmNup;
-    };
-    DWORD dmDisplayFrequency;
-    DWORD dmICMMethod;
-    DWORD dmICMIntent;
-    DWORD dmMediaType;
-    DWORD dmDitherType;
-    DWORD dmReserved1;
-    DWORD dmReserved2;
-    DWORD dmPanningWidth;
-    DWORD dmPanningHeight;
-} DEVMODEW, *PDEVMODEW, *LPDEVMODEW;
-
-typedef struct _DISPLAY_DEVICEW {
-    DWORD cb;
-    WCHAR DeviceName[32];
-    WCHAR DeviceString[128];
-    DWORD StateFlags;
-    WCHAR DeviceID[128];
-    WCHAR DeviceKey[128];
-} DISPLAY_DEVICEW, *PDISPLAY_DEVICEW;
 
 typedef struct tagPAINTSTRUCT {
     HDC  hdc;
@@ -4356,11 +4217,14 @@ HKL GetKeyboardLayout(DWORD idThread);
 UINT MapVirtualKeyW(UINT uCode, UINT uMapType);
 int ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState, LPWSTR pwszBuff,
                 int cchBuff, UINT wFlags, HKL dwhkl);
+// The display-mode calls take <wingdi.h>'s structures, as in winuser.h.
+#ifndef NOGDI
 LONG ChangeDisplaySettingsExW(LPCWSTR lpszDeviceName, DEVMODEW *lpDevMode, HWND hwnd,
                               DWORD dwflags, LPVOID lParam);
 BOOL EnumDisplayDevicesW(LPCWSTR lpDevice, DWORD iDevNum,
                          PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
 BOOL EnumDisplaySettingsW(LPCWSTR lpszDeviceName, DWORD iModeNum, DEVMODEW *lpDevMode);
+#endif
 BOOL FlashWindowEx(PFLASHWINFO pfwi);
 BOOL GetMonitorInfoW(HMONITOR hMonitor, LPMONITORINFO lpmi);
 BOOL IsZoomed(HWND hWnd);
@@ -4385,17 +4249,24 @@ int GetUpdateRgn(HWND hWnd, HRGN hRgn, BOOL bErase);
 BOOL BringWindowToTop(HWND hWnd);
 BOOL AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
 BOOL MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
-BOOL BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop);
-HDC CreateDCW(LPCWSTR pwszDriver, LPCWSTR pwszDevice, LPCWSTR pszPort,
-              const DEVMODEW *pdm);
-BOOL GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
-BOOL SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
 BOOL ShowWindow(HWND hWnd, int nCmdShow);
 HDC GetDC(HWND hWnd);
 int ReleaseDC(HWND hWnd, HDC hDC);
 BOOL GetWindowRect(HWND hWnd, LPRECT lpRect);
 BOOL GetClientRect(HWND hWnd, LPRECT lpRect);
 BOOL DestroyWindow(HWND hWnd);
+BOOL GetMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
+BOOL GetMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
+BOOL PeekMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax,
+                  UINT wRemoveMsg);
+LRESULT DispatchMessageW(const MSG *lpMsg);
+VOID PostQuitMessage(int nExitCode);
+HWND SetCapture(HWND hWnd);
+BOOL ReleaseCapture(VOID);
+BOOL SetRect(LPRECT lprc, int xLeft, int yTop, int xRight, int yBottom);
+BOOL IsClipboardFormatAvailable(UINT format);
+BOOL UnregisterClassA(LPCSTR lpClassName, HINSTANCE hInstance);
+BOOL UnregisterClassW(LPCWSTR lpClassName, HINSTANCE hInstance);
 BOOL PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax,
                   UINT wRemoveMsg);
 BOOL TranslateMessage(const MSG *lpMsg);
@@ -4442,8 +4313,10 @@ HMONITOR MonitorFromPoint(POINT pt, DWORD dwFlags);
 HMONITOR MonitorFromWindow(HWND hwnd, DWORD dwFlags);
 BOOL EnumDisplayMonitors(HDC hdc, LPCRECT lprcClip, MONITORENUMPROC lpfnEnum,
                          LPARAM dwData);
+#ifndef NOGDI
 BOOL EnumDisplayDevicesA(LPCSTR lpDevice, DWORD iDevNum,
                          PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
+#endif
 BOOL GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
 BOOL SetProcessDPIAware(VOID);
 HWND GetForegroundWindow(VOID);
@@ -4454,55 +4327,8 @@ BOOL EmptyClipboard(VOID);
 HANDLE SetClipboardData(UINT uFormat, HANDLE hMem);
 DWORD CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
 
-// gdi32.dll pixel format, DIB, and bitblt entry points.
-#pragma dylib(gdi32, "gdi32.dll")
-#pragma binding(gdi32::BitBlt,              "BitBlt")
-#pragma binding(gdi32::ChoosePixelFormat,   "ChoosePixelFormat")
-#pragma binding(gdi32::CreateBitmap,        "CreateBitmap")
-#pragma binding(gdi32::CreateCompatibleDC,  "CreateCompatibleDC")
-#pragma binding(gdi32::CreateDCW,           "CreateDCW")
-#pragma binding(gdi32::CreateDIBSection,    "CreateDIBSection")
-#pragma binding(gdi32::DeleteDC,            "DeleteDC")
-#pragma binding(gdi32::DeleteObject,        "DeleteObject")
-#pragma binding(gdi32::DescribePixelFormat, "DescribePixelFormat")
-#pragma binding(gdi32::GetDeviceCaps,       "GetDeviceCaps")
-#pragma binding(gdi32::GetDeviceGammaRamp,  "GetDeviceGammaRamp")
-#pragma binding(gdi32::SelectObject,        "SelectObject")
-#pragma binding(gdi32::SetDeviceGammaRamp,  "SetDeviceGammaRamp")
-#pragma binding(gdi32::SetPixelFormat,      "SetPixelFormat")
-#pragma binding(gdi32::SwapBuffers,         "SwapBuffers")
-int ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
-BOOL SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
-int DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes,
-                        LPPIXELFORMATDESCRIPTOR ppfd);
-BOOL SwapBuffers(HDC hdc);
-int GetDeviceCaps(HDC hdc, int index);
-HBITMAP CreateBitmap(int nWidth, int nHeight, UINT nPlanes, UINT nBitCount,
-                     const VOID *lpBits);
-HBITMAP CreateDIBSection(HDC hdc, const BITMAPINFO *pbmi, UINT usage, VOID **ppvBits,
-                         HANDLE hSection, DWORD offset);
-HDC CreateCompatibleDC(HDC hdc);
-BOOL DeleteDC(HDC hdc);
-BOOL DeleteObject(HGDIOBJ ho);
-HGDIOBJ SelectObject(HDC hdc, HGDIOBJ h);
 HICON CreateIconIndirect(PICONINFO piconinfo);
 
-// opengl32.dll WGL context entry points.
-#pragma dylib(opengl32, "opengl32.dll")
-#pragma binding(opengl32::wglCreateContext,     "wglCreateContext")
-#pragma binding(opengl32::wglDeleteContext,     "wglDeleteContext")
-#pragma binding(opengl32::wglGetCurrentContext, "wglGetCurrentContext")
-#pragma binding(opengl32::wglGetCurrentDC,      "wglGetCurrentDC")
-#pragma binding(opengl32::wglGetProcAddress,    "wglGetProcAddress")
-#pragma binding(opengl32::wglMakeCurrent,       "wglMakeCurrent")
-#pragma binding(opengl32::wglShareLists,        "wglShareLists")
-HGLRC wglCreateContext(HDC hdc);
-BOOL wglDeleteContext(HGLRC hglrc);
-BOOL wglMakeCurrent(HDC hdc, HGLRC hglrc);
-PROC wglGetProcAddress(LPCSTR lpszProc);
-HDC wglGetCurrentDC(VOID);
-HGLRC wglGetCurrentContext(VOID);
-BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 
 
 // The generic names of the A / W pairs above, as mingw-w64's headers map them.
@@ -4517,6 +4343,7 @@ BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 #define CreateWindow __MINGW_NAME_AW(CreateWindow)
 #define CreateWindowEx __MINGW_NAME_AW(CreateWindowEx)
 #define DefWindowProc __MINGW_NAME_AW(DefWindowProc)
+#define DispatchMessage __MINGW_NAME_AW(DispatchMessage)
 #define DeleteFile __MINGW_NAME_AW(DeleteFile)
 #define EnumDisplayDevices __MINGW_NAME_AW(EnumDisplayDevices)
 #define ExpandEnvironmentStrings __MINGW_NAME_AW(ExpandEnvironmentStrings)
@@ -4532,6 +4359,7 @@ BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 #define GetFileAttributes __MINGW_NAME_AW(GetFileAttributes)
 #define GetFullPathName __MINGW_NAME_AW(GetFullPathName)
 #define GetModuleFileName __MINGW_NAME_AW(GetModuleFileName)
+#define GetMessage __MINGW_NAME_AW(GetMessage)
 #define GetModuleHandle __MINGW_NAME_AW(GetModuleHandle)
 #define GetMonitorInfo __MINGW_NAME_AW(GetMonitorInfo)
 #define GetRawInputDeviceInfo __MINGW_NAME_AW(GetRawInputDeviceInfo)
@@ -4552,6 +4380,7 @@ BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 #define MoveFileEx __MINGW_NAME_AW(MoveFileEx)
 #define OpenEvent __MINGW_NAME_AW(OpenEvent)
 #define OutputDebugString __MINGW_NAME_AW(OutputDebugString)
+#define PeekMessage __MINGW_NAME_AW(PeekMessage)
 #define PeekConsoleInput __MINGW_NAME_AW(PeekConsoleInput)
 #define PostMessage __MINGW_NAME_AW(PostMessage)
 #define ReadConsole __MINGW_NAME_AW(ReadConsole)
@@ -4570,12 +4399,11 @@ BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 #define SetWindowLong __MINGW_NAME_AW(SetWindowLong)
 #define SetWindowLongPtr __MINGW_NAME_AW(SetWindowLongPtr)
 #define SetWindowText __MINGW_NAME_AW(SetWindowText)
+#define UnregisterClass __MINGW_NAME_AW(UnregisterClass)
 #define VerifyVersionInfo __MINGW_NAME_AW(VerifyVersionInfo)
 #define WriteConsole __MINGW_NAME_AW(WriteConsole)
 #define WriteConsoleInput __MINGW_NAME_AW(WriteConsoleInput)
 #define lstrcpy __MINGW_NAME_AW(lstrcpy)
-__MINGW_TYPEDEF_AW(DISPLAY_DEVICE)
-__MINGW_TYPEDEF_AW(PDISPLAY_DEVICE)
 __MINGW_TYPEDEF_AW(MONITORINFOEX)
 __MINGW_TYPEDEF_AW(LPMONITORINFOEX)
 __MINGW_TYPEDEF_AW(OSVERSIONINFO)

@@ -1392,6 +1392,19 @@ fn windows_h_imports_its_win32_functions_from_their_dlls() {
                 ("CreateWindowExW", "CreateWindowExW", "user32.dll"),
                 ("GetUpdateRect", "GetUpdateRect", "user32.dll"),
                 ("GetUpdateRgn", "GetUpdateRgn", "user32.dll"),
+                ("GetMessageW", "GetMessageW", "user32.dll"),
+                ("PeekMessageW", "PeekMessageW", "user32.dll"),
+                ("DispatchMessageW", "DispatchMessageW", "user32.dll"),
+                ("PostQuitMessage", "PostQuitMessage", "user32.dll"),
+                ("SetCapture", "SetCapture", "user32.dll"),
+                ("ReleaseCapture", "ReleaseCapture", "user32.dll"),
+                ("SetRect", "SetRect", "user32.dll"),
+                (
+                    "IsClipboardFormatAvailable",
+                    "IsClipboardFormatAvailable",
+                    "user32.dll",
+                ),
+                ("UnregisterClassW", "UnregisterClassW", "user32.dll"),
                 ("BitBlt", "BitBlt", "gdi32.dll"),
                 ("SwapBuffers", "SwapBuffers", "gdi32.dll"),
                 ("wglMakeCurrent", "wglMakeCurrent", "opengl32.dll"),
@@ -1640,6 +1653,68 @@ fn windows_crt_headers_leave_win32_names_to_their_headers() {
             ],
         );
         assert_windows_unit_imports(target, TIMER, &[]);
+    }
+}
+
+/// `<windows.h>` includes `<wingdi.h>`, mingw-w64's gdi32 surface: the
+/// drawing, text, region and bitmap calls import gdi32.dll's entry points,
+/// AlphaBlend / GradientFill / TransparentBlt msimg32.dll's, and the
+/// structures and constants they take are declared with them; under
+/// `NOGDI` none of it is.
+#[test]
+fn windows_h_includes_wingdi_h_with_its_dlls() {
+    const G: &str = "gdi32.dll";
+    const I: &str = "msimg32.dll";
+    let headers = "#include <windows.h>\n#include <wingdi.h>\n\
+        _Static_assert(sizeof(LOGPEN) == 16 && sizeof(LOGBRUSH) == 16 &&\n\
+            sizeof(TEXTMETRICW) == 60 && sizeof(LOGFONTA) == 60 && sizeof(TRIVERTEX) == 16 &&\n\
+            sizeof(GRADIENT_RECT) == 8 && sizeof(BLENDFUNCTION) == 4 &&\n\
+            sizeof(BITMAPFILEHEADER) == 14 && sizeof(DEVMODEW) == 220, \"\");\n\
+        _Static_assert(PS_SOLID == 0 && DC_PEN == 19 && DC_BRUSH == 18 && TRANSPARENT == 1 &&\n\
+            ETO_CLIPPED == 4 && AD_COUNTERCLOCKWISE == 1 && GRADIENT_FILL_RECT_H == 0 &&\n\
+            AC_SRC_OVER == 0 && AC_SRC_ALPHA == 1, \"\");\n";
+    let imports = [
+        ("CreatePen", G),
+        ("ExtCreatePen", G),
+        ("GetStockObject", G),
+        ("SetDCPenColor", G),
+        ("SetDCBrushColor", G),
+        ("MoveToEx", G),
+        ("LineTo", G),
+        ("Rectangle", G),
+        ("RoundRect", G),
+        ("Ellipse", G),
+        ("Pie", G),
+        ("SetArcDirection", G),
+        ("Polygon", G),
+        ("Polyline", G),
+        ("PolyBezier", G),
+        ("IntersectClipRect", G),
+        ("SelectClipRgn", G),
+        ("SetBkMode", G),
+        ("SetBkColor", G),
+        ("SetTextColor", G),
+        ("ExtTextOutW", G),
+        ("GetTextMetricsW", G),
+        ("CreateFontA", G),
+        ("GetObjectA", G),
+        ("CreateCompatibleBitmap", G),
+        ("StretchBlt", G),
+        ("SetDIBits", G),
+        ("GdiGradientFill", G),
+        ("BitBlt", G),
+        ("CreateDIBSection", G),
+        ("AlphaBlend", I),
+        ("GradientFill", I),
+        ("TransparentBlt", I),
+    ];
+    let imports: alloc::vec::Vec<_> = imports.iter().map(|&(n, d)| (n, n, d)).collect();
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(target, headers, &imports);
+        let nogdi = "#define NOGDI\n#include <windows.h>\n\
+            #ifdef PS_SOLID\n#error wingdi.h under NOGDI\n#endif\n\
+            int main(void) { return GetCurrentProcessId() == 0; }\n";
+        assert_windows_unit_imports(target, nogdi, &[("GetCurrentProcessId", "kernel32.dll")]);
     }
 }
 

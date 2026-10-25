@@ -188,15 +188,16 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::vfprintf,  "vfprintf")
 #pragma binding(libc::vsprintf,  "vsprintf")
 #pragma binding(libc::vsnprintf, "vsnprintf")
-#pragma binding(libc::scanf,     "scanf")
-#pragma binding(libc::fscanf,    "fscanf")
-#pragma binding(libc::sscanf,    "sscanf")
-// va_list input scan + GNU allocating printf variants; their prototypes
-// follow the bindings.
-#pragma binding(libc::vsscanf,   "vsscanf")
-// The C99 stream scanners glibc's <stdio.h> selects through C17.
+// The C99 scanners glibc's <stdio.h> selects through C17, where `%as` is a
+// floating conversion and a literal `s`; the plain names keep the GNU
+// allocating `%as`, `%aS` and `%a[`.
+#pragma binding(libc::scanf,     "__isoc99_scanf")
+#pragma binding(libc::fscanf,    "__isoc99_fscanf")
+#pragma binding(libc::sscanf,    "__isoc99_sscanf")
+#pragma binding(libc::vsscanf,   "__isoc99_vsscanf")
 #pragma binding(libc::vfscanf,   "__isoc99_vfscanf")
 #pragma binding(libc::vscanf,    "__isoc99_vscanf")
+// GNU allocating printf variants; their prototypes follow the bindings.
 #pragma binding(libc::asprintf,  "asprintf")
 #pragma binding(libc::vasprintf, "vasprintf")
 #pragma binding(libc::fopen,     "fopen")

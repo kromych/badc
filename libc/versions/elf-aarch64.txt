@@ -25,11 +25,15 @@ __environ                                GLIBC_2.17
 __errno_location                         GLIBC_2.17
 __getpagesize                            GLIBC_2.17
 __h_errno_location                       GLIBC_2.17
+__isoc99_fscanf                          GLIBC_2.17
 __isoc99_fwscanf                         GLIBC_2.17
+__isoc99_scanf                           GLIBC_2.17
+__isoc99_sscanf                          GLIBC_2.17
 __isoc99_swscanf                         GLIBC_2.17
 __isoc99_vfscanf                         GLIBC_2.17
 __isoc99_vfwscanf                        GLIBC_2.17
 __isoc99_vscanf                          GLIBC_2.17
+__isoc99_vsscanf                         GLIBC_2.17
 __isoc99_vswscanf                        GLIBC_2.17
 __isoc99_vwscanf                         GLIBC_2.17
 __isoc99_wscanf                          GLIBC_2.17
@@ -190,7 +194,6 @@ free                                     GLIBC_2.17
 freeaddrinfo                             GLIBC_2.17
 fremovexattr                             GLIBC_2.17
 freopen                                  GLIBC_2.17
-fscanf                                   GLIBC_2.17
 fseek                                    GLIBC_2.17
 fseeko                                   GLIBC_2.17
 fsetpos                                  GLIBC_2.17
@@ -644,7 +647,6 @@ rewind                                   GLIBC_2.17
 rewinddir                                GLIBC_2.17
 rindex                                   GLIBC_2.17
 rmdir                                    GLIBC_2.17
-scanf                                    GLIBC_2.17
 sched_get_priority_max                   GLIBC_2.17
 sched_get_priority_min                   GLIBC_2.17
 sched_getaffinity                        GLIBC_2.17
@@ -742,7 +744,6 @@ sprintf                                  GLIBC_2.17
 srand                                    GLIBC_2.17
 srand48                                  GLIBC_2.17
 srandom                                  GLIBC_2.17
-sscanf                                   GLIBC_2.17
 stat                                     GLIBC_2.33
 statfs                                   GLIBC_2.17
 statvfs                                  GLIBC_2.17
@@ -865,7 +866,6 @@ vfwprintf                                GLIBC_2.17
 vprintf                                  GLIBC_2.17
 vsnprintf                                GLIBC_2.17
 vsprintf                                 GLIBC_2.17
-vsscanf                                  GLIBC_2.17
 vswprintf                                GLIBC_2.17
 vwarn                                    GLIBC_2.17
 vwarnx                                   GLIBC_2.17

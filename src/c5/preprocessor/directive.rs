@@ -220,6 +220,9 @@ pub(super) enum Directive<'a> {
     /// NAME (...)`) parses as object-like with `(...)` as the body,
     /// matching the C standard.
     DefineFn(&'a str, Vec<&'a str>, &'a str),
+    /// `#define NAME(p1, p2` with no `)` closing the parameter list,
+    /// which C99 6.10.3p10 requires: an error that defines nothing.
+    DefineUnclosed(&'a str, Vec<&'a str>),
     Undef(&'a str),
     Ifdef(&'a str),
     Ifndef(&'a str),
@@ -311,25 +314,43 @@ pub(super) fn format_line_marker(line: usize, file: &str) -> String {
 
 /// `#define`'s operand. The function-like form needs the `(` flush
 /// against the name (C99 6.10.3p10; a space makes it object-like with
-/// `(` opening the body). An unclosed parameter list falls back to the
-/// object-like reading, as the lexer would see a broken `#define`.
+/// `(` opening the body).
 pub(super) fn define_operand(after: &str, dollar: Dollar) -> Directive<'_> {
     let (name, rest_after_name) = split_ident(after.trim_start(), dollar);
     // Comments were removed in translation phase 3 (C99 5.1.1.2) before
     // directives execute, so a `//` or `/*` still here can only be
     // string- or char-literal content and must stay.
-    if let Some(after_paren) = rest_after_name.strip_prefix('(')
-        && let Some(close) = after_paren.find(')')
-    {
-        let params_str = &after_paren[..close];
-        let params: Vec<&str> = if params_str.trim().is_empty() {
+    let Some(after_paren) = rest_after_name.strip_prefix('(') else {
+        return Directive::Define(name, rest_after_name.trim());
+    };
+    fn params(list: &str) -> Vec<&str> {
+        if list.trim().is_empty() {
             Vec::new()
         } else {
-            params_str.split(',').map(|p| p.trim()).collect()
-        };
-        return Directive::DefineFn(name, params, after_paren[close + 1..].trim());
+            list.split(',').map(str::trim).collect()
+        }
     }
-    Directive::Define(name, rest_after_name.trim())
+    match after_paren.find(')') {
+        Some(close) => Directive::DefineFn(
+            name,
+            params(&after_paren[..close]),
+            after_paren[close + 1..].trim(),
+        ),
+        None => Directive::DefineUnclosed(name, after_paren.split(',').map(str::trim).collect()),
+    }
+}
+
+/// The error for a parameter list the line ends inside, in gcc's terms.
+pub(super) fn unclosed_params_error(params: &[&str], dollar: Dollar) -> String {
+    let last = params.last().map_or("", |p| p.trim());
+    if last.is_empty() {
+        return String::from("macro parameter expected before end of line");
+    }
+    match macro_params_error(params, dollar) {
+        Some(text) => text,
+        None if last.ends_with("...") => String::from("expected `)` after `...`"),
+        None => String::from("expected `)` before end of line"),
+    }
 }
 
 /// The first macro parameter C99 6.10.3 rejects: each is an identifier

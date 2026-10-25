@@ -941,6 +941,7 @@ fn cli_define_takes_the_define_directives_operand() {
         ("1X", "macro name must be an identifier"),
         ("F(1)", "`1` is not a macro parameter"),
         ("F(x,x)", "duplicate macro parameter `x`"),
+        ("F(x", "expected `,` or `)` after macro parameter `x`"),
     ] {
         let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
         pp.define(name, "x");
@@ -950,6 +951,31 @@ fn cli_define_takes_the_define_directives_operand() {
             "{name}: {err}"
         );
     }
+}
+
+/// C99 6.10.3p10 closes a function-like macro's identifier list with `)`;
+/// a line ending inside it is an error that defines nothing, as gcc 16
+/// and clang 22 report it, and none in a skipped group.
+#[test]
+fn an_unclosed_macro_parameter_list_is_an_error() {
+    for (src, text) in [
+        ("F(x 1", "expected `,` or `)` after macro parameter `x`"),
+        ("F(x", "expected `)` before end of line"),
+        ("F(x, y", "expected `)` before end of line"),
+        ("F(", "macro parameter expected before end of line"),
+        ("F(x,", "macro parameter expected before end of line"),
+        ("F(...", "expected `)` after `...`"),
+        ("F(x...", "expected `)` after `...`"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let err = pp
+            .process(&format!("#define {src}\nint F;\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(&format!(":1: error: {text}")), "{src}: {err}");
+    }
+    let out = process("#if 0\n#define F(x\n#endif\nint F;\n");
+    assert!(out.contains("int F;"), "{out}");
 }
 
 #[test]
@@ -4782,6 +4808,7 @@ fn directive_kind(line: &str) -> &'static str {
     match parse_directive(line, false) {
         Directive::Define(..) => "define",
         Directive::DefineFn(..) => "define-fn",
+        Directive::DefineUnclosed(..) => "define-unclosed",
         Directive::Undef(_) => "undef",
         Directive::Ifdef(_) => "ifdef",
         Directive::Ifndef(_) => "ifndef",

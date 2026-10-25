@@ -1557,6 +1557,10 @@ impl Preprocessor {
                     None
                 })
             }
+            Directive::DefineUnclosed(name, params) => Some(
+                directive::macro_name_error(name, dollar)
+                    .unwrap_or_else(|| directive::unclosed_params_error(&params, dollar)),
+            ),
             _ => None,
         };
         if let Some(text) = error {
@@ -1951,6 +1955,15 @@ impl Preprocessor {
                 }
                 active
             }
+            Directive::DefineUnclosed(name, params) => {
+                if active {
+                    let dollar = self.dollar();
+                    let text = directive::macro_name_error(name, dollar)
+                        .unwrap_or_else(|| directive::unclosed_params_error(params, dollar));
+                    return Err(C5Error::at(Code::MACRO, filename, diag, text));
+                }
+                active
+            }
             Directive::Undef(name) => {
                 if active {
                     self.apply_undef(name);
@@ -2338,7 +2351,10 @@ impl<'p, 's> LinePass<'p, 's> {
             Directive::Line { .. } | Directive::Pragma(_) => {
                 self.directive(&parsed, spelling, line_no)
             }
-            Directive::Define(..) | Directive::DefineFn(..) | Directive::Undef(_) => {
+            Directive::Define(..)
+            | Directive::DefineFn(..)
+            | Directive::DefineUnclosed(..)
+            | Directive::Undef(_) => {
                 self.blank();
                 self.idx += 1;
                 Ok(())
@@ -2421,6 +2437,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 // every one of these.
                 Directive::Define(..)
                 | Directive::DefineFn(..)
+                | Directive::DefineUnclosed(..)
                 | Directive::Undef(..)
                 | Directive::Ifdef(..)
                 | Directive::Ifndef(..)

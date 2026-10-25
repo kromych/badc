@@ -1800,6 +1800,35 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
     }
 }
 
+/// C99 logb, lgamma, remquo and nexttoward in their three precisions import
+/// ucrtbase.dll's entry points (`long double` is `double` on Windows), and
+/// asctime msvcrt.dll's; asctime_r links from the C-library sources.
+#[test]
+fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
+    const M: &str = "msvcrt.dll";
+    const U: &str = "ucrtbase.dll";
+    let imports = [
+        ("logb", "logb", U),
+        ("logbf", "logbf", U),
+        ("logbl", "logb", U),
+        ("lgamma", "lgamma", U),
+        ("lgammaf", "lgammaf", U),
+        ("lgammal", "lgamma", U),
+        ("remquo", "remquo", U),
+        ("remquof", "remquof", U),
+        ("remquol", "remquo", U),
+        ("nexttoward", "nexttoward", U),
+        ("nexttowardf", "nexttowardf", U),
+        ("nexttowardl", "nexttoward", U),
+        ("asctime", "asctime", M),
+        ("asctime_r", "asctime", M),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let headers = "#define _POSIX_C_SOURCE 200809L\n#include <math.h>\n#include <time.h>\n";
+        assert_windows_imports(target, headers, &imports);
+    }
+}
+
 /// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
 /// and `<wctype.h>` declare under their POSIX and C99 names import an entry
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the

@@ -218,6 +218,7 @@ typedef long clock_t;
 #pragma binding(msvcrt::localtime,"localtime")
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::ctime,    "ctime")
+#pragma binding(msvcrt::asctime,  "asctime")
 #pragma binding(msvcrt::strftime, "strftime")
 #pragma binding(msvcrt::tzset,    "_tzset")
 // msvcrt.dll exports the tzset outputs as data on both x64 and
@@ -229,8 +230,8 @@ typedef long clock_t;
 #pragma binding(data msvcrt::daylight, "_daylight")
 // msvcrt has none of the POSIX clocks, nanosleep or gettimeofday, which
 // mingw-w64 declares here; libc/lib/time_ext.c defines them over
-// kernel32. The reentrant localtime_r / gmtime_r / ctime_r are declared,
-// as there, under `_POSIX_C_SOURCE` alone.
+// kernel32. The reentrant localtime_r / gmtime_r / ctime_r / asctime_r are
+// declared, as there, under `_POSIX_C_SOURCE` alone.
 #if defined(_POSIX_C_SOURCE) && !defined(_POSIX_THREAD_SAFE_FUNCTIONS)
 #define _POSIX_THREAD_SAFE_FUNCTIONS 200112L
 #endif
@@ -278,14 +279,13 @@ struct tm *gmtime_r(const time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
 char *ctime_r(const time_t *t, char *buf);
+// POSIX asctime_r: asctime's text in the caller's 26-byte buffer.
+char *asctime_r(const struct tm *restrict tm, char *restrict buf);
 #endif
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
 char *ctime(const time_t *t);
-#ifndef _WIN32
-// C89 7.12.3.1 asctime, and POSIX asctime_r into a 26-byte buffer.
+// C99 7.23.3.1 asctime.
 char *asctime(const struct tm *tm);
-char *asctime_r(const struct tm *restrict tm, char *restrict buf);
-#endif
 #ifdef __linux__
 // POSIX: the CPU-time clock of a process.
 int clock_getcpuclockid(int pid, clockid_t *clock_id);

@@ -538,6 +538,20 @@
 #pragma binding(ucrtbase::llroundl, "llround")
 #pragma binding(ucrtbase::lrintl, "lrint")
 #pragma binding(ucrtbase::llrintl, "llrint")
+// msvcrt.dll exports none of the C99 logb, lgamma, remquo and nexttoward
+// names; ucrtbase.dll exports each.
+#pragma binding(ucrtbase::logb, "logb")
+#pragma binding(ucrtbase::logbf, "logbf")
+#pragma binding(ucrtbase::logbl, "logb")
+#pragma binding(ucrtbase::lgamma, "lgamma")
+#pragma binding(ucrtbase::lgammaf, "lgammaf")
+#pragma binding(ucrtbase::lgammal, "lgamma")
+#pragma binding(ucrtbase::remquo, "remquo")
+#pragma binding(ucrtbase::remquof, "remquof")
+#pragma binding(ucrtbase::remquol, "remquo")
+#pragma binding(ucrtbase::nexttoward, "nexttoward")
+#pragma binding(ucrtbase::nexttowardf, "nexttowardf")
+#pragma binding(ucrtbase::nexttowardl, "nexttoward")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -905,9 +919,7 @@ long lroundl(long double x);
 long long llroundl(long double x);
 long lrintl(long double x);
 long long llrintl(long double x);
-#ifndef _WIN32
 // C99 7.12.6.11 logb, 7.12.8.3 lgamma, 7.12.10.3 remquo, 7.12.11.4 nexttoward.
-// TODO: the Universal CRT exports all twelve; declare them on Windows once bound.
 double logb(double x);
 float logbf(float x);
 long double logbl(long double x);
@@ -920,7 +932,6 @@ long double remquol(long double x, long double y, int *quo);
 double nexttoward(double x, long double y);
 float nexttowardf(float x, long double y);
 long double nexttowardl(long double x, long double y);
-#endif
 #ifdef __linux__
 long double scalbnl(long double x, int n);
 long double scalblnl(long double x, long n);

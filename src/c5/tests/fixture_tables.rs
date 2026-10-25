@@ -457,6 +457,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("wide_char_utf8.c", 0),
     ("scanf_family_reads_percent_a_as_a_floating_conversion.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,
@@ -1950,6 +1951,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("wide_char_utf8.c", 0),
     ("scanf_family_reads_percent_a_as_a_floating_conversion.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,
@@ -3104,6 +3106,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("wide_char_utf8.c", 0),
     ("scanf_family_reads_percent_a_as_a_floating_conversion.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,
@@ -3978,6 +3981,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_arg_by_stack.c", 0),
     ("wide_char_utf8.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,
@@ -4791,6 +4795,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("struct_arg_by_stack.c", 0),
     ("wide_char_utf8.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,
@@ -5669,6 +5674,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("wide_char_utf8.c", 0),
     ("scanf_family_reads_percent_a_as_a_floating_conversion.c", 0),
     ("vfscanf_and_vscanf_take_a_va_list.c", 0),
+    ("strtof_and_wcstof_report_range_errors.c", 0),
     (
         "wide_formatted_and_character_io_through_a_file_and_a_buffer.c",
         0,

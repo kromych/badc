@@ -185,9 +185,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::_strtoui64, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
-// msvcrt.dll has no `strtold`; UCRT exports it but the
-// universally-available CRT here does not. Programs that
-// need `long double` parsing on Windows pin to UCRT.
 #pragma binding(msvcrt::abs,     "abs")
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
@@ -353,19 +350,13 @@ long long strtoll(const char *s, char **endp, int base);
 long long _strtoi64(const char *s, char **endp, int base);
 #endif
 double strtod(const char *s, char **endp);
-#ifdef _WIN32
-// C99 7.20.1.3. msvcrt.dll exports no `strtof` (a UCRT addition).
-static inline float strtof(const char *s, char **endp) {
-    return (float)strtod(s, endp);
-}
-#else
-float strtof(const char *s, char **endp);
-// `long double` falls back to f64 in c5 (16-byte storage, 8-byte
-// precision) -- the return value flows through the long-double
-// load/store pipeline; the libc-side conversion happens at full
-// 80-bit precision and gets narrowed on the way back.
-long double strtold(const char *s, char **endp);
-#endif
+// C99 7.20.1.3. msvcrt.dll exports neither; libc/lib/strtod_ext.c defines
+// both over strtod on Windows. Elsewhere `long double` falls back to f64 in
+// c5 (16-byte storage, 8-byte precision) -- the return value flows through
+// the long-double load/store pipeline; the libc-side conversion happens at
+// full 80-bit precision and gets narrowed on the way back.
+float strtof(const char *restrict s, char **restrict endp);
+long double strtold(const char *restrict s, char **restrict endp);
 int abs(int x);
 // C99 7.20.6.1: absolute value of a long / long long. Provided inline
 // rather than through a libc binding because the result reduces to a

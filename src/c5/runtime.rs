@@ -80,8 +80,8 @@ pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),
     ("stdlib_ext.c", include_str!("../../libc/lib/stdlib_ext.c")),
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+    ("strtod_ext.c", include_str!("../../libc/lib/strtod_ext.c")),
     ("time_ext.c", include_str!("../../libc/lib/time_ext.c")),
     ("unistd_ext.c", include_str!("../../libc/lib/unistd_ext.c")),
     ("vscanf_ext.c", include_str!("../../libc/lib/vscanf_ext.c")),
-    ("wchar_ext.c", include_str!("../../libc/lib/wchar_ext.c")),
 ];

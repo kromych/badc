@@ -1945,7 +1945,7 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     const M: &str = "msvcrt.dll";
     const U: &str = "ucrtbase.dll";
     const HEADERS: &str = "#include <io.h>\n#include <process.h>\n#include <wchar.h>\n\
-        #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n";
+        #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n#include <stdlib.h>\n";
     let common = [
         ("chmod", "_chmod", M),
         ("mktemp", "_mktemp", M),
@@ -1989,6 +1989,8 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("vwscanf", "fwscanf", M),
         ("wcstof", "wcstod", M),
         ("wcstold", "wcstod", M),
+        ("strtof", "strtod", M),
+        ("strtold", "strtod", M),
     ];
     for (target, own) in [
         (

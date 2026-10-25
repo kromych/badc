@@ -6360,3 +6360,62 @@ fn an_i386_pie_reaches_an_import_through_a_stub_off_ebx() {
         "{relocs:?}"
     );
 }
+
+/// A position-dependent executable linked against a shared library is
+/// an `ET_EXEC` with the dynamic tables, as GNU ld 2.46.1 links one: a
+/// call reaches the import through a stub naming its GOT slot's address
+/// (i386 `ff 25`, x86-64 through `%rip`), `R_*_GLOB_DAT` fills the slots,
+/// and the image's own addresses take no `R_*_RELATIVE`.
+#[test]
+fn a_position_dependent_executable_imports_from_a_shared_library() {
+    let res = link_i386_with(
+        alloc::vec![("u.o", i386_import_user())],
+        &i386_import_opts(false),
+    )
+    .expect("links");
+    let img = &res.image;
+    assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
+    let relocs = elf32_dyn_relocs(img);
+    assert!(
+        relocs.iter().all(|r| r.1 != rt::R_386_RELATIVE),
+        "{relocs:?}"
+    );
+    let (foo, bar) = (i386_glob_dat(&relocs, "foo"), i386_glob_dat(&relocs, "bar"));
+    let plt = elf32_body(img, ".plt");
+    assert_eq!(plt[..2], [0xff, 0x25]);
+    assert_eq!(i32_at(plt, 2), foo, "jmp *foo@GOT");
+    let g = elf32_section(img, ".got.plt").2 as i64;
+    assert_eq!(i32_at(elf32_body(img, ".text"), 7), bar - g);
+    let [start] = i386_addrs(img, ["_start"]);
+    assert_eq!(
+        i32_at(elf32_body(img, ".data"), 4),
+        start,
+        "&_start in place"
+    );
+    let dynamic = elf32_body(img, ".dynamic");
+    let tags: Vec<u32> = (dynamic.as_chunks::<8>().0.iter())
+        .map(|c| u32_at(c, 0))
+        .collect();
+    assert!(tags.contains(&(dynamic::DT_NEEDED as u32)), "{tags:?}");
+
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
+    };
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    assert_eq!(u16::from_le_bytes([res.image[16], res.image[17]]), ET_EXEC);
+    let relocs = dyn_relocs(&res.image);
+    let foo = relocs
+        .iter()
+        .find(|r| r.1 == rt::R_X86_64_GLOB_DAT && r.2 == "foo")
+        .unwrap_or_else(|| panic!("{relocs:?}"))
+        .0;
+    let (plt_addr, plt) = image_section(&res.image, ".plt");
+    assert_eq!(plt[..2], [0xff, 0x25]);
+    assert_eq!(
+        plt_addr as i64 + 6 + u32_at(&plt, 2) as i32 as i64,
+        foo as i64
+    );
+}

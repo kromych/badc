@@ -1069,6 +1069,12 @@ impl<'a> LdsLinker<'a> {
         Ok(linker)
     }
 
+    /// The image carries the dynamic-linking tables: it is position
+    /// independent, or an executable linked against a shared library.
+    fn dynamic(&self) -> bool {
+        self.opts.emit == LdsEmit::Dyn || !self.opts.shared_libs.is_empty()
+    }
+
     fn insec(&self, i: usize) -> &RawSection {
         let id = self.insecs[i];
         &self.objects[id.obj].sections[id.sec]

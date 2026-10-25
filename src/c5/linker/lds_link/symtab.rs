@@ -220,8 +220,7 @@ impl<'a> LdsLinker<'a> {
         // adjustment, so only links with dynamic sections see them.
         let forced = |name: &str| {
             let vis = self.visibility_of(name);
-            (self.opts.emit == LdsEmit::Dyn && matches!(vis, STV_INTERNAL | STV_HIDDEN))
-                .then_some(vis)
+            (self.dynamic() && matches!(vis, STV_INTERNAL | STV_HIDDEN)).then_some(vis)
         };
         // Resolved global definitions, name order (the table order is
         // not part of the contract; nm sorts).
@@ -236,9 +235,7 @@ impl<'a> LdsLinker<'a> {
                 if forced(name).is_some() {
                     fs.info = (STB_LOCAL << 4) | (fs.info & 0xf);
                     fs.other = STV_DEFAULT;
-                } else if self.opts.emit == LdsEmit::Dyn
-                    && self.visibility_of(name) == STV_PROTECTED
-                {
+                } else if self.dynamic() && self.visibility_of(name) == STV_PROTECTED {
                     fs.other = STV_PROTECTED;
                 }
                 if track {

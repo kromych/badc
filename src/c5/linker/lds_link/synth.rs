@@ -74,7 +74,7 @@ impl<'a> LdsLinker<'a> {
             let synth = self.synth_obj;
             self.objects[synth].sections[idx].addralign = PLT_ENTRY_SIZE;
         }
-        if self.opts.emit == LdsEmit::Dyn {
+        if self.dynamic() {
             let (rela_name, rela_type, rela_ent) = self.dyn_reloc_kind();
             let rela = self.push_synth_section(rela_name, rela_type, SHF_ALLOC);
             // `.relr.dyn` exists only where RELR packing was asked for.
@@ -101,7 +101,7 @@ impl<'a> LdsLinker<'a> {
                 EM_386 => matches!(r.rtype, rt::R_386_GOT32 | rt::R_386_GOT32X),
                 _ => false,
             });
-        if self.opts.emit == LdsEmit::Dyn || self.referenced.contains(GOT_SYMBOL) || got_refs {
+        if self.dynamic() || self.referenced.contains(GOT_SYMBOL) || got_refs {
             let got = self.push_synth_section(SYNTH_GOT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let gotplt = self.push_synth_section(SYNTH_GOTPLT, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE);
             let synth = self.synth_obj;
@@ -115,7 +115,7 @@ impl<'a> LdsLinker<'a> {
             self.objects[synth].sections[gotplt].entsize = slot;
             self.objects[synth].sections[gotplt].size = 3 * slot;
         }
-        if self.opts.emit == LdsEmit::Dyn {
+        if self.dynamic() {
             self.synthesize_dynamic_sections();
         }
     }

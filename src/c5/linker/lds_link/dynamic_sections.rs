@@ -79,14 +79,16 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Compute the ET_DYN dynamic-relocation payload (RELA + RELR) and
-    /// GOT slots from the previous pass's layout, updating the
-    /// synthetic input sections' sizes for this pass.
+    /// Compute the dynamic-relocation payload (RELA + RELR) and GOT
+    /// slots from the previous pass's layout, updating the synthetic
+    /// input sections' sizes for this pass. A position-dependent image
+    /// takes no RELATIVE entry.
     pub(super) fn size_dynamic_sections(&mut self) {
-        if self.opts.emit != LdsEmit::Dyn {
+        if !self.dynamic() {
             self.size_static_got();
             return;
         }
+        let pic = self.opts.emit == LdsEmit::Dyn;
         self.dyn_relas.clear();
         self.relr_addrs.clear();
         // GOT slot set stays stable across passes (driven by reloc
@@ -217,6 +219,9 @@ impl<'a> LdsLinker<'a> {
                 }
             }
         }
+        if !pic {
+            rel_addrs.clear();
+        }
         rel_addrs.sort_by_key(|&(a, _, _)| a);
         let mut relas: Vec<DynReloc> = Vec::new();
         let mut relr: Vec<u64> = Vec::new();
@@ -241,7 +246,11 @@ impl<'a> LdsLinker<'a> {
         let nones = match self.dyn_nones {
             Some(n) => n,
             None => {
-                let n = self.count_reserved_none_slots();
+                let n = if pic {
+                    self.count_reserved_none_slots()
+                } else {
+                    0
+                };
                 self.dyn_nones = Some(n);
                 n
             }
@@ -488,7 +497,7 @@ impl<'a> LdsLinker<'a> {
 
     pub(super) fn build_dyn_tables(&mut self, out_shndx: &dyn Fn(usize) -> u16) {
         self.dyn_tables = None;
-        if self.opts.emit != LdsEmit::Dyn || self.kept_synth(SYNTH_DYNSYM).is_none() {
+        if !self.dynamic() || self.kept_synth(SYNTH_DYNSYM).is_none() {
             return;
         }
         let exports = self.collect_dyn_exports(out_shndx);

@@ -21,7 +21,7 @@ use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 
 const IMAGE_COMDAT_SELECT_NODUPLICATES: u8 = 1;
-const IMAGE_COMDAT_SELECT_ANY: u8 = 2;
+pub(crate) const IMAGE_COMDAT_SELECT_ANY: u8 = 2;
 const IMAGE_COMDAT_SELECT_SAME_SIZE: u8 = 3;
 const IMAGE_COMDAT_SELECT_EXACT_MATCH: u8 = 4;
 const IMAGE_COMDAT_SELECT_LARGEST: u8 = 6;

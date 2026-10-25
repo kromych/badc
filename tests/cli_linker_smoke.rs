@@ -115,6 +115,61 @@ fn two_sources_compile_separately_then_link() {
     assert_eq!(out.status.code(), Some(42), "exit code mismatch");
 }
 
+/// Two objects carrying the same `GRP_COMDAT` group, as GNU as writes one
+/// for `.section ...,"axG",@progbits,<sig>,comdat`, link as GNU ld links
+/// them: the first group of each signature is kept and the second's
+/// definitions are not duplicates. The program reads the kept copies.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_comdat_group_in_two_objects_links_once() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping a_comdat_group_in_two_objects_links_once: no cc");
+        return;
+    };
+    let dir = tempdir("elf-comdat-groups");
+    let seven = if cfg!(target_arch = "aarch64") {
+        "mov w0, #7"
+    } else {
+        "movl $7, %eax"
+    };
+    let asm = write_source(
+        &dir,
+        "group.s",
+        &format!(
+            "\t.section .text.pick,\"axG\",@progbits,pick,comdat\n\
+             \t.globl pick\n\t.type pick,@function\npick:\n\t{seven}\n\tret\n\
+             \t.section .data.obj,\"awG\",@progbits,obj,comdat\n\
+             \t.globl obj\nobj:\n\t.long 5\n"
+        ),
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int pick(void);\nextern int obj;\nint main(void) { return pick() + obj - 12; }\n",
+    );
+    for o in ["g1.o", "g2.o"] {
+        run(
+            Command::new(&cc)
+                .arg("-c")
+                .arg(&asm)
+                .arg("-o")
+                .arg(dir.join(o)),
+            "assemble the group",
+        );
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&main)
+            .args([dir.join("g1.o"), dir.join("g2.o")]),
+        "link the two groups",
+    );
+    let status = Command::new(&exe).status().expect("run prog");
+    assert_eq!(status.code(), Some(0));
+}
+
 /// A call to another unit's function whose result the caller returns is a
 /// sibling call at -O where the target takes one: the callee returns
 /// straight to the caller's caller, with the arguments the caller set.

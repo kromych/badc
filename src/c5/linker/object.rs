@@ -51,6 +51,7 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
+const SHT_GROUP: u32 = 17;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -1317,6 +1318,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
     }
     let debug = debug_sections(bytes, &shdrs, shstrtab_bytes, &roles)?;
+    let comdats = elf_comdats(
+        bytes,
+        &shdrs,
+        &roles.groups,
+        &symbols,
+        &sections,
+        &record_of,
+    )?;
 
     Ok(NativeObject {
         source: String::new(),
@@ -1357,7 +1366,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
-        comdats: Vec::new(),
+        comdats,
         default_libs,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
@@ -1494,6 +1503,8 @@ struct SectionRoles {
     badc_note: Option<usize>,
     /// `.deplibs` sections: the libraries `#pragma comment(lib, ...)` names.
     deplibs: Vec<usize>,
+    /// `SHT_GROUP` sections.
+    groups: Vec<usize>,
     debug_info: Option<usize>,
     debug_abbrev: Option<usize>,
     debug_line: Option<usize>,
@@ -1524,6 +1535,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         rela_sections: Vec::new(),
         badc_note: None,
         deplibs: Vec::new(),
+        groups: Vec::new(),
         debug_info: None,
         debug_abbrev: None,
         debug_line: None,
@@ -1569,6 +1581,10 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         }
         if sh.sh_type == SHT_LLVM_DEPENDENT_LIBRARIES {
             roles.deplibs.push(i);
+            continue;
+        }
+        if sh.sh_type == SHT_GROUP {
+            roles.groups.push(i);
             continue;
         }
         if name.starts_with(".debug_") && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS) {
@@ -1825,6 +1841,54 @@ fn concat_families(
         tls_align,
         tls_bases,
     })
+}
+
+/// The `GRP_COMDAT` groups of an object (System V gABI, "Section Groups"),
+/// keyed on the signature symbol's name, or on its section's name for a
+/// section symbol. GNU ld keeps the first group of each signature, which is
+/// COFF's `IMAGE_COMDAT_SELECT_ANY`; a group without the flag is not
+/// deduplicated.
+fn elf_comdats(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    groups: &[usize],
+    symbols: &[NativeSymbol],
+    sections: &[InputSection],
+    record_of: &[Option<u32>],
+) -> Result<Vec<Comdat>, C5Error> {
+    const GRP_COMDAT: u32 = 1;
+    const STT_SECTION: u8 = 3;
+    let mut out = Vec::new();
+    for &g in groups {
+        let words: Vec<u32> = (section_slice(bytes, &shdrs[g])?.as_chunks::<4>().0.iter())
+            .map(|w| u32::from_le_bytes(*w))
+            .collect();
+        if words.first().is_none_or(|&flags| flags & GRP_COMDAT == 0) {
+            continue;
+        }
+        let sig = symbols.get(shdrs[g].sh_info as usize).ok_or_else(|| {
+            link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                "a section group names no signature symbol",
+            )
+        })?;
+        let key = match sig.input_section {
+            Some(s) if sig.kind == STT_SECTION => sections[s as usize].name.clone(),
+            _ => sig.name.clone(),
+        };
+        let members: Vec<u32> = (words[1..].iter())
+            .filter_map(|&m| record_of.get(m as usize).copied().flatten())
+            .collect();
+        out.push(Comdat {
+            key,
+            selection: super::comdat::IMAGE_COMDAT_SELECT_ANY,
+            size: 0,
+            checksum: 0,
+            sections: members,
+        });
+    }
+    Ok(out)
 }
 
 /// Input-section records in placement order, and each section index's.

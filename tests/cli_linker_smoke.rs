@@ -13314,6 +13314,73 @@ fn an_archive_of_either_elf_class_indexes_its_members_at_their_headers() {
     }
 }
 
+// A library or input the GNU ld persona cannot find is reported in GNU
+// ld's words, each one before the link stops, as is a `-T` script it
+// cannot open, through the persona and through the driver's script link.
+#[test]
+fn a_missing_library_input_or_script_is_reported_in_gnu_lds_words() {
+    let dir = tempdir("missing-input");
+    write_source(&dir, "m.s", ".globl _start\n_start: ret\n");
+    write_source(&dir, "s.ld", "SECTIONS { .text : { *(.text) } }\n");
+    let badc_in = |args: &[&str]| {
+        let out = Command::new(badc())
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    let (ok, _) = badc_in(&["-q", "-c", "--target=linux-x64", "m.s", "-o", "m.o"]);
+    assert!(ok, "assemble");
+    let (ok, err) = badc_in(&[
+        "--ld",
+        "m.o",
+        "-lnosuch",
+        "nosuch.o",
+        "-lnosuch3",
+        "-o",
+        "out",
+    ]);
+    let lines: Vec<&str> = err.lines().collect();
+    assert!(!ok);
+    assert_eq!(
+        lines,
+        [
+            "badc-ld: error: cannot find -lnosuch: No such file or directory",
+            "badc-ld: error: cannot find nosuch.o: No such file or directory",
+            "badc-ld: error: cannot find -lnosuch3: No such file or directory",
+        ]
+    );
+    for (args, want) in [
+        (
+            &["--ld", "-T", "nosuch.ld", "m.o", "-o", "out"][..],
+            "cannot open linker script file nosuch.ld: No such file or directory",
+        ),
+        (
+            &["--target=linux-x64", "-T", "nosuch.ld", "m.o", "-o", "out"],
+            "cannot open linker script file nosuch.ld: No such file or directory",
+        ),
+        (
+            &[
+                "--target=linux-x64",
+                "-T",
+                "s.ld",
+                "m.o",
+                "nosuch.o",
+                "-o",
+                "out",
+            ],
+            "cannot find nosuch.o: No such file or directory",
+        ),
+    ] {
+        let (ok, err) = badc_in(args);
+        assert!(!ok && err.contains(want), "{args:?}: {err}");
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

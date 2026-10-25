@@ -99,7 +99,7 @@ pub use linker::{
 };
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
-pub use linker::{is_ld_invocation, run_ld};
+pub use linker::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]

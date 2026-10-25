@@ -117,7 +117,7 @@ pub use coff_object::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
-pub use ld_driver::{is_ld_invocation, run_ld};
+pub use ld_driver::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use lds::{LinkerScript, parse_linker_script};

@@ -139,6 +139,31 @@ fn ld_err(msg: impl core::fmt::Display) -> i32 {
     1
 }
 
+/// The `strerror` text GNU ld quotes for `e`: the C library's wording for
+/// a missing or forbidden file on every host, otherwise the system's
+/// text without std's ` (os error N)`.
+pub fn os_error_text(e: &std::io::Error) -> String {
+    match e.kind() {
+        std::io::ErrorKind::NotFound => return String::from("No such file or directory"),
+        std::io::ErrorKind::PermissionDenied => return String::from("Permission denied"),
+        _ => {}
+    }
+    let text = e.to_string();
+    match (e.raw_os_error(), text.rfind(" (os error ")) {
+        (Some(_), Some(k)) => String::from(&text[..k]),
+        _ => text,
+    }
+}
+
+/// GNU ld's text for a `-T` script it cannot open.
+pub fn script_unreadable(path: &Path, e: &std::io::Error) -> String {
+    format!(
+        "cannot open linker script file {}: {}",
+        path.display(),
+        os_error_text(e)
+    )
+}
+
 /// True when this invocation should take the ld driver: the program
 /// was installed/aliased as `ld`, or the first argument is `--ld`.
 pub fn is_ld_invocation(argv0: &str, first_arg: Option<&str>) -> bool {
@@ -549,7 +574,7 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Some(path) => {
             let text = match std::fs::read_to_string(path) {
                 Ok(t) => t,
-                Err(e) => return ld_err(format!("cannot read script `{}`: {e}", path.display())),
+                Err(e) => return ld_err(script_unreadable(path, &e)),
             };
             match parse_module_script(&text) {
                 Ok(s) => Some(s),
@@ -755,7 +780,7 @@ fn collect_inputs<T: InputObject>(
     // GNU ld takes the first directory holding either spelling, and
     // prefers the shared one there unless the search is static. A file
     // built for another machine than `want` is skipped, as bfd skips it.
-    let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Result<PathBuf, i32> {
+    let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Option<PathBuf> {
         for dir in &a.lib_paths {
             // bfd joins the directory and the file name with `/` on every
             // host, and that path is what its diagnostics print.
@@ -774,11 +799,13 @@ fn collect_inputs<T: InputObject>(
                     );
                     continue;
                 }
-                return Ok(candidate);
+                return Some(candidate);
             }
         }
-        Err(ld_err(format!("cannot find -l{name}")))
+        None
     };
+    // GNU ld reports every input it cannot find before it stops.
+    let mut missing: Vec<String> = Vec::new();
     let mut queue: Vec<InputItem> = a.inputs.clone();
     queue.reverse();
     while let Some(item) = queue.pop() {
@@ -825,7 +852,11 @@ fn collect_inputs<T: InputObject>(
             }
             InputItem::Lib(name) => {
                 let want = machine.or_else(|| objs.first().map(|o| o.machine()));
-                path_owned = find_lib(name, search_shared, want)?;
+                let Some(found) = find_lib(name, search_shared, want) else {
+                    missing.push(format!("cannot find -l{name}: No such file or directory"));
+                    continue;
+                };
+                path_owned = found;
                 &path_owned
             }
             // A name a linker script gave without a directory is
@@ -841,14 +872,23 @@ fn collect_inputs<T: InputObject>(
             }
             InputItem::File(p) => p,
         };
-        let head = std::fs::File::open(path)
-            .and_then(|f| {
-                use std::io::Read;
-                let mut buf = [0u8; 8];
-                let n = std::io::Read::take(f, 8).read(&mut buf)?;
-                Ok(buf[..n].to_vec())
-            })
-            .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
+        let head = std::fs::File::open(path).and_then(|f| {
+            use std::io::Read;
+            let mut buf = [0u8; 8];
+            let n = std::io::Read::take(f, 8).read(&mut buf)?;
+            Ok(buf[..n].to_vec())
+        });
+        let head = match head {
+            Ok(h) => h,
+            Err(e) => {
+                missing.push(format!(
+                    "cannot find {}: {}",
+                    path.display(),
+                    os_error_text(&e)
+                ));
+                continue;
+            }
+        };
         let is_archive = head.starts_with(b"!<arch>\n") || head.starts_with(b"!<thin>\n");
         if is_archive {
             let members = load_archive(path)?;
@@ -910,6 +950,12 @@ fn collect_inputs<T: InputObject>(
                 Err(e) => return Err(ld_err(e)),
             }
         }
+    }
+    if !missing.is_empty() {
+        for m in &missing {
+            ld_err(m);
+        }
+        return Err(1);
     }
     if group.is_some() {
         return Err(ld_err("--start-group without --end-group"));
@@ -1070,7 +1116,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     let text = match &a.script {
         Some(spath) => match std::fs::read_to_string(spath) {
             Ok(t) => t,
-            Err(e) => return ld_err(format!("cannot read script `{}`: {e}", spath.display())),
+            Err(e) => return ld_err(script_unreadable(spath, &e)),
         },
         None => default_script(a.shared),
     };

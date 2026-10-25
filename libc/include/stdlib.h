@@ -598,3 +598,51 @@ static inline void __clear_cache(void *__begin, void *__end) {
                                  (unsigned long long)((char *)__end - (char *)__begin));
 }
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::a64l, "_a64l")
+#pragma binding(libc::l64a, "_l64a")
+#pragma binding(libc::erand48, "_erand48")
+#pragma binding(libc::jrand48, "_jrand48")
+#pragma binding(libc::lcong48, "_lcong48")
+#pragma binding(libc::nrand48, "_nrand48")
+#pragma binding(libc::seed48, "_seed48")
+#pragma binding(libc::initstate, "_initstate")
+#pragma binding(libc::setstate, "_setstate")
+#pragma binding(libc::realpath, "_realpath")
+#pragma binding(libc::setkey, "_setkey")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::a64l, "a64l")
+#pragma binding(libc::l64a, "l64a")
+#pragma binding(libc::erand48, "erand48")
+#pragma binding(libc::jrand48, "jrand48")
+#pragma binding(libc::lcong48, "lcong48")
+#pragma binding(libc::nrand48, "nrand48")
+#pragma binding(libc::seed48, "seed48")
+#pragma binding(libc::initstate, "initstate")
+#pragma binding(libc::setstate, "setstate")
+#pragma binding(libc::realpath, "realpath")
+#endif
+// The rest of the XSI 48-bit generator family, the radix-64 conversions and
+// the random(3) state calls; setkey is libSystem's only, glibc having
+// dropped it with encrypt.
+long a64l(const char *s);
+char *l64a(long value);
+double erand48(unsigned short xsubi[3]);
+long jrand48(unsigned short xsubi[3]);
+void lcong48(unsigned short param[7]);
+long nrand48(unsigned short xsubi[3]);
+unsigned short *seed48(unsigned short seed16v[3]);
+char *initstate(unsigned int seed, char *state, size_t size);
+#ifdef __APPLE__
+char *setstate(const char *state);
+void setkey(const char *key);
+char *realpath(const char *restrict path, char *restrict resolved);
+#else
+char *setstate(char *state);
+#endif
+#endif

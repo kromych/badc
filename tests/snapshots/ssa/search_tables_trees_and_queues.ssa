@@ -547,10 +547,10 @@ fn ent_pc=12 n_params=0 variadic=false locals=19
     v403 ImmData(88)                                      -> x1
     v404 Mcpy { dst=v402, src=v403, size=24, align=8 }    -> -
     v405 ImmData(112)                                     -> x7
-    v406 CallExt { binding_idx=98, args=[v405], fp_arg_mask=0x0 } -> x3
+    v406 CallExt { binding_idx=109, args=[v405], fp_arg_mask=0x0 } -> x3
     v407 Imm(0)                                           -> x0
     v408 ImmData(118)                                     -> x7
-    v409 CallExt { binding_idx=98, args=[v408], fp_arg_mask=0x0 } -> x12
+    v409 CallExt { binding_idx=109, args=[v408], fp_arg_mask=0x0 } -> x12
     v410 Imm(0)                                           -> x0
     v411 Imm(16)                                          -> x7
     v412 CallExt { binding_idx=0, args=[v411], fp_arg_mask=0x0 } -> x0

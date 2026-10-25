@@ -13,7 +13,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(3)                                           -> x2
-    v10  CallExt { binding_idx=8, args=[v1, v3, v9], fp_arg_mask=0x0 } -> x0
+    v10  CallExt { binding_idx=9, args=[v1, v3, v9], fp_arg_mask=0x0 } -> x0
     v11  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x1
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x2
@@ -216,7 +216,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v162 BinopI { op=add, lhs=v159, rhs_imm=20 }          -> x7
     v163 ImmData(47)                                      -> x6
     v164 Imm(4)                                           -> x2
-    v165 CallExt { binding_idx=8, args=[v162, v163, v164], fp_arg_mask=0x0 } -> x0
+    v165 CallExt { binding_idx=9, args=[v162, v163, v164], fp_arg_mask=0x0 } -> x0
     v166 BinopI { op=ne, lhs=v165, rhs_imm=0 }            -> x1
     v167 Imm(0)                                           -> x1
     v168 Imm(0)                                           -> x1
@@ -262,7 +262,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v200 BinopI { op=add, lhs=v188, rhs_imm=8 }           -> x7
     v201 ImmData(51)                                      -> x6
     v202 Imm(4)                                           -> x2
-    v203 CallExt { binding_idx=8, args=[v200, v201, v202], fp_arg_mask=0x0 } -> x0
+    v203 CallExt { binding_idx=9, args=[v200, v201, v202], fp_arg_mask=0x0 } -> x0
     v204 Imm(0)                                           -> x1
     v205 Imm(0)                                           -> x1
     v206 Imm(0)                                           -> x1

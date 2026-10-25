@@ -41,7 +41,9 @@ __libc_current_sigrtmax                  GLIBC_2.2.5
 __libc_current_sigrtmin                  GLIBC_2.2.5
 __register_atfork                        GLIBC_2.3.2
 __xpg_basename                           GLIBC_2.2.5
+__xpg_sigpause                           GLIBC_2.2.5
 _exit                                    GLIBC_2.2.5
+a64l                                     GLIBC_2.2.5
 abort                                    GLIBC_2.2.5
 abs                                      GLIBC_2.2.5
 accept                                   GLIBC_2.2.5
@@ -138,6 +140,7 @@ epoll_create                             GLIBC_2.3.2
 epoll_create1                            GLIBC_2.9
 epoll_ctl                                GLIBC_2.3.2
 epoll_wait                               GLIBC_2.3.2
+erand48                                  GLIBC_2.2.5
 err                                      GLIBC_2.2.5
 errx                                     GLIBC_2.2.5
 eventfd                                  GLIBC_2.7
@@ -168,6 +171,7 @@ feof                                     GLIBC_2.2.5
 ferror                                   GLIBC_2.2.5
 fexecve                                  GLIBC_2.2.5
 fflush                                   GLIBC_2.2.5
+ffs                                      GLIBC_2.2.5
 fgetc                                    GLIBC_2.2.5
 fgetpos                                  GLIBC_2.2.5
 fgets                                    GLIBC_2.2.5
@@ -230,6 +234,8 @@ getc_unlocked                            GLIBC_2.2.5
 getchar                                  GLIBC_2.2.5
 getcontext                               GLIBC_2.2.5
 getcwd                                   GLIBC_2.2.5
+getdate                                  GLIBC_2.2.5
+getdate_err                              GLIBC_2.2.5
 getdelim                                 GLIBC_2.2.5
 getdtablesize                            GLIBC_2.2.5
 getegid                                  GLIBC_2.2.5
@@ -248,6 +254,7 @@ gethostbyaddr                            GLIBC_2.2.5
 gethostbyaddr_r                          GLIBC_2.2.5
 gethostbyname                            GLIBC_2.2.5
 gethostbyname_r                          GLIBC_2.2.5
+gethostid                                GLIBC_2.2.5
 gethostname                              GLIBC_2.2.5
 getitimer                                GLIBC_2.2.5
 getline                                  GLIBC_2.2.5
@@ -325,6 +332,7 @@ inet_ntoa                                GLIBC_2.2.5
 inet_ntop                                GLIBC_2.2.5
 inet_pton                                GLIBC_2.2.5
 initgroups                               GLIBC_2.2.5
+initstate                                GLIBC_2.2.5
 inotify_add_watch                        GLIBC_2.4
 inotify_init                             GLIBC_2.4
 inotify_init1                            GLIBC_2.9
@@ -356,11 +364,14 @@ iswspace                                 GLIBC_2.2.5
 iswupper                                 GLIBC_2.2.5
 iswxdigit                                GLIBC_2.2.5
 isxdigit                                 GLIBC_2.2.5
+jrand48                                  GLIBC_2.2.5
 kill                                     GLIBC_2.2.5
 killpg                                   GLIBC_2.2.5
+l64a                                     GLIBC_2.2.5
 lchmod                                   GLIBC_2.3.2
 lchown                                   GLIBC_2.2.5
 lckpwdf                                  GLIBC_2.2.5
+lcong48                                  GLIBC_2.2.5
 lfind                                    GLIBC_2.2.5
 lgetxattr                                GLIBC_2.3
 link                                     GLIBC_2.2.5
@@ -395,6 +406,7 @@ mbsrtowcs                                GLIBC_2.2.5
 mbstowcs                                 GLIBC_2.2.5
 mbtowc                                   GLIBC_2.2.5
 memalign                                 GLIBC_2.2.5
+memccpy                                  GLIBC_2.2.5
 memchr                                   GLIBC_2.2.5
 memcmp                                   GLIBC_2.2.5
 memcpy                                   GLIBC_2.14
@@ -441,9 +453,11 @@ munlock                                  GLIBC_2.2.5
 munlockall                               GLIBC_2.2.5
 munmap                                   GLIBC_2.2.5
 nanosleep                                GLIBC_2.2.5
+nftw                                     GLIBC_2.3.3
 ngettext                                 GLIBC_2.2.5
 nice                                     GLIBC_2.2.5
 nl_langinfo                              GLIBC_2.2.5
+nrand48                                  GLIBC_2.2.5
 ntohl                                    GLIBC_2.2.5
 ntohs                                    GLIBC_2.2.5
 open                                     GLIBC_2.2.5
@@ -658,6 +672,7 @@ sched_setaffinity                        GLIBC_2.3.4
 sched_setparam                           GLIBC_2.2.5
 sched_setscheduler                       GLIBC_2.2.5
 sched_yield                              GLIBC_2.2.5
+seed48                                   GLIBC_2.2.5
 seekdir                                  GLIBC_2.2.5
 select                                   GLIBC_2.2.5
 sem_clockwait                            GLIBC_2.30
@@ -707,6 +722,7 @@ setrlimit                                GLIBC_2.2.5
 setsid                                   GLIBC_2.2.5
 setsockopt                               GLIBC_2.2.5
 setspent                                 GLIBC_2.2.5
+setstate                                 GLIBC_2.2.5
 setuid                                   GLIBC_2.2.5
 setutxent                                GLIBC_2.2.5
 setvbuf                                  GLIBC_2.2.5
@@ -724,6 +740,8 @@ sigaltstack                              GLIBC_2.2.5
 sigdelset                                GLIBC_2.2.5
 sigemptyset                              GLIBC_2.2.5
 sigfillset                               GLIBC_2.2.5
+sighold                                  GLIBC_2.2.5
+sigignore                                GLIBC_2.2.5
 siginterrupt                             GLIBC_2.2.5
 sigismember                              GLIBC_2.2.5
 signal                                   GLIBC_2.2.5
@@ -731,6 +749,8 @@ signalfd                                 GLIBC_2.7
 sigpending                               GLIBC_2.2.5
 sigprocmask                              GLIBC_2.2.5
 sigqueue                                 GLIBC_2.2.5
+sigrelse                                 GLIBC_2.2.5
+sigset                                   GLIBC_2.2.5
 sigsuspend                               GLIBC_2.2.5
 sigtimedwait                             GLIBC_2.2.5
 sigwait                                  GLIBC_2.2.5
@@ -787,6 +807,7 @@ strtoll                                  GLIBC_2.2.5
 strtoul                                  GLIBC_2.2.5
 strtoull                                 GLIBC_2.2.5
 strxfrm                                  GLIBC_2.2.5
+swab                                     GLIBC_2.2.5
 swapcontext                              GLIBC_2.2.5
 swprintf                                 GLIBC_2.2.5
 symlink                                  GLIBC_2.2.5
@@ -803,12 +824,14 @@ tcflow                                   GLIBC_2.2.5
 tcflush                                  GLIBC_2.2.5
 tcgetattr                                GLIBC_2.2.5
 tcgetpgrp                                GLIBC_2.2.5
+tcgetsid                                 GLIBC_2.2.5
 tcsendbreak                              GLIBC_2.2.5
 tcsetattr                                GLIBC_2.2.5
 tcsetpgrp                                GLIBC_2.2.5
 tdelete                                  GLIBC_2.2.5
 tdestroy                                 GLIBC_2.2.5
 telldir                                  GLIBC_2.2.5
+tempnam                                  GLIBC_2.2.5
 textdomain                               GLIBC_2.2.5
 tfind                                    GLIBC_2.2.5
 time                                     GLIBC_2.2.5
@@ -1015,6 +1038,9 @@ hypotl        GLIBC_2.2.5
 ilogb         GLIBC_2.2.5
 ilogbf        GLIBC_2.2.5
 ilogbl        GLIBC_2.2.5
+j0            GLIBC_2.2.5
+j1            GLIBC_2.2.5
+jn            GLIBC_2.2.5
 ldexp         GLIBC_2.2.5
 ldexpf        GLIBC_2.2.5
 ldexpl        GLIBC_2.2.5
@@ -1101,6 +1127,9 @@ tgammal       GLIBC_2.2.5
 trunc         GLIBC_2.2.5
 truncf        GLIBC_2.2.5
 truncl        GLIBC_2.2.5
+y0            GLIBC_2.2.5
+y1            GLIBC_2.2.5
+yn            GLIBC_2.2.5
 
 [libutil.so.1]
 forkpty   -

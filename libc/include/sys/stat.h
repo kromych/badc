@@ -468,3 +468,19 @@ int statfs(const char *path, struct statfs *buf);
 int fstatfs(int fd, struct statfs *buf);
 #endif
 
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::mknod, "_mknod")
+#pragma binding(libc::mknodat, "_mknodat")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::mknod, "mknod")
+#pragma binding(libc::mknodat, "mknodat")
+#endif
+#include <sys/types.h>
+int mknod(const char *path, mode_t mode, dev_t dev);
+int mknodat(int fd, const char *path, mode_t mode, dev_t dev);
+#endif

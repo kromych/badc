@@ -1453,3 +1453,16 @@ void cfmakeraw(struct termios *termios_p);
 #define XTABS 6144
 #endif
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::tcgetsid, "_tcgetsid")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::tcgetsid, "tcgetsid")
+#endif
+#include <sys/types.h>
+pid_t tcgetsid(int fd);
+#endif

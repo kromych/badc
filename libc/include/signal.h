@@ -515,3 +515,34 @@ typedef struct {
 #define SS_DISABLE 2
 int sigaltstack(const stack_t *ss, stack_t *oss);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::sighold, "_sighold")
+#pragma binding(libc::sigignore, "_sigignore")
+#pragma binding(libc::sigrelse, "_sigrelse")
+#pragma binding(libc::sigset, "_sigset")
+#pragma binding(libc::sigpause, "_sigpause")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::sighold, "sighold")
+#pragma binding(libc::sigignore, "sigignore")
+#pragma binding(libc::sigrelse, "sigrelse")
+#pragma binding(libc::sigset, "sigset")
+#pragma binding(libc::sigpause, "__xpg_sigpause")
+#endif
+// The XSI System V signal calls. glibc's <signal.h> binds the XSI sigpause,
+// which takes a signal, to __xpg_sigpause; its plain sigpause takes a mask.
+#ifdef __APPLE__
+#define SIG_HOLD ((void (*)(int))5)
+#else
+#define SIG_HOLD ((void (*)(int))2)
+#endif
+int sighold(int sig);
+int sigignore(int sig);
+int sigpause(int sig);
+int sigrelse(int sig);
+void (*sigset(int sig, void (*disp)(int)))(int);
+#endif

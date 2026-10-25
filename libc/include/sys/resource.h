@@ -94,3 +94,22 @@ int prlimit(int pid, int resource, const struct rlimit *new_limit,
 #endif
 int getrusage(int who, struct rusage *r_usage);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::getpriority, "_getpriority")
+#pragma binding(libc::setpriority, "_setpriority")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::getpriority, "getpriority")
+#pragma binding(libc::setpriority, "setpriority")
+#endif
+#include <sys/types.h>
+#define PRIO_PROCESS 0
+#define PRIO_PGRP    1
+#define PRIO_USER    2
+int getpriority(int which, id_t who);
+int setpriority(int which, id_t who, int value);
+#endif

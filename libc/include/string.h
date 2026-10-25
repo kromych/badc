@@ -364,3 +364,15 @@ static inline void *mempcpy(void *dst, const void *src, size_t n) {
     return d + n;
 }
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::memccpy, "_memccpy")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::memccpy, "memccpy")
+#endif
+void *memccpy(void *restrict s1, const void *restrict s2, int c, size_t n);
+#endif

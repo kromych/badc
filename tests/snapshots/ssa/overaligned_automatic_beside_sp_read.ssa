@@ -31,7 +31,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v3   LocalAddr(-14)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=8, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   LocalAddr(-1)                                    -> x0
     v8   InlineAsm { template="mov %%rsp, %0", ops=1, args=[v7] } -> -
     v9   InlineAsm { template="xor %%ebx, %%ebx\n\txor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d", ops=0, args=[] } -> -
@@ -79,7 +79,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=1
     v3   LocalAddr(-15)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=8, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   InlineAsm { template="xor %%ebx, %%ebx\n\txor %%r12d, %%r12d\n\txor %%r13d, %%r13d\n\txor %%r14d, %%r14d\n\txor %%r15d, %%r15d", ops=0, args=[] } -> -
     v8   LocalAddr(-1)                                    -> x0
     v9   InlineAsm { template="mov %%rsp, %0", ops=1, args=[v8] } -> -

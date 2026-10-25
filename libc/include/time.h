@@ -335,3 +335,19 @@ void tzset(void);
 extern char *tzname[2];
 extern long timezone;
 extern int daylight;
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::getdate, "_getdate")
+#pragma binding(data libc::getdate_err, "_getdate_err")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::getdate, "getdate")
+#pragma binding(data libc::getdate_err, "getdate_err")
+#endif
+// getdate's failure code, 1 to 8 as XSI numbers them.
+extern int getdate_err;
+struct tm *getdate(const char *string);
+#endif

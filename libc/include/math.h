@@ -978,3 +978,31 @@ static inline long double fmal(long double x, long double y, long double z) {
 #pragma intrinsic("ceilf")
 #pragma intrinsic("trunc")
 #pragma intrinsic("truncf")
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::j0, "_j0")
+#pragma binding(libc::j1, "_j1")
+#pragma binding(libc::jn, "_jn")
+#pragma binding(libc::y0, "_y0")
+#pragma binding(libc::y1, "_y1")
+#pragma binding(libc::yn, "_yn")
+#endif
+#ifdef __linux__
+#pragma dylib(libm, "libm.so.6")
+#pragma binding(libm::j0, "j0")
+#pragma binding(libm::j1, "j1")
+#pragma binding(libm::jn, "jn")
+#pragma binding(libm::y0, "y0")
+#pragma binding(libm::y1, "y1")
+#pragma binding(libm::yn, "yn")
+#endif
+// XSI Bessel functions of the first (j) and second (y) kind.
+double j0(double x);
+double j1(double x);
+double jn(int n, double x);
+double y0(double x);
+double y1(double x);
+double yn(int n, double x);
+#endif

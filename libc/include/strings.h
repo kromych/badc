@@ -53,3 +53,15 @@ void bcopy(const void *src, void *dst, unsigned long n);
 char *index(const char *s, int c);
 char *rindex(const char *s, int c);
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::ffs, "_ffs")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::ffs, "ffs")
+#endif
+int ffs(int i);
+#endif

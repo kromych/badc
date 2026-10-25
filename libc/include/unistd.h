@@ -23,13 +23,9 @@
 // library's values, as glibc 2.43's and the macOS SDK's headers define
 // them, for the options whose interfaces the bundled headers declare. -1
 // is an option the library does not support; one it supports whose
-// interfaces are not declared here is left undefined. TODO: the XSI
-// conformance macros (_XOPEN_UNIX, _XOPEN_VERSION and the rest), which
-// need the XSI interfaces still undeclared: nftw, the Bessel functions, the
-// System V signal calls, the 48-bit generators, a64l, initstate, memccpy,
-// ffs, getpriority, mknod, utimes,
-// tcgetsid, getdate, gethostid, swab, encrypt and setkey; glibc ships no
-// <ndbm.h>.
+// interfaces are not declared here is left undefined. The XSI conformance
+// macros follow each library too: glibc defines no _XOPEN_CRYPT, having
+// dropped encrypt and setkey.
 #if defined(__linux__)
 #define _POSIX_VERSION                     200809L
 #define _POSIX2_VERSION                    200809L
@@ -94,9 +90,17 @@
 #define _POSIX_V6_LPBIG_OFFBIG             -1
 #define _POSIX_V7_LP64_OFF64               1
 #define _POSIX_V7_LPBIG_OFFBIG             -1
+#define _XOPEN_ENH_I18N                    1
+#define _XOPEN_LEGACY                      1
 #define _XOPEN_REALTIME                    1
 #define _XOPEN_REALTIME_THREADS            1
 #define _XOPEN_SHM                         1
+#define _XOPEN_UNIX                        1
+#define _XOPEN_VERSION                     700
+#define _XOPEN_XCU_VERSION                 4
+#define _XOPEN_XPG2                        1
+#define _XOPEN_XPG3                        1
+#define _XOPEN_XPG4                        1
 #ifdef __aarch64__
 #define _POSIX_V6_ILP32_OFF32              -1
 #define _POSIX_V6_ILP32_OFFBIG             -1
@@ -178,11 +182,16 @@
 #define _POSIX_V7_ILP32_OFFBIG             -1
 #define _POSIX_V7_LP64_OFF64               1
 #define _POSIX_V7_LPBIG_OFFBIG             1
+#define _XOPEN_CRYPT                       1
+#define _XOPEN_ENH_I18N                    1
 #define _XOPEN_LEGACY                      -1
 #define _XOPEN_REALTIME                    -1
 #define _XOPEN_REALTIME_THREADS            -1
 #define _XOPEN_SHM                         1
 #define _XOPEN_STREAMS                     -1
+#define _XOPEN_UNIX                        1
+#define _XOPEN_VERSION                     600
+#define _XOPEN_XCU_VERSION                 4
 #ifndef _POSIX_VDISABLE
 #define _POSIX_VDISABLE 255
 #endif
@@ -243,9 +252,6 @@
 #pragma binding(libc::_exit,     "__exit")
 #pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
-#pragma binding(libc::utimes,    "_utimes")
-#pragma binding(libc::futimes,   "_futimes")
-#pragma binding(libc::lutimes,   "_lutimes")
 #pragma binding(libc::umask,     "_umask")
 #pragma binding(libc::chmod,     "_chmod")
 #pragma binding(libc::chown,     "_chown")
@@ -292,8 +298,6 @@
 #pragma binding(libc::getsid,    "_getsid")
 #pragma binding(libc::tcgetpgrp, "_tcgetpgrp")
 #pragma binding(libc::tcsetpgrp, "_tcsetpgrp")
-#pragma binding(libc::getpriority,"_getpriority")
-#pragma binding(libc::setpriority,"_setpriority")
 #pragma binding(libc::nice,      "_nice")
 #pragma binding(libc::fpathconf, "_fpathconf")
 #pragma binding(libc::lockf,     "_lockf")
@@ -399,9 +403,6 @@ extern char **environ;
 #pragma binding(libc::_exit,     "_exit")
 #pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
-#pragma binding(libc::utimes,    "utimes")
-#pragma binding(libc::futimes,   "futimes")
-#pragma binding(libc::lutimes,   "lutimes")
 #pragma binding(libc::umask,     "umask")
 #pragma binding(libc::chmod,     "chmod")
 #pragma binding(libc::chown,     "chown")
@@ -445,8 +446,6 @@ extern char **environ;
 #pragma binding(libc::getsid,    "getsid")
 #pragma binding(libc::tcgetpgrp, "tcgetpgrp")
 #pragma binding(libc::tcsetpgrp, "tcsetpgrp")
-#pragma binding(libc::getpriority,"getpriority")
-#pragma binding(libc::setpriority,"setpriority")
 #pragma binding(libc::nice,      "nice")
 #pragma binding(libc::fpathconf, "fpathconf")
 #pragma binding(libc::lockf,     "lockf")
@@ -657,9 +656,6 @@ _Noreturn void _exit(int status);
 #ifndef _WIN32
 int fchmod(int fd, mode_t mode);
 int fchown(int fd, uid_t uid, gid_t gid);
-int utimes(char *path, char *times);
-int futimes(int fd, char *times);
-int lutimes(char *path, char *times);
 #endif
 mode_t umask(mode_t mode);
 #ifndef _WIN32
@@ -728,9 +724,7 @@ int setsid(void);
 int getsid(int pid);
 int tcgetpgrp(int fd);
 int tcsetpgrp(int fd, int pgrp);
-// Scheduling priority (POSIX getpriority/setpriority, BSD nice).
-int getpriority(int which, int who);
-int setpriority(int which, int who, int prio);
+// BSD/XSI nice; getpriority / setpriority are <sys/resource.h>'s.
 int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
@@ -1136,3 +1130,23 @@ int confstr(int name, char *buf, int len);
 #define R_OK 4
 #define W_OK 2
 #define X_OK 1
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::gethostid, "_gethostid")
+#pragma binding(libc::swab, "_swab")
+#pragma binding(libc::encrypt, "_encrypt")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::gethostid, "gethostid")
+#pragma binding(libc::swab, "swab")
+#endif
+long gethostid(void);
+void swab(const void *restrict from, void *restrict to, ssize_t n);
+#ifdef __APPLE__
+// XSI DES encryption; libSystem's only, glibc having dropped it.
+void encrypt(char block[64], int edflag);
+#endif
+#endif

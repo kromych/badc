@@ -923,3 +923,15 @@ static char *__c5_lazy_stream(int idx) {
 #ifndef _WIN32
 #define _vsnprintf vsnprintf
 #endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::tempnam, "_tempnam")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::tempnam, "tempnam")
+#endif
+char *tempnam(const char *dir, const char *pfx);
+#endif

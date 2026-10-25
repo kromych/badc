@@ -14,7 +14,7 @@ fn ent_pc=13 n_params=3 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x1
-    v11  CallExt { binding_idx=247, args=[v1, v3, v5, v10], fp_arg_mask=0x0 } -> x0
+    v11  CallExt { binding_idx=266, args=[v1, v3, v5, v10], fp_arg_mask=0x0 } -> x0
     v12  Extend { value=v11, kind=I32 }                   -> x1
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=15 ---
@@ -24,7 +24,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
-    v2   ImmData(40)                                      -> x1
+    v2   ImmData(48)                                      -> x1
     v3   Imm(0)                                           -> x2
     terminator Jmp(b2)   (exit_acc=v1)
   block 1  start_pc=0
@@ -34,7 +34,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=0
     terminator Jmp(b2)   (exit_acc=v11)
   block 2  start_pc=0
     v4   Phi { incoming=[b0:v1, b1:v11], kind=I64 }       -> x0
-    v5   ImmData(40)                                      -> x2
+    v5   ImmData(48)                                      -> x2
     v6   Extend { value=v4, kind=I32 }                    -> x2
     v7   BinopI { op=shl, lhs=v4, rhs_imm=3 }             -> x2
     v8   Binop { op=add, lhs=v2, rhs=v7 }                 -> x2

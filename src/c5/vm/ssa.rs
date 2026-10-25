@@ -1620,6 +1620,45 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
     }
 }
 
+/// Whether [`dispatch_callext`] defines `name`: a call to a function the
+/// unit declares but neither defines nor binds runs that definition, as a
+/// native link takes the one its C library offers.
+pub(super) fn interp_supplies(name: &str) -> bool {
+    matches!(
+        name,
+        "exit"
+            | "memcpy"
+            | "memmove"
+            | "memset"
+            | "memcmp"
+            | "write"
+            | "read"
+            | "close"
+            | "malloc"
+            | "free"
+            | "printf"
+            | "__iob_func"
+            | "errno_location"
+            | "fprintf"
+            | "fputs"
+            | "puts"
+            | "fputc"
+            | "putc"
+            | "fwrite"
+            | "fflush"
+            | "fileno"
+            | "putchar"
+            | "open"
+            | "getenv"
+            | "setenv"
+            | "_putenv_s"
+            | "dlopen"
+            | "dlsym"
+            | "dlclose"
+            | "dlerror"
+    )
+}
+
 /// Dispatch a libc binding by name. Implementations land here
 /// as they're ported off the `Vm<H>` host-bridge into the
 /// byte-addressed `Memory` model. Unimplemented bindings
@@ -3848,6 +3887,63 @@ mod tests {
              int main(void) { char b[48]; return fputs(\"x\", (FILE *)b); }",
             "is not a standard stream",
         );
+    }
+
+    #[test]
+    fn a_declared_function_the_interpreter_defines_runs_without_a_binding() {
+        // No header binds `printf` or `puts` here, as on Windows, where the
+        // C-library sources define the printf family; the interpreter's own
+        // definitions serve the calls.
+        let src = "int printf(const char *, ...);\nint puts(const char *);\n\
+                   int main(void) { return printf(\"%d\", 12) + puts(\"\") - 2; }\n";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        assert_eq!(crate::Vm::new(program).run().expect("run"), 0);
+    }
+
+    #[test]
+    fn every_function_the_interpreter_supplies_has_a_definition() {
+        let mut mem = Memory::new(&[0u8; 64]);
+        let names = [
+            "exit",
+            "memcpy",
+            "memmove",
+            "memset",
+            "memcmp",
+            "write",
+            "read",
+            "close",
+            "malloc",
+            "free",
+            "printf",
+            "__iob_func",
+            "errno_location",
+            "fprintf",
+            "fputs",
+            "puts",
+            "fputc",
+            "putc",
+            "fwrite",
+            "fflush",
+            "fileno",
+            "putchar",
+            "open",
+            "getenv",
+            "setenv",
+            "_putenv_s",
+            "dlopen",
+            "dlsym",
+            "dlclose",
+            "dlerror",
+        ];
+        for name in names {
+            assert!(interp_supplies(name), "{name}");
+            if let Err(C5Error::Runtime(m)) =
+                dispatch_callext(name, &[0; 4], &mut mem, &mut NullHost)
+            {
+                assert!(!m.contains("is not implemented"), "{name}: {m}");
+            }
+        }
+        assert!(!interp_supplies("snprintf"));
     }
 
     #[test]

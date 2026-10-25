@@ -86,6 +86,82 @@ pub struct Vm<H: Host> {
     target: super::codegen::Target,
 }
 
+/// The link step for the interpreter's own C library: a call to a function
+/// the unit declares, neither defines nor binds, and `ssa::interp_supplies`
+/// names becomes the `CallExt` a binding would have made, its name appended
+/// to `binding_names`. Taking such a function's address stays undefined.
+fn bind_interpreter_library(
+    program: &Program,
+    funcs: &mut [FunctionSsa],
+    weak_fn_pcs: &alloc::collections::BTreeSet<usize>,
+    binding_names: &mut Vec<String>,
+) {
+    use super::ir::Inst;
+    let mut index = |name: &str| -> i64 {
+        let i = match binding_names.iter().position(|n| n == name) {
+            Some(i) => i,
+            None => {
+                binding_names.push(name.to_string());
+                binding_names.len() - 1
+            }
+        };
+        i as i64
+    };
+    let placeholders: alloc::collections::BTreeMap<usize, String> = (program
+        .extern_function_imports)
+        .iter()
+        .filter(|(pc, name)| !weak_fn_pcs.contains(pc) && ssa::interp_supplies(name))
+        .map(|(pc, name)| (*pc, name.clone()))
+        .collect();
+    let to_call_ext = |inst: &mut Inst, binding_idx: i64| {
+        if let Inst::Call {
+            args,
+            fp_arg_mask,
+            low_word_args,
+            arg_widths,
+            fp_return,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
+        } = inst
+        {
+            *inst = Inst::CallExt {
+                binding_idx,
+                args: core::mem::take(args),
+                fp_arg_mask: core::mem::take(fp_arg_mask),
+                low_word_args: *low_word_args,
+                arg_widths: core::mem::take(arg_widths),
+                fp_return: *fp_return,
+                arg_aggs: core::mem::take(arg_aggs),
+                ret_agg: *ret_agg,
+                ret_slot_local: *ret_slot_local,
+            };
+        }
+    };
+    for f in funcs {
+        for (v, sym) in core::mem::take(&mut f.extern_call_refs) {
+            let supplied = program
+                .symbols
+                .get(sym as usize)
+                .filter(|s| !s.defined_here && !s.is_weak && ssa::interp_supplies(&s.name));
+            match supplied {
+                Some(s) => to_call_ext(&mut f.insts[v as usize], index(&s.name)),
+                None => f.extern_call_refs.push((v, sym)),
+            }
+        }
+        for inst in &mut f.insts {
+            let name = match inst {
+                Inst::Call { target_pc, .. } => placeholders.get(target_pc).cloned(),
+                _ => None,
+            };
+            if let Some(name) = name {
+                to_call_ext(inst, index(&name));
+            }
+        }
+    }
+}
+
 /// `Vm::new` is only available with the `std` feature; it picks the
 /// `StdHost` adapter as the default. In `no_std`, callers must use
 /// [`Vm::with_host`] and supply their own host.
@@ -138,11 +214,15 @@ impl<H: Host> Vm<H> {
         let mut tls_code_relocs = core::mem::take(&mut program.tls_code_relocs);
         super::codegen::bind_code_reloc_aliases(&program, &mut tls_code_relocs);
         program.tls_code_relocs = tls_code_relocs;
-        let binding_names = program
+        let mut binding_names: Vec<String> = program
             .dylibs
             .iter()
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
+        let mut ssa_funcs = ssa_funcs;
+        if let Ok(funcs) = &mut ssa_funcs {
+            bind_interpreter_library(&program, funcs, &weak_fn_pcs, &mut binding_names);
+        }
         let extern_fn_names = program
             .extern_function_imports
             .iter()

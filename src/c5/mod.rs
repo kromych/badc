@@ -14,6 +14,7 @@ mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod ms_intrinsic;
 mod object;
 mod op;
 #[cfg(feature = "std")]

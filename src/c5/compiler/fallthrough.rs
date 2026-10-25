@@ -190,6 +190,7 @@ impl Compiler {
             Expr::Cast { child, .. } => self.never_returns(*child),
             Expr::Comma { rhs, .. } => self.never_returns(*rhs),
             Expr::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
+            Expr::MsIntrinsic { op, .. } => op.is_noreturn(),
             Expr::Call { callee, .. } => match self.ast.expr(*callee) {
                 Expr::Ident { sym, .. } => self.symbols[*sym as usize].is_noreturn,
                 _ => false,

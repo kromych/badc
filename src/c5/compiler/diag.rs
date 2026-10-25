@@ -285,6 +285,7 @@ impl Compiler {
                     .is_some_and(|s| s.is_noreturn)
             }
             Expr::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
+            Expr::MsIntrinsic { op, .. } => op.is_noreturn(),
             _ => false,
         }
     }

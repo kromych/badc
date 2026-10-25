@@ -1735,82 +1735,6 @@ impl Compiler {
         intrinsic_id.map(BuiltinCall::Intrinsic)
     }
 
-    /// One of the MSVC intrinsics with no operand, the `(` consumed: a
-    /// compiler barrier, which emits nothing and orders the memory accesses
-    /// around it as `__atomic_signal_fence` does, `_ReturnAddress` as
-    /// `__builtin_return_address(0)`, and `_AddressOfReturnAddress`, the
-    /// return address's slot in the frame record, one pointer above the
-    /// saved frame pointer on both PE targets.
-    fn parse_ms_intrinsic(&mut self, name: &str) -> Result<(), C5Error> {
-        use super::super::ast::Expr;
-        use crate::c5::op::Intrinsic;
-        if self.lex.tk != ')' {
-            return Err(self.compile_err(
-                Code::INVALID_ARGUMENTS,
-                format!("intrinsic `{name}` takes no argument"),
-            ));
-        }
-        self.next()?;
-        self.mark_emit_other();
-        let pos = self.ast_src_pos();
-        let void_ptr = super::types::void_ptr_ty();
-        let intrinsic = |c: &mut Self, kind: Intrinsic, ty: i64| {
-            let args = Vec::new();
-            c.ast.push_expr(
-                Expr::Intrinsic {
-                    kind: kind as i64,
-                    args,
-                    ty,
-                },
-                pos,
-            )
-        };
-        let (id, ty) = match name {
-            "_ReturnAddress" => (
-                intrinsic(self, Intrinsic::ReturnAddress, void_ptr),
-                void_ptr,
-            ),
-            "_AddressOfReturnAddress" => {
-                let frame = intrinsic(self, Intrinsic::FrameAddress, void_ptr);
-                let u64_ty = Ty::LongLong as i64 | super::types::UNSIGNED_BIT;
-                let frame = self.ast.push_expr(
-                    Expr::Cast {
-                        child: frame,
-                        to_ty: u64_ty,
-                    },
-                    pos,
-                );
-                let slot = self.ast.push_expr(Expr::IntLit { val: 8, ty: u64_ty }, pos);
-                let sum = self.ast.push_expr(
-                    Expr::Binary {
-                        op: crate::c5::ir::BinOp::Add,
-                        lhs: frame,
-                        rhs: slot,
-                        ty: u64_ty,
-                    },
-                    pos,
-                );
-                (
-                    self.ast.push_expr(
-                        Expr::Cast {
-                            child: sum,
-                            to_ty: void_ptr,
-                        },
-                        pos,
-                    ),
-                    void_ptr,
-                )
-            }
-            _ => {
-                let void = super::types::void_ty();
-                (intrinsic(self, Intrinsic::AtomicSignalFence, void), void)
-            }
-        };
-        self.ty = ty;
-        self.ast_acc = Some(id);
-        Ok(())
-    }
-
     fn parse_intrinsic_call(&mut self, id_idx: usize, intrinsic_id: i64) -> Result<(), C5Error> {
         use crate::c5::op::Intrinsic;
         let is = |k: Intrinsic| intrinsic_id == k as i64;
@@ -5645,21 +5569,23 @@ impl Compiler {
     }
 
     /// Parse one assignment-expression unevaluated and drop the code,
-    /// relocations and AST it emitted; the lexer stays past it.
-    fn discard_unevaluated_expr(&mut self) -> Result<(), C5Error> {
+    /// relocations and AST it emitted; the lexer stays past it. The value
+    /// is the integer constant the expression is, if it is one.
+    pub(super) fn discard_unevaluated_expr(&mut self) -> Result<Option<i64>, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
         let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
+        let constant = self.ast_acc.and_then(|e| self.expr_const_int(e));
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        result
+        result.map(|_| constant)
     }
 
     /// Parse one assignment-expression for its type only. The lexer

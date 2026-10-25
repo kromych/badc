@@ -41,8 +41,11 @@ impl<'a> Walker<'a> {
                 let noreturn_call = matches!(self.ast.expr(e), Expr::Call { callee, .. }
                     if matches!(self.ast.expr(*callee), Expr::Ident { sym, .. }
                         if self.symbols.get(*sym as usize).is_some_and(|s| s.is_noreturn)));
-                let noreturn_intrinsic = matches!(self.ast.expr(e), Expr::Intrinsic { kind, .. }
-                    if crate::c5::op::Intrinsic::is_noreturn(*kind));
+                let noreturn_intrinsic = match self.ast.expr(e) {
+                    Expr::Intrinsic { kind, .. } => crate::c5::op::Intrinsic::is_noreturn(*kind),
+                    Expr::MsIntrinsic { op, .. } => op.is_noreturn(),
+                    _ => false,
+                };
                 if noreturn_call || noreturn_intrinsic {
                     b.unreachable();
                     return Ok(true);

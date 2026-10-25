@@ -38,6 +38,7 @@ mod decl;
 mod expr;
 mod function;
 mod int128;
+mod ms_intrinsic;
 mod stmt;
 #[cfg(test)]
 mod tests;

@@ -327,7 +327,7 @@ impl Compiler {
 
     /// A value operand at `pos` of `name`, converted to `want` as an
     /// argument for a parameter of that type is, with the same diagnostics.
-    fn parse_builtin_value(
+    pub(super) fn parse_builtin_value(
         &mut self,
         name: &str,
         pos: usize,
@@ -369,12 +369,12 @@ impl Compiler {
         })
     }
 
-    fn ast_node(&mut self, e: Expr) -> ExprId {
+    pub(super) fn ast_node(&mut self, e: Expr) -> ExprId {
         let pos = self.ast_src_pos();
         self.ast.push_expr(e, pos)
     }
 
-    fn ast_binary(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, ty: i64) -> ExprId {
+    pub(super) fn ast_binary(&mut self, op: BinOp, lhs: ExprId, rhs: ExprId, ty: i64) -> ExprId {
         self.ast_node(Expr::Binary { op, lhs, rhs, ty })
     }
 

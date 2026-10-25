@@ -275,20 +275,9 @@ pub(super) const LIBRARY_BUILTINS: &[&str] = &[
     "wcscmp", "wcslen", "wcsncmp", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove",
 ];
 
-/// The MSVC intrinsics the PE targets lower at the call site whatever
-/// declares them, as MSVC and clang for a windows-msvc triple do: the
-/// compiler barriers and the return-address forms.
-pub(crate) const MS_INTRINSICS: &[&str] = &[
-    "_AddressOfReturnAddress",
-    "_ReadBarrier",
-    "_ReadWriteBarrier",
-    "_ReturnAddress",
-    "_WriteBarrier",
-];
-
-/// Whether `name` is one of [`MS_INTRINSICS`] on `target`.
+/// Whether `name` is an MSVC intrinsic `target` lowers at the call site.
 pub(crate) fn is_ms_intrinsic(name: &str, target: Target) -> bool {
-    target.ms_extensions() && MS_INTRINSICS.contains(&name)
+    crate::c5::ms_intrinsic::lookup(name, target).is_some()
 }
 
 fn lookup(name: &str) -> Option<&'static Builtin> {

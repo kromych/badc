@@ -21,3 +21,14 @@ static inline int _rdrand64_step(unsigned long long *__P) {
     return __builtin_ia32_rdrand64_step(__P);
 }
 #endif
+
+/* POPCNT, which gcc's <immintrin.h> carries through <popcntintrin.h>. */
+static inline int _mm_popcnt_u32(unsigned int __X) {
+    return __builtin_popcount(__X);
+}
+
+#ifdef __x86_64__
+static inline long long _mm_popcnt_u64(unsigned long long __X) {
+    return __builtin_popcountll(__X);
+}
+#endif

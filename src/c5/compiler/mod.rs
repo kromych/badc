@@ -33,6 +33,7 @@ mod initializer;
 mod jumps;
 mod locals;
 mod loop_idiom;
+mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
 mod sizeof_expr;

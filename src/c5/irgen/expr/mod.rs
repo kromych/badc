@@ -177,6 +177,7 @@ impl<'a> Walker<'a> {
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => self.walk_intrinsic(b, *kind, args),
+            Expr::MsIntrinsic { .. } => self.walk_ms_intrinsic(b, id),
             Expr::InlineAsm(idx) => self.walk_inline_asm(b, *idx),
             Expr::LabelAddr(label) => {
                 // GCC `&&label`: materialize the address of the label's

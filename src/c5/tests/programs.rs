@@ -1517,6 +1517,172 @@ fn msvc_intrinsics_lower_at_the_call_site() {
 }
 
 #[test]
+fn msvc_scalar_intrinsics_give_the_documented_values() {
+    use crate::{CompileOptions, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_intrinsics_values.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+        // A declaration in the SDK's spelling with `#pragma intrinsic`
+        // still lowers at the call site, with no warning.
+        let sdk = "typedef unsigned char BOOLEAN;\ntypedef unsigned long DWORD;\n\
+                   BOOLEAN _BitScanForward(DWORD *Index, DWORD Mask);\n\
+                   #pragma intrinsic(_BitScanForward, _InterlockedIncrement)\n\
+                   long _InterlockedIncrement(long volatile *);\n\
+                   int f(DWORD m, long *n) { DWORD i; _InterlockedIncrement(n);\n\
+                   return _BitScanForward(&i, m) ? (int)i : -1; }\n";
+        let program = crate::Compiler::with_options(
+            sdk.to_string(),
+            t,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let dump = super::perf_codegen::ssa_dump_for(sdk, "f", t, false);
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        assert!(dump.contains("AtomicRmw"), "{t:?}:\n{dump}");
+    }
+}
+
+#[test]
+fn msvc_instruction_intrinsics_encode_their_instructions() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let fixture = super::load_fixture("msvc_intrinsics_instructions.c");
+    let traps = "#include <intrin.h>\nvoid brk(void) { __debugbreak(); }\n\
+                 void ff(unsigned c) { __fastfail(c); }\n";
+    let object = |src: &str, t: Target| {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), t, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        crate::emit_native_with_options(&program, t, opts).unwrap_or_else(|e| panic!("{t:?}: {e}"))
+    };
+    let x64 = [
+        object(&fixture, Target::WindowsX64),
+        object(traps, Target::WindowsX64),
+    ]
+    .concat();
+    // cpuid, rdtsc, pause, a gs-relative 8-byte load, int3, int $0x29.
+    let x64_seqs: [&[u8]; 6] = [
+        &[0x0f, 0xa2],
+        &[0x0f, 0x31],
+        &[0xf3, 0x90],
+        &[0x65, 0x48, 0x8b],
+        &[0xcc],
+        &[0xcd, 0x29],
+    ];
+    for seq in x64_seqs {
+        assert!(x64.windows(seq.len()).any(|w| w == seq), "x64: {seq:02x?}");
+    }
+    let words: Vec<u32> = [fixture.as_str(), traps]
+        .into_iter()
+        .flat_map(|src| {
+            let obj = object(src, Target::WindowsAarch64);
+            let (words, _) = obj.as_chunks::<4>();
+            words
+                .iter()
+                .map(|w| u32::from_le_bytes(*w))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    // brk #0xf000 and #0xf003, dmb ish, dsb sy, isb, yield, wfe, sev, sevl.
+    for w in [
+        0xd43e0000u32,
+        0xd43e0060,
+        0xd5033bbf,
+        0xd5033f9f,
+        0xd5033fdf,
+        0xd503203f,
+        0xd503205f,
+        0xd503209f,
+        0xd50320bf,
+    ] {
+        assert!(words.contains(&w), "arm64: {w:08x}");
+    }
+    // crc32b, crc32cx, and mrs / msr of FPCR, in any registers.
+    for (mask, bits) in [
+        (0xffe0fc00u32, 0x1ac04000u32),
+        (0xffe0fc00, 0x9ac05c00),
+        (0xffffffe0, 0xd53b4400),
+        (0xffffffe0, 0xd51b4400),
+    ] {
+        assert!(words.iter().any(|w| w & mask == bits), "arm64: {bits:08x}");
+    }
+}
+
+#[test]
+fn msvc_intrinsics_check_their_operands() {
+    use crate::Target;
+    let err = |src: &str, t: Target| {
+        crate::Compiler::with_target(src.to_string(), t)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default()
+    };
+    let a64 = Target::WindowsAarch64;
+    let x64 = Target::WindowsX64;
+    let cases = [
+        (
+            "void f(void) { __dmb(16); }",
+            a64,
+            "argument 1 of `__dmb` is 16, not 0 to 15",
+        ),
+        (
+            "void f(unsigned t) { __dmb(t); }",
+            a64,
+            "argument 1 of `__dmb` is not an integer constant expression",
+        ),
+        (
+            "int f(unsigned long *i) { return _BitScanForward(i); }",
+            x64,
+            "too few arguments to `_BitScanForward` (expected 2, got 1)",
+        ),
+        (
+            "void f(void) { __yield(); }",
+            x64,
+            "unknown function `__yield`",
+        ),
+        (
+            "void f(int *i) { __cpuid(i, 0); }",
+            a64,
+            "unknown function `__cpuid`",
+        ),
+        (
+            "int f(long *p) { return _InterlockedIncrement(p); }",
+            Target::LinuxX64,
+            "unknown",
+        ),
+    ];
+    for (src, t, needle) in cases {
+        let src = format!("{src}\nint main(void) {{ return 0; }}\n");
+        let msg = err(&src, t);
+        assert!(msg.contains(needle), "{t:?} {src}: {msg}");
+    }
+    // `__assume(0)` and `__fastfail` end the path, so neither function
+    // falls off its end.
+    let probe = "#if !__has_builtin(_InterlockedIncrement) || !__has_builtin(__noop)\n#error\n\
+                 #endif\n#pragma intrinsic(_BitScanForward, __popcnt)\n\
+                 int f(int x) { if (x) return 5; __assume(0); }\n\
+                 int g(void) { __fastfail(3); }\n\
+                 int main(void) { return f(1) - 5; }\n";
+    for t in [x64, a64] {
+        let program = crate::Compiler::with_target(probe.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+    }
+}
+
+#[test]
 fn builtin_overflow_mixed_signedness() {
     // The exact value decides when an operand's signedness or width
     // differs from the result's, for LP64 and LLP64.

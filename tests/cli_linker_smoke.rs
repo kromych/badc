@@ -11252,6 +11252,213 @@ fn the_ld_persona_refuses_a_library_built_for_another_machine() {
     }
 }
 
+/// `(type, symbol)` of every dynamic relocation of an ELF32 image, an
+/// `R_386_JUMP_SLOT` read as the `R_386_GLOB_DAT` badc's stubs bind by.
+#[cfg(target_os = "linux")]
+fn elf32_dynamic_relocs(path: &Path) -> std::collections::BTreeSet<(u32, String)> {
+    let b = std::fs::read(path).expect("read image");
+    let u16_at = |at: usize| u16::from_le_bytes([b[at], b[at + 1]]) as usize;
+    let u32_at = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize;
+    let (shoff, shnum) = (u32_at(32), u16_at(48));
+    // (type, flags, offset, size, link) of section `i`.
+    let sh = |i: usize| {
+        let at = shoff + i * 40;
+        (
+            u32_at(at + 4),
+            u32_at(at + 8),
+            u32_at(at + 16),
+            u32_at(at + 20),
+            u32_at(at + 24),
+        )
+    };
+    let mut out = std::collections::BTreeSet::new();
+    for i in 0..shnum {
+        let (kind, flags, off, size, link) = sh(i);
+        if kind != 9 || flags & 2 == 0 {
+            continue;
+        }
+        let (_, _, sym_off, _, str_link) = sh(link);
+        let str_off = sh(str_link).2;
+        for e in (off..off + size).step_by(8) {
+            let info = u32_at(e + 4);
+            let name_at = str_off + u32_at(sym_off + (info >> 8) * 16);
+            let end = b[name_at..].iter().position(|&c| c == 0).unwrap();
+            let name = String::from_utf8_lossy(&b[name_at..name_at + end]).into_owned();
+            let kind = match info & 0xff {
+                7 => 6,
+                t => t as u32,
+            };
+            out.insert((kind, name));
+        }
+    }
+    out
+}
+
+// An i386 library and the executables calling it, linked by the GNU ld
+// persona with and without a script, bind as GNU ld binds them: the library
+// reaches its own default-visibility definitions through the PLT, the GOT
+// and relocations naming them unless -Bsymbolic or -Bsymbolic-functions
+// binds them in place, and a PIE and a position-dependent executable
+// import through stubs. Each library's dynamic relocations name what GNU
+// ld's do, and each executable's cover GNU ld's; where an i386 loader is
+// installed, each executable prints what the bindings give.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping: no system C compiler");
+        return;
+    };
+    let dir = tempdir("i386-shared");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int g = 1;\nint *pg = &g;\nint get_g(void) { return g; }\nint f(void) { return 1; }\n\
+         int (*pf)(void) = f;\n\
+         int call_f(void) { return f() * 10 + pf() + (pf == f) * 100 + (*pg) * 1000; }\n\
+         static int s(void) { return 3; }\nint call_s(void) { return s(); }\nint lib_data = 9;\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int g = 5;\nint f(void) { return 7; }\nint get_g(void);\nint call_f(void);\n\
+         int call_s(void);\nextern int lib_data;\nint *pd = &lib_data;\n\
+         static int sys3(int n, int a, int b, int c) {\n  int r;\n\
+           __asm__ volatile(\"int $0x80\" : \"=a\"(r) : \"a\"(n), \"b\"(a), \"c\"(b), \"d\"(c) \
+             : \"memory\");\n  return r;\n}\n\
+         static void put(int v) {\n  char b[16];\n  int i = 15;\n  b[i] = ' ';\n\
+           do { b[--i] = '0' + v % 10; v /= 10; } while (v);\n\
+           sys3(4, 1, (int)(b + i), 16 - i);\n}\n\
+         void _start(void) {\n  put(get_g()); put(call_f()); put(call_s()); put(*pd);\n\
+           sys3(1, 0, 0, 0);\n}\n",
+    );
+    let cflags = [
+        "-m32",
+        "-O1",
+        "-ffreestanding",
+        "-fno-stack-protector",
+        "-fno-asynchronous-unwind-tables",
+        "-c",
+    ];
+    let compile = |src: &Path, pic: &str, obj: &str| {
+        Command::new(&cc)
+            .args(cflags)
+            .arg(pic)
+            .arg(src)
+            .arg("-o")
+            .arg(dir.join(obj))
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    if !compile(&lib, "-fPIC", "lib.o") {
+        eprintln!("skipping: the system C compiler does not compile for i386");
+        return;
+    }
+    assert!(compile(&main, "-fPIE", "pie.o") && compile(&main, "-fno-pie", "pdep.o"));
+    let script = write_source(
+        &dir,
+        "lib.lds",
+        "SECTIONS {\n  . = SIZEOF_HEADERS;\n  .hash : { *(.hash) }\n  .gnu.hash : { *(.gnu.hash) }\n\
+         .dynsym : { *(.dynsym) }\n  .dynstr : { *(.dynstr) }\n  .rel.dyn : { *(.rel.*) }\n\
+         .plt : { *(.plt) }\n  .text : { *(.text*) }\n  .rodata : { *(.rodata*) }\n\
+         . = ALIGN(CONSTANT (MAXPAGESIZE));\n  .dynamic : { *(.dynamic) }\n\
+         .got : { *(.got) }\n  .got.plt : { *(.got.plt) }\n  .data : { *(.data*) }\n\
+         .bss : { *(.bss*) }\n}\n",
+    );
+    let gnu_ld = Command::new("ld")
+        .arg("-V")
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("elf_i386"));
+    let loader = ["/lib/ld-linux.so.2", "/usr/lib32/ld-linux.so.2"]
+        .into_iter()
+        .find(|p| Path::new(p).exists());
+    if loader.is_none() {
+        eprintln!("no i386 loader: the executables are linked, not run");
+    }
+    for (flag, want) in [
+        (None, "5 5177 3 9"),
+        (Some("-Bsymbolic"), "1 1111 3 9"),
+        (Some("-Bsymbolic-functions"), "5 5111 3 9"),
+    ] {
+        for with_script in [false, true] {
+            let sub = dir.join(format!(
+                "{}-{with_script}",
+                flag.unwrap_or("default").trim_start_matches('-')
+            ));
+            std::fs::create_dir_all(&sub).expect("mkdir");
+            let mut link = Command::new(badc());
+            link.args(["--ld", "-m", "elf_i386", "-shared", "-soname", "libone.so"])
+                .args(flag);
+            if with_script {
+                link.arg("-T").arg(&script);
+            }
+            run(
+                link.arg(dir.join("lib.o"))
+                    .arg("-o")
+                    .arg(sub.join("libone.so")),
+                "link the library",
+            );
+            if gnu_ld {
+                run(
+                    Command::new("ld")
+                        .args(["-m", "elf_i386", "-shared", "-soname", "libone.so"])
+                        .args(flag)
+                        .arg(dir.join("lib.o"))
+                        .arg("-o")
+                        .arg(sub.join("ref.so")),
+                    "link the library with GNU ld",
+                );
+                assert_eq!(
+                    elf32_dynamic_relocs(&sub.join("libone.so")),
+                    elf32_dynamic_relocs(&sub.join("ref.so")),
+                    "{flag:?} script={with_script}"
+                );
+            }
+            for (kind, obj) in [("-pie", "pie.o"), ("-no-pie", "pdep.o")] {
+                let exe = sub.join(format!("prog{kind}"));
+                let args = |c: &mut Command| {
+                    c.args([
+                        "-m",
+                        "elf_i386",
+                        kind,
+                        "-dynamic-linker",
+                        "/lib/ld-linux.so.2",
+                    ])
+                    .arg(dir.join(obj))
+                    .arg(sub.join("libone.so"));
+                };
+                let mut link = Command::new(badc());
+                link.arg("--ld");
+                args(&mut link);
+                run(link.arg("-o").arg(&exe), "link the executable");
+                if gnu_ld {
+                    let reference = sub.join(format!("ref{kind}"));
+                    let mut link = Command::new("ld");
+                    args(&mut link);
+                    run(link.arg("-o").arg(&reference), "link it with GNU ld");
+                    let (ours, theirs) =
+                        (elf32_dynamic_relocs(&exe), elf32_dynamic_relocs(&reference));
+                    assert!(theirs.is_subset(&ours), "{kind}: {theirs:?} {ours:?}");
+                }
+                if let Some(loader) = loader {
+                    let out = run(
+                        Command::new(loader)
+                            .arg("--library-path")
+                            .arg(&sub)
+                            .arg(&exe),
+                        "run the executable",
+                    );
+                    assert_eq!(
+                        String::from_utf8_lossy(&out.stdout).trim(),
+                        want,
+                        "{flag:?} script={with_script} {kind}"
+                    );
+                }
+            }
+        }
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

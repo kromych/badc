@@ -16,7 +16,7 @@ use hashbrown::{HashMap, HashSet};
 use super::got::{GotKey, PLT_ENTRY_SIZE};
 use super::inputs::RawReloc;
 use super::{
-    EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS, SHT_NOTE, STB_LOCAL,
+    EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS, SHT_NOTE, STB_LOCAL,
     STT_COMMON, STT_GNU_IFUNC, STT_OBJECT, STT_TLS, STV_DEFAULT, SYNTH_DYNSYM, SYNTH_PLT, SecFate,
 };
 
@@ -40,6 +40,16 @@ pub(super) enum Reach {
 /// How a field of `rtype` reaches a preemptible definition, as GNU ld
 /// 2.46 links one; `writable` is the referring section's `SHF_WRITE`.
 pub(super) fn reach(machine: u16, rtype: u32, writable: bool, noted: bool, addend: i64) -> Reach {
+    // i386 takes a dynamic relocation for a PC-relative field in any
+    // section, and binds a GOT-relative or narrower one directly.
+    if machine == EM_386 {
+        return match rtype {
+            rt::R_386_PLT32 => Reach::Plt,
+            rt::R_386_GOT32 | rt::R_386_GOT32X => Reach::Got,
+            rt::R_386_32 | rt::R_386_PC32 => Reach::Dynamic,
+            _ => Reach::Direct,
+        };
+    }
     if machine == EM_AARCH64 {
         return match rtype {
             rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26 => Reach::Plt,
@@ -104,13 +114,7 @@ impl<'a> LdsLinker<'a> {
                     .collect()
             })
             .collect();
-        // TODO: #1672 an i386 shared object binds its own definitions
-        // directly: `reach` has no i386 forms.
-        if self.opts.emit != LdsEmit::Dyn
-            || !self.opts.shared
-            || self.opts.symbolic
-            || !matches!(self.machine, EM_X86_64 | EM_AARCH64)
-        {
+        if self.opts.emit != LdsEmit::Dyn || !self.opts.shared || self.opts.symbolic {
             return;
         }
         self.preemptible = self.preemptible_definitions();

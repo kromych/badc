@@ -6419,3 +6419,131 @@ fn a_position_dependent_executable_imports_from_a_shared_library() {
         foo as i64
     );
 }
+
+/// An i386 unit calling `func`, loading `data`'s address through the GOT
+/// and holding `&func` and `&data + 4` in `.data`: `.text` is the call,
+/// the load, a return, then `func` at 16; `.data` is `data` and the two
+/// pointers. Symtab: null(0), sections(1, 2), func(3), data(4),
+/// caller(5).
+fn i386_preemption_unit(vis: u8) -> Vec<u8> {
+    let mut text = [0u8; 17];
+    text[..12].copy_from_slice(&[0xe8, 0, 0, 0, 0, 0x8b, 0x83, 0, 0, 0, 0, 0xc3]);
+    text[16] = 0xc3;
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 12])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 16, 1)
+        .vis(vis)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .vis(vis)
+        .sym("caller", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .reloc(0, 1, 3, rt::R_386_PLT32, -4)
+        .reloc(0, 7, 4, rt::R_386_GOT32X, 0)
+        .reloc(1, 4, 3, rt::R_386_32, 0)
+        .reloc(1, 8, 4, rt::R_386_32, 4)
+        .build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// GNU ld 2.46.1 links an i386 shared object's references to its own
+/// default-visibility definitions as the x86-64 and aarch64 ones, with
+/// the stub jumping through `%ebx` and each `R_386_32` keeping its
+/// addend in the field it names, the table being `SHT_REL`. A call goes
+/// through the stub, a GOT load keeps its slot, `R_386_GLOB_DAT` fills
+/// both slots, and each pointer takes an `R_386_32` against its
+/// symbol. `-Bsymbolic` binds every reference directly, as does a
+/// protected or hidden definition; `-Bsymbolic-functions` the
+/// function's.
+#[test]
+fn an_i386_shared_objects_own_definitions_are_preemptible() {
+    for (vis, symbolic) in [
+        (STV_DEFAULT, None),
+        (STV_DEFAULT, Some(false)),
+        (STV_DEFAULT, Some(true)),
+        (STV_PROTECTED, None),
+        (STV_HIDDEN, None),
+    ] {
+        let what = alloc::format!("vis {vis} {symbolic:?}");
+        let opts = LdsOptions {
+            symbolic: symbolic == Some(true),
+            symbolic_functions: symbolic == Some(false),
+            ..i386_opts(Some(true))
+        };
+        let res = link_i386_with(alloc::vec![("u.o", i386_preemption_unit(vis))], &opts)
+            .unwrap_or_else(|e| panic!("{what}: {e}"));
+        let img = &res.image;
+        let [func, data] = i386_addrs(img, ["func", "data"]);
+        let relocs = elf32_dyn_relocs(img);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let (t, text) = (
+            elf32_section(img, ".text").2 as i64,
+            elf32_body(img, ".text"),
+        );
+        let d = elf32_body(img, ".data");
+        let preempt_func = vis == STV_DEFAULT && symbolic.is_none();
+        let preempt_data = vis == STV_DEFAULT && symbolic != Some(true);
+        let call = t + 5 + i32_at(text, 1);
+        if preempt_func {
+            let slot = i386_glob_dat(&relocs, "func");
+            let plt = elf32_body(img, ".plt");
+            assert_eq!(call, elf32_section(img, ".plt").2 as i64, "{what}");
+            assert_eq!(
+                (plt[0], plt[1], i32_at(plt, 2)),
+                (0xff, 0xa3, slot - g),
+                "{what}"
+            );
+            assert!(relocs.contains(&(data as u64 + 4, rt::R_386_32, String::from("func"))));
+            assert_eq!(i32_at(d, 4), 0, "{what}: the field holds the addend");
+        } else {
+            assert_eq!(call, func, "{what}");
+            assert!(relocs.contains(&(data as u64 + 4, rt::R_386_RELATIVE, String::new())));
+            assert_eq!(i32_at(d, 4), func, "{what}");
+        }
+        if preempt_data {
+            let slot = i386_glob_dat(&relocs, "data");
+            assert_eq!((text[5], i32_at(text, 7)), (0x8b, slot - g), "{what}");
+            assert!(relocs.contains(&(data as u64 + 8, rt::R_386_32, String::from("data"))));
+            assert_eq!(i32_at(d, 8), 4, "{what}: the field holds the addend");
+        } else {
+            assert_eq!((text[5], i32_at(text, 7)), (0x8d, data - g), "{what}: lea");
+            assert!(relocs.contains(&(data as u64 + 8, rt::R_386_RELATIVE, String::new())));
+            assert_eq!(i32_at(d, 8), data + 4, "{what}");
+        }
+    }
+}
+
+/// GNU ld 2.46.1 leaves a PC-relative field naming an i386 shared
+/// object's preemptible definition to an `R_386_PC32` against it, in a
+/// writable section or not, the field keeping its addend, and binds an
+/// `R_386_GOTOFF` to the object's own definition.
+#[test]
+fn an_i386_pc_relative_field_takes_a_dynamic_relocation_and_gotoff_binds_directly() {
+    // .text: call func; lea data@GOTOFF(%ebx), %eax. .data: data, then
+    // `.long data - .`. Symtab: null(0), sections(1, 2), func(3), data(4).
+    let text = [0xe8, 0, 0, 0, 0, 0x8d, 0x83, 0, 0, 0, 0, 0xc3];
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 8])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 11, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .reloc(0, 1, 3, rt::R_386_PC32, -4)
+        .reloc(0, 7, 4, rt::R_386_GOTOFF, 0)
+        .reloc(1, 4, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let res = link_i386_with(alloc::vec![("u.o", o)], &i386_opts(Some(true))).expect("links");
+    let img = &res.image;
+    let relocs = elf32_dyn_relocs(img);
+    let (t, text) = (elf32_section(img, ".text").2, elf32_body(img, ".text"));
+    let [data] = i386_addrs(img, ["data"]);
+    assert!(
+        relocs.contains(&(t + 1, rt::R_386_PC32, String::from("func"))),
+        "{relocs:?}"
+    );
+    assert_eq!(i32_at(text, 1), -4, "the call keeps its addend");
+    assert!(relocs.contains(&(data as u64 + 4, rt::R_386_PC32, String::from("data"))));
+    let g = elf32_section(img, ".got.plt").2 as i64;
+    assert_eq!(
+        i32_at(text, 7),
+        data - g,
+        "GOTOFF binds the object's own data"
+    );
+}

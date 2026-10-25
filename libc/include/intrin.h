@@ -2,7 +2,7 @@
 ** has a CRT export to bind; the remaining intrinsics are
 ** compiler-generated and stay undeclared so their use fails loudly
 ** at compile time rather than miscompiling. TODO: lower the
-** barrier / bit-scan / mul128 families in the compiler. */
+** bit-scan / mul128 families in the compiler. */
 #pragma once
 
 #ifdef _WIN32
@@ -18,9 +18,12 @@ unsigned short     _byteswap_ushort(unsigned short value);
 unsigned long      _byteswap_ulong(unsigned long value);
 unsigned long long _byteswap_uint64(unsigned long long value);
 
-/* Compiler-reordering fence. c5 does not reorder memory accesses
-** across calls, so an opaque no-op call carries the required
-** ordering. TODO: a fence IR op once pass-level reordering exists. */
-static void _ReadWriteBarrier(void) {}
+/* Compiler intrinsics with no library function: the compiler lowers each
+** call, a barrier to a compiler-reordering fence. */
+void _ReadWriteBarrier(void);
+void _ReadBarrier(void);
+void _WriteBarrier(void);
+void *_ReturnAddress(void);
+void *_AddressOfReturnAddress(void);
 
 #endif

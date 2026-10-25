@@ -2257,7 +2257,8 @@ fn assert_header_declarations_resolve(target: crate::Target, own_library: &[&str
             if !(object || function) || s.linkage != Linkage::External || bound(name) {
                 continue;
             }
-            if pp.intrinsics.contains_key(name) || library.admit(name) {
+            let ms_intrinsic = crate::c5::preprocessor::builtins::is_ms_intrinsic(name, target);
+            if pp.intrinsics.contains_key(name) || ms_intrinsic || library.admit(name) {
                 continue;
             }
             if own_library.contains(&name) {

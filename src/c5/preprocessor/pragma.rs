@@ -700,7 +700,9 @@ impl Preprocessor {
             } else if is_ident(item, self.dollar()) {
                 if let Some(id) = self.registered_intrinsic(item) {
                     self.intrinsics.insert(item.to_string(), id);
-                } else if !builtins::is_builtin(item) {
+                } else if !builtins::is_builtin(item)
+                    && !builtins::is_ms_intrinsic(item, self.target)
+                {
                     self.warn(
                         IGNORED_PRAGMA_INTRINSIC,
                         site,

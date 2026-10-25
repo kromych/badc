@@ -1643,6 +1643,10 @@ impl Compiler {
                 self.parse_value_builtin(kind, &name)
             }
             Some(BuiltinCall::Intrinsic(id)) => self.parse_intrinsic_call(id_idx, id),
+            Some(BuiltinCall::Ms) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_ms_intrinsic(&name)
+            }
             None => self.parse_direct_call(id_idx),
         }
     }
@@ -1695,6 +1699,9 @@ impl Compiler {
         if let Some(kind) = super::value_builtin::ValueBuiltin::of(name) {
             return Some(BuiltinCall::Value(kind));
         }
+        if super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target) {
+            return Some(BuiltinCall::Ms);
+        }
         let class = self.symbols[id_idx].class;
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
@@ -1726,6 +1733,82 @@ impl Compiler {
             }
         }
         intrinsic_id.map(BuiltinCall::Intrinsic)
+    }
+
+    /// One of the MSVC intrinsics with no operand, the `(` consumed: a
+    /// compiler barrier, which emits nothing and orders the memory accesses
+    /// around it as `__atomic_signal_fence` does, `_ReturnAddress` as
+    /// `__builtin_return_address(0)`, and `_AddressOfReturnAddress`, the
+    /// return address's slot in the frame record, one pointer above the
+    /// saved frame pointer on both PE targets.
+    fn parse_ms_intrinsic(&mut self, name: &str) -> Result<(), C5Error> {
+        use super::super::ast::Expr;
+        use crate::c5::op::Intrinsic;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(
+                Code::INVALID_ARGUMENTS,
+                format!("intrinsic `{name}` takes no argument"),
+            ));
+        }
+        self.next()?;
+        self.mark_emit_other();
+        let pos = self.ast_src_pos();
+        let void_ptr = super::types::void_ptr_ty();
+        let intrinsic = |c: &mut Self, kind: Intrinsic, ty: i64| {
+            let args = Vec::new();
+            c.ast.push_expr(
+                Expr::Intrinsic {
+                    kind: kind as i64,
+                    args,
+                    ty,
+                },
+                pos,
+            )
+        };
+        let (id, ty) = match name {
+            "_ReturnAddress" => (
+                intrinsic(self, Intrinsic::ReturnAddress, void_ptr),
+                void_ptr,
+            ),
+            "_AddressOfReturnAddress" => {
+                let frame = intrinsic(self, Intrinsic::FrameAddress, void_ptr);
+                let u64_ty = Ty::LongLong as i64 | super::types::UNSIGNED_BIT;
+                let frame = self.ast.push_expr(
+                    Expr::Cast {
+                        child: frame,
+                        to_ty: u64_ty,
+                    },
+                    pos,
+                );
+                let slot = self.ast.push_expr(Expr::IntLit { val: 8, ty: u64_ty }, pos);
+                let sum = self.ast.push_expr(
+                    Expr::Binary {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: frame,
+                        rhs: slot,
+                        ty: u64_ty,
+                    },
+                    pos,
+                );
+                (
+                    self.ast.push_expr(
+                        Expr::Cast {
+                            child: sum,
+                            to_ty: void_ptr,
+                        },
+                        pos,
+                    ),
+                    void_ptr,
+                )
+            }
+            _ => {
+                let void = super::types::void_ty();
+                (intrinsic(self, Intrinsic::AtomicSignalFence, void), void)
+            }
+        };
+        self.ty = ty;
+        self.ast_acc = Some(id);
+        Ok(())
     }
 
     fn parse_intrinsic_call(&mut self, id_idx: usize, intrinsic_id: i64) -> Result<(), C5Error> {
@@ -6504,6 +6587,8 @@ enum BuiltinCall {
     Atomic(super::super::ast::AtomicKind),
     Value(super::value_builtin::ValueBuiltin),
     Intrinsic(i64),
+    /// One of the MSVC intrinsics the PE targets lower at the call site.
+    Ms,
 }
 
 /// What the intrinsic-operand parse hands the node build: the operands,

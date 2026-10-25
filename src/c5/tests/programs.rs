@@ -1478,6 +1478,44 @@ fn builtin_overflow() {
     assert_eq!(run_fixture("builtin_overflow.c"), 0);
 }
 
+/// MSVC's intrinsics with no library function, declared by the unit and
+/// enabled with `#pragma intrinsic`, lower at the call site on the PE
+/// targets: no `#pragma intrinsic` warning, no call left for the link,
+/// and the barrier emits nothing (clang for a windows-msvc triple emits no
+/// call for it either). The fixture runs under the interpreter here and
+/// natively in the PE tables.
+#[test]
+fn msvc_intrinsics_lower_at_the_call_site() {
+    use crate::Target;
+    let src = super::load_fixture("msvc_intrinsics_self_declared.c");
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = crate::Compiler::with_target(src.clone(), t)
+            .compile()
+            .unwrap();
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let dump = super::perf_codegen::ssa_dump_for(
+            "void _ReadWriteBarrier(void);\nint x;\n\
+             int f(void) { x = 1; _ReadWriteBarrier(); return x; }\n",
+            "f",
+            t,
+            false,
+        );
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        assert_eq!(
+            run_fixture_for("msvc_intrinsics_self_declared.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+    let probe = "#if __has_builtin(_ReturnAddress) != defined(_WIN32)\n#error\n#endif\n\
+                 int main(void) { return 0; }\n";
+    for t in [Target::WindowsX64, Target::LinuxX64] {
+        crate::Compiler::with_target(probe.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+}
+
 #[test]
 fn builtin_overflow_mixed_signedness() {
     // The exact value decides when an operand's signedness or width

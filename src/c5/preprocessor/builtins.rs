@@ -275,6 +275,22 @@ pub(super) const LIBRARY_BUILTINS: &[&str] = &[
     "wcscmp", "wcslen", "wcsncmp", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove",
 ];
 
+/// The MSVC intrinsics the PE targets lower at the call site whatever
+/// declares them, as MSVC and clang for a windows-msvc triple do: the
+/// compiler barriers and the return-address forms.
+pub(crate) const MS_INTRINSICS: &[&str] = &[
+    "_AddressOfReturnAddress",
+    "_ReadBarrier",
+    "_ReadWriteBarrier",
+    "_ReturnAddress",
+    "_WriteBarrier",
+];
+
+/// Whether `name` is one of [`MS_INTRINSICS`] on `target`.
+pub(crate) fn is_ms_intrinsic(name: &str, target: Target) -> bool {
+    target.ms_extensions() && MS_INTRINSICS.contains(&name)
+}
+
 fn lookup(name: &str) -> Option<&'static Builtin> {
     BUILTINS.iter().find(|b| b.name == name)
 }
@@ -329,6 +345,9 @@ pub(super) fn is_builtin(name: &str) -> bool {
 /// translation unit for `target` can use `name` with no `#include`. The
 /// x86 vector builtins are the x86 targets' only.
 pub(super) fn has_builtin(name: &str, target: Target) -> bool {
+    if is_ms_intrinsic(name, target) {
+        return true;
+    }
     match lookup(name) {
         Some(b) => !matches!(b.supply, Supply::Library(_)),
         None => {

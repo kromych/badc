@@ -60,47 +60,29 @@ honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
    ask the console for a passphrase, and `tcgetattr` on an inherited
    socket fails with `EOPNOTSUPP` on macOS, which they report as an error.
 
-`badc.conf` inherits each stock target and changes what badc's driver
-takes differently. gcc's `-pthread` (`-D_REENTRANT` when compiling,
-`-lpthread` when linking) is spelled out because badc refuses the option.
-The link names the host as `--sysroot`, because badc reads no system
-library directory the command line does not declare. On macOS `-arch
-arm64` (badc builds for the host) and `-Wl,-search_paths_first` (badc's
-linker refuses ld64's option) are dropped. `setup.py` guards
+`badc.conf` inherits each stock target and replaces a few fields: on Linux
+it spells gcc's `-pthread` as `-D_REENTRANT` and `-lpthread` and names the
+host as `--sysroot`; on macOS it drops the stock `-arch arm64` and
+`-Wl,-search_paths_first`. On macOS `smoke.py` also passes badc's own
+archiver (`AR="badc --ar"`, `RANLIB="badc --ar s"`): the host's `ranlib`
+rewrites an archive of badc's ELF objects with an index and no members. `setup.py` guards
 `test/rsa_complex.c`'s `#include <complex.h>` with `__STDC_NO_COMPLEX__`,
 which badc defines: C11 6.10.8.3 does not require the header then, and
 badc has no complex types.
 
 ## Status
 
-The build stops at the bundled headers, so CI's `openssl` job is wired
-and disabled until these close:
-
-- [#1634](https://github.com/kromych/badc/issues/1634): `mlock` (the
-  `openssl` application) and the `IP_PKTINFO` / `IPV6_PKTINFO` options (the
-  datagram BIO) on Linux; `SO_TYPE`, `MSG_PEEK`, `EPROTO` and `fmemopen` on
-  macOS.
-- [#1637](https://github.com/kromych/badc/issues/1637): `<unistd.h>` has no
-  `_POSIX_MAPPED_FILES`, so the badc-built `openssl dgst` and `pkeyutl`
-  take their non-`mmap` path and one subtest each of `test_dgst` and
-  `test_pkeyutl` fails.
-- macOS: `IPV6_V6ONLY` has the Linux value
-  ([#1641](https://github.com/kromych/badc/issues/1641)), so no IPv6
-  listener starts and six recipes fail; and there is no archiver for
-  badc's ELF objects ([#1635](https://github.com/kromych/badc/issues/1635)),
-  with the driver refusing `-arch` and `-pthread`
-  ([#1633](https://github.com/kromych/badc/issues/1633)).
-
-Measured with the declarations of #1634, #1637 and #1641 supplied by an
-experimental include directory (not committed) and, on macOS, an archiver
-that appends: the smoke passes end to end on the three POSIX lanes. The
-suite columns are the parallel pass plus `test_quicapi` alone.
+The smoke passes end to end on the three POSIX lanes, and CI's `openssl`
+job runs it on the Linux runners (x86-64 and aarch64). Measured at the
+commit that enabled the job; the suite columns are the parallel pass plus
+the serial one (`test_quicapi` and `test_quic_multistream`, whose
+wall-clock timeouts a loaded host decides).
 
 | Lane (jobs)         | -O0 build | -O0 suite  | -O build | -O suite   | total |
 |---------------------|----------:|-----------:|---------:|-----------:|------:|
-| Linux x86_64 (12)   | 22 s      | 304 + 23 s | 30 s     | 125 + 10 s | 530 s |
-| Linux aarch64 (8)   | 17 s      | 260 + 22 s | 18 s     | 81 + 7 s   | 418 s |
-| macOS arm64 (12)    | 14 s      | 218 + 24 s | 14 s     | 75 + 8 s   | 371 s |
+| Linux x86_64 (12)   | 22 s      | 276 + 38 s | 24 s     | 118 + 21 s | 517 s |
+| Linux aarch64 (8)   | 18 s      | 247 + 41 s | 19 s     | 88 + 19 s  | 442 s |
+| macOS arm64 (12)    | 10 s      | 192 + 38 s | 10 s     | 62 + 19 s  | 346 s |
 
 402 recipe files, 3294 tests on Linux and 3260 on macOS (the suite skips
 some per platform). The host compilers' builds of the same configuration

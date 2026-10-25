@@ -61,7 +61,11 @@ LEVELS = {"O0": "-O0", "O": "-O"}
 # on x86-64 with 12 recipes at a time: the gcc -O0 build of this
 # configuration fails test_quic_write_read as the badc -O0 and -O builds
 # do; run alone, 6 of 6 runs of each of the three pass.
-SERIAL_RECIPES = ("test_quicapi",)
+# test_quic_multistream bounds a connection's shutdown to 5 s of wall-clock
+# time (quic_multistream_test.c's "shutdown time exceeded 5sec"); on the Mac
+# with 12 recipes at a time the badc -O0 build exceeded it in script 88, and
+# run alone it passes.
+SERIAL_RECIPES = ("test_quicapi", "test_quic_multistream")
 
 BUILD_TIMEOUT = 3600
 TEST_TIMEOUT = 3600
@@ -109,6 +113,10 @@ def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, log)
     bld.mkdir(parents=True)
     cmd = ["perl", str(SRC / "Configure"), f"--config={DEMO_DIR / 'badc.conf'}", target,
            f"CC={badc}", f"CFLAGS={LEVELS[level]}", *CONFIGURE_OPTIONS]
+    if sys.platform == "darwin":
+        # The host's ar keeps badc's ELF members, but its ranlib rewrites the
+        # archive with an index of Mach-O symbols only and drops them.
+        cmd += [f"AR={badc} --ar", f"RANLIB={badc} --ar s"]
     log(f"[{level}] configure: {' '.join(cmd[3:])}")
     rc = run_logged(cmd, bld, bld / "configure.log", 600)
     if rc != 0:

@@ -111,6 +111,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("malloc.h", include_str!("../../libc/include/malloc.h")),
     ("stdarg.h", include_str!("../../libc/include/stdarg.h")),
     ("stdbool.h", include_str!("../../libc/include/stdbool.h")),
+    ("iso646.h", include_str!("../../libc/include/iso646.h")),
     (
         "stdnoreturn.h",
         include_str!("../../libc/include/stdnoreturn.h"),
@@ -121,6 +122,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("ctype.h", include_str!("../../libc/include/ctype.h")),
     ("math.h", include_str!("../../libc/include/math.h")),
+    ("tgmath.h", include_str!("../../libc/include/tgmath.h")),
     ("float.h", include_str!("../../libc/include/float.h")),
     ("locale.h", include_str!("../../libc/include/locale.h")),
     ("signal.h", include_str!("../../libc/include/signal.h")),

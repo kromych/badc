@@ -375,6 +375,19 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
+        // A 32-bit pointer holding an address takes a 32-bit relocation,
+        // which the data writers do not emit. TODO: `IMAGE_REL_*_ADDR32`.
+        if super::types::is_ptr32_ty(var_ty) {
+            let cp = self.init_checkpoint();
+            let leaf = self.parse_constant_init_value();
+            if let Ok(InitLeaf { reloc, .. }) = leaf
+                && !matches!(reloc, InitElemReloc::None)
+            {
+                let text = "a `__ptr32` pointer's static initializer is not an integer constant";
+                return Err(self.compile_err_at(Code::UNSUPPORTED, line, text));
+            }
+            self.restore_init_checkpoint(cp);
+        }
         let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer

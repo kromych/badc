@@ -306,10 +306,10 @@ impl Compiler {
             p.ty = types::add_ptr_level(p.ty);
             p.levels += 1;
             p.outer_const = false;
+            let mut uptr = false;
             while self.lex.tk == Token::TypeQual {
                 p.outer_const |= self.lex_is_const_qual();
-                p.ty = apply_qual_bits(p.ty, self.lex_qualifier_bits());
-                self.next()?;
+                p.ty = self.apply_pointer_qualifier(p.ty, &mut uptr)?;
             }
         }
         Ok(p)
@@ -1697,7 +1697,38 @@ impl Compiler {
             "const" | "__const" | "__const__" => CONST_BIT,
             "__seg_gs" => SEG_GS_BIT,
             "__seg_fs" => SEG_FS_BIT,
+            "__ptr32" => super::types::PTR32_SPACE,
             _ => 0,
+        }
+    }
+
+    /// The pointer qualifier at the cursor applied to `ty`, the token
+    /// consumed. `uptr` carries a `__uptr` the same pointer took: a 32-bit
+    /// pointer widens by sign extension here, so a zero-extended one is
+    /// refused. TODO: `__uptr` 32-bit pointers.
+    pub(super) fn apply_pointer_qualifier(
+        &mut self,
+        ty: i64,
+        uptr: &mut bool,
+    ) -> Result<i64, C5Error> {
+        *uptr |= self.symbols[self.lex.curr_id_idx].name == "__uptr";
+        let ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+        if *uptr && super::types::is_ptr32_ty(ty) {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+            ));
+        }
+        self.next()?;
+        Ok(ty)
+    }
+
+    /// C: `__ptr32` follows the `*` of the pointer it narrows, as clang
+    /// requires for a windows-msvc triple.
+    pub(super) fn check_ptr32_placement(&self, ty: i64) -> Result<(), C5Error> {
+        match super::types::ptr32_misplaced(ty) {
+            Some(text) => Err(self.compile_err(Code::INVALID_DECLARATION, text)),
+            None => Ok(()),
         }
     }
 

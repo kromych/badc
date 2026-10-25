@@ -5830,7 +5830,9 @@ impl Compiler {
         let outer = core::mem::take(&mut self.pending.attrs);
         let r = self.parse_type_name_inner();
         self.pending.attrs = outer;
-        r
+        let t = r?;
+        self.check_ptr32_placement(t.ty)?;
+        Ok(t)
     }
 
     fn parse_type_name_inner(&mut self) -> Result<TypeName, C5Error> {
@@ -5886,9 +5888,9 @@ impl Compiler {
         while self.lex.tk == Token::MulOp {
             self.next()?;
             self.derive_pointer(&mut t);
+            let mut uptr = false;
             while self.lex.tk == Token::TypeQual {
-                t.ty = apply_qual_bits(t.ty, self.lex_qualifier_bits());
-                self.next()?;
+                t.ty = self.apply_pointer_qualifier(t.ty, &mut uptr)?;
             }
         }
         if self.lex.tk == '(' {

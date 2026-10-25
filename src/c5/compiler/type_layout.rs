@@ -922,6 +922,9 @@ impl Compiler {
         if is_long_double_scalar(ty) {
             return self.target.long_double().size();
         }
+        if super::types::is_ptr32_ty(ty) {
+            return 4;
+        }
         // Unsigned bit is orthogonal to width: `unsigned char` is
         // still 1 byte, `unsigned int` is still 4 bytes. Strip it
         // before consulting the band identity.
@@ -968,6 +971,9 @@ impl Compiler {
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
         if is_long_double_scalar(ty) {
             return self.target.long_double().align();
+        }
+        if super::types::is_ptr32_ty(ty) {
+            return 4;
         }
         let ty = strip_unsigned(ty);
         if ty == Ty::Float as i64 {

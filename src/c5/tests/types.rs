@@ -2314,6 +2314,50 @@ fn microsoft_declarator_modifiers_on_the_pe_targets() {
     );
 }
 
+/// MSVC's `__ptr32`, as clang 22 takes it for x86_64- and
+/// aarch64-pc-windows-msvc: a 4-byte pointer, sign-extended when it widens.
+/// The fixture runs under the interpreter for both PE targets; a
+/// `__ptr32` that follows no `*`, a zero-extended one and a static address
+/// in one are refused.
+#[test]
+fn a_ptr32_pointer_is_four_bytes_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("msvc_ptr32.c", t), 0, "{t:?}");
+    }
+    for (src, text) in [
+        (
+            "int __ptr32 x;",
+            "`__ptr32` qualifies a pointer, after its `*`",
+        ),
+        (
+            "__ptr32 int *q;",
+            "`__ptr32` qualifies a pointer, after its `*`",
+        ),
+        (
+            "int __seg_gs * __ptr32 p;",
+            "`__ptr32` with a named address space is not supported",
+        ),
+        (
+            "int * __uptr __ptr32 u;",
+            "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+        ),
+        (
+            "int x;\nint * __ptr32 p = &x;",
+            "a `__ptr32` pointer's static initializer is not an integer constant",
+        ),
+        ("int * __ptr32 p;\nint **q = &p;", "init=int* __ptr32 *"),
+    ] {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::with_target(src.clone(), Target::WindowsX64)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(err.contains(text), "{src}: {err}");
+    }
+}
+
 /// C23 6.4.1: under `-std=c23` / `gnu23` `bool` names `_Bool`, and `true`
 /// and `false` are its constants 1 and 0 (6.4.4.6), with or without
 /// `<stdbool.h>`, which then defines none of them as a macro. Before C23

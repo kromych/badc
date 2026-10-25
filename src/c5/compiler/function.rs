@@ -26,7 +26,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base::ImplicitInt;
-use super::types::{add_ptr_level, apply_qual_bits};
+use super::types::add_ptr_level;
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together
@@ -389,9 +389,9 @@ impl Compiler {
                 self.next()?;
                 ty = add_ptr_level(ty);
                 leading_ptr_count += 1;
+                let mut uptr = false;
                 while self.lex.tk == Token::TypeQual {
-                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                    self.next()?;
+                    ty = self.apply_pointer_qualifier(ty, &mut uptr)?;
                 }
             }
             // `A *p` for an array typedef `A` is a pointer to the array

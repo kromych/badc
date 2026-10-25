@@ -396,6 +396,14 @@ impl<'a> Walker<'a> {
         }
         let target_size = type_size_bytes(to_ty, self.target);
         let source_size = type_size_bytes(src_ty, self.target);
+        // A 32-bit pointer converts to a wider integer as its 32 bits, as
+        // clang does for a windows-msvc triple.
+        if crate::c5::compiler::types::is_ptr32_ty(src_ty)
+            && !is_pointer_ty(to_ty)
+            && target_size >= 8
+        {
+            return b.binop_imm(BinOp::And, v, 0xffff_ffff);
+        }
         if target_size == 0 || target_size >= 8 {
             return v;
         }

@@ -248,7 +248,11 @@ pub(crate) fn fold_const_int_binop(
 pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        return 8;
+        return if crate::c5::compiler::types::is_ptr32_ty(ty) {
+            4
+        } else {
+            8
+        };
     }
     if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         1

@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier};
+use super::types::{add_ptr_level, is_decl_modifier};
 
 /// One derivation an abstract declarator spells (C99 6.7.6).
 pub(super) enum Derivation {
@@ -252,6 +252,7 @@ impl Compiler {
         let mut ptrs: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         // The convention the group's attributes name for the signature after it.
         let mut conv = None;
+        let mut uptr = false;
         loop {
             if self.at_attribute_specifier() {
                 let named = self.skip_attributes_for_conv()?;
@@ -260,10 +261,18 @@ impl Compiler {
             }
             if self.lex.tk == Token::MulOp {
                 ptrs.push(0);
+                uptr = false;
             } else if self.lex.tk != Token::TypeQual {
                 break;
             } else if let Some(quals) = ptrs.last_mut() {
+                uptr |= self.symbols[self.lex.curr_id_idx].name == "__uptr";
                 *quals |= self.lex_qualifier_bits();
+                if uptr && *quals & super::types::SEG_MASK == super::types::PTR32_SPACE {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+                    ));
+                }
             } else {
                 self.reject_leading_qualifier()?;
             }
@@ -370,6 +379,7 @@ impl Compiler {
         // A `vector_size` or `mode` attribute the declarator carries types
         // its own entity; left pending, it retyped the next declaration.
         let ty = self.apply_pending_type_attributes(ty)?;
+        self.check_ptr32_placement(ty)?;
         Ok((idx, ty, array_size, zero_len))
     }
 
@@ -434,12 +444,12 @@ impl Compiler {
             // the inner-only marker `add_ptr_level` just set (C99
             // 6.7.5.1p1). An attribute may sit here too
             // (`void * __attribute__((malloc)) p`).
+            let mut uptr = false;
             loop {
                 if self.lex.tk == Token::TypeQual {
                     outer_const |= self.lex_is_const_qual();
                     outer_restrict |= self.lex_is_restrict_qual();
-                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                    self.next()?;
+                    ty = self.apply_pointer_qualifier(ty, &mut uptr)?;
                 } else if self.at_attribute_specifier() {
                     self.skip_declarator_attributes(entity_start)?;
                 } else {

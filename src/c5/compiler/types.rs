@@ -189,7 +189,7 @@ pub(crate) fn absorb_function_level(ty: i64, level: i64) -> i64 {
         drop_level(CONST_LVL_MASK, CONST_LVL_SHIFT) | drop_level(VOL_LVL_MASK, VOL_LVL_SHIFT);
     let mut out = ((ty & !(CONST_LVL_MASK | VOL_LVL_MASK)) - Ty::Ptr as i64) | quals;
     let seg_level = (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT;
-    if ty & SEG_MASK != 0 && seg_level > level {
+    if ty & SEG_MASK != 0 && seg_level > level && seg_level < PTR32_CONFLICT {
         out = (out & !SEG_LVL_MASK) | ((seg_level - 1) << SEG_LVL_SHIFT);
     }
     out
@@ -200,7 +200,7 @@ pub(crate) fn absorb_function_level(ty: i64, level: i64) -> i64 {
 /// the pointer. [`VOLATILE_BIT`] stays.
 pub(crate) fn pointee_ty(ty: i64) -> i64 {
     let mut ty = strip_object_const(ty) & !volatile_level_bit(ptr_depth_of(ty));
-    if segment_of_object_ty(ty).is_some() {
+    if segment_of_object_ty(ty).is_some() || is_ptr32_ty(ty) {
         ty &= !(SEG_MASK | SEG_LVL_MASK);
     }
     ty - Ty::Ptr as i64
@@ -212,17 +212,63 @@ pub(crate) fn pointee_ty(ty: i64) -> i64 {
 /// qualifier records the derivation it applies to by stamping the tag's
 /// current pointer depth into [`SEG_LVL_MASK`].
 pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
-    let mut ty = ty | bits;
+    let space = bits & SEG_MASK;
+    let prior = ty & SEG_MASK;
+    let mut ty = ty | (bits & !SEG_MASK);
     if bits & VOLATILE_BIT != 0 {
         ty |= volatile_level_bit(ptr_depth_of(ty));
     }
     if bits & CONST_BIT != 0 {
         ty = (ty & !CONST_BIT) | const_level_bit(ptr_depth_of(ty));
     }
-    if bits & SEG_MASK != 0 {
-        ty = (ty & !SEG_LVL_MASK) | (ptr_depth_of(ty) << SEG_LVL_SHIFT);
+    let depth = ptr_depth_of(ty);
+    let level = match (space, prior) {
+        (0, _) => return ty,
+        (PTR32_SPACE, 0) if depth == 0 => PTR32_MISPLACED,
+        (PTR32_SPACE, 0) => depth - 1,
+        (PTR32_SPACE, _) | (_, PTR32_SPACE) => PTR32_CONFLICT,
+        (_, 0) => depth,
+        // The first segment keyword of a tag stands.
+        _ => return ty,
+    };
+    let space = if level == PTR32_CONFLICT {
+        PTR32_SPACE
+    } else {
+        space
+    };
+    (ty & !(SEG_MASK | SEG_LVL_MASK)) | space | (level << SEG_LVL_SHIFT)
+}
+
+/// MSVC's `__ptr32`, as clang takes it for a windows-msvc triple: the third
+/// address space of the [`SEG_MASK`] field, recorded at the level of the
+/// type the 32-bit pointer points to. The value widens by sign extension
+/// (`__sptr`), so a 64-bit register holds it sign-extended, a load extends
+/// and a store truncates.
+pub(crate) const PTR32_SPACE: i64 = SEG_GS_BIT | SEG_FS_BIT;
+
+/// The levels [`apply_qual_bits`] records for a `__ptr32` beside a segment
+/// qualifier and for one that follows no `*`, which [`ptr32_misplaced`]
+/// reports.
+const PTR32_CONFLICT: i64 = 0x1FE;
+const PTR32_MISPLACED: i64 = 0x1FF;
+
+/// Whether `ty` is a 32-bit (`__ptr32`) pointer.
+pub(crate) fn is_ptr32_ty(ty: i64) -> bool {
+    ty & SEG_MASK == PTR32_SPACE
+        && is_pointer_ty(ty)
+        && ((ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT) + 1 == ptr_depth_of(ty)
+}
+
+/// The error a `__ptr32` that cannot apply to `ty` gives, if one did not.
+pub(crate) fn ptr32_misplaced(ty: i64) -> Option<&'static str> {
+    if ty & SEG_MASK != PTR32_SPACE {
+        return None;
     }
-    ty
+    match (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT {
+        PTR32_MISPLACED => Some("`__ptr32` qualifies a pointer, after its `*`"),
+        PTR32_CONFLICT => Some("`__ptr32` with a named address space is not supported"),
+        _ => None,
+    }
 }
 
 /// High-bit flags marking a type tag qualified by an x86 named address
@@ -445,7 +491,9 @@ pub(crate) fn pointer_conversion_key(ty: i64) -> i64 {
         | const_level_bit(depth - 1)
         | volatile_level_bit(depth - 1);
     let ty = ty & !(outer | VOLATILE_BIT | CONST_BIT);
-    if segment_of_object_ty(ty).is_some() {
+    // A 32-bit pointer converts to and from a 64-bit one (MSVC; clang for a
+    // windows-msvc triple).
+    if segment_of_object_ty(ty).is_some() || is_ptr32_ty(ty) {
         ty & !(SEG_MASK | SEG_LVL_MASK)
     } else {
         ty
@@ -462,12 +510,10 @@ pub(crate) enum Segment {
 /// The named address space qualifying `ty` at any derivation level,
 /// or `None`.
 pub(crate) fn segment_of_ty(ty: i64) -> Option<Segment> {
-    if ty & SEG_GS_BIT != 0 {
-        Some(Segment::Gs)
-    } else if ty & SEG_FS_BIT != 0 {
-        Some(Segment::Fs)
-    } else {
-        None
+    match ty & SEG_MASK {
+        SEG_GS_BIT => Some(Segment::Gs),
+        SEG_FS_BIT => Some(Segment::Fs),
+        _ => None,
     }
 }
 
@@ -658,6 +704,12 @@ fn qualified_stars(ty: i64, levels: core::ops::Range<usize>) -> alloc::string::S
 /// level they qualify and the segment keyword at the level it applies to.
 fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
     let stars = |levels: core::ops::Range<usize>| qualified_stars(ty, levels);
+    if ty & SEG_MASK == PTR32_SPACE {
+        let lvl = (((ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT) as usize + 1).min(depth);
+        let (below, above) = (stars(1..lvl + 1), stars(lvl + 1..depth + 1));
+        let sep = if above.is_empty() { "" } else { " " };
+        return alloc::format!("{below} __ptr32{sep}{above}");
+    }
     let Some(seg) = segment_of_ty(ty) else {
         return stars(1..depth + 1);
     };
@@ -1295,6 +1347,9 @@ pub(crate) fn is_pointer_ty(ty: i64) -> bool {
 /// Pointer-to-struct goes through [`Compiler::pointee_size`]
 /// instead so the scale picks up the struct's real size.
 pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
+    if ptr_depth_of(ty) > 1 && is_ptr32_ty(pointee_ty(ty)) {
+        return 4;
+    }
     let ty = strip_unsigned(ty);
     if ty == Ty::Ptr as i64 {
         1
@@ -1406,9 +1461,14 @@ pub(crate) fn load_kind(ty: i64, target: super::super::Target, double_kind: Load
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        // Pointers are always 8 bytes; the Long-vs-LongLong and
-        // Float-vs-Double distinctions must not narrow a pointer load.
-        return LoadKind::I64;
+        // Pointers are 8 bytes but for `__ptr32`, which a load sign-extends;
+        // the Long-vs-LongLong and Float-vs-Double distinctions must not
+        // narrow a pointer load.
+        return if is_ptr32_ty(ty) {
+            LoadKind::I32
+        } else {
+            LoadKind::I64
+        };
     }
     if stripped == Ty::Bool as i64 {
         // `_Bool` is a 1-byte slot holding 0 or 1; always

@@ -2668,15 +2668,22 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
 }
 
 /// The Microsoft keywords the PE targets take, as clang does for a
-/// windows-msvc triple: `__ptr64` (a pointer is 64 bits there already),
-/// `__w64` (a portability marker), `__sptr` / `__uptr` (how a 32-bit
-/// pointer extends) and `__unaligned` (an access that may be misaligned,
-/// which both PE targets' loads and stores allow) qualify without effect,
-/// and `__builtin_alignof` is `_Alignof`.
-/// TODO: `__ptr32` pointers, which need a 4-byte pointer representation;
-/// `_Alignof` of an `__unaligned` type, which clang reports as 1.
+/// windows-msvc triple: `__ptr32` makes the pointer it follows 32 bits
+/// wide; `__ptr64` (a pointer is 64 bits there already), `__w64` (a
+/// portability marker), `__sptr` / `__uptr` (how a 32-bit pointer extends)
+/// and `__unaligned` (an access that may be misaligned, which both PE
+/// targets' loads and stores allow) qualify without effect; and
+/// `__builtin_alignof` is `_Alignof`.
+/// TODO: `_Alignof` of an `__unaligned` type, which clang reports as 1.
 pub(crate) fn init_ms_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
-    for name in ["__ptr64", "__w64", "__sptr", "__uptr", "__unaligned"] {
+    for name in [
+        "__ptr32",
+        "__ptr64",
+        "__w64",
+        "__sptr",
+        "__uptr",
+        "__unaligned",
+    ] {
         add_keyword(symbols, index, name, Token::TypeQual as i64);
     }
     add_keyword(symbols, index, "__builtin_alignof", Token::Alignof as i64);

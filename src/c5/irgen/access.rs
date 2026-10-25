@@ -368,7 +368,11 @@ pub(super) fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     // `__seg_fs`-qualified type classifies by its underlying width.
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        return StoreKind::I64;
+        return if crate::c5::compiler::types::is_ptr32_ty(ty) {
+            StoreKind::I32
+        } else {
+            StoreKind::I64
+        };
     }
     if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         StoreKind::I8

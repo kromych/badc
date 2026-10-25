@@ -5401,8 +5401,9 @@ impl Compiler {
     /// C11 6.5.1.1 `_Generic(controlling-expr, T1: e1, ..., default: eN)`.
     /// The controlling expression is parsed for its type only and its
     /// emitted state rewound; the association list is scanned by bracket
-    /// depth, and only the selected expression is parsed live, through a
-    /// lexer snapshot taken at its start.
+    /// depth to select, each other expression is then parsed unevaluated,
+    /// and the selected one is parsed live, through a lexer snapshot taken
+    /// at its start.
     pub(super) fn parse_generic_selection(&mut self) -> Result<(), C5Error> {
         let after = self.generic_select_to_winner()?;
         self.expr_or_void(Token::Assign as i64)?;
@@ -5477,6 +5478,8 @@ impl Compiler {
         // The names each association mentions, and whether it is the type
         // match (`Some(true)`) or the `default` (`Some(false)`).
         let mut mentions: Vec<(Option<bool>, Vec<usize>)> = Vec::new();
+        // Each association's expression, from its `:`.
+        let mut exprs = Vec::new();
         loop {
             let mut role = None;
             if self.lex.tk == Token::Default {
@@ -5485,6 +5488,7 @@ impl Compiler {
                     default_assoc = Some(self.lex.snapshot());
                     role = Some(false);
                 }
+                exprs.push(self.lex.snapshot());
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
                 // An array type never matches: the controlling expression's
@@ -5509,6 +5513,7 @@ impl Compiler {
                     winner = Some(self.lex.snapshot());
                     role = Some(true);
                 }
+                exprs.push(self.lex.snapshot());
                 self.consume(b':', "`:` expected after generic association type")?;
             }
             let names = self.skip_generic_assoc_expr()?;
@@ -5522,9 +5527,13 @@ impl Compiler {
         self.consume(b')', "`)` expected to close `_Generic`")?;
         let after = self.lex.snapshot();
         let chosen = Some(winner.is_some());
-        for (_, names) in mentions.into_iter().filter(|(role, _)| *role != chosen) {
-            for idx in names {
-                self.mark_unevaluated_use(idx);
+        let mut unselected = Vec::new();
+        for ((role, names), at) in mentions.into_iter().zip(exprs) {
+            if role != chosen {
+                names
+                    .into_iter()
+                    .for_each(|idx| self.mark_unevaluated_use(idx));
+                unselected.push(at);
             }
         }
 
@@ -5534,12 +5543,40 @@ impl Compiler {
                 "no `_Generic` association matches the controlling type",
             ));
         };
+        // The other expressions are expressions of the unit all the same,
+        // unevaluated (6.5.1.1p3): they are parsed for their diagnostics.
+        for at in unselected {
+            self.rewind_speculation(at, data_start);
+            self.next()?;
+            self.discard_unevaluated_expr()?;
+            if self.lex.tk != ',' && self.lex.tk != ')' {
+                return Err(self.generic_association_error());
+            }
+        }
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
         // token, appending any string data at `data_start`.
         self.rewind_speculation(chosen, data_start);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
+    }
+
+    /// Parse one assignment-expression unevaluated and drop the code,
+    /// relocations and AST it emitted; the lexer stays past it.
+    fn discard_unevaluated_expr(&mut self) -> Result<(), C5Error> {
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        let saved_ty = self.ty;
+        let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
+        self.ty = saved_ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        result
     }
 
     /// Parse one assignment-expression for its type only. The lexer
@@ -6181,7 +6218,6 @@ impl Compiler {
     /// the terminating top-level `,` or `)`, tracking bracket depth so
     /// commas and parens inside the expression do not end the scan, and
     /// return the declared names it mentions, member names aside.
-    /// TODO: parse an unselected association's expression for syntax.
     fn skip_generic_assoc_expr(&mut self) -> Result<Vec<usize>, C5Error> {
         let mut depth = 0i32;
         let mut conditionals = 0i32;

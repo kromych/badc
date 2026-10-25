@@ -6322,6 +6322,39 @@ fn vla_larger_than_reports_the_arrays_gcc_does() {
     assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
 }
 
+/// The expressions of the associations `_Generic` does not select are
+/// unevaluated (C11 6.5.1.1p3) but checked: gcc 16.2.1 reports the same
+/// lines (-Wint-conversion, -Wenum-conversion), at file scope and in a
+/// function, whichever association is selected. None of them runs.
+#[test]
+fn unselected_generic_associations_are_checked_not_evaluated() {
+    let src = "enum A { A0, A1 };\n\
+               enum B { B0, B1 };\n\
+               int *gp; static int calls;\n\
+               int gi = _Generic(0, int: 1, long: (gp = 5));\n\
+               static int side(void) { return ++calls; }\n\
+               int f(int *p, int i, enum A a, enum B b) {\n\
+                 i = _Generic(0, int: 0, long: (p = 5));\n\
+                 b = _Generic(0, int: 0, long: (b = a));\n\
+                 i += _Generic(0, default: (p = 6), int: 3);\n\
+                 i += _Generic(0, long: \"str\", default: i, char: (p = 7));\n\
+                 i += _Generic(0, long: ({ int t = side(); t; }), default: 4);\n\
+                 return i + (int)b; }\n\
+               int main(void) { int x; return f(&x, 1, A1, B0) == 10 && calls == 0 && gi == 1 ? 0 : 1; }\n";
+    let options = crate::CompileOptions::default()
+        .with_diag(super::diag_config(&["int-conversion", "enum-conversion"]));
+    let program = Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+        .compile()
+        .expect("compile");
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4, 7, 8, 9, 10]);
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 0);
+}
+
 /// A diagnostic in an initializer of static storage duration is reported
 /// once, though the initializer may be parsed twice (as an address
 /// constant first, then as arithmetic): the checkpoint the first parse is

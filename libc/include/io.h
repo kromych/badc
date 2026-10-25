@@ -67,7 +67,7 @@ int       chdir(const char *path);
 int       chmod(const char *path, int mode);
 char     *mktemp(char *templ);
 
-#define _S_IREAD  0400
-#define _S_IWRITE 0200
+#define _S_IREAD  0x0100
+#define _S_IWRITE 0x0080
 
 #endif

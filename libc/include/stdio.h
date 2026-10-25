@@ -360,12 +360,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_isatty,        "_isatty")
 #pragma binding(msvcrt::_setmode,       "_setmode")
 #pragma binding(msvcrt::_access,        "_access")
-#pragma binding(msvcrt::_stat,          "_stat")
-#pragma binding(msvcrt::_stat64,        "_stat64")
-#pragma binding(msvcrt::_fstat64,       "_fstat64")
 #pragma binding(msvcrt::_waccess,       "_waccess")
 #pragma binding(msvcrt::_wfreopen,      "_wfreopen")
-#pragma binding(msvcrt::_wstat,         "_wstat")
 #pragma binding(msvcrt::_wchmod,        "_wchmod")
 #pragma binding(msvcrt::_wmkdir,        "_wmkdir")
 #pragma binding(msvcrt::_wunlink,       "_wunlink")
@@ -626,65 +622,8 @@ int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
 int   _access(char *path, int mode);
-// MSVC CRT stat-result shapes: `st_size`, `st_mode`, `st_mtime` and
-// `st_ctime` live at the offsets the runtime writes. The 64-bit-time
-// variant (`_stat64`) handles files past 2038.
-struct _stat {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-struct _stat64 {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-// `__stat64` is an internal MSVC alias for `_stat64`, and some
-// sources spell it so. Same layout, same use; declared as its own
-// struct because c5's struct-tag namespace doesn't track aliases.
-struct __stat64 {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-#define _S_IFMT       0xF000
-#define _S_IFDIR      0x4000
-#define _S_IFCHR      0x2000
-#define _S_IFIFO      0x1000
-#define _S_IFREG      0x8000
-#define _S_IREAD      0x0100
-#define _S_IWRITE     0x0080
-#define _S_IEXEC      0x0040
-int   _stat(char *path, struct _stat *buf);
-int   _stat64(char *path, struct _stat64 *buf);
-int   _fstat64(int fd, void *buf);
 int   _waccess(unsigned short *path, int mode);
 FILE *_wfreopen(unsigned short *path, unsigned short *mode, FILE *stream);
-int   _wstat(unsigned short *path, struct _stat *buf);
 int   _wchmod(unsigned short *path, int mode);
 int   _wmkdir(unsigned short *path);
 int   _wunlink(unsigned short *path);

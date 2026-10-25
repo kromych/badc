@@ -10,16 +10,9 @@
 #include <unistd.h>
 
 static int owner_writes(const char *name) {
-#ifdef _WIN32
-    // TODO(#1651): struct stat is not msvcrt's there; _stati64's struct is.
-    struct _stati64 st;
-    if (_stati64(name, &st))
-        return -1;
-#else
     struct stat st;
     if (stat(name, &st))
         return -1;
-#endif
     return (st.st_mode & 0200) != 0;
 }
 

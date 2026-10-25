@@ -14,33 +14,14 @@
 
 typedef int (*visit_fn)(const char *, const struct stat *, int);
 
-// TODO(#1651): stat itself once struct stat has msvcrt's layout.
-static int stat_of(const char *path, struct stat *st) {
-    struct _stati64 s;
-    memset(st, 0, sizeof *st);
-    if (_stati64(path, &s))
-        return -1;
-    st->st_dev = s.st_dev;
-    st->st_ino = s.st_ino;
-    st->st_mode = s.st_mode;
-    st->st_nlink = s.st_nlink;
-    st->st_uid = s.st_uid;
-    st->st_gid = s.st_gid;
-    st->st_rdev = s.st_rdev;
-    st->st_size = s.st_size;
-    st->st_atime = s.st_atime;
-    st->st_mtime = s.st_mtime;
-    st->st_ctime = s.st_ctime;
-    return 0;
-}
-
 static int walk(const char *path, visit_fn fn, int root) {
     struct stat st;
     struct dirent *e;
     DIR *dir;
     size_t len = strlen(path);
     int rc;
-    if (stat_of(path, &st))
+    memset(&st, 0, sizeof st);
+    if (stat(path, &st))
         return root ? -1 : fn(path, &st, FTW_NS);
     if (!S_ISDIR(st.st_mode))
         return fn(path, &st, FTW_F);

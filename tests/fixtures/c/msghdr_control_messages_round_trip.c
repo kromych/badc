@@ -3,7 +3,9 @@
 // scattered into two, with the sender in msg_name and an IP_PKTINFO record
 // naming 127.0.0.1; IPV6_RECVPKTINFO yields an in6_pktinfo naming ::1; a
 // descriptor passes as SCM_RIGHTS; CMSG_NXTHDR steps over records laid out
-// by CMSG_SPACE; sockatmark reports no mark on an unconnected stream socket.
+// by CMSG_SPACE, and on Linux stops at a record shorter than its header or
+// longer than the buffer; sockatmark reports no mark on an unconnected
+// stream socket.
 // A host without IPv6 loopback skips that part.
 #define _GNU_SOURCE 1
 #define __APPLE_USE_RFC_3542 1
@@ -187,6 +189,13 @@ static int walk_records(void) {
     second->cmsg_len = CMSG_LEN(3);
     if (CMSG_NXTHDR(&msg, second) != 0) return 42;
     if (CMSG_DATA(first) != control.buf + CMSG_LEN(0)) return 43;
+#ifdef __linux__
+    // glibc's CMSG_NXTHDR ends the walk at a malformed record.
+    first->cmsg_len = 0;
+    if (CMSG_NXTHDR(&msg, first) != 0) return 45;
+    first->cmsg_len = (size_t)-1;
+    if (CMSG_NXTHDR(&msg, first) != 0) return 46;
+#endif
     msg.msg_controllen = sizeof(struct cmsghdr) - 1;
     if (CMSG_FIRSTHDR(&msg) != 0) return 44;
     return 0;

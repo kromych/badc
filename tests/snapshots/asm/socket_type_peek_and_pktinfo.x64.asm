@@ -172,22 +172,11 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	setg	%r12b
                	movzbq	%r12b, %r12
-               	movq	(%rbx), %rax
-               	addq	$0x7, %rax
-               	andq	$-0x8, %rax
-               	addq	%rbx, %rax
-               	addq	$0x10, %rax
-               	movq	-0x18(%rbp), %rcx
-               	movq	-0x10(%rbp), %rdx
-               	addq	%rdx, %rcx
-               	cmpq	%rcx, %rax
-               	jbe	<addr>
-               	xorl	%ebx, %ebx
-               	jmp	<addr>
-               	movq	(%rbx), %rax
-               	addq	$0x7, %rax
-               	andq	$-0x8, %rax
-               	addq	%rax, %rbx
+               	leaq	-0x38(%rbp), %rdi
+               	movq	%rbx, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movq	%rax, %rbx
                	testq	%rbx, %rbx
                	jne	<addr>
                	movq	%r13, %rdi

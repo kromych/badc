@@ -144,22 +144,10 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x48]
                	cmp	w0, #0x0
                	cset	x21, gt
-               	ldr	x0, [x20]
-               	add	x0, x0, #0x7
-               	and	x0, x0, #0xfffffffffffffff8
-               	add	x0, x20, x0
-               	add	x0, x0, #0x10
-               	ldur	x1, [x29, #-0x18]
-               	ldur	x2, [x29, #-0x10]
-               	add	x1, x1, x2
-               	cmp	x0, x1
-               	b.ls	<addr>
-               	mov	x20, #0x0               // =0
-               	b	<addr>
-               	ldr	x0, [x20]
-               	add	x0, x0, #0x7
-               	and	x0, x0, #0xfffffffffffffff8
-               	add	x20, x20, x0
+               	sub	x0, x29, #0x38
+               	mov	x1, x20
+               	bl	<addr>
+               	mov	x20, x0
                	cbnz	x20, <addr>
                	mov	x0, x22
                	bl	<addr>

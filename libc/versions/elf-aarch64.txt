@@ -18,6 +18,7 @@
 
 [libc.so.6]
 _Exit                                    GLIBC_2.17
+__cmsg_nxthdr                            GLIBC_2.17
 __cxa_at_quick_exit                      GLIBC_2.17
 __cxa_atexit                             GLIBC_2.17
 __environ                                GLIBC_2.17

@@ -313,6 +313,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::recvmmsg,   "recvmmsg")
 #pragma binding(libc::accept4,    "accept4")
 #pragma binding(libc::sockatmark, "sockatmark")
+#pragma binding(libc::__cmsg_nxthdr, "__cmsg_nxthdr")
 
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
@@ -377,11 +378,10 @@ struct cmsghdr {
 #define CMSG_FIRSTHDR(mhdr) \
     ((size_t)(mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
      ? (struct cmsghdr *)(mhdr)->msg_control : (struct cmsghdr *)0)
-#define CMSG_NXTHDR(mhdr, cmsg) \
-    (((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len) + sizeof(struct cmsghdr) \
-      > (unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen) \
-     ? (struct cmsghdr *)0 \
-     : (struct cmsghdr *)((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len)))
+// glibc's: a record shorter than its header, or one whose length runs past
+// the buffer, has no successor.
+#define CMSG_NXTHDR(mhdr, cmsg) __cmsg_nxthdr(mhdr, cmsg)
+struct cmsghdr *__cmsg_nxthdr(struct msghdr *mhdr, struct cmsghdr *cmsg);
 
 // Batched socket I/O (GNU/Linux): recvmmsg/sendmmsg transfer an array of
 // mmsghdr in one call, each pairing a msghdr with the byte count moved.

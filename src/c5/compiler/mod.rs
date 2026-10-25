@@ -2631,6 +2631,17 @@ impl Compiler {
         Ok((text, pp.include_records))
     }
 
+    /// The `#define` lines of the macros `source` ends with (gcc's `-dM -E`).
+    pub fn preprocess_macros(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Result<Vec<String>, C5Error> {
+        let mut pp = Self::configure_preprocessor(target, &opts);
+        pp.process(&source)?;
+        Ok(pp.macro_definitions())
+    }
+
     /// Assemble one GNU-as source unit for `target`, yielding the program the
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two

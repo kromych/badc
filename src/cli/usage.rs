@@ -62,6 +62,8 @@ Output mode -- pick at most one (defaults to a native binary):
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
                            `-`. Mirrors gcc / clang `-E`.
+  -dM                      With -E, print a #define line per macro the
+                           unit ends with, predefined ones included.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -230,6 +232,10 @@ Compile knobs:
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later
                            flags expand after earlier ones.
+  -pthread                 Define _REENTRANT; the POSIX threads are in
+                           each target's C library, so a link adds none.
+  -arch <name>             The Darwin driver's architecture; arm64 for
+                           the macOS target, refused elsewhere.
   -H, --show-includes      Print every #include's resolved path to
                            stderr (gcc -H shape; leading dots mark
                            nesting depth; missing headers print as
@@ -258,7 +264,8 @@ Compile knobs:
   -w                       Report no warning at all.
   -Wall / -Wextra          Enable a group of diagnostics, following
   -Wpedantic               gcc's split. --list-diagnostics prints the
-                           group each row belongs to.
+                           group each row belongs to. -pedantic is
+                           -Wpedantic, -pedantic-errors -Werror=pedantic.
   -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
                            is its name, an alias, its `B` code, or a
                            group name. A gcc or clang warning badc does

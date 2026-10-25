@@ -1590,6 +1590,75 @@ fn unresolved_extern_function_fails_link() {
     );
 }
 
+/// `-dM -E` prints gcc's `#define` lines for the macros the unit ends with,
+/// `-pthread` defines `_REENTRANT` and links, and `-arch arm64` builds for
+/// the macOS target, as `CC=badc` builds pass them.
+#[test]
+fn gcc_driver_options_from_build_systems_take_effect() {
+    let dir = tempdir("driver-options");
+    write_source(
+        &dir,
+        "m.c",
+        "#define EMPTY\n#define ADD(a, b) ((a) + (b))\n#define VA(x, ...) f(x, __VA_ARGS__)\n\
+         #define NAMED(x, rest...) g(x, rest)\n#define GONE 1\n#undef GONE\n",
+    );
+    write_source(
+        &dir,
+        "t.c",
+        "#ifndef _REENTRANT\n#error no _REENTRANT\n#endif\nint main(void) { return 0; }\n",
+    );
+    let out = run(
+        Command::new(badc())
+            .args(["--target=linux-x64", "-dM", "-E", "m.c"])
+            .current_dir(&dir),
+        "-dM -E",
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = text.lines().collect();
+    for want in [
+        "#define EMPTY ",
+        "#define ADD(a,b) ((a) + (b))",
+        "#define VA(x,...) f(x, __VA_ARGS__)",
+        "#define NAMED(x,rest...) g(x, rest)",
+        "#define __x86_64__ 1",
+    ] {
+        assert!(lines.contains(&want), "{want:?} not in:\n{text}");
+    }
+    assert!(
+        !text.contains("GONE") && !text.contains("__LINE__"),
+        "{text}"
+    );
+    assert!(lines.windows(2).all(|w| w[0] <= w[1]), "sorted");
+    for target in ["linux-x64", "windows-x64", "macos-aarch64"] {
+        run(
+            Command::new(badc())
+                .args([
+                    &format!("--target={target}"),
+                    "-pthread",
+                    "t.c",
+                    "-o",
+                    "t.exe",
+                ])
+                .current_dir(&dir),
+            "-pthread",
+        );
+    }
+    run(
+        Command::new(badc())
+            .args([
+                "--target=macos-aarch64",
+                "-arch",
+                "arm64",
+                "-pedantic",
+                "-c",
+                "t.c",
+            ])
+            .arg("-pthread")
+            .current_dir(&dir),
+        "-arch arm64 -pedantic",
+    );
+}
+
 /// A link reports every name it finds undefined, once each and in the
 /// order of their first references, before it fails, as GNU ld does,
 /// whether the units are compiled in the link or given as objects.

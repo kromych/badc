@@ -1519,6 +1519,39 @@ impl Preprocessor {
         self.fn_macros.remove(&*name);
     }
 
+    /// A `#define` line per macro defined now, sorted, as gcc's `-dM` prints
+    /// them; like gcc's, without the names the expansion site supplies.
+    pub fn macro_definitions(&self) -> Vec<String> {
+        const DYNAMIC: [&str; 8] = [
+            "__FILE__",
+            "__LINE__",
+            "__COUNTER__",
+            "__DATE__",
+            "__TIME__",
+            "__TIMESTAMP__",
+            "__INCLUDE_LEVEL__",
+            "__BASE_FILE__",
+        ];
+        let object = (self.macros.iter()).map(|(n, b)| (n.clone(), format!("#define {n} {b}")));
+        let function = self.fn_macros.iter().map(|(n, m)| {
+            let mut params = m.params.join(",");
+            if m.is_variadic {
+                let rest = m.va_name.as_deref().unwrap_or_default();
+                if !params.is_empty() {
+                    params.push(',');
+                }
+                params = format!("{params}{rest}...");
+            }
+            (n.clone(), format!("#define {n}({params}) {}", m.body))
+        });
+        let mut lines: Vec<(String, String)> = object
+            .chain(function)
+            .filter(|(n, _)| !DYNAMIC.contains(&n.as_str()))
+            .collect();
+        lines.sort();
+        lines.into_iter().map(|(_, l)| l).collect()
+    }
+
     /// Run the preprocessor over `source` and return the substituted
     /// text suitable for the lexer. Within a single source file each
     /// input line maps to exactly one output line so lexer-level

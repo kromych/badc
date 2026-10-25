@@ -98,6 +98,8 @@ pub(crate) struct FrontEnd {
     pub(crate) nostdinc: bool,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
+    /// gcc `-dM`: `-E` prints the macro definitions in place of the text.
+    pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
     pub(crate) defines: Vec<(String, String)>,
@@ -541,6 +543,8 @@ struct Parser {
     /// The `--explain` selector, resolved once the whole line is read.
     explain: Option<String>,
     target_spec: Option<String>,
+    /// `-arch <name>`, checked against the target once it is known.
+    arch: Option<String>,
     mcpu: Option<String>,
     dep: DepFlags,
     /// `-mcmodel=tiny`, which lowers as `small` and is checked against
@@ -789,6 +793,9 @@ impl Parser {
     /// (`-Wa,`, `-Wp,`) keeps it.
     fn diagnostic_option(&mut self, arg: &str) -> Result<bool, ParseError> {
         match arg {
+            // gcc's original spellings of `-Wpedantic` and `-Werror=pedantic`.
+            "-pedantic" => self.diag_level("pedantic", arg, badc::diag::Level::Warning)?,
+            "-pedantic-errors" => self.diag_error("pedantic", arg, true)?,
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
@@ -1076,8 +1083,16 @@ impl Parser {
 
     /// Preprocessor and language-dialect options.
     fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
+        if arg == "-arch" {
+            self.arch = Some(operand(iter, "badc: error: -arch requires a name")?);
+            return Ok(true);
+        }
         let front = &mut self.front;
         match arg {
+            // gcc's `-pthread`; the threads live in the target's C library as
+            // badc describes it, so the link adds no library.
+            "-pthread" => front.defines.push(("_REENTRANT".into(), "1".into())),
+            "-dM" => front.dump_macros = true,
             "-D" => {
                 let s = operand(iter, "badc: error: -D requires NAME[=VALUE]")?;
                 match s.split_once('=') {
@@ -2044,6 +2059,7 @@ impl Parser {
                 Err(e) => return Err(ParseError::diag(format!("badc: error: {e}"))),
             }
         }
+        self.check_arch(target)?;
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
@@ -2130,6 +2146,29 @@ impl Parser {
             #[cfg(feature = "codegen_test")]
             pressure_caps: self.pressure_caps,
         })))
+    }
+
+    /// Apple clang's `-arch <name>`: a Darwin target's own architecture; any
+    /// other, or any other target, is refused, as clang refuses it for Linux.
+    fn check_arch(&self, target: Target) -> Result<(), ParseError> {
+        const DARWIN: [&str; 15] = [
+            "i386", "x86_64", "x86_64h", "arm64", "arm64e", "arm64_32", "armv6", "armv6m", "armv7",
+            "armv7s", "armv7k", "armv7m", "armv7em", "ppc", "ppc64",
+        ];
+        let Some(arch) = self.arch.as_deref() else {
+            return Ok(());
+        };
+        let message = match target {
+            Target::MacOSAarch64 if arch == "arm64" => return Ok(()),
+            Target::MacOSAarch64 if DARWIN.contains(&arch) => {
+                format!(
+                    "`-arch {arch}` names an architecture badc does not build for macOS; its macOS target is arm64"
+                )
+            }
+            Target::MacOSAarch64 => format!("invalid arch name `-arch {arch}`"),
+            other => format!("unsupported option `-arch` for target `{}`", other.id_str()),
+        };
+        Err(ParseError::diag(format!("badc: error: {message}")))
     }
 
     /// `-pg`, `-fpatchable-function-entry=` and `-fstack-protector*`
@@ -4079,5 +4118,40 @@ mod tests {
         assert_eq!(level(&["-Werror=inline", "a.c"]), Level::Error);
         // Not a member of any group, as in gcc.
         assert_eq!(level(&["-Wall", "-Wextra", "a.c"]), Level::Ignore);
+    }
+
+    /// gcc's `-pthread`, `-pedantic` / `-pedantic-errors` and `-dM`, and the
+    /// Darwin driver's `-arch`, which names the macOS target's arm64 alone.
+    #[test]
+    fn gcc_and_darwin_driver_options_take_their_meanings() {
+        let defines = parse(&["-pthread", "-c", "a.c"]).front.defines;
+        assert!(defines.contains(&("_REENTRANT".to_string(), "1".to_string())));
+        let diag = |args: &[&str]| format!("{:?}", parse(args).front.diag);
+        assert_eq!(diag(&["-pedantic", "a.c"]), diag(&["-Wpedantic", "a.c"]));
+        assert_eq!(
+            diag(&["-pedantic-errors", "a.c"]),
+            diag(&["-Werror=pedantic", "a.c"])
+        );
+        assert!(parse(&["-dM", "-E", "a.c"]).front.dump_macros);
+        let mac = "--target=macos-aarch64";
+        parse(&[mac, "-arch", "arm64", "-c", "a.c"]);
+        for (args, want) in [
+            (
+                &[mac, "-arch", "x86_64"][..],
+                "badc does not build for macOS",
+            ),
+            (
+                &[mac, "-arch", "sparc"][..],
+                "invalid arch name `-arch sparc`",
+            ),
+            (
+                &[X64, "-arch", "x86_64"][..],
+                "unsupported option `-arch` for target `linux-x64`",
+            ),
+        ] {
+            let args = [args, &["-c", "a.c"]].concat();
+            let (message, _) = reject(&args);
+            assert!(message.contains(want), "{args:?}: {message}");
+        }
     }
 }

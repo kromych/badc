@@ -136,7 +136,13 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             .with_keep_pragmas(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
-        match Compiler::preprocess_tracked(contents, cli.target, opts) {
+        let preprocessed = if cli.front.dump_macros {
+            Compiler::preprocess_macros(contents, cli.target, opts)
+                .map(|lines| (lines.iter().map(|l| format!("{l}\n")).collect(), Vec::new()))
+        } else {
+            Compiler::preprocess_tracked(contents, cli.target, opts)
+        };
+        match preprocessed {
             Ok((s, records)) => {
                 if multi_tu {
                     eprintln!("--- {label} ---");

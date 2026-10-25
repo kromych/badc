@@ -3114,3 +3114,135 @@ fn link_order_to_a_default_data_section_follows_the_compacted_index() {
     assert_eq!(header(".data.hot").3, index(".data"));
     assert_eq!(header(".bss.hot").3, index(".bss"));
 }
+
+/// `(name, type, binding, section name, value, size)` of each named symbol.
+fn named_syms(bytes: &[u8]) -> Vec<(String, u8, u8, String, u64, u64)> {
+    let headers = section_headers64(bytes);
+    (sym_table(bytes).into_iter())
+        .filter(|s| !s.0.is_empty() && !matches!(s.1 & 15, 3 | 4) && !s.0.starts_with('$'))
+        .map(|(name, info, shndx, value, size)| {
+            let section = match shndx {
+                0 => String::from("UND"),
+                0xfff2 => String::from("COM"),
+                i => headers[i as usize].0.clone(),
+            };
+            (name, info & 15, info >> 4, section, value, size)
+        })
+        .collect()
+}
+
+fn sym<'a>(
+    syms: &'a [(String, u8, u8, String, u64, u64)],
+    name: &str,
+) -> (u8, u8, &'a str, u64, u64) {
+    let s = syms.iter().find(|s| s.0 == name).expect(name);
+    (s.1, s.2, s.3.as_str(), s.4, s.5)
+}
+
+const STT_OBJECT: u8 = 1;
+const STT_FUNC: u8 = 2;
+const STB_LOCAL: u8 = 0;
+const STB_GLOBAL: u8 = 1;
+
+/// `@gnu_unique_object` makes an `STT_OBJECT` bound `STB_GNU_UNIQUE`, `.globl`,
+/// `.weak` or neither, and the OS/ABI GNU, as GNU as 2.46.1 writes them.
+#[test]
+fn a_gnu_unique_object_is_bound_stb_gnu_unique() {
+    const STB_GNU_UNIQUE: u8 = 10;
+    let src = "\t.data\n\t.globl v\n\t.type v, @gnu_unique_object\nv:\n\t.long 7\n\t.size v, 4\n\
+               \t.weak w\n\t.type w, @gnu_unique_object\nw:\n\t.long 8\n\t.size w, 4\n\
+               \t.type lu, @gnu_unique_object\nlu:\n\t.long 9\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let bytes = object_for("gnu-unique", src, target);
+        let syms = named_syms(&bytes);
+        assert_eq!(sym(&syms, "v"), (STT_OBJECT, STB_GNU_UNIQUE, ".data", 0, 4));
+        assert_eq!(sym(&syms, "w"), (STT_OBJECT, STB_GNU_UNIQUE, ".data", 4, 4));
+        assert_eq!(
+            sym(&syms, "lu"),
+            (STT_OBJECT, STB_GNU_UNIQUE, ".data", 8, 0)
+        );
+        assert_eq!(bytes[7], 3, "{target}: ELFOSABI_GNU");
+    }
+}
+
+/// `.comm` defines a common symbol in any section, its value the alignment;
+/// `.lcomm`, and `.comm` after `.local`, allocate a local object in `.bss`.
+/// The default alignments and values are GNU as 2.46.1's for the source.
+#[test]
+fn a_common_symbol_is_defined_whatever_the_current_section() {
+    let src = "\t.section .mysec,\"aw\",@progbits\n\t.long 1\n\t.comm c, 8, 8\n\t.comm a3, 3\n\
+               \t.comm a32, 32\n\t.text\n\t.comm b, 4, 1\n\t.lcomm p, 1\n\t.lcomm q, 12\n\
+               \t.lcomm r, 3\n\t.comm s, 8, 8\n\t.local s\n\t.local t\n\t.comm t, 4\n\
+               \t.section .mysec\n\t.long 2\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let bytes = object_for("common", src, target);
+        let syms = named_syms(&bytes);
+        for (name, align, size) in [("c", 8, 8), ("a3", 4, 3), ("a32", 16, 32), ("b", 1, 4)] {
+            assert_eq!(
+                sym(&syms, name),
+                (STT_OBJECT, STB_GLOBAL, "COM", align, size),
+                "{name}"
+            );
+        }
+        assert_eq!(sym(&syms, "s"), (STT_OBJECT, STB_GLOBAL, "COM", 8, 8));
+        for (name, offset, size) in [("p", 0, 1), ("q", 8, 12), ("r", 20, 3), ("t", 23, 4)] {
+            assert_eq!(
+                sym(&syms, name),
+                (STT_OBJECT, STB_LOCAL, ".bss", offset, size),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            section_data(&bytes, ".mysec"),
+            [1, 0, 0, 0, 2, 0, 0, 0],
+            "{target}"
+        );
+    }
+}
+
+/// `.type` and `.size` may precede the label they name in another section,
+/// and give a name nothing defines an undefined global, as in GNU as 2.46.1.
+#[test]
+fn a_type_before_its_label_applies_in_any_section() {
+    let src = "\t.type y, @object\n\t.size y, 4\n\t.type f2, @function\n\t.globl q\n\
+               \t.type q, @object\n\t.size q, 4\n\t.type n, @object\n\t.data\n\t.globl y\n\
+               y:\n\t.long 2\n\t.text\nf2:\n\tret\n\t.size f2, .-f2\n\
+               \t.section .rodata.z,\"a\",@progbits\n\t.type z, @object\nz:\n\t.quad 3\n\
+               \t.size z, 8\n";
+    let bytes = object_of("type-first", src);
+    let syms = named_syms(&bytes);
+    assert_eq!(sym(&syms, "y"), (STT_OBJECT, STB_GLOBAL, ".data", 0, 4));
+    assert_eq!(sym(&syms, "f2"), (STT_FUNC, STB_LOCAL, ".text", 0, 1));
+    assert_eq!(sym(&syms, "z"), (STT_OBJECT, STB_LOCAL, ".rodata.z", 0, 8));
+    assert_eq!(sym(&syms, "q"), (STT_OBJECT, STB_GLOBAL, "UND", 0, 4));
+    assert_eq!(sym(&syms, "n"), (STT_OBJECT, STB_GLOBAL, "UND", 0, 0));
+}
+
+/// A program links against a unit's common, `.lcomm` and unique objects.
+#[test]
+fn a_program_links_against_common_and_unique_symbols() {
+    let d = dir("common-link");
+    let bump = if cfg!(target_arch = "aarch64") {
+        "\tadrp x1, lv\n\tadd x1, x1, :lo12:lv\n\tldr w0, [x1]\n\tadd w0, w0, 1\n\tstr w0, [x1]\n\tret\n"
+    } else {
+        "\tincl lv(%rip)\n\tmovl lv(%rip), %eax\n\tret\n"
+    };
+    let src = format!(
+        "\t.section .mysec,\"aw\",@progbits\n\t.comm cvar, 8, 8\n\t.lcomm lv, 4\n\t.data\n\
+         \t.globl uv\n\t.type uv, @gnu_unique_object\nuv:\n\t.long 5\n\t.size uv, 4\n\t.text\n\
+         \t.globl bump\n\t.type bump, @function\nbump:\n{bump}"
+    );
+    write(&d, "u.s", &src);
+    write(
+        &d,
+        "m.c",
+        "extern long cvar;\nextern int uv;\nint bump(void);\n\
+         int main(void) { cvar = 3; return (int)cvar + uv + bump() - 9; }\n",
+    );
+    let t = format!("--target={TARGET}");
+    run_ok(&d, &["-q", &t, "m.c", "u.s", "-o", "m"]);
+    if cfg!(target_os = "linux") {
+        let status = Command::new(d.join("m")).status().expect("run");
+        assert_eq!(status.code(), Some(0));
+    }
+}

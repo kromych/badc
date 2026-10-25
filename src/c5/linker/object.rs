@@ -359,10 +359,10 @@ pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
             for j in 0..(sh.sh_size as usize / entsize) {
                 let sym = sym_at(sh.sh_offset as usize + j * entsize)?;
                 // STB_LOCAL (0) has no external linkage. Of the STB_GLOBAL
-                // (1) / STB_WEAK (2) entries, SHN_UNDEF (0) is a reference
-                // and the rest are definitions.
+                // (1) / STB_WEAK (2) / STB_GNU_UNIQUE (10) entries, SHN_UNDEF
+                // (0) is a reference and the rest are definitions.
                 let bind = sym.st_info >> 4;
-                if bind != 1 && bind != 2 {
+                if !matches!(bind, 1 | 2 | 10) {
                     continue;
                 }
                 let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
@@ -2053,7 +2053,12 @@ fn decode_symbols(
     );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
-        let binding = sym.st_info >> 4;
+        // GNU ld links an `STB_GNU_UNIQUE` definition as a global one. TODO:
+        // keep the binding in a shared library's dynamic symbols.
+        let binding = match sym.st_info >> 4 {
+            10 => 1,
+            b => b,
+        };
         let kind = sym.st_info & 0xf;
         let (section, value_offset) = shndx_map.lookup(sym.st_shndx);
         symbols.push(NativeSymbol {

@@ -153,6 +153,9 @@ const SHF_TLS: u64 = 0x400;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
+const STB_GNU_UNIQUE: u8 = 10;
+const ELFOSABI_GNU: u8 = 3;
+const SHN_COMMON: u16 = 0xfff2;
 const STV_DEFAULT: u8 = 0;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
@@ -909,6 +912,8 @@ struct AsmLabelSym<'a> {
     value: u64,
     global: bool,
     weak: bool,
+    /// `@gnu_unique_object`: bound `STB_GNU_UNIQUE`, and non-local as `global`.
+    unique: bool,
     st_type: u8,
     st_size: u64,
     merge: bool,
@@ -964,6 +969,7 @@ struct NameStarts {
     asm_text_labels: usize,
     asm_decl_set: usize,
     asm_decl_undef: usize,
+    asm_commons: usize,
     map: usize,
 }
 
@@ -1000,6 +1006,8 @@ struct Names<'a> {
     asm_text_label_syms: Vec<AsmTextLabelSym<'a>>,
     asm_decl_set: Vec<(&'a str, AsmSymValue)>,
     asm_decl_undef: Vec<&'a AsmSymDecl>,
+    /// `.comm` symbols no other definition of the unit takes the place of.
+    asm_commons: Vec<&'a AsmSymDecl>,
     /// Names a GOT-addressed reference reaches; the slot is per symbol, so
     /// such a label keeps its own entry.
     got_ref_names: BTreeSet<&'a str>,
@@ -1915,11 +1923,19 @@ impl<'a> RelocWriter<'a> {
                 }
             })
             .collect();
+        names.asm_commons = (build.asm_sym_decls.iter())
+            .filter(|d| {
+                d.common.is_some()
+                    && !names.asm_label_names.contains(d.name.as_str())
+                    && !names.defined_fn_names.contains(d.name.as_str())
+            })
+            .collect();
         names.asm_defined_labels = names
             .asm_label_names
             .iter()
             .copied()
             .chain(names.asm_set_defs.iter().map(|&(n, _)| n))
+            .chain(names.asm_commons.iter().map(|d| d.name.as_str()))
             .collect();
         names.defined_obj_by_name = program
             .symbols
@@ -2164,6 +2180,11 @@ impl<'a> RelocWriter<'a> {
                 let merge = carve.table.entries[e].flags & SHF_MERGE != 0;
                 s.labels.iter().map(move |l| {
                     let d = this.sym_decl(l.name.as_str());
+                    let ty = match l.sym_type {
+                        AsmSymType::NoType => d.map_or(AsmSymType::NoType, |d| d.sym_type),
+                        t => t,
+                    };
+                    let unique = ty == AsmSymType::GnuUniqueObject;
                     AsmLabelSym {
                         name: l.name.as_str(),
                         shndx: if l.absolute.is_some() { SHN_ABS } else { shndx },
@@ -2172,16 +2193,15 @@ impl<'a> RelocWriter<'a> {
                             Some(v) => v as u64,
                             None => base + l.offset as u64,
                         },
-                        global: match d.map(|d| d.bind) {
-                            Some(AsmSymBind::Global) => true,
-                            Some(AsmSymBind::Local) => false,
-                            _ => l.global,
-                        },
+                        global: unique
+                            || match d.map(|d| d.bind) {
+                                Some(AsmSymBind::Global) => true,
+                                Some(AsmSymBind::Local) => false,
+                                _ => l.global,
+                            },
                         weak: l.weak || weak_names.contains(l.name.as_str()),
-                        st_type: st_type_of(match l.sym_type {
-                            AsmSymType::NoType => d.map_or(AsmSymType::NoType, |d| d.sym_type),
-                            t => t,
-                        }),
+                        unique,
+                        st_type: st_type_of(ty),
                         st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
                         merge,
                     }
@@ -2201,6 +2221,9 @@ impl<'a> RelocWriter<'a> {
                 name: n,
                 offset: l.text_offset,
                 bind: match d.map(|d| d.bind) {
+                    _ if d.is_some_and(|d| d.sym_type == AsmSymType::GnuUniqueObject) => {
+                        STB_GNU_UNIQUE
+                    }
                     Some(AsmSymBind::Global) => STB_GLOBAL,
                     Some(AsmSymBind::Weak) => STB_WEAK,
                     _ if weak_names.contains(n) => STB_WEAK,
@@ -2221,7 +2244,10 @@ impl<'a> RelocWriter<'a> {
             .asm_sym_decls
             .iter()
             .filter(|d| {
-                d.bind == AsmSymBind::Global
+                // gas: a name only `.type` or `.size` gives is an undefined global.
+                let attrs = d.sym_type != AsmSymType::NoType || d.size.is_some();
+                (d.bind == AsmSymBind::Global || d.bind == AsmSymBind::Default && attrs)
+                    && d.common.is_none()
                     && d.value.is_none()
                     && this.is_unreached(d.name.as_str())
                     && !this.names.asm_global_undef.contains(&d.name.as_str())
@@ -2274,6 +2300,8 @@ impl<'a> RelocWriter<'a> {
         all.extend(names.asm_decl_set.iter().map(|(n, _)| *n));
         names.at.asm_decl_undef = all.len();
         all.extend(names.asm_decl_undef.iter().map(|d| d.name.as_str()));
+        names.at.asm_commons = all.len();
+        all.extend(names.asm_commons.iter().map(|d| d.name.as_str()));
         names.at.map = all.len();
         if self.machine == Machine::Aarch64 {
             all.push(MapClass::Code.symbol_name());
@@ -2797,9 +2825,14 @@ impl<'a> RelocWriter<'a> {
             if !(l.global || l.weak) {
                 continue;
             }
+            let bind = match (l.unique, l.weak) {
+                (true, _) => STB_GNU_UNIQUE,
+                (_, true) => STB_WEAK,
+                _ => STB_GLOBAL,
+            };
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.asm_labels + j],
-                st_info: pack_sym_info(if l.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
+                st_info: pack_sym_info(bind, l.st_type),
                 st_other: self.vis_for(l.name),
                 st_shndx: l.shndx,
                 st_value: l.value,
@@ -2985,11 +3018,16 @@ impl<'a> RelocWriter<'a> {
         }
         for i in 0..self.names.asm_global_undef.len() {
             let name = self.names.asm_global_undef[i];
+            let d = self.sym_decl(name);
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.asm_global_undef + i],
-                st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+                st_info: pack_sym_info(
+                    STB_GLOBAL,
+                    st_type_of(d.map_or_else(Default::default, |d| d.sym_type)),
+                ),
                 st_other: self.vis_for(name),
                 st_shndx: SHN_UNDEF,
+                st_size: d.and_then(|d| d.size).unwrap_or(0),
                 ..Default::default()
             };
             self.syms.push(sym);
@@ -3004,6 +3042,22 @@ impl<'a> RelocWriter<'a> {
                 ..Default::default()
             };
             self.syms.push(sym);
+        }
+        for i in 0..self.names.asm_commons.len() {
+            let d = self.names.asm_commons[i];
+            let (size, align) = d.common.unwrap_or_default();
+            let sym = Elf64Sym {
+                st_name: self.names.name_offs[self.names.at.asm_commons + i],
+                st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
+                st_other: self.vis_for(&d.name),
+                st_shndx: SHN_COMMON,
+                st_value: align,
+                st_size: size,
+            };
+            let idx = self.syms.push(sym);
+            self.syms
+                .asm_label_symidx
+                .insert(d.name.as_str(), idx as u32);
         }
         for i in 0..self.names.defined_tls_globals.len() {
             let (name, off, size) = self.names.defined_tls_globals[i];
@@ -4625,6 +4679,15 @@ impl<'a> RelocWriter<'a> {
         e_ident[4] = class.ei_class();
         e_ident[5] = ELF_DATA_LSB;
         e_ident[6] = ELF_VERSION_CURRENT;
+        // gas marks an object holding a GNU extension binding.
+        if self
+            .syms
+            .symbols
+            .iter()
+            .any(|s| s.st_info >> 4 == STB_GNU_UNIQUE)
+        {
+            e_ident[7] = ELFOSABI_GNU;
+        }
         let ehdr = Elf64Ehdr {
             e_ident,
             e_type: ET_REL,
@@ -4717,7 +4780,7 @@ fn st_type_of(t: crate::c5::asm::AsmSymType) -> u8 {
     use crate::c5::asm::AsmSymType;
     match t {
         AsmSymType::Func => STT_FUNC,
-        AsmSymType::Object => STT_OBJECT,
+        AsmSymType::Object | AsmSymType::GnuUniqueObject => STT_OBJECT,
         AsmSymType::NoType => STT_NOTYPE,
     }
 }

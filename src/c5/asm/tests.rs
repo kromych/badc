@@ -1716,10 +1716,15 @@ fn section_type_object_and_bad_forms_rejected() {
     )
     .expect_err("unknown .type must be rejected");
     assert!(err.contains("unsupported `.type`"), "{err}");
-    // `.type` / `.size` on a symbol not defined in the section is rejected.
-    let err = materialize(".pushsection .t,\"a\"\n.type ext, @function\n.popsection\n")
-        .expect_err("`.type` on an undefined label must be rejected");
-    assert!(err.contains("undefined label"), "{err}");
+    // `.type` on a name no section defines is the unit's, as in gas.
+    let sink = materialize(".pushsection .t,\"a\"\n.type ext, @function\n.popsection\n").unwrap();
+    let (sections, decls) = sink.into_parts();
+    assert!(sections[0].labels.is_empty());
+    assert!(
+        decls
+            .iter()
+            .any(|d| d.name == "ext" && d.sym_type == AsmSymType::Func)
+    );
 }
 
 #[test]

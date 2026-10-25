@@ -182,6 +182,12 @@ pub(crate) enum AsmSectionItem {
         relocs: alloc::vec::Vec<AsmSectionReloc>,
         short: Option<AsmShortBranch>,
     },
+    /// `.comm name, size, align`: a common symbol, which the link allocates.
+    Common {
+        name: alloc::string::String,
+        size: u64,
+        align: u64,
+    },
     /// `.weak name`: weak symbol binding. The materializer marks a label
     /// defined in this statement's sections; a name defined elsewhere in the
     /// unit (or nowhere) is returned to the caller as a unit-level weak name.
@@ -665,6 +671,8 @@ pub(crate) enum AsmSymType {
     NoType,
     Func,
     Object,
+    /// `@gnu_unique_object`: `STT_OBJECT` bound `STB_GNU_UNIQUE`.
+    GnuUniqueObject,
 }
 
 /// Binding a symbol directive requests; `Default` leaves the symbol's own.
@@ -701,6 +709,8 @@ pub(crate) struct AsmSymDecl {
     pub size: Option<u64>,
     /// Assigned value, when a `.set` family directive named it.
     pub value: Option<AsmSymValue>,
+    /// `.comm name, size, align`: a common symbol of `(size, align)`.
+    pub common: Option<(u64, u64)>,
 }
 
 /// A label defined inside a named section.

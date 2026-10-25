@@ -316,6 +316,10 @@ impl AsmSectionSink {
                         "inline asm: `.set .` outside a section",
                     ));
                 }
+                AsmSectionItem::Common { name, size, align } => {
+                    self.record_common(name, *size, *align);
+                    continue;
+                }
                 _ => continue,
             };
             let di = self.sym_decl_slot(name);
@@ -348,6 +352,11 @@ impl AsmSectionSink {
             ..Default::default()
         });
         self.sym_decls.len() - 1
+    }
+
+    pub(crate) fn record_common(&mut self, name: &str, size: u64, align: u64) {
+        let di = self.sym_decl_slot(name);
+        self.sym_decls[di].common = Some((size, align));
     }
 
     /// Record a `.type` / `.size` for a name the sections define no label

@@ -770,6 +770,15 @@ pub(crate) fn locate_reloc(source: &str, section: &str, offset: u64) -> String {
 /// input, naming the output kind. Both link engines report through
 /// this; the body carries no diagnostic prefix, since the script engine
 /// collects several and wraps them once.
+/// The refusal of an absolute field narrower than an address naming a
+/// symbol a shared library defines, which the loader alone places.
+pub(crate) fn narrow_import_body(location: &str, reloc: &str, symbol: &str, kind: &str) -> String {
+    format!(
+        "{location}: {reloc} against symbol `{symbol}` can not be used when making {kind}: \
+         the field cannot hold the address the loader binds the symbol to; recompile with -fPIE"
+    )
+}
+
 pub(crate) fn absolute_in_pie_body(
     location: &str,
     reloc: &str,

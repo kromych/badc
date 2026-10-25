@@ -7477,3 +7477,86 @@ fn an_i386_writable_pc_relative_word_takes_a_dynamic_relocation_rather_than_a_co
         assert!(relocs.iter().all(|r| r.1 != rt::R_386_COPY), "{pic:?}");
     }
 }
+
+/// `_start` and an absolute field of `rtype` naming the library object
+/// `bar`, in `.data` where `writable` and in `.text` otherwise.
+fn narrow_import_user(machine: u16, rtype: u32, writable: bool) -> Vec<u8> {
+    let field = if writable { 1 } else { 0 };
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0; 8],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(field, 4, 4, rtype, 0)
+        .build(machine)
+}
+
+/// An absolute field narrower than an address cannot hold a library
+/// object's address in a PIE, and a position-dependent x86-64
+/// executable's writable data takes no copy for one, so GNU ld 2.46.1
+/// refuses both; a position-dependent executable's code reaches the
+/// object through a copy.
+#[test]
+fn a_narrow_absolute_field_naming_a_library_object_is_refused_where_gnu_ld_refuses_it() {
+    for (machine, rtype) in [
+        (EM_X86_64, rt::R_X86_64_32),
+        (EM_X86_64, rt::R_X86_64_32S),
+        (EM_AARCH64, rt::R_AARCH64_ABS32),
+    ] {
+        for (emit, writable, refused) in [
+            (
+                LdsEmit::Dyn,
+                false,
+                Some("a position-independent executable"),
+            ),
+            (
+                LdsEmit::Dyn,
+                true,
+                Some("a position-independent executable"),
+            ),
+            (
+                LdsEmit::Exec,
+                true,
+                (machine == EM_X86_64).then_some("a position-dependent executable"),
+            ),
+            (LdsEmit::Exec, false, None),
+        ] {
+            let what = alloc::format!("{machine} {rtype} {emit:?} writable={writable}");
+            let script =
+                parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+            let unit = narrow_import_user(machine, rtype, writable);
+            let o = parse_lds_object("a.o", unit).expect("parses");
+            let mut lib = shared_input("libc.so.6", &[], &["bar"]);
+            lib.lib.machine = machine;
+            let opts = LdsOptions {
+                emit,
+                max_page_size: 0x10000,
+                ..dynamic_opts(alloc::vec![lib])
+            };
+            let res = link_with_script(&script, alloc::vec![o], &opts);
+            match refused {
+                Some(kind) => {
+                    let e = alloc::format!("{}", res.expect_err("refused"));
+                    let want =
+                        alloc::format!("against symbol `bar` can not be used when making {kind}");
+                    assert!(e.contains(&want), "{what}: {e}");
+                }
+                None => {
+                    let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+                    let copy = match machine {
+                        EM_AARCH64 => rt::R_AARCH64_COPY,
+                        _ => rt::R_X86_64_COPY,
+                    };
+                    assert!(dyn_relocs(&img).iter().any(|r| r.1 == copy), "{what}: a copy");
+                }
+            }
+        }
+    }
+}

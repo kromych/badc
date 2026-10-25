@@ -1,7 +1,9 @@
 //! Imports, PLT and GOT slots, and symbol values taken from the
 //! previous pass.
 
-use crate::c5::linker::object::{absolute_in_pie_body, elf_reloc_desc, locate_reloc};
+use crate::c5::linker::object::{
+    absolute_in_pie_body, elf_reloc_desc, locate_reloc, narrow_import_body,
+};
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::collections::BTreeSet;
 use alloc::string::String;
@@ -442,6 +444,41 @@ impl<'a> LdsLinker<'a> {
             &elf_reloc_desc(self.machine, r.rtype),
             target,
             self.opts.shared,
+        ))
+    }
+
+    /// Refusal for an absolute field narrower than an address naming an
+    /// import, as GNU ld refuses one: in a PIE, and on x86-64 in a
+    /// position-dependent executable's writable data, which takes no copy.
+    pub(super) fn narrow_import_refusal(
+        &self,
+        oi: usize,
+        si: usize,
+        r: &RawReloc,
+    ) -> Option<String> {
+        let obj = &self.objects[oi];
+        let sym = obj.symbols.get(r.sym as usize)?;
+        let sec = &obj.sections[si];
+        if self.opts.shared
+            || sec.flags & SHF_ALLOC == 0
+            || sym.binding() == STB_LOCAL
+            || !narrow_absolute(self.machine, r.rtype)
+            || !self.import_of.contains_key(&sym.name)
+        {
+            return None;
+        }
+        let kind = match self.opts.emit {
+            LdsEmit::Dyn => "a position-independent executable",
+            _ if self.machine == EM_X86_64 && sec.flags & SHF_WRITE != 0 => {
+                "a position-dependent executable"
+            }
+            _ => return None,
+        };
+        Some(narrow_import_body(
+            &locate_reloc(&obj.source, &sec.name, r.offset),
+            &elf_reloc_desc(self.machine, r.rtype),
+            &sym.name,
+            kind,
         ))
     }
 

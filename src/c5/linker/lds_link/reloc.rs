@@ -66,6 +66,10 @@ impl<'a> LdsLinker<'a> {
                     );
                 }
                 let reach = self.reach_at(id.obj, id.sec, r);
+                if let Some(e) = self.narrow_import_refusal(id.obj, id.sec, r) {
+                    errors.push(e);
+                    continue;
+                }
                 let dyn_import = reach == Reach::Dynamic
                     && (self.objects[id.obj].symbols.get(r.sym as usize))
                         .is_some_and(|s| self.import_of.contains_key(&s.name));

@@ -12835,9 +12835,10 @@ fn elf32_dynamic_relocs(path: &Path) -> Vec<(u32, String)> {
 // and relocations naming them unless -Bsymbolic or -Bsymbolic-functions
 // binds them in place, and a PIE and a position-dependent executable
 // import through lazy PLT entries, the latter reading the library's object
-// through a copy. Each image's dynamic relocations are GNU
-// ld's, type for type; where an i386 loader is installed, each executable
-// prints what the bindings give.
+// through a copy. Each image's dynamic relocations are the set GNU ld 2.46.1
+// writes, type for type (R_386_32 1, COPY 5, GLOB_DAT 6, JUMP_SLOT 7,
+// RELATIVE 8; bfd 2.42 writes no JUMP_SLOT for the library's `f`); where an
+// i386 loader is installed, each executable prints what the bindings give.
 #[cfg(target_os = "linux")]
 #[test]
 fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
@@ -12901,16 +12902,15 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
          .got : { *(.got) }\n  .got.plt : { *(.got.plt) }\n  .data : { *(.data*) }\n\
          .bss : { *(.bss*) }\n}\n",
     );
-    let gnu_ld = Command::new("ld")
-        .arg("-V")
-        .output()
-        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("elf_i386"));
     let loader = ["/lib/ld-linux.so.2", "/usr/lib32/ld-linux.so.2"]
         .into_iter()
         .find(|p| Path::new(p).exists());
     if loader.is_none() {
         eprintln!("no i386 loader: the executables are linked, not run");
     }
+    let relocs = |set: &[(u32, &str)]| -> Vec<(u32, String)> {
+        set.iter().map(|&(t, n)| (t, n.to_string())).collect()
+    };
     for (flag, want) in [
         (None, "5 5177 3 9 9"),
         (Some("-Bsymbolic"), "1 1111 3 9 9"),
@@ -12934,22 +12934,24 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
                     .arg(sub.join("libone.so")),
                 "link the library",
             );
-            if gnu_ld {
-                run(
-                    Command::new("ld")
-                        .args(["-m", "elf_i386", "-shared", "-soname", "libone.so"])
-                        .args(flag)
-                        .arg(dir.join("lib.o"))
-                        .arg("-o")
-                        .arg(sub.join("ref.so")),
-                    "link the library with GNU ld",
-                );
-                assert_eq!(
-                    elf32_dynamic_relocs(&sub.join("libone.so")),
-                    elf32_dynamic_relocs(&sub.join("ref.so")),
-                    "{flag:?} script={with_script}"
-                );
-            }
+            let lib_relocs: &[(u32, &str)] = match flag {
+                None => &[
+                    (1, "f"),
+                    (1, "g"),
+                    (6, "f"),
+                    (6, "g"),
+                    (6, "pf"),
+                    (6, "pg"),
+                    (7, "f"),
+                ],
+                Some("-Bsymbolic") => &[(8, ""), (8, "")],
+                _ => &[(1, "g"), (6, "g"), (6, "pf"), (6, "pg"), (8, "")],
+            };
+            assert_eq!(
+                elf32_dynamic_relocs(&sub.join("libone.so")),
+                relocs(lib_relocs),
+                "{flag:?} script={with_script}"
+            );
             for (kind, obj) in [("-pie", "pie.o"), ("-no-pie", "pdep.o")] {
                 let exe = sub.join(format!("prog{kind}"));
                 let args = |c: &mut Command| {
@@ -12967,15 +12969,17 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
                 link.arg("--ld");
                 args(&mut link);
                 run(link.arg("-o").arg(&exe), "link the executable");
-                if gnu_ld {
-                    let reference = sub.join(format!("ref{kind}"));
-                    let mut link = Command::new("ld");
-                    args(&mut link);
-                    run(link.arg("-o").arg(&reference), "link it with GNU ld");
-                    let (ours, theirs) =
-                        (elf32_dynamic_relocs(&exe), elf32_dynamic_relocs(&reference));
-                    assert_eq!(ours, theirs, "{kind}");
-                }
+                let mut want_relocs = if kind == "-pie" {
+                    vec![(1, "lib_data"), (6, "lib_data")]
+                } else {
+                    vec![(5, "lib_data")]
+                };
+                want_relocs.extend([(7, "call_f"), (7, "call_s"), (7, "get_g")]);
+                assert_eq!(
+                    elf32_dynamic_relocs(&exe),
+                    relocs(&want_relocs),
+                    "{flag:?} {kind}"
+                );
                 if let Some(loader) = loader {
                     let out = run(
                         Command::new(loader)

@@ -1,6 +1,6 @@
 use super::args::Cli;
-use super::compile::{CompileCfg, compile_object_tu, compile_units, worker_count};
-use super::diag::eprint_diagnostic;
+use super::compile::{CompileCfg, compile_object_tu, compile_units, translate_tu, worker_count};
+use super::diag::{TuLog, eprint_diagnostic};
 use super::inputs::{Inputs, StdinSource, native_defined_globals, unreadable_object_reason};
 use super::output::write_output;
 
@@ -94,6 +94,34 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             }
         });
     }
+}
+
+/// `-fsyntax-only`: each source through the preprocessor and the front end,
+/// or through the assembler, as gcc runs it, with their diagnostics; no
+/// output is written and the status is the units'.
+pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic("badc: error: -fsyntax-only requires at least one source input");
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    compile_units(sources, workers, |_, src| {
+        // An assembler unit is checked by assembling it, which happens as
+        // its object is encoded.
+        if super::options::SourceKind::of(src).is_asm() {
+            let (log, res) = compile_object_tu(src, &cfg);
+            return (log, res.map(drop));
+        }
+        let mut log = TuLog::default();
+        let res = translate_tu(src, &[], &cfg, &mut log).map(drop);
+        (log, res)
+    });
 }
 
 /// `--ar` mode: bundle each `.c` input (compiled to a native

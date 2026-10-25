@@ -64,6 +64,9 @@ Output mode -- pick at most one (defaults to a native binary):
                            `-`. Mirrors gcc / clang `-E`.
   -dM                      With -E, print a #define line per macro the
                            unit ends with, predefined ones included.
+  -fsyntax-only            Check each unit through the front end (an
+                           assembler unit through the assembler) and
+                           write nothing; -E takes precedence.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of

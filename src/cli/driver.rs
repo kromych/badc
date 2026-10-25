@@ -6,7 +6,7 @@ use super::diag::eprint_diagnostic;
 use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbols};
 use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
-use super::objects::{build_archive, compile_objects};
+use super::objects::{build_archive, check_syntax, compile_objects};
 use super::options::{Mode, SourceKind};
 use super::paths::{
     declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
@@ -314,6 +314,10 @@ fn dispatch(cli: Cli) {
         && d.kind == DepKind::Only
     {
         return dump_dependencies(&cli, &inputs, &stdin, d);
+    }
+    // `-E` takes precedence, as in gcc; any other output is not written.
+    if cli.syntax_only && cli.mode != Mode::DumpPp {
+        return check_syntax(&cli, &inputs, &stdin);
     }
     if matches!(cli.mode, Mode::Jit | Mode::Interp) {
         run_in_process(&cli, &inputs, &stdin);

@@ -332,6 +332,8 @@ pub(crate) struct Cli {
     pub(crate) target: Target,
     pub(crate) output_path: Option<PathBuf>,
     pub(crate) compile_only: bool,
+    /// `-fsyntax-only`: each unit through the front end, nothing written.
+    pub(crate) syntax_only: bool,
     /// `--freestanding`: no embedded startup runtime, and the program's
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
@@ -542,6 +544,7 @@ struct Parser {
     link: Link,
     output_path: Option<PathBuf>,
     compile_only: bool,
+    syntax_only: bool,
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
@@ -1032,6 +1035,7 @@ impl Parser {
             // `-c` emits one relocatable object per source instead of
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
+            "-fsyntax-only" => self.syntax_only = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             "--verify-ssa" => self.codegen.verify_ssa = true,
@@ -2150,6 +2154,7 @@ impl Parser {
             target,
             output_path: self.output_path,
             compile_only: self.compile_only,
+            syntax_only: self.syntax_only,
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,
@@ -3824,6 +3829,13 @@ mod tests {
     fn preprocess_only_has_two_spellings() {
         assert_eq!(parse(&["-E", "a.c"]).mode, Mode::DumpPp);
         assert_eq!(parse(&["--dump-pp", "a.c"]).mode, Mode::DumpPp);
+    }
+
+    #[test]
+    fn syntax_only_combines_with_the_output_modes() {
+        let cli = parse(&["-fsyntax-only", "-c", "a.c"]);
+        assert!(cli.syntax_only && cli.compile_only);
+        assert!(!parse(&["a.c"]).syntax_only);
     }
 
     #[test]

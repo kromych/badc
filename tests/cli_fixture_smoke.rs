@@ -610,6 +610,64 @@ fn linked_image_fixtures_run_on_the_native_target() {
 // Compiling `sub/main.c` from the parent directory must still find
 // `sub/helper.h`; a CWD-relative-only search would miss it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+/// `-fsyntax-only` as gcc 16 runs it: each unit through the front end (an
+/// assembler unit through the assembler) with its diagnostics and status,
+/// no output written whatever `-o` or `-c` asks for, and `-E` taking
+/// precedence.
+#[test]
+fn syntax_only_checks_units_and_writes_nothing() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-syntax-only");
+    for (name, body) in [
+        ("ok.c", "int main(void) { return 0; }\n"),
+        ("bad.c", "int main(void) { return x; }\n"),
+        ("warn.c", "int main(void) { int unused; return 0; }\n"),
+        ("good.s", "\t.text\n\tnop\n"),
+        ("bad.s", "garbage instruction here\n"),
+    ] {
+        std::fs::write(dir.join(name), body).expect("write unit");
+    }
+    let run = |args: &[&str]| {
+        Command::new(badc)
+            .arg("-fsyntax-only")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    for args in [
+        &["ok.c"][..],
+        &["-o", "out.o", "ok.c"],
+        &["-c", "ok.c"],
+        &["good.s"],
+    ] {
+        let out = run(args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for written in ["out.o", "ok.o", "a.out", "good.o"] {
+        assert!(!dir.join(written).exists(), "{written} written");
+    }
+    for (args, needle) in [
+        (&["bad.c"][..], "undefined variable x"),
+        (&["-Wall", "-Werror", "warn.c"], "unused variable"),
+        (&["ok.c", "bad.c"], "undefined variable x"),
+        (&["bad.s"], "garbage instruction here"),
+    ] {
+        let out = run(args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(needle),
+            "{args:?}: {err}"
+        );
+    }
+    let out = run(&["-E", "ok.c"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("int main(void)"));
+}
+
 #[test]
 fn quoted_include_resolves_relative_to_including_file() {
     let badc = env!("CARGO_BIN_EXE_badc");

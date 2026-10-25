@@ -2480,6 +2480,8 @@ pub(crate) struct Build {
     /// then falls back to the coarse whole-`.text` entry and the DWARF
     /// builder to the post-prologue rule.
     pub fn_unwind: Vec<FnUnwind>,
+    /// The arm64 functions whose frames the linker decoded.
+    pub a64_unwind: Vec<A64Unwind>,
     /// Functions the inputs' own unwind tables describe.
     pub pe_unwind: Vec<PeUnwindRange>,
     /// Inline-asm main-stream references to labels defined in the template's
@@ -2587,6 +2589,14 @@ pub(crate) struct FnUnwind {
     /// Offset (from `begin`) past `sub rsp,N`. Set only when
     /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
+}
+
+/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's codes.
+#[derive(Debug, Clone)]
+pub(crate) struct A64Unwind {
+    pub begin: u32,
+    pub end: u32,
+    pub codes: Vec<u8>,
 }
 
 /// An input's `RUNTIME_FUNCTION`: `[begin, end)` in `Build::text`, and its unwind data.

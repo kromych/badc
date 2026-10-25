@@ -558,6 +558,7 @@ impl<'a> PeWriter<'a> {
             l.pdata_rva,
             self.text_prologue_len,
             &build.fn_unwind,
+            &build.a64_unwind,
             &build.early_returns,
             &build.pe_unwind,
         );
@@ -2417,6 +2418,7 @@ fn build_pdata(
     pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
+    a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
 ) -> Pdata {
@@ -2430,7 +2432,14 @@ fn build_pdata(
             early_returns,
             foreign,
         ),
-        Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size, text_prologue_len, foreign),
+        Machine::Aarch64 => build_aarch64_pdata(
+            text_rva,
+            text_size,
+            pdata_rva,
+            text_prologue_len,
+            a64_unwind,
+            foreign,
+        ),
     }
 }
 
@@ -2633,45 +2642,74 @@ fn build_x86_64_pdata(
     }
 }
 
-/// AArch64 `.pdata` builder: packed leaf entries over the code the inputs'
-/// own entries do not describe, theirs over the rest.
+/// AArch64 `.pdata`: an `.xdata` record after the array for each frame `a64`
+/// describes, the inputs' entries, packed frameless ones over the rest.
 fn build_aarch64_pdata(
     text_rva: u32,
     text_size: u32,
+    pdata_rva: u32,
     text_prologue_len: u32,
+    a64: &[super::A64Unwind],
     foreign: &[super::PeUnwindRange],
 ) -> Pdata {
-    let mut ranges: Vec<&super::PeUnwindRange> = foreign.iter().collect();
-    ranges.sort_by_key(|r| r.begin);
-    let mut bytes = Vec::new();
-    let mut info_slots = Vec::new();
-    let leaf = |bytes: &mut Vec<u8>, from: u32, to: u32| {
+    enum Data {
+        Packed(u32),
+        Info(u64),
+        Xdata(Vec<u8>),
+    }
+    let body = text_prologue_len;
+    let mut rows: Vec<(u32, u32, Data)> = (foreign.iter())
+        .map(|r| {
+            let data = match r.data {
+                super::PeUnwindRef::Packed(word) => Data::Packed(word),
+                super::PeUnwindRef::Info(off) => Data::Info(off),
+            };
+            (body + r.begin as u32, body + r.end as u32, data)
+        })
+        .collect();
+    rows.extend(a64.iter().filter_map(|u| {
+        let x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
+        Some((body + u.begin, body + u.end, Data::Xdata(x)))
+    }));
+    rows.sort_by_key(|r| r.0);
+    let mut entries: Vec<(u32, Data)> = Vec::new();
+    let leaf = |entries: &mut Vec<(u32, Data)>, from: u32, to: u32| {
         let mut covered = from;
         while covered < to {
             let chunk = (to - covered).min(ARM64_PACKED_FUNCTION_MAX_BYTES);
             let function_length = (chunk / 4) & 0x7FF; // 11 bits
-            let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
-            bytes.extend_from_slice(&(text_rva + covered).to_le_bytes());
-            bytes.extend_from_slice(&unwind_data.to_le_bytes());
+            entries.push((covered, Data::Packed((function_length << 2) | 0b01)));
             covered += chunk;
         }
     };
     let mut covered = 0u32;
-    for r in ranges {
-        let begin = text_prologue_len + r.begin as u32;
-        leaf(&mut bytes, covered, begin);
-        bytes.extend_from_slice(&(text_rva + begin).to_le_bytes());
-        match r.data {
-            super::PeUnwindRef::Packed(word) => bytes.extend_from_slice(&word.to_le_bytes()),
-            super::PeUnwindRef::Info(off) => {
-                info_slots.push((bytes.len(), off));
-                bytes.extend_from_slice(&[0; 4]);
-            }
-        }
-        covered = text_prologue_len + r.end as u32;
+    for (begin, end, data) in rows {
+        leaf(&mut entries, covered, begin);
+        entries.push((begin, data));
+        covered = end;
     }
-    leaf(&mut bytes, covered, text_size);
-    let directory_size = bytes.len() as u32;
+    leaf(&mut entries, covered, text_size);
+    let directory_size = entries.len() as u32 * 8;
+    let mut bytes = Vec::with_capacity(directory_size as usize);
+    let mut blobs: Vec<u8> = Vec::new();
+    let mut info_slots = Vec::new();
+    for (begin, data) in entries {
+        bytes.extend_from_slice(&(text_rva + begin).to_le_bytes());
+        let word = match data {
+            Data::Packed(word) => word,
+            Data::Info(off) => {
+                info_slots.push((bytes.len(), off));
+                0
+            }
+            Data::Xdata(x) => {
+                let rva = pdata_rva + directory_size + blobs.len() as u32;
+                blobs.extend_from_slice(&x);
+                rva
+            }
+        };
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    bytes.extend_from_slice(&blobs);
     Pdata {
         bytes,
         directory_size,
@@ -2961,7 +2999,7 @@ mod tests {
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
         let text_size = 2047 * 4 + 4 + 4;
-        let p = build_aarch64_pdata(0x1000, text_size, 0, &[]);
+        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[]);
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);

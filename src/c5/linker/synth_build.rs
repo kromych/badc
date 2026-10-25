@@ -222,6 +222,7 @@ fn synth_program_and_build(
     );
     let functions = function_table(merged, pc_to_native);
     let fn_unwind = x86_64_unwind(merged, target, &functions);
+    let a64_unwind = aarch64_unwind(merged, target, &functions);
     let mut early_returns: Vec<crate::c5::codegen::EarlyReturn> = merged
         .early_returns
         .iter()
@@ -326,6 +327,7 @@ fn synth_program_and_build(
         region_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
+        a64_unwind,
         pe_unwind: merged.pe_unwind.clone(),
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
@@ -573,6 +575,50 @@ fn x86_64_unwind(
             )
         })
         .collect()
+}
+
+/// The windows-arm64 functions of `merged` whose prologue `prologue_codes`
+/// describes; a return ahead of the frame stays out, as in `x86_64_unwind`.
+fn aarch64_unwind(
+    merged: &MergedNative,
+    target: Target,
+    functions: &FunctionTable,
+) -> Vec<crate::c5::codegen::A64Unwind> {
+    if target != Target::WindowsAarch64 {
+        return Vec::new();
+    }
+    let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
+    begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
+    begins.sort_unstable();
+    begins.dedup();
+    let foreign =
+        |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
+    let text_len = merged.text.len() as u32;
+    let mut out = Vec::new();
+    for (i, &begin) in begins.iter().enumerate() {
+        if begin >= text_len || foreign(begin) {
+            continue;
+        }
+        let end = begins.get(i + 1).copied().unwrap_or(text_len);
+        let Some(&anchor) = functions.prologue_native.get(&(begin as usize)) else {
+            continue;
+        };
+        let (start, stop) = match merged.early_returns.get(&u64::from(begin)) {
+            Some(&(frame, exit)) => (frame as u32, exit as u32),
+            None => (begin, end),
+        };
+        let limit = (anchor as u32).min(stop);
+        if let Some(codes) =
+            crate::c5::object::arm64_unwind::prologue_codes(&merged.text, start, limit)
+        {
+            out.push(crate::c5::codegen::A64Unwind {
+                begin: start,
+                end: stop,
+                codes,
+            });
+        }
+    }
+    out
 }
 
 /// Each data-import copy relocation against the merged symbol table.

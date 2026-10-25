@@ -7879,6 +7879,108 @@ fn pe_layout(image: &[u8]) -> (u64, Vec<(u32, usize, usize)>, Vec<u32>) {
     (base, secs, dir64)
 }
 
+/// Each arm64 `.pdata` entry's start RVA and its packed word or unwind codes.
+fn arm64_pdata(image: &[u8]) -> Vec<(u32, Result<u32, Vec<u8>>)> {
+    let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let (_, secs, _) = pe_layout(image);
+    let at = |rva: u32| {
+        let &(s, off, _) = secs
+            .iter()
+            .find(|s| rva >= s.0 && ((rva - s.0) as usize) < s.2)
+            .expect("rva in a section");
+        off + (rva - s) as usize
+    };
+    let opt = u32le(0x3c) as usize + 24;
+    let (dir, size) = (u32le(opt + 136), u32le(opt + 140));
+    (0..size / 8)
+        .map(|k| {
+            let entry = at(dir) + k as usize * 8;
+            let data = u32le(entry + 4);
+            if data & 3 != 0 {
+                return (u32le(entry), Ok(data));
+            }
+            let x = at(data);
+            let words = (u32le(x) >> 27) as usize;
+            (u32le(entry), Err(image[x + 4..x + 4 + words * 4].to_vec()))
+        })
+        .collect()
+}
+
+/// Each badc function of a windows-arm64 image takes an `.xdata` record whose
+/// codes describe its prologue up to where x29 is set (Microsoft, "ARM64
+/// exception handling"), in each frame shape and with a variadic area; packed
+/// frameless entries cover only code no frame is set in.
+#[test]
+fn each_arm64_function_takes_an_entry_describing_its_prologue() {
+    let dir = tempdir("arm64-pdata");
+    write_source(
+        &dir,
+        "u.c",
+        "#include <stdarg.h>\n\
+         int ext(int x) { return x; }\n\
+         int small(int x) { return ext(x) + 1; }\n\
+         int many(int a, int b, int c, int d)\n\
+         { int e = ext(a), f = ext(b), g = ext(c), h = ext(d);\n\
+           return ext(e + f) + ext(g + h) + a + b + c + d + e + f + g + h; }\n\
+         int var(int n, ...)\n\
+         { va_list ap; va_start(ap, n); int s = 0;\n\
+           for (int i = 0; i < n; i++) s += va_arg(ap, int);\n\
+           va_end(ap); return s; }\n\
+         int main(void) { return small(1) + many(1, 2, 3, 4) + var(2, 3, 4) > 0 ? 0 : 1; }\n",
+    );
+    let exe = dir.join("u.exe");
+    run(
+        Command::new(badc())
+            .args(["--target=windows-arm64", "u.c", "-o"])
+            .arg(&exe)
+            .current_dir(&dir),
+        "link",
+    );
+    let image = std::fs::read(&exe).unwrap();
+    let entries = arm64_pdata(&image);
+    let (_, secs, _) = pe_layout(&image);
+    let &(text_rva, text_off, text_len) = &secs[0];
+    let word = |rva: u32| {
+        let o = text_off + (rva - text_rva) as usize;
+        u32::from_le_bytes(image[o..o + 4].try_into().unwrap())
+    };
+    // The entry covering `rva`: the last one starting at or before it.
+    let covering = |rva: u32| entries.iter().rev().find(|e| e.0 <= rva).expect("covered");
+    let mut shapes = [false; 3];
+    for k in 0..text_len as u32 / 4 {
+        let rva = text_rva + k * 4;
+        let w = word(rva);
+        // `add x29, sp, #imm`.
+        if w & 0xFFC0_03FF != 0x9100_03FD {
+            continue;
+        }
+        let (begin, data) = covering(rva);
+        let Err(codes) = data else {
+            panic!("x29 is set at {rva:#x} under the packed entry at {begin:#x}");
+        };
+        let first = word(*begin);
+        if first == 0xA9BF_7BFD {
+            assert_eq!(codes[..3], [0xE1, 0x81, 0xE4], "{begin:#x}");
+            shapes[0] = true;
+        } else if first & 0xFF80_03FF == 0xD100_03FF {
+            let alloc = ((first >> 10) & 0xFFF) / 16;
+            let end = codes.iter().position(|&c| c == 0xE4).unwrap();
+            assert_eq!(codes[..2], [0xE1, 0x81], "{begin:#x}");
+            assert!(
+                codes[2..end - 1].iter().all(|&c| c == 0xE3),
+                "{begin:#x}: {codes:02x?}"
+            );
+            assert_eq!(u32::from(codes[end - 1]), alloc, "{begin:#x}");
+            shapes[1] = true;
+        } else {
+            let k = ((w >> 10) & 0xFFF) / 8;
+            assert_eq!(codes[..3], [0xE2, k as u8, 0x40 | k as u8], "{begin:#x}");
+            shapes[2] = true;
+        }
+    }
+    assert_eq!(shapes, [true; 3], "every prologue shape is in the image");
+}
+
 /// `__ImageBase` is the image's own address, its DOS header, as link.exe
 /// and lld-link define it: an address constant naming it holds the
 /// preferred base plus its addend under a DIR64 entry, and an arm64
@@ -10815,8 +10917,9 @@ int peer_walk(int (*cb)(void))
 
 /// The exception directory of an image holding a COFF object's functions
 /// takes the object's own entries: `RtlLookupFunctionEntry` finds the entry
-/// that begins at the foreign function, and `RtlCaptureStackBackTrace` from a
-/// badc callback lists the foreign frame, on x86-64 through to `main`.
+/// that begins at the foreign function, and `RtlVirtualUnwind` from a badc
+/// callback steps through the foreign frame to `main`, whose own entry
+/// begins at it.
 #[cfg(windows)]
 #[test]
 fn a_stack_walk_crosses_a_coff_objects_frame() {
@@ -10826,30 +10929,51 @@ fn a_stack_walk_crosses_a_coff_objects_frame() {
         &dir,
         "main.c",
         "#pragma dylib(k32, \"kernel32.dll\")\n\
-         #pragma binding(k32::RtlCaptureStackBackTrace, \"RtlCaptureStackBackTrace\")\n\
+         #pragma binding(k32::RtlCaptureContext, \"RtlCaptureContext\")\n\
          #pragma binding(k32::RtlLookupFunctionEntry, \"RtlLookupFunctionEntry\")\n\
-         unsigned short __stdcall RtlCaptureStackBackTrace(unsigned long, unsigned long,\n\
-                                                           void **, unsigned long *);\n\
+         #pragma binding(k32::RtlVirtualUnwind, \"RtlVirtualUnwind\")\n\
+         void __stdcall RtlCaptureContext(void *);\n\
          unsigned *__stdcall RtlLookupFunctionEntry(unsigned long long, unsigned long long *,\n\
                                                     void *);\n\
+         void *__stdcall RtlVirtualUnwind(unsigned long, unsigned long long, unsigned long long,\n\
+                                          void *, void *, void **, unsigned long long *, void *);\n\
          int peer_walk(int (*)(void));\n\
          int main(void);\n\
+         // CONTEXT's pc, and a frameless function's return: lr, or popped.\n\
+         #if defined(__aarch64__)\n\
+         #define PC 0x108\n\
+         static unsigned long long leaf_return(char *c) { return *(unsigned long long *)(c + 0xF8); }\n\
+         #else\n\
+         #define PC 0xF8\n\
+         static unsigned long long leaf_return(char *c)\n\
+         { unsigned long long *sp = (unsigned long long *)(c + 0x98);\n\
+           *sp += 8; return ((unsigned long long *)*sp)[-1]; }\n\
+         #endif\n\
          // The start of the function `pc` lies in, by the exception directory.\n\
          static char *function_of(void *pc)\n\
          { unsigned long long base = 0;\n\
            unsigned *f = RtlLookupFunctionEntry((unsigned long long)pc, &base, 0);\n\
            return f ? (char *)base + f[0] : 0; }\n\
+         // Unwind from here through the exception directory's entries.\n\
          static int callback(void)\n\
-         { void *frames[16];\n\
-           unsigned short n = RtlCaptureStackBackTrace(0, 16, frames, 0);\n\
+         { _Alignas(16) char ctx[2048] = {0};\n\
+           RtlCaptureContext(ctx);\n\
            int peer = 0, top = 0;\n\
-           for (unsigned short k = 0; k < n; k++) {\n\
-             peer |= function_of(frames[k]) == (char *)peer_walk;\n\
-             top |= function_of(frames[k]) == (char *)main;\n\
+           for (int k = 0; k < 16 && !top; k++) {\n\
+             unsigned long long pc = *(unsigned long long *)(ctx + PC), base = 0, frame;\n\
+             if (!pc) break;\n\
+             unsigned *f = RtlLookupFunctionEntry(pc, &base, 0);\n\
+             char *fn = f ? (char *)base + f[0] : 0;\n\
+             peer |= fn == (char *)peer_walk;\n\
+             top |= fn == (char *)main;\n\
+             void *data;\n\
+             if (f) RtlVirtualUnwind(0, base, pc, f, ctx, &data, &frame, 0);\n\
+             else *(unsigned long long *)(ctx + PC) = leaf_return(ctx);\n\
            }\n\
-           return peer && (top || !REACHES_MAIN) ? 0 : 10; }\n\
+           return peer && top ? 0 : 10; }\n\
          int main(void)\n\
          { if (function_of((char *)peer_walk + 4) != (char *)peer_walk) return 1;\n\
+           if (function_of((char *)main + 8) != (char *)main) return 2;\n\
            return peer_walk(callback); }\n",
     );
     let arch = if cfg!(target_arch = "aarch64") {
@@ -10900,16 +11024,12 @@ fn a_stack_walk_crosses_a_coff_objects_frame() {
         );
         objects.push(("gcc".to_string(), obj));
     }
-    // TODO: #1687 badc's own arm64 code takes packed leaf entries laid from the
-    // start of `.text`, so a pc in `main` resolves to no function start.
-    let reaches_main = u8::from(cfg!(target_arch = "x86_64"));
     for (label, obj) in &objects {
         for opt in ["-O0", "-O"] {
             let exe = dir.join(format!("{label}{opt}.exe"));
             run(
                 Command::new(badc())
                     .arg(opt)
-                    .arg(format!("-DREACHES_MAIN={reaches_main}"))
                     .arg("-o")
                     .arg(&exe)
                     .arg(&main)

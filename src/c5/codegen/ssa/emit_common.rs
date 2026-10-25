@@ -3093,6 +3093,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
+        a64_unwind: alloc::vec::Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs: st.user_extern_data_refs,

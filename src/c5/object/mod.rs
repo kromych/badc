@@ -17,6 +17,8 @@ pub const DWARF_VERSION: u16 = 4;
 pub const DWARF_FORMAT_BITS: u8 = 32;
 
 #[cfg(feature = "native-emit")]
+pub(crate) mod arm64_unwind;
+#[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
@@ -66,7 +68,7 @@ use crate::c5::codegen::asm_fold::{AsmLabelPlacement, bind_label_calls, fold_asm
 pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
-    Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
+    A64Unwind, Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
     MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
     ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
@@ -864,6 +866,7 @@ pub(crate) mod test_support {
             param_frame_offsets: BTreeMap::new(),
             region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),
+            a64_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),

@@ -1277,15 +1277,10 @@ jobs:
         run: python demos/tcl/smoke.py
 
   # OpenSSL 4.1.0: Configure with a badc target, make, and OpenSSL's own
-  # suite (make test, every recipe) at -O0 and -O. Disabled until the
-  # bundled headers carry what the build reaches
-  # (https://github.com/kromych/badc/issues/1634) and the POSIX option
-  # macros the applications select on (#1637); macOS also needs #1641 and
-  # an archiver for badc's objects (#1635). With those supplied the smoke
-  # took 418 s on an 8-core aarch64 box and 530 s on a 12-core x86-64 one;
-  # a 4-vCPU runner runs the suite's 402 recipes about half as wide.
+  # suite (make test, every recipe) at -O0 and -O. The smoke takes 442 s on
+  # an 8-core aarch64 box and 517 s on a 12-core x86-64 one; a 4-vCPU runner
+  # runs the suite's recipes about half as wide.
   openssl:
-    if: false
     needs: build
     name: openssl suite (${{ matrix.os }})
     strategy:

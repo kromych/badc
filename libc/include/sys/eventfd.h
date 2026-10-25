@@ -16,7 +16,7 @@
 
 typedef unsigned long long eventfd_t;
 
-#ifndef _WIN32
+#ifdef __linux__
 int eventfd(unsigned int initval, int flags);
 int eventfd_read(int fd, eventfd_t *value);
 int eventfd_write(int fd, eventfd_t value);

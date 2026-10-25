@@ -150,6 +150,7 @@ typedef struct __c5_fpos_t fpos_t;
 // on every `fflush` / `fclose`. Available on macOS 10.13+
 // and every recent Linux C library / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
+#pragma binding(libc::wprintf, "_wprintf")
 // POSIX.1-2008 `fmemopen`: a stream over a caller buffer.
 #pragma binding(libc::fmemopen, "_fmemopen")
 // POSIX `popen` / `pclose` -- not in C89 but universally
@@ -232,6 +233,7 @@ typedef struct __c5_fpos_t fpos_t;
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
+#pragma binding(libc::wprintf, "wprintf")
 #pragma binding(libc::fmemopen, "fmemopen")
 // X/Open `cuserid` -- a glibc export; absent from libSystem and msvcrt.
 #pragma binding(libc::cuserid, "cuserid")
@@ -486,8 +488,10 @@ int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // Alias forms used by source that pre-rewrites the standard
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
+#ifdef _WIN32
 int _snprintf(char *buf, int size, char *fmt, ...);
 int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+#endif
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.
 int scanf(const char *fmt, ...);

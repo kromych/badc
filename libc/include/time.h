@@ -141,7 +141,6 @@ typedef long clock_t;
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::nanosleep,     "_nanosleep")
-// libSystem exports no clock_nanosleep; unbound so a use fails at link.
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
@@ -243,10 +242,12 @@ typedef int clockid_t;
 time_t time(time_t *out);
 clock_t clock(void);
 int clock_gettime(clockid_t clk_id, struct timespec *ts);
+#ifndef __APPLE__
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
-// `remain` receives the unslept interval on EINTR.
+// `remain` receives the unslept interval on EINTR. libSystem has none.
 int clock_nanosleep(clockid_t clk_id, int flags, const struct timespec *request,
                     struct timespec *remain);
+#endif
 int clock_settime(clockid_t clk_id, const struct timespec *ts);
 int clock_getres(clockid_t clk_id, struct timespec *res);
 int nanosleep(const struct timespec *req, struct timespec *rem);

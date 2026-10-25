@@ -56,7 +56,7 @@ struct epoll_event {
     epoll_data_t data;
 } __EPOLL_PACKED;
 
-#ifndef _WIN32
+#ifdef __linux__
 int epoll_create(int size);
 int epoll_create1(int flags);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);

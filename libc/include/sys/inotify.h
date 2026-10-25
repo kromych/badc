@@ -59,7 +59,7 @@ struct inotify_event {
     char     name[];
 };
 
-#ifndef _WIN32
+#ifdef __linux__
 int inotify_init(void);
 int inotify_init1(int flags);
 int inotify_add_watch(int fd, const char *name, uint32_t mask);

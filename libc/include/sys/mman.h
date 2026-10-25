@@ -74,7 +74,6 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::mmap,     "_mmap")
 #pragma binding(libc::munmap,   "_munmap")
-// mremap is Linux-only; unbound here so a use fails at link.
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
 #pragma binding(libc::madvise,    "_madvise")
@@ -123,7 +122,9 @@ void *mmap(void *addr, unsigned long len, int prot, int flags, int fd, long offs
 int munmap(void *addr, unsigned long len);
 // Report which pages of a mapping are resident; `vec` gets one byte per page.
 int mincore(void *addr, unsigned long len, unsigned char *vec);
+#ifdef __linux__
 void *mremap(void *old, unsigned long old_size, unsigned long new_size, int flags);
+#endif
 int msync(void *addr, unsigned long len, int flags);
 int mprotect(void *addr, unsigned long len, int prot);
 int madvise(void *addr, unsigned long len, int advice);

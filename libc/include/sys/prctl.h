@@ -22,6 +22,6 @@
 #define PR_MCE_KILL_EARLY   1
 #define PR_MCE_KILL_DEFAULT 2
 
-#ifndef _WIN32
+#ifdef __linux__
 int prctl(int option, ...);
 #endif

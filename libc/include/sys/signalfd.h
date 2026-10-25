@@ -40,6 +40,6 @@ struct signalfd_siginfo {
     uint8_t  __pad[28];
 };
 
-#if defined(__APPLE__) || defined(__linux__) // sigset_t
+#ifdef __linux__
 int signalfd(int fd, const sigset_t *mask, int flags);
 #endif

@@ -25,14 +25,15 @@
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
-// Darwin deprecates unnamed semaphores (sem_init/sem_getvalue return
-// ENOSYS) and ships no sem_timedwait/sem_clockwait; only the named
-// semaphore operations resolve. Programs that need a timed wait there
-// take the mutex + condition variable path.
+// Darwin deprecates unnamed semaphores (sem_init/sem_getvalue fail with
+// ENOSYS) and ships no sem_timedwait/sem_clockwait, which the SDK does not
+// declare either.
 #pragma binding(libc::sem_wait,    "_sem_wait")
 #pragma binding(libc::sem_trywait, "_sem_trywait")
 #pragma binding(libc::sem_post,    "_sem_post")
 #pragma binding(libc::sem_destroy, "_sem_destroy")
+#pragma binding(libc::sem_init,    "_sem_init")
+#pragma binding(libc::sem_getvalue,"_sem_getvalue")
 #pragma binding(libc::sem_open,    "_sem_open")
 #pragma binding(libc::sem_close,   "_sem_close")
 #pragma binding(libc::sem_unlink,  "_sem_unlink")
@@ -72,8 +73,10 @@ int sem_init(sem_t *sem, int pshared, unsigned int value);
 int sem_destroy(sem_t *sem);
 int sem_wait(sem_t *sem);
 int sem_trywait(sem_t *sem);
+#ifdef __linux__
 int sem_timedwait(sem_t *sem, struct timespec *abs_timeout);
 int sem_clockwait(sem_t *sem, int clock, struct timespec *abs_timeout);
+#endif
 int sem_post(sem_t *sem);
 int sem_getvalue(sem_t *sem, int *sval);
 // Named semaphores. sem_open is variadic: (name, oflag[, mode, value]).

@@ -811,6 +811,7 @@ wmemcmp                                  GLIBC_2.17
 wmemcpy                                  GLIBC_2.17
 wmemmove                                 GLIBC_2.17
 wmemset                                  GLIBC_2.17
+wprintf                                  GLIBC_2.17
 write                                    GLIBC_2.17
 writev                                   GLIBC_2.17
 

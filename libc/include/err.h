@@ -4,6 +4,18 @@
 
 #include <stdarg.h>
 
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::err,    "_err")
+#pragma binding(libc::errx,   "_errx")
+#pragma binding(libc::warn,   "_warn")
+#pragma binding(libc::warnx,  "_warnx")
+#pragma binding(libc::verr,   "_verr")
+#pragma binding(libc::verrx,  "_verrx")
+#pragma binding(libc::vwarn,  "_vwarn")
+#pragma binding(libc::vwarnx, "_vwarnx")
+#endif
+
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::err,    "err")

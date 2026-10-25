@@ -399,7 +399,7 @@ int socket(int domain, int type, int protocol);
 int bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int fd, int backlog);
 int accept(int fd, struct sockaddr *restrict addr, socklen_t *restrict addrlen);
-#ifndef _WIN32
+#ifdef __linux__
 int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 #endif
 int connect(int fd, const struct sockaddr *addr, socklen_t addrlen);

@@ -8686,9 +8686,9 @@ fn windows_x64_tz_globals_bind_to_msvcrt_data_exports() {
 
 #[test]
 fn dead_libc_bindings_fail_at_build_not_at_load() {
-    // libSystem exports none of these (dlsym-verified); the header must
-    // leave them unbound so a use fails the build loudly instead of
-    // producing an image that aborts at load with a dyld error.
+    // libSystem exports none of these (dlsym-verified) and the SDK
+    // declares none; the header leaves them undeclared, so a use fails the
+    // build loudly instead of producing an image that aborts at load.
     let cases = [
         (
             "#include <time.h>\nint main(void) { struct timespec t; t.tv_sec = 0; t.tv_nsec = 0; return clock_nanosleep(0, 0, &t, 0); }\n",
@@ -8716,20 +8716,20 @@ fn dead_libc_bindings_fail_at_build_not_at_load() {
             CompileOptions::default().with_no_entry_point(true),
         )
         .compile()
-        .expect("compile");
+        .map_err(|e| format!("{e}"))?;
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
         };
         let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
-        link_native_objects(&[parse_native_elf(&bytes).expect("parse")])
+        link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).map_err(|e| format!("{e}"))
     };
     for (src, name) in cases {
         let err = link_one(src)
             .err()
-            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not link"));
+            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not build"));
         assert!(
-            format!("{err}").contains(name),
+            err.contains(name),
             "{name}: diagnostic must name the symbol: {err}"
         );
     }

@@ -292,7 +292,6 @@
 #pragma binding(libc::fpathconf, "_fpathconf")
 #pragma binding(libc::lockf,     "_lockf")
 #pragma binding(libc::execv,     "_execv")
-// libSystem exports no fexecve; unbound so a use fails at link.
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
 #pragma binding(libc::getpagesize, "_getpagesize")
@@ -421,7 +420,6 @@ extern char **environ;
 #pragma binding(libc::ttyname,   "ttyname")
 #pragma binding(libc::ttyname_r, "ttyname_r")
 #pragma binding(libc::ctermid,   "ctermid")
-// glibc exports no ctermid_r; unbound so a use fails at link.
 #pragma binding(libc::getlogin,  "getlogin")
 #pragma binding(libc::getlogin_r,"getlogin_r")
 #pragma binding(libc::getgroups, "getgroups")
@@ -689,7 +687,9 @@ int futimens(int fd, char *times);
 char *ttyname(int fd);
 int ttyname_r(int fd, char *buf, unsigned long len);
 char *ctermid(char *s);
+#ifdef __APPLE__
 char *ctermid_r(char *s);
+#endif
 char *getlogin(void);
 int getlogin_r(char *buf, unsigned long len);
 // Supplementary group lists.
@@ -733,7 +733,7 @@ long fpathconf(int fd, int name);
 int lockf(int fd, int cmd, long len);
 #endif
 int execv(const char *path, char *const argv[]);
-#ifndef _WIN32
+#ifdef __linux__
 int fexecve(int fd, char *const argv[], char *const envp[]);
 #endif
 #ifdef __linux__

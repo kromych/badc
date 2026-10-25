@@ -1469,89 +1469,124 @@ fn link_definitions(target: crate::Target) -> alloc::collections::BTreeSet<Strin
     defined
 }
 
-/// Every function and object a bundled header declares for a Windows target
-/// resolves at link: it is bound to a DLL, defined by the header, an
-/// intrinsic, in the target's C library export set, or defined by the
-/// startup runtime or a C-library source the link offers like an archive
-/// member, which a unit naming all of those then links against. A name
-/// mingw-w64 does not declare is left undeclared instead
-/// (`native-compilation.md` states the rule). Each header is compiled alone
-/// with the feature macros that widen its surface; one that stops at an
-/// `#error` serves the other architecture.
-#[test]
-fn windows_header_declarations_resolve_at_link() {
+/// Asserts that every function and object a bundled header declares for
+/// `target` resolves at link: it is bound to a library, defined by the
+/// header, an intrinsic, in the target's C library export set, or defined by
+/// the startup runtime or a C-library source the link offers like an archive
+/// member, which a unit naming all of those then links against.
+/// `own_library` names what a program's own `-l` library supplies. Each
+/// header is compiled alone with the feature macros that widen its surface;
+/// one that stops at an `#error` serves another target.
+fn assert_header_declarations_resolve(target: crate::Target, own_library: &[&str]) {
     use crate::c5::preprocessor::Preprocessor;
     use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
-    use crate::{CompileOptions, Compiler, NativeOptions, Target, TargetCLibrary};
+    use crate::{CompileOptions, Compiler, NativeOptions, TargetCLibrary};
     const MACROS: &str = "#define _GNU_SOURCE 1\n#define _POSIX_C_SOURCE 200809L\n";
-    for target in [Target::WindowsX64, Target::WindowsAarch64] {
-        let defined = link_definitions(target);
-        let mut library = TargetCLibrary::new(target);
-        let mut unresolved = alloc::vec::Vec::new();
-        let mut from_sources = alloc::collections::BTreeMap::new();
-        for (header, _) in crate::embedded_headers() {
-            let src = alloc::format!("{MACROS}#include <{header}>\n");
-            let opts = CompileOptions::default().with_no_entry_point(true);
-            let program = match Compiler::with_options(src.clone(), target, opts).compile() {
-                Ok(program) => program,
-                Err(e) => {
-                    let text = alloc::format!("{e}");
-                    assert!(
-                        text.contains("[error-directive]"),
-                        "{target:?} <{header}>: {text}"
-                    );
-                    continue;
-                }
-            };
-            let mut pp = Preprocessor::new(target.id_str(), target, "0");
-            pp.process(&src).expect("the unit compiled");
-            let bound = |name: &str| {
-                (pp.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == name))
-            };
-            for s in &program.symbols {
-                let object = s.class == Token::Glo as i64 && s.declares_no_storage();
-                let function = s.is_fun_entity() && !s.defined_here;
-                let name = s.link_name();
-                if !(object || function) || s.linkage != Linkage::External || bound(name) {
-                    continue;
-                }
-                if pp.intrinsics.contains_key(name) || library.admit(name) {
-                    continue;
-                }
-                if defined.contains(name) {
-                    from_sources.insert(name.to_string(), object);
-                } else {
-                    unresolved.push(alloc::format!("<{header}> {name}"));
-                }
+    let defined = link_definitions(target);
+    let mut library = TargetCLibrary::new(target);
+    let mut unresolved = alloc::vec::Vec::new();
+    let mut from_sources = alloc::collections::BTreeMap::new();
+    for (header, _) in crate::embedded_headers() {
+        let src = alloc::format!("{MACROS}#include <{header}>\n");
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = match Compiler::with_options(src.clone(), target, opts).compile() {
+            Ok(program) => program,
+            Err(e) => {
+                let text = alloc::format!("{e}");
+                assert!(
+                    text.contains("[error-directive]"),
+                    "{target:?} <{header}>: {text}"
+                );
+                continue;
+            }
+        };
+        let mut pp = Preprocessor::new(target.id_str(), target, "0");
+        pp.process(&src).expect("the unit compiled");
+        let bound = |name: &str| {
+            (pp.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == name))
+        };
+        for s in &program.symbols {
+            let object = s.class == Token::Glo as i64 && s.declares_no_storage();
+            let function = s.is_fun_entity() && !s.defined_here;
+            let name = s.link_name();
+            if !(object || function) || s.linkage != Linkage::External || bound(name) {
+                continue;
+            }
+            if pp.intrinsics.contains_key(name) || library.admit(name) {
+                continue;
+            }
+            if own_library.contains(&name) {
+                continue;
+            }
+            if defined.contains(name) {
+                from_sources.insert(name.to_string(), object);
+            } else {
+                unresolved.push(alloc::format!("<{header}> {name}"));
             }
         }
-        unresolved.sort();
-        unresolved.dedup();
-        assert!(
-            unresolved.is_empty(),
-            "{target:?}: declared with no definition:\n  {}",
-            unresolved.join("\n  ")
-        );
-        let mut unit = alloc::string::String::new();
-        for (name, object) in &from_sources {
-            unit += &if *object {
-                alloc::format!("extern char {name};\n")
-            } else {
-                alloc::format!("void {name}(void);\n")
-            };
-        }
-        unit += "static void *const used[] = {\n";
-        for name in from_sources.keys() {
-            unit += &alloc::format!("    (void *)&{name},\n");
-        }
-        unit += "};\nint main(void) { return used[0] == 0; }\n";
-        let program = crate::c5::tests::compile_str_bare_for(&unit, target);
-        if let Err(e) =
-            super::link_executable_with_runtime(&program, target, NativeOptions::default())
-        {
-            panic!("{target:?}: {e}");
-        }
+    }
+    unresolved.sort();
+    unresolved.dedup();
+    assert!(
+        unresolved.is_empty(),
+        "{target:?}: declared with no definition:\n  {}",
+        unresolved.join("\n  ")
+    );
+    let mut unit = alloc::string::String::new();
+    for (name, object) in &from_sources {
+        unit += &if *object {
+            alloc::format!("extern char {name};\n")
+        } else {
+            alloc::format!("void {name}(void);\n")
+        };
+    }
+    unit += "static void *const used[] = {\n";
+    for name in from_sources.keys() {
+        unit += &alloc::format!("    (void *)&{name},\n");
+    }
+    unit += "};\nint main(void) { return used[0] == 0; }\n";
+    let program = crate::c5::tests::compile_str_bare_for(&unit, target);
+    if let Err(e) = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+    {
+        panic!("{target:?}: {e}");
+    }
+}
+
+/// Every declaration a bundled header makes for a Windows target resolves at
+/// link. A name mingw-w64 does not declare is left undeclared instead
+/// (`native-compilation.md` states the rule).
+#[test]
+fn windows_header_declarations_resolve_at_link() {
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_header_declarations_resolve(target, &[]);
+    }
+}
+
+/// Every declaration a bundled header makes for macOS and the Linux targets
+/// resolves at link. A name the platform's C library does not provide is
+/// left undeclared there. The gettext functions and crypt are what a
+/// program's own libintl and libcrypt supply.
+#[test]
+fn posix_header_declarations_resolve_at_link() {
+    const OWN: &[&str] = &[
+        "bind_textdomain_codeset",
+        "bindtextdomain",
+        "crypt",
+        "dcgettext",
+        "dcngettext",
+        "dgettext",
+        "dngettext",
+        "gettext",
+        "ngettext",
+        "textdomain",
+    ];
+    for target in [
+        crate::Target::MacOSAarch64,
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+    ] {
+        assert_header_declarations_resolve(target, OWN);
     }
 }
 
@@ -1572,6 +1607,46 @@ fn windows_bindings_name_exports_of_their_dlls() {
         let handle = host.dlopen(Some(&dll), 0);
         if handle == 0 || host.dlsym(handle, &symbol) == 0 {
             missing.push(alloc::format!("{dll} {symbol}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "{target:?}: not exported:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
+/// On a macOS or Linux host, every binding the bundled headers state for the
+/// host's target names an export of its library, so an image importing it
+/// loads. A Mach-O symbol carries the leading underscore `dlsym` does not
+/// take.
+#[cfg(all(
+    unix,
+    any(target_os = "macos", target_os = "linux"),
+    any(target_arch = "aarch64", target_arch = "x86_64")
+))]
+#[test]
+fn posix_bindings_name_exports_of_their_libraries() {
+    use crate::c5::host::Host;
+    const RTLD_LAZY: i64 = 1;
+    let target = if cfg!(target_os = "macos") {
+        crate::Target::MacOSAarch64
+    } else if cfg!(target_arch = "aarch64") {
+        crate::Target::LinuxAarch64
+    } else {
+        crate::Target::LinuxX64
+    };
+    let mut host = crate::StdHost::default();
+    let mut missing = alloc::vec::Vec::new();
+    for (library, symbol) in crate::c5::linker::library_bindings(target) {
+        let name = if cfg!(target_os = "macos") {
+            symbol.strip_prefix('_').unwrap_or(&symbol)
+        } else {
+            &symbol
+        };
+        let handle = host.dlopen(Some(&library), RTLD_LAZY);
+        if handle == 0 || host.dlsym(handle, name) == 0 {
+            missing.push(alloc::format!("{library} {symbol}"));
         }
     }
     assert!(

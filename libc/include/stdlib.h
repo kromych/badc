@@ -305,7 +305,9 @@ double atof(const char *s);
 // width must match so the 64-bit return register is not narrowed.
 long strtol(const char *s, char **endp, int base);
 long long strtoll(const char *s, char **endp, int base);
+#ifdef _WIN32
 long long _strtoi64(const char *s, char **endp, int base);
+#endif
 double strtod(const char *s, char **endp);
 #ifdef _WIN32
 // C99 7.20.1.3. msvcrt.dll exports no `strtof` (a UCRT addition).
@@ -429,7 +431,9 @@ int atexit(void (*handler)(void));
 // type; an `int` declaration truncates the result to its low 32 bits.
 unsigned long strtoul(const char *s, char **endp, int base);
 unsigned long long strtoull(const char *s, char **endp, int base);
+#ifdef _WIN32
 unsigned long long _strtoui64(const char *s, char **endp, int base);
+#endif
 #ifdef _WIN32
 // The msvcrt `_spawn*` / `_cwait` family and its mode constants live in
 // <process.h> (matching MSVC), not here: defining `P_WAIT` etc. in <stdlib.h>

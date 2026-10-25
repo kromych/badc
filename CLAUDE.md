@@ -80,3 +80,20 @@ Keep the tool output terse to slow context growth.
 * Implement solutions
 * Add a regression test for each bug or feature to lock the behaviors in
 * Analyze SSA and assembler delta's under `./tests/snapshots` for improvements.
+
+## Issue labels
+
+Every issue carries:
+
+* a type: `bug` or `enhancement`;
+* `severity:critical|high|medium|low` and `leverage:high|medium|low`, as
+  the labels' descriptions define them;
+* one or more `subsystem:` labels naming the code it touches: `lexer`,
+  `preprocessor`, `parser`, `irgen`, `ssa`, `emission`, `object`, `linker`,
+  `assembler`, `driver`, `archiver`, `libc`, `vm`, `jit`, `diagnostics`,
+  `tooling`;
+* `conformance` for a C99 or POSIX deviation, `memory-safety` for memory
+  corruption, and `os:` / `arch:` when only some targets are affected.
+
+An i386 item takes `severity:low` and `leverage:low` unless it breaks
+linking the x86-64 kernel.

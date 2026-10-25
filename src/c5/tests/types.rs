@@ -2179,6 +2179,40 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// C23 6.4.1: under `-std=c23` / `gnu23` `bool` names `_Bool`, and `true`
+/// and `false` are its constants 1 and 0 (6.4.4.6), with or without
+/// `<stdbool.h>`, which then defines none of them as a macro. Before C23
+/// they are identifiers a program may declare. gcc 16.2.1 (`-std=c23`) and
+/// clang 22 accept the C23 unit and its run returns 0.
+#[test]
+fn c23_bool_true_and_false_are_keywords() {
+    use crate::{CStd, CompileOptions, Compiler, Target};
+    const SRC: &str = "static bool flip(bool b) { return !b; }\n\
+        _Static_assert(_Generic(true, bool: 1, default: 0) && sizeof(false) == 1, \"bool\");\n\
+        #include <stdbool.h>\n\
+        #ifdef bool\n#error bool is a macro\n#endif\n\
+        int main(void) {\n\
+          bool t = true;\n\
+          return (flip(false) == t && sizeof(bool) == 1 && (bool)2 == 1 && true + true == 2) ? 0 : 1; }\n";
+    for t in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        for name in ["c23", "gnu2x"] {
+            let opts = CompileOptions::default().with_std(CStd::from_dialect(name).unwrap());
+            let program = Compiler::with_options(SRC.to_string(), t, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?} {name}: {e}"));
+            assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?} {name}");
+        }
+    }
+    let c17 = "int bool = 2, true = 1;
+int main(void) { return bool - 2 * true; }
+";
+    let opts = CompileOptions::default().with_std(CStd::from_dialect("c17").unwrap());
+    let program = Compiler::with_options(c17.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .unwrap();
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0);
+}
+
 /// `__builtin_va_list` is `char *` where the ABI makes `va_list` a single
 /// cursor (Microsoft x64 and ARM64, Apple arm64), so a header's own
 /// `typedef char *va_list;` (MSVC's `vadefs.h`) redeclares `<stdarg.h>`'s

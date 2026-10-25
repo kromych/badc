@@ -1128,6 +1128,9 @@ impl<'a> IfExprParser<'a> {
                 return Ok(IfValue::signed(n));
             }
         }
+        if self.pp.c23_keywords() && matches!(&*name, "true" | "false") {
+            return Ok(IfValue::signed(i64::from(&*name == "true")));
+        }
         // An identifier left after expansion -- undefined, or a macro
         // whose unquoted body is no number -- is 0 (C99 6.10.1p4); gcc
         // reports a function-like name with no arguments the same way.

@@ -168,10 +168,10 @@ by default.
 `__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined.
 `__DATE__` and `__TIME__` are the time of translation in UTC; the
 `SOURCE_DATE_EPOCH` environment variable fixes it, as under gcc and clang.
-`__STDC_VERSION__` is defined as `201112L` (C11): the implemented surface
-is C99 plus the C11 features real code gates on this macro
-(`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`, `_Generic`,
-anonymous members, `<stdatomic.h>`).
+Without `-std=`, `__STDC_VERSION__` is defined as `201112L` (C11): the
+implemented surface is C99 plus the C11 features real code gates on this
+macro (`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`,
+`_Generic`, anonymous members, `<stdatomic.h>`).
 
 ### Unrecognized command-line options are fatal, severity 4
 
@@ -229,14 +229,16 @@ options whose effect badc's assembler already has -- `--fatal-warnings`,
 instruction set and admits every member of it, so a ceiling below that set
 selects nothing rather than rejecting the instructions above it.
 
-`-std=<dialect>` is accepted. badc compiles C99 with the GNU extensions
-always available, so the name selects only whether `__STRICT_ANSI__` is
-defined under `--gnu`: `gnu*` clears it and `c<digits>` / `iso9899:*` set
-it, as in gcc and clang. Without the flag `--gnu` reports strict
-conformance, so a header takes its standard-C path for the GNU features
-badc lacks. A name outside those three shapes is refused rather than read
-as strict ISO, so gcc's `-std=c2x` fails the invocation while `-std=c23`
-is taken.
+`-std=<dialect>` takes the names gcc 16 takes. The edition sets
+`__STDC_VERSION__` as gcc predefines it (`199901L` for `c99` / `gnu99`,
+`201710L` for `c17`, `202311L` for `c23` / `c2x`, none for C90), and from
+C23 on `bool`, `true` and `false` are keywords; without the flag badc
+compiles C11. The GNU extensions stay available under every edition, so
+the dialect selects only whether `__STRICT_ANSI__` is defined under
+`--gnu`: `gnu*` clears it and `c*` / `iso9899:*` set it, as in gcc and
+clang. Without the flag `--gnu` reports strict conformance, so a header
+takes its standard-C path for the GNU features badc lacks. A name gcc does
+not take is refused rather than read as strict ISO.
 
 ### ELF imports take their versions from a pinned manifest, severity 5
 
@@ -340,6 +342,10 @@ registers under either compiler.
   6.6 constant-expression grammar (float casts and arithmetic work in the
   condition).
 - `_Generic` selection (C11 6.5.1.1).
+- `bool`, `true` and `false` as keywords under `-std=c23` / `gnu23` (C23
+  6.4.1): `bool` is `_Bool` and `true` / `false` its constants, 1 and 0 in
+  `#if` as well; `<stdbool.h>` then defines only
+  `__bool_true_false_are_defined`.
 - `typeof` and `typeof_unqual` (C23 6.7.2.5), also under the GNU spellings
   `__typeof__` / `__typeof` and `__typeof_unqual__` / `__typeof_unqual`.
   `typeof_unqual` names the operand's type without the qualifiers on the

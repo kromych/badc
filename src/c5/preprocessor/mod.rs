@@ -274,6 +274,8 @@ pub(crate) struct Preprocessor {
     /// macro-expanded, as GNU cpp does for assembler input; in C such
     /// a line is diagnosed and dropped.
     asm_source: bool,
+    /// The edition `-std=` selects; see [`Self::set_std`].
+    std: crate::c5::CStd,
     /// `#pragma entrypoint(<id>)`: a non-`main` entry such as `WinMain`
     /// or a custom `_start`. `None` keeps `main`. Read by the compile
     /// pass for `entry_pc` and by the PE writer for
@@ -938,9 +940,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
         PredefOn::Every,
         &[
             // C99 6.10.8. `__STDC_HOSTED__` holds because every target
-            // binds the host libc. `__STDC_VERSION__` reports C11: the
-            // surface is C99 plus the C11 features real code gates on
-            // this macro. `__DATE__` / `__TIME__` come from
+            // binds the host libc. `__STDC_VERSION__` reports C11 unless
+            // `-std=` selects another edition (`set_std`): the surface is
+            // C99 plus the C11 features real code gates on this macro. `__DATE__` / `__TIME__` come from
             // [`install_translation_time`].
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
@@ -1248,6 +1250,7 @@ impl Preprocessor {
             keep_pragmas: false,
             preprocessed: false,
             asm_source: false,
+            std: crate::c5::CStd::default(),
             entrypoint: None,
             subsystem: None,
             default_libs: Vec::new(),
@@ -1410,6 +1413,21 @@ impl Preprocessor {
     /// Mark the input as assembler-with-cpp (a `.S` unit).
     pub fn set_asm_source(&mut self, on: bool) {
         self.asm_source = on;
+    }
+
+    /// Compile to the edition `std` of the C standard: `__STDC_VERSION__`
+    /// takes its value, undefined for C90 (C99 6.10.8), and C23 reads the
+    /// keywords `true` and `false` in `#if` as 1 and 0 (C23 6.10.2).
+    pub fn set_std(&mut self, std: crate::c5::CStd) {
+        self.std = std;
+        match std.0 {
+            Some(v) => self.define("__STDC_VERSION__", &format!("{v}L")),
+            None => self.undef("__STDC_VERSION__"),
+        }
+    }
+
+    pub(super) fn c23_keywords(&self) -> bool {
+        self.std.c23_keywords()
     }
 
     /// Whether `$` forms identifiers in this unit: in C, not in

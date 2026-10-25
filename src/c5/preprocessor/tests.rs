@@ -1555,6 +1555,32 @@ fn process_asm(source: &str) -> String {
     pp.process(source).expect("preprocessor failed")
 }
 
+/// `__STDC_VERSION__` follows the edition `-std=` selects, undefined for
+/// C90 (C99 6.10.8), and C23 reads `true` and `false` in `#if` as 1 and 0
+/// (C23 6.10.2) without a definition of either; the values are gcc 16's.
+#[test]
+fn the_edition_sets_stdc_version_and_the_c23_if_keywords() {
+    let src = "#ifdef __STDC_VERSION__\nv = __STDC_VERSION__;\n#endif\n\
+               #if true && !false\nc23 = 1;\n#endif\n#ifdef true\nmacro = 1;\n#endif\n";
+    let run = |std: Option<crate::c5::CStd>| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        if let Some(std) = std {
+            pp.set_std(std);
+        }
+        pp.process(src).expect("preprocessor failed")
+    };
+    let edition = |name| crate::c5::CStd::from_dialect(name);
+    assert!(run(None).contains("v = 201112L;"));
+    assert!(!run(edition("c90")).contains("v ="));
+    assert!(run(edition("gnu99")).contains("v = 199901L;"));
+    let c23 = run(edition("c23"));
+    assert!(
+        c23.contains("v = 202311L;") && c23.contains("c23 = 1;"),
+        "{c23}"
+    );
+    assert!(!c23.contains("macro") && !run(edition("c17")).contains("c23 ="));
+}
+
 /// `$` is an identifier character in C and not in assembler-with-cpp, as
 /// gcc 16 and clang 22 take it (`-fdollars-in-identifiers` is on for C):
 /// `$FOO` is one name in C, while assembly expands the `FOO` of `$FOO`.

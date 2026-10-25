@@ -86,6 +86,8 @@ pub(crate) enum Parsed {
 pub(crate) struct FrontEnd {
     pub(crate) gnu: bool,
     pub(crate) gnu_dialect: bool,
+    /// `-std=`'s edition.
+    pub(crate) std: badc::CStd,
     pub(crate) gnu89_inline: bool,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
@@ -1313,26 +1315,19 @@ impl Parser {
             // that are not C (linker scripts, generated headers). Without
             // `-E` it has no effect, as under gcc.
             "-P" => front.no_line_markers = true,
-            // gcc / clang `-std=<dialect>`: badc compiles C99 with the
-            // GNU extensions always available, so the dialect selects
-            // only whether `__STRICT_ANSI__` is defined.
+            // gcc / clang `-std=<dialect>`: the edition, which sets
+            // `__STDC_VERSION__` and the C23 keywords, and the GNU dialect,
+            // which suppresses `__STRICT_ANSI__`; the GNU extensions stay
+            // available either way. A name gcc does not take is rejected,
+            // since a caller that misspells the dialect gets another one.
             s if s.starts_with("-std=") => {
-                // The C dialect families gcc names: `cNN` / `gnuNN` and
-                // the `iso9899:` spellings, which are strict ISO. A name
-                // outside them is rejected rather than read as strict
-                // ISO, since a caller that misspells the dialect gets the
-                // other one.
                 let dialect = &s["-std=".len()..];
-                let known = dialect.starts_with("gnu")
-                    || dialect.starts_with("iso9899:")
-                    || (dialect.starts_with('c')
-                        && dialect[1..].chars().all(|c| c.is_ascii_digit())
-                        && dialect.len() > 1);
-                if !known {
+                let Some(std) = badc::CStd::from_dialect(dialect) else {
                     return Err(ParseError::plain(format!(
                         "badc: error: unknown C dialect `{dialect}` (-std=)"
                     )));
-                }
+                };
+                front.std = std;
                 front.gnu_dialect = dialect.starts_with("gnu");
             }
             _ => return Ok(false),
@@ -2521,6 +2516,7 @@ impl FrontEnd {
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
             .with_gnu_dialect(self.gnu_dialect)
+            .with_std(self.std)
             .with_optimize(self.optimize)
             .with_vla_larger_than(self.vla_larger_than)
             .with_defines(tu_defines(label, &self.defines))
@@ -4051,20 +4047,33 @@ mod tests {
         );
     }
 
+    /// `-std=` selects the GNU dialect and the edition, as gcc 16 names
+    /// them; a name gcc rejects is rejected.
     #[test]
-    fn dialect_selects_only_strict_conformance() {
+    fn dialect_selects_the_edition_and_strict_conformance() {
         assert!(parse(&["-std=gnu11", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=c99", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
         assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
-        assert_eq!(
-            reject(&["-std=fortran", "a.c"]),
-            (
-                "badc: error: unknown C dialect `fortran` (-std=)".to_string(),
-                1
-            )
-        );
+        let edition = |s: &str| parse(&[s, "a.c"]).front.std.0;
+        assert_eq!(parse(&["a.c"]).front.std.0, Some(201112));
+        assert_eq!(edition("-std=gnu89"), None);
+        assert_eq!(edition("-std=iso9899:199409"), Some(199409));
+        assert_eq!(edition("-std=c9x"), Some(199901));
+        assert_eq!(edition("-std=gnu18"), Some(201710));
+        assert_eq!(edition("-std=c2x"), Some(202311));
+        assert_eq!(edition("-std=iso9899:2024"), Some(202311));
+        assert_eq!(edition("-std=gnu2y"), Some(202500));
+        for name in ["fortran", "c95", "c24", "gnu", "c"] {
+            assert_eq!(
+                reject(&[&format!("-std={name}"), "a.c"]),
+                (
+                    format!("badc: error: unknown C dialect `{name}` (-std=)"),
+                    1
+                )
+            );
+        }
     }
 
     #[test]

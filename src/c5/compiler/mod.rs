@@ -656,6 +656,54 @@ pub struct CompileOptions {
     pub auto_var_init: AutoVarInit,
     /// `-ffp-contract=`; see [`FpContract`].
     pub fp_contract: FpContract,
+    /// `-std=`; see [`CStd`].
+    pub std: CStd,
+}
+
+/// The edition of the C standard a unit is compiled to (`-std=`), held as
+/// the `__STDC_VERSION__` it predefines (C99 6.10.8): `None` for C90,
+/// which predefines none. Without `-std` badc compiles C11.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CStd(pub Option<u32>);
+
+impl Default for CStd {
+    fn default() -> Self {
+        Self(Some(201112))
+    }
+}
+
+impl CStd {
+    /// The editions gcc's `-std=` names, the GNU dialect included, as
+    /// gcc 16 predefines `__STDC_VERSION__` for them; `None` for a name
+    /// gcc does not take.
+    pub fn from_dialect(name: &str) -> Option<Self> {
+        let year = match name {
+            "iso9899:1990" => "90",
+            "iso9899:199409" => return Some(Self(Some(199409))),
+            "iso9899:1999" | "iso9899:199x" => "99",
+            "iso9899:2011" => "11",
+            "iso9899:2017" | "iso9899:2018" => "17",
+            "iso9899:2024" => "23",
+            _ => name
+                .strip_prefix("gnu")
+                .or_else(|| name.strip_prefix('c'))?,
+        };
+        let version = match year {
+            "89" | "90" => None,
+            "99" | "9x" => Some(199901),
+            "11" | "1x" => Some(201112),
+            "17" | "18" => Some(201710),
+            "23" | "2x" => Some(202311),
+            "2y" => Some(202500),
+            _ => return None,
+        };
+        Some(Self(version))
+    }
+
+    /// C23 6.4.1: `bool`, `true` and `false` are keywords.
+    pub fn c23_keywords(self) -> bool {
+        self.0.is_some_and(|v| v >= 202311)
+    }
 }
 
 /// `-ffp-contract=`: where a floating product may be contracted with the
@@ -821,6 +869,11 @@ impl CompileOptions {
     /// Select the GNU dialect (`-std=gnu*`) over strict ISO (`-std=c*`).
     pub fn with_gnu_dialect(mut self, on: bool) -> Self {
         self.gnu_dialect = on;
+        self
+    }
+    /// Select the edition of the C standard (`-std=`).
+    pub fn with_std(mut self, std: CStd) -> Self {
+        self.std = std;
         self
     }
     /// Replace the `-D` predefine list.
@@ -2685,6 +2738,7 @@ impl Compiler {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         pp.set_source_label(&opts.source_label);
+        pp.set_std(opts.std);
         pp.set_track_includes(opts.track_includes);
         pp.set_keep_pragmas(opts.keep_pragmas);
         pp.set_preprocessed(opts.preprocessed);
@@ -2860,6 +2914,9 @@ impl Compiler {
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
         let shadowed = lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
+        if opts.std.c23_keywords() {
+            lexer::init_c23_keywords(&mut symbols, &mut symbol_index);
+        }
         // The dead-store bookkeeping is a cost the parser pays only when
         // the row reports somewhere, which a pragma decides as much as
         // the command line does.

@@ -2667,6 +2667,24 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
     index.record(hash);
 }
 
+/// C23 6.4.1's `bool`, `true` and `false`: `bool` spells `_Bool`, and the
+/// other two are its constants 1 and 0 (C23 6.4.4.6), bound as named
+/// constants the way an enumeration constant is.
+pub(crate) fn init_c23_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
+    add_keyword(symbols, index, "bool", Token::IntMod as i64);
+    for (name, val) in [("true", 1), ("false", 0)] {
+        symbols.push(Symbol {
+            name: name.to_string(),
+            token: Token::Id as i64,
+            class: Token::Num as i64,
+            type_: Ty::Bool as i64,
+            val,
+            ..Default::default()
+        });
+        index.record(hash_name(name.as_bytes()));
+    }
+}
+
 /// Reserved words that map to a non-`Id` token. Library function
 /// names used to be listed here so the lexer's pre-seeded set could
 /// upgrade them to `Token::Sys` later; the

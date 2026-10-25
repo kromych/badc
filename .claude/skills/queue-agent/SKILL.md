@@ -36,11 +36,17 @@ the box remotes by name, the scratch and note paths -- are in
   project badc builds (CLAUDE.md, Implementation choices).
 - Before every commit: `cargo fmt`, `cargo clippy --all-targets --features full`
   (and `--target x86_64-pc-windows-gnu` when Windows code changed),
+  `cargo clippy --all-targets -- -D warnings` without features (a test that
+  uses a `full` or `native-emit` item carries that `#[cfg(feature)]`),
   `cargo build --locked --no-default-features --lib` (write `alloc::vec::Vec`,
-  `alloc::format!`, `alloc::string::String` as the file's existing code does).
+  `alloc::format!`, `alloc::string::String` as the file's existing code does),
+  and `python3 scripts/diagnostics_doc.py --check` when a diagnostic code
+  changed. These are the pre-push hook's checks; the coordinator runs the hook
+  itself before landing.
 - Snapshots: regenerate `tests/snapshots/` for each commit
   (`python3 scripts/snapshots.py`, `--only <name>` while iterating); review the
-  asm and SSA deltas and cite them.
+  asm and SSA deltas and cite them. `snapshots.py --check` also fails on the
+  callee-saved budget: read its exit code, not its last line.
 - Tests assert on emitted SSA/asm or on program behavior; no host-compiler parity
   fixtures.
 - In any polling loop, or anything whose exit status matters, use `/usr/bin/grep`.

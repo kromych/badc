@@ -249,10 +249,10 @@ impl<'a> LdsLinker<'a> {
         out
     }
 
-    /// Whether a shared object's branch reaches an undefined weak symbol,
-    /// which it imports through a PLT entry.
+    /// Whether a dynamically linked image's branch reaches an undefined
+    /// weak symbol, which it may import through a PLT entry.
     pub(super) fn calls_undefined_weak(&self) -> bool {
-        self.opts.shared
+        self.dynamically_linked()
             && (self.objects.iter().enumerate()).any(|(oi, o)| {
                 (o.sections.iter().enumerate())
                     .filter(|(si, _)| !self.comdat_dropped.contains(&(oi, *si)))

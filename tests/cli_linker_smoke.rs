@@ -13676,6 +13676,91 @@ fn the_ld_persona_takes_a_numeric_entry_a_default_script_and_a_named_library_fil
     );
 }
 
+/// The `PT_INTERP` path of an ELF image, if it has one.
+fn elf_interp(image: &[u8]) -> Option<String> {
+    let wide = image[4] == 2;
+    let n = |at: usize, len: usize| {
+        (0..len).fold(0u64, |v, i| v | (image[at + i] as u64) << (8 * i)) as usize
+    };
+    let (phoff, phentsize, phnum) = if wide {
+        (n(0x20, 8), n(0x36, 2), n(0x38, 2))
+    } else {
+        (n(0x1c, 4), n(0x2a, 2), n(0x2c, 2))
+    };
+    (0..phnum).find_map(|k| {
+        let ph = phoff + k * phentsize;
+        let (off, size) = if wide {
+            (n(ph + 8, 8), n(ph + 32, 8))
+        } else {
+            (n(ph + 4, 4), n(ph + 16, 4))
+        };
+        (n(ph, 4) == 3).then(|| {
+            String::from_utf8_lossy(&image[off..off + size])
+                .trim_end_matches('\0')
+                .to_string()
+        })
+    })
+}
+
+// A dynamic executable the GNU ld persona links names GNU ld's built-in
+// interpreter for its machine unless the command line names one or
+// `--no-dynamic-linker` declines it; a static one names none.
+#[test]
+fn the_ld_persona_names_gnu_lds_default_interpreter_in_a_dynamic_executable() {
+    let dir = tempdir("default-interp");
+    write_source(&dir, "x.s", ".globl _start, f\n_start: ret\nf: ret\n");
+    write_source(&dir, "a.s", ".globl _start, f\n_start: ret\nf: ret\n");
+    let badc_in = |args: &[&str]| {
+        let out = Command::new(badc())
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(out.status.success(), "{args:?}: {err}");
+    };
+    badc_in(&["-q", "-c", "--target=linux-x64", "x.s", "-o", "x.o"]);
+    badc_in(&[
+        "-q",
+        "-c",
+        "--target=linux-x64",
+        "-m32",
+        "x.s",
+        "-o",
+        "x32.o",
+    ]);
+    badc_in(&["-q", "-c", "--target=linux-aarch64", "a.s", "-o", "a.o"]);
+    badc_in(&[
+        "--ld", "-shared", "-soname", "libx.so", "x.o", "-o", "libx.so",
+    ]);
+    for (args, want) in [
+        (&["-pie", "x.o"][..], Some("/lib/ld64.so.1")),
+        (
+            &["-m", "elf_i386", "-pie", "x32.o"],
+            Some("/usr/lib/libc.so.1"),
+        ),
+        (&["-pie", "a.o"], Some("/lib/ld-linux-aarch64.so.1")),
+        (&["-no-pie", "x.o", "libx.so"], Some("/lib/ld64.so.1")),
+        (&["-no-pie", "x.o"], None),
+        (&["-pie", "--no-dynamic-linker", "x.o"], None),
+        (
+            &[
+                "-pie",
+                "--no-dynamic-linker",
+                "-dynamic-linker",
+                "/x/ld.so",
+                "x.o",
+            ],
+            Some("/x/ld.so"),
+        ),
+        (&["-shared", "x.o"], None),
+    ] {
+        badc_in(&[&["--ld", "-e", "_start"][..], args, &["-o", "out"]].concat());
+        let image = std::fs::read(dir.join("out")).expect("read the image");
+        assert_eq!(elf_interp(&image).as_deref(), want, "{args:?}");
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

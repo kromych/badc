@@ -127,7 +127,7 @@ impl<'a> LdsLinker<'a> {
     /// slot is taken only by a reference through the GOT.
     pub(super) fn build_imports(&mut self) {
         self.prune_preemptible();
-        if !self.opts.shared_libs.is_empty() || self.opts.shared {
+        if self.dynamically_linked() {
             self.bind_shared_libraries();
         }
         let reached = self.reached_by(Reach::Plt);

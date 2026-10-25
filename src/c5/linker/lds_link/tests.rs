@@ -7683,3 +7683,33 @@ fn an_aarch64_pc_relative_field_naming_an_undefined_weak_name_holds_0() {
         assert_eq!(u32_at(&data, 0), 0, "{what}");
     }
 }
+
+/// A PIE that names an interpreter is dynamically linked with no library
+/// on the command line too, so it imports an undefined weak function it
+/// calls, as GNU ld 2.46.1 links one; a PIE that names none resolves it.
+#[test]
+fn a_pie_with_an_interpreter_imports_an_undefined_weak_function_it_calls() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for interp in [Some(String::from("/lib64/ld-linux-x86-64.so.2")), None] {
+        let o = parse_lds_object("a.o", weak_caller(false)).expect("parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            interp: interp.clone(),
+            ..LdsOptions::default()
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let slot = section_addr(&img, ".rela.plt").map(|_| {
+            let (_, rela) = image_section(&img, ".rela.plt");
+            rela_entries(&rela)
+        });
+        if interp.is_some() {
+            let wf = dynsym_entries(&img).into_iter().find(|s| s.0 == "wf");
+            assert_eq!(wf.map(|s| s.1), Some((STB_WEAK << 4) | STT_NOTYPE));
+            assert_eq!(slot.map(|s| s.len()), Some(1), "a JUMP_SLOT");
+        } else {
+            assert!(slot.is_none_or(|s| s.is_empty()), "no PLT entry");
+        }
+    }
+}

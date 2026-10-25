@@ -1128,6 +1128,15 @@ impl<'a> LdsLinker<'a> {
         self.opts.emit == LdsEmit::Dyn || !self.opts.shared_libs.is_empty()
     }
 
+    /// The loader binds the image's imports: a shared object, an
+    /// executable linked against a shared library, or a PIE that names an
+    /// interpreter.
+    fn dynamically_linked(&self) -> bool {
+        self.opts.shared
+            || !self.opts.shared_libs.is_empty()
+            || self.opts.emit == LdsEmit::Dyn && self.opts.interp.is_some()
+    }
+
     fn insec(&self, i: usize) -> &RawSection {
         let id = self.insecs[i];
         &self.objects[id.obj].sections[id.sec]

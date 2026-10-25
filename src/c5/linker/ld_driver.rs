@@ -120,6 +120,8 @@ struct LdArgs {
     eh_frame_hdr: bool,
     /// `--dynamic-linker PATH`: the `PT_INTERP` program interpreter.
     interp: Option<String>,
+    /// `--no-dynamic-linker`: a dynamic executable names no interpreter.
+    no_interp: bool,
     /// `-rpath` / `-R` directories, in command order.
     rpath: Vec<String>,
     /// `DT_RUNPATH` rather than `DT_RPATH`, which is what the
@@ -354,6 +356,7 @@ impl LdArgs {
             nmagic: false,
             eh_frame_hdr: false,
             interp: None,
+            no_interp: false,
             rpath: Vec::new(),
             new_dtags: true,
             search_shared: true,
@@ -428,7 +431,7 @@ impl LdArgs {
                 "--pack-dyn-relocs=none" => a.z.push(ZKeyword::PackRelativeRelocs(false)),
                 "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
                 "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
-                "--no-dynamic-linker" => a.interp = None,
+                "--no-dynamic-linker" => (a.interp, a.no_interp) = (None, true),
                 // The image has these by construction: no unwind table of
                 // the linker's own, and the only veneers, the AArch64
                 // erratum ones, address their targets PC-relative.
@@ -462,10 +465,11 @@ impl LdArgs {
                         .ok_or_else(|| ld_err(format!("unknown hash style `{v}`")))?;
                 }
                 "--dynamic-linker" | "-dynamic-linker" | "-I" => {
-                    a.interp = Some(next_of(&mut it, arg)?);
+                    (a.interp, a.no_interp) = (Some(next_of(&mut it, arg)?), false);
                 }
                 s if s.starts_with("--dynamic-linker=") => {
-                    a.interp = Some(s["--dynamic-linker=".len()..].to_string());
+                    let path = s["--dynamic-linker=".len()..].to_string();
+                    (a.interp, a.no_interp) = (Some(path), false);
                 }
                 "-rpath" | "-R" | "--rpath" => a.rpath.push(next_of(&mut it, arg)?),
                 s if s.starts_with("-rpath=") || s.starts_with("--rpath=") => {
@@ -1157,6 +1161,17 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         return ld_err("no input files");
     }
     let m = machine.unwrap_or(objs[0].machine);
+    // A dynamic executable names GNU ld's built-in interpreter unless the
+    // command line names one; a compiler driver always does.
+    let dynamic_exe = !a.shared_object && (a.shared || !libs.is_empty());
+    let interp = (a.interp.clone()).or_else(|| {
+        let default = match m {
+            EM_AARCH64 => "/lib/ld-linux-aarch64.so.1",
+            EM_386 => "/usr/lib/libc.so.1",
+            _ => "/lib/ld64.so.1",
+        };
+        (dynamic_exe && !a.no_interp).then(|| String::from(default))
+    });
     if a.fix_cortex_a53_843419 && m != EM_AARCH64 {
         return ld_err("--fix-cortex-a53-843419 is not supported: it applies to AArch64 code");
     }
@@ -1208,7 +1223,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         symbolic_functions: a.symbolic_functions,
         nmagic: a.nmagic,
         eh_frame_hdr: a.eh_frame_hdr,
-        interp: a.interp.clone(),
+        interp,
         shared_libs: libs,
         rpath: a.rpath.clone(),
         new_dtags: a.new_dtags,

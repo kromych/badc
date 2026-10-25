@@ -234,6 +234,7 @@ shell.aarch64.test
 trigger.sql
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 
 *.gz
 *.bzip2

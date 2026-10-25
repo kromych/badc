@@ -655,6 +655,7 @@ sigwait                                  GLIBC_2.2.5
 sigwaitinfo                              GLIBC_2.2.5
 sleep                                    GLIBC_2.2.5
 snprintf                                 GLIBC_2.2.5
+sockatmark                               GLIBC_2.2.5
 socket                                   GLIBC_2.2.5
 socketpair                               GLIBC_2.2.5
 splice                                   GLIBC_2.5

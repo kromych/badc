@@ -185,10 +185,59 @@ struct sockaddr_storage {
 #pragma binding(libc::shutdown,   "_shutdown")
 #pragma binding(libc::socketpair, "_socketpair")
 #pragma binding(libc::sendfile,   "_sendfile")
+#pragma binding(libc::sendmsg,    "_sendmsg")
+#pragma binding(libc::recvmsg,    "_recvmsg")
+#pragma binding(libc::sockatmark, "_sockatmark")
 
-// Optional header / trailer iovecs for Darwin's sendfile(). `struct
-// iovec` is from <sys/uio.h>; only a pointer to it is needed here.
-struct iovec;
+#include <sys/uio.h>
+
+// The SDK's message header: msg_iovlen is an int and msg_controllen a
+// socklen_t, 48 bytes in all.
+struct msghdr {
+    void *msg_name;
+    socklen_t msg_namelen;
+    struct iovec *msg_iov;
+    int msg_iovlen;
+    void *msg_control;
+    socklen_t msg_controllen;
+    int msg_flags;
+};
+struct cmsghdr {
+    socklen_t cmsg_len;
+    int cmsg_level;
+    int cmsg_type;
+};
+
+// Ancillary data is aligned to 4 bytes, as the SDK's <machine/_param.h>
+// defines it; CMSG_NXTHDR of a null record is the first one (RFC 2292).
+#define __DARWIN_ALIGNBYTES32 (sizeof(unsigned int) - 1)
+#define __DARWIN_ALIGN32(p) \
+    ((unsigned long)((unsigned long)(p) + __DARWIN_ALIGNBYTES32) & ~__DARWIN_ALIGNBYTES32)
+#define CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + __DARWIN_ALIGN32(sizeof(struct cmsghdr)))
+#define CMSG_FIRSTHDR(mhdr) \
+    ((mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+     ? (struct cmsghdr *)(mhdr)->msg_control : (struct cmsghdr *)0L)
+#define CMSG_NXTHDR(mhdr, cmsg) \
+    ((char *)(cmsg) == (char *)0L ? CMSG_FIRSTHDR(mhdr) \
+     : ((((unsigned char *)(cmsg) + __DARWIN_ALIGN32((unsigned int)(cmsg)->cmsg_len) \
+          + __DARWIN_ALIGN32(sizeof(struct cmsghdr))) \
+         > ((unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen)) \
+        ? (struct cmsghdr *)0L \
+        : (struct cmsghdr *)(void *)((unsigned char *)(cmsg) \
+                                     + __DARWIN_ALIGN32((unsigned int)(cmsg)->cmsg_len))))
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define CMSG_SPACE(l) (__DARWIN_ALIGN32(sizeof(struct cmsghdr)) + __DARWIN_ALIGN32(l))
+#define CMSG_LEN(l)   (__DARWIN_ALIGN32(sizeof(struct cmsghdr)) + (l))
+#endif
+
+#define SCM_RIGHTS 0x01
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define SCM_TIMESTAMP           0x02
+#define SCM_CREDS               0x03
+#define SCM_TIMESTAMP_MONOTONIC 0x04
+#endif
+
+// Optional header / trailer iovecs for Darwin's sendfile().
 struct sf_hdtr {
     struct iovec *headers;
     int hdr_cnt;
@@ -263,6 +312,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::sendmmsg,   "sendmmsg")
 #pragma binding(libc::recvmmsg,   "recvmmsg")
 #pragma binding(libc::accept4,    "accept4")
+#pragma binding(libc::sockatmark, "sockatmark")
 
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
@@ -332,9 +382,6 @@ struct cmsghdr {
       > (unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen) \
      ? (struct cmsghdr *)0 \
      : (struct cmsghdr *)((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len)))
-
-long sendmsg(int fd, const struct msghdr *msg, int flags);
-long recvmsg(int fd, struct msghdr *msg, int flags);
 
 // Batched socket I/O (GNU/Linux): recvmmsg/sendmmsg transfer an array of
 // mmsghdr in one call, each pairing a msghdr with the byte count moved.
@@ -416,6 +463,9 @@ ssize_t send(int fd, const void *buf, size_t n, int flags);
 int shutdown(int fd, int how);
 #ifndef _WIN32
 int socketpair(int domain, int type, int protocol, int *sv);
+ssize_t sendmsg(int fd, const struct msghdr *msg, int flags);
+ssize_t recvmsg(int fd, struct msghdr *msg, int flags);
+int sockatmark(int fd);
 #endif
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);

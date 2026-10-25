@@ -233,6 +233,32 @@ struct in6_pktinfo {
 #endif
 #endif
 
+// The SDK's packet information outside strict POSIX (<netinet/in.h>,
+// <netinet6/in6.h>): IPV6_PKTINFO is RFC 3542's option under
+// __APPLE_USE_RFC_3542, RFC 2292's under __APPLE_USE_RFC_2292, else undefined.
+#if defined(__APPLE__) && (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))
+#define IP_PKTINFO       26
+#define IP_RECVPKTINFO   IP_PKTINFO
+#define IPV6_2292PKTINFO 19
+struct in_pktinfo {
+    unsigned int ipi_ifindex;
+    struct in_addr ipi_spec_dst;
+    struct in_addr ipi_addr;
+};
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    unsigned int ipi6_ifindex;
+};
+#if defined(__APPLE_USE_RFC_3542) && defined(__APPLE_USE_RFC_2292)
+#error "__APPLE_USE_RFC_3542 and __APPLE_USE_RFC_2292 cannot be both defined"
+#elif defined(__APPLE_USE_RFC_3542)
+#define IPV6_RECVPKTINFO 61
+#define IPV6_PKTINFO     46
+#elif defined(__APPLE_USE_RFC_2292)
+#define IPV6_PKTINFO     IPV6_2292PKTINFO
+#endif
+#endif
+
 // IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is
 // the all-zero unspecified address (POSIX guarantees its value), provided here
 // as a const object so callers can take its address without a libc data

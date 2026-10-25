@@ -111,6 +111,34 @@ fn vla_typedef_constraints_are_diagnosed() {
     assert!(msg.contains("only allowed at block scope"), "{msg}");
 }
 
+/// A block-scope pointer to a variable-length array (C99 6.7.5.2p2), its
+/// bound taken where the declaration is reached, under the interpreter for
+/// both data models; one with linkage and a jump into its scope are
+/// rejected, as gcc 16 and clang 22 reject them.
+#[test]
+fn a_block_scope_pointer_to_a_vla_takes_its_bound_where_declared() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            super::run_fixture_for("vla_pointer_block_scope.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+    for (src, text) in [
+        (
+            "void f(int n) { extern char (*p)[n]; }",
+            "an object with linkage cannot have a variably modified type",
+        ),
+        (
+            "void f(int n) { goto l; char (*p)[n]; l: (void)p; }",
+            "jumps into the scope of `p`",
+        ),
+    ] {
+        let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+        assert!(msg.contains(text), "{src}: {msg}");
+    }
+}
+
 /// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
 /// is no constant: an array bound of it declares a variable-length array
 /// (`int b[sizeof a]`), and a context that requires a constant rejects it,

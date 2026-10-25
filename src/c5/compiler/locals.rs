@@ -301,6 +301,34 @@ impl Compiler {
     /// declarator request, the type's natural alignment, and an
     /// `aligned(N)` type attribute on the base. Records it on the symbol
     /// and raises the unit's `.data` alignment to match.
+    /// Run the byte-count stores of the variable-length arrays the type
+    /// `idx` was just declared with points to, where the declaration is
+    /// reached. C99 6.7.5.2p2 gives a variably modified type only to an
+    /// identifier with no linkage, so an `extern` one is refused.
+    pub(super) fn emit_vm_bound_stores(
+        &mut self,
+        idx: usize,
+        is_extern: bool,
+    ) -> Result<(), C5Error> {
+        let stores = core::mem::take(&mut self.pending.vm_bound_stores);
+        if stores.is_empty() {
+            return Ok(());
+        }
+        if is_extern {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "an object with linkage cannot have a variably modified type",
+            ));
+        }
+        let pos = self.ast_src_pos();
+        for store in stores {
+            self.ast
+                .push_stmt(super::super::ast::Stmt::Expr(store), pos);
+        }
+        self.note_jump_barrier(idx, true);
+        Ok(())
+    }
+
     pub(super) fn apply_static_local_align(&mut self, loc_idx: usize, ty: i64, a: &DeclAlign) {
         let want_align = if a.gnu_set {
             core::cmp::max(a.req_align as usize, self.unattributed_align_of(ty))
@@ -484,6 +512,7 @@ impl Compiler {
             self.pending.fn_params = None;
             let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
+            self.emit_vm_bound_stores(loc_idx, is_extern)?;
             let (ty, array_size_vla) = self.vla_typed_object(ty, array_size)?;
             array_size = array_size_vla;
             if implicit_int {

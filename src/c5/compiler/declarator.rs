@@ -678,6 +678,9 @@ impl Compiler {
             // bounds a pointer to an array (`(*p)[N]`), whose
             // dimensions fold into the aggregate-backed pointee below.
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            // C99 6.7.5.2p2: at block scope the outermost pointee bound may
+            // be variable (`T (*p)[n]`), the pointer's type variably modified.
+            let mut vm_dim = None;
             let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
@@ -760,7 +763,28 @@ impl Compiler {
                         // negative sentinel `array_agg_type` keeps.
                         pointee_dims.push(-1);
                     } else {
-                        let m = self.parse_constant_int()?;
+                        let vm = self.pending.vla_allowed && !param_ctx;
+                        let m = if vm {
+                            self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                        } else {
+                            Some(self.parse_constant_int()?)
+                        };
+                        let Some(m) = m else {
+                            if vm_dim.is_some() || !pointee_dims.is_empty() {
+                                return Err(self.compile_err(
+                                    Code::UNSUPPORTED,
+                                    "a non-constant inner array dimension is not supported",
+                                ));
+                            }
+                            self.expr(Token::Assign as i64)?;
+                            self.require_integer_size(self.ty)?;
+                            if self.is_int128_ty(self.ty) {
+                                self.ast_apply_assign_conv(self.size_t_ty());
+                            }
+                            vm_dim = self.ast_acc.take();
+                            self.accept(']')?;
+                            continue;
+                        };
                         if m < 0 {
                             return Err(self.compile_err(
                                 Code::INVALID_DECLARATION,
@@ -815,7 +839,8 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
-            if !pointee_dims.is_empty() && !after_sig && inner_ptr_levels > 0 {
+            if (!pointee_dims.is_empty() || vm_dim.is_some()) && !after_sig && inner_ptr_levels > 0
+            {
                 // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
                 // the pointee dimensions into the aggregate-backed
                 // tag, one pointer level per inner `*`. Also covers
@@ -828,9 +853,19 @@ impl Compiler {
                     return Err(self.unknown_size_element_err());
                 }
                 self.require_complete_elements(outer_ty_before_inner, &pointee_dims)?;
-                self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
-                inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
-                    + inner_ptr_levels * (Ty::Ptr as i64))
+                self.pending.fn_chain_array_levels +=
+                    pointee_dims.len() as i64 + i64::from(vm_dim.is_some());
+                let mut pointee = if pointee_dims.is_empty() {
+                    outer_ty_before_inner
+                } else {
+                    self.array_agg_type(outer_ty_before_inner, &pointee_dims)
+                };
+                if let Some(dim) = vm_dim {
+                    let (vla_ty, bound) = self.vla_bound_type(pointee, dim);
+                    self.pending.vm_bound_stores.push(bound.store);
+                    pointee = vla_ty;
+                }
+                inner_ty = (pointee + inner_ptr_levels * (Ty::Ptr as i64))
                     | (inner_ty & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK));
             }
             return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));

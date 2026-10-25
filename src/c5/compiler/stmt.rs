@@ -814,6 +814,7 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
+            self.emit_vm_bound_stores(id_idx, false)?;
             if td_array != 0 && self.vla_value_slot(ty).is_some() {
                 return Err(self.compile_err(
                     Code::UNSUPPORTED,

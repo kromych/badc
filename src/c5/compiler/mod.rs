@@ -1197,6 +1197,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// leading `[expr]` was non-constant and `vla_allowed`. `None` for
     /// a constant-dimension array. Consumed by the local-decl site.
     pub vla_dim_expr: Option<crate::c5::ast::ExprId>,
+    /// The byte-count stores of the variable-length arrays a block-scope
+    /// declarator's pointer points to, which run where the declaration is
+    /// reached (C99 6.8p3). Consumed by the declaration's site.
+    pub vm_bound_stores: alloc::vec::Vec<crate::c5::ast::ExprId>,
     /// True when the declarator's leading dimension was spelled `[0]`.
     /// Both `T x[0]` and `T x[]` reach the object allocators as
     /// `array_size == -1`, but they declare different objects: `[0]` is
@@ -1679,6 +1683,7 @@ impl Default for Pending {
             declarator_outer_restrict: false,
             vla_allowed: false,
             vla_dim_expr: None,
+            vm_bound_stores: alloc::vec::Vec::new(),
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             sizeof_vla_store: None,

@@ -373,7 +373,7 @@ Disassembly of section .text:
                	subq	$0x78, %rsp
                	pushq	%rbx
                	xorl	%ebx, %ebx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	%rbx, %rcx
                	shlq	$0x5, %rcx
                	leaq	(%rax,%rcx), %rdi

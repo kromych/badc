@@ -27,9 +27,12 @@
 // them, for the options whose interfaces the bundled headers declare. -1
 // is an option the library does not support; one it supports whose
 // interfaces are not declared here is left undefined. TODO: the XSI
-// conformance macros (_XOPEN_UNIX, _XOPEN_VERSION and the rest), whose
-// interfaces include <fmtmsg.h>, <ndbm.h>, <search.h>, <ulimit.h> and
-// <utmpx.h>, which are not bundled.
+// conformance macros (_XOPEN_UNIX, _XOPEN_VERSION and the rest), which
+// need the XSI interfaces still undeclared: nftw, the Bessel functions, the
+// System V signal calls, the 48-bit generators, a64l, initstate, memccpy,
+// ffs, getpriority, getrusage in <sys/resource.h>, mknod, utimes,
+// tcgetsid, getdate, gethostid, swab, encrypt and setkey; glibc ships no
+// <ndbm.h>.
 #if defined(__linux__)
 #define _POSIX_VERSION                     200809L
 #define _POSIX2_VERSION                    200809L

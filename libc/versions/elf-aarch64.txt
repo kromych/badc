@@ -41,6 +41,7 @@ abs                                      GLIBC_2.17
 accept                                   GLIBC_2.17
 accept4                                  GLIBC_2.17
 access                                   GLIBC_2.17
+addseverity                              GLIBC_2.17
 aio_cancel                               GLIBC_2.17
 aio_cancel64                             GLIBC_2.17
 aio_error                                GLIBC_2.17
@@ -77,6 +78,9 @@ bsearch                                  GLIBC_2.17
 btowc                                    GLIBC_2.17
 bzero                                    GLIBC_2.17
 calloc                                   GLIBC_2.17
+catclose                                 GLIBC_2.17
+catgets                                  GLIBC_2.17
+catopen                                  GLIBC_2.17
 cfgetispeed                              GLIBC_2.17
 cfgetospeed                              GLIBC_2.17
 cfmakeraw                                GLIBC_2.17
@@ -123,6 +127,7 @@ dup3                                     GLIBC_2.17
 endgrent                                 GLIBC_2.17
 endpwent                                 GLIBC_2.17
 endspent                                 GLIBC_2.17
+endutxent                                GLIBC_2.17
 epoll_create                             GLIBC_2.17
 epoll_create1                            GLIBC_2.17
 epoll_ctl                                GLIBC_2.17
@@ -168,6 +173,7 @@ flistxattr                               GLIBC_2.17
 flock                                    GLIBC_2.17
 flockfile                                GLIBC_2.17
 fmemopen                                 GLIBC_2.22  # minimum from libc/versions/minimums.txt
+fmtmsg                                   GLIBC_2.17
 fnmatch                                  GLIBC_2.17
 fopen                                    GLIBC_2.17
 fork                                     GLIBC_2.17
@@ -278,6 +284,11 @@ gettext                                  GLIBC_2.17
 gettid                                   GLIBC_2.30
 gettimeofday                             GLIBC_2.17
 getuid                                   GLIBC_2.17
+getutmp                                  GLIBC_2.17
+getutmpx                                 GLIBC_2.17
+getutxent                                GLIBC_2.17
+getutxid                                 GLIBC_2.17
+getutxline                               GLIBC_2.17
 getwc                                    GLIBC_2.17
 getwchar                                 GLIBC_2.17
 getxattr                                 GLIBC_2.17
@@ -286,6 +297,12 @@ globfree                                 GLIBC_2.17
 gmtime                                   GLIBC_2.17
 gmtime_r                                 GLIBC_2.17
 grantpt                                  GLIBC_2.17
+hcreate                                  GLIBC_2.17
+hcreate_r                                GLIBC_2.17
+hdestroy                                 GLIBC_2.17
+hdestroy_r                               GLIBC_2.17
+hsearch                                  GLIBC_2.17
+hsearch_r                                GLIBC_2.17
 hstrerror                                GLIBC_2.17
 htonl                                    GLIBC_2.17
 htons                                    GLIBC_2.17
@@ -307,6 +324,7 @@ inotify_add_watch                        GLIBC_2.17
 inotify_init                             GLIBC_2.17
 inotify_init1                            GLIBC_2.17
 inotify_rm_watch                         GLIBC_2.17
+insque                                   GLIBC_2.17
 ioctl                                    GLIBC_2.17
 isalnum                                  GLIBC_2.17
 isalpha                                  GLIBC_2.17
@@ -338,6 +356,7 @@ killpg                                   GLIBC_2.17
 lchmod                                   GLIBC_2.17
 lchown                                   GLIBC_2.17
 lckpwdf                                  GLIBC_2.17
+lfind                                    GLIBC_2.17
 lgetxattr                                GLIBC_2.17
 link                                     GLIBC_2.17
 linkat                                   GLIBC_2.17
@@ -353,6 +372,7 @@ lockf                                    GLIBC_2.17
 longjmp                                  GLIBC_2.17
 lrand48                                  GLIBC_2.17
 lremovexattr                             GLIBC_2.17
+lsearch                                  GLIBC_2.17
 lseek                                    GLIBC_2.17
 lsetxattr                                GLIBC_2.17
 lstat                                    GLIBC_2.33
@@ -583,6 +603,7 @@ putc_unlocked                            GLIBC_2.17
 putchar                                  GLIBC_2.17
 putenv                                   GLIBC_2.17
 puts                                     GLIBC_2.17
+pututxline                               GLIBC_2.17
 putwc                                    GLIBC_2.17
 putwchar                                 GLIBC_2.17
 pwrite                                   GLIBC_2.17
@@ -614,6 +635,7 @@ regexec                                  GLIBC_2.17
 regfree                                  GLIBC_2.17
 remove                                   GLIBC_2.17
 removexattr                              GLIBC_2.17
+remque                                   GLIBC_2.17
 rename                                   GLIBC_2.17
 renameat                                 GLIBC_2.17
 rewind                                   GLIBC_2.17
@@ -681,6 +703,7 @@ setsid                                   GLIBC_2.17
 setsockopt                               GLIBC_2.17
 setspent                                 GLIBC_2.17
 setuid                                   GLIBC_2.17
+setutxent                                GLIBC_2.17
 setvbuf                                  GLIBC_2.17
 setxattr                                 GLIBC_2.17
 shm_open                                 GLIBC_2.17
@@ -736,6 +759,7 @@ strcspn                                  GLIBC_2.17
 strdup                                   GLIBC_2.17
 strerror                                 GLIBC_2.17
 strerror_r                               GLIBC_2.17
+strfmon                                  GLIBC_2.17
 strftime                                 GLIBC_2.17
 strlen                                   GLIBC_2.17
 strncasecmp                              GLIBC_2.17
@@ -778,8 +802,11 @@ tcgetpgrp                                GLIBC_2.17
 tcsendbreak                              GLIBC_2.17
 tcsetattr                                GLIBC_2.17
 tcsetpgrp                                GLIBC_2.17
+tdelete                                  GLIBC_2.17
+tdestroy                                 GLIBC_2.17
 telldir                                  GLIBC_2.17
 textdomain                               GLIBC_2.17
+tfind                                    GLIBC_2.17
 time                                     GLIBC_2.17
 timer_create                             GLIBC_2.17
 timer_delete                             GLIBC_2.17
@@ -799,11 +826,15 @@ towctrans                                GLIBC_2.17
 towlower                                 GLIBC_2.17
 towupper                                 GLIBC_2.17
 truncate                                 GLIBC_2.17
+tsearch                                  GLIBC_2.17
 ttyname                                  GLIBC_2.17
 ttyname_r                                GLIBC_2.17
+twalk                                    GLIBC_2.17
+twalk_r                                  GLIBC_2.30
 tzname                                   GLIBC_2.17
 tzset                                    GLIBC_2.17
 ulckpwdf                                 GLIBC_2.17
+ulimit                                   GLIBC_2.17
 umask                                    GLIBC_2.17
 umount                                   GLIBC_2.17
 umount2                                  GLIBC_2.17
@@ -815,10 +846,12 @@ unlinkat                                 GLIBC_2.17
 unlockpt                                 GLIBC_2.17
 unsetenv                                 GLIBC_2.17
 unshare                                  GLIBC_2.17
+updwtmpx                                 GLIBC_2.17
 usleep                                   GLIBC_2.17
 utime                                    GLIBC_2.17
 utimensat                                GLIBC_2.17
 utimes                                   GLIBC_2.17
+utmpxname                                GLIBC_2.17
 valloc                                   GLIBC_2.17
 vasprintf                                GLIBC_2.17
 vdprintf                                 GLIBC_2.17
@@ -880,6 +913,8 @@ wmemcmp                                  GLIBC_2.17
 wmemcpy                                  GLIBC_2.17
 wmemmove                                 GLIBC_2.17
 wmemset                                  GLIBC_2.17
+wordexp                                  GLIBC_2.17
+wordfree                                 GLIBC_2.17
 wprintf                                  GLIBC_2.17
 write                                    GLIBC_2.17
 writev                                   GLIBC_2.17

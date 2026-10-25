@@ -1438,6 +1438,15 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("message_catalog_round_trip.c", 0),
+    ("strfmon_formats_in_the_c_locale.c", 0),
+    ("wordexp_splits_and_offsets_fields.c", 0),
+    ("search_tables_trees_and_queues.c", 0),
+    ("fmtmsg_writes_standard_error.c", 0),
+    ("ulimit_reports_the_file_size_limit.c", 0),
+    ("utmpx_reads_the_accounting_database.c", 0),
+    ("archive_format_constants.c", 0),
+    ("ndbm_store_fetch_round_trip.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -2502,6 +2511,15 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("message_catalog_round_trip.c", 0),
+    ("strfmon_formats_in_the_c_locale.c", 0),
+    ("wordexp_splits_and_offsets_fields.c", 0),
+    ("search_tables_trees_and_queues.c", 0),
+    ("fmtmsg_writes_standard_error.c", 0),
+    ("ulimit_reports_the_file_size_limit.c", 0),
+    ("utmpx_reads_the_accounting_database.c", 0),
+    ("archive_format_constants.c", 0),
+    ("ndbm_store_fetch_round_trip.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -3552,6 +3570,15 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("message_catalog_round_trip.c", 0),
+    ("strfmon_formats_in_the_c_locale.c", 0),
+    ("wordexp_splits_and_offsets_fields.c", 0),
+    ("search_tables_trees_and_queues.c", 0),
+    ("fmtmsg_writes_standard_error.c", 0),
+    ("ulimit_reports_the_file_size_limit.c", 0),
+    ("utmpx_reads_the_accounting_database.c", 0),
+    ("archive_format_constants.c", 0),
+    ("ndbm_store_fetch_round_trip.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -4372,6 +4399,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("search_tables_trees_and_queues.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -5125,6 +5153,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("search_tables_trees_and_queues.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -6182,6 +6211,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // thread-local block at run time.
     ("thread_local_const_fold.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    ("message_catalog_round_trip.c", 0),
+    ("strfmon_formats_in_the_c_locale.c", 0),
+    ("wordexp_splits_and_offsets_fields.c", 0),
+    ("archive_format_constants.c", 0),
+    ("ndbm_store_fetch_round_trip.c", 0),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

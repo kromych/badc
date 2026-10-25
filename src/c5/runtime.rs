@@ -68,6 +68,7 @@ pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
         include_str!("../../libc/lib/mbctype_ext.c"),
     ),
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
+    ("search_ext.c", include_str!("../../libc/lib/search_ext.c")),
     (
         "pthread_ext.c",
         include_str!("../../libc/lib/pthread_ext.c"),

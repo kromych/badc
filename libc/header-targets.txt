@@ -181,6 +181,16 @@ pthread.h	y	y	y	y	y
 semaphore.h	y	y	y	y	y
 mqueue.h	-	y	y	-	-
 aio.h	y	y	y	-	-
+nl_types.h	y	y	y	-	-
+monetary.h	y	y	y	-	-
+wordexp.h	y	y	y	-	-
+cpio.h	y	y	y	-	-
+tar.h	y	y	y	-	-
+fmtmsg.h	y	y	y	-	-
+search.h	y	y	y	y	y
+ulimit.h	y	y	y	-	-
+utmpx.h	y	y	y	-	-
+ndbm.h	y	-	-	-	-
 dlfcn.h	y	y	y	-	-
 fenv.h	y	y	y	y	y
 io.h	-	-	-	y	y

@@ -4,7 +4,7 @@
 
 #pragma once
 
-typedef int nl_item;
+#include <nl_types.h> // nl_item
 
 #ifdef __APPLE__
 #define CODESET 0

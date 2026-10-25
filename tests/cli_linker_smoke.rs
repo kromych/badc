@@ -1611,6 +1611,103 @@ fn a_pe_programs_subsystem_follows_its_entry_function_unless_stated() {
     }
 }
 
+/// A `-l` naming a part of the target's C library that no search path holds
+/// resolves through the C library badc describes, as gcc and clang find
+/// glibc's, libSystem's and on Windows libm and libpthread; a name the
+/// platform's toolchain does not resolve is still refused, and a library on
+/// `-L` still wins.
+#[test]
+fn a_c_library_part_named_by_l_links_without_a_sysroot() {
+    let dir = tempdir("c-library-parts");
+    write_source(
+        &dir,
+        "p.c",
+        "#include <math.h>\n#include <pthread.h>\n\
+         int main(int argc, char **argv)\n\
+         { (void)argv; return (int)sqrt(argc + 3.0) == 2 \
+           && pthread_equal(pthread_self(), pthread_self()) ? 0 : 1; }\n",
+    );
+    write_source(&dir, "e.c", "int extra(void) { return 7; }\n");
+    write_source(
+        &dir,
+        "x.c",
+        "int extra(void);\nint main(void) { return extra() - 7; }\n",
+    );
+    let host = match (
+        cfg!(target_os = "macos"),
+        cfg!(windows),
+        cfg!(target_arch = "aarch64"),
+    ) {
+        (true, _, _) => "macos-aarch64",
+        (_, true, true) => "windows-arm64",
+        (_, true, false) => "windows-x64",
+        (_, _, true) => "linux-aarch64",
+        _ => "linux-x64",
+    };
+    let elf: &[&str] = &["c", "m", "pthread", "dl", "rt", "util"];
+    for (target, parts, refused) in [
+        ("linux-x64", elf, "nosuch"),
+        ("linux-aarch64", elf, "nosuch"),
+        ("macos-aarch64", &["c", "m", "pthread", "dl"][..], "rt"),
+        ("windows-x64", &["m", "pthread"][..], "dl"),
+        ("windows-arm64", &["m", "pthread"][..], "dl"),
+    ] {
+        let t = format!("--target={target}");
+        let exe = dir.join(format!("p-{target}.exe"));
+        let ls: Vec<String> = parts.iter().map(|p| format!("-l{p}")).collect();
+        run(
+            Command::new(badc())
+                .args([t.as_str(), "-q", "p.c"])
+                .args(&ls)
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            &format!("{target} {ls:?}"),
+        );
+        if target == host {
+            let status = Command::new(&exe).status().expect("run");
+            assert_eq!(status.code(), Some(0), "{target}");
+        }
+        let out = Command::new(badc())
+            .args([t.as_str(), "-q", "p.c", &format!("-l{refused}"), "-o"])
+            .arg(&exe)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("cannot find"),
+            "{target}: {err}"
+        );
+        let lib = dir.join(target);
+        std::fs::create_dir_all(&lib).unwrap();
+        let obj = lib.join("e.o");
+        run(
+            Command::new(badc())
+                .args([t.as_str(), "-q", "-c", "e.c", "-o"])
+                .arg(&obj)
+                .current_dir(&dir),
+            "compile -c",
+        );
+        run(
+            Command::new(badc())
+                .args(["--ar", "rcs"])
+                .arg(lib.join("libm.a"))
+                .arg(&obj)
+                .current_dir(&dir),
+            "archive",
+        );
+        run(
+            Command::new(badc())
+                .args([t.as_str(), "-q", "x.c", "-lm", "-o"])
+                .arg(dir.join(format!("x-{target}.exe")))
+                .arg(format!("-L{}", lib.display()))
+                .current_dir(&dir),
+            &format!("{target} -L libm.a"),
+        );
+    }
+}
+
 /// A unit with each way C and gcc state a definition's visibility.
 const VISIBILITY_UNIT: &str = "int counter = 5;\n\
     static int local(void) { return 1; }\n\

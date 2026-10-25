@@ -102,6 +102,18 @@ pub(crate) fn foreign_object_reason(
     })
 }
 
+/// A `-l` naming a part of the target's C library, whose functions the bundled
+/// headers route, as gcc and clang resolve it: glibc's libc, libm, libpthread,
+/// libdl, librt and libutil; libSystem's libc, libm, libpthread and libdl; on
+/// Windows libm and libpthread, which the on-demand sources stand for.
+fn c_library_part(name: &str, target: Target) -> bool {
+    match target.binary_format() {
+        badc::BinaryFormat::Elf => matches!(name, "c" | "m" | "pthread" | "dl" | "rt" | "util"),
+        badc::BinaryFormat::MachO => matches!(name, "c" | "m" | "pthread" | "dl"),
+        badc::BinaryFormat::Pe => matches!(name, "m" | "pthread"),
+    }
+}
+
 /// The file names `-l<name>` looks for on `target`, in `ld`'s order:
 /// the unversioned shared library first, then the static archive. The
 /// shared spelling follows the target's container format -- `.so` for
@@ -601,6 +613,7 @@ impl Inputs {
                         std::process::exit(1);
                     }
                 }
+                None if !cli.freestanding && c_library_part(&name, cli.target) => {}
                 None => {
                     let spellings: Vec<String> =
                         if cli.target.binary_format() == badc::BinaryFormat::Pe {

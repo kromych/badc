@@ -1479,6 +1479,19 @@ fn builtin_overflow() {
 }
 
 #[test]
+fn builtin_overflow_mixed_signedness() {
+    // The exact value decides when an operand's signedness or width
+    // differs from the result's, for LP64 and LLP64.
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            run_fixture_for("builtin_overflow_mixed_signedness.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
 fn builtin_parity() {
     // GCC `__builtin_parity` / `__builtin_parityll`: odd-set-bit predicate
     // (`popcount(x) & 1`), constant and runtime.

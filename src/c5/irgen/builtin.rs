@@ -88,9 +88,27 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         let store_kind = store_kind_for(elem_ty, self.target);
         let w = type_size_bytes(elem_ty, self.target);
+        // The 64-bit forms are exact only for operands narrower than the
+        // register under a narrower result, and for operands of the
+        // result's signedness under a 64-bit one; anything else takes the
+        // 128-bit form, which tracks the exact value.
+        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
+        let operand = |id| expr_ty(self.ast.expr(id)).unwrap_or(Ty::Int as i64);
+        let (ta, tb) = (operand(a_expr), operand(b_expr));
+        // A non-negative constant reads the same at either signedness.
+        let same_sign = |id| {
+            matches!(self.ast.expr(id), crate::c5::ast::Expr::IntLit { val, .. } if *val >= 0)
+                || self.checked_operand_is_signed(id) != unsigned
+        };
+        let exact64 = if w < 8 {
+            type_size_bytes(ta, self.target) < 8 && type_size_bytes(tb, self.target) < 8
+        } else {
+            same_sign(a_expr) && same_sign(b_expr)
+        };
         if self.is_int128_value_ty(elem_ty)
             || self.expr_is_int128_value(a_expr)
             || self.expr_is_int128_value(b_expr)
+            || !exact64
         {
             return self.walk_checked_arith_128(b, op, a_expr, b_expr, dst_expr, elem_ty);
         }
@@ -103,7 +121,6 @@ impl<'a> Walker<'a> {
                 kind: "__builtin_*_overflow requires a 1/2/4/8-byte scalar type",
             });
         }
-        let unsigned = (elem_ty & UNSIGNED_BIT) != 0;
         let bin = match op {
             0 => BinOp::Add,
             1 => BinOp::Sub,

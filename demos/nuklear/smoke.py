@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Nuklear 4.13.3 with badc the way upstream's CI does, and run its
+"""Build Nuklear (setup.py's pin, past 4.13.3) with badc the way upstream's CI does, and run its
 demo windows headlessly against a host-compiler build.
 
 Upstream's CI (``.github/workflows/ccpp.yml``) regenerates ``nuklear.h``
@@ -47,8 +47,8 @@ from pathlib import Path
 
 DEMO_DIR = Path(__file__).resolve().parent
 REPO_ROOT = DEMO_DIR.parent.parent
-VERSION = "4.13.3"
-SRC = DEMO_DIR / ".cache" / f"Nuklear-{VERSION}"
+COMMIT = "a7353204d0f76fa38df9e9a2c02247b52c3bc878"
+SRC = DEMO_DIR / ".cache" / f"Nuklear-{COMMIT}"
 WIN = sys.platform == "win32"
 EXE = ".exe" if WIN else ""
 
@@ -144,10 +144,7 @@ def compile_sources(badc: Path, work: Path) -> None:
 
 
 # Demos that do not build, with the reason.
-BLOCKED_DEMOS = {
-    "gdi": "upstream demo/gdi/main.c does not compile: line 141 has an `else` "
-           "with no `if` (gcc 16 rejects it too)",
-}
+BLOCKED_DEMOS: dict[str, str] = {}
 
 
 def x11_demos(badc: Path, work: Path) -> None:

@@ -357,12 +357,13 @@ SOURCES = [
     ),
     Source(
         # Nuklear -- immediate-mode GUI. The asset is the upstream GitHub
-        # archive of the v4.13.3 tag, pinned by its own sha256.
+        # archive of commit a7353204d0, four past v4.13.3 (whose
+        # demo/gdi/main.c does not compile), pinned by its own sha256.
         name="nuklear",
-        version="4.13.3",
-        url="https://github.com/Immediate-Mode-UI/Nuklear/archive/refs/tags/v4.13.3.tar.gz",
+        version="a7353204d0",
+        url="https://github.com/Immediate-Mode-UI/Nuklear/archive/a7353204d0f76fa38df9e9a2c02247b52c3bc878.tar.gz",
         ext=".tar.gz",
-        upstream_sha="834bf30974a294e996f7b1222aa59f1eb4ee259bd8d7d7967e8a2fb213d82dde",
+        upstream_sha="fc259d261f0a0065bbb0805625ae18c0955a01cf1530646dec5e3334eb6dc8bf",
         sha_kind="tarball-sha256",
     ),
     Source(

@@ -1,6 +1,7 @@
 # Nuklear demo
 
-Builds [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) 4.13.3, the
+Builds [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) at commit
+`a7353204d0` (four past 4.13.3, whose `demo/gdi/main.c` does not compile), the
 single-header immediate-mode GUI library, with badc, checks what upstream's
 CI checks, and runs the upstream demo windows headlessly against a
 host-compiler build.
@@ -12,9 +13,10 @@ library, and compiles each `src/*.c` on its own
 (`.github/ci_compile_sources.sh`).
 
 The source tree is **not committed**: `setup.py` fetches the GitHub archive
-of tag v4.13.3 from the `kromych/badc` vendor-deps release (mirrored as
-`nuklear-4.13.3-834bf309.tar.gz`), verifies its sha256, and extracts it
-under `demos/nuklear/.cache/`. No patches.
+of that commit from the `kromych/badc` vendor-deps release (as
+`nuklear-a7353204d0-fc259d26.tar.gz`) or, while the release lacks it, from
+GitHub, verifies its sha256, and extracts it under `demos/nuklear/.cache/`.
+No patches.
 
 ## Files
 
@@ -43,17 +45,13 @@ and 1 with a line naming the failed step otherwise. It honours
 2. **Sources.** Compiles each of the 42 `src/*.c` with badc and the flags of
    `ci_compile_sources.sh` (`-std=c89 -Wall -Wextra -Wpedantic` and the
    `NK_INCLUDE_*` set), at -O0 and -O. The script's `-x c` is left out (the
-   `.c` suffix selects the same language) and its `-pedantic` is spelled
-   `-Wpedantic`; the driver refuses both spellings (issues
-   [#1326](https://github.com/kromych/badc/issues/1326),
-   [#1633](https://github.com/kromych/badc/issues/1633)).
+   `.c` suffix selects the same language; the driver refuses `-x`,
+   [#1326](https://github.com/kromych/badc/issues/1326)) and its `-pedantic`
+   is spelled `-Wpedantic`.
 3. **Demos.** Builds, at -O0 and -O, the demos whose library the host has
-   without a GPU: `demo/x11` against the host's libX11 on Linux, when the X11
-   development headers are installed. Build-only, as upstream's CI. Not
-   built yet: `demo/rawfb/x11` (no bundled `<sys/ipc.h>`,
-   [#1636](https://github.com/kromych/badc/issues/1636)) and `demo/gdi` on
-   Windows (no bundled `<wingdi.h>`,
-   [#1638](https://github.com/kromych/badc/issues/1638)). The demos that need
+   without a GPU: `demo/x11` and `demo/rawfb/x11` against the host's libX11
+   (and libXext) on Linux, when the X11 development headers are installed,
+   and `demo/gdi` on Windows. Build-only, as upstream's CI. The demos that need
    OpenGL, Vulkan, Direct3D, SDL, GLFW, Allegro, Wayland or cairo, and the
    GLFW example, are out of reach on a runner without those libraries.
 4. **Headless frames.** `headless.c` includes the library, the rawfb software

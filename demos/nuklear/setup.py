@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Fetch Nuklear from the badc vendor-deps mirror.
 
-Pins tag v4.13.3 of `Immediate-Mode-UI/Nuklear`. The asset on the
-`kromych/badc` release is the upstream GitHub archive of that tag, named
-after the release and the first 8 hex digits of the tarball's sha256;
+Pins commit a7353204d0 of `Immediate-Mode-UI/Nuklear`, four commits past
+tag v4.13.3: that release's demo/gdi/main.c does not compile (an `else
+if` without its opening brace), and this commit adds the brace. The asset
+is the upstream GitHub archive of the commit, named after the commit and
+the first 8 hex digits of the tarball's sha256, fetched from the
+`kromych/badc` release or, while the release lacks it, from GitHub;
 ``_fetch`` verifies the full digest before extraction, and the tree lands
-under ``demos/nuklear/.cache/Nuklear-4.13.3/``, used as upstream ships it.
+under ``demos/nuklear/.cache/Nuklear-<commit>/``, used as upstream ships it.
 See ``scripts/vendor_deps/README.md`` for the auth model.
 
 Idempotent: safe to call from CI before each smoke run. Re-extracts only
@@ -24,11 +27,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "4.13.3"
-SHA256 = "834bf30974a294e996f7b1222aa59f1eb4ee259bd8d7d7967e8a2fb213d82dde"
-ASSET = f"nuklear-{VERSION}-{SHA256[:8]}.tar.gz"
+COMMIT = "a7353204d0f76fa38df9e9a2c02247b52c3bc878"
+SHA256 = "fc259d261f0a0065bbb0805625ae18c0955a01cf1530646dec5e3334eb6dc8bf"
+ASSET = f"nuklear-{COMMIT[:10]}-{SHA256[:8]}.tar.gz"
+UPSTREAM_URL = f"https://github.com/Immediate-Mode-UI/Nuklear/archive/{COMMIT}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
-SRC_DIRNAME = f"Nuklear-{VERSION}"
+SRC_DIRNAME = f"Nuklear-{COMMIT}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     if cached and (src / "nuklear.h").is_file():
         log(f"done -- {src}")
         return 0
-    _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log)
+    _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tar_path, SHA256, log,
+                            fallback_url=UPSTREAM_URL)
 
     log("extracting")
     with tarfile.open(tar_path, "r:gz") as tf:

@@ -6,7 +6,7 @@
 # at or below the floor, else the oldest version it has, unless
 # libc/versions/minimums.txt raises it -- which it does only where
 # the older definition implements a different interface, and says so.
-# Reference library: ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39.
+# Reference library: ldd (GNU libc) 2.43.
 #
 # `[soname]` opens a library; each line under it names a symbol the
 # bundled headers bind to it and the version the image requires. `-`

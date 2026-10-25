@@ -10,15 +10,14 @@ use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
 use alloc::vec::Vec;
 
-/// Names that bind STB_WEAK as function definitions: `__attribute__((weak))`
-/// carriers and file-scope asm `.weak` names. Mirrors the set the object
-/// writers use to pick the symbol binding.
+/// Names that bind STB_WEAK as function definitions another unit's may
+/// replace: `weak` attributes and asm `.weak`, not pick-any definitions.
 fn weak_function_names(program: &Program) -> alloc::collections::BTreeSet<&str> {
     use crate::c5::token::Token;
     program
         .symbols
         .iter()
-        .filter(|s| s.is_weak && s.class == Token::Fun as i64 && !s.name.is_empty())
+        .filter(|s| s.is_weak && !s.pick_any && s.class == Token::Fun as i64 && !s.name.is_empty())
         .map(|s| s.def_link_name())
         .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
         .collect()

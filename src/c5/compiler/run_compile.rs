@@ -3175,10 +3175,17 @@ impl Compiler {
     /// the identifier stays an undefined external reference that every
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
+    /// On Windows an inline function's external definition is pick-any, as
+    /// MSVC and clang's `*-windows-msvc` emit an `IMAGE_COMDAT_SELECT_ANY`.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
+        let windows = self.target.is_windows();
         for sym in self.symbols.iter_mut() {
+            if sym.pick_any && !(sym.class == Token::Glo as i64 && sym.defined_here) {
+                sym.pick_any = false;
+            }
+            sym.is_weak |= sym.pick_any;
             // Only names this unit declared at file scope; the census
             // bits are the record of that, and symbols the parser
             // synthesizes keep whatever linkage they were built with.
@@ -3197,6 +3204,10 @@ impl Compiler {
             // collides with nothing the source can declare.
             if sym.is_inline_definition && sym.defined_here {
                 sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
+            }
+            if windows && sym.defined_here && !sym.is_inline_definition && !sym.is_gnu_inline {
+                sym.pick_any = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+                sym.is_weak |= sym.pick_any;
             }
         }
     }
@@ -3262,6 +3273,10 @@ impl Compiler {
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
         if self.pending.attrs.weak {
             self.symbols[id_idx].is_weak = true;
+        }
+        // Settled once the unit ends: only an object this unit defines is.
+        if self.pending.attrs.selectany {
+            self.symbols[id_idx].pick_any = true;
         }
         if self.pending.attrs.used {
             self.symbols[id_idx].is_used = true;

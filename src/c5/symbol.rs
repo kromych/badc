@@ -147,6 +147,10 @@ pub(crate) struct Symbol {
     /// reference links to address 0 instead of failing).
     pub is_weak: bool,
 
+    /// The link keeps any one unit's identical definition (MSVC's
+    /// `IMAGE_COMDAT_SELECT_ANY`); the object states it by `is_weak`.
+    pub pick_any: bool,
+
     /// `dllimport` on the declarations so far: references go through the
     /// import-address slot `__imp_<name>`.
     pub dllimport: bool,
@@ -952,6 +956,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             asm_name: _,   // an assembler symbol name, not an offset
             h_asm_name: _, // scope-restore shadow
             is_weak: _,
+            pick_any: _,
             dllimport: _,
             is_used,
             visibility: _,

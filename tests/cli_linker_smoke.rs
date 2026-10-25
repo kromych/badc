@@ -170,6 +170,97 @@ fn a_comdat_group_in_two_objects_links_once() {
     assert_eq!(status.code(), Some(0));
 }
 
+/// A header's `selectany` object and, on Windows, its inline function with a
+/// non-`inline` prototype (C99 6.7.4p7) link to one definition from two units;
+/// elsewhere GNU ld reports the function twice defined.
+#[test]
+fn a_headers_selectany_object_and_inline_function_link_once_per_program() {
+    let dir = tempdir("pick-any");
+    write_source(
+        &dir,
+        "sel.h",
+        "typedef struct { unsigned long a; unsigned short b, c; unsigned char d[8]; } GUID;\n\
+         __declspec(selectany) const GUID IID_Probe = {1, 2, 3, {4}};\n\
+         #ifdef WITH_INLINE\n\
+         int IsZero(const char *b, unsigned long long n);\n\
+         __forceinline int IsZero(const char *b, unsigned long long n)\n\
+         { while (n--) if (*b++) return 0; return 1; }\n\
+         #endif\n\
+         int other(void);\nconst void *iid_there(void);\nvoid *iszero_there(void);\n",
+    );
+    write_source(
+        &dir,
+        "sel1.c",
+        "#include \"sel.h\"\n\
+         int main(void) {\n\
+         #ifdef WITH_INLINE\n\
+         char z[4] = {0};\n\
+         if (!IsZero(z, 4) || iszero_there() != (void *)IsZero) return 2;\n\
+         #endif\n\
+         return !(IID_Probe.a == 1 && other() == 2 && iid_there() == &IID_Probe); }\n",
+    );
+    write_source(
+        &dir,
+        "sel2.c",
+        "#include \"sel.h\"\n\
+         int other(void) { return IID_Probe.b; }\n\
+         const void *iid_there(void) { return &IID_Probe; }\n\
+         #ifdef WITH_INLINE\n\
+         void *iszero_there(void) { return (void *)IsZero; }\n\
+         #endif\n",
+    );
+    let host = if cfg!(windows) && cfg!(target_arch = "x86_64") {
+        Some("windows-x64")
+    } else if cfg!(windows) {
+        Some("windows-arm64")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some("linux-x64")
+    } else if cfg!(target_os = "linux") {
+        Some("linux-aarch64")
+    } else {
+        None
+    };
+    let targets = ["windows-x64", "windows-arm64", "linux-x64", "linux-aarch64"];
+    for target in targets {
+        let t = format!("--target={target}");
+        let windows = target.starts_with("windows");
+        let define = if windows { "-DWITH_INLINE" } else { "-DPLAIN" };
+        for opt in ["-O0", "-O"] {
+            let badc_with = || {
+                let mut c = Command::new(badc());
+                c.args([&t, opt, define]).current_dir(&dir);
+                c
+            };
+            for unit in ["sel1", "sel2"] {
+                run(
+                    badc_with().args(["-c", &format!("{unit}.c"), "-o", &format!("{unit}.o")]),
+                    "compile -c",
+                );
+            }
+            for inputs in [["sel1.o", "sel2.o"], ["sel1.c", "sel2.c"]] {
+                let exe = dir.join(format!("sel{opt}-{}.exe", inputs[0]));
+                run(badc_with().args(inputs).arg("-o").arg(&exe), "link");
+                if host == Some(target) {
+                    let status = Command::new(&exe).status().expect("run the program");
+                    assert_eq!(status.code(), Some(0), "{target} {opt} {inputs:?}");
+                }
+            }
+        }
+        if !windows {
+            let out = Command::new(badc())
+                .args([&t, "-DWITH_INLINE", "sel1.c", "sel2.c", "-o", "dup.exe"])
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                err.contains("multiple definition of `IsZero`"),
+                "{target}: {err}"
+            );
+        }
+    }
+}
+
 /// A call to another unit's function whose result the caller returns is a
 /// sibling call at -O where the target takes one: the callee returns
 /// straight to the caller's caller, with the arguments the caller set.

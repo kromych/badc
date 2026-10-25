@@ -6752,7 +6752,9 @@ fn inline_linkage_follows_c99_6_7_4p7() {
     const STB_GLOBAL: u8 = 1;
 
     fn binding_of(src: &str, name: &str) -> u8 {
-        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, Default::default())
+            .compile()
+            .expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()

@@ -48,6 +48,7 @@ struct AttrFlags {
     gnu_inline: bool,
     naked: bool,
     weak: bool,
+    selectany: bool,
     used: bool,
     no_instrument_function: bool,
     no_stack_protector: bool,
@@ -74,6 +75,7 @@ impl AttrFlags {
         self.gnu_inline |= other.gnu_inline;
         self.naked |= other.naked;
         self.weak |= other.weak;
+        self.selectany |= other.selectany;
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
         self.no_stack_protector |= other.no_stack_protector;
@@ -1037,6 +1039,9 @@ impl Compiler {
                 // GNU `weak`: the defined (or declared) symbol binds
                 // STB_WEAK in the object's symbol table.
                 f.weak = true;
+            } else if n == "selectany" || n == "__selectany__" {
+                // MSVC and GCC: the link keeps any one unit's definition.
+                f.selectany = true;
             } else if n == "used" || n == "__used__" {
                 // GNU `used`: keep the definition in the object even when
                 // nothing in the unit references it.
@@ -1507,6 +1512,9 @@ impl Compiler {
         }
         if attrs.weak {
             self.pending.attrs.weak = true;
+        }
+        if attrs.selectany {
+            self.pending.attrs.selectany = true;
         }
         if attrs.used {
             self.pending.attrs.used = true;

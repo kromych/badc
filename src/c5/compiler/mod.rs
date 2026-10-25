@@ -1436,6 +1436,7 @@ pub(super) struct DeclAttrs {
     /// `uninitialized`: the object is left out of `-ftrivial-auto-var-init`.
     pub uninitialized: bool,
     pub weak: bool,
+    pub selectany: bool,
     /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
     /// target's own, including where the attribute is inert.
     pub call_conv: Option<crate::c5::codegen::CallConv>,

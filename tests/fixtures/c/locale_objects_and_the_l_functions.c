@@ -4,6 +4,7 @@
 // Each _l function of <ctype.h>, <wctype.h>, <string.h>, <strings.h>,
 // <time.h>, <monetary.h>, <wchar.h> and <langinfo.h> answers in that locale
 // as the C locale's rules say.
+// snapshot-budget: exempt
 
 #include <ctype.h>
 #include <langinfo.h>

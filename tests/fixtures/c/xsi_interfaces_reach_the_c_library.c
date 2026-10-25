@@ -6,6 +6,7 @@
 // conformance macros of <unistd.h>. The generators' and the signals'
 // process-wide state keeps it out of the JIT table, whose fixtures share a
 // process.
+// snapshot-budget: exempt
 
 #include <errno.h>
 #include <fcntl.h>

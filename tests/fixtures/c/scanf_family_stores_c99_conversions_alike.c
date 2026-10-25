@@ -6,6 +6,7 @@
 // wide function's %s stores multibyte characters, %ls wide ones in either
 // family, %p reads what printf's %p writes, and a stream keeps the
 // character that ends a field.
+// snapshot-budget: exempt
 
 #include <stdarg.h>
 #include <stdio.h>

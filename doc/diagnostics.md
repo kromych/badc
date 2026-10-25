@@ -51,6 +51,7 @@ regenerates.
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |
 | B1013 | `error-directive` | error | hard | - | a `#error` directive reached in an active conditional block |
 | B1014 | `macro` | error | hard | - | a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list |
+| B1015 | `macro-redefined` | warning | controllable | default | a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old |
 | B2001 | `unused-variable` | ignore | controllable | all | a variable declared and never used |
 | B2002 | `unused-parameter` | ignore | controllable | extra | a parameter never used in the function body |
 | B2003 | `unused-but-set-variable` | ignore | controllable | all | a variable that is only ever assigned to |

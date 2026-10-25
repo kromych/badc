@@ -2260,6 +2260,26 @@ fn jit_reads_binding_data_global() {
     );
 }
 
+/// A call to a function the unit declares, neither defines nor binds, and
+/// the loaded C library exports takes that export through a veneer, as a
+/// direct call and as a tail call; a native link takes it the same way.
+#[test]
+fn a_declared_c_library_function_runs_without_a_binding() {
+    let program = Compiler::new(
+        "int puts(const char *);\n\
+         int abs(int);\n\
+         static int tail(int x) { return abs(x); }\n\
+         int main(void) { return puts(\"\") < 0 || tail(-3) != 3; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(
+        jit_run(&program, &["jit-unbound-call".to_string()]).expect("run"),
+        0
+    );
+}
+
 /// Mirror the linker: a call to a declared-but-undefined extern must
 /// refuse to run instead of dispatching to whatever function sits at
 /// the placeholder-colliding ent_pc.

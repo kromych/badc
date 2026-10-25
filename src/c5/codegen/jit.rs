@@ -609,26 +609,12 @@ mod jit_impl {
         let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
-        // An extern call site left has no link step to resolve it, and would
-        // branch to the zeroed placeholder: refuse it as the linker would,
-        // unless the name is weak, which resolves to a null address.
         let weak = program.weak_link_names();
         let machine = if target.is_aarch64() {
             super::super::Machine::Aarch64
         } else {
             super::super::Machine::X86_64
         };
-        for site in core::mem::take(&mut build.user_extern_call_sites) {
-            if !weak.contains(site.symbol_name.as_str()) {
-                return Err(undefined_reference(&site.symbol_name));
-            }
-            if !weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset) {
-                return Err(C5Error::internal(format!(
-                    "JIT: the call to `{}` is not a branch",
-                    site.symbol_name
-                )));
-            }
-        }
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
         route_jit_data_imports(&mut build, &weak, machine)?;
@@ -636,6 +622,30 @@ mod jit_impl {
         // One slot per import, holding what dlsym finds, read as a loader's GOT.
         let mut got_region = GotRegion::new(build.imports.imports.len())?;
         got_region.bind_imports(&build.imports)?;
+        // A call to a function the unit declares and neither defines nor
+        // binds takes the loaded C library's export of that name, as a
+        // dynamic linker's lookup would; the JIT has no link step to join
+        // the C-library sources a native link offers. A weak name nothing
+        // exports is the null address; any other is refused.
+        for site in core::mem::take(&mut build.user_extern_call_sites) {
+            let name = site.symbol_name.as_str();
+            let addr = match atexit_thunk_addr(name) {
+                0 => got_region.resolve_symbol(name),
+                a => a,
+            };
+            let bound = if addr != 0 {
+                branch_to_veneer(machine, &mut build.text, site.instr_offset, addr)
+            } else if weak.contains(name) {
+                weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset)
+            } else {
+                return Err(undefined_reference(name));
+            };
+            if !bound {
+                return Err(C5Error::internal(format!(
+                    "JIT: the call to `{name}` is not a branch"
+                )));
+            }
+        }
         // A data import's slot must resolve, as the code dereferences it.
         for fx in &build.got_fixups {
             if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
@@ -1125,6 +1135,51 @@ mod jit_impl {
              the host runtime. Compile to a native image instead."
             ),
         )
+    }
+
+    /// Point the call or tail branch at `offset` to a veneer appended to
+    /// `text` that jumps to the absolute `addr`: `jmp [rip+0]` and the
+    /// address on x86-64, `ldr x16, #8; br x16` and the address on AArch64.
+    fn branch_to_veneer(
+        machine: super::super::Machine,
+        text: &mut Vec<u8>,
+        offset: usize,
+        addr: u64,
+    ) -> bool {
+        use super::super::Machine;
+        match machine {
+            Machine::X86_64 => {
+                let at = text.len();
+                let Ok(rel) = i32::try_from(at as i64 - (offset as i64 + 5)) else {
+                    return false;
+                };
+                if !matches!(text.get(offset), Some(0xE8 | 0xE9)) {
+                    return false;
+                }
+                text[offset + 1..offset + 5].copy_from_slice(&rel.to_le_bytes());
+                text.extend_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
+                text.extend_from_slice(&addr.to_le_bytes());
+                true
+            }
+            Machine::Aarch64 => {
+                text.resize((text.len() + 7) & !7, 0);
+                let at = text.len();
+                let Some(insn) = text.get(offset..offset + 4) else {
+                    return false;
+                };
+                let insn = u32::from_le_bytes([insn[0], insn[1], insn[2], insn[3]]);
+                let delta = (at as i64 - offset as i64) / 4;
+                if !matches!(insn & 0x7C00_0000, 0x1400_0000) || delta >= 1 << 25 {
+                    return false;
+                }
+                let patched = (insn & 0xFC00_0000) | (delta as u32 & 0x03FF_FFFF);
+                text[offset..offset + 4].copy_from_slice(&patched.to_le_bytes());
+                text.extend_from_slice(&0x5800_0050u32.to_le_bytes());
+                text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+                text.extend_from_slice(&addr.to_le_bytes());
+                true
+            }
+        }
     }
 
     /// Mirror the linker's undefined-symbol diagnostic wording.
@@ -1846,6 +1901,17 @@ mod jit_impl {
                 // Every handle joins the shared set so extern-data
                 // resolution searches exactly what import binding used;
                 // `owned` gates release in Drop.
+                self.lib_handles.push((h, owned));
+            }
+            // The C runtime joins the set as `dlopen(NULL)` does on POSIX,
+            // for the calls `resolve_symbol` answers that no binding names.
+            let crt = c"msvcrt.dll".as_ptr();
+            let mut h = unsafe { GetModuleHandleA(crt) };
+            let owned = h.is_null();
+            if owned {
+                h = unsafe { LoadLibraryA(crt) };
+            }
+            if !h.is_null() {
                 self.lib_handles.push((h, owned));
             }
             for (i, imp) in imports.imports.iter().enumerate() {

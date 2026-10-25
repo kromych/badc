@@ -343,8 +343,13 @@ fn ingest_linker_input(
 /// linker's archive pull-in decides which members to load. Only a
 /// section-resident definition is visible at pull-in time, so undefined
 /// and absolute symbols are dropped. `Err` is the parse diagnostic.
-pub(crate) fn native_defined_globals(bytes: &[u8], path: &str) -> Result<Vec<String>, String> {
-    let obj = badc::parse_native_object(bytes).map_err(|e| format!("badc: {path}: {e}"))?;
+pub(crate) fn native_defined_globals(
+    bytes: &[u8],
+    path: &str,
+    target: Target,
+) -> Result<Vec<String>, String> {
+    let obj = badc::parse_native_object_for(bytes, target_machine(target))
+        .map_err(|e| format!("badc: {path}: {e}"))?;
     Ok(obj
         .symbols
         .into_iter()

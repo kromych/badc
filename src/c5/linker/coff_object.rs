@@ -27,6 +27,8 @@ use crate::c5::object::elf_reloc_types::{
 
 const MODULE: &str = "linker::coff_object";
 
+/// The PE format's machine-independent object, which links on any machine.
+const IMAGE_FILE_MACHINE_UNKNOWN: u16 = 0;
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_MACHINE_ARM64EC: u16 = 0xA641;
@@ -195,18 +197,34 @@ fn read_header(bytes: &[u8]) -> Result<Header<'_>, C5Error> {
 }
 
 /// True when `bytes` is a COFF relocatable for a machine the reader names
-/// (x86-64, arm64), in the regular or the bigobj form. An image and an
+/// (x86-64, arm64, any), in the regular or the bigobj form. An image and an
 /// import-library member fail here.
 pub fn is_coff_object(bytes: &[u8]) -> bool {
     let machine = if bigobj(bytes) {
         u16le(bytes, 6)
+    } else if u16le(bytes, 2) == Some(0xFFFF) {
+        None
     } else {
         u16le(bytes, 0)
     };
     matches!(
         machine,
-        Some(IMAGE_FILE_MACHINE_AMD64 | IMAGE_FILE_MACHINE_ARM64)
+        Some(IMAGE_FILE_MACHINE_UNKNOWN | IMAGE_FILE_MACHINE_AMD64 | IMAGE_FILE_MACHINE_ARM64)
     ) && read_header(bytes).is_ok()
+}
+
+/// Whether an ARM64X archive's member joins a native arm64 link: the
+/// archive's `/` index lists its arm64 members, `/<ECSYMBOLS>/` the
+/// ARM64EC and x64 ones an ARM64EC image takes.
+pub fn is_arm64x_native_member(bytes: &[u8]) -> bool {
+    let machine = match (bigobj(bytes), is_coff_import_member(bytes)) {
+        (true, _) | (_, true) => u16le(bytes, 6),
+        _ => u16le(bytes, 0),
+    };
+    !matches!(
+        machine,
+        Some(IMAGE_FILE_MACHINE_AMD64 | IMAGE_FILE_MACHINE_ARM64EC)
+    )
 }
 
 fn cstr(table: &[u8], off: usize) -> Result<String, C5Error> {
@@ -1473,9 +1491,24 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
     Ok(lib)
 }
 
-/// Parse a COFF relocatable into the linker's native object model.
-pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
-    let h = read_header(bytes)?;
+/// Parse a COFF relocatable into the linker's native object model; a
+/// machine-independent object takes `link`'s machine.
+pub fn parse_native_coff(
+    bytes: &[u8],
+    link: Option<NativeMachine>,
+) -> Result<NativeObject, C5Error> {
+    let mut h = read_header(bytes)?;
+    if h.machine == IMAGE_FILE_MACHINE_UNKNOWN {
+        h.machine = match link {
+            Some(NativeMachine::X86_64) => IMAGE_FILE_MACHINE_AMD64,
+            Some(NativeMachine::Aarch64) => IMAGE_FILE_MACHINE_ARM64,
+            None => {
+                return Err(unsupported(
+                    "a machine-independent COFF object takes the machine of a link",
+                ));
+            }
+        };
+    }
     let machine = match h.machine {
         IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
         IMAGE_FILE_MACHINE_ARM64 => NativeMachine::Aarch64,
@@ -1738,7 +1771,7 @@ mod tests {
     }
 
     fn parse(secs: &[Sec], syms: &[super::build::Sym]) -> Result<NativeObject, C5Error> {
-        parse_native_coff(&object(AMD64, secs, syms))
+        parse_native_coff(&object(AMD64, secs, syms), None)
     }
 
     /// `REL32_k` measures from `k` bytes past the field's end, which the
@@ -2064,12 +2097,16 @@ mod tests {
         .to_string();
         assert!(err.contains("IMAGE_REL_AMD64_SECTION against `s`"), "{err}");
         assert!(err.ends_with("[B4001] [unsupported]"), "{err}");
-        let err = parse_native_coff(&object(0x014C, &[], &[]))
+        let err = parse_native_coff(&object(0x014C, &[], &[]), None)
             .unwrap_err()
             .to_string();
         assert!(err.contains("COFF machine 0x014c"), "{err}");
         assert!(!is_coff_object(&object(0x014C, &[], &[])));
         assert!(is_coff_object(&object(AMD64, &[], &[])));
+        let any = object(IMAGE_FILE_MACHINE_UNKNOWN, &[], &[]);
+        assert!(is_coff_object(&any) && parse_native_coff(&any, None).is_err());
+        let o = parse_native_coff(&any, Some(NativeMachine::Aarch64)).unwrap();
+        assert_eq!(o.machine, NativeMachine::Aarch64);
     }
 
     /// arm64 keeps an instruction form's addend in its immediate, in bytes
@@ -2104,17 +2141,20 @@ mod tests {
             (36, 0, 0x11),
         ];
         let tls = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE | 0x0030_0000;
-        let o = parse_native_coff(&object(
-            IMAGE_FILE_MACHINE_ARM64,
-            &[
-                with(sec(".text", TEXT, &code), &relocs),
-                sec(".tls$", tls, &[0; 4]),
-            ],
-            &[
-                sym("f", 0, 0, IMAGE_SYM_CLASS_EXTERNAL),
-                sym("t", 0, 2, IMAGE_SYM_CLASS_EXTERNAL),
-            ],
-        ))
+        let o = parse_native_coff(
+            &object(
+                IMAGE_FILE_MACHINE_ARM64,
+                &[
+                    with(sec(".text", TEXT, &code), &relocs),
+                    sec(".tls$", tls, &[0; 4]),
+                ],
+                &[
+                    sym("f", 0, 0, IMAGE_SYM_CLASS_EXTERNAL),
+                    sym("t", 0, 2, IMAGE_SYM_CLASS_EXTERNAL),
+                ],
+            ),
+            None,
+        )
         .unwrap();
         use crate::c5::object::elf_reloc_types::*;
         let got: Vec<_> = o.text_relocs.iter().map(|r| (r.rtype, r.addend)).collect();
@@ -2214,18 +2254,21 @@ mod tests {
         let mut words = alloc::vec![0u8; 8];
         words.extend_from_slice(&[0, 0, 0, 0]);
         words.extend_from_slice(&packed);
-        let o = parse_native_coff(&object(
-            IMAGE_FILE_MACHINE_ARM64,
-            &[
-                sec(".text", TEXT, &[0; 16]),
-                sec(".xdata", RDATA, &[4, 0, 0, 0]),
-                pdata(&[(0, 0, 2), (4, 1, 2), (8, 0, 2)], &words),
-            ],
-            &[
-                sym("f", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
-                sym("$x", 0, 2, IMAGE_SYM_CLASS_STATIC),
-            ],
-        ))
+        let o = parse_native_coff(
+            &object(
+                IMAGE_FILE_MACHINE_ARM64,
+                &[
+                    sec(".text", TEXT, &[0; 16]),
+                    sec(".xdata", RDATA, &[4, 0, 0, 0]),
+                    pdata(&[(0, 0, 2), (4, 1, 2), (8, 0, 2)], &words),
+                ],
+                &[
+                    sym("f", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                    sym("$x", 0, 2, IMAGE_SYM_CLASS_STATIC),
+                ],
+            ),
+            None,
+        )
         .unwrap();
         let data: Vec<_> = o.pe_unwind.iter().map(|e| e.data).collect();
         assert_eq!(
@@ -2262,7 +2305,7 @@ mod tests {
         big.extend_from_slice(&[0x20, 0, IMAGE_SYM_CLASS_EXTERNAL, 0]);
         big.extend_from_slice(&4u32.to_le_bytes());
         assert!(is_coff_object(&big));
-        let o = parse_native_coff(&big).unwrap();
+        let o = parse_native_coff(&big, None).unwrap();
         assert_eq!(
             (o.symbols[1].name.as_str(), o.symbols[1].kind),
             ("f", STT_FUNC)

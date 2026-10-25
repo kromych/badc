@@ -12098,7 +12098,7 @@ fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
             &[sec(".data", 0xC040_1040, &[value, 0, 0, 0]), slot],
             &[def, sym("shared", 0, 1, external)],
         );
-        parse_native_coff(&bytes).expect("parse the COFF object")
+        parse_native_coff(&bytes, None).expect("parse the COFF object")
     };
     let opts = LinkOptions {
         allow_undefined: true,
@@ -12162,7 +12162,7 @@ fn a_coff_inputs_unwind_entries_join_the_exception_directory() {
             sym("g", 16, 1, external),
         ],
     );
-    let obj = parse_native_coff(&coff).expect("parse the COFF object");
+    let obj = parse_native_coff(&coff, None).expect("parse the COFF object");
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
@@ -12269,7 +12269,7 @@ fn coff_image_relative_addresses_take_their_rvas() {
             sym("obj", 0, 3, external),
         ],
     );
-    let obj = parse_native_coff(&coff).expect("parse the COFF object");
+    let obj = parse_native_coff(&coff, None).expect("parse the COFF object");
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,

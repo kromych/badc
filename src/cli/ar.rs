@@ -62,7 +62,10 @@ fn write_members(path: &str, members: &[badc::ArchiveMember], index: bool) {
     let symbols: Vec<(usize, Vec<String>)> = if index {
         (members.iter().enumerate())
             .filter(|(_, m)| badc::is_native_object(&m.bytes))
-            .filter_map(|(i, m)| Some((i, native_defined_globals(&m.bytes, &m.name).ok()?)))
+            .filter_map(|(i, m)| {
+                let defined = native_defined_globals(&m.bytes, &m.name, badc::Target::host());
+                Some((i, defined.ok()?))
+            })
             .collect()
     } else {
         Vec::new()

@@ -412,6 +412,27 @@ fn write_ar_header(out: &mut Vec<u8>, name_field: &str, size: usize) {
     write_struct(out, &hdr);
 }
 
+/// True when the archive carries the `/<ECSYMBOLS>/` index of an ARM64X
+/// library, which follows the `/` indexes and the `//` name table.
+pub fn is_arm64x_archive(blob: &[u8]) -> bool {
+    let mut at = 8;
+    while blob.get(..8) == Some(b"!<arch>\n") {
+        let Ok(h) = read_header(blob, at) else {
+            return false;
+        };
+        let name = trim_ascii(&h.name);
+        let Ok(size) = parse_dec(&trim_ascii(&h.size), "size") else {
+            return false;
+        };
+        match name.as_str() {
+            "/<ECSYMBOLS>/" => return true,
+            "/" | "//" => at += AR_HEADER_SIZE + size + (size & 1),
+            _ => return false,
+        }
+    }
+    false
+}
+
 fn trim_ascii(bytes: &[u8]) -> String {
     let end = bytes
         .iter()

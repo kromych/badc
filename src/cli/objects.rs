@@ -148,7 +148,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let compiled = compile_units(sources, workers, |_, src| {
         let (mut log, res) = compile_object_tu(src, &cfg);
         match res {
-            Ok(bytes) => match native_defined_globals(&bytes, src) {
+            Ok(bytes) => match native_defined_globals(&bytes, src, cli.target) {
                 Ok(defined) => (log, Ok((bytes, defined))),
                 Err(e) => {
                     log.diag(cfg.stderr_is_tty, e);
@@ -188,7 +188,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             ));
             std::process::exit(1);
         }
-        let defined = match native_defined_globals(&bytes, obj_path) {
+        let defined = match native_defined_globals(&bytes, obj_path, cli.target) {
             Ok(d) => d,
             Err(e) => {
                 eprint_diagnostic(e);

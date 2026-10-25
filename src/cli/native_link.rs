@@ -427,7 +427,7 @@ impl EmbeddedSources<'_> {
 
 /// Parse the object `label` names, refusing one foreign to `target`.
 fn parse_input_object(bytes: &[u8], label: String, target: badc::Target) -> badc::NativeObject {
-    let mut o = badc::parse_native_object(bytes).unwrap_or_else(|e| {
+    let mut o = badc::parse_native_object_for(bytes, target_machine(target)).unwrap_or_else(|e| {
         eprint_diagnostic(format!("badc: {label}: {e}"));
         std::process::exit(1);
     });
@@ -495,10 +495,14 @@ fn read_archive_members(
     };
     let mut out = Vec::with_capacity(members.len());
     let mut imports = Vec::new();
+    let arm64x = !target.is_x86_64() && badc::is_arm64x_archive(&bytes);
     for m in members {
         // A member may itself be a fat object (`lipo` output
         // archived as-is).
         let member_bytes = fat_slice_for_target(m.bytes, target);
+        if arm64x && !badc::is_arm64x_native_member(&member_bytes) {
+            continue;
+        }
         if badc::is_coff_import_member(&member_bytes) {
             match badc::parse_import_member(&member_bytes) {
                 Ok(None) => {}

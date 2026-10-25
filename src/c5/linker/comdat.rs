@@ -162,6 +162,7 @@ mod tests {
     fn unit(source: &str, groups: &[(&str, u8, u64, u32)]) -> NativeObject {
         let mut o = crate::c5::linker::coff_object::parse_native_coff(
             &crate::c5::linker::coff_object::build::object(0x8664, &[], &[]),
+            None,
         )
         .unwrap();
         o.source = source.into();

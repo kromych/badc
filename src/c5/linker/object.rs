@@ -1251,10 +1251,23 @@ pub fn is_native_object(bytes: &[u8]) -> bool {
 /// Parse a relocatable object of any format the linker reads,
 /// dispatching on the leading magic.
 pub fn parse_native_object(bytes: &[u8]) -> Result<NativeObject, C5Error> {
+    parse_object_on(bytes, None)
+}
+
+/// [`parse_native_object`] for a link on `machine`, which a
+/// machine-independent COFF object takes.
+pub fn parse_native_object_for(
+    bytes: &[u8],
+    machine: NativeMachine,
+) -> Result<NativeObject, C5Error> {
+    parse_object_on(bytes, Some(machine))
+}
+
+fn parse_object_on(bytes: &[u8], link: Option<NativeMachine>) -> Result<NativeObject, C5Error> {
     if super::mach_o_object::is_mach_o_object(bytes) {
         super::mach_o_object::parse_native_mach_o(bytes)
     } else if super::coff_object::is_coff_object(bytes) {
-        super::coff_object::parse_native_coff(bytes)
+        super::coff_object::parse_native_coff(bytes, link)
     } else {
         parse_native_elf(bytes)
     }

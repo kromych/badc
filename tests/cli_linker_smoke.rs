@@ -4970,6 +4970,150 @@ fn a_pe_link_leaves_the_c_runtime_default_libraries_to_its_runtime() {
     }
 }
 
+/// A COFF object for `machine`: `sections` of `(name, characteristics,
+/// content)` and external `symbols` of `(name, 1-based section, is a
+/// function)`, each at the start of its section.
+fn coff_object(
+    machine: u16,
+    sections: &[(&str, u32, &[u8])],
+    symbols: &[(&str, i16, bool)],
+) -> Vec<u8> {
+    let name8 = |name: &str| {
+        let mut field = [0u8; 8];
+        field[..name.len()].copy_from_slice(name.as_bytes());
+        field
+    };
+    let mut at = 20 + 40 * sections.len();
+    let data: Vec<u8> = sections.iter().flat_map(|s| s.2.iter().copied()).collect();
+    let mut out = machine.to_le_bytes().to_vec();
+    out.extend((sections.len() as u16).to_le_bytes());
+    out.extend(0u32.to_le_bytes());
+    out.extend(((at + data.len()) as u32).to_le_bytes());
+    out.extend((symbols.len() as u32).to_le_bytes());
+    out.extend([0; 4]);
+    for &(name, flags, content) in sections {
+        out.extend(name8(name));
+        out.extend([0; 8]);
+        out.extend((content.len() as u32).to_le_bytes());
+        out.extend((at as u32).to_le_bytes());
+        out.extend([0; 12]);
+        out.extend(flags.to_le_bytes());
+        at += content.len();
+    }
+    out.extend(data);
+    for &(name, section, function) in symbols {
+        out.extend(name8(name));
+        out.extend(0u32.to_le_bytes());
+        out.extend(section.to_le_bytes());
+        out.extend(u16::from(function).wrapping_mul(0x20).to_le_bytes());
+        // IMAGE_SYM_CLASS_EXTERNAL, no auxiliary record.
+        out.extend([2, 0]);
+    }
+    out.extend(4u32.to_le_bytes());
+    out
+}
+
+/// An archive in lib.exe's layout: the two `/` indexes and, for an ARM64X
+/// library, `/<ECSYMBOLS>/`, ahead of `members`.
+fn lib_archive(members: &[(&str, Vec<u8>)], arm64x: bool) -> Vec<u8> {
+    let mut out = b"!<arch>\n".to_vec();
+    let mut add = |name: &str, body: &[u8]| {
+        let header = format!(
+            "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            0,
+            0,
+            0,
+            644,
+            body.len()
+        );
+        out.extend(header.as_bytes());
+        out.extend(body);
+        if body.len() % 2 == 1 {
+            out.push(b'\n');
+        }
+    };
+    add("/", &[0; 4]);
+    add("/", &[0; 8]);
+    if arm64x {
+        add("/<ECSYMBOLS>/", &[0; 4]);
+    }
+    for (name, body) in members {
+        add(&format!("{name}/"), body);
+    }
+    out
+}
+
+/// A PE link takes from an archive the members link.exe gives its machine:
+/// of an ARM64X library, whose `pick` exists for arm64, ARM64EC and x64,
+/// the arm64 one; and on either machine an `IMAGE_FILE_MACHINE_UNKNOWN`
+/// object, which the PE format applies to any machine, here holding data
+/// and a `.debug$S` section.
+#[test]
+fn an_archive_gives_a_pe_link_the_members_for_its_machine() {
+    let dir = tempdir("pe-archive-machines");
+    write_source(
+        &dir,
+        "main.c",
+        "int pick(void);\nextern const int any_data;\n\
+         int main(void) { return pick() + any_data - 47; }\n",
+    );
+    const TEXT: u32 = 0x6030_0020;
+    const RDATA: u32 = 0x4030_0040;
+    const DEBUG: u32 = 0x4210_0040;
+    let any = coff_object(
+        0,
+        &[
+            (".rdata", RDATA, &42u32.to_le_bytes()),
+            (".debug$S", DEBUG, &4u32.to_le_bytes()),
+        ],
+        &[("any_data", 1, false)],
+    );
+    // `pick` returns 5 on arm64 and x64, 9 on ARM64EC.
+    let arm64 = [0x5280_00A0u32, 0xD65F_03C0].map(u32::to_le_bytes).concat();
+    let arm64ec = [0x5280_0120u32, 0xD65F_03C0].map(u32::to_le_bytes).concat();
+    let x64 = [0xB8, 5, 0, 0, 0, 0xC3];
+    let pick =
+        |machine, code: &[u8]| coff_object(machine, &[(".text", TEXT, code)], &[("pick", 1, true)]);
+    let arm64x = [
+        ("ec.obj", pick(0xA641, &arm64ec)),
+        ("x64.obj", pick(0x8664, &x64)),
+        ("a64.obj", pick(0xAA64, &arm64)),
+        ("any.obj", any.clone()),
+    ];
+    std::fs::write(dir.join("arm64x.lib"), lib_archive(&arm64x, true)).unwrap();
+    let plain = [("x64.obj", pick(0x8664, &x64)), ("any.obj", any)];
+    std::fs::write(dir.join("x64.lib"), lib_archive(&plain, false)).unwrap();
+    let host = if cfg!(target_arch = "aarch64") {
+        "windows-arm64"
+    } else {
+        "windows-x64"
+    };
+    for (target, lib, code) in [
+        ("windows-arm64", "arm64x.lib", &arm64[..]),
+        ("windows-x64", "x64.lib", &x64[..]),
+    ] {
+        let exe = dir.join(format!("{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["main.c", lib, "-o"])
+                .arg(&exe)
+                .current_dir(&dir),
+            &format!("link for {target}"),
+        );
+        let image = std::fs::read(&exe).unwrap();
+        let holds = |code: &[u8]| image.windows(code.len()).any(|w| w == code);
+        assert!(
+            holds(code) && !holds(&arm64ec),
+            "{target}: another member's `pick`"
+        );
+        if cfg!(windows) && target == host {
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "{target}");
+        }
+    }
+}
+
 // Build-only (cross-compiles a Windows PE from any host). A
 // NATIVE-subsystem driver runs no `_start` CRT stub, so the
 // libc-`exit` runtime wrapper is not linked and the image

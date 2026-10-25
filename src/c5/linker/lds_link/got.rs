@@ -10,9 +10,9 @@ use hashbrown::{HashMap, HashSet};
 use super::inputs::RawReloc;
 use super::preempt::Reach;
 use super::{
-    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHF_ALLOC, SHF_EXECINSTR,
-    SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT,
-    SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
+    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, R_NONE, SHF_ALLOC,
+    SHF_EXECINSTR, SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_LOCAL, STB_WEAK, STT_SECTION,
+    STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
 };
 
 /// A relocation writing a whole load address into a field narrower
@@ -61,6 +61,15 @@ pub(super) fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
         EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
         EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
         _ => matches!(rtype, rt::R_X86_64_PC32 | rt::R_X86_64_PLT32),
+    }
+}
+
+/// A branch to its target: the call forms a PLT entry serves.
+pub(super) fn branch(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
+        EM_386 => rtype == rt::R_386_PLT32,
+        _ => rtype == rt::R_X86_64_PLT32,
     }
 }
 
@@ -134,17 +143,7 @@ impl<'a> LdsLinker<'a> {
             .map(|a| a.symbol.as_str())
             .filter(|s| *s != ".")
             .collect();
-        // An executable linked against a library makes an undefined weak
-        // reference dynamic where it reaches the symbol through the GOT,
-        // as bfd does; the loader writes 0 or a library's definition.
-        let through_got: HashSet<&str> = (self.objects.iter())
-            .flat_map(|o| {
-                (o.sections.iter().flat_map(|s| &s.relocs))
-                    .filter(|r| reloc_uses_got(self.machine, r.rtype))
-                    .filter_map(|r| o.symbols.get(r.sym as usize))
-                    .map(|s| s.name.as_str())
-            })
-            .collect();
+        let weak_dynamic = self.dynamic_weak_names();
         let mut names: BTreeSet<&str> = BTreeSet::new();
         let mut strong: BTreeSet<&str> = BTreeSet::new();
         for (oi, o) in self.objects.iter().enumerate() {
@@ -155,7 +154,7 @@ impl<'a> LdsLinker<'a> {
                     && !self.globals.contains_key(&s.name)
                     && !script_defined.contains(s.name.as_str())
                     && (self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(&s.name))
-                    || (self.opts.shared || through_got.contains(s.name.as_str()))
+                    || (self.opts.shared || weak_dynamic.contains(s.name.as_str()))
                         && self.undefweak_dynamic(oi, si)
                 {
                     names.insert(&s.name);
@@ -203,6 +202,50 @@ impl<'a> LdsLinker<'a> {
         self.import_of = index_map(&self.imports);
     }
 
+    /// The undefined weak names an executable linked against a library
+    /// makes dynamic, as bfd does, so that a component the loader finds
+    /// can define them: those it reaches through the GOT or a call, and in
+    /// an aarch64 PIE through an address-width word. x86 resolves one
+    /// that code also addresses directly to 0 instead.
+    fn dynamic_weak_names(&self) -> HashSet<String> {
+        let pie = self.opts.emit == LdsEmit::Dyn;
+        let mut reached: HashSet<&str> = HashSet::new();
+        let mut addressed: HashSet<&str> = HashSet::new();
+        for o in &self.objects {
+            for s in &o.sections {
+                let code = s.flags & (SHF_ALLOC | SHF_EXECINSTR) == SHF_ALLOC | SHF_EXECINSTR;
+                for r in &s.relocs {
+                    let Some(sym) = o.symbols.get(r.sym as usize) else {
+                        continue;
+                    };
+                    let word = pie
+                        && self.machine == EM_AARCH64
+                        && r.rtype == rt::R_AARCH64_ABS64
+                        && s.flags & SHF_ALLOC != 0;
+                    if reloc_uses_got(self.machine, r.rtype)
+                        || branch(self.machine, r.rtype)
+                        || word
+                    {
+                        reached.insert(&sym.name);
+                    } else if code && self.machine != EM_AARCH64 && r.rtype != R_NONE {
+                        addressed.insert(&sym.name);
+                    }
+                }
+            }
+        }
+        (reached.into_iter())
+            .filter(|n| !addressed.contains(n))
+            .map(String::from)
+            .collect()
+    }
+
+    /// Whether `name` is an import no library defines: an undefined weak
+    /// reference the link made dynamic.
+    pub(super) fn undefined_weak_import(&self, name: &str) -> bool {
+        self.weak_imports.contains(name)
+            && !(self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(name))
+    }
+
     /// Whether `r`, in a section with `flags`, takes the address of the
     /// function import `name` in an executable, which then gives the
     /// function a PLT entry: `Some(true)` where the entry is the
@@ -228,12 +271,14 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Whether a PC-relative field naming the import `name` takes a
-    /// dynamic relocation of its own type: in a shared object, and for a
-    /// function in an i386 PIE, as GNU ld links them.
+    /// dynamic relocation of its own type: in a shared object, for a
+    /// function in an i386 PIE, and for an undefined weak name in a PIE,
+    /// as GNU ld links them.
     pub(super) fn import_pc_dynamic(&self, name: &str, rtype: u32) -> bool {
-        let i386_pie = self.machine == EM_386 && self.opts.emit == LdsEmit::Dyn;
+        let pie = self.opts.emit == LdsEmit::Dyn;
+        let i386_function = self.machine == EM_386 && self.is_function_export(name);
         x86_pc_field(self.machine, rtype)
-            && (self.opts.shared || i386_pie && self.is_function_export(name))
+            && (self.opts.shared || pie && (i386_function || self.undefined_weak_import(name)))
     }
 
     /// Whether an address-width word naming the canonical import `name`
@@ -560,6 +605,12 @@ impl<'a> LdsLinker<'a> {
     pub(super) fn slot_value(&self, key: &GotKey) -> Option<u64> {
         match key {
             GotKey::Global(name) if self.preemptible.contains(name) => None,
+            // An undefined weak name the link keeps local holds 0.
+            GotKey::Global(name)
+                if !self.globals.contains_key(name) && !self.import_of.contains_key(name) =>
+            {
+                Some(self.resolve_name(name).unwrap_or(0))
+            }
             GotKey::Global(name) => self.resolve_name(name),
             GotKey::Local(oi, si) => self.resolve_sym_prevpass(*oi, *si as usize, 0),
         }

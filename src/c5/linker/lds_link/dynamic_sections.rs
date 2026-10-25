@@ -182,10 +182,14 @@ impl<'a> LdsLinker<'a> {
                 // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     let name = &self.objects[id.obj].symbols[r.sym as usize].name;
-                    if self.undefweak_dynamic(id.obj, r.sym as usize)
-                        || self.import_of.contains_key(name)
-                            && !self.word_binds_canonical(name)
-                            && !self.word_binds_copy(name)
+                    // A position-dependent executable's word naming an
+                    // undefined weak import holds 0, as bfd writes it.
+                    let pde_weak =
+                        self.opts.emit == LdsEmit::Exec && self.undefined_weak_import(name);
+                    if self.import_of.contains_key(name)
+                        && !self.word_binds_canonical(name)
+                        && !self.word_binds_copy(name)
+                        && !pde_weak
                     {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,

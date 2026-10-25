@@ -13,7 +13,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::GotKey;
+use super::got::{GotKey, branch};
 use super::inputs::RawReloc;
 use super::{
     EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS, SHT_NOTE, STB_LOCAL,
@@ -250,6 +250,22 @@ impl<'a> LdsLinker<'a> {
             }
         }
         out
+    }
+
+    /// Whether a shared object's branch reaches an undefined weak symbol,
+    /// which it imports through a PLT entry.
+    pub(super) fn calls_undefined_weak(&self) -> bool {
+        self.opts.shared
+            && (self.objects.iter().enumerate()).any(|(oi, o)| {
+                (o.sections.iter().enumerate())
+                    .filter(|(si, _)| !self.comdat_dropped.contains(&(oi, *si)))
+                    .flat_map(|(_, s)| &s.relocs)
+                    .any(|r| {
+                        branch(self.machine, r.rtype)
+                            && (r.sym as usize) < o.symbols.len()
+                            && self.undefweak_dynamic(oi, r.sym as usize)
+                    })
+            })
     }
 
     /// Whether a branch reaches a preemptible definition, so the link

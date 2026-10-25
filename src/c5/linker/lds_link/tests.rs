@@ -3883,10 +3883,11 @@ fn emit_relocs_keeps_the_entries_relocations_name() {
     assert!(rows.iter().any(|(n, _, _)| n == ".Lstr"));
 }
 
-/// An unresolved default-visibility weak reference keeps
-/// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for
-/// its GOT entry) instead of resolving statically; a hidden global
-/// is emitted with local binding in a dynamic link.
+/// A shared object's unresolved default-visibility weak reference keeps
+/// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for its GOT
+/// entry), where a PIE linked against no library resolves it to 0 with
+/// none, as GNU ld 2.46.1 links them; a hidden global is emitted with
+/// local binding in a dynamic link.
 #[test]
 fn undefweak_keeps_symbol_entries_and_hidden_forces_local() {
     let script = parse_linker_script(
@@ -3920,14 +3921,29 @@ SECTIONS {
         .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
         .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
         .build(EM_AARCH64);
-    let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
-    let opts = LdsOptions {
-        emit: LdsEmit::Dyn,
-        pack_relative_relocs: true,
-        max_page_size: 0x10000,
-        ..Default::default()
+    let link = |shared: bool| {
+        let objs = alloc::vec![parse_lds_object("a.o", a.clone()).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            shared,
+            pack_relative_relocs: true,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        link_with_script(&script, objs, &opts).expect("links")
     };
-    let res = link_with_script(&script, objs, &opts).expect("links");
+    let pie = link(false).image;
+    let rela_size = |img: &[u8]| {
+        readelf_sections(img)
+            .iter()
+            .find(|s| s.0 == ".rela.dyn")
+            .map(|s| s.3)
+    };
+    assert!(
+        rela_size(&pie).is_none_or(|n| n == 0),
+        "a PIE resolves it to 0"
+    );
+    let res = link(true);
     let secs = readelf_sections(&res.image);
     let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
     assert_eq!(rela.3, 48, "GLOB_DAT for the GOT slot + ABS64 at the site");
@@ -7226,5 +7242,134 @@ fn the_archive_index_lists_an_elf_objects_definitions_in_either_class() {
         let bytes = o.build_class(if wide { EM_X86_64 } else { EM_386 }, class, wide);
         let names = crate::c5::linker::archive::elf_archive_symbols(&bytes).expect("reads");
         assert_eq!(names, ["g", "w", "u", "c", "a"], "{class:?}");
+    }
+}
+
+/// `_start` calling `wf`, an undefined weak name, through `call wf@PLT`;
+/// where `addressed`, `movl $wf, %eax` takes its address first.
+fn weak_caller(addressed: bool) -> Vec<u8> {
+    let body = [0xb8, 0, 0, 0, 0, 0xe8, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), section(1), _start(2), wf(3).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 11)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 6, 3, rt::R_X86_64_PLT32, -4);
+    if addressed {
+        o.reloc(0, 1, 3, rt::R_X86_64_32, 0)
+    } else {
+        o
+    }
+    .build(EM_X86_64)
+}
+
+/// An executable linked against a library calls an undefined weak name
+/// through a PLT entry its `JUMP_SLOT` binds, the name a weak undefined
+/// `.dynsym` row, so that a library the loader finds can define it; one
+/// its code also addresses directly resolves to 0, call and all. A shared
+/// object linked against no library imports it the same way. GNU ld
+/// 2.46.1 links each so on x86-64.
+#[test]
+fn an_undefined_weak_function_an_executable_calls_takes_a_plt_entry() {
+    let link = |emit: LdsEmit, shared: bool, addressed: bool| {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", weak_caller(addressed)).expect("parses");
+        let libs = if shared {
+            Vec::new()
+        } else {
+            alloc::vec![shared_input("libc.so.6", &["foo"], &[])]
+        };
+        let opts = LdsOptions {
+            emit,
+            shared,
+            interp: (!shared).then(|| String::from("/lib64/ld-linux-x86-64.so.2")),
+            ..dynamic_opts(libs)
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image
+    };
+    for (emit, shared) in [
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Exec, false),
+        (LdsEmit::Dyn, true),
+    ] {
+        let what = alloc::format!("{emit:?} shared={shared}");
+        let img = link(emit, shared, false);
+        let wf = dynsym_entries(&img).into_iter().find(|s| s.0 == "wf");
+        assert_eq!(
+            wf.map(|s| s.1),
+            Some((STB_WEAK << 4) | STT_NOTYPE),
+            "{what}"
+        );
+        let (plt, _) = image_section(&img, ".plt");
+        let (t, text) = image_section(&img, ".text");
+        assert_eq!(
+            t as i64 + 10 + u32_at(&text, 6) as i32 as i64,
+            plt as i64 + 16,
+            "{what}"
+        );
+        let (_, rela) = image_section(&img, ".rela.plt");
+        let slots = rela_entries(&rela);
+        assert_eq!(slots.len(), 1, "{what}");
+        assert_eq!(slots[0].2, rt::R_X86_64_JUMP_SLOT, "{what}");
+    }
+    let img = link(LdsEmit::Exec, false, true);
+    assert!(dynsym_entries(&img).iter().all(|s| s.0 != "wf"));
+    let (t, text) = image_section(&img, ".text");
+    assert_eq!(u32_at(&text, 1), 0, "the address is 0");
+    assert_eq!(
+        t as i64 + 10 + u32_at(&text, 6) as i32 as i64,
+        0,
+        "the call reaches 0"
+    );
+}
+
+/// An aarch64 PIE linked against a library exports an undefined weak name
+/// a data word holds, which takes an `R_AARCH64_ABS64` naming it; a
+/// position-dependent executable writes 0 with no relocation, as GNU ld
+/// 2.46.1 links them.
+#[test]
+fn an_aarch64_pie_exports_an_undefined_weak_name_a_data_word_holds() {
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    let unit = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc0, 0x03, 0x5f, 0xd6],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+        .build(EM_AARCH64);
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", unit.clone()).expect("parses");
+        let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+        lib.lib.machine = EM_AARCH64;
+        let opts = LdsOptions {
+            emit,
+            interp: Some(String::from("/lib/ld-linux-aarch64.so.1")),
+            max_page_size: 0x10000,
+            ..dynamic_opts(alloc::vec![lib])
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let (data, word) = image_section(&img, ".data");
+        let relocs = match section_addr(&img, ".rela.dyn") {
+            Some(_) => dyn_relocs(&img),
+            None => Vec::new(),
+        };
+        if emit == LdsEmit::Dyn {
+            let want = (data, rt::R_AARCH64_ABS64, String::from("wf"), 0);
+            assert!(relocs.contains(&want), "{relocs:?}");
+        } else {
+            assert!(relocs.iter().all(|r| r.0 != data), "{relocs:?}");
+            assert_eq!(u64::from_le_bytes(word[..8].try_into().unwrap()), 0);
+        }
     }
 }

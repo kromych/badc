@@ -231,6 +231,11 @@ impl<'a> LdsLinker<'a> {
                 if let Some(copy) = self.copy_addr(&sym.name) {
                     return Some(copy.wrapping_add(r.addend as u64));
                 }
+                // An executable resolves an undefined weak import's other
+                // references to 0, as for one the link keeps local.
+                if !self.opts.shared && self.undefined_weak_import(&sym.name) {
+                    return Some(r.addend as u64);
+                }
                 errors.push(format!(
                     "{}: {} against `{}' cannot reach a shared library; \
                      the reference needs a GOT slot or a call",

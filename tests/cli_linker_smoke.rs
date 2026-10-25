@@ -13381,6 +13381,141 @@ fn a_missing_library_input_or_script_is_reported_in_gnu_lds_words() {
     }
 }
 
+// An executable linked against a library that does not define a weak
+// function it calls reaches it through a PLT entry the loader binds, so a
+// library of that name found at run time that defines it serves the call;
+// a call guarded by the function's address, loaded through the GOT, skips
+// it where no library defines it.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+#[test]
+fn a_weak_function_an_executable_calls_binds_to_the_library_found_at_run_time() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping: no system C compiler");
+        return;
+    };
+    let dir = tempdir("weak-call");
+    let sys = "#ifdef __x86_64__\n\
+         #define SYS_WRITE 1\n#define SYS_EXIT 60\n\
+         #else\n\
+         #define SYS_WRITE 64\n#define SYS_EXIT 93\n\
+         #endif\n\
+         static void sys(long n, long a, long b, long c) {\n\
+         #ifdef __x86_64__\n\
+           __asm__ volatile(\"syscall\" : \"+a\"(n) : \"D\"(a), \"S\"(b), \"d\"(c) \
+             : \"rcx\", \"r11\", \"memory\");\n\
+         #else\n\
+           register long x8 __asm__(\"x8\") = n, x0 __asm__(\"x0\") = a;\n\
+           register long x1 __asm__(\"x1\") = b, x2 __asm__(\"x2\") = c;\n\
+           __asm__ volatile(\"svc 0\" : \"+r\"(x0) : \"r\"(x8), \"r\"(x1), \"r\"(x2) : \"memory\");\n\
+         #endif\n\
+         }\n\
+         int lf(void);\n__attribute__((weak)) int wf(void);\n\
+         #ifdef __x86_64__\n\
+         __attribute__((force_align_arg_pointer))\n\
+         #endif\n\
+         void _start(void) {\n";
+    let tail = "  char b[3] = {'0' + v / 10 % 10, '0' + v % 10, '\\n'};\n\
+         sys(SYS_WRITE, 1, (long)b, 3);\n  sys(SYS_EXIT, 0, 0, 0);\n}\n";
+    write_source(&dir, "none.c", "int lf(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "def.c",
+        "int lf(void) { return 1; }\nint wf(void) { return 7; }\n",
+    );
+    write_source(
+        &dir,
+        "call.c",
+        &format!("{sys}  int v = lf() * 10 + wf();\n{tail}"),
+    );
+    write_source(
+        &dir,
+        "guard.c",
+        &format!("{sys}  int v = wf ? wf() : 9;\n{tail}"),
+    );
+    let (emulation, loader) = if cfg!(target_arch = "x86_64") {
+        ("elf_x86_64", "/lib64/ld-linux-x86-64.so.2")
+    } else {
+        ("aarch64linux", "/lib/ld-linux-aarch64.so.1")
+    };
+    for (src, pic, obj) in [
+        ("none.c", "-fPIC", "none.o"),
+        ("def.c", "-fPIC", "def.o"),
+        ("call.c", "-fPIE", "call-pie.o"),
+        ("call.c", "-fno-pie", "call-pdep.o"),
+        ("guard.c", "-fPIE", "guard-pie.o"),
+    ] {
+        run(
+            Command::new(&cc)
+                .args(["-O1", "-ffreestanding", "-fno-stack-protector"])
+                .args(["-fno-asynchronous-unwind-tables", pic, "-c", src, "-o", obj])
+                .current_dir(&dir),
+            "compile",
+        );
+    }
+    let ld = |args: &[&str], what: &str| {
+        run(
+            Command::new(badc())
+                .args(["--ld", "-m", emulation])
+                .args(args)
+                .current_dir(&dir),
+            what,
+        )
+    };
+    for (obj, sub) in [("none.o", "none"), ("def.o", "def")] {
+        std::fs::create_dir_all(dir.join(sub)).expect("mkdir");
+        let out = format!("{sub}/libone.so");
+        ld(
+            &["-shared", "-soname", "libone.so", obj, "-o", &out],
+            "link a library",
+        );
+    }
+    for (obj, kind) in [
+        ("call-pie.o", "-pie"),
+        ("call-pdep.o", "-no-pie"),
+        ("guard-pie.o", "-pie"),
+    ] {
+        let exe = obj.replace(".o", "");
+        ld(
+            &[
+                kind,
+                "-dynamic-linker",
+                loader,
+                obj,
+                "none/libone.so",
+                "-o",
+                &exe,
+            ],
+            "link the executable",
+        );
+    }
+    if !Path::new(loader).exists() {
+        eprintln!("no {loader}: the executables are linked, not run");
+        return;
+    }
+    for (exe, libs, want) in [
+        ("call-pie", "def", "17\n"),
+        ("call-pdep", "def", "17\n"),
+        ("guard-pie", "none", "09\n"),
+        ("guard-pie", "def", "07\n"),
+    ] {
+        let out = run(
+            Command::new(loader)
+                .arg("--library-path")
+                .arg(dir.join(libs))
+                .arg(dir.join(exe)),
+            "run the executable",
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            want,
+            "{exe} with {libs}"
+        );
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

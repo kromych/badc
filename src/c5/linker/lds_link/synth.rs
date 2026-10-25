@@ -81,7 +81,9 @@ impl<'a> LdsLinker<'a> {
                 (sec.size, sec.addralign) = (size, align);
             }
         }
-        let plt = !self.opts.shared_libs.is_empty() || self.calls_preemptible();
+        let plt = !self.opts.shared_libs.is_empty()
+            || self.calls_preemptible()
+            || self.calls_undefined_weak();
         if plt {
             let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
             let synth = self.synth_obj;

@@ -744,16 +744,24 @@ fn collect_inputs<T: InputObject>(
         Ok(members.into_iter().map(|m| (m.name, m.bytes)).collect())
     };
     // GNU ld takes the first directory holding either spelling, and
-    // prefers the shared one there unless the search is static.
-    let find_lib = |name: &str, shared: bool| -> Result<PathBuf, i32> {
+    // prefers the shared one there unless the search is static. A file
+    // built for another machine than `want` is skipped, as bfd skips it.
+    let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Result<PathBuf, i32> {
         for dir in &a.lib_paths {
             let so = dir.join(format!("lib{name}.so"));
-            if shared && so.is_file() {
-                return Ok(so);
-            }
             let ar = dir.join(format!("lib{name}.a"));
-            if ar.is_file() {
-                return Ok(ar);
+            for candidate in [so].into_iter().filter(|_| shared).chain([ar]) {
+                if !candidate.is_file() {
+                    continue;
+                }
+                if want.is_some_and(|m| !built_for(&candidate, m)) {
+                    eprintln!(
+                        "badc-ld: skipping incompatible {} when searching for -l{name}",
+                        candidate.display()
+                    );
+                    continue;
+                }
+                return Ok(candidate);
             }
         }
         Err(ld_err(format!("cannot find -l{name}")))
@@ -803,7 +811,8 @@ fn collect_inputs<T: InputObject>(
                 continue;
             }
             InputItem::Lib(name) => {
-                path_owned = find_lib(name, search_shared)?;
+                let want = machine.or_else(|| objs.first().map(|o| o.machine()));
+                path_owned = find_lib(name, search_shared, want)?;
                 &path_owned
             }
             // A name a linker script gave without a directory is
@@ -1010,6 +1019,27 @@ fn strip_comments(text: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// Whether the file at `path` can enter a link for `machine`: an ELF image
+/// of that machine, an archive whose first ELF member is one, or anything
+/// else, a linker script among it. bfd's search judges an archive by the
+/// same member.
+fn built_for(path: &Path, machine: u16) -> bool {
+    let elf_machine = |b: &[u8]| {
+        (b.len() >= 20 && b.starts_with(b"\x7fELF")).then(|| u16::from_le_bytes([b[18], b[19]]))
+    };
+    let Ok(bytes) = std::fs::read(path) else {
+        return true;
+    };
+    if let Some(m) = elf_machine(&bytes) {
+        return m == machine;
+    }
+    if !bytes.starts_with(b"!<arch>\n") && !bytes.starts_with(b"!<thin>\n") {
+        return true;
+    }
+    let members = archive::read_archive_at(&bytes, path.parent()).unwrap_or_default();
+    (members.iter().find_map(|m| elf_machine(&m.bytes))).is_none_or(|m| m == machine)
 }
 
 /// True when the bytes are an ELF shared object.

@@ -12519,6 +12519,101 @@ fn the_ld_persona_refuses_a_library_built_for_another_machine() {
     }
 }
 
+// GNU ld's -l search skips a library built for another machine than the
+// link's, with "skipping incompatible <path> when searching for -l<name>",
+// and searches on: to the archive in the same directory, then to the next
+// directory. An archive is judged by its first object.
+#[test]
+fn the_ld_persona_searches_past_an_incompatible_library() {
+    let dir = tempdir("lib-search");
+    write_source(&dir, "lib.s", ".globl f\n.type f,@function\nf: ret\n");
+    write_source(&dir, "main.s", ".globl _start\n_start: call f\n");
+    for sub in ["d64", "d32", "mix"] {
+        std::fs::create_dir_all(dir.join(sub)).expect("mkdir");
+    }
+    let tool = |args: &[&str], what: &str| {
+        run(Command::new(badc()).args(args).current_dir(&dir), what);
+    };
+    tool(
+        &["-q", "-c", "--target=linux-x64", "lib.s", "-o", "f64.o"],
+        "assemble x86-64",
+    );
+    tool(
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-m32",
+            "lib.s",
+            "-o",
+            "f32.o",
+        ],
+        "assemble i386",
+    );
+    tool(
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-m32",
+            "main.s",
+            "-o",
+            "m.o",
+        ],
+        "assemble the program",
+    );
+    for (em, obj, out) in [
+        ("elf_x86_64", "f64.o", "d64/libx.so"),
+        ("elf_i386", "f32.o", "d32/libx.so"),
+        ("elf_x86_64", "f64.o", "mix/libz.so"),
+    ] {
+        tool(
+            &["--ld", "-m", em, "-shared", obj, "-o", out],
+            "link a library",
+        );
+    }
+    // An `ar` archive of one member, in the common format.
+    let archive = |obj: &str, out: &str| {
+        let body = std::fs::read(dir.join(obj)).expect("read the object");
+        let name = format!("{obj}/");
+        let head = format!(
+            "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            0,
+            0,
+            0,
+            644,
+            body.len()
+        );
+        let mut a = b"!<arch>\n".to_vec();
+        a.extend(head.bytes());
+        a.extend(&body);
+        if a.len() % 2 == 1 {
+            a.push(b'\n');
+        }
+        std::fs::write(dir.join(out), a).expect("write the archive");
+    };
+    archive("f64.o", "d64/liby.a");
+    archive("f32.o", "d32/liby.a");
+    archive("f32.o", "mix/libz.a");
+    for (dirs, lib, skipped) in [
+        (&["-Ld64", "-Ld32"][..], "-lx", "d64/libx.so"),
+        (&["-Ld64", "-Ld32"], "-ly", "d64/liby.a"),
+        (&["-Lmix"], "-lz", "mix/libz.so"),
+    ] {
+        let out = Command::new(badc())
+            .args(["--ld", "-m", "elf_i386", "m.o"])
+            .args(dirs)
+            .args([lib, "-o", "prog"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc --ld");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{lib}: {err}");
+        let want = format!("skipping incompatible {skipped} when searching for {lib}");
+        assert!(err.contains(&want), "{lib}: {err}");
+    }
+}
+
 /// `(type, symbol)` of every dynamic relocation of an ELF32 image, sorted.
 #[cfg(target_os = "linux")]
 fn elf32_dynamic_relocs(path: &Path) -> Vec<(u32, String)> {

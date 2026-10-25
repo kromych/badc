@@ -18,8 +18,8 @@
 #pragma binding(msvcrt::_ungetwch, "_ungetwch")
 #pragma binding(msvcrt::_kbhit,    "_kbhit")
 
-// `_getwch`/`_getwche`/`_ungetwch` return `wint_t`; badc encodes that
-// as `int` (<wchar.h>), wide enough for any `wchar_t` plus `WEOF`.
+// `_getwch`/`_getwche`/`_ungetwch` return `wint_t` (<wchar.h>), the C
+// runtime's `unsigned short`, with WEOF 0xFFFF.
 int    _getch(void);
 int    _getche(void);
 wint_t _getwch(void);

@@ -623,7 +623,9 @@ fn the_code_model_predefine_names_the_selected_model() {
 /// Sizes and underlying types the layout engine fixes across targets:
 /// `long double` takes the target ABI's storage size (16 on both Linux
 /// targets, 8 elsewhere; no `__float80` / `__float128` exists to
-/// describe), `wint_t` is the bundled <wchar.h>'s `int`, a bare
+/// describe), `wint_t` is the bundled <wchar.h>'s `int` and on Windows
+/// the C runtime's `unsigned short` (gcc for x86_64-w64-mingw32 predefines
+/// `short unsigned int` and 2), a bare
 /// `__attribute__((aligned))` resolves to 16, and `__WCHAR_TYPE__`
 /// agrees with `__SIZEOF_WCHAR_T__` on every target.
 /// `__CHAR16_TYPE__` / `__CHAR32_TYPE__` name the types C11
@@ -640,20 +642,30 @@ fn type_size_predefines_match_the_layout_engine() {
         "#if defined(__SIZEOF_FLOAT80__) || defined(__SIZEOF_FLOAT128__)\n",
         "phantom-float\n#endif\n",
     );
-    for (t, wchar, ld) in [
-        (Target::LinuxX64, "int = 4", 16),
-        (Target::LinuxAarch64, "unsigned int = 4", 16),
-        (Target::MacOSAarch64, "int = 4", 8),
-        (Target::WindowsX64, "unsigned short = 2", 8),
-        (Target::WindowsAarch64, "unsigned short = 2", 8),
+    for (t, wchar, ld, (wint, wint_size)) in [
+        (Target::LinuxX64, "int = 4", 16, ("int", 4)),
+        (Target::LinuxAarch64, "unsigned int = 4", 16, ("int", 4)),
+        (Target::MacOSAarch64, "int = 4", 8, ("int", 4)),
+        (
+            Target::WindowsX64,
+            "unsigned short = 2",
+            8,
+            ("unsigned short", 2),
+        ),
+        (
+            Target::WindowsAarch64,
+            "unsigned short = 2",
+            8,
+            ("unsigned short", 2),
+        ),
     ] {
         let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
         let out = pp.process(probe).expect("preprocessor failed");
         assert!(
-            out.contains(&format!("ld {ld} wint 4 align 16 .")),
+            out.contains(&format!("ld {ld} wint {wint_size} align 16 .")),
             "{t:?}: {out}"
         );
-        assert!(out.contains("winttype int ."), "{t:?}: {out}");
+        assert!(out.contains(&format!("winttype {wint} .")), "{t:?}: {out}");
         assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
         assert!(
             out.contains("c16 unsigned short c32 unsigned int ."),
@@ -5499,7 +5511,7 @@ fn width_predefines_follow_the_targets_types() {
         ),
         (
             Target::WindowsX64,
-            "w 8 16 32 32 64 64 64 64 64 8 16 32 64 8 32 32 64 32 16 32",
+            "w 8 16 32 32 64 64 64 64 64 8 16 32 64 8 32 32 64 32 16 16",
         ),
     ] {
         let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");

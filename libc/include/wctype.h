@@ -4,9 +4,13 @@
 
 // `wint_t` and `WEOF` mirror <wchar.h> (C99 7.25.1). A repeated
 // same-type typedef is harmless when both headers are included.
-typedef int wint_t;
+typedef __WINT_TYPE__ wint_t;
 #ifndef WEOF
+#ifdef _WIN32
+#define WEOF ((wint_t)0xFFFF)
+#else
 #define WEOF ((wint_t)-1)
+#endif
 #endif
 
 // `wctype_t`/`wctrans_t` hold the opaque property and mapping handles

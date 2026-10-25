@@ -9,10 +9,15 @@
 // and as a 16-bit unit anywhere under `-fshort-wchar`.
 #include <stddef.h>
 
-// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1). It is a
-// 4-byte integer on the supported Unix targets.
-typedef int wint_t;
+// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1): `int` on
+// the Unix targets, and on Windows the C runtime's `unsigned short`, whose
+// WEOF is 0xFFFF.
+typedef __WINT_TYPE__ wint_t;
+#ifdef _WIN32
+#define WEOF ((wint_t)0xFFFF)
+#else
 #define WEOF ((wint_t)-1)
+#endif
 
 // Conversion state for the restartable multibyte functions (C99
 // 7.24.1). The contents are opaque; the host libc reads only the bytes
@@ -107,6 +112,21 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(msvcrt::_i64tow,  "_i64tow")
 #pragma binding(msvcrt::_ui64tow, "_ui64tow")
 #pragma binding(msvcrt::_vscwprintf, "_vscwprintf")
+#pragma binding(msvcrt::fgetwc,   "fgetwc")
+#pragma binding(msvcrt::fputwc,   "fputwc")
+#pragma binding(msvcrt::getwc,    "getwc")
+#pragma binding(msvcrt::putwc,    "putwc")
+#pragma binding(msvcrt::ungetwc,  "ungetwc")
+#pragma binding(msvcrt::getwchar, "getwchar")
+#pragma binding(msvcrt::putwchar, "putwchar")
+struct __c5_FILE;
+wint_t fgetwc(struct __c5_FILE *stream);
+wint_t fputwc(wchar_t c, struct __c5_FILE *stream);
+wint_t getwc(struct __c5_FILE *stream);
+wint_t putwc(wchar_t c, struct __c5_FILE *stream);
+wint_t ungetwc(wint_t c, struct __c5_FILE *stream);
+wint_t getwchar(void);
+wint_t putwchar(wchar_t c);
 wchar_t *_itow(int value, wchar_t *dst, int radix);
 wchar_t *_ltow(long value, wchar_t *dst, int radix);
 wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);

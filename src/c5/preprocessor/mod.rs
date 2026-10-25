@@ -844,6 +844,15 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     let (max, umax) = limits(intptr);
     macros.insert("__PTRDIFF_MAX__".to_string(), max);
     macros.insert("__SIZE_MAX__".to_string(), umax);
+    // `wint_t`: the bundled <wchar.h>'s `int`, and on Windows the C runtime's
+    // `unsigned short`, which gcc for x86_64-w64-mingw32 predefines too.
+    let (wint, wint_size) = if target.is_windows() {
+        ("unsigned short", "2")
+    } else {
+        ("int", "4")
+    };
+    macros.insert("__WINT_TYPE__".to_string(), wint.to_string());
+    macros.insert("__SIZEOF_WINT_T__".to_string(), wint_size.to_string());
     // gcc's `__<T>_WIDTH__`, each the width of the type predefined for `T`.
     let bits = |ty: &str| match ty {
         "short" => 16,
@@ -870,7 +879,7 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
         ("INT_FAST32", bits(fast32)),
         ("INT_FAST64", 64),
         ("SIG_ATOMIC", 32),
-        ("WINT", 32),
+        ("WINT", if target.is_windows() { 16 } else { 32 }),
     ] {
         macros.insert(format!("__{name}_WIDTH__"), width.to_string());
     }
@@ -971,9 +980,6 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__SIZEOF_LONG_LONG__", "8"),
             ("__SIZEOF_FLOAT__", "4"),
             ("__SIZEOF_DOUBLE__", "8"),
-            // `wint_t` is the bundled <wchar.h>'s `int` everywhere.
-            ("__WINT_TYPE__", "int"),
-            ("__SIZEOF_WINT_T__", "4"),
             // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t`
             // and `char32_t` is `uint_least32_t`, the types `u'c'` and
             // `U'c'` take. Neither tracks `wchar_t`.

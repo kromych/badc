@@ -240,6 +240,8 @@
 #define ENOSYS          40
 #define ENOTEMPTY       41
 #define EILSEQ          42
+// The truncation report of the bounds-checked copies under _TRUNCATE.
+#define STRUNCATE       80
 #define ETXTBSY         139
 #define EADDRINUSE      100
 #define EADDRNOTAVAIL   101

@@ -67,6 +67,14 @@ int       chdir(const char *path);
 int       chmod(const char *path, int mode);
 char     *mktemp(char *templ);
 
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_access_s, "_access_s")
+errno_t _access_s(const char *_Filename, int _AccessMode);
+#pragma binding(msvcrt::_mktemp_s, "_mktemp_s")
+errno_t _mktemp_s(char *_TemplateName, size_t _Size);
+
 #define _S_IREAD  0x0100
 #define _S_IWRITE 0x0080
 

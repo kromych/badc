@@ -1903,6 +1903,171 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
     }
 }
 
+/// `<tchar.h>`'s bounds-checked generic-text names, as mingw-w64's
+/// `sec_api/tchar_s.h` maps them, each resolve for both Windows targets under
+/// `_UNICODE`, `_MBCS` (with and without `_MB_MAP_DIRECT`) and neither, and
+/// import msvcrt.dll's entry point; the names over function-like macros are
+/// called.
+#[test]
+fn windows_tchar_bounds_checked_names_reach_msvcrt() {
+    const M: &str = "msvcrt.dll";
+    const NARROW: &[&str] = &[
+        "_tprintf_s",
+        "_tprintf_s_l",
+        "_tcprintf_s",
+        "_tcprintf_s_l",
+        "_vtcprintf_s",
+        "_vtcprintf_s_l",
+        "_ftprintf_s",
+        "_ftprintf_s_l",
+        "_stprintf_s",
+        "_stprintf_s_l",
+        "_sntprintf_s",
+        "_sntprintf_s_l",
+        "_vtprintf_s",
+        "_vtprintf_s_l",
+        "_vftprintf_s",
+        "_vftprintf_s_l",
+        "_vstprintf_s",
+        "_vstprintf_s_l",
+        "_vsntprintf_s",
+        "_vsntprintf_s_l",
+        "_tscanf_s",
+        "_tscanf_s_l",
+        "_tcscanf_s",
+        "_tcscanf_s_l",
+        "_ftscanf_s",
+        "_ftscanf_s_l",
+        "_stscanf_s",
+        "_stscanf_s_l",
+        "_sntscanf_s",
+        "_sntscanf_s_l",
+        "_cgetts_s",
+        "_itot_s",
+        "_ltot_s",
+        "_ultot_s",
+        "_i64tot_s",
+        "_ui64tot_s",
+        "_tcscat_s",
+        "_tcscpy_s",
+        "_tcserror_s",
+        "__tcserror_s",
+        "_tasctime_s",
+        "_tctime_s",
+        "_tctime32_s",
+        "_tctime64_s",
+        "_tstrdate_s",
+        "_tstrtime_s",
+        "_tgetenv_s",
+        "_tmakepath_s",
+        "_tputenv_s",
+        "_tsearchenv_s",
+        "_tsplitpath_s",
+        "_tfopen_s",
+        "_tfreopen_s",
+        "_ttmpnam_s",
+        "_tmktemp_s",
+        "_taccess_s",
+        "_tsopen_s",
+    ];
+    const STRINGS: &[&str] = &[
+        "_tcsncat_s",
+        "_tcsncpy_s",
+        "_tcstok_s",
+        "_tcsset_s",
+        "_tcsnccat_s",
+        "_tcsnccpy_s",
+        "_tcsncset_s",
+        "_tcslwr_s",
+        "_tcslwr_s_l",
+        "_tcsupr_s",
+        "_tcsupr_s_l",
+    ];
+    const MBCS_LOCALE: &[&str] = &[
+        "_tcsncat_s_l",
+        "_tcsncpy_s_l",
+        "_tcstok_s_l",
+        "_tcsset_s_l",
+        "_tcsnccat_s_l",
+        "_tcsnccpy_s_l",
+        "_tcsncset_s_l",
+    ];
+    const MBCS_DIRECT: &[&str] = &["_tcsnset_s", "_tcsnset_s_l", "_tccpy_s", "_tccpy_s_l"];
+    const NSET: &[&str] = &["_tcsnset_s"];
+    // Over the function-like _str*_s_l / _wcs*_s_l macros of tchar_s.h; the
+    // wide set has the _wcstok_s_l one besides.
+    const CALLS: &str = "static void calls(_TCHAR *b, _TCHAR **c)\n{\n\
+        (void)c;\n(void)_tcsnset_s_l(b, 4, 'x', 1, 0);\n(void)_tcsset_s_l(b, 4, 'x', 0);\n\
+        (void)_tcsncset_s_l(b, 4, 'x', 1, 0);\n";
+    const WIDE_CALLS: &str = "(void)_tcstok_s_l(b, b, c, 0);\n";
+    let headers = "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+        #include <wchar.h>\n#include <time.h>\n#include <io.h>\n#include <conio.h>\n\
+        #include <tchar.h>\n";
+    // The defines, the name lists, whether the calls apply, the imports.
+    type Config<'a> = (&'a str, &'a [&'a [&'a str]], bool, &'a [(&'a str, &'a str)]);
+    let configs: [Config; 4] = [
+        (
+            "",
+            &[NARROW, STRINGS, NSET],
+            true,
+            &[
+                ("strcpy_s", M),
+                ("strncpy_s", M),
+                ("sprintf_s", M),
+                ("_splitpath_s", M),
+                ("_ctime64_s", M),
+                ("_strnset_s", M),
+            ],
+        ),
+        (
+            "#define _MBCS\n",
+            &[NARROW, STRINGS, MBCS_LOCALE],
+            false,
+            &[("_mbsnbcpy_s", M), ("_mbstok_s_l", M), ("_mbslwr_s", M)],
+        ),
+        (
+            "#define _MBCS\n#define _MB_MAP_DIRECT\n",
+            &[NARROW, STRINGS, MBCS_LOCALE, MBCS_DIRECT],
+            false,
+            &[("_mbsnbcpy_s", M), ("_mbsnbset_s", M), ("_mbccpy_s", M)],
+        ),
+        (
+            "#define _UNICODE\n",
+            &[NARROW, STRINGS, NSET],
+            true,
+            &[
+                ("wcscpy_s", M),
+                ("swprintf_s", M),
+                ("_wsplitpath_s", M),
+                ("_wctime64_s", M),
+                ("_wcsnset_s", M),
+                ("_itow_s", M),
+            ],
+        ),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for (config, lists, calls, imports) in &configs {
+            let mut src = alloc::format!("{config}{headers}typedef void (*fn)(void);\n");
+            if *calls {
+                src += CALLS;
+                if config.contains("_UNICODE") {
+                    src += WIDE_CALLS;
+                }
+                src += "}\n";
+            }
+            src += "static const fn used[] = {\n";
+            for name in lists.iter().flat_map(|l| l.iter()) {
+                src += &alloc::format!("    (fn){name},\n");
+            }
+            if *calls {
+                src += "    (fn)calls,\n";
+            }
+            src += "};\nint main(void) { return used[0] == 0; }\n";
+            assert_windows_unit_imports(target, &src, imports);
+        }
+    }
+}
+
 /// C99 logb, lgamma, remquo and nexttoward in their three precisions import
 /// ucrtbase.dll's entry points (`long double` is `double` on Windows), and
 /// asctime msvcrt.dll's; asctime_r links from the C-library sources.

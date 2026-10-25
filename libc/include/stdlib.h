@@ -249,6 +249,27 @@ wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
 char *_ecvt(double value, int ndigits, int *decpt, int *sign);
 char *_fcvt(double value, int ndigits, int *decpt, int *sign);
 char *_gcvt(double value, int ndigits, char *dst);
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_itoa_s, "_itoa_s")
+errno_t _itoa_s(int _Value, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ltoa_s, "_ltoa_s")
+errno_t _ltoa_s(long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ultoa_s, "_ultoa_s")
+errno_t _ultoa_s(unsigned long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_i64toa_s, "_i64toa_s")
+errno_t _i64toa_s(long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ui64toa_s, "_ui64toa_s")
+errno_t _ui64toa_s(unsigned long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::getenv_s, "getenv_s")
+errno_t getenv_s(size_t *_ReturnSize, char *_DstBuf, rsize_t _DstSize, const char *_VarName);
+#pragma binding(msvcrt::_makepath_s, "_makepath_s")
+errno_t _makepath_s(char *_PathResult, size_t _Size, const char *_Drive, const char *_Dir, const char *_Filename, const char *_Ext);
+#pragma binding(msvcrt::_searchenv_s, "_searchenv_s")
+errno_t _searchenv_s(const char *_Filename, const char *_EnvVar, char *_ResultPath, size_t _SizeInBytes);
+#pragma binding(msvcrt::_splitpath_s, "_splitpath_s")
+errno_t _splitpath_s(const char *_FullPath, char *_Drive, size_t _DriveSize, char *_Dir, size_t _DirSize, char *_Filename, size_t _FilenameSize, char *_Ext, size_t _ExtSize);
 #define _CVTBUFSIZE (309 + 40)
 #define __max(a, b) (((a) > (b)) ? (a) : (b))
 #define __min(a, b) (((a) < (b)) ? (a) : (b))

@@ -261,6 +261,32 @@ char *strlwr(char *s);
 char *_strlwr(char *s);
 char *strupr(char *s);
 char *_strupr(char *s);
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::strcpy_s, "strcpy_s")
+errno_t strcpy_s(char *_Dst, rsize_t _SizeInBytes, const char *_Src);
+#pragma binding(msvcrt::strcat_s, "strcat_s")
+errno_t strcat_s(char *_Dst, rsize_t _SizeInBytes, const char *_Src);
+#pragma binding(msvcrt::strncpy_s, "strncpy_s")
+errno_t strncpy_s(char *_Dst, size_t _DstSizeInChars, const char *_Src, size_t _MaxCount);
+#pragma binding(msvcrt::strncat_s, "strncat_s")
+errno_t strncat_s(char *_Dst, size_t _DstSizeInChars, const char *_Src, size_t _MaxCount);
+#pragma binding(msvcrt::strtok_s, "strtok_s")
+char *strtok_s(char *_Str, const char *_Delim, char **_Context);
+#pragma binding(msvcrt::_strerror_s, "_strerror_s")
+errno_t _strerror_s(char *_Buf, size_t _SizeInBytes, const char *_ErrMsg);
+#pragma binding(msvcrt::_strlwr_s, "_strlwr_s")
+errno_t _strlwr_s(char *_Str, size_t _Size);
+#pragma binding(msvcrt::_strlwr_s_l, "_strlwr_s_l")
+errno_t _strlwr_s_l(char *_Str, size_t _Size, _locale_t _Locale);
+#pragma binding(msvcrt::_strupr_s, "_strupr_s")
+errno_t _strupr_s(char *_Str, size_t _Size);
+#pragma binding(msvcrt::_strupr_s_l, "_strupr_s_l")
+errno_t _strupr_s_l(char *_Str, size_t _Size, _locale_t _Locale);
+#pragma binding(msvcrt::_strnset_s, "_strnset_s")
+errno_t _strnset_s(char *_Str, size_t _Size, int _Val, size_t _MaxCount);
+#pragma binding(msvcrt::_strset_s, "_strset_s")
+errno_t _strset_s(char *_Dst, size_t _DstSize, int _Value);
 #endif
 
 // POSIX.1-2008 / BSD `<string.h>` helpers that not every target libc

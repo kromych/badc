@@ -771,6 +771,61 @@ struct _wfinddata64_t {
 #define _O_U8TEXT     0x40000
 #define O_TEXT        _O_TEXT
 #define O_BINARY      _O_BINARY
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::printf_s, "printf_s")
+int printf_s(const char *_Format, ...);
+#pragma binding(msvcrt::fprintf_s, "fprintf_s")
+int fprintf_s(FILE *_File, const char *_Format, ...);
+#pragma binding(msvcrt::sprintf_s, "sprintf_s")
+int sprintf_s(char *_DstBuf, size_t _DstSize, const char *_Format, ...);
+#pragma binding(msvcrt::vprintf_s, "vprintf_s")
+int vprintf_s(const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::vfprintf_s, "vfprintf_s")
+int vfprintf_s(FILE *_File, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::vsprintf_s, "vsprintf_s")
+int vsprintf_s(char *_DstBuf, size_t _Size, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_snprintf_s, "_snprintf_s")
+int _snprintf_s(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, ...);
+#pragma binding(msvcrt::_vsnprintf_s, "_vsnprintf_s")
+int _vsnprintf_s(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_printf_s_l, "_printf_s_l")
+int _printf_s_l(const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vprintf_s_l, "_vprintf_s_l")
+int _vprintf_s_l(const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_fprintf_s_l, "_fprintf_s_l")
+int _fprintf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vfprintf_s_l, "_vfprintf_s_l")
+int _vfprintf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_sprintf_s_l, "_sprintf_s_l")
+int _sprintf_s_l(char *_DstBuf, size_t _DstSize, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vsprintf_s_l, "_vsprintf_s_l")
+int _vsprintf_s_l(char *_DstBuf, size_t _DstSize, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_snprintf_s_l, "_snprintf_s_l")
+int _snprintf_s_l(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vsnprintf_s_l, "_vsnprintf_s_l")
+int _vsnprintf_s_l(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::scanf_s, "scanf_s")
+int scanf_s(const char *_Format, ...);
+#pragma binding(msvcrt::fscanf_s, "fscanf_s")
+int fscanf_s(FILE *_File, const char *_Format, ...);
+#pragma binding(msvcrt::sscanf_s, "sscanf_s")
+int sscanf_s(const char *_Src, const char *_Format, ...);
+#pragma binding(msvcrt::_snscanf_s, "_snscanf_s")
+int _snscanf_s(const char *_Src, size_t _MaxCount, const char *_Format, ...);
+#pragma binding(msvcrt::_scanf_s_l, "_scanf_s_l")
+int _scanf_s_l(const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_fscanf_s_l, "_fscanf_s_l")
+int _fscanf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_sscanf_s_l, "_sscanf_s_l")
+int _sscanf_s_l(const char *_Src, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_snscanf_s_l, "_snscanf_s_l")
+int _snscanf_s_l(const char *_Src, size_t _MaxCount, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::fopen_s, "fopen_s")
+errno_t fopen_s(FILE **_File, const char *_Filename, const char *_Mode);
+#pragma binding(msvcrt::tmpnam_s, "tmpnam_s")
+errno_t tmpnam_s(char *_Buf, rsize_t _Size);
 #endif
 void *dlsym(void *__restrict handle, const char *__restrict name);
 

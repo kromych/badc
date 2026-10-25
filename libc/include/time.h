@@ -232,6 +232,17 @@ typedef long clock_t;
 // mingw-w64 declares here; libc/lib/time_ext.c defines them over
 // kernel32. The reentrant localtime_r / gmtime_r / ctime_r / asctime_r are
 // declared, as there, under `_POSIX_C_SOURCE` alone.
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_ctime32_s, "_ctime32_s")
+errno_t _ctime32_s(char *_Buf, size_t _SizeInBytes, const __time32_t *_Time);
+#pragma binding(msvcrt::_ctime64_s, "_ctime64_s")
+errno_t _ctime64_s(char *_Buf, size_t _SizeInBytes, const __time64_t *_Time);
+#pragma binding(msvcrt::_strdate_s, "_strdate_s")
+errno_t _strdate_s(char *_Buf, size_t _SizeInBytes);
+#pragma binding(msvcrt::_strtime_s, "_strtime_s")
+errno_t _strtime_s(char *_Buf, size_t _SizeInBytes);
 #if defined(_POSIX_C_SOURCE) && !defined(_POSIX_THREAD_SAFE_FUNCTIONS)
 #define _POSIX_THREAD_SAFE_FUNCTIONS 200112L
 #endif

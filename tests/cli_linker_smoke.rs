@@ -1563,6 +1563,54 @@ fn a_pe_programs_entry_function_is_the_one_its_inputs_define() {
     );
 }
 
+/// Without a stated subsystem a `WinMain` / `wWinMain` program is a GUI one and
+/// any other a console one, as link.exe infers; `--subsystem=`, `-mwindows`,
+/// `-mconsole` and `#pragma subsystem` state it.
+#[test]
+fn a_pe_programs_subsystem_follows_its_entry_function_unless_stated() {
+    let dir = tempdir("pe-subsystem");
+    let winmain = "#include <windows.h>\n\
+                   int WINAPI WinMain(HINSTANCE h, HINSTANCE p, LPSTR c, int s) { return 0; }\n";
+    let wwinmain = "#include <windows.h>\n\
+                    int WINAPI wWinMain(HINSTANCE h, HINSTANCE p, LPWSTR c, int s) { return 0; }\n";
+    let wmain = "#include <wchar.h>\nint wmain(int c, wchar_t **v) { return 0; }\n";
+    let main = "int main(void) { return 0; }\n";
+    let pragma = format!("#pragma subsystem(console)\n{winmain}");
+    // The unit, the options, and IMAGE_SUBSYSTEM_WINDOWS_GUI (2) or _CUI (3).
+    let cases: [(&str, &[&str], u16); 8] = [
+        (winmain, &[], 2),
+        (wwinmain, &[], 2),
+        (wmain, &[], 3),
+        (main, &[], 3),
+        (winmain, &["--subsystem=console"], 3),
+        (winmain, &["-mconsole"], 3),
+        (main, &["-mwindows"], 2),
+        (&pragma, &[], 3),
+    ];
+    let subsystem = |exe: &Path| {
+        let image = std::fs::read(exe).unwrap();
+        let pe = u32::from_le_bytes(image[0x3c..0x40].try_into().unwrap()) as usize;
+        u16::from_le_bytes(image[pe + 92..pe + 94].try_into().unwrap())
+    };
+    for target in ["--target=windows-x64", "--target=windows-arm64"] {
+        for (k, (src, opts, want)) in cases.iter().enumerate() {
+            write_source(&dir, "u.c", src);
+            let badc_for = || {
+                let mut c = Command::new(badc());
+                c.arg(target).args(*opts).current_dir(&dir);
+                c
+            };
+            run(badc_for().args(["-c", "u.c", "-o", "u.o"]), "compile -c");
+            let inputs: &[&str] = if k == 0 { &["u.c", "u.o"] } else { &["u.c"] };
+            for input in inputs {
+                let exe = dir.join("u.exe");
+                run(badc_for().args([input, "-o"]).arg(&exe), "link");
+                assert_eq!(subsystem(&exe), *want, "{target} {input} {opts:?}\n{src}");
+            }
+        }
+    }
+}
+
 #[test]
 fn unresolved_extern_function_fails_link() {
     let dir = tempdir("unresolved");

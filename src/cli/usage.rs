@@ -153,7 +153,10 @@ Multi-TU knobs:
                            efi_boot_service_driver,
                            efi_runtime_driver or efi_rom, in any
                            case and with `-` for `_`; overrides
-                           `#pragma subsystem`.
+                           `#pragma subsystem`. Without one a
+                           WinMain / wWinMain program is a windows
+                           one, as link.exe infers.
+  -mwindows, -mconsole     gcc's --subsystem=windows / console.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is

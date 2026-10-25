@@ -1833,6 +1833,8 @@ impl Parser {
                 };
                 link.subsystem = Some(parsed);
             }
+            "-mwindows" => link.subsystem = Some(badc::Subsystem::Windows),
+            "-mconsole" => link.subsystem = Some(badc::Subsystem::Console),
             // GNU ld surface for script-driven links. `-T FILE` /
             // `--script=FILE` select the script; the rest mirror GNU ld's
             // options of the same names.
@@ -4014,6 +4016,10 @@ mod tests {
                 .0
                 .contains("unknown kind `nope`")
         );
+        let gui = parse(&["-mconsole", "-mwindows", "a.o"]);
+        assert_eq!(gui.link.subsystem, Some(badc::Subsystem::Windows));
+        let cui = parse(&["-mwindows", "-mconsole", "a.o"]);
+        assert_eq!(cui.link.subsystem, Some(badc::Subsystem::Console));
     }
 
     #[test]

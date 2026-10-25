@@ -168,6 +168,13 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     if entry_override.is_none() && cli.mode != Mode::SharedLibrary {
         entry_override = program_entry(&slots, cli.target).map(str::to_string);
     }
+    // link.exe infers the GUI subsystem from a `WinMain` / `wWinMain` entry.
+    if subsystem_override.is_none()
+        && cli.target.binary_format() == badc::BinaryFormat::Pe
+        && matches!(entry_override.as_deref(), Some("WinMain" | "wWinMain"))
+    {
+        subsystem_override = Some(badc::Subsystem::Windows);
+    }
     let mut runtime = Vec::new();
     embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
     slots[0] = Slot::Fixed(runtime);

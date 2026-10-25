@@ -4,6 +4,38 @@
 
 use crate::c5::ir::AsmConstraint;
 
+/// A `call` to a numeric local label of the same x86_64 asm block is the
+/// rel32 near call to it, backward and forward, as GNU as and clang
+/// assemble it: `E8 F5 FF FF FF` back over `movl $7, %eax; ret`, and
+/// `E8 02 00 00 00` forward over a two-byte `jmp`. The fixture runs it in
+/// the x86_64 tables.
+#[test]
+fn a_call_to_a_local_label_is_a_rel32_near_call() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = super::load_fixture("inline_asm_x64_call_local_label.c");
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.clone(), target, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for call in [
+            [0xE8, 0xF5, 0xFF, 0xFF, 0xFF],
+            [0xE8, 0x02, 0x00, 0x00, 0x00],
+        ] {
+            assert!(obj.windows(5).any(|w| w == call), "{target:?}: {call:02x?}");
+        }
+    }
+}
+
 /// Classify an output constraint for an x86_64 target.
 fn out(cstr: &str) -> Option<(AsmConstraint, bool)> {
     crate::Compiler::parse_asm_constraint(cstr, true, 0, true)

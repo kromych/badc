@@ -2837,6 +2837,30 @@ impl AsmPass<'_> {
         // stream defines relaxes to the rel8 form unless a round lengthened
         // it; a target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            // A `call` to a local label is the rel32 near call, which has no
+            // shorter form (GNU as: any code-address operand takes a label).
+            if matches!(insn.mnemonic, Mnemonic::Table("call" | "callq")) {
+                code.push(0xE8);
+                code.extend_from_slice(&[0u8; 4]);
+                match self.weak_target_name(num) {
+                    Some(n) => out.cx.asm_sym_fixups.push(super::AsmSymFixup {
+                        instr_offset: code.len() - 4,
+                        kind: crate::c5::asm::AsmRelocKind::JumpRel,
+                        target: crate::c5::asm::AsmSectionTarget::Symbol(n),
+                        addend: -4,
+                    }),
+                    None => layout.label_fixups.push(LabelFixup {
+                        at: code.len() - 4,
+                        width: 4,
+                        end: code.len(),
+                        num,
+                        forward,
+                        ii,
+                    }),
+                }
+                layout.after_insn = true;
+                return Some(Ok(()));
+            }
             let cc = match Self::branch_cc(insn) {
                 Ok(cc) => cc,
                 Err(e) => return Some(Err(e)),

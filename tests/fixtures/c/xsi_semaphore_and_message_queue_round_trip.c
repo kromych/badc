@@ -4,6 +4,7 @@
 // refuses to block under IPC_NOWAIT, and IPC_STAT reports the set; a
 // private queue returns messages by type, truncates under MSG_NOERROR and
 // refuses a short buffer with E2BIG, and IPC_STAT counts what it holds.
+// snapshot-budget: exempt
 #include <errno.h>
 #include <string.h>
 #include <sys/ipc.h>

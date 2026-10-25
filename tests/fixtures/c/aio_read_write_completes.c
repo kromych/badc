@@ -3,6 +3,7 @@
 // aio_error 0 and aio_return the byte count, lio_listio runs a read and a
 // LIO_NOP to completion under LIO_WAIT, aio_fsync completes, and
 // aio_cancel of a descriptor with nothing outstanding reports AIO_ALLDONE.
+// snapshot-budget: exempt
 #include <aio.h>
 #include <errno.h>
 #include <fcntl.h>

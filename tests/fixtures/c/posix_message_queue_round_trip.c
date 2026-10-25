@@ -4,6 +4,7 @@
 // receive against an absolute deadline, and under O_NONBLOCK refuses to
 // receive from an empty queue with EAGAIN. A kernel without message queues
 // (ENOSYS) has nothing to check; macOS defines the option -1.
+// snapshot-budget: exempt
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

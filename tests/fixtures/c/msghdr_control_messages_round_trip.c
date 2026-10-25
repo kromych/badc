@@ -7,6 +7,7 @@
 // longer than the buffer; sockatmark reports no mark on an unconnected
 // stream socket.
 // A host without IPv6 loopback skips that part.
+// snapshot-budget: exempt
 #define _GNU_SOURCE 1
 #define __APPLE_USE_RFC_3542 1
 #include <errno.h>

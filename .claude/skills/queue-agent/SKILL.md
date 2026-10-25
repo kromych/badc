@@ -46,7 +46,9 @@ the box remotes by name, the scratch and note paths -- are in
 - Snapshots: regenerate `tests/snapshots/` for each commit
   (`python3 scripts/snapshots.py`, `--only <name>` while iterating); review the
   asm and SSA deltas and cite them. `snapshots.py --check` also fails on the
-  callee-saved budget: read its exit code, not its last line.
+  callee-saved budget: read its exit code, not its last line. A fixture that
+  holds objects or state across the library calls it tests carries
+  `// snapshot-budget: exempt`; say its own ratio in the commit.
 - Tests assert on emitted SSA/asm or on program behavior; no host-compiler parity
   fixtures.
 - In any polling loop, or anything whose exit status matters, use `/usr/bin/grep`.

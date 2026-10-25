@@ -144,6 +144,7 @@ linux/fs.h	-	y	y	-	-
 linux/sched.h	-	y	y	-	-
 linux/wait.h	-	y	y	-	-
 linux/memfd.h	-	y	y	-	-
+linux/mman.h	-	y	y	-	-
 linux/futex.h	-	y	y	-	-
 linux/ioctl.h	-	y	y	-	-
 linux/types.h	-	y	y	-	-

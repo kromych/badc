@@ -292,6 +292,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("linux/sched.h", LINUX),
     header!("linux/wait.h", LINUX),
     header!("linux/memfd.h", LINUX),
+    header!("linux/mman.h", LINUX),
     header!("linux/futex.h", LINUX),
     header!("linux/ioctl.h", LINUX),
     header!("linux/types.h", LINUX),
@@ -1049,6 +1050,38 @@ mod tests {
         for target in [Target::WindowsX64, Target::WindowsAarch64] {
             if let Err(e) = Compiler::with_target(src.to_string(), target).compile() {
                 panic!("{target:?}: {e}");
+            }
+        }
+    }
+
+    /// <linux/mman.h> gives the kernel's flags and agrees with <sys/mman.h>
+    /// in either include order: no redefinition, the UAPI headers' values.
+    #[test]
+    fn linux_mman_agrees_with_sys_mman_in_either_order() {
+        use crate::{CompileOptions, Compiler, Target};
+        for (target, arch) in [
+            (Target::LinuxX64, "MAP_32BIT == 0x40"),
+            (Target::LinuxAarch64, "PROT_BTI == 0x10"),
+        ] {
+            for (first, second) in [
+                ("sys/mman.h", "linux/mman.h"),
+                ("linux/mman.h", "sys/mman.h"),
+            ] {
+                let src = alloc::format!(
+                    "#include <{first}>\n#include <{second}>\n\
+                     _Static_assert(MLOCK_ONFAULT == 1 && PROT_READ == 1 && MREMAP_MAYMOVE == 1\n\
+                       && MAP_HUGE_2MB == (21U << 26) && sizeof(struct cachestat) == 40\n\
+                       && {arch}, \"mman\");\n"
+                );
+                let opts = CompileOptions::default().with_no_entry_point(true);
+                let program = Compiler::with_options(src, target, opts)
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{target:?} {first} then {second}: {e}"));
+                assert!(
+                    program.warnings.is_empty(),
+                    "{target:?}: {:?}",
+                    program.warnings
+                );
             }
         }
     }

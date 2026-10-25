@@ -1366,8 +1366,8 @@ pub fn link_executable_with_runtime_as(
     form: crate::ExecForm,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, ImageOptions, OutputKind, embedded_runtime, emit_native_with_options,
-        link_native_objects, parse_native_elf, write_native_image_from_merged_ex,
+        ImageOptions, OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
+        parse_native_elf, write_native_image_from_merged_ex,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -1400,17 +1400,12 @@ pub fn link_executable_with_runtime_as(
         Some("wmain") => rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string())),
         _ => {}
     }
-    for (name, body) in embedded_runtime().iter() {
-        let copts = CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_defines(rt_defines.clone());
-        let rt_program = Compiler::with_options(body.to_string(), target, copts)
-            .compile()
-            .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
-            .map_err(|e| format!("emit runtime {name}: {e}"))?;
-        objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
-    }
+    objs.extend(compiled_sources(
+        embedded_runtime(),
+        target,
+        &rt_defines,
+        &reloc,
+    )?);
 
     append_on_demand_objects(&mut objs, target, reloc)?;
 
@@ -1437,17 +1432,14 @@ pub fn link_executable_with_runtime_as(
 /// Offer the compiler-runtime and C-library sources the way the CLI's
 /// link does: each joins only when it defines a symbol the object set
 /// still leaves undefined. Nothing is compiled when nothing is
-/// undefined, which is the usual case for a fixture.
+/// undefined.
 #[cfg(feature = "full")]
 fn append_on_demand_objects(
     objs: &mut Vec<crate::NativeObject>,
     target: crate::Target,
     reloc: crate::NativeOptions,
 ) -> Result<(), String> {
-    use crate::{
-        CompileOptions, NativeSymSection, embedded_compiler_rt, embedded_libc,
-        emit_native_with_options, parse_native_elf,
-    };
+    use crate::{NativeSymSection, embedded_compiler_rt, embedded_libc};
     let unresolved = |objs: &[crate::NativeObject]| {
         let mut defined = alloc::collections::BTreeSet::new();
         let mut undefined = alloc::collections::BTreeSet::new();
@@ -1471,18 +1463,16 @@ fn append_on_demand_objects(
     if unresolved(objs).is_empty() {
         return Ok(());
     }
-    let mut pool = Vec::new();
-    for (name, body) in embedded_compiler_rt().iter().chain(embedded_libc().iter()) {
-        let copts = CompileOptions::default().with_no_entry_point(true);
-        let p = Compiler::with_options(body.to_string(), target, copts)
-            .compile()
-            .map_err(|e| format!("compile {name}: {e}"))?;
-        let bytes = emit_native_with_options(&p, target, reloc.clone())
-            .map_err(|e| format!("emit {name}: {e}"))?;
-        pool.push(Some(
-            parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))?,
-        ));
-    }
+    let sources: Vec<(&str, &str)> = embedded_compiler_rt()
+        .iter()
+        .chain(embedded_libc())
+        .copied()
+        .collect();
+    let mut pool: Vec<Option<crate::NativeObject>> =
+        compiled_sources(&sources, target, &[], &reloc)?
+            .into_iter()
+            .map(Some)
+            .collect();
     loop {
         let undefined = unresolved(objs);
         let mut progress = false;
@@ -1503,6 +1493,85 @@ fn append_on_demand_objects(
             return Ok(());
         }
     }
+}
+
+/// The relocatable objects `sources` compile to for `target` with the
+/// predefined macros `defines` and the emit options `reloc`. Every link of
+/// one configuration gets the same objects, so each test process compiles
+/// them once and every caller takes a copy.
+#[cfg(feature = "full")]
+fn compiled_sources(
+    sources: &[(&str, &str)],
+    target: crate::Target,
+    defines: &[(String, String)],
+    reloc: &crate::NativeOptions,
+) -> Result<Vec<crate::NativeObject>, String> {
+    use crate::{CompileOptions, emit_native_with_options, parse_native_elf};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    type Objects = Arc<OnceLock<Result<Vec<crate::NativeObject>, String>>>;
+    static COMPILED: OnceLock<Mutex<HashMap<String, Objects>>> = OnceLock::new();
+    // `Debug` prints every field of the options, so equal keys compile alike.
+    let names: Vec<&str> = sources.iter().map(|(name, _)| *name).collect();
+    let key = format!("{names:?} {target:?} {defines:?} {reloc:?}");
+    let cell = COMPILED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry(key)
+        .or_default()
+        .clone();
+    cell.get_or_init(|| {
+        sources
+            .iter()
+            .map(|(name, body)| {
+                SOURCES_COMPILED.with(|n| n.set(n.get() + 1));
+                let copts = CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_defines(defines.to_vec());
+                let p = Compiler::with_options(body.to_string(), target, copts)
+                    .compile()
+                    .map_err(|e| format!("compile {name}: {e}"))?;
+                let bytes = emit_native_with_options(&p, target, reloc.clone())
+                    .map_err(|e| format!("emit {name}: {e}"))?;
+                parse_native_elf(&bytes).map_err(|e| format!("parse {name}: {e}"))
+            })
+            .collect()
+    })
+    .clone()
+}
+
+#[cfg(feature = "full")]
+thread_local! {
+    /// Sources [`compiled_sources`] compiled on this thread.
+    static SOURCES_COMPILED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// A second link of one configuration takes the objects the first one
+/// compiled. The entry name makes the configuration this test's own.
+#[cfg(feature = "full")]
+#[test]
+fn link_sources_compile_once_per_configuration() {
+    let sources = crate::embedded_runtime();
+    let defines = vec![
+        ("__BADC_C5_START__".to_string(), "1".to_string()),
+        (
+            "__BADC_ENTRY__".to_string(),
+            "link_sources_compile_once_per_configuration".to_string(),
+        ),
+    ];
+    let reloc = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let compiled = || SOURCES_COMPILED.with(core::cell::Cell::get);
+    let before = compiled();
+    let first = compiled_sources(sources, crate::Target::LinuxX64, &defines, &reloc).unwrap();
+    let between = compiled();
+    let second = compiled_sources(sources, crate::Target::LinuxX64, &defines, &reloc).unwrap();
+    assert_eq!(between - before, sources.len());
+    assert_eq!(compiled(), between, "the second link compiled again");
+    assert_eq!(format!("{first:?}"), format!("{second:?}"));
 }
 
 /// Link one translation unit into a shared library, the way the CLI's
@@ -1551,8 +1620,8 @@ pub fn link_executable_with_runtime_multi(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, OutputKind, embedded_runtime, emit_native_with_options,
-        link_native_objects, parse_native_elf, write_native_image_from_merged,
+        OutputKind, embedded_runtime, emit_native_with_options, link_native_objects,
+        parse_native_elf, write_native_image_from_merged,
     };
     let entry = programs[0];
     let mut reloc = opts;
@@ -1577,17 +1646,12 @@ pub fn link_executable_with_runtime_multi(
     if entry.entry_name.as_deref() == Some("wmain") {
         rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
     }
-    for (name, body) in embedded_runtime().iter() {
-        let copts = CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_defines(rt_defines.clone());
-        let rt_program = Compiler::with_options(body.to_string(), target, copts)
-            .compile()
-            .map_err(|e| format!("compile runtime {name}: {e}"))?;
-        let rt_bytes = emit_native_with_options(&rt_program, target, reloc.clone())
-            .map_err(|e| format!("emit runtime {name}: {e}"))?;
-        objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
-    }
+    objs.extend(compiled_sources(
+        embedded_runtime(),
+        target,
+        &rt_defines,
+        &reloc,
+    )?);
 
     for (i, program) in programs.iter().enumerate() {
         let bytes = emit_native_with_options(program, target, reloc.clone())

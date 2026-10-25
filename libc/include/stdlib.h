@@ -575,12 +575,14 @@ static inline char *canonicalize_file_name(const char *path) {
 #endif
 
 #ifdef _WIN32
-#pragma binding(kernel32::FlushInstructionCache, "FlushInstructionCache")
-#pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")
-int FlushInstructionCache(void *hProcess, void *lpBaseAddress, long long dwSize);
-void *GetCurrentProcess(void);
+// kernel32's FlushInstructionCache under a reserved name, so the Win32
+// declarations of <windows.h> or the SDK's headers are the only ones of
+// that name; (HANDLE)-1 is GetCurrentProcess()'s pseudo handle.
+#pragma binding(kernel32::__badc_FlushInstructionCache, "FlushInstructionCache")
+int __badc_FlushInstructionCache(void *hProcess, const void *lpBaseAddress,
+                                 unsigned long long dwSize);
 static inline void __clear_cache(void *__begin, void *__end) {
-    FlushInstructionCache(GetCurrentProcess(), __begin,
-                          (long long)((char *)__end - (char *)__begin));
+    __badc_FlushInstructionCache((void *)(long long)-1, __begin,
+                                 (unsigned long long)((char *)__end - (char *)__begin));
 }
 #endif

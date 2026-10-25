@@ -2424,6 +2424,7 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetTempFileNameA,        "GetTempFileNameA")
 #pragma binding(kernel32::GetTempFileNameW,        "GetTempFileNameW")
 #pragma binding(kernel32::GetCurrentProcess,       "GetCurrentProcess")
+#pragma binding(kernel32::FlushInstructionCache,   "FlushInstructionCache")
 #pragma binding(kernel32::DuplicateHandle,         "DuplicateHandle")
 #pragma binding(kernel32::SetFilePointerEx,        "SetFilePointerEx")
 #pragma binding(kernel32::GetFileSizeEx,           "GetFileSizeEx")
@@ -2667,6 +2668,7 @@ UINT GetTempFileNameA(LPCSTR lpPathName, LPCSTR lpPrefixString, UINT uUnique,
 UINT GetTempFileNameW(LPCWSTR lpPathName, LPCWSTR lpPrefixString, UINT uUnique,
                       LPWSTR lpTempFileName);
 HANDLE GetCurrentProcess(VOID);
+BOOL FlushInstructionCache(HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T dwSize);
 BOOL DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
                      HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
                      DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwOptions);

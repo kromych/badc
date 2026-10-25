@@ -1604,6 +1604,45 @@ fn windows_sharing_opens_and_checked_conversions_import_msvcrt() {
     }
 }
 
+/// `<stdlib.h>`'s `__clear_cache` reaches kernel32's FlushInstructionCache
+/// through a reserved name, so a unit's own declaration of the Win32 name
+/// with the SDK's types, before or after the header, and `<windows.h>`'s
+/// agree; `<time.h>` shares `struct timeval` and its timer macros with
+/// `<winsock2.h>` and with a unit that defines it under `_TIMEVAL_DEFINED`,
+/// as mingw-w64's headers do.
+#[test]
+fn windows_crt_headers_leave_win32_names_to_their_headers() {
+    const SRC: &str = "int FlushInstructionCache(void *hProcess, const void *lpBaseAddress,\n\
+        unsigned long long dwSize);\n\
+        #define _TIMEVAL_DEFINED\n\
+        struct timeval { long tv_sec; long tv_usec; };\n\
+        #include <stdlib.h>\n#include <time.h>\n#include <winsock2.h>\n#include <windows.h>\n\
+        int main(void)\n{\n\
+            char code[16] = {0};\n\
+            struct timeval t = {1, 2};\n\
+            __clear_cache(code, code + sizeof code);\n\
+            return FlushInstructionCache(GetCurrentProcess(), code, sizeof code) &&\n\
+                   t.tv_usec == 2 ? 0 : 1;\n\
+        }\n";
+    const TIMER: &str = "#include <time.h>\n#include <winsock2.h>\n\
+        int main(void)\n{\n\
+            struct timeval a = {1, 2}, b = {1, 3};\n\
+            timerclear(&a);\n\
+            return !timerisset(&a) && timercmp(&a, &b, <) ? 0 : 1;\n\
+        }\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("FlushInstructionCache", "kernel32.dll"),
+                ("GetCurrentProcess", "kernel32.dll"),
+            ],
+        );
+        assert_windows_unit_imports(target, TIMER, &[]);
+    }
+}
+
 /// `<stringapiset.h>` included alone declares the string comparison,
 /// folding, classification and conversion calls mingw-w64's declares, and
 /// the A forms its `<winnls.h>` adds, each imported from kernel32.dll; the

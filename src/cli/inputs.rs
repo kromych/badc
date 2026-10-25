@@ -62,7 +62,7 @@ pub(crate) fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
         );
     }
     match badc::detect_binary_format(bytes) {
-        Some(badc::BinaryFormat::Elf) => format!("malformed ELF object; {reads}"),
+        Some(badc::BinaryFormat::Elf) => format!("is an ELF file but not ET_REL; {reads}"),
         Some(badc::BinaryFormat::MachO) => format!("is a Mach-O file but not MH_OBJECT; {reads}"),
         Some(f) => {
             let image = target.binary_format();
@@ -436,6 +436,30 @@ pub(crate) struct Inputs {
     pub(crate) target_libc: Option<badc::TargetCLibrary>,
 }
 
+enum InputKind {
+    Source,
+    Object,
+    Archive,
+    /// A shared library, a linker script or another image, as `-l` reads one.
+    Shared,
+}
+
+/// A link input's kind by its content: a relocatable object, an archive, or a
+/// binary or `.tbd` stub [`ingest_linker_input`] reads; `Err` says why not.
+fn linker_input_kind(path: &str, target: Target) -> Result<InputKind, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read it: {e}"))?;
+    let bytes = badc::mach_o_fat_slice(&bytes, target_machine(target)).unwrap_or(&bytes);
+    if badc::is_native_object(bytes) {
+        Ok(InputKind::Object)
+    } else if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
+        Ok(InputKind::Archive)
+    } else if badc::detect_binary_format(bytes).is_some() || badc::is_tbd(bytes) {
+        Ok(InputKind::Shared)
+    } else {
+        Err("its content is none of them".to_string())
+    }
+}
+
 impl Inputs {
     /// Classify every positional input by extension: `.c`, and a name
     /// with no extension, is a C source; `.s` / `.S` / `.sx` an
@@ -443,7 +467,7 @@ impl Inputs {
     /// `.lib` a static archive; `.so` / `.dylib` / `.tbd` / `.dll` a shared
     /// library; `-` the stdin source. Under `--jit` / `--interp` the
     /// first unrecognised entry starts the program's own argv; every
-    /// other mode reports it.
+    /// other mode reads it by content.
     pub(crate) fn classify(cli: &Cli) -> Self {
         let mut sources: Vec<String> = Vec::new();
         let mut objects: Vec<String> = Vec::new();
@@ -475,24 +499,41 @@ impl Inputs {
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
-            match ext {
-                _ if a == "-" => {
+            let kind = match ext {
+                _ if a == "-" => InputKind::Source,
+                "c" | "i" | "" | "s" | "S" | "sx" => InputKind::Source,
+                "o" | "obj" => InputKind::Object,
+                "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => InputKind::Shared,
+                "a" | "lib" => InputKind::Archive,
+                // In --jit / --interp the first unrecognised entry starts the
+                // program's argv (`badc --jit foo.c arg1 arg2`).
+                _ if takes_prog_args => {
+                    prog_args_start = i;
+                    break;
+                }
+                // gcc hands any other suffix to the linker, which reads its content.
+                _ => linker_input_kind(a, cli.target).unwrap_or_else(|why| {
+                    eprint_diagnostic(format!(
+                        "badc: error: unrecognized input file extension: `{a}` \
+                         (expected a `.c` / `.i` / `.s` / `.S` source, `.o` / `.obj` \
+                         object, `.a` / `.lib` archive, or `.so` / `.dylib` / `.tbd` / `.dll` \
+                         shared library); {why}"
+                    ));
+                    std::process::exit(1);
+                }),
+            };
+            match kind {
+                InputKind::Source => {
                     named.push(Named::Input(LinkInput::Source(sources.len())));
                     sources.push(a.clone());
                 }
-                "c" | "i" | "" | "s" | "S" | "sx" => {
-                    named.push(Named::Input(LinkInput::Source(sources.len())));
-                    sources.push(a.clone());
-                }
-                "o" | "obj" => {
+                InputKind::Object => {
                     objects.push(a.clone());
                     link_inputs.push(LinkInputCli::Object(a.clone()));
                     named.push(Named::Input(LinkInput::Object(a.clone())));
                 }
-                "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => {
-                    named.push(Named::SharedPath(a.clone()));
-                }
-                "a" | "lib" => {
+                InputKind::Shared => named.push(Named::SharedPath(a.clone())),
+                InputKind::Archive => {
                     archives.push(a.clone());
                     link_inputs.push(LinkInputCli::Archive {
                         path: a.clone(),
@@ -502,26 +543,6 @@ impl Inputs {
                         path: a.clone(),
                         whole,
                     }));
-                }
-                _ => {
-                    // In --jit / --interp the first unrecognised entry marks
-                    // the boundary; everything after it is the program's argv
-                    // (so `badc --jit foo.c arg1 arg2` still works). Every
-                    // other mode links or preprocesses its inputs and has no
-                    // argv, so an unrecognised extension is a mistyped or
-                    // unsupported input and is reported rather than silently
-                    // dropped along with every input after it.
-                    if takes_prog_args {
-                        prog_args_start = i;
-                        break;
-                    }
-                    eprint_diagnostic(format!(
-                        "badc: error: unrecognized input file extension: `{a}` \
-                         (expected a `.c` / `.i` / `.s` / `.S` source, `.o` / `.obj` \
-                         object, `.a` / `.lib` archive, or `.so` / `.dylib` / `.tbd` / `.dll` \
-                         shared library)"
-                    ));
-                    std::process::exit(1);
                 }
             }
         }

@@ -1243,7 +1243,7 @@ pub fn is_elf_object(bytes: &[u8]) -> bool {
 /// True when `bytes` is a relocatable object in a format the linker
 /// reads: ELF `ET_REL`, Mach-O `MH_OBJECT` or a COFF object.
 pub fn is_native_object(bytes: &[u8]) -> bool {
-    is_elf_object(bytes)
+    (is_elf_object(bytes) && bytes.get(16..18) == Some(&ET_REL.to_le_bytes()))
         || super::mach_o_object::is_mach_o_object(bytes)
         || super::coff_object::is_coff_object(bytes)
 }

@@ -1611,6 +1611,73 @@ fn a_pe_programs_subsystem_follows_its_entry_function_unless_stated() {
     }
 }
 
+/// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
+/// versioned `libx.so.1`, is read by content, as gcc hands it to the linker;
+/// a text file or a missing one is still refused by name.
+#[test]
+fn a_link_input_of_an_unlisted_suffix_is_read_by_content() {
+    let dir = tempdir("unlisted-suffix");
+    write_source(&dir, "x.c", "int x(void) { return 3; }\n");
+    write_source(
+        &dir,
+        "m.c",
+        "int x(void);\nint main(void) { return x() - 3; }\n",
+    );
+    std::fs::write(dir.join("notes.txt"), "int x;\n").unwrap();
+    let host = if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x64"
+    };
+    for (os, shared) in [("linux", "libx.so.1"), ("windows", "X.Dll")] {
+        let target = format!("--target={os}-{host}");
+        let badc_for = |args: &[&str]| {
+            let mut c = Command::new(badc());
+            c.arg(&target).args(args).current_dir(&dir);
+            c
+        };
+        run(&mut badc_for(&["-c", "x.c", "-o", "X.OBJ"]), "compile -c");
+        run(
+            Command::new(badc())
+                .args(["--ar", "rcs", "libx.LIB", "X.OBJ"])
+                .current_dir(&dir),
+            "archive",
+        );
+        run(
+            &mut badc_for(&["-shared", "--export-all", "x.c", "-o", shared]),
+            "build the shared library",
+        );
+        for (k, input) in ["X.OBJ", "libx.LIB", shared].into_iter().enumerate() {
+            let exe = format!("m-{os}-{k}.exe");
+            run(
+                &mut badc_for(&["m.c", input, "-o", &exe]),
+                &format!("{target} {input}"),
+            );
+            let native =
+                cfg!(target_os = "linux") && os == "linux" || cfg!(windows) && os == "windows";
+            if native {
+                let status = Command::new(dir.join(&exe))
+                    .env("LD_LIBRARY_PATH", &*dir)
+                    .current_dir(&dir)
+                    .status()
+                    .expect("run");
+                assert_eq!(status.code(), Some(0), "{target} {input}");
+            }
+        }
+        for (input, why) in [
+            ("notes.txt", "none of them"),
+            ("gone.LIB", "cannot read it"),
+        ] {
+            let out = badc_for(&["m.c", input, "-o", "m.exe"]).output().unwrap();
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && err.contains(why),
+                "{target} {input}: {err}"
+            );
+        }
+    }
+}
+
 #[test]
 fn unresolved_extern_function_fails_link() {
     let dir = tempdir("unresolved");

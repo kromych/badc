@@ -559,6 +559,7 @@ fn compact_and_lower(
     program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
     program.interposable_refs = options.output_kind == OutputKind::Relocatable
         && options.pic
+        && !options.pie
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     if program.data.is_empty() {

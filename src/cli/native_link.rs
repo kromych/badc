@@ -61,7 +61,10 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .relocatable_options(cli.front.optimize, !placed, &cli.front.diag);
     // A shared library's sources compile as `-fPIC` ones, so the link
     // decides which of their own definitions another component preempts.
-    reloc_opts.pic |= cli.mode == Mode::SharedLibrary;
+    if cli.mode == Mode::SharedLibrary {
+        reloc_opts.pic = true;
+        reloc_opts.pie = false;
+    }
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.

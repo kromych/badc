@@ -14411,6 +14411,73 @@ fn a_pic_aarch64_elf_object_reaches_external_data_through_the_got() {
 }
 
 #[test]
+fn a_pie_elf_object_binds_its_own_definitions_directly() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_GOT_PAGE, R_AARCH64_TLSDESC_ADR_PAGE21, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+        R_AARCH64_TLSLE_ADD_TPREL_HI12, R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTTPOFF,
+        R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "int g = 1;\nextern int ext;\n__thread int tl;\nextern __thread int etl;\n\
+               int get(void) { return g + ext; }\nint get_t(void) { return tl + etl; }\n";
+    let relocs = |target: Target, pie: bool| -> alloc::vec::Vec<(alloc::string::String, u32)> {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic: true,
+            pie,
+            ..Default::default()
+        };
+        let obj =
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse");
+        (obj.text_relocs.iter())
+            .map(|r| (obj.symbols[r.sym_idx].name.clone(), r.rtype))
+            .collect()
+    };
+    for (target, got, desc, ie, le) in [
+        (
+            Target::LinuxX64,
+            R_X86_64_REX_GOTPCRELX,
+            R_X86_64_GOTPC32_TLSDESC,
+            R_X86_64_GOTTPOFF,
+            R_X86_64_TPOFF32,
+        ),
+        (
+            Target::LinuxAarch64,
+            R_AARCH64_ADR_GOT_PAGE,
+            R_AARCH64_TLSDESC_ADR_PAGE21,
+            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+            R_AARCH64_TLSLE_ADD_TPREL_HI12,
+        ),
+    ] {
+        let has = |rs: &[(alloc::string::String, u32)], name: &str, rtype: u32| {
+            rs.iter().any(|(n, t)| n == name && *t == rtype)
+        };
+        let pic = relocs(target, false);
+        assert!(has(&pic, "g", got), "{target:?} -fPIC: {pic:?}");
+        assert!(has(&pic, "etl", desc), "{target:?} -fPIC: {pic:?}");
+        let pie = relocs(target, true);
+        assert!(!has(&pie, "g", got), "{target:?} -fPIE: {pie:?}");
+        assert!(has(&pie, "ext", got), "{target:?} -fPIE: {pie:?}");
+        assert!(has(&pie, "etl", ie), "{target:?} -fPIE: {pie:?}");
+        assert!(
+            pie.iter().any(|(_, t)| *t == le),
+            "{target:?} -fPIE: {pie:?}"
+        );
+        assert!(
+            !pie.iter().any(|(_, t)| *t == desc),
+            "{target:?} -fPIE: {pie:?}"
+        );
+    }
+}
+
+#[test]
 fn import_address_keeps_got_pair_aarch64() {
     // Address-taking a dylib-routed import stays GOT-indirect: the
     // symbol binds against a shared object at load time, so a direct

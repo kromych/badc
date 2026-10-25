@@ -9386,6 +9386,45 @@ fn gnu_ld_links_a_badc_pic_object_into_a_shared_library() {
     assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
 
+// `-fPIE` code is for an executable: the unit's own data and thread-locals
+// bind directly (local-exec TLS), another module's through the GOT
+// (initial-exec TLS), and GNU ld links the object into a PIE.
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_ld_links_a_badc_pie_object_with_executable_tls_models() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping gnu_ld_links_a_badc_pie_object_with_executable_tls_models: no host cc");
+        return;
+    };
+    let dir = tempdir("pie-gnu-ld");
+    write_source(
+        &dir,
+        "unit.c",
+        "extern int ext;\nextern __thread int etl;\nint g = 5;\n__thread int tl = 7;\n\
+         int get(void) { return ext + g + tl++ + etl++; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "int ext = 10;\n__thread int etl = 20;\nint get(void);\n\
+         int main(void) { return get() != 42 || get() != 44; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-O", "-fPIE", "-c", "unit.c", "-o", "unit.o"])
+            .current_dir(&dir),
+        "compile the -fPIE unit",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-pie", "-fPIE", "-o", "main", "main.c", "unit.o"])
+            .current_dir(&dir),
+        "link the PIE with GNU ld",
+    );
+    let out = Command::new(dir.join("main")).output().expect("run");
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+}
+
 // An import-address slot whose name a header binds is resolved by the
 // binding, so it does not call for the on-demand runtime sources: a link
 // whose `-I` path shadows a header those sources include still succeeds.

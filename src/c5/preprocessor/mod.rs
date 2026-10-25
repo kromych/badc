@@ -896,6 +896,9 @@ enum PredefOn {
     Windows,
     /// Targets whose objects are ELF, whichever the OS.
     Elf,
+    /// Targets whose code is position-independent whatever the flags:
+    /// the Mach-O and PE ones.
+    AlwaysPic,
     /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
     /// choice to the implementation; gcc and clang report it here.
     UnsignedChar,
@@ -914,6 +917,7 @@ impl PredefOn {
             PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
             PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
             PredefOn::Elf => target.binary_format() == BinaryFormat::Elf,
+            PredefOn::AlwaysPic => target.binary_format() != BinaryFormat::Elf,
             PredefOn::UnsignedChar => !target.plain_char_signed(),
         }
     }
@@ -1014,6 +1018,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     // ELF-only directives and attributes on it (`.type`, `.size`,
     // `.symver`, `.hidden`, `@progbits` section types, visibility).
     (PredefOn::Elf, &[("__ELF__", "1")]),
+    // clang's values there, with or without `-fPIC`; on ELF the driver
+    // derives them from the PIC flags.
+    (PredefOn::AlwaysPic, &[("__pic__", "2"), ("__PIC__", "2")]),
     (
         PredefOn::MacOS,
         &[

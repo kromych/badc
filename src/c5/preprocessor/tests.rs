@@ -4697,6 +4697,7 @@ fn target_predefines_are_locked() {
     ];
     // The object format's, not the OS's: the Linux targets are the ELF ones.
     const ELF: &[(&str, &str)] = &[("__ELF__", "1")];
+    const ALWAYS_PIC: &[(&str, &str)] = &[("__pic__", "2"), ("__PIC__", "2")];
     const WINDOWS: &[(&str, &str)] = &[
         ("_WIN32", "1"),
         ("_WIN64", "1"),
@@ -4712,6 +4713,7 @@ fn target_predefines_are_locked() {
         .chain(MACOS)
         .chain(LINUX)
         .chain(ELF)
+        .chain(ALWAYS_PIC)
         .chain(WINDOWS)
         .copied()
         .collect();
@@ -4719,9 +4721,24 @@ fn target_predefines_are_locked() {
         let want: Vec<(&str, &str)> = match target {
             Target::LinuxX64 => X86_64.iter().chain(LINUX).chain(ELF).copied().collect(),
             Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).chain(ELF).copied().collect(),
-            Target::MacOSAarch64 => AARCH64.iter().chain(MACOS).copied().collect(),
-            Target::WindowsX64 => X86_64.iter().chain(WINDOWS).copied().collect(),
-            Target::WindowsAarch64 => AARCH64.iter().chain(WINDOWS).copied().collect(),
+            Target::MacOSAarch64 => AARCH64
+                .iter()
+                .chain(MACOS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
+            Target::WindowsX64 => X86_64
+                .iter()
+                .chain(WINDOWS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
+            Target::WindowsAarch64 => AARCH64
+                .iter()
+                .chain(WINDOWS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
         };
         let pp = Preprocessor::new(spec, target, "0.1.0");
         for (name, _) in &every {

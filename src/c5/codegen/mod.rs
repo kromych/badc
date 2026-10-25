@@ -4118,6 +4118,13 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. The
     /// image's own form is the link's; see [`ExecForm`].
     pub pic: bool,
+    /// `-fPIE` / `-fpie`: with [`Self::pic`], the code is for an
+    /// executable, whose own definitions no other module preempts (System
+    /// V gABI symbol resolution). They bind directly instead of through
+    /// ELF symbol interposition, and a thread-local takes the executable
+    /// TLS models (local-exec for the unit's own, initial-exec for
+    /// another module's) instead of a TLS descriptor.
+    pub pie: bool,
     /// The object is compiled for a link that applies its relocations
     /// after mapping, as a position-independent image does (ELF
     /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
@@ -4545,6 +4552,7 @@ impl NativeOptions {
             jump_tables: true,
             sibling_calls: true,
             pic: false,
+            pie: false,
             pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,

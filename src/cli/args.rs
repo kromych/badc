@@ -145,6 +145,11 @@ pub(crate) struct Codegen {
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
+    /// The last of the PIC flags was `-fpie` / `-fPIE`.
+    pub(crate) fpie: bool,
+    /// 1 for `-fpic` / `-fpie`, 2 for `-fPIC` / `-fPIE`: the value gcc
+    /// gives `__pic__` and `__pie__`.
+    pub(crate) pic_level: u8,
     /// `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
     /// absence of any PIC flag and an explicit opt-out choose different
     /// `const` placements in a `-c` object.
@@ -177,6 +182,8 @@ impl Default for Codegen {
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
+            fpie: false,
+            pic_level: 0,
             fno_pic: false,
             code_model: badc::CodeModel::Small,
             hardening: badc::Hardening::NONE,
@@ -1395,13 +1402,20 @@ impl Parser {
             // relocation reaches the object, so a consumer that relocates
             // it wholesale at load can take it. The flags choose
             // relocation shapes; an executable's form is `-pie` /
-            // `-no-pie`.
+            // `-no-pie`. The last one given wins, as in gcc.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
                 code.fpic = true;
+                code.fpie = matches!(arg, "-fPIE" | "-fpie");
+                code.pic_level = if matches!(arg, "-fpic" | "-fpie") {
+                    1
+                } else {
+                    2
+                };
                 code.fno_pic = false;
             }
             "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
                 code.fpic = false;
+                code.fpie = false;
                 code.fno_pic = true;
             }
             // gcc / clang `-fno-jump-tables`: a switch never dispatches
@@ -2033,6 +2047,7 @@ impl Parser {
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
+        self.define_pic_macros(target);
         self.check_code_model(mode, target)?;
         self.check_exec_form(mode, target)?;
         self.link.check_groups()?;
@@ -2345,6 +2360,30 @@ impl Parser {
         Ok(())
     }
 
+    /// gcc's `__pic__` / `__PIC__` and, for the PIE flags, `__pie__` /
+    /// `__PIE__` on an ELF target, valued by the last PIC flag; the
+    /// Mach-O and PE targets predefine `__PIC__` whatever the flags.
+    /// `-D` and `-U` still win.
+    fn define_pic_macros(&mut self, target: Target) {
+        if target.binary_format() != badc::BinaryFormat::Elf || !self.codegen.fpic {
+            return;
+        }
+        let pic = self.codegen.pic_level;
+        let pie = if self.codegen.fpie { pic } else { 0 };
+        for (name, value) in [
+            ("__pic__", pic),
+            ("__PIC__", pic),
+            ("__pie__", pie),
+            ("__PIE__", pie),
+        ] {
+            if value != 0 && !self.front.defines.iter().any(|(n, _)| n == name) {
+                self.front
+                    .defines
+                    .push((name.to_string(), value.to_string()));
+            }
+        }
+    }
+
     /// `-pie` / `-no-pie` pick the form of an executable the link
     /// writes, which `--freestanding` fixes and only ELF leaves open.
     fn check_exec_form(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
@@ -2481,6 +2520,7 @@ impl Codegen {
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
         opts.pic = self.fpic;
+        opts.pie = self.fpie;
         opts.pic_link = pic_link;
         opts.code_model = self.code_model;
         opts.hardening = self.hardening;
@@ -3290,6 +3330,45 @@ mod tests {
             reject(&["-jx", "a.c"]),
             ("badc: error: unknown option `-jx`".to_string(), 1)
         );
+    }
+
+    #[test]
+    fn the_last_pic_flag_chooses_the_form_and_the_gcc_macros() {
+        let macros = |args: &[&str]| -> Vec<(String, String)> {
+            let cli = parse(args);
+            (cli.front.defines.iter())
+                .filter(|(n, _)| {
+                    matches!(n.as_str(), "__pic__" | "__PIC__" | "__pie__" | "__PIE__")
+                })
+                .cloned()
+                .collect()
+        };
+        let both = |pic: &str, pie: Option<&str>| {
+            let mut v = vec![
+                ("__pic__".to_string(), pic.to_string()),
+                ("__PIC__".to_string(), pic.to_string()),
+            ];
+            if let Some(pie) = pie {
+                v.push(("__pie__".to_string(), pie.to_string()));
+                v.push(("__PIE__".to_string(), pie.to_string()));
+            }
+            v
+        };
+        let linux = "--target=linux-x64";
+        assert_eq!(macros(&[linux, "a.c"]), vec![]);
+        assert_eq!(macros(&[linux, "-fpic", "a.c"]), both("1", None));
+        assert_eq!(macros(&[linux, "-fPIE", "a.c"]), both("2", Some("2")));
+        assert_eq!(macros(&[linux, "-fPIE", "-fPIC", "a.c"]), both("2", None));
+        assert_eq!(
+            macros(&[linux, "-fPIC", "-fpie", "a.c"]),
+            both("1", Some("1"))
+        );
+        assert_eq!(macros(&[linux, "-fPIE", "-fno-pic", "a.c"]), vec![]);
+        assert_eq!(macros(&["--target=macos-aarch64", "-fPIE", "a.c"]), vec![]);
+        let pie = parse(&[linux, "-fPIC", "-fPIE", "a.c"]).codegen;
+        assert!(pie.fpic && pie.fpie);
+        let pic = parse(&[linux, "-fPIE", "-fpic", "a.c"]).codegen;
+        assert!(pic.fpic && !pic.fpie);
     }
 
     #[test]

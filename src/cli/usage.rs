@@ -352,6 +352,12 @@ Compile knobs:
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
+                           Under -fPIC another ELF module may preempt the
+                           unit's definitions; under -fPIE, code for an
+                           executable, they bind directly and thread-locals
+                           take the executable TLS models. The last one
+                           given wins and sets __pic__ / __PIC__ (and
+                           __pie__ / __PIE__) to 1 or 2, as gcc does.
                            An executable's own form is -pie / -no-pie.
   -fno-pic, -fno-pie       Compile the `-c` object for a link that
                            resolves its relocations statically, keeping

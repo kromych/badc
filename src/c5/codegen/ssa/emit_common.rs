@@ -2685,6 +2685,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         }
         f.general_regs_only = native.no_fp_regs;
         f.tls_dynamic = native.pic
+            && !native.pie
             && matches!(
                 target,
                 super::Target::LinuxX64 | super::Target::LinuxAarch64

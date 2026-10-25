@@ -6,6 +6,7 @@
 // the compile, and one it does not bind stops the link. Spot values are
 // the C library's: glibc 2.43's on Linux and the macOS SDK's.
 #define _GNU_SOURCE 1
+#include <aio.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -19,9 +20,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ipc.h>
 #include <sys/mman.h>
+#include <sys/msg.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(_POSIX_MESSAGE_PASSING) && _POSIX_MESSAGE_PASSING != -1
+#include <mqueue.h>
+#endif
 
 #ifndef _POSIX_VERSION
 #error _POSIX_VERSION is not defined
@@ -33,6 +41,16 @@ static const fn named[] = {
     (fn)posix_fadvise,
     (fn)posix_madvise,
     (fn)posix_memalign,
+#endif
+#if defined(_POSIX_ASYNCHRONOUS_IO) && _POSIX_ASYNCHRONOUS_IO != -1
+    (fn)aio_cancel,
+    (fn)aio_error,
+    (fn)aio_fsync,
+    (fn)aio_read,
+    (fn)aio_return,
+    (fn)aio_suspend,
+    (fn)aio_write,
+    (fn)lio_listio,
 #endif
 #if defined(_POSIX_BARRIERS) && _POSIX_BARRIERS != -1
     (fn)pthread_barrier_init,
@@ -67,6 +85,18 @@ static const fn named[] = {
 #endif
 #if defined(_POSIX_MEMORY_PROTECTION) && _POSIX_MEMORY_PROTECTION != -1
     (fn)mprotect,
+#endif
+#if defined(_POSIX_MESSAGE_PASSING) && _POSIX_MESSAGE_PASSING != -1
+    (fn)mq_close,
+    (fn)mq_getattr,
+    (fn)mq_notify,
+    (fn)mq_open,
+    (fn)mq_receive,
+    (fn)mq_send,
+    (fn)mq_setattr,
+    (fn)mq_timedreceive,
+    (fn)mq_timedsend,
+    (fn)mq_unlink,
 #endif
 #if defined(_POSIX_PRIORITY_SCHEDULING) && _POSIX_PRIORITY_SCHEDULING != -1
     (fn)sched_get_priority_max,
@@ -243,6 +273,20 @@ static const fn named[] = {
     (fn)timer_gettime,
     (fn)timer_settime,
 #endif
+#if defined(_XOPEN_SHM) && _XOPEN_SHM != -1
+    (fn)ftok,
+    (fn)msgctl,
+    (fn)msgget,
+    (fn)msgrcv,
+    (fn)msgsnd,
+    (fn)semctl,
+    (fn)semget,
+    (fn)semop,
+    (fn)shmat,
+    (fn)shmctl,
+    (fn)shmdt,
+    (fn)shmget,
+#endif
     0,
 };
 
@@ -261,6 +305,9 @@ int main(void) {
     if (_POSIX_MONOTONIC_CLOCK != 0) return 10;
     if (_POSIX_SPORADIC_SERVER != -1) return 11;
     if (_POSIX_TRACE != -1) return 12;
+    if (_POSIX_ASYNCHRONOUS_IO != 200809L || _POSIX_PRIORITIZED_IO != 200809L) return 13;
+    if (_POSIX_MESSAGE_PASSING != 200809L) return 14;
+    if (_XOPEN_SHM != 1 || _XOPEN_REALTIME != 1) return 15;
 #endif
 #ifdef __APPLE__
     if (_POSIX_VERSION != 200112L) return 1;
@@ -275,6 +322,9 @@ int main(void) {
     if (_POSIX_MONOTONIC_CLOCK != -1) return 10;
     if (_POSIX_SPORADIC_SERVER != -1) return 11;
     if (_POSIX_TRACE != -1) return 12;
+    if (_POSIX_ASYNCHRONOUS_IO != -1 || _POSIX_PRIORITIZED_IO != -1) return 13;
+    if (_POSIX_MESSAGE_PASSING != -1) return 14;
+    if (_XOPEN_SHM != 1 || _XOPEN_REALTIME != -1) return 15;
 #endif
     while (named[i])
         i++;

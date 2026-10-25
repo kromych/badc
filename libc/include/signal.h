@@ -269,11 +269,25 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 #endif
 
 // Asynchronous notification (POSIX 7.14): what a per-process timer,
-// an AIO completion or a message queue delivers. Linux only -- Darwin
-// has neither `struct sigevent` nor the interfaces that take one.
-// The layout is glibc's 64-byte record: the value word, the two ints,
-// and the SIGEV_THREAD pair at offset 16, which glibc reaches through
-// its `sigev_notify_function` / `sigev_notify_attributes` macros.
+// an AIO completion or a message queue delivers. On Linux glibc's
+// 64-byte record: the value word, the two ints, and the SIGEV_THREAD
+// pair at offset 16, which glibc reaches through its
+// `sigev_notify_function` / `sigev_notify_attributes` macros. On macOS
+// the SDK's 32-byte record, which only the AIO calls take.
+#ifdef __APPLE__
+struct sigevent {
+    int sigev_notify;
+    int sigev_signo;
+    union sigval sigev_value;
+    void (*sigev_notify_function)(union sigval);
+    struct __c5_pthread_attr *sigev_notify_attributes;
+};
+
+#define SIGEV_NONE   0
+#define SIGEV_SIGNAL 1
+#define SIGEV_THREAD 3
+#define SIGEV_KEVENT 4
+#endif
 #ifdef __linux__
 struct sigevent {
     union sigval sigev_value;                     /* offset  0 */

@@ -209,6 +209,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("sys/uio.h", include_str!("../../libc/include/sys/uio.h")),
     ("sys/ipc.h", include_str!("../../libc/include/sys/ipc.h")),
     ("sys/shm.h", include_str!("../../libc/include/sys/shm.h")),
+    ("sys/sem.h", include_str!("../../libc/include/sys/sem.h")),
+    ("sys/msg.h", include_str!("../../libc/include/sys/msg.h")),
     (
         "sys/queue.h",
         include_str!("../../libc/include/sys/queue.h"),
@@ -471,6 +473,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "semaphore.h",
         include_str!("../../libc/include/semaphore.h"),
     ),
+    ("mqueue.h", include_str!("../../libc/include/mqueue.h")),
+    ("aio.h", include_str!("../../libc/include/aio.h")),
     ("dlfcn.h", include_str!("../../libc/include/dlfcn.h")),
     ("fenv.h", include_str!("../../libc/include/fenv.h")),
     ("io.h", include_str!("../../libc/include/io.h")),

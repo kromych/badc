@@ -27,6 +27,8 @@
 #define O_CLOEXEC    0x1000000
 #define O_NOFOLLOW   0x0100
 #define O_ACCMODE    0x0003
+#define O_SYNC       0x0080
+#define O_DSYNC      0x400000
 #endif
 #ifdef __linux__
 // splice() flags.

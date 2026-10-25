@@ -748,8 +748,12 @@ fn collect_inputs<T: InputObject>(
     // built for another machine than `want` is skipped, as bfd skips it.
     let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Result<PathBuf, i32> {
         for dir in &a.lib_paths {
-            let so = dir.join(format!("lib{name}.so"));
-            let ar = dir.join(format!("lib{name}.a"));
+            // bfd joins the directory and the file name with `/` on every
+            // host, and that path is what its diagnostics print.
+            let d = dir.to_string_lossy();
+            let sep = if d.ends_with(['/', '\\']) { "" } else { "/" };
+            let so = PathBuf::from(format!("{d}{sep}lib{name}.so"));
+            let ar = PathBuf::from(format!("{d}{sep}lib{name}.a"));
             for candidate in [so].into_iter().filter(|_| shared).chain([ar]) {
                 if !candidate.is_file() {
                     continue;

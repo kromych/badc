@@ -689,8 +689,10 @@ impl Compiler {
             // dimensions fold into the aggregate-backed pointee below.
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             // C99 6.7.5.2p2: at block scope the outermost pointee bound may
-            // be variable (`T (*p)[n]`), the pointer's type variably modified.
+            // be variable (`T (*p)[n]`), the pointer's type variably modified;
+            // a parameter's bound is evaluated on entry (6.9.1p10).
             let mut vm_dim = None;
+            let mut vm_param = None;
             let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
@@ -773,7 +775,7 @@ impl Compiler {
                         // negative sentinel `array_agg_type` keeps.
                         pointee_dims.push(-1);
                     } else {
-                        let vm = self.pending.vla_allowed && !param_ctx;
+                        let vm = self.pending.vla_allowed || param_ctx;
                         let m = if vm {
                             self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
                         } else {
@@ -785,6 +787,12 @@ impl Compiler {
                                     Code::UNSUPPORTED,
                                     "a non-constant inner array dimension is not supported",
                                 ));
+                            }
+                            if param_ctx {
+                                vm_param = self.parse_param_array_size()?;
+                                self.accept(']')?;
+                                pointee_dims.push(-1);
+                                continue;
                             }
                             self.expr(Token::Assign as i64)?;
                             self.require_integer_size(self.ty)?;
@@ -874,6 +882,21 @@ impl Compiler {
                     let (vla_ty, bound) = self.vla_bound_type(pointee, dim);
                     self.pending.vm_bound_stores.push(bound.store);
                     pointee = vla_ty;
+                }
+                if let Some(mut size) = vm_param.take().filter(|_| idx != usize::MAX) {
+                    let rest = &pointee_dims[1..];
+                    let elem = if rest.is_empty() {
+                        outer_ty_before_inner
+                    } else {
+                        self.array_agg_type(outer_ty_before_inner, rest)
+                    };
+                    let levels = inner_ptr_levels;
+                    size.vm = Some(super::function::VmParam {
+                        sym: idx,
+                        elem,
+                        levels,
+                    });
+                    self.param_sizes.push(size);
                 }
                 inner_ty = (pointee + inner_ptr_levels * (Ty::Ptr as i64))
                     | (inner_ty & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK));
@@ -1124,6 +1147,22 @@ impl Compiler {
             } else {
                 0
             };
+            if let Some(mut size) = self.pending.vm_param_bound.take()
+                && idx != usize::MAX
+                && full_dims.len() >= 2
+            {
+                let elem = if full_dims.len() > 2 {
+                    self.array_agg_type(ty, &full_dims[2..])
+                } else {
+                    ty
+                };
+                size.vm = Some(super::function::VmParam {
+                    sym: idx,
+                    elem,
+                    levels: 1,
+                });
+                self.param_sizes.push(size);
+            }
             if idx != usize::MAX {
                 // Always overwrite, even with 0, so a rebinding of a
                 // name that previously carried a multi-dim shape (a
@@ -1180,6 +1219,15 @@ impl Compiler {
             }
             let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
             else {
+                // A parameter's first inner bound may be variable: the
+                // adjusted parameter points to a variable-length array whose
+                // bound the definition evaluates on entry (C99 6.9.1p10).
+                if param_ctx && dims.is_empty() && self.pending.vm_param_bound.is_none() {
+                    self.pending.vm_param_bound = self.parse_param_array_size()?;
+                    self.consume(b']', "close bracket expected in array declarator")?;
+                    dims.push(-1);
+                    continue;
+                }
                 // A non-constant inner dimension makes the whole
                 // object a variably-modified type (C99 6.7.6.2); c5's
                 // stride model is compile-time only, so reject it

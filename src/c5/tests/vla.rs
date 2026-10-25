@@ -139,6 +139,20 @@ fn a_block_scope_pointer_to_a_vla_takes_its_bound_where_declared() {
     }
 }
 
+/// Parameters of variably modified type, their bounds evaluated on entry
+/// (C99 6.9.1p10): `char (*p)[n]`, `int m[][n]`, `long m[n][n]` and a
+/// qualified pointer to a two-dimensional one, under the interpreter for
+/// both data models; gcc 16 and clang 22 run the fixture to 0.
+#[test]
+fn a_parameter_may_point_to_a_vla() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("vla_parameter.c", t), 0, "{t:?}");
+    }
+    let src = "int n = 2;\nvoid f(int (*p)[n], int n) { (void)p; }\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("which a later parameter declares"), "{msg}");
+}
+
 /// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
 /// is no constant: an array bound of it declares a variable-length array
 /// (`int b[sizeof a]`), and a context that requires a constant rejects it,

@@ -62,6 +62,19 @@ pub(super) struct ParsedParams {
 pub(super) struct ParamSize {
     pub(super) at: crate::c5::lexer::LexerSnapshot,
     pub(super) outer_names: Vec<usize>,
+    /// The bound of the array the parameter points to, which makes it
+    /// variably modified (C99 6.7.5.2): its type takes the byte count the
+    /// evaluation stores.
+    pub(super) vm: Option<VmParam>,
+}
+
+/// A variably modified parameter: its symbol, the element type of the
+/// array it points to, and the pointer levels above that array.
+#[derive(Clone, Copy)]
+pub(super) struct VmParam {
+    pub(super) sym: usize,
+    pub(super) elem: i64,
+    pub(super) levels: i64,
 }
 
 impl core::fmt::Debug for ParamSize {

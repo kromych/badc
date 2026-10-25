@@ -1554,7 +1554,27 @@ impl Compiler {
             }
             self.restore_lex(size.at);
             self.expr(Token::Assign as i64)?;
-            items.extend(self.ast_emit_expr_stmt());
+            let Some(vm) = size.vm else {
+                items.extend(self.ast_emit_expr_stmt());
+                continue;
+            };
+            // The parameter's type takes the variable-length array whose byte
+            // count this evaluation stores.
+            if self.is_int128_ty(self.ty) {
+                self.ast_apply_assign_conv(self.size_t_ty());
+            }
+            let Some(dim) = self.ast_acc.take() else {
+                continue;
+            };
+            let (vla_ty, bound) = self.vla_bound_type(vm.elem, dim);
+            let pos = self.ast_src_pos();
+            items.push(
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos),
+            );
+            let declared = self.symbols[vm.sym].type_;
+            let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
+            self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;
         }
         self.restore_lex(resume);
         Ok(items)

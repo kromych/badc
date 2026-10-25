@@ -777,6 +777,15 @@ impl Compiler {
     /// which the adjustment to a pointer discards (C99 6.7.5.3p7) and
     /// which has integer type all the same.
     pub(super) fn skip_param_array_size(&mut self) -> Result<(), C5Error> {
+        let size = self.parse_param_array_size()?;
+        self.param_sizes.extend(size);
+        Ok(())
+    }
+
+    /// [`Self::skip_param_array_size`], the size left to the caller.
+    pub(super) fn parse_param_array_size(
+        &mut self,
+    ) -> Result<Option<super::function::ParamSize>, C5Error> {
         while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
             self.next()?;
         }
@@ -789,6 +798,7 @@ impl Compiler {
             size = Some(super::function::ParamSize {
                 at,
                 outer_names: alloc::vec::Vec::new(),
+                vm: None,
             });
         }
         let mut depth: i64 = 0;
@@ -803,8 +813,7 @@ impl Compiler {
                 depth += 1;
             } else if self.lex.tk == ']' {
                 if depth == 0 {
-                    self.param_sizes.extend(size);
-                    return Ok(());
+                    return Ok(size);
                 }
                 depth -= 1;
             } else if self.lex.tk == 0 {

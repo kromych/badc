@@ -7713,3 +7713,30 @@ fn a_pie_with_an_interpreter_imports_an_undefined_weak_function_it_calls() {
         }
     }
 }
+
+/// `-z lazy` is the engine's binding, lazy PLT entries bound through
+/// `R_*_JUMP_SLOT`, so it is taken and records nothing; the later of it
+/// and `-z now` stands, as GNU ld 2.46.1 takes them.
+#[test]
+fn z_lazy_is_taken_and_the_later_of_it_and_z_now_stands() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for (keywords, now) in [
+        (&["lazy"][..], false),
+        (&["now", "lazy"], false),
+        (&["lazy", "now"], true),
+    ] {
+        let mut z = ZKeywords::default();
+        for kw in keywords {
+            z.push(parse_z_keyword(kw).unwrap());
+        }
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.take_z_keywords(&z).expect("the engine takes them");
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tag = |want: u64| (dyn_tags(&res.image).into_iter()).find(|&(t, _)| t == want);
+        let flags = tag(dynamic::DT_FLAGS).map(|t| t.1 & dynamic::DF_BIND_NOW);
+        assert_eq!(flags, now.then_some(dynamic::DF_BIND_NOW), "{keywords:?}");
+        let flags_1 = tag(dynamic::DT_FLAGS_1).map_or(0, |t| t.1 & dynamic::DF_1_NOW);
+        assert_eq!(flags_1 != 0, now, "{keywords:?}");
+    }
+}

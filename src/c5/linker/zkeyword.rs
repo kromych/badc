@@ -62,9 +62,6 @@ impl ZKeyword {
                 ZSupport::Holds
             }
             ZKeyword::Relro(true) => ZSupport::Refused("the link writes no PT_GNU_RELRO"),
-            ZKeyword::Now(false) => {
-                ZSupport::Refused("every import binds when the image is loaded")
-            }
             ZKeyword::Defs(false) => ZSupport::Refused("an unresolved reference is an error"),
             ZKeyword::SeparateCode(true) => {
                 ZSupport::Refused("code shares its load with the read-only data on its pages")
@@ -352,7 +349,7 @@ mod tests {
             ("relro", 'R', 'H', 'H'),
             ("norelro", 'H', 'R', 'R'),
             ("now", 'A', 'H', 'H'),
-            ("lazy", 'R', 'R', 'R'),
+            ("lazy", 'A', 'R', 'R'),
             ("text", 'A', 'H', 'H'),
             ("notext", 'A', 'H', 'H'),
             ("defs", 'H', 'H', 'A'),
@@ -406,18 +403,11 @@ mod tests {
                 ZKeyword::ExecStack(false),
             ]
         );
-        assert_eq!(
-            z.refusal(ZKeyword::in_script_link),
-            None,
-            "now replaced lazy"
-        );
         z.push(ZKeyword::Now(false));
         assert_eq!(
-            z.refusal(ZKeyword::in_script_link),
-            Some((
-                ZKeyword::Now(false),
-                "every import binds when the image is loaded"
-            ))
+            z.get(|kw| matches!(kw, ZKeyword::Now(_)).then_some(kw)),
+            Some(ZKeyword::Now(false))
         );
+        assert_eq!(z.refusal(ZKeyword::in_script_link), None);
     }
 }

@@ -6185,7 +6185,6 @@ fn link_options_badc_does_not_implement_are_refused_by_name() {
     }
     let scripted: &[(&[&str], &str)] = &[
         (&["-Wl,-z,relro"], "`-z relro`"),
-        (&["-Wl,-z,lazy"], "`-z lazy`"),
         (&["-Wl,-z,undefs"], "`-z undefs`"),
         (&["--export-all"], "`--export-all / --export-data`"),
         (&["-lm"], "`-l`"),
@@ -6572,7 +6571,7 @@ fn the_ld_persona_and_the_script_link_answer_every_z_keyword_alike() {
         "t.lds",
         "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
     );
-    let refused = ["relro", "lazy", "undefs", "separate-code"];
+    let refused = ["relro", "undefs", "separate-code"];
     for kw in [
         "execstack",
         "noexecstack",

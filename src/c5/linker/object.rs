@@ -54,6 +54,7 @@ const SHT_NOTE: u32 = 7;
 const SHT_GROUP: u32 = 17;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
+const SHF_WRITE: u64 = 0x1;
 const SHF_EXECINSTR: u64 = 0x4;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
@@ -300,6 +301,11 @@ pub struct DynamicImage {
     pub data_exports: alloc::collections::BTreeSet<String>,
     /// The exports typed as functions, `STT_FUNC` or `STT_GNU_IFUNC`.
     pub function_exports: alloc::collections::BTreeSet<String>,
+    /// Size, alignment and read-only-ness of each data export, which a
+    /// copy of it in an executable takes. The alignment is bfd's: the
+    /// largest power of two up to the defining section's that divides the
+    /// object's offset in it.
+    pub copy_layout: alloc::collections::BTreeMap<String, (u64, u64, bool)>,
     pub tls_exports: alloc::collections::BTreeSet<String>,
     pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
     pub references: alloc::collections::BTreeSet<String>,
@@ -376,6 +382,16 @@ pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
                 // shows, capped at the targets' `max_align_t`.
                 match sym.st_info & 0xf {
                     STT_OBJECT => {
+                        if let Ok(home) = shdr(sym.st_shndx as usize) {
+                            let off = sym.st_value.wrapping_sub(home.sh_addr);
+                            let mut align = home.sh_addralign.max(1).next_power_of_two();
+                            while off % align != 0 {
+                                align /= 2;
+                            }
+                            let readonly = home.sh_flags & SHF_WRITE == 0;
+                            (image.copy_layout)
+                                .insert(name.clone(), (sym.st_size, align, readonly));
+                        }
                         let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
                         image
                             .object_sizes

@@ -214,8 +214,14 @@ impl<'a> LdsLinker<'a> {
                 }
                 // An address-width field of a dynamic image takes a dynamic
                 // relocation against the import; the field holds the addend.
-                if self.dynamic() && r.rtype == self.dyn_reloc_types().0 {
+                if self.dynamic()
+                    && r.rtype == self.dyn_reloc_types().0
+                    && !self.word_binds_copy(&sym.name)
+                {
                     return Some(r.addend as u64);
+                }
+                if let Some(copy) = self.copy_addr(&sym.name) {
+                    return Some(copy.wrapping_add(r.addend as u64));
                 }
                 errors.push(format!(
                     "{}: {} against `{}' cannot reach a shared library; \

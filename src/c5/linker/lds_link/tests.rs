@@ -2686,6 +2686,10 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
             function_exports: funcs.iter().map(|s| s.to_string()).collect(),
+            copy_layout: data
+                .iter()
+                .map(|s| (s.to_string(), (8, 8, false)))
+                .collect(),
             ..Default::default()
         },
         as_needed: false,
@@ -3000,10 +3004,11 @@ fn an_import_is_called_through_a_lazy_plt_entry_and_loaded_through_a_got_slot() 
     assert_eq!(tag(dynamic::DT_PLTREL), Some(dynamic::DT_RELA));
 }
 
-/// A reference that would need the imported object copied into this
-/// image is refused rather than left pointing at nothing.
+/// A shared object's reference that would need the imported object copied
+/// into it is refused rather than left pointing at nothing: only an
+/// executable holds copies.
 #[test]
-fn a_direct_reference_to_imported_data_is_refused() {
+fn a_shared_objects_direct_reference_to_imported_data_is_refused() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
     let obj = TestObj::new()
         .sec(
@@ -3018,7 +3023,10 @@ fn a_direct_reference_to_imported_data_is_refused() {
         .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
         .build(EM_X86_64);
     let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
-    let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])]);
+    let opts = LdsOptions {
+        shared: true,
+        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])])
+    };
     let e = alloc::format!(
         "{}",
         link_with_script(&script, objs, &opts).expect_err("refused")
@@ -6704,4 +6712,130 @@ fn an_executable_imports_an_undefined_weak_symbol_it_reaches_through_the_got() {
     );
     let (_, text) = image_section(&res.image, ".text");
     assert_eq!(text[1], 0x8b, "the load is kept");
+}
+
+/// x86-64 `mov bar(%rip), %eax` (PC32), `mov $baz, %eax` (32S), `mov
+/// $foo, %eax` (32S) and `ret`, then `&bar` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), bar(4), baz(5), foo(6).
+fn direct_user() -> Vec<u8> {
+    let text = [
+        0x8b, 0x05, 0, 0, 0, 0, 0xc7, 0xc0, 0, 0, 0, 0, 0xc7, 0xc0, 0, 0, 0, 0, 0xc3,
+    ];
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 19)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("baz", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 2, 4, rt::R_X86_64_PC32, -4)
+        .reloc(1, 0, 4, rt::R_X86_64_64, 0)
+        .build(EM_X86_64)
+}
+
+/// GNU ld 2.46.1 gives an executable a copy of a library object its code
+/// reaches by an address the link fixes (System V gABI, `R_*_COPY`): in
+/// `.dynbss`, at the largest alignment up to the defining section's that
+/// divides the object's offset, or in `.data.rel.ro` for an object the
+/// library keeps read-only. `.dynsym` defines the object at its copy,
+/// which the loader fills and every reference names; a PIE leaves a data
+/// word naming it to a relocation against the symbol, where a
+/// position-dependent executable writes the copy's address. A function
+/// such code takes the address of has its PLT entry as its address.
+#[test]
+fn an_executable_reaches_an_imported_object_through_a_copy() {
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let mut o = parse_lds_object("a.o", direct_user()).expect("parses");
+        if emit == LdsEmit::Exec {
+            for (at, sym) in [(8, 5), (14, 6)] {
+                o.sections[0].relocs.push(RawReloc {
+                    offset: at,
+                    sym,
+                    rtype: rt::R_X86_64_32S,
+                    addend: 0,
+                });
+            }
+        }
+        let mut lib = shared_input("libc.so.6", &["foo"], &["bar", "baz"]);
+        lib.lib
+            .copy_layout
+            .insert(String::from("bar"), (12, 4, false));
+        lib.lib
+            .copy_layout
+            .insert(String::from("baz"), (4, 4, true));
+        let opts = LdsOptions {
+            emit,
+            ..dynamic_opts(alloc::vec![lib])
+        };
+        let res = link_with_script(&script, alloc::vec![o], &opts).expect("links");
+        let img = &res.image;
+        let what = alloc::format!("{emit:?}");
+        let syms = image_dynsyms(img);
+        let row = |n: &str| syms.iter().find(|s| s.0 == n).cloned().unwrap();
+        let bss = section_index(img, ".bss") as u16;
+        let bar = row("bar");
+        assert_eq!(bar.2, bss, "{what}: bar is defined at its copy");
+        let relocs = dyn_relocs(img);
+        assert!(
+            relocs.contains(&(bar.1, rt::R_X86_64_COPY, String::from("bar"), 0)),
+            "{what}: {relocs:?}"
+        );
+        let (t, text) = image_section(img, ".text");
+        assert_eq!(t as i64 + 6 + u32_at(&text, 2) as i32 as i64, bar.1 as i64);
+        let (data, word) = image_section(img, ".data");
+        if emit == LdsEmit::Dyn {
+            assert!(relocs.contains(&(data, rt::R_X86_64_64, String::from("bar"), 0)));
+            continue;
+        }
+        assert_eq!(u64::from_le_bytes(word[..8].try_into().unwrap()), bar.1);
+        let baz = row("baz");
+        assert_eq!(
+            baz.2,
+            section_index(img, ".data.rel.ro") as u16,
+            "read-only copy"
+        );
+        assert_eq!(u32_at(&text, 8) as u64, baz.1);
+        let foo = row("foo");
+        let (plt, _) = image_section(img, ".plt");
+        assert_eq!(
+            (foo.1, foo.2),
+            (plt + 16, SHN_UNDEF),
+            "foo's PLT entry is its address"
+        );
+        assert_eq!(u32_at(&text, 14) as u64, foo.1);
+    }
+}
+
+/// A library object's copy takes bfd's alignment: the largest power of two
+/// up to its section's alignment that divides its offset in the section;
+/// one in a read-only section is copied to `.data.rel.ro`.
+#[test]
+fn a_library_states_the_layout_a_copy_of_its_object_takes() {
+    // .data (align 32): a at 0, b at 8, c at 0x20; .rodata: r.
+    // Symtab: null(0), sections(1, 2), a(3), b(4), c(5), r(6).
+    let o = TestObj::new()
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 32, &[0; 0x28])
+        .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 4, &[0; 4])
+        .sym("a", STB_GLOBAL, STT_OBJECT, 0, 0, 4)
+        .sym("b", STB_GLOBAL, STT_OBJECT, 0, 8, 4)
+        .sym("c", STB_GLOBAL, STT_OBJECT, 0, 0x20, 8)
+        .sym("r", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .build(EM_X86_64);
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let objs = alloc::vec![parse_lds_object("l.o", o).expect("parses")];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let lib = crate::c5::linker::object::read_dynamic_image(&res.image).expect("reads");
+    let layout: Vec<(&str, (u64, u64, bool))> = (lib.copy_layout.iter())
+        .map(|(n, l)| (n.as_str(), *l))
+        .collect();
+    assert_eq!(
+        layout,
+        [
+            ("a", (4, 32, false)),
+            ("b", (4, 8, false)),
+            ("c", (8, 32, false)),
+            ("r", (4, 4, true)),
+        ]
+    );
 }

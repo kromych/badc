@@ -244,6 +244,22 @@ impl<'a> LdsLinker<'a> {
                 syms.push(fs);
             }
         }
+        // A copied import is defined at its copy, as bfd's table states.
+        for c in &self.copies {
+            if let (Some(value), Some(o)) = (self.copy_addr(&c.name), self.copy_out(&c.name)) {
+                if track {
+                    index.by_name.insert(c.name.clone(), syms.len());
+                }
+                syms.push(FinalSym {
+                    name: c.name.clone(),
+                    info: (STB_GLOBAL << 4) | STT_OBJECT,
+                    other: STV_DEFAULT,
+                    shndx: out_shndx(o),
+                    value,
+                    size: c.size,
+                });
+            }
+        }
         // Script-defined symbols.
         let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
         script_syms.sort_by(|a, b| a.0.cmp(b.0));

@@ -2,8 +2,10 @@
 
 use crate::c5::linker::dynamic::{self, DynSym, VerDef};
 use crate::c5::linker::lds::glob_match;
+use crate::c5::linker::object::DynamicImage;
 use crate::c5::object::elf_reloc_types::{self as rt, GOT_BASE_SYMBOL as GOT_SYMBOL};
 use crate::c5::object::relr::encode_relr;
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
@@ -14,11 +16,11 @@ use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
-    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_NOTYPE, STT_OBJECT,
-    STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
-    SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA,
-    SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
-    machine_uses_rela,
+    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FUNC, STT_NOTYPE,
+    STT_OBJECT, STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR,
+    SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL,
+    SYNTH_RELA, SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym,
+    SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -181,7 +183,9 @@ impl<'a> LdsLinker<'a> {
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                     if self.undefweak_dynamic(id.obj, r.sym as usize)
-                        || self.import_of.contains_key(name) && !self.canonical.contains(name)
+                        || self.import_of.contains_key(name)
+                            && !self.canonical.contains(name)
+                            && !self.word_binds_copy(name)
                     {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
@@ -223,6 +227,17 @@ impl<'a> LdsLinker<'a> {
                     // A local in a discarded section: the slot stays zero.
                     (None, GotKey::Local(..)) => {}
                 }
+            }
+        }
+        // The loader fills each copy from the library's object.
+        for c in &self.copies {
+            if let Some(at) = self.copy_addr(&c.name) {
+                sym_relas.push(DynReloc {
+                    offset: at,
+                    rtype: self.copy_reloc_type(),
+                    addend: 0,
+                    sym: Some(c.name.clone()),
+                });
             }
         }
         if !pic {
@@ -427,29 +442,46 @@ impl<'a> LdsLinker<'a> {
     /// its visibility. Each version definition also contributes a
     /// symbol naming itself.
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
-        // Imports come first and in their own order: a dynamic
-        // relocation names one by the index that ordering fixes.
-        let mut out: Vec<DynSym> = self
-            .imports
-            .iter()
-            .map(|name| DynSym {
+        // Imports come first and in their own order. An executable defines
+        // a copied object at its copy, and states a function's PLT entry
+        // where that is the function's address.
+        let mut out: Vec<DynSym> = Vec::new();
+        for name in &self.imports {
+            let bind = if self.weak_imports.contains(name) {
+                STB_WEAK
+            } else {
+                STB_GLOBAL
+            };
+            let lib = |pick: fn(&DynamicImage) -> &BTreeSet<String>| {
+                (self.opts.shared_libs.iter()).any(|l| pick(&l.lib).contains(name))
+            };
+            let kind = if lib(|l| &l.function_exports) {
+                STT_FUNC
+            } else if lib(|l| &l.data_exports) {
+                STT_OBJECT
+            } else if lib(|l| &l.tls_exports) {
+                STT_TLS
+            } else {
+                STT_NOTYPE
+            };
+            let mut sym = DynSym {
                 name: name.clone(),
-                info: (if self.weak_imports.contains(name) {
-                    STB_WEAK
-                } else {
-                    STB_GLOBAL
-                } << 4)
-                    | STT_NOTYPE,
+                info: (bind << 4) | kind,
                 other: STV_DEFAULT,
                 shndx: SHN_UNDEF,
-                value: (self.canonical.contains(name))
-                    .then(|| self.stub_or_slot(name, Reach::Plt))
-                    .flatten()
-                    .unwrap_or(0),
+                value: 0,
                 size: 0,
                 version: dynamic::VER_NDX_GLOBAL,
-            })
-            .collect();
+            };
+            if let (Some(at), Some(o)) = (self.copy_addr(name), self.copy_out(name)) {
+                let size = self.copies[self.copy_of[name]].size;
+                (sym.info, sym.shndx, sym.value, sym.size) =
+                    ((bind << 4) | STT_OBJECT, out_shndx(o), at, size);
+            } else if self.canonical.contains(name) {
+                sym.value = self.stub_or_slot(name, Reach::Plt).unwrap_or(0);
+            }
+            out.push(sym);
+        }
         let mut names: Vec<&String> = self.globals.keys().collect();
         names.sort();
         for name in names {

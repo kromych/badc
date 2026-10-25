@@ -31,6 +31,7 @@
 #![cfg(feature = "std")]
 #![allow(dead_code)]
 
+mod copies;
 mod dynamic_sections;
 mod eval;
 mod got;
@@ -697,6 +698,9 @@ pub struct LdsLinker<'a> {
     /// The imports a position-dependent executable takes the PLT entry of
     /// as their address, which `.dynsym` states.
     canonical: HashSet<String>,
+    /// The data imports an executable holds a copy of, and their positions.
+    copies: Vec<copies::ObjectCopy>,
+    copy_of: HashMap<String, usize>,
     /// Program headers `SIZEOF_HEADERS` accounts for where the script
     /// declares none, measured from the previous round's layout.
     phdrs: usize,
@@ -828,6 +832,10 @@ const SYNTH_RELR: &str = ".relr.dyn";
 const SYNTH_GOT: &str = ".got";
 
 const SYNTH_GOTPLT: &str = ".got.plt";
+
+const SYNTH_DYNBSS: &str = ".dynbss";
+
+const SYNTH_DYNRELRO: &str = ".data.rel.ro";
 
 const SYNTH_BUILD_ID: &str = ".note.gnu.build-id";
 
@@ -1024,6 +1032,8 @@ impl<'a> LdsLinker<'a> {
             plt_syms: Vec::new(),
             plt_of: HashMap::new(),
             canonical: HashSet::new(),
+            copies: Vec::new(),
+            copy_of: HashMap::new(),
             phdrs: 4,
             outs: Vec::new(),
             stmts: Vec::new(),

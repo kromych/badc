@@ -12,10 +12,10 @@ use super::inputs::RawSection;
 use super::plt::{GOTPLT_RESERVED, PLT_ENTRY_SIZE};
 use super::{
     EM_386, EM_AARCH64, LdsEmit, LdsLinker, OUT_EH_FRAME, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE,
-    SHT_NOTE, SHT_PROGBITS, SHT_RELR, SHT_STRTAB, SYNTH_BUILD_ID, SYNTH_DYNAMIC, SYNTH_DYNSTR,
-    SYNTH_DYNSYM, SYNTH_EH_FRAME_HDR, SYNTH_GNU_HASH, SYNTH_GNU_PROPERTY, SYNTH_GOT, SYNTH_GOTPLT,
-    SYNTH_HASH, SYNTH_INTERP, SYNTH_PLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, SecFate,
-    machine_uses_rela,
+    SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_RELR, SHT_STRTAB, SYNTH_BUILD_ID, SYNTH_DYNAMIC,
+    SYNTH_DYNBSS, SYNTH_DYNRELRO, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_EH_FRAME_HDR, SYNTH_GNU_HASH,
+    SYNTH_GNU_PROPERTY, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_INTERP, SYNTH_PLT, SYNTH_RELR,
+    SYNTH_VERDEF, SYNTH_VERSYM, SecFate, machine_uses_rela,
 };
 use crate::c5::object::relr::encode_relr;
 
@@ -68,6 +68,18 @@ impl<'a> LdsLinker<'a> {
             let sec = &mut self.objects[synth].sections[idx];
             sec.addralign = 4;
             sec.size = self.opts.build_id.note_len() as u64;
+        }
+        let [bss, relro] = self.plan_copies();
+        for ((size, align), name, shtype) in [
+            (bss, SYNTH_DYNBSS, SHT_NOBITS),
+            (relro, SYNTH_DYNRELRO, SHT_PROGBITS),
+        ] {
+            if size != 0 {
+                let idx = self.push_synth_section(name, shtype, SHF_ALLOC | SHF_WRITE);
+                let synth = self.synth_obj;
+                let sec = &mut self.objects[synth].sections[idx];
+                (sec.size, sec.addralign) = (size, align);
+            }
         }
         let plt = !self.opts.shared_libs.is_empty() || self.calls_preemptible();
         if plt {

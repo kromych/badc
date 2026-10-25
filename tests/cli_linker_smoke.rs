@@ -12562,7 +12562,8 @@ fn elf32_dynamic_relocs(path: &Path) -> Vec<(u32, String)> {
 // reaches its own default-visibility definitions through the PLT, the GOT
 // and relocations naming them unless -Bsymbolic or -Bsymbolic-functions
 // binds them in place, and a PIE and a position-dependent executable
-// import through lazy PLT entries. Each image's dynamic relocations are GNU
+// import through lazy PLT entries, the latter reading the library's object
+// through a copy. Each image's dynamic relocations are GNU
 // ld's, type for type; where an i386 loader is installed, each executable
 // prints what the bindings give.
 #[cfg(target_os = "linux")]
@@ -12592,7 +12593,7 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
          static void put(int v) {\n  char b[16];\n  int i = 15;\n  b[i] = ' ';\n\
            do { b[--i] = '0' + v % 10; v /= 10; } while (v);\n\
            sys3(4, 1, (int)(b + i), 16 - i);\n}\n\
-         void _start(void) {\n  put(get_g()); put(call_f()); put(call_s()); put(*pd);\n\
+         void _start(void) {\n  put(get_g()); put(call_f()); put(call_s()); put(*pd); put(lib_data);\n\
            sys3(1, 0, 0, 0);\n}\n",
     );
     let cflags = [
@@ -12639,9 +12640,9 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
         eprintln!("no i386 loader: the executables are linked, not run");
     }
     for (flag, want) in [
-        (None, "5 5177 3 9"),
-        (Some("-Bsymbolic"), "1 1111 3 9"),
-        (Some("-Bsymbolic-functions"), "5 5111 3 9"),
+        (None, "5 5177 3 9 9"),
+        (Some("-Bsymbolic"), "1 1111 3 9 9"),
+        (Some("-Bsymbolic-functions"), "5 5111 3 9 9"),
     ] {
         for with_script in [false, true] {
             let sub = dir.join(format!(

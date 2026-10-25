@@ -53,7 +53,7 @@ pub(super) fn index_map(names: &[String]) -> HashMap<String, usize> {
 
 /// A relocation holding a branch displacement: reaching an imported
 /// symbol from one means going through a stub.
-fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
+pub(super) fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
     match machine {
         EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
         EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
@@ -165,13 +165,13 @@ impl<'a> LdsLinker<'a> {
                     if !names.contains(sym.name.as_str()) {
                         continue;
                     }
-                    let pointer = self.function_pointer(&sym.name, r.rtype);
+                    let pointer = self.function_pointer(&sym.name, r, sec.flags);
                     if reloc_needs_plt(self.machine, r.rtype) && !self.is_data_export(&sym.name)
-                        || pointer
+                        || pointer.is_some()
                     {
                         called.insert(&sym.name);
                     }
-                    if pointer && self.opts.emit == LdsEmit::Exec {
+                    if pointer == Some(true) {
                         canonical.insert(&sym.name);
                     }
                 }
@@ -183,16 +183,23 @@ impl<'a> LdsLinker<'a> {
         self.import_of = index_map(&self.imports);
     }
 
-    /// Whether an `rtype` field naming the import `name` holds a function's
-    /// address that an executable must compare equal to the library's.
-    /// aarch64 GNU ld gives such a function a PLT entry in an executable,
-    /// and in a position-dependent one makes the entry the function's
-    /// address (AAELF64, the canonical PLT entry).
-    fn function_pointer(&self, name: &str, rtype: u32) -> bool {
-        self.machine == EM_AARCH64
-            && !self.opts.shared
-            && rtype == rt::R_AARCH64_ABS64
-            && (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name))
+    /// Whether `r`, in a section with `flags`, takes the address of the
+    /// function import `name` in an executable, which then gives the
+    /// function a PLT entry: `Some(true)` where the entry is the
+    /// function's address, so it compares equal to the library's. A
+    /// position-dependent executable's direct reference takes one, as does
+    /// an aarch64 executable's `R_AARCH64_ABS64`, as GNU ld links them.
+    fn function_pointer(&self, name: &str, r: &RawReloc, flags: u64) -> Option<bool> {
+        let function =
+            (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name));
+        if !function || self.opts.shared {
+            return None;
+        }
+        let pde = self.opts.emit == LdsEmit::Exec;
+        if pde && self.direct_reference(r, flags, true) {
+            return Some(true);
+        }
+        (self.machine == EM_AARCH64 && r.rtype == rt::R_AARCH64_ABS64).then_some(pde)
     }
 
     /// `.dynsym` index of `name`: the table's, and before the table is
@@ -228,7 +235,7 @@ impl<'a> LdsLinker<'a> {
             return None;
         }
         if reloc_needs_plt(self.machine, rtype)
-            || self.canonical.contains(name) && rtype == self.dyn_reloc_types().0
+            || self.canonical.contains(name) && !reloc_uses_got(self.machine, rtype)
         {
             return self.stub_or_slot(name, Reach::Plt);
         }

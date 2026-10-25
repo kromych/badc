@@ -13588,6 +13588,90 @@ fn a_text_relocation_warns_unless_z_text_or_z_notext_says_otherwise() {
     );
 }
 
+// The GNU ld persona reads an entry no symbol names as an address in C's
+// bases, runs the `-dT` / `--default-script` script where no `-T` names
+// one, and searches the -L directories for the file `-l:<file>` names, as
+// GNU ld does.
+#[test]
+fn the_ld_persona_takes_a_numeric_entry_a_default_script_and_a_named_library_file() {
+    let dir = tempdir("ld-options");
+    write_source(&dir, "m.s", ".globl _start\n_start: call f\n ret\n");
+    write_source(&dir, "f.s", ".globl f\n.type f,@function\nf: ret\n");
+    write_source(
+        &dir,
+        "d.ld",
+        "SECTIONS { . = 0x500000; .text : { *(.text) } }\n",
+    );
+    write_source(
+        &dir,
+        "t.ld",
+        "SECTIONS { . = 0x600000; .text : { *(.text) } }\n",
+    );
+    std::fs::create_dir_all(dir.join("lib")).expect("mkdir");
+    let badc_in = |args: &[&str]| {
+        let out = Command::new(badc())
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), err)
+    };
+    for args in [
+        &["-q", "-c", "--target=linux-x64", "m.s", "-o", "m.o"][..],
+        &["-q", "-c", "--target=linux-x64", "f.s", "-o", "f.o"],
+        &[
+            "--ld",
+            "-shared",
+            "-soname",
+            "libx.so",
+            "f.o",
+            "-o",
+            "lib/libx.so",
+        ],
+        &["-q", "--ar", "-o", "lib/libx.a", "f.o"],
+    ] {
+        let (ok, err) = badc_in(args);
+        assert!(ok, "{args:?}: {err}");
+    }
+    let entry = || {
+        let b = std::fs::read(dir.join("out")).expect("read the image");
+        u64::from_le_bytes(b[24..32].try_into().unwrap())
+    };
+    let ld = |args: &[&str]| badc_in(&[&["--ld"][..], args, &["-o", "out"]].concat());
+    for (args, want) in [
+        (&["-e", "0x1234", "m.o", "f.o"][..], 0x1234),
+        (&["-e", "4096", "m.o", "f.o"], 4096),
+        (&["-e", "010", "m.o", "f.o"], 8),
+        (&["-dT", "d.ld", "m.o", "f.o"], 0x500000),
+        (&["--default-script=d.ld", "m.o", "f.o"], 0x500000),
+        (&["-dT", "d.ld", "-T", "t.ld", "m.o", "f.o"], 0x600000),
+    ] {
+        let (ok, err) = ld(args);
+        assert!(ok && err.is_empty(), "{args:?}: {err}");
+        assert_eq!(entry(), want, "{args:?}");
+    }
+    let (ok, err) = ld(&["-e", "0x12g", "m.o", "f.o"]);
+    assert!(ok, "{err}");
+    let want = format!(
+        "cannot find entry symbol 0x12g; defaulting to {:016x}",
+        entry()
+    );
+    assert!(err.contains(&want), "{err}");
+    for lib in ["-l:libx.so", "-l:libx.a"] {
+        let (ok, err) = ld(&["-pie", "m.o", "-Llib", lib]);
+        assert!(ok, "{lib}: {err}");
+        let image = std::fs::read(dir.join("out")).expect("read the image");
+        let needed = image.windows(8).any(|w| w == b"libx.so\0");
+        assert_eq!(needed, lib.ends_with(".so"), "{lib}: DT_NEEDED");
+    }
+    let (ok, err) = ld(&["m.o", "-Llib", "-l:nosuch.a"]);
+    assert!(
+        !ok && err.contains("cannot find -l:nosuch.a: No such file or directory"),
+        "{err}"
+    );
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

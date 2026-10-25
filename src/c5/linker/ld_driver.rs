@@ -66,6 +66,9 @@ struct LdArgs {
     output: PathBuf,
     emulation: Option<String>,
     script: Option<PathBuf>,
+    /// `-dT` / `--default-script`: the script a link without `-T` runs in
+    /// place of the built-in one.
+    default_script: Option<PathBuf>,
     inputs: Vec<InputItem>,
     lib_paths: Vec<PathBuf>,
     build_id: BuildId,
@@ -265,10 +268,13 @@ fn expand_response_files(args: &[String]) -> Vec<String> {
 /// Run the ld driver over `args` (program name and any `--ld` marker
 /// already stripped). Returns the process exit code.
 pub fn run_ld(args: &[String]) -> i32 {
-    let a = match LdArgs::parse(&expand_response_files(args)) {
+    let mut a = match LdArgs::parse(&expand_response_files(args)) {
         Ok(a) => a,
         Err(code) => return code,
     };
+    if a.script.is_none() {
+        a.script = a.default_script.take();
+    }
     if a.print_version {
         print_ld_version();
         return 0;
@@ -317,6 +323,7 @@ impl LdArgs {
             output: PathBuf::from("a.out"),
             emulation: None,
             script: None,
+            default_script: None,
             inputs: Vec::new(),
             lib_paths: Vec::new(),
             build_id: BuildId::None,
@@ -372,6 +379,12 @@ impl LdArgs {
                 }
                 s if s.starts_with("-T") && s.len() > 2 => {
                     a.script = Some(PathBuf::from(&s[2..]));
+                }
+                "-dT" | "--default-script" => {
+                    a.default_script = Some(PathBuf::from(next_of(&mut it, arg)?));
+                }
+                s if s.starts_with("--default-script=") => {
+                    a.default_script = Some(PathBuf::from(&s["--default-script=".len()..]));
                 }
                 "--whole-archive" => a.inputs.push(InputItem::WholeArchiveOn),
                 "--no-whole-archive" => a.inputs.push(InputItem::WholeArchiveOff),
@@ -791,7 +804,16 @@ fn collect_inputs<T: InputObject>(
             let sep = if d.ends_with(['/', '\\']) { "" } else { "/" };
             let so = PathBuf::from(format!("{d}{sep}lib{name}.so"));
             let ar = PathBuf::from(format!("{d}{sep}lib{name}.a"));
-            for candidate in [so].into_iter().filter(|_| shared).chain([ar]) {
+            // `-l:file` names the file itself.
+            let named = name
+                .strip_prefix(':')
+                .map(|f| PathBuf::from(format!("{d}{sep}{f}")));
+            let spellings = match named {
+                Some(file) => alloc::vec![file],
+                None if shared => alloc::vec![so, ar],
+                None => alloc::vec![ar],
+            };
+            for candidate in spellings {
                 if !candidate.is_file() {
                     continue;
                 }

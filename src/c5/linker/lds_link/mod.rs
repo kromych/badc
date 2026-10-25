@@ -388,6 +388,17 @@ pub struct LdsOptions {
     pub fini_function: String,
 }
 
+/// An entry no symbol names read as an address, as GNU ld reads one: in
+/// C's bases, `0x` hexadecimal and a leading `0` octal, the whole name.
+fn numeric_entry(name: &str) -> Option<u64> {
+    let (digits, radix) = match name.strip_prefix("0x").or_else(|| name.strip_prefix("0X")) {
+        Some(hex) => (hex, 16),
+        None if name.len() > 1 && name.starts_with('0') => (&name[1..], 8),
+        None => (name, 10),
+    };
+    u64::from_str_radix(digits, radix).ok()
+}
+
 impl Default for LdsOptions {
     fn default() -> Self {
         LdsOptions {
@@ -1336,17 +1347,17 @@ impl<'a> LdsLinker<'a> {
             .clone()
             .or_else(|| self.script.entry().map(|s| s.to_string()));
         let entry = match &entry_name {
-            Some(name) => match self.final_sym_value(name) {
+            Some(name) => match self.final_sym_value(name).or_else(|| numeric_entry(name)) {
                 Some(v) => v,
                 None => {
+                    let at = self.default_entry(&emit_order);
+                    let width = 2 * self.class.addr_size() as usize;
                     self.sink.emit(
                         Code::MISSING_ENTRY,
                         None,
-                        format!(
-                            "cannot find entry symbol {name}; defaulting to first text address"
-                        ),
+                        format!("cannot find entry symbol {name}; defaulting to {at:0width$x}"),
                     );
-                    self.default_entry(&emit_order)
+                    at
                 }
             },
             // Nothing named an entry. A shared object has none, as bfd

@@ -37,6 +37,7 @@ mod got;
 mod inputs;
 mod layout;
 mod phdrs;
+mod plt;
 mod pools;
 mod preempt;
 mod reloc;
@@ -693,6 +694,9 @@ pub struct LdsLinker<'a> {
     /// order of their PLT stubs.
     plt_syms: Vec<String>,
     plt_of: HashMap<String, usize>,
+    /// The imports a position-dependent executable takes the PLT entry of
+    /// as their address, which `.dynsym` states.
+    canonical: HashSet<String>,
     /// Program headers `SIZEOF_HEADERS` accounts for where the script
     /// declares none, measured from the previous round's layout.
     phdrs: usize,
@@ -814,6 +818,10 @@ enum Stmt {
 const SYNTH_RELA: &str = ".rela.dyn";
 
 const SYNTH_REL: &str = ".rel.dyn";
+
+const SYNTH_RELAPLT: &str = ".rela.plt";
+
+const SYNTH_RELPLT: &str = ".rel.plt";
 
 const SYNTH_RELR: &str = ".relr.dyn";
 
@@ -1015,6 +1023,7 @@ impl<'a> LdsLinker<'a> {
             noted_data: Vec::new(),
             plt_syms: Vec::new(),
             plt_of: HashMap::new(),
+            canonical: HashSet::new(),
             phdrs: 4,
             outs: Vec::new(),
             stmts: Vec::new(),

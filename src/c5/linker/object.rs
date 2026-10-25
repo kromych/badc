@@ -298,6 +298,8 @@ pub struct DynamicImage {
     pub soname: String,
     pub exports: alloc::collections::BTreeSet<String>,
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// The exports typed as functions, `STT_FUNC` or `STT_GNU_IFUNC`.
+    pub function_exports: alloc::collections::BTreeSet<String>,
     pub tls_exports: alloc::collections::BTreeSet<String>,
     pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
     pub references: alloc::collections::BTreeSet<String>,
@@ -382,6 +384,9 @@ pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
                     }
                     STT_TLS => {
                         image.tls_exports.insert(name.clone());
+                    }
+                    STT_FUNC | STT_GNU_IFUNC => {
+                        image.function_exports.insert(name.clone());
                     }
                     _ => {}
                 }
@@ -856,6 +861,7 @@ pub const STT_FUNC: u8 = 2;
 pub const STT_SECTION: u8 = 3;
 pub const STT_FILE: u8 = 4;
 pub const STT_TLS: u8 = 6;
+pub const STT_GNU_IFUNC: u8 = 10;
 /// `st_other & 0x3` -- the only visibility that reaches the dynamic
 /// symbol table.
 pub const STV_DEFAULT: u8 = 0;

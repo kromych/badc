@@ -5,15 +5,13 @@ use crate::c5::linker::object::{absolute_in_pie_body, elf_reloc_desc, locate_rel
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::collections::BTreeSet;
 use alloc::string::String;
-use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::inputs::RawReloc;
 use super::preempt::Reach;
 use super::{
     Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHN_ABS, SHN_COMMON, SHN_UNDEF,
-    STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_PLT, SecFate,
-    Stmt,
+    STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
 };
 
 /// A relocation writing a whole load address into a field narrower
@@ -34,9 +32,6 @@ fn narrow_absolute(machine: u16, rtype: u32) -> bool {
         ),
     }
 }
-
-/// One PLT stub, on both targets.
-pub(super) const PLT_ENTRY_SIZE: u64 = 16;
 
 /// The symbol a GOT slot holds the address of: a global by name, a named
 /// local by its object and symbol index, as two objects' locals may share
@@ -67,7 +62,7 @@ fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
 }
 
 /// A relocation naming a GOT slot rather than the symbol's own address.
-fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
+pub(super) fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
     match machine {
         EM_AARCH64 => matches!(
             rtype,
@@ -81,49 +76,13 @@ fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
     }
 }
 
-/// A stub at `at` jumping through the GOT slot at `slot`. An i386 stub
-/// in a position-independent image reaches the slot from the GOT base
-/// `%ebx` holds at the call, `got_base` (Intel386 psABI, procedure
-/// linkage table), as bfd's `ff a3` entries do; elsewhere it names the
-/// slot's address.
-fn plt_entry(
-    machine: u16,
-    at: u64,
-    slot: u64,
-    got_base: Option<u64>,
-) -> [u8; PLT_ENTRY_SIZE as usize] {
-    let mut e = [0u8; PLT_ENTRY_SIZE as usize];
-    if machine == EM_AARCH64 {
-        let page = (slot & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12;
-        let imm = page as u32 & 0x1f_ffff;
-        let adrp = 0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5;
-        let ldr = 0xf940_0211 | ((slot & 0xfff) as u32 / 8) << 10;
-        for (k, w) in [adrp, ldr, 0xd61f_0220, 0xd503_201f].iter().enumerate() {
-            e[k * 4..k * 4 + 4].copy_from_slice(&w.to_le_bytes());
-        }
-        return e;
-    }
-    // jmp *disp32(%rip), *disp32(%ebx) or *addr32, then a pad to the
-    // entry size.
-    let (modrm, field) = match (machine, got_base) {
-        (EM_386, Some(base)) => (0xa3, slot.wrapping_sub(base)),
-        (EM_386, None) => (0x25, slot),
-        _ => (0x25, slot.wrapping_sub(at + 6)),
-    };
-    e[0] = 0xff;
-    e[1] = modrm;
-    e[2..6].copy_from_slice(&(field as u32).to_le_bytes());
-    e[6..].fill(0xcc);
-    e
-}
-
 impl<'a> LdsLinker<'a> {
     /// Bind the references no input defines against the shared
     /// libraries named on the command line. Each binding takes a
-    /// `.dynsym` entry and a GOT slot; one a call reaches also takes a
-    /// PLT stub, since a call site holds a displacement rather than a
-    /// slot to load through. A call to a preemptible definition takes
-    /// one as well.
+    /// `.dynsym` entry; one a call reaches also takes a PLT entry, since
+    /// a call site holds a displacement rather than a slot to load
+    /// through, and so does a call to a preemptible definition. A GOT
+    /// slot is taken only by a reference through the GOT.
     pub(super) fn build_imports(&mut self) {
         self.prune_preemptible();
         if !self.opts.shared_libs.is_empty() || self.opts.shared {
@@ -160,6 +119,17 @@ impl<'a> LdsLinker<'a> {
             .map(|a| a.symbol.as_str())
             .filter(|s| *s != ".")
             .collect();
+        // An executable linked against a library makes an undefined weak
+        // reference dynamic where it reaches the symbol through the GOT,
+        // as bfd does; the loader writes 0 or a library's definition.
+        let through_got: HashSet<&str> = (self.objects.iter())
+            .flat_map(|o| {
+                (o.sections.iter().flat_map(|s| &s.relocs))
+                    .filter(|r| reloc_uses_got(self.machine, r.rtype))
+                    .filter_map(|r| o.symbols.get(r.sym as usize))
+                    .map(|s| s.name.as_str())
+            })
+            .collect();
         let mut names: BTreeSet<&str> = BTreeSet::new();
         let mut strong: BTreeSet<&str> = BTreeSet::new();
         for (oi, o) in self.objects.iter().enumerate() {
@@ -170,7 +140,8 @@ impl<'a> LdsLinker<'a> {
                     && !self.globals.contains_key(&s.name)
                     && !script_defined.contains(s.name.as_str())
                     && (self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(&s.name))
-                    || self.opts.shared && self.undefweak_dynamic(oi, si)
+                    || (self.opts.shared || through_got.contains(s.name.as_str()))
+                        && self.undefweak_dynamic(oi, si)
                 {
                     names.insert(&s.name);
                     if s.binding() != STB_WEAK {
@@ -184,35 +155,53 @@ impl<'a> LdsLinker<'a> {
             .map(|n| String::from(*n))
             .collect();
         let mut called: BTreeSet<&str> = BTreeSet::new();
+        let mut canonical: BTreeSet<&str> = BTreeSet::new();
         for o in &self.objects {
             for sec in &o.sections {
                 for r in &sec.relocs {
                     let Some(sym) = o.symbols.get(r.sym as usize) else {
                         continue;
                     };
-                    if reloc_needs_plt(self.machine, r.rtype)
-                        && names.contains(sym.name.as_str())
-                        && !self.is_data_export(&sym.name)
+                    if !names.contains(sym.name.as_str()) {
+                        continue;
+                    }
+                    let pointer = self.function_pointer(&sym.name, r.rtype);
+                    if reloc_needs_plt(self.machine, r.rtype) && !self.is_data_export(&sym.name)
+                        || pointer
                     {
                         called.insert(&sym.name);
+                    }
+                    if pointer && self.opts.emit == LdsEmit::Exec {
+                        canonical.insert(&sym.name);
                     }
                 }
             }
         }
         self.imports = names.iter().map(|s| String::from(*s)).collect();
         self.plt_syms = called.iter().map(|s| String::from(*s)).collect();
+        self.canonical = canonical.iter().map(|s| String::from(*s)).collect();
         self.import_of = index_map(&self.imports);
     }
 
-    /// `.dynsym` index of `name`. Imports sit right after the null
-    /// entry, in their own order; a definition's index is the table's.
+    /// Whether an `rtype` field naming the import `name` holds a function's
+    /// address that an executable must compare equal to the library's.
+    /// aarch64 GNU ld gives such a function a PLT entry in an executable,
+    /// and in a position-dependent one makes the entry the function's
+    /// address (AAELF64, the canonical PLT entry).
+    fn function_pointer(&self, name: &str, rtype: u32) -> bool {
+        self.machine == EM_AARCH64
+            && !self.opts.shared
+            && rtype == rt::R_AARCH64_ABS64
+            && (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name))
+    }
+
+    /// `.dynsym` index of `name`: the table's, and before the table is
+    /// built an import's place after the null entry, in import order.
     pub(super) fn dynsym_index(&self, name: &str) -> u32 {
-        if let Some(&k) = self.import_of.get(name) {
-            return 1 + k as u32;
+        if let Some(i) = self.dyn_tables.as_ref().and_then(|t| t.index_of(name)) {
+            return i;
         }
-        (self.dyn_tables.as_ref())
-            .and_then(|t| t.index_of(name))
-            .unwrap_or(0)
+        self.import_of.get(name).map_or(0, |&k| 1 + k as u32)
     }
 
     /// True when a shared library exports `name` as a data object, so a
@@ -224,41 +213,29 @@ impl<'a> LdsLinker<'a> {
             .any(|l| l.lib.data_exports.contains(name))
     }
 
+    /// Whether `r` of object `oi` loads an import's address through the
+    /// GOT.
+    pub(super) fn imported_through_got(&self, oi: usize, r: &RawReloc) -> bool {
+        let name = &self.objects[oi].symbols[r.sym as usize].name;
+        reloc_uses_got(self.machine, r.rtype) && self.import_of.contains_key(name)
+    }
+
     /// Address a reference to an imported symbol resolves to: its PLT
-    /// stub for a call, its GOT slot for a load through one.
+    /// entry for a call or where the entry is its address, its GOT slot
+    /// for a load through one.
     pub(super) fn import_target(&self, name: &str, rtype: u32) -> Option<u64> {
         if !self.import_of.contains_key(name) {
             return None;
         }
-        if reloc_needs_plt(self.machine, rtype) {
+        if reloc_needs_plt(self.machine, rtype)
+            || self.canonical.contains(name) && rtype == self.dyn_reloc_types().0
+        {
             return self.stub_or_slot(name, Reach::Plt);
         }
         if reloc_uses_got(self.machine, rtype) {
             return self.stub_or_slot(name, Reach::Got);
         }
         None
-    }
-
-    /// PLT stub bytes: each jumps through its symbol's GOT slot, which
-    /// the loader fills from the `GLOB_DAT` entry naming the symbol.
-    /// Lazy binding would need a `.rela.plt` the loader walks on
-    /// demand; these bind at load time.
-    pub(super) fn plt_bytes(&self) -> Vec<u8> {
-        let (Some(plt), Some(got)) = (self.synth_addr(SYNTH_PLT), self.got_slot_base()) else {
-            return Vec::new();
-        };
-        let slot_size = self.class.addr_size();
-        let got_base = (self.opts.emit == LdsEmit::Dyn)
-            .then(|| self.got_symbol_addr())
-            .flatten();
-        let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
-        for (k, name) in self.plt_syms.iter().enumerate() {
-            let at = plt + k as u64 * PLT_ENTRY_SIZE;
-            let key = GotKey::Global(name.clone());
-            let slot = got + *self.got_map.get(&key).unwrap_or(&0) as u64 * slot_size;
-            out.extend_from_slice(&plt_entry(self.machine, at, slot, got_base));
-        }
-        out
     }
 
     /// Resolve a symbol name to a final value through the global table

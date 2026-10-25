@@ -41,6 +41,10 @@ pub const DT_SYMENT: u64 = 11;
 pub const DT_SONAME: u64 = 14;
 pub const DT_SYMBOLIC: u64 = 16;
 pub const DT_DEBUG: u64 = 21;
+pub const DT_PLTRELSZ: u64 = 2;
+pub const DT_PLTGOT: u64 = 3;
+pub const DT_PLTREL: u64 = 20;
+pub const DT_JMPREL: u64 = 23;
 pub const DT_INIT_ARRAY: u64 = 25;
 pub const DT_FINI_ARRAY: u64 = 26;
 pub const DT_INIT_ARRAYSZ: u64 = 27;
@@ -303,9 +307,11 @@ pub fn build_tables(
 ) -> DynTables {
     // Symbols a loader can find go in bucket order after the ones it
     // cannot (the null entry and any undefined). bfd records the first
-    // hashed index as `symndx` and hashes nothing below it.
+    // hashed index as `symndx` and hashes nothing below it. An undefined
+    // symbol with a value, the PLT entry an executable gives a function
+    // as its address, is one the loader finds.
     let (imports, defined): (Vec<usize>, Vec<usize>) =
-        (0..exports.len()).partition(|&i| exports[i].shndx == 0);
+        (0..exports.len()).partition(|&i| exports[i].shndx == 0 && exports[i].value == 0);
     let nbuckets = bucket_count(defined.len());
     let mut hashed: Vec<(usize, u32)> = defined
         .iter()
@@ -500,6 +506,9 @@ pub struct DynAddrs {
     pub strsz: u64,
     pub symtab: Option<u64>,
     pub rela: Option<(u64, u64)>,
+    /// `.got.plt` and `(address, size)` of the PLT's relocations, where
+    /// the image has a PLT.
+    pub plt: Option<(u64, (u64, u64))>,
     /// The dynamic relocation table carries explicit addends
     /// (`DT_RELA`); i386 uses `DT_REL`.
     pub use_rela: bool,
@@ -565,6 +574,12 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     // link map; bfd writes the slot into every executable.
     if a.executable {
         tags.push((DT_DEBUG, 0));
+    }
+    if let Some((pltgot, (jmprel, size))) = a.plt {
+        tags.push((DT_PLTGOT, pltgot));
+        tags.push((DT_PLTRELSZ, size));
+        tags.push((DT_PLTREL, if a.use_rela { DT_RELA } else { DT_REL }));
+        tags.push((DT_JMPREL, jmprel));
     }
     for (arr, tag, sz) in [
         (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),

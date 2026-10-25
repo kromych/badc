@@ -2685,6 +2685,7 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             machine: EM_X86_64,
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
+            function_exports: funcs.iter().map(|s| s.to_string()).collect(),
             ..Default::default()
         },
         as_needed: false,
@@ -2920,77 +2921,83 @@ fn a_shared_library_input_records_a_dependency() {
     );
 }
 
-/// A call to an imported function reaches it through a PLT stub and
-/// a load through a GOT slot the loader fills from a `GLOB_DAT`
-/// entry naming the symbol.
+/// `(offset, symbol index, type, addend)` of each entry of a RELA section.
+fn rela_entries(body: &[u8]) -> Vec<(u64, u32, u32, i64)> {
+    let word = |c: &[u8], at: usize| u64::from_le_bytes(c[at..at + 8].try_into().unwrap());
+    (body.as_chunks::<24>().0.iter())
+        .map(|c| {
+            let info = word(c, 8);
+            (
+                word(c, 0),
+                (info >> 32) as u32,
+                info as u32,
+                word(c, 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// GNU ld 2.46.1 gives a load through the GOT a slot `GLOB_DAT` fills, and
+/// a call a lazy PLT entry (x86-64 psABI, procedure linkage table): the
+/// header pushes `.got.plt[1]` and jumps through `.got.plt[2]`, the
+/// loader's; the entry jumps through its own `.got.plt` slot, which holds
+/// the entry's `push` until a `JUMP_SLOT` in `.rela.plt` binds it.
+/// `.dynamic` names the table and the slots. The called import takes no
+/// `.got` slot.
 #[test]
-fn an_import_binds_through_a_stub_and_a_got_slot() {
+fn an_import_is_called_through_a_lazy_plt_entry_and_loaded_through_a_got_slot() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
     let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
     let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
     let res = link_with_script(&script, objs, &opts).expect("links");
-    // Imports lead the table, in name order, so a relocation can
-    // name one by index.
-    let syms = image_dynsyms(&res.image);
-    assert_eq!(syms[1].0, "bar");
-    assert_eq!(syms[2].0, "foo");
-    assert_eq!((syms[1].2, syms[2].2), (SHN_UNDEF, SHN_UNDEF));
-
-    let (got_addr, _) = image_section(&res.image, ".got");
-    let (_, rela) = image_section(&res.image, ".rela.dyn");
-    let entries: Vec<(u64, u32, u32)> = rela
-        .as_chunks::<24>()
-        .0
-        .iter()
-        .map(|c| {
-            let info = u64::from_le_bytes(c[8..16].try_into().unwrap());
-            (
-                u64::from_le_bytes(c[..8].try_into().unwrap()),
-                (info >> 32) as u32,
-                info as u32,
-            )
-        })
-        .collect();
-    let glob: Vec<&(u64, u32, u32)> = entries
-        .iter()
-        .filter(|e| e.2 == rt::R_X86_64_GLOB_DAT)
-        .collect();
-    assert_eq!(glob.len(), 2, "one slot per import");
+    let img = &res.image;
+    let index = |name: &str| image_dynsyms(img).iter().position(|s| s.0 == name).unwrap() as u32;
+    let (got, got_body) = image_section(img, ".got");
+    assert_eq!(got_body.len(), 8, "one slot, the load's");
+    let (_, rela) = image_section(img, ".rela.dyn");
     assert_eq!(
-        (glob[0].0, glob[0].1),
-        (got_addr, 1),
-        "bar's slot names bar"
+        rela_entries(&rela),
+        [(got, index("bar"), rt::R_X86_64_GLOB_DAT, 0)]
     );
+    let (gotplt, gotplt_body) = image_section(img, ".got.plt");
+    let (plt, stubs) = image_section(img, ".plt");
+    let (_, relaplt) = image_section(img, ".rela.plt");
+    let slot = gotplt + 24;
     assert_eq!(
-        (glob[1].0, glob[1].1),
-        (got_addr + 8, 2),
-        "foo's slot names foo"
+        rela_entries(&relaplt),
+        [(slot, index("foo"), rt::R_X86_64_JUMP_SLOT, 0)]
     );
-
-    let (text_addr, text) = image_section(&res.image, ".text");
-    let (plt_addr, plt) = image_section(&res.image, ".plt");
-    assert_eq!(plt.len(), 16, "only the called import takes a stub");
-    let call = i32::from_le_bytes(text[1..5].try_into().unwrap()) as i64;
+    let rel = |at: u64, to: u64| (to.wrapping_sub(at) as u32).to_le_bytes();
+    let mut want = alloc::vec![0xff, 0x35];
+    want.extend(rel(plt + 6, gotplt + 8));
+    want.extend([0xff, 0x25]);
+    want.extend(rel(plt + 12, gotplt + 16));
+    want.extend([0x0f, 0x1f, 0x40, 0x00, 0xff, 0x25]);
+    want.extend(rel(plt + 22, slot));
+    want.extend([0x68, 0, 0, 0, 0, 0xe9]);
+    want.extend(rel(plt + 32, plt));
+    assert_eq!(stubs, want);
     assert_eq!(
-        text_addr as i64 + 5 + call,
-        plt_addr as i64,
-        "the call reaches the stub"
+        u64::from_le_bytes(gotplt_body[24..32].try_into().unwrap()),
+        plt + 22
     );
-    let load = i32::from_le_bytes(text[8..12].try_into().unwrap()) as i64;
+    let (text_addr, text) = image_section(img, ".text");
     assert_eq!(
-        text_addr as i64 + 12 + load,
-        got_addr as i64,
-        "the load keeps its GOT slot rather than relaxing to an address"
+        text_addr as i64 + 5 + u32_at(&text, 1) as i32 as i64,
+        (plt + 16) as i64
     );
+    assert_eq!(text[5..8], [0x48, 0x8b, 0x05], "the load keeps its slot");
     assert_eq!(
-        text[5..8],
-        [0x48, 0x8b, 0x05],
-        "so the load is not rewritten"
+        text_addr as i64 + 12 + u32_at(&text, 8) as i32 as i64,
+        got as i64
     );
-    // The stub jumps through the slot: ff 25 <rip-relative>.
-    assert_eq!(plt[..2], [0xff, 0x25]);
-    let disp = i32::from_le_bytes(plt[2..6].try_into().unwrap()) as i64;
-    assert_eq!(plt_addr as i64 + 6 + disp, got_addr as i64 + 8);
+    let tags = dyn_tags(img);
+    let tag = |t: u64| tags.iter().find(|e| e.0 == t).map(|e| e.1);
+    let (relaplt_addr, _) = image_section(img, ".rela.plt");
+    assert_eq!(tag(dynamic::DT_PLTGOT), Some(gotplt));
+    assert_eq!(tag(dynamic::DT_JMPREL), Some(relaplt_addr));
+    assert_eq!(tag(dynamic::DT_PLTRELSZ), Some(24));
+    assert_eq!(tag(dynamic::DT_PLTREL), Some(dynamic::DT_RELA));
 }
 
 /// A reference that would need the imported object copied into this
@@ -5501,38 +5508,41 @@ fn call_target(machine: u16, image: &[u8]) -> u64 {
 
 /// GNU ld 2.46.1 `-shared -T`, measured with gcc objects on both
 /// targets: a call to the object's own default-visibility function goes
-/// through a PLT stub and the stub through a GOT slot the loader fills.
-/// badc's stub loads a slot `GLOB_DAT` binds, as the stubs of its
-/// imports do, where bfd's lazy one takes `JUMP_SLOT`; both name the
-/// definition's own `.dynsym` entry. `-Bsymbolic` and
+/// through a lazy PLT entry past the header, and the entry through a
+/// `.got.plt` slot a `JUMP_SLOT` naming the definition's own `.dynsym`
+/// entry binds; the function takes no `.got` slot. `-Bsymbolic` and
 /// `-Bsymbolic-functions` call the function in place.
 #[test]
-fn a_shared_objects_call_to_its_own_function_takes_a_stub() {
+fn a_shared_objects_call_to_its_own_function_takes_a_lazy_plt_entry() {
     for machine in [EM_X86_64, EM_AARCH64] {
         let res = link_preemption(machine, None);
         let plt = section_addr(&res.image, ".plt").expect("a .plt");
-        assert_eq!(call_target(machine, &res.image), plt, "{machine}");
-        let got = section_addr(&res.image, ".got").expect("a .got");
-        let slot = got + if machine == EM_AARCH64 { 8 } else { 0 };
-        let (_, stub) = image_section(&res.image, ".plt");
+        let entry = plt + if machine == EM_AARCH64 { 32 } else { 16 };
+        assert_eq!(call_target(machine, &res.image), entry, "{machine}");
+        let gotplt = section_addr(&res.image, ".got.plt").expect("a .got.plt");
+        let slot = gotplt + 24;
+        let (_, stubs) = image_section(&res.image, ".plt");
+        let stub = &stubs[(entry - plt) as usize..];
         let through = if machine == EM_AARCH64 {
-            let page =
-                ((u32_at(&stub, 0) >> 29 & 3) | (u32_at(&stub, 0) >> 5 & 0x7ffff) << 2) as u64;
-            (plt & !0xfff) + (page << 12) + ((u32_at(&stub, 4) >> 10 & 0xfff) as u64) * 8
+            let page = ((u32_at(stub, 0) >> 29 & 3) | (u32_at(stub, 0) >> 5 & 0x7ffff) << 2) as u64;
+            (entry & !0xfff) + (page << 12) + ((u32_at(stub, 4) >> 10 & 0xfff) as u64) * 8
         } else {
-            (plt as i64 + 6 + u32_at(&stub, 2) as i32 as i64) as u64
+            (entry as i64 + 6 + u32_at(stub, 2) as i32 as i64) as u64
         };
-        assert_eq!(through, slot, "{machine}: the stub loads func's slot");
+        assert_eq!(through, slot, "{machine}: the entry loads func's slot");
         let relocs = dyn_relocs(&res.image);
-        let glob_dat = if machine == EM_AARCH64 {
-            rt::R_AARCH64_GLOB_DAT
+        let jump_slot = if machine == EM_AARCH64 {
+            rt::R_AARCH64_JUMP_SLOT
         } else {
-            rt::R_X86_64_GLOB_DAT
+            rt::R_X86_64_JUMP_SLOT
         };
         assert!(
-            relocs.contains(&(slot, glob_dat, String::from("func"), 0)),
+            relocs.contains(&(slot, jump_slot, String::from("func"), 0)),
             "{machine}: {relocs:?}"
         );
+        let (_, got) = image_section(&res.image, ".got");
+        let header = if machine == EM_AARCH64 { 8 } else { 0 };
+        assert_eq!(got.len(), header + 8, "{machine}: one .got slot, data's");
         for symbolic in [Some(true), Some(false)] {
             let res = link_preemption(machine, symbolic);
             let func = find_sym(&image_symbols(&res.image), "func");
@@ -6285,15 +6295,123 @@ fn i386_import_opts(pic: bool) -> LdsOptions {
     }
 }
 
-/// The GOT slot `.rel.dyn` binds to `name` by `R_386_GLOB_DAT`.
-fn i386_glob_dat(relocs: &[(u64, u32, String)], name: &str) -> i64 {
-    let slot = relocs
-        .iter()
-        .find(|r| r.1 == rt::R_386_GLOB_DAT && r.2 == name);
+/// The slot `.rel.dyn` binds to `name` by `rtype`.
+fn i386_slot(relocs: &[(u64, u32, String)], name: &str, rtype: u32) -> i64 {
+    let slot = relocs.iter().find(|r| r.1 == rtype && r.2 == name);
     slot.unwrap_or_else(|| panic!("{name}'s slot: {relocs:?}"))
         .0 as i64
 }
 
+/// The lazy i386 PLT GNU ld 2.46.1 writes for one called import, at
+/// `plt` with `.got.plt` at `g` and the import's slot at `slot`: through
+/// `%ebx`, which holds `g` at the call, in a position-independent image
+/// (`ff b3`, `ff a3`), and by absolute address otherwise (`ff 35`, `ff
+/// 25`); the entry pushes its relocation's offset and jumps to the header.
+fn i386_lazy_plt(pic: bool, plt: i64, g: i64, slot: i64) -> Vec<u8> {
+    let indirect = |op: u8, to: i64| {
+        let (modrm, field) = if pic {
+            (op | 0x83, to - g)
+        } else {
+            (op | 0x05, to)
+        };
+        [0xff, modrm]
+            .into_iter()
+            .chain((field as u32).to_le_bytes())
+    };
+    let mut want: Vec<u8> = Vec::new();
+    want.extend(indirect(0x30, g + 4));
+    want.extend(indirect(0x20, g + 8));
+    want.extend([0; 4]);
+    want.extend(indirect(0x20, slot));
+    want.extend([0x68, 0, 0, 0, 0, 0xe9]);
+    want.extend(((plt - (plt + 32)) as u32).to_le_bytes());
+    want
+}
+
+/// An i386 executable calls an import through a lazy PLT entry and loads
+/// it through a GOT slot `R_386_GLOB_DAT` fills, as GNU ld 2.46.1 links
+/// one (Intel386 psABI, procedure linkage table): the entry jumps through
+/// its `.got.plt` slot, which holds the entry's `push` until an
+/// `R_386_JUMP_SLOT` binds it; an address-width field naming the import
+/// takes an `R_386_32` against it. A PIE reaches the slots from `%ebx`; a
+/// position-dependent executable names their addresses, stays `ET_EXEC`
+/// and takes no `R_386_RELATIVE`.
+#[test]
+fn an_i386_executable_reaches_an_import_through_a_lazy_plt_entry() {
+    for pic in [true, false] {
+        let res = link_i386_with(
+            alloc::vec![("u.o", i386_import_user())],
+            &i386_import_opts(pic),
+        )
+        .expect("links");
+        let img = &res.image;
+        let relocs = elf32_dyn_relocs(img);
+        let foo = i386_slot(&relocs, "foo", rt::R_386_JUMP_SLOT);
+        let bar = i386_slot(&relocs, "bar", rt::R_386_GLOB_DAT);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        assert_eq!(foo, g + 12, "{pic}: the first slot past the loader's");
+        let (plt_addr, plt) = (elf32_section(img, ".plt").2 as i64, elf32_body(img, ".plt"));
+        assert_eq!(plt, i386_lazy_plt(pic, plt_addr, g, foo), "{pic}");
+        assert_eq!(i32_at(elf32_body(img, ".got.plt"), 12), plt_addr + 22);
+        let (t, text) = (
+            elf32_section(img, ".text").2 as i64,
+            elf32_body(img, ".text"),
+        );
+        assert_eq!(
+            t + 5 + i32_at(text, 1),
+            plt_addr + 16,
+            "the call reaches the entry"
+        );
+        assert_eq!(text[5..7], [0x8b, 0x83], "the load is kept");
+        assert_eq!(i32_at(text, 7), bar - g);
+        let data = elf32_section(img, ".data").2;
+        assert!(
+            relocs.contains(&(data, rt::R_386_32, String::from("bar"))),
+            "{relocs:?}"
+        );
+        let [start] = i386_addrs(img, ["_start"]);
+        if pic {
+            assert!(relocs.contains(&(data + 4, rt::R_386_RELATIVE, String::new())));
+        } else {
+            assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
+            assert!(
+                relocs.iter().all(|r| r.1 != rt::R_386_RELATIVE),
+                "{relocs:?}"
+            );
+            assert_eq!(
+                i32_at(elf32_body(img, ".data"), 4),
+                start,
+                "&_start in place"
+            );
+        }
+    }
+}
+
+/// A position-dependent x86-64 executable linked against a shared library
+/// is an `ET_EXEC` with the dynamic tables, as GNU ld 2.46.1 links one,
+/// its PLT entries reaching their slots through `%rip`.
+#[test]
+fn a_position_dependent_executable_imports_from_a_shared_library() {
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
+    };
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let img = &res.image;
+    assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
+    let tags = dyn_tags(img);
+    assert!(tags.iter().any(|t| t.0 == dynamic::DT_NEEDED), "{tags:?}");
+    let (_, relaplt) = image_section(img, ".rela.plt");
+    let slot = rela_entries(&relaplt)[0].0;
+    let (plt_addr, plt) = image_section(img, ".plt");
+    assert_eq!(plt[16..18], [0xff, 0x25]);
+    assert_eq!(
+        plt_addr as i64 + 22 + u32_at(&plt, 18) as i32 as i64,
+        slot as i64
+    );
+}
 /// An i386 shared object the engine links reads back as a library: its
 /// machine, its soname, and the objects among its exports.
 #[test]
@@ -6317,107 +6435,6 @@ fn an_i386_shared_object_reads_back_as_a_library() {
         "{lib:?}"
     );
     assert_eq!(lib.data_exports.iter().collect::<Vec<_>>(), ["d"]);
-}
-
-/// An i386 PIE calls an import through a stub that jumps through the
-/// import's GOT slot at its offset from `%ebx`, which holds the GOT base
-/// at the call (Intel386 psABI, procedure linkage table), as GNU ld
-/// 2.46.1 encodes it (`ff a3`). A load through the GOT keeps the slot,
-/// `R_386_GLOB_DAT` fills both slots, and an address-width field naming
-/// the import takes an `R_386_32` against it.
-#[test]
-fn an_i386_pie_reaches_an_import_through_a_stub_off_ebx() {
-    let res = link_i386_with(
-        alloc::vec![("u.o", i386_import_user())],
-        &i386_import_opts(true),
-    )
-    .expect("links");
-    let img = &res.image;
-    let relocs = elf32_dyn_relocs(img);
-    let (foo, bar) = (i386_glob_dat(&relocs, "foo"), i386_glob_dat(&relocs, "bar"));
-    let g = elf32_section(img, ".got.plt").2 as i64;
-    let (plt_addr, plt) = (elf32_section(img, ".plt").2 as i64, elf32_body(img, ".plt"));
-    assert_eq!(plt[..2], [0xff, 0xa3]);
-    assert_eq!(i32_at(plt, 2), foo - g, "jmp *foo@GOT(%ebx)");
-    let (t, text) = (
-        elf32_section(img, ".text").2 as i64,
-        elf32_body(img, ".text"),
-    );
-    assert_eq!(
-        t + 5 + i32_at(text, 1),
-        plt_addr,
-        "the call reaches the stub"
-    );
-    assert_eq!(text[5..7], [0x8b, 0x83], "the load is kept");
-    assert_eq!(i32_at(text, 7), bar - g);
-    let data = elf32_section(img, ".data").2;
-    assert!(
-        relocs.contains(&(data, rt::R_386_32, String::from("bar"))),
-        "{relocs:?}"
-    );
-    assert!(
-        relocs.contains(&(data + 4, rt::R_386_RELATIVE, String::new())),
-        "{relocs:?}"
-    );
-}
-
-/// A position-dependent executable linked against a shared library is
-/// an `ET_EXEC` with the dynamic tables, as GNU ld 2.46.1 links one: a
-/// call reaches the import through a stub naming its GOT slot's address
-/// (i386 `ff 25`, x86-64 through `%rip`), `R_*_GLOB_DAT` fills the slots,
-/// and the image's own addresses take no `R_*_RELATIVE`.
-#[test]
-fn a_position_dependent_executable_imports_from_a_shared_library() {
-    let res = link_i386_with(
-        alloc::vec![("u.o", i386_import_user())],
-        &i386_import_opts(false),
-    )
-    .expect("links");
-    let img = &res.image;
-    assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
-    let relocs = elf32_dyn_relocs(img);
-    assert!(
-        relocs.iter().all(|r| r.1 != rt::R_386_RELATIVE),
-        "{relocs:?}"
-    );
-    let (foo, bar) = (i386_glob_dat(&relocs, "foo"), i386_glob_dat(&relocs, "bar"));
-    let plt = elf32_body(img, ".plt");
-    assert_eq!(plt[..2], [0xff, 0x25]);
-    assert_eq!(i32_at(plt, 2), foo, "jmp *foo@GOT");
-    let g = elf32_section(img, ".got.plt").2 as i64;
-    assert_eq!(i32_at(elf32_body(img, ".text"), 7), bar - g);
-    let [start] = i386_addrs(img, ["_start"]);
-    assert_eq!(
-        i32_at(elf32_body(img, ".data"), 4),
-        start,
-        "&_start in place"
-    );
-    let dynamic = elf32_body(img, ".dynamic");
-    let tags: Vec<u32> = (dynamic.as_chunks::<8>().0.iter())
-        .map(|c| u32_at(c, 0))
-        .collect();
-    assert!(tags.contains(&(dynamic::DT_NEEDED as u32)), "{tags:?}");
-
-    let script = parse_linker_script(&default_script(false)).expect("parses");
-    let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
-    let opts = LdsOptions {
-        emit: LdsEmit::Exec,
-        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
-    };
-    let res = link_with_script(&script, objs, &opts).expect("links");
-    assert_eq!(u16::from_le_bytes([res.image[16], res.image[17]]), ET_EXEC);
-    let relocs = dyn_relocs(&res.image);
-    let foo = relocs
-        .iter()
-        .find(|r| r.1 == rt::R_X86_64_GLOB_DAT && r.2 == "foo")
-        .unwrap_or_else(|| panic!("{relocs:?}"))
-        .0;
-    let (plt_addr, plt) = image_section(&res.image, ".plt");
-    assert_eq!(plt[..2], [0xff, 0x25]);
-    assert_eq!(
-        plt_addr as i64 + 6 + u32_at(&plt, 2) as i32 as i64,
-        foo as i64
-    );
 }
 
 /// An i386 unit calling `func`, loading `data`'s address through the GOT
@@ -6446,11 +6463,11 @@ fn i386_preemption_unit(vis: u8) -> Vec<u8> {
 
 /// GNU ld 2.46.1 links an i386 shared object's references to its own
 /// default-visibility definitions as the x86-64 and aarch64 ones, with
-/// the stub jumping through `%ebx` and each `R_386_32` keeping its
-/// addend in the field it names, the table being `SHT_REL`. A call goes
-/// through the stub, a GOT load keeps its slot, `R_386_GLOB_DAT` fills
-/// both slots, and each pointer takes an `R_386_32` against its
-/// symbol. `-Bsymbolic` binds every reference directly, as does a
+/// the PLT reaching its slots through `%ebx` and each `R_386_32` keeping
+/// its addend in the field it names, the table being `SHT_REL`. A call
+/// goes through a lazy PLT entry whose slot `R_386_JUMP_SLOT` binds, a
+/// GOT load keeps a slot `R_386_GLOB_DAT` fills, and each pointer takes
+/// an `R_386_32` against its symbol. `-Bsymbolic` binds every reference directly, as does a
 /// protected or hidden definition; `-Bsymbolic-functions` the
 /// function's.
 #[test]
@@ -6483,14 +6500,11 @@ fn an_i386_shared_objects_own_definitions_are_preemptible() {
         let preempt_data = vis == STV_DEFAULT && symbolic != Some(true);
         let call = t + 5 + i32_at(text, 1);
         if preempt_func {
-            let slot = i386_glob_dat(&relocs, "func");
+            let slot = i386_slot(&relocs, "func", rt::R_386_JUMP_SLOT);
+            let plt_addr = elf32_section(img, ".plt").2 as i64;
             let plt = elf32_body(img, ".plt");
-            assert_eq!(call, elf32_section(img, ".plt").2 as i64, "{what}");
-            assert_eq!(
-                (plt[0], plt[1], i32_at(plt, 2)),
-                (0xff, 0xa3, slot - g),
-                "{what}"
-            );
+            assert_eq!(call, plt_addr + 16, "{what}");
+            assert_eq!(plt, i386_lazy_plt(true, plt_addr, g, slot), "{what}");
             assert!(relocs.contains(&(data as u64 + 4, rt::R_386_32, String::from("func"))));
             assert_eq!(i32_at(d, 4), 0, "{what}: the field holds the addend");
         } else {
@@ -6499,7 +6513,7 @@ fn an_i386_shared_objects_own_definitions_are_preemptible() {
             assert_eq!(i32_at(d, 4), func, "{what}");
         }
         if preempt_data {
-            let slot = i386_glob_dat(&relocs, "data");
+            let slot = i386_slot(&relocs, "data", rt::R_386_GLOB_DAT);
             assert_eq!((text[5], i32_at(text, 7)), (0x8b, slot - g), "{what}");
             assert!(relocs.contains(&(data as u64 + 8, rt::R_386_32, String::from("data"))));
             assert_eq!(i32_at(d, 8), 4, "{what}: the field holds the addend");
@@ -6546,4 +6560,148 @@ fn an_i386_pc_relative_field_takes_a_dynamic_relocation_and_gotoff_binds_directl
         data - g,
         "GOTOFF binds the object's own data"
     );
+}
+
+/// aarch64 `bl foo` and `ret`, then `&foo` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), foo(4).
+fn aarch64_pointer_user() -> Vec<u8> {
+    let mut text = Vec::new();
+    for w in [0x9400_0000u32, 0xd65f_03c0] {
+        text.extend_from_slice(&w.to_le_bytes());
+    }
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_AARCH64_CALL26, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+        .build(EM_AARCH64)
+}
+
+/// GNU ld 2.46.1's aarch64 PLT (AAELF64, PLT sequences): a 32-byte
+/// header that saves x16 and x30 and branches through `.got.plt[2]`,
+/// then per entry `adrp x16`, `ldr x17` of the entry's `.got.plt` slot,
+/// `add x16`, `br x17`; each slot holds the header's address until its
+/// `JUMP_SLOT` binds it. An executable gives a function whose address a
+/// data word holds an entry too; a position-dependent one makes the entry
+/// the function's address, which `.dynsym` states and the word holds with
+/// no relocation of its own, so the function compares equal across the
+/// image and the library.
+#[test]
+fn an_aarch64_executable_calls_through_a_lazy_plt_and_compares_function_addresses() {
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let objs = alloc::vec![parse_lds_object("a.o", aarch64_pointer_user()).expect("parses")];
+        let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+        lib.lib.machine = EM_AARCH64;
+        let opts = LdsOptions {
+            emit,
+            interp: Some(String::from("/lib/ld-linux-aarch64.so.1")),
+            shared_libs: alloc::vec![lib],
+            max_page_size: 0x10000,
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let img = &res.image;
+        let (plt, stubs) = image_section(img, ".plt");
+        let (gotplt, slots) = image_section(img, ".got.plt");
+        let page = |at: u64, to: u64| {
+            let imm = ((to & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12) as u32 & 0x1f_ffff;
+            0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5
+        };
+        let lo = |to: u64| (to & 0xfff) as u32;
+        let (slot, entry) = (gotplt + 24, plt + 32);
+        let want: Vec<u32> = alloc::vec![
+            0xa9bf_7bf0,
+            page(plt + 4, gotplt + 16),
+            0xf940_0211 | (lo(gotplt + 16) / 8) << 10,
+            0x9100_0210 | lo(gotplt + 16) << 10,
+            0xd61f_0220,
+            0xd503_201f,
+            0xd503_201f,
+            0xd503_201f,
+            page(entry, slot),
+            0xf940_0211 | (lo(slot) / 8) << 10,
+            0x9100_0210 | lo(slot) << 10,
+            0xd61f_0220,
+        ];
+        let words: Vec<u32> = (0..stubs.len() / 4)
+            .map(|k| u32_at(&stubs, 4 * k))
+            .collect();
+        assert_eq!(words, want, "{emit:?}");
+        assert_eq!(u64::from_le_bytes(slots[24..32].try_into().unwrap()), plt);
+        let (_, relaplt) = image_section(img, ".rela.plt");
+        assert_eq!(
+            (rela_entries(&relaplt).iter())
+                .map(|e| (e.0, e.2))
+                .collect::<Vec<_>>(),
+            [(slot, rt::R_AARCH64_JUMP_SLOT)]
+        );
+        let (data, held) = image_section(img, ".data");
+        let foo = image_dynsyms(img)
+            .into_iter()
+            .find(|s| s.0 == "foo")
+            .unwrap();
+        let relocs = if section_addr(img, ".rela.dyn").is_some() {
+            dyn_relocs(img)
+        } else {
+            Vec::new()
+        };
+        let abs = relocs.into_iter().find(|r| r.0 == data);
+        if emit == LdsEmit::Exec {
+            assert_eq!(
+                (foo.1, foo.2),
+                (entry, SHN_UNDEF),
+                "the entry is foo's address"
+            );
+            assert_eq!(u64::from_le_bytes(held[..8].try_into().unwrap()), entry);
+            assert_eq!(abs, None);
+        } else {
+            assert_eq!(foo.1, 0);
+            assert_eq!(
+                abs.map(|r| (r.1, r.2)),
+                Some((rt::R_AARCH64_ABS64, String::from("foo")))
+            );
+        }
+    }
+}
+
+/// GNU ld 2.46.1 makes a default-visibility undefined weak symbol an
+/// executable reaches through the GOT a dynamic symbol, its slot bound by
+/// `GLOB_DAT`, so the loader writes 0 or a library's definition; the load
+/// is not relaxed.
+#[test]
+fn an_executable_imports_an_undefined_weak_symbol_it_reaches_through_the_got() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    // mov wk@GOTPCREL(%rip), %rax; ret. Symtab: null(0), section(1),
+    // _start(2), wk(3).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0, 0xc3],
+        )
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("wk", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 3, 3, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .build(EM_X86_64);
+    let objs = alloc::vec![parse_lds_object("a.o", o).expect("parses")];
+    let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])]);
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let syms = image_dynsyms(&res.image);
+    assert!(
+        syms.iter().any(|s| s.0 == "wk" && s.2 == SHN_UNDEF),
+        "{syms:?}"
+    );
+    let (got, _) = image_section(&res.image, ".got");
+    let relocs = dyn_relocs(&res.image);
+    assert!(
+        relocs.contains(&(got, rt::R_X86_64_GLOB_DAT, String::from("wk"), 0)),
+        "{relocs:?}"
+    );
+    let (_, text) = image_section(&res.image, ".text");
+    assert_eq!(text[1], 0x8b, "the load is kept");
 }

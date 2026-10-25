@@ -12519,10 +12519,9 @@ fn the_ld_persona_refuses_a_library_built_for_another_machine() {
     }
 }
 
-/// `(type, symbol)` of every dynamic relocation of an ELF32 image, an
-/// `R_386_JUMP_SLOT` read as the `R_386_GLOB_DAT` badc's stubs bind by.
+/// `(type, symbol)` of every dynamic relocation of an ELF32 image, sorted.
 #[cfg(target_os = "linux")]
-fn elf32_dynamic_relocs(path: &Path) -> std::collections::BTreeSet<(u32, String)> {
+fn elf32_dynamic_relocs(path: &Path) -> Vec<(u32, String)> {
     let b = std::fs::read(path).expect("read image");
     let u16_at = |at: usize| u16::from_le_bytes([b[at], b[at + 1]]) as usize;
     let u32_at = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize;
@@ -12538,7 +12537,7 @@ fn elf32_dynamic_relocs(path: &Path) -> std::collections::BTreeSet<(u32, String)
             u32_at(at + 24),
         )
     };
-    let mut out = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
     for i in 0..shnum {
         let (kind, flags, off, size, link) = sh(i);
         if kind != 9 || flags & 2 == 0 {
@@ -12551,13 +12550,10 @@ fn elf32_dynamic_relocs(path: &Path) -> std::collections::BTreeSet<(u32, String)
             let name_at = str_off + u32_at(sym_off + (info >> 8) * 16);
             let end = b[name_at..].iter().position(|&c| c == 0).unwrap();
             let name = String::from_utf8_lossy(&b[name_at..name_at + end]).into_owned();
-            let kind = match info & 0xff {
-                7 => 6,
-                t => t as u32,
-            };
-            out.insert((kind, name));
+            out.push(((info & 0xff) as u32, name));
         }
     }
+    out.sort();
     out
 }
 
@@ -12566,9 +12562,9 @@ fn elf32_dynamic_relocs(path: &Path) -> std::collections::BTreeSet<(u32, String)
 // reaches its own default-visibility definitions through the PLT, the GOT
 // and relocations naming them unless -Bsymbolic or -Bsymbolic-functions
 // binds them in place, and a PIE and a position-dependent executable
-// import through stubs. Each library's dynamic relocations name what GNU
-// ld's do, and each executable's cover GNU ld's; where an i386 loader is
-// installed, each executable prints what the bindings give.
+// import through lazy PLT entries. Each image's dynamic relocations are GNU
+// ld's, type for type; where an i386 loader is installed, each executable
+// prints what the bindings give.
 #[cfg(target_os = "linux")]
 #[test]
 fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
@@ -12705,7 +12701,7 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
                     run(link.arg("-o").arg(&reference), "link it with GNU ld");
                     let (ours, theirs) =
                         (elf32_dynamic_relocs(&exe), elf32_dynamic_relocs(&reference));
-                    assert!(theirs.is_subset(&ours), "{kind}: {theirs:?} {ours:?}");
+                    assert_eq!(ours, theirs, "{kind}");
                 }
                 if let Some(loader) = loader {
                     let out = run(

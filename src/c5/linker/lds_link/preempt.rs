@@ -13,11 +13,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::{GotKey, PLT_ENTRY_SIZE};
+use super::got::GotKey;
 use super::inputs::RawReloc;
 use super::{
     EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS, SHT_NOTE, STB_LOCAL,
-    STT_COMMON, STT_GNU_IFUNC, STT_OBJECT, STT_TLS, STV_DEFAULT, SYNTH_DYNSYM, SYNTH_PLT, SecFate,
+    STT_COMMON, STT_GNU_IFUNC, STT_OBJECT, STT_TLS, STV_DEFAULT, SYNTH_DYNSYM, SecFate,
 };
 
 /// `R_AARCH64_ADR_PREL_PG_HI21_NC`, which `elf_reloc_types` does not name.
@@ -264,7 +264,7 @@ impl<'a> LdsLinker<'a> {
     pub(super) fn stub_or_slot(&self, name: &str, how: Reach) -> Option<u64> {
         if how == Reach::Plt {
             let k = *self.plt_of.get(name)?;
-            return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
+            return self.plt_entry_addr(k);
         }
         let k = *self.got_map.get(&GotKey::Global(String::from(name)))?;
         Some(self.got_slot_base()? + k as u64 * self.class.addr_size())

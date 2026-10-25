@@ -8,8 +8,8 @@ use alloc::format;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::PLT_ENTRY_SIZE;
 use super::inputs::RawSection;
+use super::plt::{GOTPLT_RESERVED, PLT_ENTRY_SIZE};
 use super::{
     EM_386, EM_AARCH64, LdsEmit, LdsLinker, OUT_EH_FRAME, SHF_ALLOC, SHF_EXECINSTR, SHF_WRITE,
     SHT_NOTE, SHT_PROGBITS, SHT_RELR, SHT_STRTAB, SYNTH_BUILD_ID, SYNTH_DYNAMIC, SYNTH_DYNSTR,
@@ -69,7 +69,8 @@ impl<'a> LdsLinker<'a> {
             sec.addralign = 4;
             sec.size = self.opts.build_id.note_len() as u64;
         }
-        if !self.opts.shared_libs.is_empty() || self.calls_preemptible() {
+        let plt = !self.opts.shared_libs.is_empty() || self.calls_preemptible();
+        if plt {
             let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
             let synth = self.synth_obj;
             self.objects[synth].sections[idx].addralign = PLT_ENTRY_SIZE;
@@ -77,6 +78,11 @@ impl<'a> LdsLinker<'a> {
         if self.dynamic() {
             let (rela_name, rela_type, rela_ent) = self.dyn_reloc_kind();
             let rela = self.push_synth_section(rela_name, rela_type, SHF_ALLOC);
+            if plt {
+                let k = self.push_synth_section(self.plt_reloc_name(), rela_type, SHF_ALLOC);
+                let synth = self.synth_obj;
+                self.objects[synth].sections[k].entsize = rela_ent;
+            }
             // `.relr.dyn` exists only where RELR packing was asked for.
             // Creating it unconditionally leaves an empty section no
             // script names, which `--orphan-handling=error` rejects.
@@ -111,7 +117,7 @@ impl<'a> LdsLinker<'a> {
             // .got: the reserved header, where this target keeps it;
             // GOT slots append per use.
             self.objects[synth].sections[got].size = reserved * slot;
-            // .got.plt: three reserved slots, no PLT entries.
+            // .got.plt: the three reserved slots; the PLT entries' follow.
             self.objects[synth].sections[gotplt].entsize = slot;
             self.objects[synth].sections[gotplt].size = 3 * slot;
         }
@@ -218,6 +224,7 @@ impl<'a> LdsLinker<'a> {
         let class = self.class;
         let dynamic_bytes = dynamic::build_dynamic(&addrs, class);
         let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let plt_rel_name = self.plt_reloc_name();
         let slot = class.addr_size();
         let aw = slot as usize;
         let use_rela = machine_uses_rela(self.machine);
@@ -252,6 +259,17 @@ impl<'a> LdsLinker<'a> {
                         bytes.extend_from_slice(&class.addr_bytes(d.addend as u64)[..aw]);
                     }
                 }
+            } else if name == plt_rel_name {
+                let jump_slot = self.jump_slot_type();
+                for (k, sym) in self.plt_syms.iter().enumerate() {
+                    let at = self.gotplt_slot(k).unwrap_or(0);
+                    let info = class.reloc_info(self.dynsym_index(sym), jump_slot);
+                    bytes.extend_from_slice(&class.addr_bytes(at)[..aw]);
+                    bytes.extend_from_slice(&class.addr_bytes(info)[..aw]);
+                    if use_rela {
+                        bytes.extend_from_slice(&[0; 8]);
+                    }
+                }
             } else {
                 match name.as_str() {
                     SYNTH_RELR => {
@@ -282,15 +300,20 @@ impl<'a> LdsLinker<'a> {
                         }
                     }
                     SYNTH_GOTPLT => {
-                        bytes.resize(3 * aw, 0);
+                        bytes.resize(GOTPLT_RESERVED as usize * aw, 0);
                         // Where `_GLOBAL_OFFSET_TABLE_` names this
                         // section, its first slot is the header the
                         // psABI points at `.dynamic`; the next two are
-                        // the dynamic linker's.
+                        // the dynamic linker's. The PLT entries' slots
+                        // follow.
                         if self.got_on_got_plt() {
                             bytes[..aw].copy_from_slice(
                                 &class.addr_bytes(dyn_section_addr.unwrap_or(0))[..aw],
                             );
+                        }
+                        for k in 0..self.plt_syms.len() {
+                            bytes
+                                .extend_from_slice(&class.addr_bytes(self.gotplt_initial(k))[..aw]);
                         }
                     }
                     SYNTH_BUILD_ID => bytes = self.opts.build_id.note(),

@@ -8,7 +8,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::{GotKey, PLT_ENTRY_SIZE};
+use super::got::GotKey;
+use super::plt::{GOTPLT_RESERVED, PLT_ENTRY_SIZE, plt_header_size};
 use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
@@ -16,7 +17,8 @@ use super::{
     SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_NOTYPE, STT_OBJECT,
     STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
     SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA,
-    SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate, machine_uses_rela,
+    SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
+    machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -60,6 +62,15 @@ impl<'a> LdsLinker<'a> {
         self.dyn_reloc_kind().0
     }
 
+    /// The PLT's relocation table, of the dynamic table's type.
+    pub(super) fn plt_reloc_name(&self) -> &'static str {
+        if machine_uses_rela(self.machine) {
+            SYNTH_RELAPLT
+        } else {
+            SYNTH_RELPLT
+        }
+    }
+
     /// Relocation types the dynamic tables are built from: the
     /// address-width absolute form the input uses, and the load-time
     /// forms bfd rewrites it to.
@@ -94,18 +105,12 @@ impl<'a> LdsLinker<'a> {
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            // Every import loads through a slot the loader fills, so
-            // each takes one whether or not an input names the GOT. So
-            // does a preemptible definition a reference reaches through
-            // a stub or a slot.
-            let mut slots: Vec<GotKey> = (self.imports.iter())
-                .map(|n| GotKey::Global(n.clone()))
-                .collect();
-            let mut map: HashMap<GotKey, usize> = slots
-                .iter()
-                .enumerate()
-                .map(|(i, k)| (k.clone(), i))
-                .collect();
+            // A slot is taken by a reference through the GOT alone, as
+            // GNU ld allocates them: to an import, to a preemptible
+            // definition, or one no relaxation removes. A call reaches
+            // its target through the PLT's own slot.
+            let mut slots: Vec<GotKey> = Vec::new();
+            let mut map: HashMap<GotKey, usize> = HashMap::new();
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
@@ -113,9 +118,10 @@ impl<'a> LdsLinker<'a> {
                 let id = self.insecs[i];
                 for r in &self.objects[id.obj].sections[id.sec].relocs {
                     if self.got_slot_ref(id.obj, id.sec, r)
+                        || self.imported_through_got(id.obj, r)
                         || matches!(
                             self.reach_at(id.obj, id.sec, r),
-                            Reach::Plt | Reach::Got | Reach::NotedPair
+                            Reach::Got | Reach::NotedPair
                         )
                     {
                         let Some(key) = self.got_key(id.obj, r.sym) else {
@@ -175,7 +181,7 @@ impl<'a> LdsLinker<'a> {
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
                     let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                     if self.undefweak_dynamic(id.obj, r.sym as usize)
-                        || self.import_of.contains_key(name)
+                        || self.import_of.contains_key(name) && !self.canonical.contains(name)
                     {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
@@ -265,7 +271,14 @@ impl<'a> LdsLinker<'a> {
         let got_header = self.got_reserved() != 0
             && (!self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some());
         let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let plt_rel_name = self.plt_reloc_name();
         let slot = self.class.addr_size();
+        let called = self.plt_syms.len() as u64;
+        let plt = if called == 0 {
+            0
+        } else {
+            plt_header_size(self.machine) + called * PLT_ENTRY_SIZE
+        };
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
             if let Some(&size) = dyn_sizes.get(sec.name.as_str()) {
@@ -276,13 +289,18 @@ impl<'a> LdsLinker<'a> {
                 sec.size = (nones + self.dyn_relas.len() as u64) * rela_ent;
                 continue;
             }
+            if sec.name == plt_rel_name {
+                sec.size = called * rela_ent;
+                continue;
+            }
             match sec.name.as_str() {
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * slot,
                 SYNTH_GOT => {
                     let header = if got_header { slot } else { 0 };
                     sec.size = header + self.got_slots.len() as u64 * slot;
                 }
-                SYNTH_PLT => sec.size = self.plt_syms.len() as u64 * PLT_ENTRY_SIZE,
+                SYNTH_GOTPLT => sec.size = (GOTPLT_RESERVED + called) * slot,
+                SYNTH_PLT => sec.size = plt,
                 _ => {}
             }
         }
@@ -424,7 +442,10 @@ impl<'a> LdsLinker<'a> {
                     | STT_NOTYPE,
                 other: STV_DEFAULT,
                 shndx: SHN_UNDEF,
-                value: 0,
+                value: (self.canonical.contains(name))
+                    .then(|| self.stub_or_slot(name, Reach::Plt))
+                    .flatten()
+                    .unwrap_or(0),
                 size: 0,
                 version: dynamic::VER_NDX_GLOBAL,
             })
@@ -582,6 +603,7 @@ impl<'a> LdsLinker<'a> {
             strsz: t.map(|t| t.dynstr().len() as u64).unwrap_or(0),
             symtab: addr(SYNTH_DYNSYM),
             rela: sized(self.dyn_reloc_name()),
+            plt: sized(self.plt_reloc_name()).and_then(|j| Some((addr(SYNTH_GOTPLT)?, j))),
             use_rela: machine_uses_rela(self.machine),
             relr: sized(SYNTH_RELR),
             verdef: addr(SYNTH_VERDEF).map(|a| (a, t.map(|t| t.verdef_count).unwrap_or(0))),

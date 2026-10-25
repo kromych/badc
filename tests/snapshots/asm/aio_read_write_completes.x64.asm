@@ -205,6 +205,9 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
+               	leaq	-0x2a0(%rbp), %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
                	leaq	-0xa8(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>

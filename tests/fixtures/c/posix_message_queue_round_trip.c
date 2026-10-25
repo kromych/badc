@@ -22,11 +22,15 @@ static int round_trip(void) {
     mqd_t q;
 
     if (sizeof(struct mq_attr) != 64 || sizeof(mqd_t) != 4) return 10;
-    snprintf(name, sizeof name, "/badc-mq-%d", (int)getpid());
     memset(&attr, 0, sizeof attr);
     attr.mq_maxmsg = 4;
     attr.mq_msgsize = 64;
-    q = mq_open(name, O_CREAT | O_EXCL | O_RDWR, 0600, &attr);
+    // JIT runs share the pid; a name another run holds takes the next suffix.
+    for (int k = 0;; k++) {
+        snprintf(name, sizeof name, "/badc-mq-%d-%d", (int)getpid(), k);
+        q = mq_open(name, O_CREAT | O_EXCL | O_RDWR, 0600, &attr);
+        if (q != (mqd_t)-1 || errno != EEXIST || k == 1000) break;
+    }
     if (q == (mqd_t)-1) return errno == ENOSYS ? 0 : 11;
     mq_unlink(name);
     if (mq_getattr(q, &now) != 0) return 12;

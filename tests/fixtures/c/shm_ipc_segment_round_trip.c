@@ -6,6 +6,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <string.h>
+#include <unistd.h>
 
 #if defined(__APPLE__)
 #define WANT_IPC_PERM 24
@@ -32,6 +33,10 @@ int main(void) {
     if (p == (char *)-1) return 4;
     strcpy(p, "segment");
     if (shmctl(id, IPC_STAT, &ds) != 0) return 5;
+    // A fork in another thread of the process holds an attachment until the
+    // child execs (the JIT runs fixtures beside tests that spawn children).
+    for (int k = 0; ds.shm_nattch != 1 && k < 1000; k++)
+        if (usleep(1000) != 0 || shmctl(id, IPC_STAT, &ds) != 0) return 5;
     if (ds.shm_segsz != 4096 || ds.shm_nattch != 1 || (ds.shm_perm.mode & 0777) != 0600)
         return 6;
     if (strcmp(p, "segment") != 0 || shmdt(p) != 0) return 7;

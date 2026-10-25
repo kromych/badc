@@ -2229,6 +2229,22 @@ pub(crate) fn materialize_asm_sections(
                                     }
                                 }
                             }
+                            AsmSectionValue::RelocOp { name, addend, op } => {
+                                sec.relocs.push(AsmSectionReloc {
+                                    offset: sec.bytes.len() as u32,
+                                    width: *width,
+                                    kind: AsmRelocKind::Op {
+                                        op: *op,
+                                        relax: AsmGotRelax::No,
+                                    },
+                                    pcrel: false,
+                                    branch: false,
+                                    signed: false,
+                                    target: AsmSectionTarget::Symbol(name.clone()),
+                                    addend: *addend,
+                                });
+                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                            }
                             AsmSectionValue::OperandReloc {
                                 idx,
                                 goto,

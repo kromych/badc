@@ -2781,6 +2781,10 @@ fn parse_int(s: &str) -> Option<i64> {
 /// difference and relocating what is left.
 fn sym_disp_expr<'a>(prefix: &'a str, labels: &[&str]) -> Option<&'a str> {
     let prefix = prefix.trim();
+    // A relocation operator (`sym@GOTPCREL`) stays on the text the encoder reads.
+    if let Some((bare, _)) = crate::c5::asm::split_reloc_op(prefix) {
+        return sym_disp_expr(&bare, labels).map(|_| prefix);
+    }
     // `%` in a displacement is a register or an operand reference, never a
     // link-time symbol.
     if prefix.is_empty()
@@ -3143,11 +3147,12 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // template defines as a label resolves locally instead. The name may
         // embed operand references (`call helper_%c0`), which are
         // substituted at emit time, so the text is kept verbatim here.
+        let bare = crate::c5::asm::split_reloc_op(rest).map_or_else(|| String::from(rest), |b| b.0);
         let is_symbol_target = !rest.is_empty()
-            && (crate::c5::asm::is_asm_symbol_template(rest)
-                || crate::c5::asm::is_asm_branch_expr(rest))
-            && reg_by_name(rest).is_none()
-            && !names.contains(&rest);
+            && (crate::c5::asm::is_asm_symbol_template(&bare)
+                || crate::c5::asm::is_asm_branch_expr(&bare))
+            && reg_by_name(&bare).is_none()
+            && !names.contains(&bare.as_str());
         if (matches!(
             mnem_tok,
             "call" | "callw" | "calll" | "callq" | "jmp" | "jmpw" | "jmpl" | "jmpq"

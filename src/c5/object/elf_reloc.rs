@@ -49,6 +49,11 @@ use super::elf_reloc_types::{
     R_X86_64_REX_GOTPCRELX, R_X86_64_TLSDESC_CALL, R_X86_64_TPOFF32, TLS_MODULE_BASE,
     i386_field_width, i386_reloc_desc,
 };
+use super::elf_reloc_types::{
+    R_386_GOT32, R_386_GOT32X, R_386_GOTOFF, R_X86_64_GOT32, R_X86_64_GOT64, R_X86_64_GOTOFF64,
+    R_X86_64_GOTPCREL, R_X86_64_GOTPCREL64, R_X86_64_GOTPCRELX, R_X86_64_TLSGD, R_X86_64_TLSLD,
+    R_X86_64_TPOFF64,
+};
 
 const ELF_DATA_LSB: u8 = 1;
 const ELF_VERSION_CURRENT: u8 = 1;
@@ -3584,6 +3589,48 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
+    /// The type a gas relocation operator names for a field of `width`, as
+    /// GNU as 2.46.1 picks it.
+    fn asm_op_reloc_type(
+        &self,
+        op: crate::c5::asm::AsmRelocOp,
+        relax: crate::c5::asm::AsmGotRelax,
+        width: u8,
+        section_name: &str,
+    ) -> Result<u32, C5Error> {
+        use crate::c5::asm::{AsmGotRelax as X, AsmRelocOp as O};
+        Ok(match (self.abi, op, width, relax) {
+            (RelocAbi::X86_64, O::Plt, 4, _) => R_X86_64_PLT32,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::No) => R_X86_64_GOTPCREL,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::Relaxable) => R_X86_64_GOTPCRELX,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::RelaxableRex) => R_X86_64_REX_GOTPCRELX,
+            (RelocAbi::X86_64, O::GotPcRel, 8, _) => R_X86_64_GOTPCREL64,
+            (RelocAbi::X86_64, O::Got, 4, _) => R_X86_64_GOT32,
+            (RelocAbi::X86_64, O::Got, 8, _) => R_X86_64_GOT64,
+            (RelocAbi::X86_64, O::GotOff, 8, _) => R_X86_64_GOTOFF64,
+            (RelocAbi::X86_64, O::TpOff, 4, _) => R_X86_64_TPOFF32,
+            (RelocAbi::X86_64, O::TpOff, 8, _) => R_X86_64_TPOFF64,
+            (RelocAbi::X86_64, O::GotTpOff, 4, _) => R_X86_64_GOTTPOFF,
+            (RelocAbi::X86_64, O::TlsGd, 4, _) => R_X86_64_TLSGD,
+            (RelocAbi::X86_64, O::TlsLd, 4, _) => R_X86_64_TLSLD,
+            (RelocAbi::X86_64, O::DtpOff, 4, _) => R_X86_64_DTPOFF32,
+            (RelocAbi::X86_64, O::DtpOff, 8, _) => R_X86_64_DTPOFF64,
+            (RelocAbi::I386, O::Plt, 4, _) => R_386_PLT32,
+            (RelocAbi::I386, O::Got, 4, X::No) => R_386_GOT32,
+            (RelocAbi::I386, O::Got, 4, _) => R_386_GOT32X,
+            (RelocAbi::I386, O::GotOff, 4, _) => R_386_GOTOFF,
+            _ => {
+                return Err(asm_section_err(
+                    section_name,
+                    &alloc::format!(
+                        "has a {width}-byte field with a relocation operator ({op:?}) this \
+                         psABI has no relocation for"
+                    ),
+                ));
+            }
+        })
+    }
+
     /// The relocation type of an inline-asm section data field.
     fn asm_data_reloc_type(
         &self,
@@ -3693,6 +3740,12 @@ impl<'a> RelocWriter<'a> {
                     RK::Data | RK::JumpRel => self.asm_data_reloc_type(
                         r,
                         section_syms.contains(&sym_idx),
+                        self.layout.carve.table.entries[e].name.as_str(),
+                    )?,
+                    RK::Op { op, relax } => self.asm_op_reloc_type(
+                        op,
+                        relax,
+                        r.width,
                         self.layout.carve.table.entries[e].name.as_str(),
                     )?,
                     kind => a64_insn_reloc_type(kind)
@@ -5072,7 +5125,7 @@ fn dwarf_reloc_to_elf_rela(
 fn a64_insn_reloc_type(kind: crate::c5::asm::AsmRelocKind) -> Option<u32> {
     use crate::c5::asm::AsmRelocKind as RK;
     Some(match kind {
-        RK::Data | RK::JumpRel => return None,
+        RK::Data | RK::JumpRel | RK::Op { .. } => return None,
         RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
         RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
         RK::A64Condbr19 => R_AARCH64_CONDBR19,

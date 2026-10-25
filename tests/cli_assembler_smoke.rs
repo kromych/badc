@@ -3246,3 +3246,184 @@ fn a_program_links_against_common_and_unique_symbols() {
         assert_eq!(status.code(), Some(0));
     }
 }
+
+/// `(offset, type, symbol, addend)` of each relocation of `section` in an
+/// ELF64 RELA object or an ELF32 REL one, whose addend is the field's.
+fn rel_entries(bytes: &[u8], section: &str) -> Vec<(u64, u32, String, i64)> {
+    let le = |o: usize, n: usize| {
+        let mut v = [0u8; 8];
+        v[..n].copy_from_slice(&bytes[o..o + n]);
+        u64::from_le_bytes(v)
+    };
+    let is64 = bytes[4] == 2;
+    let (w, shoff, shent, shnum, shstr) = if is64 {
+        (8, le(0x28, 8), le(0x3a, 2), le(0x3c, 2), le(0x3e, 2))
+    } else {
+        (4, le(0x20, 4), le(0x2e, 2), le(0x30, 2), le(0x32, 2))
+    };
+    // `(sh_name, sh_type, sh_offset, sh_size, sh_link, sh_info)`.
+    let sh = |i: u64| {
+        let h = (shoff + i * shent) as usize;
+        let at = |k: usize| {
+            if is64 {
+                [0, 4, 24, 32, 40, 44][k]
+            } else {
+                [0, 4, 16, 20, 24, 28][k]
+            }
+        };
+        let wide = |k: usize| if is64 && (k == 2 || k == 3) { 8 } else { 4 };
+        (0..6).map(|k| le(h + at(k), wide(k))).collect::<Vec<_>>()
+    };
+    let cstr = |o: u64| {
+        let o = o as usize;
+        let end = bytes[o..].iter().position(|&c| c == 0).unwrap();
+        String::from_utf8_lossy(&bytes[o..o + end]).into_owned()
+    };
+    let name_of = |i: u64| cstr(sh(shstr)[2] + sh(i)[0]);
+    let rel = (0..shnum).find(|&i| name_of(i) == section).expect(section);
+    let (r, symtab) = (sh(rel), sh(sh(rel)[4]));
+    let target = sh(r[5]);
+    let strtab = sh(symtab[4])[2];
+    let (esize, symsize) = if is64 { (24, 24) } else { (8, 16) };
+    (0..r[3] / esize)
+        .map(|k| {
+            let o = (r[2] + k * esize) as usize;
+            let (off, info) = (le(o, w), le(o + w, w));
+            let (sym, ty) = if is64 {
+                (info >> 32, info & 0xffff_ffff)
+            } else {
+                (info >> 8, info & 0xff)
+            };
+            let addend = if is64 {
+                le(o + 16, 8) as i64
+            } else {
+                le((target[2] + off) as usize, 4) as u32 as i32 as i64
+            };
+            let name = cstr(strtab + le((symtab[2] + sym * symsize) as usize, 4));
+            (off, ty as u32, name, addend)
+        })
+        .collect()
+}
+
+fn rel_list(rows: &[(u64, u32, &str, i64)]) -> Vec<(u64, u32, String, i64)> {
+    rows.iter()
+        .map(|&(o, t, s, a)| (o, t, String::from(s), a))
+        .collect()
+}
+
+/// The x86-64 relocation operators gas reads on an operand or a data value
+/// take GNU as 2.46.1's relocations: `@PLT` (a same-section target folds),
+/// `@GOTPCREL` (`[REX_]GOTPCRELX` on a relaxable load or branch), `@GOT`,
+/// `@GOTOFF`, `@TPOFF`, `@GOTTPOFF`, `@TLSGD`, `@TLSLD` and `@DTPOFF`.
+#[test]
+fn x86_64_relocation_operators_take_the_relocations_gas_writes() {
+    let src = "\t.text\n\t.globl f\nf:\n\tcall wf@PLT\n\tjmp wf@PLT\n\tcall loc@PLT\n\
+               \tmovq x@GOTPCREL(%rip), %rax\n\tmovl x@GOTPCREL(%rip), %eax\n\
+               \tcall *wf@GOTPCREL(%rip)\n\taddq x@GOTPCREL(%rip), %rax\n\
+               \tmovq x@GOTPCREL+8(%rip), %rax\n\tmovq x@GOT, %rax\n\tmovabsq $x@GOT, %rax\n\
+               \tmovabsq $x@GOTOFF, %rax\n\tmovl %fs:t@TPOFF, %eax\n\tmovq $t@TPOFF, %rax\n\
+               \tleaq t@TPOFF(%rax), %rcx\n\tmovq t@GOTTPOFF(%rip), %rax\n\
+               \tleaq t@TLSGD(%rip), %rdi\n\tleaq t@TLSLD(%rip), %rdi\n\
+               \tleaq t@DTPOFF(%rax), %rcx\n\tmovq t@DTPOFF+4(%rax), %rcx\nloc:\n\tret\n\
+               \t.data\n\t.quad x@GOTPCREL\n\t.long x@GOTPCREL\n\t.quad t@DTPOFF\n\
+               \t.long t@DTPOFF\n\t.quad x@GOTOFF\n\t.long wf@PLT\n\t.quad t@TPOFF\n\t.long t@TPOFF\n";
+    let bytes = object_of("x64-reloc-ops", src);
+    let text = rel_list(&[
+        (0x01, 4, "wf", -4),
+        (0x06, 4, "wf", -4),
+        (0x12, 42, "x", -4),
+        (0x18, 41, "x", -4),
+        (0x1e, 41, "wf", -4),
+        (0x25, 42, "x", -4),
+        (0x2c, 42, "x", 4),
+        (0x34, 3, "x", 0),
+        (0x3a, 27, "x", 0),
+        (0x44, 25, "x", 0),
+        (0x50, 23, "t", 0),
+        (0x57, 23, "t", 0),
+        (0x5e, 23, "t", 0),
+        (0x65, 22, "t", -4),
+        (0x6c, 19, "t", -4),
+        (0x73, 20, "t", -4),
+        (0x7a, 21, "t", 0),
+        (0x81, 21, "t", 4),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rela.text"), text);
+    let data = rel_list(&[
+        (0x00, 28, "x", 0),
+        (0x08, 9, "x", 0),
+        (0x0c, 17, "t", 0),
+        (0x14, 21, "t", 0),
+        (0x18, 25, "x", 0),
+        (0x20, 4, "wf", 0),
+        (0x24, 18, "t", 0),
+        (0x2c, 23, "t", 0),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rela.data"), data);
+}
+
+/// i386's `@PLT`, `@GOT` (`GOT32X` on a relaxable load or branch) and
+/// `@GOTOFF` take GNU as 2.46.1's relocations, the addend in the field.
+#[test]
+fn i386_relocation_operators_take_the_relocations_gas_writes() {
+    let d = dir("i386-reloc-ops");
+    write(
+        &d,
+        "b.s",
+        "\t.text\n\t.globl g\ng:\n\tcall f@PLT\n\tmovl x@GOT(%ebx), %eax\n\
+         \tleal x@GOTOFF(%ebx), %eax\n\tmovl x@GOTOFF(%ebx), %eax\n\tcall *f@GOT(%ebx)\n\
+         \t.data\n\t.long x@GOTOFF\n\t.long x@GOT\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m32", "b.s", "-o", "b.o"],
+    );
+    let bytes = std::fs::read(d.join("b.o")).expect("object");
+    let text = rel_list(&[
+        (1, 4, "f", -4),
+        (7, 43, "x", 0),
+        (0xd, 9, "x", 0),
+        (0x13, 9, "x", 0),
+        (0x19, 43, "f", 0),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rel.text"), text);
+    assert_eq!(
+        rel_entries(&bytes, ".rel.data"),
+        rel_list(&[(0, 9, "x", 0), (4, 3, "x", 0)])
+    );
+}
+
+/// A function's asm statement calls through `@PLT`; an operator gas or the
+/// psABI has no relocation for is refused by name.
+#[test]
+fn relocation_operators_outside_their_forms_are_refused() {
+    let bytes = object_of_c("plt-in-c", "void f(void) { __asm__(\"call wf@PLT\"); }\n");
+    assert!(
+        rel_entries(&bytes, ".rela.text")
+            .iter()
+            .any(|r| r.1 == 4 && r.2 == "wf")
+    );
+    for (src, want) in [
+        (
+            "\t.text\n\tleaq x@GOTOFF(%rbx), %rax\n",
+            "relocation operator",
+        ),
+        ("\t.text\n\tcall wf@GOTPCREL\n", "other than `@PLT`"),
+    ] {
+        let d = dir("reloc-op-refused");
+        write(&d, "b.s", src);
+        let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
+        assert!(!ok && text.contains(want), "{src}: {text}");
+    }
+    let d = dir("reloc-op-in-c");
+    write(
+        &d,
+        "u.c",
+        "long f(void) { long v; __asm__(\"movq x@GOTPCREL(%%rip), %0\" : \"=r\"(v)); return v; }\n",
+    );
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    assert!(
+        !ok && text.contains("only supported in file-scope asm"),
+        "{text}"
+    );
+}

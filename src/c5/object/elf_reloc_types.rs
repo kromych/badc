@@ -23,6 +23,7 @@ pub(crate) const R_X86_64_COPY: u32 = 5;
 pub(crate) const R_X86_64_GLOB_DAT: u32 = 6;
 pub(crate) const R_X86_64_JUMP_SLOT: u32 = 7;
 pub(crate) const R_X86_64_RELATIVE: u32 = 8;
+pub(crate) const R_X86_64_GOT32: u32 = 3;
 pub(crate) const R_X86_64_GOTPCREL: u32 = 9;
 pub(crate) const R_X86_64_32: u32 = 10;
 pub(crate) const R_X86_64_32S: u32 = 11;
@@ -50,6 +51,7 @@ pub(crate) const R_X86_64_GOTOFF64: u32 = 25;
 pub(crate) const R_X86_64_GOTPC32: u32 = 26;
 /// `G + A`: the symbol's GOT slot as a distance from the GOT base.
 pub(crate) const R_X86_64_GOT64: u32 = 27;
+pub(crate) const R_X86_64_GOTPCREL64: u32 = 28;
 pub(crate) const R_X86_64_GOTPC64: u32 = 29;
 /// `L + A - GOT`: the symbol's call entry as a distance from the GOT base.
 pub(crate) const R_X86_64_PLTOFF64: u32 = 31;

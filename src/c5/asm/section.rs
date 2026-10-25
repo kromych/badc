@@ -70,6 +70,12 @@ pub(crate) enum AsmSectionValue {
         /// assembled, which makes the field PC-relative as GNU as makes it.
         minus: Option<alloc::string::String>,
     },
+    /// `sym@OP + addend`: a field the gas relocation operator relocates.
+    RelocOp {
+        name: alloc::string::String,
+        addend: i64,
+        op: AsmRelocOp,
+    },
 }
 
 /// One item of an in-template section block, in source order.
@@ -374,6 +380,56 @@ pub(crate) enum AsmRelocKind {
     /// `.reloc`: the ELF relocation type is named in the source, and the
     /// section deposits no field for it.
     Explicit(u32),
+    /// A field a gas relocation operator names (`sym@GOTPCREL`); the object
+    /// writer picks the type for the psABI and the field's width.
+    Op { op: AsmRelocOp, relax: AsmGotRelax },
+}
+
+/// A gas x86 relocation operator written on a symbol (`sym@PLT`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmRelocOp {
+    Plt,
+    Got,
+    GotPcRel,
+    GotOff,
+    TpOff,
+    GotTpOff,
+    TlsGd,
+    TlsLd,
+    DtpOff,
+}
+
+/// Whether a GOT field's instruction is one the psABI lets the link relax
+/// (`R_X86_64_[REX_]GOTPCRELX`, `R_386_GOT32X`), and whether it has a REX.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AsmGotRelax {
+    #[default]
+    No,
+    Relaxable,
+    RelaxableRex,
+}
+
+/// `sym@OP...`: the expression without its relocation operator, and the
+/// operator, which gas reads in either case.
+pub(crate) fn split_reloc_op(expr: &str) -> Option<(alloc::string::String, AsmRelocOp)> {
+    let at = expr.find('@')?;
+    let after = &expr[at + 1..];
+    let end = after
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(after.len());
+    let op = match after[..end].to_ascii_uppercase().as_str() {
+        "PLT" => AsmRelocOp::Plt,
+        "GOT" => AsmRelocOp::Got,
+        "GOTPCREL" => AsmRelocOp::GotPcRel,
+        "GOTOFF" => AsmRelocOp::GotOff,
+        "TPOFF" => AsmRelocOp::TpOff,
+        "GOTTPOFF" => AsmRelocOp::GotTpOff,
+        "TLSGD" => AsmRelocOp::TlsGd,
+        "TLSLD" => AsmRelocOp::TlsLd,
+        "DTPOFF" => AsmRelocOp::DtpOff,
+        _ => return None,
+    };
+    Some((alloc::format!("{}{}", &expr[..at], &after[end..]), op))
 }
 
 impl AsmRelocKind {
@@ -579,7 +635,8 @@ pub(crate) fn patch_asm_insn_field(
         | AsmRelocKind::A64AddLo12
         | AsmRelocKind::A64LdstLo12(_)
         | AsmRelocKind::A64MovwAbs { .. }
-        | AsmRelocKind::Explicit(_) => Ok(false),
+        | AsmRelocKind::Explicit(_)
+        | AsmRelocKind::Op { .. } => Ok(false),
     }
 }
 

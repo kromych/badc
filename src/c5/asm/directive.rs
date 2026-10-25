@@ -1393,6 +1393,11 @@ pub(crate) fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::str
     if let Some(v) = eval_const_expr_wide(a) {
         return Ok(AsmSectionValue::Const(v));
     }
+    if let Some((bare, op)) = split_reloc_op(a) {
+        let (name, addend) = asm_expr_sym_addend(&bare)
+            .ok_or_else(|| alloc::format!("inline asm: bad section value `{a}`"))?;
+        return Ok(AsmSectionValue::RelocOp { name, addend, op });
+    }
     // A fully-enclosing parenthesis group is grouping only; strip it so
     // `((insn) - .)` (the aarch64 exception table) reduces like `(insn) - .`
     // and `(((x)))` like `x`. A group that closes before the end

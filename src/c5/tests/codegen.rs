@@ -2100,9 +2100,9 @@ fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
 /// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
 /// and `<wctype.h>` declare under their POSIX and C99 names import an entry
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
-/// target's msvcrt.dll lacks. The scanners and wide-character functions
-/// msvcrt.dll does not export reach the ones it does through the header's and
-/// the C-library sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
+/// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
+/// not export reach the ones it does through the header's and the C-library
+/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
 /// does.
 #[test]
 fn windows_crt_names_import_the_entry_points_their_dlls_export() {
@@ -2132,9 +2132,6 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("fwprintf", "fwprintf", M),
         ("vfwprintf", "vfwprintf", M),
         ("vwprintf", "vwprintf", M),
-        ("fwscanf", "fwscanf", M),
-        ("swscanf", "swscanf", M),
-        ("wscanf", "wscanf", M),
         ("fgetws", "fgetws", M),
         ("fputws", "fputws", M),
         ("wcsncat", "wcsncat", M),
@@ -2147,11 +2144,6 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wcstoull", "_wcstoui64", M),
         ("swprintf", "_vsnwprintf", M),
         ("vswprintf", "_vsnwprintf", M),
-        ("vfscanf", "fscanf", M),
-        ("vscanf", "fscanf", M),
-        ("vfwscanf", "fwscanf", M),
-        ("vswscanf", "swscanf", M),
-        ("vwscanf", "fwscanf", M),
         ("wcstof", "wcstod", M),
         ("wcstold", "wcstod", M),
         ("strtof", "strtod", M),
@@ -2174,6 +2166,52 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
             "#include <unistd.h>\n",
             &[("execv", "_execv", M), ("execvp", "_execvp", M)],
         );
+    }
+}
+
+/// The twelve C99 scanners are libc/lib/scanf_ext.c's on Windows: an image
+/// taking each one's address imports no C-library scanner, and converts
+/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`.
+#[test]
+fn windows_scanners_import_no_crt_scanner() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <wchar.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {(fn)scanf, (fn)fscanf, (fn)sscanf, (fn)vscanf, (fn)vfscanf,\n\
+          (fn)vsscanf, (fn)wscanf, (fn)fwscanf, (fn)swscanf, (fn)vwscanf, (fn)vfwscanf,\n\
+          (fn)vswscanf};\n\
+        int main(void) { return used[0] == 0; }\n";
+    const CRT_SCANNERS: [&str; 9] = [
+        "scanf",
+        "fscanf",
+        "sscanf",
+        "wscanf",
+        "fwscanf",
+        "swscanf",
+        "__stdio_common_vsscanf",
+        "__stdio_common_vfscanf",
+        "__stdio_common_vswscanf",
+    ];
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for symbol in CRT_SCANNERS {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol),
+                None,
+                "{target:?}: {symbol}"
+            );
+        }
+        for symbol in ["_strtod_l", "_strtof_l"] {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol).as_deref(),
+                Some("ucrtbase.dll"),
+                "{target:?}: {symbol}"
+            );
+        }
     }
 }
 

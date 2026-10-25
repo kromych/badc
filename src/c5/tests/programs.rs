@@ -4289,10 +4289,16 @@ fn builtin_bit_byte_const() {
 
 #[test]
 fn scanf_fscanf_binding() {
-    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
-    // from <stdio.h>; the calls are guarded so the interp lane never
-    // reaches their (unimplemented) CallExt and never blocks on stdin.
-    assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared by <stdio.h>;
+    // the calls are guarded so the interp lane never reaches their
+    // (unimplemented) CallExt and never blocks on stdin. On Windows they
+    // are libc/lib/scanf_ext.c's, which the interpreter does not load; the
+    // native tables link and run the fixture there.
+    if crate::Target::default_target().is_windows() {
+        super::compile_fixture("scanf_fscanf_binding.c");
+    } else {
+        assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+    }
 }
 
 #[test]

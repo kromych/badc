@@ -300,9 +300,6 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::vprintf,   "vprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
-#pragma binding(msvcrt::scanf,     "scanf")
-#pragma binding(msvcrt::fscanf,    "fscanf")
-#pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
 #pragma binding(msvcrt::fclose,    "fclose")
@@ -328,7 +325,6 @@ typedef struct __c5_fpos_t fpos_t;
 // The legacy msvcrt.dll exports no _ftelli64 (unlike _fseeki64); UCRT does.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::_ftelli64, "_ftelli64")
-#pragma binding(ucrtbase::__stdio_common_vsscanf, "__stdio_common_vsscanf")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -508,20 +504,10 @@ int sscanf(const char *src, const char *fmt, ...);
 int asprintf(char **strp, char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
 #endif
-// C99 7.19.6.14. msvcrt.dll has no vsscanf; the Universal CRT's header
-// defines it over ucrtbase's scanner, which reads no FILE.
-#ifdef _WIN32
-int __stdio_common_vsscanf(unsigned long long options, const char *src, size_t len,
-                           const char *fmt, void *locale, __builtin_va_list ap);
-static inline int vsscanf(const char *src, const char *fmt, __builtin_va_list ap)
-{
-    return __stdio_common_vsscanf(0, src, (size_t)-1, fmt, 0, ap);
-}
-#else
+// C99 7.19.6.14 vsscanf, 7.19.6.9 vfscanf and 7.19.6.11 vscanf. On Windows
+// libc/lib/scanf_ext.c defines these and the three above: msvcrt.dll's
+// scanners miss C99's conversions, and it exports no va_list form.
 int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
-#endif
-// C99 7.19.6.9 vfscanf and 7.19.6.11 vscanf; libc/lib/vscanf_ext.c defines
-// them on Windows, where msvcrt.dll exports neither.
 int vfscanf(FILE *restrict stream, const char *restrict format, __builtin_va_list arg);
 int vscanf(const char *restrict format, __builtin_va_list arg);
 FILE *fopen(const char *path, const char *mode);

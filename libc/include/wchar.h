@@ -196,9 +196,6 @@ struct __c5_FILE;
 #pragma binding(msvcrt::vfwprintf, "vfwprintf")
 #pragma binding(msvcrt::vwprintf,  "vwprintf")
 #pragma binding(msvcrt::wprintf,   "wprintf")
-#pragma binding(msvcrt::fwscanf,   "fwscanf")
-#pragma binding(msvcrt::swscanf,   "swscanf")
-#pragma binding(msvcrt::wscanf,    "wscanf")
 #pragma binding(msvcrt::wcsncat,  "wcsncat")
 #pragma binding(msvcrt::wcscspn,  "wcscspn")
 #pragma binding(msvcrt::wcspbrk,  "wcspbrk")
@@ -418,7 +415,8 @@ static inline wchar_t *wmemset(wchar_t *d, wchar_t c, size_t n) {
 #endif
 
 // Formatted wide-character input/output (C99 7.24.2). On Windows swprintf
-// and vswprintf are the definitions above.
+// and vswprintf are the definitions above, and libc/lib/scanf_ext.c defines
+// the six scanners.
 int fwprintf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
 int fwscanf(struct __c5_FILE *restrict stream, const wchar_t *restrict format, ...);
 int swscanf(const wchar_t *restrict s, const wchar_t *restrict format, ...);

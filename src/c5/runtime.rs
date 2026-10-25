@@ -73,6 +73,7 @@ pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
         "pthread_ext.c",
         include_str!("../../libc/lib/pthread_ext.c"),
     ),
+    ("scanf_ext.c", include_str!("../../libc/lib/scanf_ext.c")),
     (
         "semaphore_ext.c",
         include_str!("../../libc/lib/semaphore_ext.c"),
@@ -83,5 +84,4 @@ pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("strtod_ext.c", include_str!("../../libc/lib/strtod_ext.c")),
     ("time_ext.c", include_str!("../../libc/lib/time_ext.c")),
     ("unistd_ext.c", include_str!("../../libc/lib/unistd_ext.c")),
-    ("vscanf_ext.c", include_str!("../../libc/lib/vscanf_ext.c")),
 ];

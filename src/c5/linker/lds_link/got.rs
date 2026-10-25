@@ -18,10 +18,12 @@ use super::{
 /// than an address. `size_dynamic_sections` rewrites the address-width
 /// form to `R_*_RELATIVE`; no dynamic form writes a narrower field.
 /// The `*_ABS_LO12_NC` group is excluded: it takes only the target's
-/// page offset, which a page-aligned load base leaves alone.
+/// page offset, which a page-aligned load base leaves alone. GNU ld
+/// writes an i386 `R_386_16` / `R_386_8` with the link-time value,
+/// subject to the field's overflow check, so none is refused there.
 fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     match machine {
-        EM_386 => matches!(rtype, rt::R_386_16 | rt::R_386_8),
+        EM_386 => false,
         EM_AARCH64 => {
             matches!(rtype, rt::R_AARCH64_ABS32 | rt::R_AARCH64_ABS16)
                 || rt::aarch64_movw_field(rtype).is_some()

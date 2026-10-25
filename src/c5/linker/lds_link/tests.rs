@@ -6839,3 +6839,42 @@ fn a_library_states_the_layout_a_copy_of_its_object_takes() {
         ]
     );
 }
+
+/// GNU ld 2.46.1 writes an i386 `R_386_16` naming a load address with the
+/// link-time value in a position-independent link too, taking no dynamic
+/// relocation, and reports an `R_386_8` or `R_386_16` the value does not
+/// fit as truncated, as in any other link.
+#[test]
+fn an_i386_narrow_field_takes_the_link_time_value_in_a_position_independent_link() {
+    // .data: d, then `.word d`, `.word d + 2`, and `.byte d` where `byte`.
+    // Symtab: null(0), section(1), d(2).
+    let unit = |byte: bool| {
+        let o = TestObj::new()
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 9])
+            .sym("d", STB_GLOBAL, STT_OBJECT, 0, 0, 4)
+            .reloc(0, 4, 2, rt::R_386_16, 0)
+            .reloc(0, 6, 2, rt::R_386_16, 2);
+        if byte {
+            o.reloc(0, 8, 2, rt::R_386_8, 0)
+        } else {
+            o
+        }
+        .build_class(EM_386, ElfClass::Elf32, false)
+    };
+    for pic in [Some(true), Some(false)] {
+        let res = link_i386_with(alloc::vec![("n.o", unit(false))], &i386_opts(pic))
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [d] = i386_addrs(img, ["d"]);
+        let data = elf32_body(img, ".data");
+        let half = |at: usize| u16::from_le_bytes([data[at], data[at + 1]]) as i64;
+        assert_eq!((half(4), half(6)), (d, d + 2), "{pic:?}");
+        assert!(elf32_dyn_relocs(img).is_empty(), "{pic:?}");
+        let e = link_i386_with(alloc::vec![("n.o", unit(true))], &i386_opts(pic))
+            .expect_err("does not fit");
+        assert!(
+            alloc::format!("{e}").contains("relocation truncated"),
+            "{e}"
+        );
+    }
+}

@@ -66,8 +66,19 @@ refs that are not checked out needs no `receive.denyCurrentBranch` change.
   a 0-byte `rustup.exe`; copying `rustup-init.exe` over it restores it.
 - msys2 for debugging (`msys64\usr\bin\gdb.exe`, `objdump.exe`).
 - A box whose cmd output is localized: no lane step may parse English messages.
-- Antivirus scanning of the checkout slows builds and test runs; account for it when
-  a lane is slower than its peers.
+- Microsoft Defender set up as on CI's Windows images (runner-images'
+  `Configure-WindowsDefender.ps1`): cloud protection off, samples never sent, and the
+  `R:` drive and the ssh account's `%TEMP%` excluded. The tests write each fixture
+  image to `%TEMP%` and start it; with cloud protection on, Defender sends each new
+  image to the cloud service (event 2010 in its Operational log), which has made a
+  parity test take 671 s instead of 54 s. From an elevated PowerShell, with Tamper
+  Protection off (otherwise `Set-MpPreference` returns without effect):
+
+  ```
+  Set-MpPreference -MAPSReporting Disabled -SubmitSamplesConsent NeverSend
+  Add-MpPreference -ExclusionPath R:\, C:\Users\<account>\AppData\Local\Temp
+  Get-MpPreference | Select-Object MAPSReporting, SubmitSamplesConsent, ExclusionPath
+  ```
 
 ## Checking a box
 

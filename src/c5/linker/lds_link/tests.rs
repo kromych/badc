@@ -6995,3 +6995,203 @@ fn an_i386_pc_relative_word_naming_a_library_function_takes_a_relocation_naming_
         assert!(relocs.iter().all(|r| r.1 != rt::R_386_PC32), "{relocs:?}");
     }
 }
+
+/// `.init` with `_init`, `.fini` with `_fini` and `myfini`, an entry each
+/// in `.init_array` and `.fini_array`, and one in `.preinit_array` where
+/// `pre`; `_start` calls the import `foo`.
+fn init_fini_user(pre: bool) -> Vec<u8> {
+    let sections = 5 + pre as u32;
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xe8, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".init", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(
+            ".fini",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc3, 0xc3],
+        )
+        .sec(
+            ".init_array",
+            SHT_INIT_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        )
+        .sec(
+            ".fini_array",
+            SHT_FINI_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        );
+    let o = if pre {
+        o.sec(
+            ".preinit_array",
+            SHT_PREINIT_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        )
+    } else {
+        o
+    };
+    // Symtab: null(0), sections(1..=sections), then these in order.
+    (o.sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 6))
+        .sym("_init", STB_GLOBAL, STT_FUNC, 1, 0, 1)
+        .sym("_fini", STB_GLOBAL, STT_FUNC, 2, 0, 1)
+        .sym("myfini", STB_GLOBAL, STT_FUNC, 2, 1, 1)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 1, sections + 5, rt::R_X86_64_PLT32, -4)
+        .build(EM_X86_64)
+}
+
+/// `.dynamic` names the `-init` and `-fini` functions the link defines in
+/// `DT_INIT` and `DT_FINI` and the arrays after them, ahead of the symbol
+/// tables, and `DT_SYMBOLIC` before the search path, in GNU ld 2.46.1's
+/// order; a shared object refuses `.preinit_array` input, as the gABI
+/// gives `DT_PREINIT_ARRAY` to an executable alone.
+#[test]
+fn dynamic_tags_name_the_init_and_fini_functions_ahead_of_the_arrays() {
+    use dynamic::{
+        DT_FINI, DT_FINI_ARRAY, DT_FINI_ARRAYSZ, DT_GNU_HASH, DT_HASH, DT_INIT, DT_INIT_ARRAY,
+        DT_INIT_ARRAYSZ, DT_NEEDED, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ, DT_RUNPATH, DT_SONAME,
+        DT_SYMBOLIC,
+    };
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let link = |pre: bool, opts: LdsOptions| {
+        let o = parse_lds_object("a.o", init_fini_user(pre)).expect("parses");
+        let libs = alloc::vec![shared_input("libc.so.6", &["foo"], &[])];
+        let opts = LdsOptions {
+            shared_libs: libs,
+            ..opts
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+    };
+    // The tags ahead of the hash tables, with their values.
+    let head = |img: &[u8]| -> Vec<(u64, u64)> {
+        (dyn_tags(img).into_iter())
+            .take_while(|t| t.0 != DT_HASH && t.0 != DT_GNU_HASH)
+            .collect()
+    };
+    let arrays = |img: &[u8]| {
+        let (init, fini) = (
+            section_addr(img, ".init_array"),
+            section_addr(img, ".fini_array"),
+        );
+        [
+            (DT_INIT_ARRAY, init.unwrap()),
+            (DT_INIT_ARRAYSZ, 8),
+            (DT_FINI_ARRAY, fini.unwrap()),
+            (DT_FINI_ARRAYSZ, 8),
+        ]
+    };
+    let img = link(true, dynamic_opts(Vec::new())).expect("links").image;
+    let (init, fini) = (section_addr(&img, ".init"), section_addr(&img, ".fini"));
+    let pre = section_addr(&img, ".preinit_array").unwrap();
+    let mut want = alloc::vec![
+        (DT_NEEDED, head(&img)[0].1),
+        (DT_INIT, init.unwrap()),
+        (DT_FINI, fini.unwrap()),
+        (DT_PREINIT_ARRAY, pre),
+        (DT_PREINIT_ARRAYSZ, 8),
+    ];
+    want.extend(arrays(&img));
+    assert_eq!(head(&img), want);
+    let shared = LdsOptions {
+        shared: true,
+        interp: None,
+        soname: Some(String::from("libx.so")),
+        symbolic: true,
+        rpath: alloc::vec![String::from("/opt/x")],
+        new_dtags: true,
+        fini_function: String::from("myfini"),
+        ..dynamic_opts(Vec::new())
+    };
+    let img = link(false, shared.clone()).expect("links").image;
+    let h = head(&img);
+    let tags: Vec<u64> = h.iter().map(|t| t.0).collect();
+    assert_eq!(
+        tags[..6],
+        [
+            DT_NEEDED,
+            DT_SONAME,
+            DT_SYMBOLIC,
+            DT_RUNPATH,
+            DT_INIT,
+            DT_FINI
+        ]
+    );
+    assert_eq!(h[5].1, section_addr(&img, ".fini").unwrap() + 1, "myfini");
+    assert_eq!(h[6..], arrays(&img));
+    let none = LdsOptions {
+        init_function: String::from("nosuch"),
+        ..shared.clone()
+    };
+    let img = link(false, none).expect("links").image;
+    assert!(
+        head(&img).iter().all(|t| t.0 != DT_INIT),
+        "no DT_INIT for nosuch"
+    );
+    let e = link(true, shared).expect_err("refused");
+    assert!(
+        alloc::format!("{e}").contains("a.o: .preinit_array section is not allowed in DSO"),
+        "{e}"
+    );
+}
+
+/// The symbol table lists each import as `.dynsym` does: undefined, with
+/// the type the library gives it and the binding of the references, as
+/// GNU ld 2.46.1 lists them.
+#[test]
+fn the_symbol_table_lists_the_imports() {
+    let body = [
+        0xe8, 0, 0, 0, 0, // call foo
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov bar@GOTPCREL(%rip), %rax
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov wk@GOTPCREL(%rip), %rax
+        0xc3,
+    ];
+    // Symtab: null(0), section(1), _start(2), foo(3), bar(4), wk(5).
+    let unit = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 20)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("wk", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 1, 3, rt::R_X86_64_PLT32, -4)
+        .reloc(0, 8, 4, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .reloc(0, 15, 5, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .build(EM_X86_64);
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", unit.clone()).expect("parses");
+        let opts = LdsOptions {
+            emit,
+            ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let mut und: Vec<(String, u8)> = (image_sym_rows(&img).into_iter())
+            .filter(|s| s.2 == SHN_UNDEF && !s.0.is_empty())
+            .map(|s| (s.0, s.1))
+            .collect();
+        und.sort();
+        let row = |n: &str, bind: u8, kind: u8| (String::from(n), (bind << 4) | kind);
+        assert_eq!(
+            und,
+            [
+                row("bar", STB_GLOBAL, STT_OBJECT),
+                row("foo", STB_GLOBAL, STT_FUNC),
+                row("wk", STB_WEAK, STT_NOTYPE),
+            ],
+            "{emit:?}"
+        );
+    }
+}

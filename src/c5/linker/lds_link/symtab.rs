@@ -244,21 +244,21 @@ impl<'a> LdsLinker<'a> {
                 syms.push(fs);
             }
         }
-        // A copied import is defined at its copy, as bfd's table states.
-        for c in &self.copies {
-            if let (Some(value), Some(o)) = (self.copy_addr(&c.name), self.copy_out(&c.name)) {
-                if track {
-                    index.by_name.insert(c.name.clone(), syms.len());
-                }
-                syms.push(FinalSym {
-                    name: c.name.clone(),
-                    info: (STB_GLOBAL << 4) | STT_OBJECT,
-                    other: STV_DEFAULT,
-                    shndx: out_shndx(o),
-                    value,
-                    size: c.size,
-                });
+        // Each import takes its `.dynsym` row: a copied one is defined at
+        // its copy, as bfd's table states.
+        for name in &self.imports {
+            let d = self.import_row(name, &out_shndx);
+            if track {
+                index.by_name.insert(name.clone(), syms.len());
             }
+            syms.push(FinalSym {
+                name: d.name,
+                info: d.info,
+                other: d.other,
+                shndx: d.shndx,
+                value: d.value,
+                size: d.size,
+            });
         }
         // Script-defined symbols.
         let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
@@ -294,6 +294,7 @@ impl<'a> LdsLinker<'a> {
                 && !sym.name.is_empty()
                 && !self.globals.contains_key(&sym.name)
                 && !self.script_now.contains_key(&sym.name)
+                && !self.import_of.contains_key(&sym.name)
             {
                 weak_undefs.insert(&sym.name);
             }

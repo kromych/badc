@@ -16,11 +16,11 @@ use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
-    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FUNC, STT_NOTYPE,
-    STT_OBJECT, STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR,
-    SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL,
-    SYNTH_RELA, SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym,
-    SecFate, machine_uses_rela,
+    SHN_UNDEF, SHT_PREINIT_ARRAY, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FUNC,
+    STT_NOTYPE, STT_OBJECT, STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC,
+    SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT,
+    SYNTH_REL, SYNTH_RELA, SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM,
+    ScriptSym, SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -441,47 +441,53 @@ impl<'a> LdsLinker<'a> {
     /// entry, and kept by the version script. A protected one carries
     /// its visibility. Each version definition also contributes a
     /// symbol naming itself.
+    /// The symbol table row of the import `name`: undefined with the
+    /// type the library gives it, defined at its copy where the image
+    /// holds one, and valued at its PLT entry where that is its address.
+    pub(super) fn import_row(&self, name: &str, out_shndx: &dyn Fn(usize) -> u16) -> DynSym {
+        let bind = if self.weak_imports.contains(name) {
+            STB_WEAK
+        } else {
+            STB_GLOBAL
+        };
+        let lib = |pick: fn(&DynamicImage) -> &BTreeSet<String>| {
+            (self.opts.shared_libs.iter()).any(|l| pick(&l.lib).contains(name))
+        };
+        let kind = if lib(|l| &l.function_exports) {
+            STT_FUNC
+        } else if lib(|l| &l.data_exports) {
+            STT_OBJECT
+        } else if lib(|l| &l.tls_exports) {
+            STT_TLS
+        } else {
+            STT_NOTYPE
+        };
+        let mut sym = DynSym {
+            name: String::from(name),
+            info: (bind << 4) | kind,
+            other: STV_DEFAULT,
+            shndx: SHN_UNDEF,
+            value: 0,
+            size: 0,
+            version: dynamic::VER_NDX_GLOBAL,
+        };
+        if let (Some(at), Some(o)) = (self.copy_addr(name), self.copy_out(name)) {
+            let size = self.copies[self.copy_of[name]].size;
+            (sym.info, sym.shndx, sym.value, sym.size) =
+                ((bind << 4) | STT_OBJECT, out_shndx(o), at, size);
+        } else if self.canonical.contains(name) {
+            sym.value = self.stub_or_slot(name, Reach::Plt).unwrap_or(0);
+        }
+        sym
+    }
+
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
         // Imports come first and in their own order. An executable defines
         // a copied object at its copy, and states a function's PLT entry
         // where that is the function's address.
-        let mut out: Vec<DynSym> = Vec::new();
-        for name in &self.imports {
-            let bind = if self.weak_imports.contains(name) {
-                STB_WEAK
-            } else {
-                STB_GLOBAL
-            };
-            let lib = |pick: fn(&DynamicImage) -> &BTreeSet<String>| {
-                (self.opts.shared_libs.iter()).any(|l| pick(&l.lib).contains(name))
-            };
-            let kind = if lib(|l| &l.function_exports) {
-                STT_FUNC
-            } else if lib(|l| &l.data_exports) {
-                STT_OBJECT
-            } else if lib(|l| &l.tls_exports) {
-                STT_TLS
-            } else {
-                STT_NOTYPE
-            };
-            let mut sym = DynSym {
-                name: name.clone(),
-                info: (bind << 4) | kind,
-                other: STV_DEFAULT,
-                shndx: SHN_UNDEF,
-                value: 0,
-                size: 0,
-                version: dynamic::VER_NDX_GLOBAL,
-            };
-            if let (Some(at), Some(o)) = (self.copy_addr(name), self.copy_out(name)) {
-                let size = self.copies[self.copy_of[name]].size;
-                (sym.info, sym.shndx, sym.value, sym.size) =
-                    ((bind << 4) | STT_OBJECT, out_shndx(o), at, size);
-            } else if self.canonical.contains(name) {
-                sym.value = self.stub_or_slot(name, Reach::Plt).unwrap_or(0);
-            }
-            out.push(sym);
-        }
+        let mut out: Vec<DynSym> = (self.imports.iter())
+            .map(|name| self.import_row(name, out_shndx))
+            .collect();
         let mut names: Vec<&String> = self.globals.keys().collect();
         names.sort();
         for name in names {
@@ -657,10 +663,28 @@ impl<'a> LdsLinker<'a> {
             executable: !self.opts.shared,
             flags: self.opts.dynamic_flags,
             flags_1: self.opts.dynamic_flags_1,
+            init: self.final_sym_value(&self.opts.init_function),
+            fini: self.final_sym_value(&self.opts.fini_function),
             preinit_array: self.out_extent(".preinit_array"),
             init_array: self.out_extent(".init_array"),
             fini_array: self.out_extent(".fini_array"),
         }
+    }
+
+    /// The refusal of a shared object whose `.preinit_array` holds input:
+    /// the gABI gives `DT_PREINIT_ARRAY` to an executable alone, and GNU
+    /// ld names each input carrying one.
+    pub(super) fn preinit_array_in_shared_object(&self) -> Option<String> {
+        let out = (self.outs.iter()).position(|o| o.name == ".preinit_array" && !o.removed)?;
+        let fed = (0..self.insecs.len()).any(|i| self.fates[i] == SecFate::Placed { out });
+        if !self.opts.shared || !fed {
+            return None;
+        }
+        let lines: Vec<String> = (self.objects.iter())
+            .filter(|o| o.sections.iter().any(|s| s.shtype == SHT_PREINIT_ARRAY))
+            .map(|o| format!("{}: .preinit_array section is not allowed in DSO", o.source))
+            .collect();
+        Some(lines.join("\n"))
     }
 
     /// `(address, size)` of a kept output section.

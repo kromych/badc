@@ -101,6 +101,9 @@ struct LdArgs {
     gc_sections: bool,
     /// `-soname NAME`: recorded as `DT_SONAME`.
     soname: Option<String>,
+    /// `-init NAME` / `-fini NAME`: the `DT_INIT` / `DT_FINI` functions.
+    init_function: Option<String>,
+    fini_function: Option<String>,
     /// `--hash-style`.
     hash_style: HashStyle,
     /// `-Bsymbolic`.
@@ -311,6 +314,8 @@ impl LdArgs {
             undefined: Vec::new(),
             gc_sections: false,
             soname: None,
+            init_function: None,
+            fini_function: None,
             hash_style: HashStyle::default(),
             symbolic: false,
             symbolic_functions: false,
@@ -401,6 +406,10 @@ impl LdArgs {
                 s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
                     a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
                 }
+                "-init" => a.init_function = Some(next_of(&mut it, arg)?),
+                "-fini" => a.fini_function = Some(next_of(&mut it, arg)?),
+                s if s.starts_with("-init=") => a.init_function = Some(s[6..].to_string()),
+                s if s.starts_with("-fini=") => a.fini_function = Some(s[6..].to_string()),
                 "--hash-style" => {
                     let v = next_of(&mut it, arg)?;
                     a.hash_style = HashStyle::parse(&v)
@@ -1115,6 +1124,8 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
+        init_function: (a.init_function.clone()).unwrap_or_else(|| String::from("_init")),
+        fini_function: (a.fini_function.clone()).unwrap_or_else(|| String::from("_fini")),
         output_name: a
             .output
             .file_name()

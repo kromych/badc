@@ -373,6 +373,10 @@ pub struct LdsOptions {
     /// `--fix-cortex-a53-843419`: rewrite the erratum sequences, as
     /// ADR where the page is in range and through a veneer otherwise.
     pub fix_cortex_a53_843419: bool,
+    /// `-init` / `-fini`: the functions `DT_INIT` and `DT_FINI` name
+    /// where the link defines them.
+    pub init_function: String,
+    pub fini_function: String,
 }
 
 impl Default for LdsOptions {
@@ -415,6 +419,8 @@ impl Default for LdsOptions {
             rpath: Vec::new(),
             new_dtags: false,
             fix_cortex_a53_843419: false,
+            init_function: String::from("_init"),
+            fini_function: String::from("_fini"),
         }
     }
 }
@@ -1152,6 +1158,9 @@ impl<'a> LdsLinker<'a> {
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
             return Err(self.script_errors());
+        }
+        if let Some(e) = self.preinit_array_in_shared_object() {
+            return Err(link_err(Code::LINK, MODULE, &e));
         }
         if self.opts.text && self.has_readonly_dynamic_reloc() {
             return Err(link_err(

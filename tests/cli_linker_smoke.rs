@@ -13146,6 +13146,121 @@ fn a_pc_relative_word_naming_a_library_function_equals_the_librarys_address() {
     }
 }
 
+// A shared object's `-init` function runs before its `.init_array`, from
+// the DT_INIT the GNU ld persona records, as the gABI orders them.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+#[test]
+fn a_shared_objects_init_function_runs_before_its_init_array() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping: no system C compiler");
+        return;
+    };
+    let dir = tempdir("dt-init");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int seq;\nvoid lib_init(void) { seq = seq * 10 + 1; }\n\
+         static void arr(void) { seq = seq * 10 + 2; }\n\
+         __attribute__((section(\".init_array\"), used)) static void (*p)(void) = arr;\n\
+         int lib_seq(void) { return seq; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int lib_seq(void);\n\
+         #ifdef __x86_64__\n\
+         #define SYS_WRITE 1\n#define SYS_EXIT 60\n\
+         #else\n\
+         #define SYS_WRITE 64\n#define SYS_EXIT 93\n\
+         #endif\n\
+         static void sys(long n, long a, long b, long c) {\n\
+         #ifdef __x86_64__\n\
+           __asm__ volatile(\"syscall\" : \"+a\"(n) : \"D\"(a), \"S\"(b), \"d\"(c) \
+             : \"rcx\", \"r11\", \"memory\");\n\
+         #else\n\
+           register long x8 __asm__(\"x8\") = n, x0 __asm__(\"x0\") = a;\n\
+           register long x1 __asm__(\"x1\") = b, x2 __asm__(\"x2\") = c;\n\
+           __asm__ volatile(\"svc 0\" : \"+r\"(x0) : \"r\"(x8), \"r\"(x1), \"r\"(x2) : \"memory\");\n\
+         #endif\n\
+         }\n\
+         #ifdef __x86_64__\n\
+         __attribute__((force_align_arg_pointer))\n\
+         #endif\n\
+         void _start(void) {\n\
+           int v = lib_seq();\n\
+           char b[3] = {'0' + v / 10 % 10, '0' + v % 10, '\\n'};\n\
+           sys(SYS_WRITE, 1, (long)b, 3);\n\
+           sys(SYS_EXIT, 0, 0, 0);\n\
+         }\n",
+    );
+    let (emulation, loader) = if cfg!(target_arch = "x86_64") {
+        ("elf_x86_64", "/lib64/ld-linux-x86-64.so.2")
+    } else {
+        ("aarch64linux", "/lib/ld-linux-aarch64.so.1")
+    };
+    let flags = ["-O1", "-ffreestanding", "-fno-stack-protector"];
+    for (src, pic, obj) in [(&lib, "-fPIC", "lib.o"), (&main, "-fPIE", "main.o")] {
+        run(
+            Command::new(&cc)
+                .args(flags)
+                .args(["-fno-asynchronous-unwind-tables", pic, "-c"])
+                .arg(src)
+                .arg("-o")
+                .arg(dir.join(obj)),
+            "compile",
+        );
+    }
+    let ld = |args: &[&str], what: &str| {
+        run(
+            Command::new(badc())
+                .args(["--ld", "-m", emulation])
+                .args(args)
+                .current_dir(&dir),
+            what,
+        )
+    };
+    ld(
+        &[
+            "-shared",
+            "-soname",
+            "libini.so",
+            "-init",
+            "lib_init",
+            "lib.o",
+            "-o",
+            "libini.so",
+        ],
+        "link the library",
+    );
+    ld(
+        &[
+            "-pie",
+            "-dynamic-linker",
+            loader,
+            "main.o",
+            "libini.so",
+            "-o",
+            "prog",
+        ],
+        "link the executable",
+    );
+    if !Path::new(loader).exists() {
+        eprintln!("no {loader}: the executable is linked, not run");
+        return;
+    }
+    let out = run(
+        Command::new(loader)
+            .arg("--library-path")
+            .arg(&dir)
+            .arg(dir.join("prog")),
+        "run the executable",
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "12\n");
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

@@ -24,6 +24,14 @@ struct conv_case {
     int erange;
 };
 
+// An inexact hexadecimal subnormal: glibc 2.43 sets ERANGE, glibc 2.39
+// leaves errno untouched (C99 7.20.1.3p10 makes either conforming).
+#ifdef __GLIBC__
+#define HEX_SUBNORMAL_ERANGE -1
+#else
+#define HEX_SUBNORMAL_ERANGE 1
+#endif
+
 #define INF 0x7ff0000000000000ULL
 // Any NaN.
 #define A_NAN (~0ULL)
@@ -47,7 +55,7 @@ static const struct conv_case cases[] = {
     {"0x1.8p-1074", 11, 0x2, 1},
     {"0x1.fffffffffffff8p-1023", 24, 0x0010000000000000ULL, -1},
     {"0x0.fffffffffffff8p-1022", 24, 0x0010000000000000ULL, -1},
-    {"0x1.ffffffffffffe8p-1023", 24, 0x000fffffffffffffULL, 1},
+    {"0x1.ffffffffffffe8p-1023", 24, 0x000fffffffffffffULL, HEX_SUBNORMAL_ERANGE},
     {"0x1p1023", 8, 0x7fe0000000000000ULL, 0},
     {"0x1p1024", 8, INF, 1},
     {"0x1.0000000000000801p0", 22, 0x3ff0000000000001ULL, 0},

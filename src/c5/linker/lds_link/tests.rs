@@ -6878,3 +6878,120 @@ fn an_i386_narrow_field_takes_the_link_time_value_in_a_position_independent_link
         );
     }
 }
+
+/// `.text` with `_start`, and section `name` holding `foo - .` and, on
+/// x86-64, `foo`; `foo` is undefined.
+fn pc_word_user(machine: u16, name: &str, flags: u64) -> Vec<u8> {
+    // Symtab: null(0), sections(1, 2), _start(3), foo(4).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3],
+        )
+        .sec(name, SHT_PROGBITS, flags, 8, &[0; 16])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0);
+    if machine == EM_386 {
+        return (o.reloc(1, 0, 4, rt::R_386_PC32, 0)).build_class(EM_386, ElfClass::Elf32, false);
+    }
+    (o.reloc(1, 0, 4, rt::R_X86_64_PC32, 0))
+        .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+        .build(EM_X86_64)
+}
+
+/// A PC-relative word naming a library's function in an x86-64 PIE's data
+/// makes the function's PLT entry its address, as GNU ld 2.46.1 links it,
+/// so it compares equal to the library's own; an address-width word keeps
+/// its relocation against the symbol. A shared object leaves both to
+/// relocations naming the function and takes no PLT entry for them; a PIE
+/// or shared object's word in read-only data is refused.
+#[test]
+fn an_x86_64_pie_s_pc_relative_word_makes_a_library_function_s_plt_entry_its_address() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let rw = SHF_ALLOC | SHF_WRITE;
+    let link = |name: &str, flags: u64, shared: bool| {
+        let o = parse_lds_object("a.o", pc_word_user(EM_X86_64, name, flags)).expect("parses");
+        let opts = LdsOptions {
+            shared,
+            interp: (!shared).then(|| String::from("/lib64/ld-linux-x86-64.so.2")),
+            ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])])
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+    };
+    let img = link(".data", rw, false).expect("links").image;
+    let foo = image_dynsyms(&img).into_iter().find(|s| s.0 == "foo");
+    let (plt, _) = image_section(&img, ".plt");
+    assert_eq!(foo.map(|s| (s.1, s.2)), Some((plt + 16, SHN_UNDEF)));
+    let (data, word) = image_section(&img, ".data");
+    assert_eq!(
+        data as i64 + u32_at(&word, 0) as i32 as i64,
+        plt as i64 + 16
+    );
+    let relocs = dyn_relocs(&img);
+    assert!(
+        relocs.contains(&(data + 8, rt::R_X86_64_64, String::from("foo"), 0)),
+        "{relocs:?}"
+    );
+    assert!(
+        relocs.iter().all(|r| r.1 != rt::R_X86_64_PC32),
+        "{relocs:?}"
+    );
+    let img = link(".data", rw, true).expect("links").image;
+    let (data, _) = image_section(&img, ".data");
+    let relocs = dyn_relocs(&img);
+    assert!(
+        relocs.contains(&(data, rt::R_X86_64_PC32, String::from("foo"), 0)),
+        "{relocs:?}"
+    );
+    assert!(section_addr(&img, ".rela.plt").is_none(), "no PLT entry");
+    for shared in [false, true] {
+        let e = link(".rodata", SHF_ALLOC, shared).expect_err("refused");
+        assert!(
+            alloc::format!("{e}").contains("R_X86_64_PC32 (2) against `foo'"),
+            "{e}"
+        );
+    }
+}
+
+/// An i386 PC-relative word naming a library's function takes an
+/// `R_386_PC32` naming it in a PIE and a shared object, as GNU ld 2.46.1
+/// links it, the field holding the addend; a position-dependent
+/// executable makes the function's PLT entry its address.
+#[test]
+fn an_i386_pc_relative_word_naming_a_library_function_takes_a_relocation_naming_it() {
+    for pic in [Some(false), Some(true), None] {
+        let mut lib = shared_input("libone.so", &["foo"], &[]);
+        lib.lib.machine = EM_386;
+        let opts = LdsOptions {
+            shared_libs: alloc::vec![lib],
+            interp: (pic != Some(true)).then(|| String::from("/lib/ld-linux.so.2")),
+            ..i386_opts(pic)
+        };
+        let unit = pc_word_user(EM_386, ".data", SHF_ALLOC | SHF_WRITE);
+        let res = link_i386_with(alloc::vec![("u.o", unit)], &opts).expect("links");
+        let img = &res.image;
+        let data = elf32_section(img, ".data").2;
+        let relocs = elf32_dyn_relocs(img);
+        let foo = elf32_symbols_of(img, ".dynsym", ".dynstr")
+            .into_iter()
+            .find(|s| s.0 == "foo");
+        let field = i32_at(elf32_body(img, ".data"), 0);
+        if pic.is_some() {
+            let want = (data, rt::R_386_PC32, String::from("foo"));
+            assert!(relocs.contains(&want), "{pic:?}: {relocs:?}");
+            assert_eq!((foo.map(|s| s.1), field), (Some(0), 0), "{pic:?}");
+            continue;
+        }
+        let plt = elf32_section(img, ".plt").2;
+        assert_eq!(
+            foo.map(|s| s.1),
+            Some(plt + 16),
+            "the PLT entry is foo's address"
+        );
+        assert_eq!(data as i64 + field, plt as i64 + 16);
+        assert!(relocs.iter().all(|r| r.1 != rt::R_386_PC32), "{relocs:?}");
+    }
+}

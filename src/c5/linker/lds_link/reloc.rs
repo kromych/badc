@@ -66,6 +66,9 @@ impl<'a> LdsLinker<'a> {
                     );
                 }
                 let reach = self.reach_at(id.obj, id.sec, r);
+                let dyn_import = reach == Reach::Dynamic
+                    && (self.objects[id.obj].symbols.get(r.sym as usize))
+                        .is_some_and(|s| self.import_of.contains_key(&s.name));
                 let target = match reach {
                     Reach::Plt | Reach::Got | Reach::NotedPair => {
                         let name = &self.objects[id.obj].symbols[r.sym as usize].name;
@@ -81,8 +84,12 @@ impl<'a> LdsLinker<'a> {
                         }
                         at.map(|v| v.wrapping_add(r.addend as u64))
                     }
+                    // The field of a dynamic relocation against an import
+                    // holds the addend.
+                    Reach::Dynamic if dyn_import => Some(r.addend as u64),
                     _ => {
-                        let sa = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
+                        let flags = self.objects[id.obj].sections[id.sec].flags;
+                        let sa = self.resolve_reloc_target(id.obj, r, flags, tolerant, &mut errors);
                         // A GOT reference that keeps its slot reaches the slot.
                         if sa.is_some()
                             && self.machine == EM_386
@@ -168,6 +175,7 @@ impl<'a> LdsLinker<'a> {
         &self,
         oi: usize,
         r: &RawReloc,
+        flags: u64,
         tolerant: bool,
         errors: &mut Vec<String>,
     ) -> Option<u64> {
@@ -209,7 +217,7 @@ impl<'a> LdsLinker<'a> {
                 return Some(s.val.v.wrapping_add(r.addend as u64));
             }
             if self.import_of.contains_key(&sym.name) {
-                if let Some(v) = self.import_target(&sym.name, r.rtype) {
+                if let Some(v) = self.import_target(&sym.name, r.rtype, flags) {
                     return Some(v.wrapping_add(r.addend as u64));
                 }
                 // An address-width field of a dynamic image takes a dynamic

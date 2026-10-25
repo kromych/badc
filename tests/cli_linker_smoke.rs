@@ -13014,6 +13014,138 @@ fn an_i386_shared_library_and_its_executables_bind_as_gnu_ld_binds_them() {
     }
 }
 
+// A PC-relative word naming a library's function holds the address the
+// library takes for it, in a PIE's data, a position-dependent executable's
+// and a shared object's, each linked by the GNU ld persona: an x86-64 PIE
+// makes the function's PLT entry its address, an i386 PIE and a shared
+// object leave the word to a relocation naming the function. The shared
+// object's word joins the PIE only: on x86-64 a position-dependent
+// executable's PLT entry lies out of its reach. Each target runs where the
+// system compiler builds for it and its loader is installed.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn a_pc_relative_word_naming_a_library_function_equals_the_librarys_address() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping: no system C compiler");
+        return;
+    };
+    let dir = tempdir("pc-word");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "void f(void) {}\nvoid *lib_f(void) { return (void *)f; }\n",
+    );
+    let user = write_source(
+        &dir,
+        "use.c",
+        "__asm__(\".data\\n.globl pc_f\\npc_f: .long f - .\\n.text\\n\");\nextern int pc_f;\n\
+         void *use_f(void) { return (char *)&pc_f + pc_f; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "void *lib_f(void);\n__attribute__((weak)) void *use_f(void);\n\
+         __asm__(\".data\\n.globl pc_m\\npc_m: .long f - .\\n.text\\n\");\nextern int pc_m;\n\
+         static void sys(long n, long a, long b, long c) {\n\
+         #ifdef __x86_64__\n\
+           __asm__ volatile(\"syscall\" : \"+a\"(n) : \"D\"(a), \"S\"(b), \"d\"(c) \
+             : \"rcx\", \"r11\", \"memory\");\n\
+         #else\n\
+           __asm__ volatile(\"int $0x80\" : \"+a\"(n) : \"b\"(a), \"c\"(b), \"d\"(c) : \"memory\");\n\
+         #endif\n\
+         }\n\
+         __attribute__((force_align_arg_pointer)) void _start(void) {\n\
+           char b[3] = {'0' + ((char *)&pc_m + pc_m == lib_f()), '-', '\\n'};\n\
+           if (use_f)\n    b[1] = '0' + (use_f() == lib_f());\n\
+           int ia32 = sizeof(long) == 4;\n\
+           sys(ia32 ? 4 : 1, 1, (long)b, 3);\n\
+           sys(ia32 ? 1 : 60, 0, 0, 0);\n\
+         }\n",
+    );
+    for (m, emulation, loaders) in [
+        ("-m64", "elf_x86_64", &["/lib64/ld-linux-x86-64.so.2"][..]),
+        (
+            "-m32",
+            "elf_i386",
+            &["/lib/ld-linux.so.2", "/usr/lib32/ld-linux.so.2"][..],
+        ),
+    ] {
+        let sub = dir.join(emulation);
+        std::fs::create_dir_all(&sub).expect("mkdir");
+        let compile = |src: &Path, pic: &str, obj: &str| {
+            Command::new(&cc)
+                .args([m, "-O1", "-ffreestanding", "-fno-stack-protector"])
+                .args(["-fno-asynchronous-unwind-tables", pic, "-c"])
+                .arg(src)
+                .arg("-o")
+                .arg(sub.join(obj))
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        if !compile(&lib, "-fPIC", "lib.o") {
+            eprintln!("skipping {emulation}: the system C compiler does not build for it");
+            continue;
+        }
+        assert!(compile(&user, "-fPIC", "use.o"));
+        assert!(compile(&main, "-fPIE", "pie.o") && compile(&main, "-fno-pie", "pdep.o"));
+        let ld = |args: &[&str], what: &str| {
+            run(
+                Command::new(badc())
+                    .args(["--ld", "-m", emulation])
+                    .args(args)
+                    .current_dir(&sub),
+                what,
+            )
+        };
+        ld(
+            &["-shared", "-soname", "libfn.so", "lib.o", "-o", "libfn.so"],
+            "link the library",
+        );
+        let libs = ["libuse.so", "libfn.so"];
+        ld(
+            &[
+                "-shared",
+                "-soname",
+                "libuse.so",
+                "use.o",
+                "libfn.so",
+                "-o",
+                libs[0],
+            ],
+            "link the library's user",
+        );
+        let loader = loaders.iter().find(|p| Path::new(p).exists());
+        for (kind, obj, libs, want) in [
+            ("-pie", "pie.o", &libs[..], "11\n"),
+            ("-no-pie", "pdep.o", &libs[1..], "1-\n"),
+        ] {
+            let exe = format!("prog{kind}");
+            let interp = loaders[0];
+            let args = [kind, "-dynamic-linker", interp, obj];
+            ld(
+                &[&args[..], libs, &["-o", &exe]].concat(),
+                "link the executable",
+            );
+            let Some(loader) = loader else {
+                eprintln!("no {emulation} loader: the executables are linked, not run");
+                continue;
+            };
+            let out = run(
+                Command::new(loader)
+                    .arg("--library-path")
+                    .arg(&sub)
+                    .arg(sub.join(&exe)),
+                "run the executable",
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&out.stdout),
+                want,
+                "{emulation} {kind}"
+            );
+        }
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

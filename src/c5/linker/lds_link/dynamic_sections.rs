@@ -184,7 +184,7 @@ impl<'a> LdsLinker<'a> {
                     let name = &self.objects[id.obj].symbols[r.sym as usize].name;
                     if self.undefweak_dynamic(id.obj, r.sym as usize)
                         || self.import_of.contains_key(name)
-                            && !self.canonical.contains(name)
+                            && !self.word_binds_canonical(name)
                             && !self.word_binds_copy(name)
                     {
                         sym_relas.push(DynReloc {

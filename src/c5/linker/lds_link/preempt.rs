@@ -202,8 +202,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// How `r` in section `si` of object `oi` reaches its target. An
-    /// import takes only the noted pair here; [`Self::import_target`]
-    /// routes the rest.
+    /// import takes only the noted pair and a PC-relative field's dynamic
+    /// relocation here; [`Self::import_target`] routes the rest.
     pub(super) fn reach_at(&self, oi: usize, si: usize, r: &RawReloc) -> Reach {
         if self.preemptible.is_empty() && self.import_of.is_empty() {
             return Reach::Direct;
@@ -223,7 +223,8 @@ impl<'a> LdsLinker<'a> {
             noted,
             r.addend,
         );
-        if self.preemptible.contains(name) || how == Reach::NotedPair {
+        let pc_dynamic = how == Reach::Dynamic && self.import_pc_dynamic(name, r.rtype);
+        if self.preemptible.contains(name) || how == Reach::NotedPair || pc_dynamic {
             how
         } else {
             Reach::Direct

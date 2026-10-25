@@ -10,8 +10,9 @@ use hashbrown::{HashMap, HashSet};
 use super::inputs::RawReloc;
 use super::preempt::Reach;
 use super::{
-    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHN_ABS, SHN_COMMON, SHN_UNDEF,
-    STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
+    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHF_ALLOC, SHF_EXECINSTR,
+    SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT,
+    SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
 };
 
 /// A relocation writing a whole load address into a field narrower
@@ -60,6 +61,18 @@ pub(super) fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
         EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
         EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
         _ => matches!(rtype, rt::R_X86_64_PC32 | rt::R_X86_64_PLT32),
+    }
+}
+
+/// An x86 PC-relative field a dynamic relocation of its own type carries.
+pub(super) fn x86_pc_field(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_386 => rtype == rt::R_386_PC32,
+        EM_X86_64 => matches!(
+            rtype,
+            rt::R_X86_64_PC8 | rt::R_X86_64_PC16 | rt::R_X86_64_PC32 | rt::R_X86_64_PC64
+        ),
+        _ => false,
     }
 }
 
@@ -168,7 +181,12 @@ impl<'a> LdsLinker<'a> {
                         continue;
                     }
                     let pointer = self.function_pointer(&sym.name, r, sec.flags);
-                    if reloc_needs_plt(self.machine, r.rtype) && !self.is_data_export(&sym.name)
+                    // A shared object's PC-relative field takes a dynamic
+                    // relocation instead.
+                    let carried = self.opts.shared && x86_pc_field(self.machine, r.rtype);
+                    if reloc_needs_plt(self.machine, r.rtype)
+                        && !carried
+                        && !self.is_data_export(&sym.name)
                         || pointer.is_some()
                     {
                         called.insert(&sym.name);
@@ -189,19 +207,40 @@ impl<'a> LdsLinker<'a> {
     /// function import `name` in an executable, which then gives the
     /// function a PLT entry: `Some(true)` where the entry is the
     /// function's address, so it compares equal to the library's. A
-    /// position-dependent executable's direct reference takes one, as does
-    /// an aarch64 executable's `R_AARCH64_ABS64`, as GNU ld links them.
+    /// position-dependent executable's direct reference takes one, as do
+    /// an x86-64 PIE's `R_X86_64_PC32` in writable data and an aarch64
+    /// executable's `R_AARCH64_ABS64`, as GNU ld links them.
     fn function_pointer(&self, name: &str, r: &RawReloc, flags: u64) -> Option<bool> {
-        let function =
-            (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name));
-        if !function || self.opts.shared {
+        if !self.is_function_export(name) || self.opts.shared {
             return None;
         }
         let pde = self.opts.emit == LdsEmit::Exec;
-        if pde && self.direct_reference(r, flags, true) {
+        let data = flags & (SHF_ALLOC | SHF_WRITE | SHF_EXECINSTR) == SHF_ALLOC | SHF_WRITE;
+        let pie_field = self.machine == EM_X86_64 && r.rtype == rt::R_X86_64_PC32 && data;
+        if pde && self.direct_reference(r, flags, true) || !pde && pie_field {
             return Some(true);
         }
         (self.machine == EM_AARCH64 && r.rtype == rt::R_AARCH64_ABS64).then_some(pde)
+    }
+
+    fn is_function_export(&self, name: &str) -> bool {
+        (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name))
+    }
+
+    /// Whether a PC-relative field naming the import `name` takes a
+    /// dynamic relocation of its own type: in a shared object, and for a
+    /// function in an i386 PIE, as GNU ld links them.
+    pub(super) fn import_pc_dynamic(&self, name: &str, rtype: u32) -> bool {
+        let i386_pie = self.machine == EM_386 && self.opts.emit == LdsEmit::Dyn;
+        x86_pc_field(self.machine, rtype)
+            && (self.opts.shared || i386_pie && self.is_function_export(name))
+    }
+
+    /// Whether an address-width word naming the canonical import `name`
+    /// holds its PLT entry: in a position-dependent executable. A PIE's
+    /// word takes a relocation against the symbol, as bfd links it.
+    pub(super) fn word_binds_canonical(&self, name: &str) -> bool {
+        self.opts.emit == LdsEmit::Exec && self.canonical.contains(name)
     }
 
     /// `.dynsym` index of `name`: the table's, and before the table is
@@ -229,16 +268,26 @@ impl<'a> LdsLinker<'a> {
         reloc_uses_got(self.machine, r.rtype) && self.import_of.contains_key(name)
     }
 
-    /// Address a reference to an imported symbol resolves to: its PLT
-    /// entry for a call or where the entry is its address, its GOT slot
-    /// for a load through one.
-    pub(super) fn import_target(&self, name: &str, rtype: u32) -> Option<u64> {
+    /// Address a reference to an imported symbol from a section with
+    /// `flags` resolves to: its PLT entry for a call or where the entry is
+    /// its address, its GOT slot for a load through one. An x86
+    /// PC-relative field is a call only in a position-dependent
+    /// executable's code, as bfd reads one.
+    pub(super) fn import_target(&self, name: &str, rtype: u32, flags: u64) -> Option<u64> {
         if !self.import_of.contains_key(name) {
             return None;
         }
-        if reloc_needs_plt(self.machine, rtype)
-            || self.canonical.contains(name) && !reloc_uses_got(self.machine, rtype)
-        {
+        let pde_code = self.opts.emit == LdsEmit::Exec && flags & SHF_EXECINSTR != 0;
+        let call = match self.machine {
+            EM_386 => rtype == rt::R_386_PLT32 || rtype == rt::R_386_PC32 && pde_code,
+            EM_X86_64 => rtype == rt::R_X86_64_PLT32 || rtype == rt::R_X86_64_PC32 && pde_code,
+            _ => reloc_needs_plt(self.machine, rtype),
+        };
+        let word = rtype == self.dyn_reloc_types().0;
+        let canonical = self.canonical.contains(name)
+            && !reloc_uses_got(self.machine, rtype)
+            && (!word || self.word_binds_canonical(name));
+        if call || canonical {
             return self.stub_or_slot(name, Reach::Plt);
         }
         if reloc_uses_got(self.machine, rtype) {

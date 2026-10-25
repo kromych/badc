@@ -524,6 +524,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("wincrypt.h", include_str!("../../libc/include/wincrypt.h")),
     ("tchar.h", include_str!("../../libc/include/tchar.h")),
+    ("mbstring.h", include_str!("../../libc/include/mbstring.h")),
+    ("mbctype.h", include_str!("../../libc/include/mbctype.h")),
     (
         "winapifamily.h",
         include_str!("../../libc/include/winapifamily.h"),

@@ -60,6 +60,8 @@
 #pragma binding(msvcrt::toupper,  "toupper")
 #pragma binding(msvcrt::_isctype,   "_isctype")
 #pragma binding(msvcrt::_isctype_l, "_isctype_l")
+#pragma binding(msvcrt::isleadbyte, "isleadbyte")
+#pragma binding(msvcrt::_isleadbyte_l, "_isleadbyte_l")
 #include <corecrt.h>
 #define _UPPER    0x1
 #define _LOWER    0x2
@@ -73,6 +75,8 @@
 #define _ALPHA    (0x0100 | _UPPER | _LOWER)
 int _isctype(int c, int type);
 int _isctype_l(int c, int type, _locale_t locale);
+int isleadbyte(int c);
+int _isleadbyte_l(int c, _locale_t locale);
 #endif
 
 // isascii: the C macro form; no libc symbol.

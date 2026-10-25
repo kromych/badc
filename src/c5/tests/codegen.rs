@@ -1762,9 +1762,10 @@ fn windows_stringapiset_h_imports_its_functions_from_kernel32() {
 }
 
 /// `<tchar.h>` maps the generic-text names to the wide C runtime functions
-/// under `_UNICODE` and to the single-byte ones otherwise, as mingw-w64's
-/// does, and `_T` / `_TEXT` build a literal of the matching width. `TCHAR`
-/// follows `UNICODE`, which `<windows.h>` reads first.
+/// under `_UNICODE`, to the `<mbstring.h>` ones under `_MBCS` (through
+/// definitions, or macros under `_MB_MAP_DIRECT`) and to the single-byte ones
+/// otherwise, as mingw-w64's does, and `_T` / `_TEXT` build a literal of the
+/// matching width. `TCHAR` follows `UNICODE`, which `<windows.h>` reads first.
 #[test]
 fn windows_tchar_maps_generic_text_names_by_unicode() {
     const M: &str = "msvcrt.dll";
@@ -1797,6 +1798,27 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
                 ("__wcsncnt", "__wcsncnt", M),
             ],
         );
+        for map in ["", "#define _MB_MAP_DIRECT\n"] {
+            let mbcs = alloc::format!(
+                "#define _MBCS\n{map}#include <windows.h>\n#include <ctype.h>\n#include <tchar.h>\n\
+                 _Static_assert(sizeof(_TXCHAR) == 1 && (_TINT)-1 > 0, \"\");\n"
+            );
+            assert_windows_imports(
+                target,
+                &mbcs,
+                &[
+                    ("_tcsncmp", "_mbsnbcmp", M),
+                    ("_tcsnccmp", "_mbsncmp", M),
+                    ("_tcsncpy", "_mbsnbcpy", M),
+                    ("_tcsinc", "_mbsinc", M),
+                    ("_tcsclen", "_mbslen", M),
+                    ("_tcscnlen", "_mbsnlen", M),
+                    ("_tcslen", "strlen", M),
+                    ("_istalpha", "_ismbcalpha", M),
+                    ("_istleadbyte", "isleadbyte", M),
+                ],
+            );
+        }
     }
 }
 

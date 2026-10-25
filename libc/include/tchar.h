@@ -1,7 +1,7 @@
 // tchar.h -- the generic-text mappings of mingw-w64's tchar.h: the _t*, _tcs*,
-// _ist* and _ftcs* names map to the wide C runtime functions under _UNICODE
-// and to the single-byte ones otherwise, and _T / _TEXT build a literal of
-// the matching width. TODO(#1689): _MBCS takes the single-byte mappings.
+// _ist* and _ftcs* names map to the wide C runtime functions under _UNICODE,
+// to the <mbstring.h> ones under _MBCS and to the single-byte ones otherwise,
+// and _T / _TEXT build a literal of the matching width.
 
 #pragma once
 
@@ -414,11 +414,6 @@ size_t __wcsncnt(const wchar_t *_Str, size_t _MaxCount);
 
 #include <string.h>
 
-typedef char _TCHAR;
-typedef signed char _TSCHAR;
-typedef unsigned char _TUCHAR;
-typedef char _TXCHAR;
-typedef int _TINT;
 #ifndef _TCHAR_DEFINED
 #define _TCHAR_DEFINED
 typedef char TCHAR, *PTCHAR;
@@ -662,6 +657,302 @@ typedef unsigned char TBYTE, *PTBYTE;
 #define _tstat64i32 _stat64i32
 #define _tstati64 _stati64
 #define _tsetlocale setlocale
+
+#ifdef _MBCS
+
+#include <mbstring.h>
+
+typedef char _TCHAR;
+typedef signed char _TSCHAR;
+typedef unsigned char _TUCHAR;
+typedef unsigned char _TXCHAR;
+typedef unsigned int _TINT;
+
+#ifdef _MB_MAP_DIRECT
+#define _tcschr _mbschr
+#define _tcscspn _mbscspn
+#define _tcsncat _mbsnbcat
+#define _tcsncat_l _mbsnbcat_l
+#define _tcsncpy _mbsnbcpy
+#define _tcsncpy_l _mbsnbcpy_l
+#define _tcspbrk _mbspbrk
+#define _tcsrchr _mbsrchr
+#define _tcsspn _mbsspn
+#define _tcsstr _mbsstr
+#define _tcstok _mbstok
+#define _tcstok_l _mbstok_l
+#define _tcsnset _mbsnbset
+#define _tcsnset_l _mbsnbset_l
+#define _tcsrev _mbsrev
+#define _tcsset _mbsset
+#define _tcsset_l _mbsset_l
+#define _tcscmp _mbscmp
+#define _tcsicmp _mbsicmp
+#define _tcsicmp_l _mbsicmp_l
+#define _tcsnccmp _mbsncmp
+#define _tcsncmp _mbsnbcmp
+#define _tcsncicmp _mbsnicmp
+#define _tcsncicmp_l _mbsnicmp_l
+#define _tcsnicmp _mbsnbicmp
+#define _tcsnicmp_l _mbsnbicmp_l
+#define _tcscoll _mbscoll
+#define _tcscoll_l _mbscoll_l
+#define _tcsicoll _mbsicoll
+#define _tcsicoll_l _mbsicoll_l
+#define _tcsnccoll _mbsncoll
+#define _tcsnccoll_l _mbsncoll_l
+#define _tcsncoll _mbsnbcoll
+#define _tcsncoll_l _mbsnbcoll_l
+#define _tcsncicoll _mbsnicoll
+#define _tcsncicoll_l _mbsnicoll_l
+#define _tcsnicoll _mbsnbicoll
+#define _tcsnicoll_l _mbsnbicoll_l
+#define _tcsclen _mbslen
+#define _tcscnlen _mbsnlen
+#define _tcsclen_l _mbslen_l
+#define _tcscnlen_l _mbsnlen_l
+#define _tcsnccat _mbsncat
+#define _tcsnccat_l _mbsncat_l
+#define _tcsnccpy _mbsncpy
+#define _tcsnccpy_l _mbsncpy_l
+#define _tcsncset _mbsnset
+#define _tcsncset_l _mbsnset_l
+#define _tcsdec _mbsdec
+#define _tcsinc _mbsinc
+#define _tcsnbcnt _mbsnbcnt
+#define _tcsnccnt _mbsnccnt
+#define _tcsnextc _mbsnextc
+#define _tcsninc _mbsninc
+#define _tcsspnp _mbsspnp
+#define _tcslwr _mbslwr
+#define _tcslwr_l _mbslwr_l
+#define _tcsupr _mbsupr
+#define _tcsupr_l _mbsupr_l
+#define _tclen _mbclen
+#define _tccpy _mbccpy
+#define _tccpy_l _mbccpy_l
+#else
+// mingw-w64 declares these as functions no library defines; they are defined
+// as the Windows SDK's tchar.h defines them, over the _MB_MAP_DIRECT targets.
+static inline char *_tcschr(const char *_Str, unsigned int _Val) {
+    return (char *)_mbschr((const unsigned char *)_Str, _Val);
+}
+static inline size_t _tcscspn(const char *_Str, const char *_Control) {
+    return _mbscspn((const unsigned char *)_Str, (const unsigned char *)_Control);
+}
+static inline char *_tcsncat(char *_Dst, const char *_Src, size_t _MaxCount) {
+    return (char *)_mbsnbcat((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount);
+}
+static inline char *_tcsncat_l(char *_Dst, const char *_Src, size_t _MaxCount, _locale_t _Locale) {
+    return (char *)_mbsnbcat_l((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount, _Locale);
+}
+static inline char *_tcsncpy(char *_Dst, const char *_Src, size_t _MaxCount) {
+    return (char *)_mbsnbcpy((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount);
+}
+static inline char *_tcsncpy_l(char *_Dst, const char *_Src, size_t _MaxCount, _locale_t _Locale) {
+    return (char *)_mbsnbcpy_l((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount, _Locale);
+}
+static inline char *_tcspbrk(const char *_Str, const char *_Control) {
+    return (char *)_mbspbrk((const unsigned char *)_Str, (const unsigned char *)_Control);
+}
+static inline char *_tcsrchr(const char *_Str, unsigned int _Ch) {
+    return (char *)_mbsrchr((const unsigned char *)_Str, _Ch);
+}
+static inline size_t _tcsspn(const char *_Str, const char *_Control) {
+    return _mbsspn((const unsigned char *)_Str, (const unsigned char *)_Control);
+}
+static inline char *_tcsstr(const char *_Str, const char *_Substr) {
+    return (char *)_mbsstr((const unsigned char *)_Str, (const unsigned char *)_Substr);
+}
+static inline char *_tcstok(char *_Str, const char *_Delim) {
+    return (char *)_mbstok((unsigned char *)_Str, (const unsigned char *)_Delim);
+}
+static inline char *_tcstok_l(char *_Str, const char *_Delim, _locale_t _Locale) {
+    return (char *)_mbstok_l((unsigned char *)_Str, (const unsigned char *)_Delim, _Locale);
+}
+static inline char *_tcsnset(char *_Str, unsigned int _Val, size_t _MaxCount) {
+    return (char *)_mbsnbset((unsigned char *)_Str, _Val, _MaxCount);
+}
+static inline char *_tcsrev(char *_Str) {
+    return (char *)_mbsrev((unsigned char *)_Str);
+}
+static inline char *_tcsset(char *_Str, unsigned int _Val) {
+    return (char *)_mbsset((unsigned char *)_Str, _Val);
+}
+static inline char *_tcsset_l(char *_Str, unsigned int _Val, _locale_t _Locale) {
+    return (char *)_mbsset_l((unsigned char *)_Str, _Val, _Locale);
+}
+static inline int _tcscmp(const char *_Str1, const char *_Str) {
+    return _mbscmp((const unsigned char *)_Str1, (const unsigned char *)_Str);
+}
+static inline int _tcsicmp(const char *_Str1, const char *_Str2) {
+    return _mbsicmp((const unsigned char *)_Str1, (const unsigned char *)_Str2);
+}
+static inline int _tcsicmp_l(const char *_Str1, const char *_Str2, _locale_t _Locale) {
+    return _mbsicmp_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _Locale);
+}
+static inline int _tcsnccmp(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsncmp((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsncmp(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnbcmp((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsncicmp(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnicmp((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsncicmp_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnicmp_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline int _tcsnicmp(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnbicmp((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsnicmp_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnbicmp_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline int _tcscoll(const char *_Str1, const char *_Str2) {
+    return _mbscoll((const unsigned char *)_Str1, (const unsigned char *)_Str2);
+}
+static inline int _tcscoll_l(const char *_Str1, const char *_Str2, _locale_t _Locale) {
+    return _mbscoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _Locale);
+}
+static inline int _tcsicoll(const char *_Str1, const char *_Str2) {
+    return _mbsicoll((const unsigned char *)_Str1, (const unsigned char *)_Str2);
+}
+static inline int _tcsicoll_l(const char *_Str1, const char *_Str2, _locale_t _Locale) {
+    return _mbsicoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _Locale);
+}
+static inline int _tcsnccoll(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsncoll((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsnccoll_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsncoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline int _tcsncoll(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnbcoll((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsncoll_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnbcoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline int _tcsncicoll(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnicoll((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsncicoll_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnicoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline int _tcsnicoll(const char *_Str1, const char *_Str2, size_t _MaxCount) {
+    return _mbsnbicoll((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount);
+}
+static inline int _tcsnicoll_l(const char *_Str1, const char *_Str2, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnbicoll_l((const unsigned char *)_Str1, (const unsigned char *)_Str2, _MaxCount, _Locale);
+}
+static inline size_t _tcsclen(const char *_Str) {
+    return _mbslen((const unsigned char *)_Str);
+}
+static inline size_t _tcscnlen(const char *_Str, size_t _MaxCount) {
+    return _mbsnlen((const unsigned char *)_Str, _MaxCount);
+}
+static inline size_t _tcsclen_l(const char *_Str, _locale_t _Locale) {
+    return _mbslen_l((const unsigned char *)_Str, _Locale);
+}
+static inline size_t _tcscnlen_l(const char *_Str, size_t _MaxCount, _locale_t _Locale) {
+    return _mbsnlen_l((const unsigned char *)_Str, _MaxCount, _Locale);
+}
+static inline char *_tcsnccat(char *_Dst, const char *_Src, size_t _MaxCount) {
+    return (char *)_mbsncat((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount);
+}
+static inline char *_tcsnccat_l(char *_Dst, const char *_Src, size_t _MaxCount, _locale_t _Locale) {
+    return (char *)_mbsncat_l((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount, _Locale);
+}
+static inline char *_tcsnccpy(char *_Dst, const char *_Src, size_t _MaxCount) {
+    return (char *)_mbsncpy((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount);
+}
+static inline char *_tcsnccpy_l(char *_Dst, const char *_Src, size_t _MaxCount, _locale_t _Locale) {
+    return (char *)_mbsncpy_l((unsigned char *)_Dst, (const unsigned char *)_Src, _MaxCount, _Locale);
+}
+static inline char *_tcsncset(char *_Str, unsigned int _Val, size_t _MaxCount) {
+    return (char *)_mbsnset((unsigned char *)_Str, _Val, _MaxCount);
+}
+static inline char *_tcsncset_l(char *_Str, unsigned int _Val, size_t _MaxCount, _locale_t _Locale) {
+    return (char *)_mbsnset_l((unsigned char *)_Str, _Val, _MaxCount, _Locale);
+}
+static inline char *_tcsdec(const char *_Start, const char *_Pos) {
+    return (char *)_mbsdec((const unsigned char *)_Start, (const unsigned char *)_Pos);
+}
+static inline char *_tcsinc(const char *_Ptr) {
+    return (char *)_mbsinc((const unsigned char *)_Ptr);
+}
+static inline size_t _tcsnbcnt(const char *_Str, size_t _MaxCount) {
+    return _mbsnbcnt((const unsigned char *)_Str, _MaxCount);
+}
+static inline size_t _tcsnccnt(const char *_Str, size_t _MaxCount) {
+    return _mbsnccnt((const unsigned char *)_Str, _MaxCount);
+}
+static inline unsigned int _tcsnextc(const char *_Str) {
+    return _mbsnextc((const unsigned char *)_Str);
+}
+static inline char *_tcsninc(const char *_Ptr, size_t _Count) {
+    return (char *)_mbsninc((const unsigned char *)_Ptr, _Count);
+}
+static inline char *_tcsspnp(const char *_Str1, const char *_Str2) {
+    return (char *)_mbsspnp((const unsigned char *)_Str1, (const unsigned char *)_Str2);
+}
+static inline char *_tcslwr(char *_Str) {
+    return (char *)_mbslwr((unsigned char *)_Str);
+}
+static inline char *_tcslwr_l(char *_Str, _locale_t _Locale) {
+    return (char *)_mbslwr_l((unsigned char *)_Str, _Locale);
+}
+static inline char *_tcsupr(char *_Str) {
+    return (char *)_mbsupr((unsigned char *)_Str);
+}
+static inline char *_tcsupr_l(char *_Str, _locale_t _Locale) {
+    return (char *)_mbsupr_l((unsigned char *)_Str, _Locale);
+}
+static inline size_t _tclen(const char *_Str) {
+    return _mbclen((const unsigned char *)_Str);
+}
+static inline void _tccpy(char *_DstCh, const char *_SrcCh) {
+    _mbccpy((unsigned char *)_DstCh, (const unsigned char *)_SrcCh);
+}
+#endif
+
+#define _tccmp(_cp1,_cp2) _tcsnccmp(_cp1,_cp2,1)
+#define _istalnum _ismbcalnum
+#define _istalnum_l _ismbcalnum_l
+#define _istalpha _ismbcalpha
+#define _istalpha_l _ismbcalpha_l
+#define _istdigit _ismbcdigit
+#define _istdigit_l _ismbcdigit_l
+#define _istgraph _ismbcgraph
+#define _istgraph_l _ismbcgraph_l
+#define _istlegal _ismbclegal
+#define _istlegal_l _ismbclegal_l
+#define _istlower _ismbclower
+#define _istlower_l _ismbclower_l
+#define _istprint _ismbcprint
+#define _istprint_l _ismbcprint_l
+#define _istpunct _ismbcpunct
+#define _istpunct_l _ismbcpunct_l
+#define _istspace _ismbcspace
+#define _istspace_l _ismbcspace_l
+#define _istupper _ismbcupper
+#define _istupper_l _ismbcupper_l
+#define _totupper _mbctoupper
+#define _totupper_l _mbctoupper_l
+#define _totlower _mbctolower
+#define _totlower_l _mbctolower_l
+#define _istlead _ismbblead
+#define _istleadbyte isleadbyte
+#define _istleadbyte_l _isleadbyte_l
+
+#else
+
+typedef char _TCHAR;
+typedef signed char _TSCHAR;
+typedef unsigned char _TUCHAR;
+typedef char _TXCHAR;
+typedef int _TINT;
+
 #define _tcschr strchr
 #define _tcscspn strcspn
 #define _tcsncat strncat
@@ -775,6 +1066,8 @@ size_t __strncnt(const char *_Str, size_t _Cnt);
 #define _strtok_l(_String,_Delimiters,_Locale) (strtok(_String,_Delimiters))
 #define _strnset_l(_Destination,_Value,_Count,_Locale) (_strnset(_Destination,_Value,_Count))
 #define _strset_l(_Destination,_Value,_Locale) (_strset(_Destination,_Value))
+
+#endif
 
 #endif
 

@@ -21,6 +21,9 @@
 #include <wchar.h>
 #include <wctype.h>
 
+void __c5_lock_stream(FILE *stream);
+void __c5_unlock_stream(FILE *stream);
+
 // A stream, or a string of narrow or `wide` characters; `count` characters
 // read so far, for %n.
 struct input {
@@ -443,9 +446,13 @@ static int scan(struct input *in, const void *format, va_list ap) {
     return assigned;
 }
 
+// C11 7.21.2p8: the stream's lock is held across the call.
 int vfscanf(FILE *restrict stream, const char *restrict format, va_list ap) {
     struct input in = {stream, NULL, NULL, 0, 0};
-    return scan(&in, format, ap);
+    __c5_lock_stream(stream);
+    int r = scan(&in, format, ap);
+    __c5_unlock_stream(stream);
+    return r;
 }
 
 int vscanf(const char *restrict format, va_list ap) {
@@ -483,7 +490,10 @@ int sscanf(const char *src, const char *fmt, ...) {
 
 int vfwscanf(FILE *restrict stream, const wchar_t *restrict format, va_list ap) {
     struct input in = {stream, NULL, NULL, 1, 0};
-    return scan(&in, format, ap);
+    __c5_lock_stream(stream);
+    int r = scan(&in, format, ap);
+    __c5_unlock_stream(stream);
+    return r;
 }
 
 int vwscanf(const wchar_t *restrict format, va_list ap) {

@@ -2172,6 +2172,28 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     }
 }
 
+/// A stream scanner on Windows holds the stream's lock across its call
+/// through msvcrt.dll's `_lock` / `_unlock` for its static streams and
+/// kernel32's critical-section calls for the rest, msvcrt exporting no
+/// `_lock_file`.
+#[test]
+fn windows_stream_scanners_take_the_stream_lock() {
+    use crate::Target;
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            "#include <stdio.h>\n\
+             int main(void) { int x; return fscanf(stdin, \"%d\", &x); }\n",
+            &[
+                ("_lock", "msvcrt.dll"),
+                ("_unlock", "msvcrt.dll"),
+                ("EnterCriticalSection", "kernel32.dll"),
+                ("LeaveCriticalSection", "kernel32.dll"),
+            ],
+        );
+    }
+}
+
 /// The twelve C99 scanners are libc/lib/scanf_ext.c's on Windows: an image
 /// taking each one's address imports no C-library scanner, and converts
 /// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`.

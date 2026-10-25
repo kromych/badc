@@ -22,6 +22,8 @@ int __c5_ucrt_vswprintf(unsigned long long options, wchar_t *buf, size_t n,
                         const wchar_t *format, void *locale, va_list ap);
 int __c5_ucrt_set_printf_count_output(int enable);
 void *__c5_ucrt_numeric_locale(void);
+void __c5_lock_stream(FILE *stream);
+void __c5_unlock_stream(FILE *stream);
 
 // _CRT_INTERNAL_PRINTF_STANDARD_SNPRINTF_BEHAVIOR | _STANDARD_ROUNDING.
 #define STANDARD ((1ULL << 1) | (1ULL << 5))
@@ -82,6 +84,7 @@ int vfwprintf(FILE *restrict stream, const wchar_t *restrict format, va_list ap)
     if (!buf)
         return -1;
     // fputws stops at a null character, which fputwc writes.
+    __c5_lock_stream(stream);
     for (int i = 0; i < n;) {
         size_t len = wcslen(buf + i);
         if ((len && fputws(buf + i, stream) < 0) ||
@@ -90,6 +93,7 @@ int vfwprintf(FILE *restrict stream, const wchar_t *restrict format, va_list ap)
             break;
         }
     }
+    __c5_unlock_stream(stream);
     if (buf != local)
         free(buf);
     return n;

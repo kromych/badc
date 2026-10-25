@@ -397,7 +397,7 @@ impl Compiler {
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
             let field_name = self.symbols[id_idx].name.clone();
-            if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
+            if is_aggregate_value && self.incomplete_aggregate_tag(field_ty).is_some() {
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
                     format!("field `{field_name}` has incomplete type"),
@@ -440,7 +440,9 @@ impl Compiler {
                 self.symbols[idx] = *saved;
             }
             let field_spelling = self.decl_spelling(base_spelling);
-            let enum_tag = incomplete_enum_tag.filter(|_| super::types::is_pointer_ty(field_ty));
+            let enum_tag = incomplete_enum_tag.filter(|&t| {
+                super::types::is_pointer_ty(field_ty) || self.is_ms_forward_enum(t as usize)
+            });
             self.structs[struct_id].fields.push(StructField {
                 name: field_name,
                 offset: field_offset,

@@ -2179,6 +2179,55 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// On the PE targets an enum named before its definition is complete with
+/// `int`'s layout, as MSVC and clang's Microsoft compatibility mode (the
+/// windows-msvc default) complete it, so it may type a member; the
+/// definition then completes it as on the other targets. clang 22 accepts
+/// the unit for both windows-msvc triples, where it returns 0, and rejects
+/// it elsewhere, as badc does. A definition needing another size after
+/// such a use is an error, one never defined stays `int`-sized, and one
+/// reached through a pointer only takes the type badc's PE targets give
+/// any enum (the windows-gnu one).
+#[test]
+fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef enum _INTERFACE_TYPE INTERFACE_TYPE;\n\
+        typedef struct _IO_SPACE {\n\
+          unsigned long Request; INTERFACE_TYPE InterfaceType; unsigned long BusNumber;\n\
+        } IO_SPACE;\n\
+        _Static_assert(sizeof(INTERFACE_TYPE) == 4 && _Alignof(INTERFACE_TYPE) == 4, \"\");\n\
+        typedef enum _INTERFACE_TYPE { Internal, Isa, Eisa } INTERFACE_TYPE;\n\
+        int main(void) {\n\
+          IO_SPACE s; s.InterfaceType = Eisa;\n\
+          return (int)s.InterfaceType - 2 + (int)(sizeof(IO_SPACE) != 12); }\n";
+    const WIDE: &str = "enum E; struct S { enum E e; };\nenum E { E_HI = 0x100000000LL };\n";
+    const POINTER: &str = "enum W *pw;\nenum W { W_HI = 0x100000000LL };\n\
+        int main(void) { return sizeof *pw != 8; }\n";
+    const NEVER: &str = "enum U u;\nstruct S { enum U m; int k; };\n\
+        int main(void) { enum U l; return (int)(sizeof u + sizeof l + sizeof(struct S)) - 16; }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for src in [SRC, POINTER, NEVER] {
+            let program = Compiler::with_target(src.to_string(), t)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+        }
+        let err = Compiler::with_target(WIDE.to_string(), t)
+            .compile()
+            .expect_err("wide")
+            .to_string();
+        assert!(err.contains("must have the size of `int`"), "{t:?}: {err}");
+    }
+    let err = Compiler::with_target(SRC.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("linux-x64")
+        .to_string();
+    assert!(
+        err.contains("field `InterfaceType` has incomplete type"),
+        "{err}"
+    );
+}
+
 /// The Microsoft declarator modifiers on the PE targets, as clang 22 takes
 /// them for both windows-msvc triples (which accept the unit): `__ptr64`,
 /// `__w64`, `__sptr` and `__uptr` leave the type as it is, an `__unaligned`

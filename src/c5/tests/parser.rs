@@ -22,6 +22,17 @@ fn expect_compile_error(src: &str, needle: &str) {
     }
 }
 
+/// [`expect_compile_error`] for x86-64 Linux: the incomplete-enum rules the
+/// PE targets relax, where MSVC completes an enum named before its
+/// definition as `int`.
+fn expect_compile_error_off_pe(src: &str, needle: &str) {
+    let msg = match Compiler::with_target(src.to_string(), crate::Target::LinuxX64).compile() {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected a compile error containing {needle:?} for {src:?}"),
+    };
+    assert!(msg.contains(needle), "expected {needle:?}, got {msg:?}");
+}
+
 #[test]
 fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
@@ -3350,12 +3361,12 @@ fn object_of_incomplete_type_is_diagnosed() {
     );
     // C99 6.7.2.3p2: an enum used before its definition is incomplete, for
     // an automatic and a block-scope `static` object alike.
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          int main(void) { enum later e; enum later { A, B = 0x100000000 }; return 0; }",
         "object `e` has incomplete type",
     );
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          int main(void) { static enum later e; return 0; }\n\
          enum later { A };",
@@ -3389,7 +3400,7 @@ fn parameter_of_incomplete_type_in_a_definition_is_diagnosed() {
          int main(void) { return 0; }",
         "parameter `s` has incomplete type",
     );
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          long f(enum later e) { enum later { A, B = 0x100000000 }; return e; }\n\
          int main(void) { return 0; }",
@@ -3449,7 +3460,7 @@ fn tags_share_one_scoped_name_space() {
     }
     // 6.2.1p4: a block's enum definition declares a type of its own, so the
     // file-scope declaration it shares a name with stays incomplete.
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum E;\n\
          int f(void) { enum E { BIG = 0x100000000 }; return (int)sizeof(enum E); }\n\
          int main(void) { return (int)sizeof(enum E); }",
@@ -3511,7 +3522,7 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
         ("enum E; static enum E x;", "object `x` has incomplete type"),
         ("enum E; enum E x;", "object `x` has incomplete type"),
     ] {
-        expect_compile_error(
+        expect_compile_error_off_pe(
             &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
             msg,
         );
@@ -3578,7 +3589,7 @@ fn incomplete_type_is_rejected_where_its_object_is_needed() {
             ),
         ] {
             let src = alloc::format!("{}\nint main(void) {{ return 0; }}", src.replace('@', tag));
-            expect_compile_error(&src, &msg.replace('@', tag));
+            expect_compile_error_off_pe(&src, &msg.replace('@', tag));
         }
         // The lvalue itself stands where no value is read: its address, the
         // type of it, and an asm memory operand, which gcc accepts.
@@ -4747,11 +4758,12 @@ fn an_array_of_an_incomplete_element_type_is_rejected() {
     const STRUCT_S: &str = "array has incomplete element type `struct S`";
     const VOID: &str = "array has incomplete element type `void`";
     let compile = |src: &str| {
-        Compiler::new(alloc::format!(
+        let src = alloc::format!(
             "struct S; enum E; typedef int T[]; typedef int Z[0]; typedef int F(void);\n\
              typedef void V;\n{src}\nint main(void) {{ return 0; }}\n"
-        ))
-        .compile()
+        );
+        // The PE targets complete an enum named before its definition.
+        Compiler::with_target(src, crate::Target::LinuxX64).compile()
     };
     for (src, needle) in [
         ("int a[2][];", UNKNOWN_SIZE),

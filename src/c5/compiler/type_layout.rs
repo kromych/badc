@@ -807,7 +807,16 @@ impl Compiler {
     /// Pointers to such a tag are complete types and are excluded.
     pub(super) fn incomplete_aggregate_tag(&self, ty: i64) -> Option<usize> {
         let sid = struct_id_of(ty);
-        (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
+        (is_struct_value_ty(ty) && !self.structs[sid].is_complete && !self.is_ms_forward_enum(sid))
+            .then_some(sid)
+    }
+
+    /// Whether the tag entry `id` is an enum named before its definition
+    /// on a target taking the Microsoft extensions, where MSVC and clang
+    /// complete it as an `int` (the entry carries `int`'s layout).
+    pub(super) fn is_ms_forward_enum(&self, id: usize) -> bool {
+        let s = &self.structs[id];
+        self.target.ms_extensions() && s.is_enum && s.enum_underlying.is_none()
     }
 
     /// Whether the aggregate tag `ty` names, at any pointer depth, is
@@ -817,6 +826,7 @@ impl Compiler {
         let s = &self.structs[struct_id_of(ty)];
         match s.fields.first().filter(|_| s.is_array) {
             _ if s.vla_size_slot.is_some() => false,
+            None if self.is_ms_forward_enum(struct_id_of(ty)) => false,
             Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
             Some(f) => f.array_size < 0,
             None => !s.is_complete,

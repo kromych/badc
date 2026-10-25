@@ -22,7 +22,10 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::{UNSIGNED_BIT, enum_ty, rebase_enum_placeholder, struct_ty_for};
+use super::types::{
+    UNSIGNED_BIT, enum_ty, is_struct_ty, rebase_enum_placeholder, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
+};
 use super::{Compiler, EnumDef};
 
 /// The definition of an enum tag, applied to the types an earlier use of
@@ -186,6 +189,15 @@ impl Compiler {
             for idx in constants {
                 self.symbols[idx].type_ = if wider_than_int { ty } else { Ty::Int as i64 };
             }
+            if self.is_ms_forward_enum(id)
+                && self.size_of_type(underlying) != 4
+                && self.enum_sized_before_definition(id)
+            {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "an enumeration an object or member was declared with before its definition must have the size of `int`",
+                ));
+            }
             self.structs[id].enum_underlying = Some(underlying);
             self.complete_enum_placeholders(id as u32, underlying);
             return Ok((ty, None));
@@ -214,6 +226,10 @@ impl Compiler {
         let tag = id as u32;
         if !self.enum_placeholder_tags.contains(&tag) {
             self.enum_placeholder_tags.push(tag);
+        }
+        if self.is_ms_forward_enum(id) {
+            let s = &mut self.structs[id];
+            (s.size, s.align, s.natural_align, s.member_align) = (4, 4, 4, 4);
         }
         Ok((struct_ty_for(id), Some(tag)))
     }
@@ -262,6 +278,24 @@ impl Compiler {
         for e in self.linked_entities.values_mut() {
             e.complete_enum(&c);
         }
+    }
+
+    /// Whether a member or an automatic object declared before the
+    /// enumeration `id`'s definition has the enumerated type itself, so its
+    /// storage was laid out with the placeholder's size. (A tentative
+    /// definition is sized when the unit ends.)
+    fn enum_sized_before_definition(&self, id: usize) -> bool {
+        let tag = Some(id as u32);
+        let sized =
+            |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && struct_id_of(ty) == id;
+        self.symbols
+            .iter()
+            .any(|s| s.incomplete_enum_tag == tag && s.class == Token::Loc as i64 && sized(s.type_))
+            || self
+                .structs
+                .iter()
+                .flat_map(|s| s.fields.iter())
+                .any(|f| f.enum_tag == tag && sized(f.ty))
     }
 
     /// The 64-bit type an enum widens to: `long` where it is 64 bits wide,

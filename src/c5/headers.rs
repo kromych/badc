@@ -1035,6 +1035,24 @@ mod tests {
         }
     }
 
+    /// <windows.h> defines the virtual-key codes, the mouse, IME, browser,
+    /// media, OEM and gamepad ranges included.
+    #[test]
+    fn windows_defines_the_virtual_key_codes() {
+        use crate::{Compiler, Target};
+        let src = "#include <windows.h>\n\
+                   _Static_assert(VK_LBUTTON == 0x01 && VK_MENU == 0x12 && VK_HANGUL == 0x15\n\
+                     && VK_APPS == 0x5D && VK_F24 == 0x87 && VK_LMENU == 0xA4\n\
+                     && VK_BROWSER_BACK == 0xA6 && VK_OEM_1 == 0xBA && VK_GAMEPAD_A == 0xC3\n\
+                     && VK_PACKET == 0xE7 && VK_OEM_CLEAR == 0xFE, \"virtual-key codes\");\n\
+                   int main(void) { return 0; }\n";
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            if let Err(e) = Compiler::with_target(src.to_string(), target).compile() {
+                panic!("{target:?}: {e}");
+            }
+        }
+    }
+
     /// A program may repeat the C99 and POSIX prototypes after the bundled
     /// headers on every target with no redeclaration diagnostic.
     #[test]

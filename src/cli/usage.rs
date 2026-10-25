@@ -320,13 +320,14 @@ Compile knobs:
   --export-all             Export every non-static function in native
                            output (Mach-O / ELF / PE) so a runtime
                            dlopen consumer can dlsym it without a
-                           #pragma export. Applies to --shared and
-                           executable output.
+                           #pragma export. An ELF or Mach-O --shared
+                           library exports its default-visibility
+                           functions and data without it; a PE one
+                           its dllexport ones.
   --export-data            Export every non-static data global from an
-                           ELF executable or --shared library into
-                           .dynsym (STT_OBJECT) so another module
-                           resolves it, the data half of the
-                           toolchain's -rdynamic. Pair with
+                           executable into its dynamic symbols so
+                           another module resolves it, the data half
+                           of the toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
   --gnu                    Define the GCC identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
@@ -516,6 +517,11 @@ Compile knobs:
                            while #pragma STDC FP_CONTRACT is on, `off`
                            nowhere, `fast` wherever the product has no
                            other use.
+  -fvisibility=<vis>       The visibility of each external definition
+                           no attribute or #pragma GCC visibility
+                           states: default, hidden, protected or
+                           internal. A hidden one stays out of a
+                           shared library's exports.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.

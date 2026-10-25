@@ -165,6 +165,8 @@ pub(crate) struct Symbol {
     /// name inside its component, protected exports it but binds the
     /// component's own references to it.
     pub visibility: Option<crate::c5::program::SymVisibility>,
+    /// An attribute or a `#pragma GCC visibility` extent gave `visibility`.
+    pub visibility_stated: bool,
 
     /// `__attribute__((section("name")))`: the named object section the
     /// symbol's bytes go to instead of the default `.text` / `.data` /
@@ -960,6 +962,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             dllimport: _,
             is_used,
             visibility: _,
+            visibility_stated: _,
             section_name,
             patchable_function_entry: _,
             code_align: _,

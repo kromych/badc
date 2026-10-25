@@ -400,6 +400,7 @@ impl Compiler {
         // Before the asm `.globl` sweep: that directive is an explicit
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
+        self.apply_default_visibility();
         self.resolve_file_scope_asm_globl();
         self.resolve_file_scope_asm_weak();
         self.reject_section_type_conflicts()?;
@@ -3178,6 +3179,25 @@ impl Compiler {
     /// function needs no such reference and links as before.
     /// On Windows an inline function's external definition is pick-any, as
     /// MSVC and clang's `*-windows-msvc` emit an `IMAGE_COMDAT_SELECT_ANY`.
+    /// gcc's `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default, as in gcc.
+    fn apply_default_visibility(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let Some(vis) = self.default_visibility else {
+            return;
+        };
+        for sym in self.symbols.iter_mut() {
+            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
+            if named
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.visibility_stated
+            {
+                sym.visibility = Some(vis);
+            }
+        }
+    }
+
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
@@ -3302,13 +3322,17 @@ impl Compiler {
         }
         // An explicit `visibility` attribute states the answer; without one
         // the enclosing `#pragma GCC visibility` extent supplies it.
-        let visibility = self
+        if let Some(visibility) = self
             .pending
             .attrs
             .visibility
-            .unwrap_or_else(|| self.lex.visibility());
-        if visibility.is_some() {
-            self.symbols[id_idx].visibility = visibility;
+            .or_else(|| self.lex.visibility())
+        {
+            let sym = &mut self.symbols[id_idx];
+            sym.visibility_stated = true;
+            if visibility.is_some() {
+                sym.visibility = visibility;
+            }
         }
         if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);

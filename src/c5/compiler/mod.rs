@@ -592,6 +592,9 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
+    /// gcc's `-fvisibility=`: the visibility of a definition with external
+    /// linkage that no attribute or `#pragma GCC visibility` states.
+    pub default_visibility: Option<crate::c5::program::SymVisibility>,
     /// `--gnu` -- when true the preprocessor defines the GCC identity
     /// macros (`__GNUC__` and the rest, via
     /// [`Preprocessor::enable_gnu`]). Off by default: badc implements
@@ -963,6 +966,11 @@ impl CompileOptions {
     /// [`Self::export_all_functions`].
     pub fn with_export_all_functions(mut self, on: bool) -> Self {
         self.export_all_functions = on;
+        self
+    }
+    /// See [`Self::default_visibility`].
+    pub fn with_default_visibility(mut self, v: Option<crate::c5::program::SymVisibility>) -> Self {
+        self.default_visibility = v;
         self
     }
     /// Drop the "must define main" requirement. Returns a
@@ -2405,6 +2413,7 @@ pub struct Compiler {
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
+    default_visibility: Option<crate::c5::program::SymVisibility>,
     /// Mirror of [`CompileOptions::no_builtin`] and
     /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
     /// folds, which decline under them, and by a builtin's fallback
@@ -3090,6 +3099,7 @@ impl Compiler {
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
             preprocessed: opts.preprocessed,

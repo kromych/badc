@@ -147,9 +147,10 @@ pub use c5::{
     ElfImageOptions, ExecForm, FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol, Hardening,
     Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
     Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Profiling, Program,
-    SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, TargetSet, Trace,
-    VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register,
-    jit_run, jit_run_with_options, predefined_symbols, stack_guard_sysreg,
+    SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, SymVisibility, Target,
+    TargetSet, Trace, VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render,
+    embedded_headers, fixed_register, jit_run, jit_run_with_options, predefined_symbols,
+    stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{

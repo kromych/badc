@@ -61,7 +61,7 @@ pub use {
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
-    program::{Program, VariableInfo},
+    program::{Program, SymVisibility, VariableInfo},
     vm::{Trace, Vm},
 };
 

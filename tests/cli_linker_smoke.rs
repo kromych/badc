@@ -1611,6 +1611,105 @@ fn a_pe_programs_subsystem_follows_its_entry_function_unless_stated() {
     }
 }
 
+/// A unit with each way C and gcc state a definition's visibility.
+const VISIBILITY_UNIT: &str = "int counter = 5;\n\
+    static int local(void) { return 1; }\n\
+    __attribute__((visibility(\"hidden\"))) int hidden_fn(void) { return 2; }\n\
+    __attribute__((visibility(\"default\"))) int api(void) { return 3 + local() + hidden_fn(); }\n\
+    #pragma GCC visibility push(default)\n\
+    int pushed(void) { return 4; }\n\
+    #pragma GCC visibility pop\n\
+    #pragma GCC visibility push(hidden)\n\
+    int inner(void) { return 5; }\n\
+    #pragma GCC visibility pop\n\
+    extern int ext_decl(void);\n\
+    int plain(void) { return 6; }\n";
+
+/// An ELF or Mach-O shared library exports each external definition of
+/// default visibility, functions and data, as gcc and clang build one;
+/// a hidden attribute or extent and `-fvisibility=hidden` keep a name out,
+/// a default one keeps it in. A PE DLL exports its `dllexport` names alone.
+#[test]
+fn a_shared_library_exports_its_default_visibility_definitions() {
+    let dir = tempdir("shared-exports");
+    write_source(&dir, "v.c", VISIBILITY_UNIT);
+    write_source(
+        &dir,
+        "m.c",
+        "int api(void);\nint plain(void);\nextern int counter;\n\
+         int main(void) { return api() + plain() + counter - 17; }\n",
+    );
+    let names = [
+        "api",
+        "counter",
+        "hidden_fn",
+        "inner",
+        "local",
+        "plain",
+        "pushed",
+    ];
+    let all: &[&str] = &["api", "counter", "plain", "pushed"];
+    let host = if cfg!(target_os = "macos") {
+        "macos-aarch64"
+    } else if cfg!(target_arch = "aarch64") {
+        "linux-aarch64"
+    } else {
+        "linux-x64"
+    };
+    for (target, lib) in [
+        ("linux-x64", "libv.so"),
+        ("linux-aarch64", "libv.so"),
+        ("macos-aarch64", "libv.dylib"),
+        ("windows-x64", "v.dll"),
+    ] {
+        for (opts, want) in [
+            (&[][..], all),
+            (&["-fvisibility=hidden"], &["api", "pushed"]),
+        ] {
+            let t = format!("--target={target}");
+            let mut c = Command::new(badc());
+            c.args([t.as_str(), "-q", "-shared"]).args(opts);
+            run(
+                c.args(["v.c", "-o", lib]).current_dir(&dir),
+                "build the library",
+            );
+            let bytes = std::fs::read(dir.join(lib)).unwrap();
+            let read = match target {
+                "macos-aarch64" => badc::parse_mach_o_dylib(&bytes),
+                "windows-x64" => badc::parse_pe_dll(&bytes),
+                _ => badc::parse_shared_library(&bytes),
+            };
+            let read = read.expect("read the library");
+            let exported: Vec<&str> = (names.iter().copied())
+                .filter(|n| read.exports.contains(*n) || read.data_exports.contains(*n))
+                .collect();
+            let want = if target == "windows-x64" {
+                &[][..]
+            } else {
+                want
+            };
+            assert_eq!(exported, want, "{target} {opts:?}");
+            if opts.is_empty() && target == host && !cfg!(windows) {
+                let exe = dir.join(format!("m-{target}"));
+                run(
+                    Command::new(badc())
+                        .args([t.as_str(), "-q", "m.c", "-L.", "-lv", "-o"])
+                        .arg(&exe)
+                        .current_dir(&dir),
+                    "link the program",
+                );
+                let status = Command::new(&exe)
+                    .env("LD_LIBRARY_PATH", &*dir)
+                    .env("DYLD_LIBRARY_PATH", &*dir)
+                    .current_dir(&dir)
+                    .status()
+                    .expect("run");
+                assert_eq!(status.code(), Some(0), "{target}");
+            }
+        }
+    }
+}
+
 /// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
 /// versioned `libx.so.1`, is read by content, as gcc hands it to the linker;
 /// a text file or a missing one is still refused by name.

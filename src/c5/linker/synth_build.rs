@@ -672,7 +672,7 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// ELF executable also exports each definition of a name a linked shared
 /// library defines or references, so the library binds to it, as GNU ld
 /// does; a copy-relocated one is exported by its copy relocation.
-/// A shared library exports functions through `exports`; an ELF one data here.
+/// A shared library exports functions through `exports` and data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
     target: Target,
@@ -686,10 +686,10 @@ fn synth_dynamic_exports(
         target,
         Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
     ) && is_exec;
-    let elf_library = output_kind == OutputKind::SharedLibrary
-        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let library = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() != crate::c5::codegen::BinaryFormat::Pe;
     let export_funcs = macos_exec || (flagged_exec && export_all);
-    let export_data_globals = macos_exec || ((flagged_exec || elf_library) && export_data);
+    let export_data_globals = macos_exec || ((flagged_exec || library) && export_data);
     let elf_exec = is_exec && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let linked = |name: &str| {
         elf_exec

@@ -838,9 +838,9 @@ impl Lexer {
     }
 
     /// The visibility the `#pragma GCC visibility` extent at the current
-    /// source position states; `None`, default visibility, outside any.
-    pub fn visibility(&self) -> Option<crate::c5::program::SymVisibility> {
-        self.visibility_stack.last().copied().flatten()
+    /// source position states (`Some(None)` for default); `None` outside any.
+    pub fn visibility(&self) -> Option<Option<crate::c5::program::SymVisibility>> {
+        (self.visibility_stack.len() > 1).then(|| *self.visibility_stack.last().unwrap())
     }
 
     /// Active `#pragma pack(N)` value at the current source

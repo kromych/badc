@@ -97,6 +97,8 @@ pub(crate) struct FrontEnd {
     pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) fp_contract: badc::FpContract,
+    /// gcc `-fvisibility=`; `None` is default.
+    pub(crate) default_visibility: Option<badc::SymVisibility>,
     pub(crate) nostdinc: bool,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
@@ -393,8 +395,8 @@ impl Cli {
     pub(crate) fn image_options(&self, exec_stack: bool) -> badc::ImageOptions {
         let link = &self.link;
         badc::ImageOptions {
-            export_all: link.export_all,
-            export_data: link.export_data,
+            export_all: link.export_all || self.exports_definitions(),
+            export_data: link.export_data || self.exports_definitions(),
             emit_relocs: link.emit_relocs,
             exec_form: self.exec_form(),
             strip_debug: link.strip_debug,
@@ -408,6 +410,17 @@ impl Cli {
                 symbolic: link.symbolic && self.mode == Mode::SharedLibrary,
             },
         }
+    }
+
+    /// Whether the image exports each default-visibility definition, as GNU ld
+    /// and ld64 do for an ELF or Mach-O shared library; link.exe exports a
+    /// DLL's `dllexport` ones.
+    pub(crate) fn exports_definitions(&self) -> bool {
+        self.mode == Mode::SharedLibrary
+            && matches!(
+                self.target.binary_format(),
+                badc::BinaryFormat::Elf | badc::BinaryFormat::MachO
+            )
     }
 
     /// Which of its own definitions the image binds through `.dynsym`.
@@ -1278,6 +1291,16 @@ impl Parser {
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
+            s if s.starts_with("-fvisibility=") => {
+                let spec = &s["-fvisibility=".len()..];
+                front.default_visibility =
+                    badc::SymVisibility::from_gcc_name(spec).ok_or_else(|| {
+                        ParseError::diag(format!(
+                            "badc: error: unrecognized visibility value `{spec}` (default, hidden, \
+                         protected or internal)"
+                        ))
+                    })?;
+            }
             // gcc / clang `-ffp-contract=`: where `-O` contracts a product
             // with the add or subtract using it (C99 6.5p8).
             s if s.starts_with("-ffp-contract=") => {
@@ -2511,6 +2534,7 @@ impl FrontEnd {
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
             .with_fp_contract(self.fp_contract)
+            .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)
@@ -4168,5 +4192,16 @@ mod tests {
             let (message, _) = reject(&args);
             assert!(message.contains(want), "{args:?}: {message}");
         }
+        let hidden = parse(&["-fvisibility=hidden", "-c", "a.c"])
+            .front
+            .default_visibility;
+        assert_eq!(hidden, Some(badc::SymVisibility::Hidden));
+        let last = parse(&["-fvisibility=hidden", "-fvisibility=default", "-c", "a.c"]);
+        assert_eq!(last.front.default_visibility, None);
+        let (message, _) = reject(&["-fvisibility=secret", "-c", "a.c"]);
+        assert!(
+            message.contains("unrecognized visibility value"),
+            "{message}"
+        );
     }
 }

@@ -1373,3 +1373,17 @@ fn xsi_records_follow_each_c_library() {
         &[("sizeof(DBM)", 68), ("_Alignof(DBM)", 1)],
     );
 }
+
+/// Make sure `msvc_compat.h` doesn't break alignment.
+#[test]
+fn msvc_compat_keeps_declspec_align() {
+    let src = "#include <msvc_compat.h>\n\
+               typedef struct __declspec(align(16)) _M { unsigned long long a; long long b; } M;\n\
+               struct probe { char c; M m; };\n\
+               _Static_assert(_Alignof(struct _M) == 16, \"tag\");\n\
+               _Static_assert(_Alignof(M) == 16, \"typedef\");\n\
+               _Static_assert(__builtin_offsetof(struct probe, m) == 16, \"offset\");\n";
+    if let Err(err) = compile(src, Target::WindowsX64) {
+        panic!("declspec(align) under msvc_compat.h: {err}");
+    }
+}

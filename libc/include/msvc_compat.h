@@ -102,11 +102,6 @@
 #define _Outptr_
 #define _Outptr_opt_
 
-// Function-like decorator macros (`__declspec(x)`, `__pragma(x)`,
-// `_Pre_satisfies_(x)`, ...) expand to nothing. The 1-arg shape
-// covers every form the bundled CRT headers emit; none of them
-// rely on argument concatenation or stringification.
-#define __declspec(x)
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)

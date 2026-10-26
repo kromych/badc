@@ -1,0 +1,12 @@
+{
+  "name": "badc",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {},
+    "ghcr.io/devcontainers/features/python:1": {},
+  },
+  "postCreateCommand": "cargo build",
+  "customizations": {
+    "vscode": { "extensions": ["rust-lang.rust-analyzer"] },
+  },
+}

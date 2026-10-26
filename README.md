@@ -45,8 +45,7 @@ thousand tests, and fuzzing jobs run daily.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/), and
-  [`OpenSSL`](./demos/openssl/) 4.1.0 as a badc Configure target with its
-  own `make test` (wired; the run waits on header gaps its build reaches).
+  [`OpenSSL`](./demos/openssl/) (with its `make test`).
 * _Graphics, math, and the rest_: [`stb`](./demos/README.md#stb),
   [`raylib`](./demos/raylib/) with a Lode Runner game,
   [`Nuklear`](./demos/nuklear/), whose demo windows rendered headlessly give
@@ -55,7 +54,7 @@ thousand tests, and fuzzing jobs run daily.
   windowed program per OS family, each cross-compiled to every target), the
   [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver,
   [`SimpleVisor`](./demos/simplevisor/), an Intel VT-x hypervisor built as a
-  native-subsystem driver and checked but never loaded, the NT native
+  native-subsystem Windows driver, the NT native
   binaries ([`nt_hello`](./demos/README.md#nt_hello), an
   `IMAGE_SUBSYSTEM_NATIVE` PE that runs under `ntdll` alone, and
   [`nt_loader`](./demos/README.md#nt_loader), which spawns one through

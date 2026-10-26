@@ -183,9 +183,15 @@ of the same name declares. A declaration resolves either through a binding to
 a system DLL or to a definition in `libc/lib/`, which the link joins as it
 would an archive member. A name mingw-w64 leaves undeclared stays undeclared,
 so a program's own Windows fallback for it compiles under badc as under
-mingw-w64. `setenv` is one such name.
-TODO(#1441): `<unistd.h>`, `<stdlib.h>` and other POSIX headers still
-declare names on Windows that have no definition there.
+mingw-w64. `setenv` is one such name, as are `fork`, `getuid` and the rest
+of the POSIX process, user and terminal calls, and every function of a
+POSIX header mingw-w64 does not ship (`<termios.h>`, `<sys/mman.h>`,
+`<pwd.h>`, ...), whose types and macros remain. The
+`windows_header_declarations_resolve_at_link` test walks every bundled
+header for both Windows targets and fails on a declared function or object
+that nothing defines, and on a Windows host
+`windows_bindings_name_exports_of_their_dlls` checks that each binding
+names an export of its DLL.
 
 ### Source-driven build flags via `#pragma`
 
@@ -223,7 +229,12 @@ for every OS.
 Unknown `#pragma`s and unknown preprocessor directives warn rather than
 failing the build. An `#include` that resolves through neither the search paths
 nor the embedded headers is an error, as in gcc / clang; pass `-H` /
-`--show-includes` for the gcc-`-H`-shape resolution trace on stderr.
+`--show-includes` for the gcc-`-H`-shape resolution trace on stderr. A bundled
+header is served on the targets whose C library, SDK or compiler ships it, as
+`libc/header-targets.txt` records them, so `<sys/epoll.h>` is not found for
+macOS and `__has_include(<windows.h>)` is 0 for Linux, as with the system
+compilers; the installed tree holds every target's headers and follows the same
+rule.
 
 ## Reaching beyond the predefined set
 

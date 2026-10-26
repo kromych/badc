@@ -208,8 +208,11 @@
    */
 #define HAVE_DECL_STRSEP 1
 
-/* Define to 1 if you have the <endian.h> header file. */
-/* #undef HAVE_ENDIAN_H */
+/* Define to 1 if you have the <endian.h> header file. glibc's; the macOS SDK
+   has <machine/endian.h> and <sys/endian.h>. */
+#ifdef __linux__
+#define HAVE_ENDIAN_H 1
+#endif
 
 /* Define to 1 if you have the `faccessat' function. */
 #define HAVE_FACCESSAT 1
@@ -347,7 +350,9 @@
 #define HAVE_ISCNTRL 1
 
 /* Define to 1 if you have the <machine/endian.h> header file. */
+#ifdef __APPLE__
 #define HAVE_MACHINE_ENDIAN_H 1
+#endif
 
 /* Define to 1 if you have the `mempcpy' function. glibc declares it under
    _GNU_SOURCE, which this file defines. */
@@ -437,7 +442,9 @@
 #define HAVE_SYSCONF 1
 
 /* Define to 1 if you have the <sys/endian.h> header file. */
+#ifdef __APPLE__
 #define HAVE_SYS_ENDIAN_H 1
+#endif
 
 /* Define to 1 if you have the <sys/mman.h> header file. */
 #define HAVE_SYS_MMAN_H 1

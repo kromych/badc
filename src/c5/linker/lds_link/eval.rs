@@ -95,7 +95,7 @@ impl<'a> LdsLinker<'a> {
     /// through `bfd_copy_link_hash_symbol_type`); a compound
     /// expression leaves the symbol untyped. An operator assignment
     /// reads the destination, so it names that symbol too.
-    fn assigned_sym_type(&self, a: &Assignment) -> u8 {
+    pub(super) fn assigned_sym_type(&self, a: &Assignment) -> u8 {
         let mut names: HashSet<String> = HashSet::new();
         collect_symbols(&a.value, &mut names);
         if a.op != AssignOp::Set {

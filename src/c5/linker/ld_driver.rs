@@ -23,7 +23,7 @@ use super::lds::parse_linker_script;
 use super::lds_link::{
     LdsEmit, LdsObject, LdsOptions, OrphanHandling, SharedInput, parse_lds_object,
 };
-use super::object::parse_shared_library;
+use super::object::read_dynamic_image;
 use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     link_relocatable_with_map, parse_et_rel, parse_module_script,
@@ -66,6 +66,9 @@ struct LdArgs {
     output: PathBuf,
     emulation: Option<String>,
     script: Option<PathBuf>,
+    /// `-dT` / `--default-script`: the script a link without `-T` runs in
+    /// place of the built-in one.
+    default_script: Option<PathBuf>,
     inputs: Vec<InputItem>,
     lib_paths: Vec<PathBuf>,
     build_id: BuildId,
@@ -101,16 +104,24 @@ struct LdArgs {
     gc_sections: bool,
     /// `-soname NAME`: recorded as `DT_SONAME`.
     soname: Option<String>,
+    /// `-init NAME` / `-fini NAME`: the `DT_INIT` / `DT_FINI` functions.
+    init_function: Option<String>,
+    fini_function: Option<String>,
     /// `--hash-style`.
     hash_style: HashStyle,
     /// `-Bsymbolic`.
     symbolic: bool,
+    /// `-Bsymbolic-functions`; the last of it, `-Bsymbolic` and
+    /// `-Bno-symbolic` holds.
+    symbolic_functions: bool,
     /// `-n` / `--nmagic`: no page alignment between segments.
     nmagic: bool,
     /// `--eh-frame-hdr`.
     eh_frame_hdr: bool,
     /// `--dynamic-linker PATH`: the `PT_INTERP` program interpreter.
     interp: Option<String>,
+    /// `--no-dynamic-linker`: a dynamic executable names no interpreter.
+    no_interp: bool,
     /// `-rpath` / `-R` directories, in command order.
     rpath: Vec<String>,
     /// `DT_RUNPATH` rather than `DT_RPATH`, which is what the
@@ -131,6 +142,31 @@ fn ld_err(msg: impl core::fmt::Display) -> i32 {
         text.strip_prefix("error: ").unwrap_or(&text)
     );
     1
+}
+
+/// The `strerror` text GNU ld quotes for `e`: the C library's wording for
+/// a missing or forbidden file on every host, otherwise the system's
+/// text without std's ` (os error N)`.
+pub fn os_error_text(e: &std::io::Error) -> String {
+    match e.kind() {
+        std::io::ErrorKind::NotFound => return String::from("No such file or directory"),
+        std::io::ErrorKind::PermissionDenied => return String::from("Permission denied"),
+        _ => {}
+    }
+    let text = e.to_string();
+    match (e.raw_os_error(), text.rfind(" (os error ")) {
+        (Some(_), Some(k)) => String::from(&text[..k]),
+        _ => text,
+    }
+}
+
+/// GNU ld's text for a `-T` script it cannot open.
+pub fn script_unreadable(path: &Path, e: &std::io::Error) -> String {
+    format!(
+        "cannot open linker script file {}: {}",
+        path.display(),
+        os_error_text(e)
+    )
 }
 
 /// True when this invocation should take the ld driver: the program
@@ -234,10 +270,13 @@ fn expand_response_files(args: &[String]) -> Vec<String> {
 /// Run the ld driver over `args` (program name and any `--ld` marker
 /// already stripped). Returns the process exit code.
 pub fn run_ld(args: &[String]) -> i32 {
-    let a = match LdArgs::parse(&expand_response_files(args)) {
+    let mut a = match LdArgs::parse(&expand_response_files(args)) {
         Ok(a) => a,
         Err(code) => return code,
     };
+    if a.script.is_none() {
+        a.script = a.default_script.take();
+    }
     if a.print_version {
         print_ld_version();
         return 0;
@@ -286,6 +325,7 @@ impl LdArgs {
             output: PathBuf::from("a.out"),
             emulation: None,
             script: None,
+            default_script: None,
             inputs: Vec::new(),
             lib_paths: Vec::new(),
             build_id: BuildId::None,
@@ -308,11 +348,15 @@ impl LdArgs {
             undefined: Vec::new(),
             gc_sections: false,
             soname: None,
+            init_function: None,
+            fini_function: None,
             hash_style: HashStyle::default(),
             symbolic: false,
+            symbolic_functions: false,
             nmagic: false,
             eh_frame_hdr: false,
             interp: None,
+            no_interp: false,
             rpath: Vec::new(),
             new_dtags: true,
             search_shared: true,
@@ -338,6 +382,12 @@ impl LdArgs {
                 }
                 s if s.starts_with("-T") && s.len() > 2 => {
                     a.script = Some(PathBuf::from(&s[2..]));
+                }
+                "-dT" | "--default-script" => {
+                    a.default_script = Some(PathBuf::from(next_of(&mut it, arg)?));
+                }
+                s if s.starts_with("--default-script=") => {
+                    a.default_script = Some(PathBuf::from(&s["--default-script=".len()..]));
                 }
                 "--whole-archive" => a.inputs.push(InputItem::WholeArchiveOn),
                 "--no-whole-archive" => a.inputs.push(InputItem::WholeArchiveOff),
@@ -381,23 +431,29 @@ impl LdArgs {
                 "--pack-dyn-relocs=none" => a.z.push(ZKeyword::PackRelativeRelocs(false)),
                 "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
                 "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
-                "--no-dynamic-linker" => a.interp = None,
+                "--no-dynamic-linker" => (a.interp, a.no_interp) = (None, true),
                 // The image has these by construction: no unwind table of
                 // the linker's own, and the only veneers, the AArch64
                 // erratum ones, address their targets PC-relative.
                 "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+                // A text relocation warns unless `-z text` or `-z notext`
+                // comes later.
+                "--warn-textrel" | "--warn-shared-textrel" => a.z.clear_kind(ZKeyword::Text(true)),
                 "--eh-frame-hdr" => a.eh_frame_hdr = true,
                 "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
                 // `-n`: a segment aligns to its sections, not to a page.
                 "-n" | "--nmagic" => a.nmagic = true,
-                "-Bsymbolic" => a.symbolic = true,
-                // A shared library binds every reference to its own
-                // definitions, which records nothing for functions alone.
-                "-Bsymbolic-functions" => {}
+                "-Bsymbolic" => (a.symbolic, a.symbolic_functions) = (true, false),
+                "-Bsymbolic-functions" => (a.symbolic, a.symbolic_functions) = (false, true),
+                "-Bno-symbolic" => (a.symbolic, a.symbolic_functions) = (false, false),
                 "-soname" | "-h" => a.soname = Some(next_of(&mut it, arg)?),
                 s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
                     a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
                 }
+                "-init" => a.init_function = Some(next_of(&mut it, arg)?),
+                "-fini" => a.fini_function = Some(next_of(&mut it, arg)?),
+                s if s.starts_with("-init=") => a.init_function = Some(s[6..].to_string()),
+                s if s.starts_with("-fini=") => a.fini_function = Some(s[6..].to_string()),
                 "--hash-style" => {
                     let v = next_of(&mut it, arg)?;
                     a.hash_style = HashStyle::parse(&v)
@@ -409,10 +465,11 @@ impl LdArgs {
                         .ok_or_else(|| ld_err(format!("unknown hash style `{v}`")))?;
                 }
                 "--dynamic-linker" | "-dynamic-linker" | "-I" => {
-                    a.interp = Some(next_of(&mut it, arg)?);
+                    (a.interp, a.no_interp) = (Some(next_of(&mut it, arg)?), false);
                 }
                 s if s.starts_with("--dynamic-linker=") => {
-                    a.interp = Some(s["--dynamic-linker=".len()..].to_string());
+                    let path = s["--dynamic-linker=".len()..].to_string();
+                    (a.interp, a.no_interp) = (Some(path), false);
                 }
                 "-rpath" | "-R" | "--rpath" => a.rpath.push(next_of(&mut it, arg)?),
                 s if s.starts_with("-rpath=") || s.starts_with("--rpath=") => {
@@ -537,7 +594,7 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         Some(path) => {
             let text = match std::fs::read_to_string(path) {
                 Ok(t) => t,
-                Err(e) => return ld_err(format!("cannot read script `{}`: {e}", path.display())),
+                Err(e) => return ld_err(script_unreadable(path, &e)),
             };
             match parse_module_script(&text) {
                 Ok(s) => Some(s),
@@ -681,6 +738,7 @@ fn collect_inputs<T: InputObject>(
     }
     let mut objs: Vec<T> = Vec::new();
     let mut libs: Vec<SharedInput> = Vec::new();
+    let mut lib_paths: Vec<PathBuf> = Vec::new();
     let mut search_shared = true;
     let mut as_needed = false;
     let mut as_needed_before: Vec<bool> = Vec::new();
@@ -740,20 +798,43 @@ fn collect_inputs<T: InputObject>(
         Ok(members.into_iter().map(|m| (m.name, m.bytes)).collect())
     };
     // GNU ld takes the first directory holding either spelling, and
-    // prefers the shared one there unless the search is static.
-    let find_lib = |name: &str, shared: bool| -> Result<PathBuf, i32> {
+    // prefers the shared one there unless the search is static. A file
+    // built for another machine than `want` is skipped, as bfd skips it.
+    let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Option<PathBuf> {
         for dir in &a.lib_paths {
-            let so = dir.join(format!("lib{name}.so"));
-            if shared && so.is_file() {
-                return Ok(so);
-            }
-            let ar = dir.join(format!("lib{name}.a"));
-            if ar.is_file() {
-                return Ok(ar);
+            // bfd joins the directory and the file name with `/` on every
+            // host, and that path is what its diagnostics print.
+            let d = dir.to_string_lossy();
+            let sep = if d.ends_with(['/', '\\']) { "" } else { "/" };
+            let so = PathBuf::from(format!("{d}{sep}lib{name}.so"));
+            let ar = PathBuf::from(format!("{d}{sep}lib{name}.a"));
+            // `-l:file` names the file itself.
+            let named = name
+                .strip_prefix(':')
+                .map(|f| PathBuf::from(format!("{d}{sep}{f}")));
+            let spellings = match named {
+                Some(file) => alloc::vec![file],
+                None if shared => alloc::vec![so, ar],
+                None => alloc::vec![ar],
+            };
+            for candidate in spellings {
+                if !candidate.is_file() {
+                    continue;
+                }
+                if want.is_some_and(|m| !built_for(&candidate, m)) {
+                    eprintln!(
+                        "badc-ld: skipping incompatible {} when searching for -l{name}",
+                        candidate.display()
+                    );
+                    continue;
+                }
+                return Some(candidate);
             }
         }
-        Err(ld_err(format!("cannot find -l{name}")))
+        None
     };
+    // GNU ld reports every input it cannot find before it stops.
+    let mut missing: Vec<String> = Vec::new();
     let mut queue: Vec<InputItem> = a.inputs.clone();
     queue.reverse();
     while let Some(item) = queue.pop() {
@@ -799,7 +880,12 @@ fn collect_inputs<T: InputObject>(
                 continue;
             }
             InputItem::Lib(name) => {
-                path_owned = find_lib(name, search_shared)?;
+                let want = machine.or_else(|| objs.first().map(|o| o.machine()));
+                let Some(found) = find_lib(name, search_shared, want) else {
+                    missing.push(format!("cannot find -l{name}: No such file or directory"));
+                    continue;
+                };
+                path_owned = found;
                 &path_owned
             }
             // A name a linker script gave without a directory is
@@ -815,14 +901,23 @@ fn collect_inputs<T: InputObject>(
             }
             InputItem::File(p) => p,
         };
-        let head = std::fs::File::open(path)
-            .and_then(|f| {
-                use std::io::Read;
-                let mut buf = [0u8; 8];
-                let n = std::io::Read::take(f, 8).read(&mut buf)?;
-                Ok(buf[..n].to_vec())
-            })
-            .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
+        let head = std::fs::File::open(path).and_then(|f| {
+            use std::io::Read;
+            let mut buf = [0u8; 8];
+            let n = std::io::Read::take(f, 8).read(&mut buf)?;
+            Ok(buf[..n].to_vec())
+        });
+        let head = match head {
+            Ok(h) => h,
+            Err(e) => {
+                missing.push(format!(
+                    "cannot find {}: {}",
+                    path.display(),
+                    os_error_text(&e)
+                ));
+                continue;
+            }
+        };
         let is_archive = head.starts_with(b"!<arch>\n") || head.starts_with(b"!<thin>\n");
         if is_archive {
             let members = load_archive(path)?;
@@ -853,7 +948,7 @@ fn collect_inputs<T: InputObject>(
             let bytes = std::fs::read(path)
                 .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
             if is_shared_object(&bytes) {
-                let mut lib = parse_shared_library(&bytes)
+                let mut lib = read_dynamic_image(&bytes)
                     .map_err(|e| ld_err(format!("`{}`: {e}", path.display())))?;
                 if lib.soname.is_empty() {
                     lib.soname = path
@@ -861,6 +956,7 @@ fn collect_inputs<T: InputObject>(
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_default();
                 }
+                lib_paths.push(path.to_path_buf());
                 libs.push(SharedInput { lib, as_needed });
                 continue;
             }
@@ -884,6 +980,12 @@ fn collect_inputs<T: InputObject>(
             }
         }
     }
+    if !missing.is_empty() {
+        for m in &missing {
+            ld_err(m);
+        }
+        return Err(1);
+    }
     if group.is_some() {
         return Err(ld_err("--start-group without --end-group"));
     }
@@ -894,6 +996,17 @@ fn collect_inputs<T: InputObject>(
                     "{}: machine {} is incompatible with the requested emulation",
                     o.source(),
                     o.machine()
+                )));
+            }
+        }
+    }
+    // bfd refuses a library built for another machine than the link's.
+    if let Some(m) = machine.or_else(|| objs.first().map(|o| o.machine())) {
+        for (lib, path) in libs.iter().zip(&lib_paths) {
+            if lib.lib.machine != m {
+                return Err(ld_err(format!(
+                    "{}: error adding symbols: file in wrong format",
+                    path.display()
                 )));
             }
         }
@@ -996,6 +1109,27 @@ fn strip_comments(text: &str) -> String {
     out
 }
 
+/// Whether the file at `path` can enter a link for `machine`: an ELF image
+/// of that machine, an archive whose first ELF member is one, or anything
+/// else, a linker script among it. bfd's search judges an archive by the
+/// same member.
+fn built_for(path: &Path, machine: u16) -> bool {
+    let elf_machine = |b: &[u8]| {
+        (b.len() >= 20 && b.starts_with(b"\x7fELF")).then(|| u16::from_le_bytes([b[18], b[19]]))
+    };
+    let Ok(bytes) = std::fs::read(path) else {
+        return true;
+    };
+    if let Some(m) = elf_machine(&bytes) {
+        return m == machine;
+    }
+    if !bytes.starts_with(b"!<arch>\n") && !bytes.starts_with(b"!<thin>\n") {
+        return true;
+    }
+    let members = archive::read_archive_at(&bytes, path.parent()).unwrap_or_default();
+    (members.iter().find_map(|m| elf_machine(&m.bytes))).is_none_or(|m| m == machine)
+}
+
 /// True when the bytes are an ELF shared object.
 fn is_shared_object(bytes: &[u8]) -> bool {
     const ET_DYN: u16 = 3;
@@ -1011,7 +1145,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     let text = match &a.script {
         Some(spath) => match std::fs::read_to_string(spath) {
             Ok(t) => t,
-            Err(e) => return ld_err(format!("cannot read script `{}`: {e}", spath.display())),
+            Err(e) => return ld_err(script_unreadable(spath, &e)),
         },
         None => default_script(a.shared),
     };
@@ -1027,6 +1161,17 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         return ld_err("no input files");
     }
     let m = machine.unwrap_or(objs[0].machine);
+    // A dynamic executable names GNU ld's built-in interpreter unless the
+    // command line names one; a compiler driver always does.
+    let dynamic_exe = !a.shared_object && (a.shared || !libs.is_empty());
+    let interp = (a.interp.clone()).or_else(|| {
+        let default = match m {
+            EM_AARCH64 => "/lib/ld-linux-aarch64.so.1",
+            EM_386 => "/usr/lib/libc.so.1",
+            _ => "/lib/ld64.so.1",
+        };
+        (dynamic_exe && !a.no_interp).then(|| String::from(default))
+    });
     if a.fix_cortex_a53_843419 && m != EM_AARCH64 {
         return ld_err("--fix-cortex-a53-843419 is not supported: it applies to AArch64 code");
     }
@@ -1065,6 +1210,8 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
+        init_function: (a.init_function.clone()).unwrap_or_else(|| String::from("_init")),
+        fini_function: (a.fini_function.clone()).unwrap_or_else(|| String::from("_fini")),
         output_name: a
             .output
             .file_name()
@@ -1073,9 +1220,10 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             .to_string(),
         hash_style: a.hash_style,
         symbolic: a.symbolic,
+        symbolic_functions: a.symbolic_functions,
         nmagic: a.nmagic,
         eh_frame_hdr: a.eh_frame_hdr,
-        interp: a.interp.clone(),
+        interp,
         shared_libs: libs,
         rpath: a.rpath.clone(),
         new_dtags: a.new_dtags,

@@ -544,6 +544,14 @@ pub(crate) enum Expr {
         align: u32,
         ty: i64,
     },
+    /// An MSVC intrinsic (`crate::c5::ms_intrinsic`): `args` are the value
+    /// operands converted to the parameter types, `imm` the constant one.
+    MsIntrinsic {
+        op: crate::c5::ms_intrinsic::Op,
+        args: Vec<ExprId>,
+        imm: i64,
+        ty: i64,
+    },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -996,6 +1004,7 @@ macro_rules! visit_data_offsets {
                 | Expr::StmtExpr { .. }
                 | Expr::CheckedArith { .. }
                 | Expr::X86Simd { .. }
+                | Expr::MsIntrinsic { .. }
                 | Expr::MemTransfer { .. } => {}
             }
         }
@@ -1046,6 +1055,10 @@ impl Ast {
 
     pub(crate) fn expr(&self, id: ExprId) -> &Expr {
         &self.exprs[id as usize]
+    }
+
+    pub(crate) fn expr_mut(&mut self, id: ExprId) -> &mut Expr {
+        &mut self.exprs[id as usize]
     }
 
     /// Value type of an expression node, falling back to `Ty::Int`
@@ -1297,6 +1310,7 @@ macro_rules! plain_ty_expr {
             | Expr::StmtExpr { ty: $t, .. }
             | Expr::CheckedArith { ty: $t, .. }
             | Expr::X86Simd { ty: $t, .. }
+            | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
     };
 }

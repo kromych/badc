@@ -28,22 +28,22 @@ Disassembly of section .text:
 <__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	cmpq	$0x0, 0x10(%rax)
                	je	<addr>
                	movq	0x10(%rax), %rax
                	popq	%rbp
                	retq
                	xorl	%edi, %edi
-               	leaq	<rip>, %rsi       # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rax), %rax
                	movq	%rax, 0x10(%rcx)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x10(%rax), %rax
                	popq	%rbp
                	retq
@@ -55,8 +55,8 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%r12d, %r12d
-               	leaq	<rip>, %rcx       # <addr>
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movq	%r12, %rbx
                	movq	%rbx, %rax
                	shlq	$0x4, %rax
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	cmpl	$0xc, %ebx
                	jl	<addr>
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movss	(%rax), %xmm0
                	movss	0x4(%rax), %xmm1
                	addss	%xmm1, %xmm0
@@ -143,7 +143,7 @@ Disassembly of section .text:
                	movss	0x8(%rax), %xmm2
                	addss	%xmm2, %xmm1
                	addss	%xmm1, %xmm0
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	leaq	0x70(%rax), %rcx
                	movss	(%rcx), %xmm1
                	movss	0x4(%rcx), %xmm2
@@ -189,7 +189,7 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %rdi
-               	leaq	<rip>, %rsi       # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movsd	0x18(%rsp), %xmm14
                	cvtss2sd	%xmm14, %xmm0
                	movb	$0x1, %al
@@ -208,8 +208,8 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	callq	<addr>
                	movq	%rax, %rdi
-               	leaq	<rip>, %rsi       # <addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rbx, %rax
                	shlq	$0x4, %rax
                	leaq	(%rcx,%rax), %rdx
@@ -218,7 +218,7 @@ Disassembly of section .text:
                	addq	%rcx, %rdx
                	movss	(%rdx), %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	leaq	<rip>, %rdx       # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	movss	(%rax), %xmm1

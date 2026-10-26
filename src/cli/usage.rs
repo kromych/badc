@@ -62,6 +62,11 @@ Output mode -- pick at most one (defaults to a native binary):
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
                            `-`. Mirrors gcc / clang `-E`.
+  -dM                      With -E, print a #define line per macro the
+                           unit ends with, predefined ones included.
+  -fsyntax-only            Check each unit through the front end (an
+                           assembler unit through the assembler) and
+                           write nothing; -E takes precedence.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -72,6 +77,12 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
+  --ar -o <lib>.a <inputs> Compile the sources and archive them with
+                           the objects, with a symbol index.
+  --ar <key> <lib>.a [file...]
+                           POSIX ar: d p q r t x with c s S u v D, as
+                           badc runs when named `ar` / `*-ar`; named
+                           `ranlib` / `*-ranlib` it indexes archives.
   -L <dir>                 Library search path for `-l<name>`.
                            Repeatable; probed in declared order, ahead
                            of the --sysroot directories.
@@ -145,7 +156,10 @@ Multi-TU knobs:
                            efi_boot_service_driver,
                            efi_runtime_driver or efi_rom, in any
                            case and with `-` for `_`; overrides
-                           `#pragma subsystem`.
+                           `#pragma subsystem`. Without one a
+                           WinMain / wWinMain program is a windows
+                           one, as link.exe infers.
+  -mwindows, -mconsole     gcc's --subsystem=windows / console.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -224,12 +238,16 @@ Compile knobs:
                            carries is an error instead of resolving to
                            badc's libc, and the auto-include retry is
                            off. The compiler's own headers
-                           (`_builtins.h`, `arm_neon.h`) stay, as gcc's
-                           builtins do.
+                           (`arm_neon.h`, `x86intrin.h` and the x86
+                           intrinsic headers) stay, as gcc's do.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later
                            flags expand after earlier ones.
+  -pthread                 Define _REENTRANT; the POSIX threads are in
+                           each target's C library, so a link adds none.
+  -arch <name>             The Darwin driver's architecture; arm64 for
+                           the macOS target, refused elsewhere.
   -H, --show-includes      Print every #include's resolved path to
                            stderr (gcc -H shape; leading dots mark
                            nesting depth; missing headers print as
@@ -258,10 +276,14 @@ Compile knobs:
   -w                       Report no warning at all.
   -Wall / -Wextra          Enable a group of diagnostics, following
   -Wpedantic               gcc's split. --list-diagnostics prints the
-                           group each row belongs to.
+                           group each row belongs to. -pedantic is
+                           -Wpedantic, -pedantic-errors -Werror=pedantic.
   -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
                            is its name, an alias, its `B` code, or a
-                           group name; an unknown one is refused.
+                           group name. A gcc or clang warning badc does
+                           not implement is taken: turned on, it reports
+                           B7012; any other unknown name is refused,
+                           except in -Wno-<sel>, as in gcc.
   -Werror / -Wno-error     Report every warning as an error, or undo
                            that. The unit still parses whole and fails
                            at the end of the phase, as gcc does.
@@ -301,13 +323,14 @@ Compile knobs:
   --export-all             Export every non-static function in native
                            output (Mach-O / ELF / PE) so a runtime
                            dlopen consumer can dlsym it without a
-                           #pragma export. Applies to --shared and
-                           executable output.
+                           #pragma export. An ELF or Mach-O --shared
+                           library exports its default-visibility
+                           functions and data without it; a PE one
+                           its dllexport ones.
   --export-data            Export every non-static data global from an
-                           ELF executable or --shared library into
-                           .dynsym (STT_OBJECT) so another module
-                           resolves it, the data half of the
-                           toolchain's -rdynamic. Pair with
+                           executable into its dynamic symbols so
+                           another module resolves it, the data half
+                           of the toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
   --gnu                    Define the GCC identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
@@ -349,6 +372,12 @@ Compile knobs:
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
+                           Under -fPIC another ELF module may preempt the
+                           unit's definitions; under -fPIE, code for an
+                           executable, they bind directly and thread-locals
+                           take the executable TLS models. The last one
+                           given wins and sets __pic__ / __PIC__ (and
+                           __pie__ / __PIE__) to 1 or 2, as gcc does.
                            An executable's own form is -pie / -no-pie.
   -fno-pic, -fno-pie       Compile the `-c` object for a link that
                            resolves its relocations statically, keeping
@@ -485,6 +514,17 @@ Compile knobs:
                            overflow (C99 6.5p5).
   -fno-wrapv               Undo -fwrapv / -fno-strict-overflow; the last
   -fstrict-overflow        of the four given wins.
+  -ffp-contract=<mode>     Where -O fuses a floating multiply with the add
+                           or subtract using it into one rounding (C99
+                           6.5p8): `on` (default) within one expression
+                           while #pragma STDC FP_CONTRACT is on, `off`
+                           nowhere, `fast` wherever the product has no
+                           other use.
+  -fvisibility=<vis>       The visibility of each external definition
+                           no attribute or #pragma GCC visibility
+                           states: default, hidden, protected or
+                           internal. A hidden one stays out of a
+                           shared library's exports.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.

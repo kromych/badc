@@ -40,23 +40,24 @@ use crate::c5::codegen::{
     EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, ImportKind,
     OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
+use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
     R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_GOT64,
-    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
-    R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_PE_ADDR32NB,
+    R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL,
+    R_X86_64_GOTTPOFF, R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
     aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::internal_err;
 use super::link::{
     DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline, exports_definition,
 };
 use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT};
+use super::{internal_err, link_err};
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
@@ -187,8 +188,8 @@ fn synth_program_and_build(
     }
     let SynthFixups {
         got: got_fixups,
-        got_base: got_base_fixups,
-        got_rel: got_rel_fields,
+        base: base_fixups,
+        got_rel: image_rel_fields,
         got_pcrel: got_pcrel_fixups,
         data: data_fixups,
         func: func_fixups,
@@ -221,6 +222,7 @@ fn synth_program_and_build(
     );
     let functions = function_table(merged, pc_to_native);
     let fn_unwind = x86_64_unwind(merged, target, &functions);
+    let a64_unwind = aarch64_unwind(merged, target, &functions);
     let mut early_returns: Vec<crate::c5::codegen::EarlyReturn> = merged
         .early_returns
         .iter()
@@ -267,6 +269,10 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
+        protected_exports: (merged.defined.iter())
+            .filter(|(_, sym)| sym.visibility == super::object::STV_PROTECTED)
+            .map(|(name, _)| name.clone())
+            .collect(),
         image_symbols: (merged.symbols.iter())
             .filter(|s| {
                 !(opts.discard_temporaries
@@ -292,8 +298,8 @@ fn synth_program_and_build(
         init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
-        got_base_fixups,
-        got_rel_fields,
+        base_fixups,
+        image_rel_fields,
         got_pcrel_fixups,
         data_fixups,
         // Object-linked jump tables ride in the merged data stream
@@ -321,6 +327,8 @@ fn synth_program_and_build(
         region_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
+        a64_unwind,
+        pe_unwind: merged.pe_unwind.clone(),
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -330,6 +338,12 @@ fn synth_program_and_build(
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
         tls_align: merged.tls_align,
+        tls_got: merged.tls_got.clone(),
+        tls_got_fields: merged.tls_got_fields.clone(),
+        static_tls: merged.static_tls,
+        tls_index_slot: (merged.defined.get(super::link::TLS_INDEX))
+            .filter(|d| d.section == NativeSymSection::Bss)
+            .map(|d| merged.data.len() as u64 + d.value),
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -369,6 +383,8 @@ fn synth_program_and_build(
         // A synthesized link image resolves every label address at
         // write time; no unresolved label slot survives into the Build.
         label_relocs: Vec::new(),
+        image_base_slots: merged.image_base_slots.clone(),
+        tls_image_base_slots: merged.tls_image_base_slots.clone(),
         exports: exports.clone(),
         output_kind,
         shared_lib_name: if output_kind == OutputKind::SharedLibrary {
@@ -429,10 +445,13 @@ fn synth_program(
         sys_trampolines: Vec::new(),
         bind_trampoline_slots: false,
         weak_refs_by_name: false,
+        interposable_refs: false,
+        fp_contract_fast: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),
         exports: exports.to_vec(),
+        exported_objects: Vec::new(),
         dylibs: Vec::new(),
         dllmain_pc: None,
         source_files: Vec::new(),
@@ -442,6 +461,7 @@ fn synth_program(
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
         entry_pragma: None,
+        default_libs: Vec::new(),
         auto_includes: Vec::new(),
         subsystem,
         finished_functions: Vec::new(),
@@ -521,12 +541,18 @@ fn x86_64_unwind(
         return Vec::new();
     }
     let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
+    // Code an input's own unwind table describes takes its entry from it;
+    // its end still bounds the function before it.
+    begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
     begins.sort_unstable();
     begins.dedup();
+    let foreign =
+        |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
     let text_len = merged.text.len() as u32;
     begins
         .iter()
         .enumerate()
+        .filter(|&(_, &begin)| begin < text_len && !foreign(begin))
         .map(|(i, &begin)| {
             let end = begins.get(i + 1).copied().unwrap_or(text_len);
             // No anchor (synthetic trampoline / no standard prologue)
@@ -551,16 +577,60 @@ fn x86_64_unwind(
         .collect()
 }
 
+/// The windows-arm64 functions of `merged` whose prologue `prologue_codes`
+/// describes; a return ahead of the frame stays out, as in `x86_64_unwind`.
+fn aarch64_unwind(
+    merged: &MergedNative,
+    target: Target,
+    functions: &FunctionTable,
+) -> Vec<crate::c5::codegen::A64Unwind> {
+    if target != Target::WindowsAarch64 {
+        return Vec::new();
+    }
+    let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
+    begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
+    begins.sort_unstable();
+    begins.dedup();
+    let foreign =
+        |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
+    let text_len = merged.text.len() as u32;
+    let mut out = Vec::new();
+    for (i, &begin) in begins.iter().enumerate() {
+        if begin >= text_len || foreign(begin) {
+            continue;
+        }
+        let end = begins.get(i + 1).copied().unwrap_or(text_len);
+        let Some(&anchor) = functions.prologue_native.get(&(begin as usize)) else {
+            continue;
+        };
+        let (start, stop) = match merged.early_returns.get(&u64::from(begin)) {
+            Some(&(frame, exit)) => (frame as u32, exit as u32),
+            None => (begin, end),
+        };
+        let limit = (anchor as u32).min(stop);
+        if let Some(codes) =
+            crate::c5::object::arm64_unwind::prologue_codes(&merged.text, start, limit)
+        {
+            out.push(crate::c5::codegen::A64Unwind {
+                begin: start,
+                end: stop,
+                codes,
+            });
+        }
+    }
+    out
+}
+
 /// Each data-import copy relocation against the merged symbol table.
-/// On ELF the local data object named in the binding must be defined
-/// in the image (e.g. runtime.c's `tzname`); its section + offset let
-/// the writer place the host symbol and the R_*_COPY at the object's
-/// runtime address. A binding whose local symbol the image does not
-/// define is dropped silently. PE and Mach-O have no copy semantics:
-/// the reference must stay undefined so it routes through a
-/// loader-filled import slot; a definition anywhere in the image wins
-/// symbol resolution and silently shadows the binding with a slot
-/// nothing populates, so the collision is rejected.
+/// A `#pragma binding(data ...)` names a C-library object. A definition of
+/// the name with an initializer is the image's own object and takes
+/// precedence over the binding, as on the paths with no link step. A
+/// zero-filled one in an ELF image is the slot a copy relocation fills with
+/// the library's object and binds every reference to (the runtime's
+/// `environ` and `tzname`), as GNU ld resolves a common symbol a shared
+/// library defines; a PE or Mach-O image reaches a library object only
+/// through a loader-filled slot, so there the definition would leave the
+/// binding naming a slot nothing fills, and is refused.
 fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRelocReq>, C5Error> {
     let elf_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
     let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
@@ -568,23 +638,23 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
         let Some(sym) = merged.defined.get(local) else {
             continue;
         };
+        if sym.section != NativeSymSection::Bss {
+            continue;
+        }
         if !elf_target {
-            return Err(internal_err(
+            return Err(link_err(
+                Code::INVALID_DECLARATION,
                 MODULE,
                 &alloc::format!(
                     "`{local}` is bound as a data import of `{host}` but the image also \
-                 defines it; remove the definition or the `#pragma binding(data ...)`"
+                     defines it; remove the definition or the `#pragma binding(data ...)`"
                 ),
             ));
-        }
-        let is_bss = matches!(sym.section, NativeSymSection::Bss);
-        if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
-            continue;
         }
         copy_relocs.push(CopyRelocReq {
             host_symbol: host.clone(),
             local_offset: sym.value,
-            is_bss,
+            is_bss: true,
             size: sym.size.max(1),
         });
     }
@@ -598,8 +668,11 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// executable through the Mach-O symtab. ELF and PE split the same
 /// coverage across two flags matching the toolchain's `-rdynamic`:
 /// `--export-all` adds functions, `--export-data` adds data globals.
-/// Both gate the export because it widens the global symbol scope.
-/// A shared library exports functions through `exports`; an ELF one data here.
+/// Both gate the export because it widens the global symbol scope. An
+/// ELF executable also exports each definition of a name a linked shared
+/// library defines or references, so the library binds to it, as GNU ld
+/// does; a copy-relocated one is exported by its copy relocation.
+/// A shared library exports functions through `exports` and data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
     target: Target,
@@ -613,18 +686,40 @@ fn synth_dynamic_exports(
         target,
         Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
     ) && is_exec;
-    let elf_library = output_kind == OutputKind::SharedLibrary
-        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let library = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() != crate::c5::codegen::BinaryFormat::Pe;
     let export_funcs = macos_exec || (flagged_exec && export_all);
-    let export_data_globals = macos_exec || ((flagged_exec || elf_library) && export_data);
-    if !export_funcs && !export_data_globals {
+    let export_data_globals = macos_exec || ((flagged_exec || library) && export_data);
+    let elf_exec = is_exec && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let linked = |name: &str| {
+        elf_exec
+            && merged.shared_names.contains(name)
+            && !merged.copy_relocs.iter().any(|(local, _)| local == name)
+    };
+    // The objects `#pragma export` names; the functions it names are in
+    // the function export table.
+    let named: alloc::collections::BTreeSet<&str> =
+        merged.exports.iter().map(String::as_str).collect();
+    if !export_funcs
+        && !export_data_globals
+        && named.is_empty()
+        && (!elf_exec || merged.shared_names.is_empty())
+    {
         return Vec::new();
     }
     merged
         .defined
         .iter()
+        .chain(&merged.tls_defined)
         .filter_map(|(name, sym)| {
-            if name.is_empty() || !exports_definition(sym, false, export_funcs, export_data_globals)
+            let named_object =
+                sym.section != NativeSymSection::Text && named.contains(name.as_str());
+            let exported = exports_definition(sym, named_object, export_funcs, export_data_globals)
+                || linked(name) && exports_definition(sym, true, false, true);
+            // An ELF symbol of a thread-local is its offset in the TLS
+            // template; the other formats publish none.
+            let tls_format = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+            if name.is_empty() || !exported || (sym.section == NativeSymSection::Tls && !tls_format)
             {
                 return None;
             }
@@ -632,6 +727,7 @@ fn synth_dynamic_exports(
             // space as `.data`, biased past the file image.
             let (section, offset) = match sym.section {
                 NativeSymSection::Text => (DynamicExportSection::Text, sym.value),
+                NativeSymSection::Tls => (DynamicExportSection::Tls, sym.value),
                 NativeSymSection::Bss => (
                     DynamicExportSection::Data,
                     merged.data.len() as u64 + sym.value,
@@ -721,7 +817,11 @@ fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
         v.push(EmittedFinalReloc {
             site: EmitStream::Data,
             site_offset: d.slot_offset,
-            rtype: prel32,
+            rtype: if d.image_relative {
+                R_PE_ADDR32NB
+            } else {
+                prel32
+            },
             target,
             addend,
         });
@@ -745,6 +845,7 @@ fn synth_data_pcrel(merged: &MergedNative) -> Vec<crate::c5::codegen::DataPcRelR
                 target_anchor: anchor as u64,
                 target_in_data,
                 width: r.width,
+                image_relative: r.image_relative,
             }
         })
         .collect()
@@ -926,6 +1027,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
+            ordinal: merged.import_ordinals.get(name).copied(),
             kind: if merged.tls_imports.contains(&i) {
                 ImportKind::ThreadLocal
             } else if merged.object_imports.contains(&i) {
@@ -977,8 +1079,8 @@ fn dylib_name_from_path(path: &str) -> String {
 /// function-pointer / data reference site.
 struct SynthFixups {
     got: Vec<GotFixup>,
-    got_base: Vec<crate::c5::codegen::GotBaseFixup>,
-    got_rel: Vec<crate::c5::codegen::GotRelField>,
+    base: Vec<crate::c5::codegen::BaseFixup>,
+    got_rel: Vec<crate::c5::codegen::ImageRelField>,
     got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
@@ -992,8 +1094,8 @@ fn synth_fixups(
     text_abs: TextAbsolute,
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
-    let mut got_rel: Vec<crate::c5::codegen::GotRelField> = Vec::new();
+    let mut base_fixups: Vec<crate::c5::codegen::BaseFixup> = Vec::new();
+    let mut got_rel: Vec<crate::c5::codegen::ImageRelField> = Vec::new();
     let mut got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
@@ -1012,6 +1114,10 @@ fn synth_fixups(
     }
 
     for reloc in &merged.pending_imports {
+        if let Some(field) = image_base_field(merged, reloc)? {
+            got_rel.push(field);
+            continue;
+        }
         // A parked pc-relative data word (`.long x - .` / `.quad x - .`
         // in an executable section, target in the data-byte space) is a
         // plain field, not one of the per-arch instruction shapes below.
@@ -1083,7 +1189,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
-                    &mut got_base_fixups,
+                    &mut base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -1094,7 +1200,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
-                    &mut got_base_fixups,
+                    &mut base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -1104,7 +1210,7 @@ fn synth_fixups(
 
     Ok(SynthFixups {
         got: got_fixups,
-        got_base: got_base_fixups,
+        base: base_fixups,
         got_rel,
         got_pcrel,
         data: data_fixups,
@@ -1119,7 +1225,7 @@ fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
-    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
+    base_fixups: &mut Vec<crate::c5::codegen::BaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -1171,10 +1277,15 @@ fn project_aarch64_pending(
             });
             Ok(())
         }
-        NativeSymSection::Got => {
-            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+        section @ (NativeSymSection::Got | NativeSymSection::ImageBase) => {
+            base_fixups.push(crate::c5::codegen::BaseFixup {
                 instr_offset: reloc.text_offset as usize,
-                got_offset: reloc.addend,
+                base: if section == NativeSymSection::Got {
+                    crate::c5::codegen::ImageAddr::GotBase
+                } else {
+                    crate::c5::codegen::ImageAddr::ImageBase
+                },
+                offset: reloc.addend,
                 part,
             });
             Ok(())
@@ -1275,6 +1386,71 @@ fn declined_reloc(
     }
 }
 
+/// An arm64 relocation naming the page or the in-page offset of an address.
+fn aarch64_addr_part(rtype: u32) -> bool {
+    matches!(
+        rtype,
+        R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC
+    ) || aarch64_ldst_lo12_scale(rtype).is_some()
+}
+
+/// The field a parked reference holds when it is measured from or to the
+/// PE image base: an image-relative address (`IMAGE_REL_*_ADDR32NB`), or
+/// the x86-64 RIP-relative distance to `__ImageBase`. `None` for any
+/// other form; an arm64 `adrp` / in-page pair naming `__ImageBase` takes
+/// a [`crate::c5::codegen::BaseFixup`].
+fn image_base_field(
+    merged: &MergedNative,
+    reloc: &super::link::PendingImportReloc,
+) -> Result<Option<crate::c5::codegen::ImageRelField>, C5Error> {
+    use crate::c5::codegen::{ImageAddr, ImageRelField};
+    let x86 = merged.machine == NativeMachine::X86_64;
+    if !x86 && reloc.target_section == NativeSymSection::ImageBase && aarch64_addr_part(reloc.rtype)
+    {
+        return Ok(None);
+    }
+    let (to, from, addend) = match (reloc.rtype, reloc.target_section) {
+        (R_X86_64_PC32 | R_X86_64_PLT32, NativeSymSection::ImageBase) if x86 => {
+            (ImageAddr::ImageBase, ImageAddr::Site, reloc.addend)
+        }
+        (R_PE_ADDR32NB, NativeSymSection::ImageBase) => {
+            (ImageAddr::ImageBase, ImageAddr::ImageBase, reloc.addend)
+        }
+        (R_PE_ADDR32NB, NativeSymSection::Text) => (
+            ImageAddr::Text(reloc.anchor as u64),
+            ImageAddr::ImageBase,
+            reloc.addend - reloc.anchor,
+        ),
+        (
+            R_PE_ADDR32NB,
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss,
+        ) => (
+            ImageAddr::Data(reloc.anchor as u64),
+            ImageAddr::ImageBase,
+            reloc.addend - reloc.anchor,
+        ),
+        (R_PE_ADDR32NB, _) | (_, NativeSymSection::ImageBase) => {
+            return Err(declined_reloc(
+                merged,
+                reloc,
+                reloc.rtype,
+                TextAbsolute::Representable,
+            ));
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(ImageRelField {
+        site_text_offset: reloc.text_offset,
+        to,
+        from,
+        addend,
+        width: 4,
+    }))
+}
+
 /// The field of an x86-64 relocation measured from or to the GOT base,
 /// or `None` for any other form. The merge resolved the symbol: a
 /// section target's offset rides in `addend`, a GOT64 against a symbol
@@ -1285,8 +1461,8 @@ fn x86_64_got_rel_field(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
-) -> Result<Option<crate::c5::codegen::GotRelField>, C5Error> {
-    use crate::c5::codegen::{GotRelField, ImageAddr};
+) -> Result<Option<crate::c5::codegen::ImageRelField>, C5Error> {
+    use crate::c5::codegen::{ImageAddr, ImageRelField};
     let (to, from, addend, width) = match (reloc.rtype, reloc.target_section) {
         (R_X86_64_GOTPC32, NativeSymSection::Got) => {
             (ImageAddr::GotBase, ImageAddr::Site, reloc.addend, 4)
@@ -1331,7 +1507,7 @@ fn x86_64_got_rel_field(
         ) => return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs)),
         _ => return Ok(None),
     };
-    Ok(Some(GotRelField {
+    Ok(Some(ImageRelField {
         site_text_offset: reloc.text_offset,
         to,
         from,
@@ -1345,7 +1521,7 @@ fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
-    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
+    base_fixups: &mut Vec<crate::c5::codegen::BaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -1399,9 +1575,10 @@ fn project_x86_64_pending(
             Ok(())
         }
         NativeSymSection::Got => {
-            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+            base_fixups.push(crate::c5::codegen::BaseFixup {
                 instr_offset,
-                got_offset: target_byte_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: target_byte_offset,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1539,6 +1716,7 @@ fn synth_exports(
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
+            && sym.section == NativeSymSection::Text
             && exports_definition(sym, true, false, false)
             && seen.insert(name.clone())
         {
@@ -1625,23 +1803,33 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            image_base_slots: alloc::vec![],
+            tls_image_base_slots: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             tls_data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
+            import_ordinals: alloc::collections::BTreeMap::new(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
+            slot_reads: Default::default(),
+            warnings: Default::default(),
             preemptible_imports: alloc::collections::BTreeSet::new(),
             tls_imports: alloc::collections::BTreeSet::new(),
+            tls_got: Vec::new(),
+            tls_got_fields: Vec::new(),
+            static_tls: false,
+            tls_defined: Default::default(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
@@ -1671,6 +1859,7 @@ mod tests {
             exec_stack_input: None,
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            pe_unwind: Vec::new(),
         }
     }
 

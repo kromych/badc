@@ -9,9 +9,9 @@ use hashbrown::HashMap;
 
 use super::{
     ChunkSrc, ET_DYN, ET_EXEC, Elf64Phdr, FinalSym, LdsEmit, LdsLinker, PT_LOAD, PT_PHDR, Piece,
-    SHF_LINK_ORDER, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, STB_LOCAL,
-    SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_HASH, SYNTH_VERDEF,
-    SYNTH_VERSYM, SecFate, align_up, machine_uses_rela,
+    SHF_INFO_LINK, SHF_LINK_ORDER, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB,
+    STB_LOCAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOTPLT, SYNTH_HASH,
+    SYNTH_VERDEF, SYNTH_VERSYM, SecFate, align_up, machine_uses_rela,
 };
 
 /// `.symtab` and `.strtab` bytes, locals first as ELF requires, with
@@ -585,10 +585,19 @@ impl<'a> LdsLinker<'a> {
         };
         let (dynsym_ndx, dynstr_ndx) = (out_index(SYNTH_DYNSYM), out_index(SYNTH_DYNSTR));
         let dyn_rel_name = self.dyn_reloc_name();
+        // The PLT's table names the `.got.plt` it relocates, as bfd's
+        // `SHF_INFO_LINK` one does.
+        let plt_rel_name = self.plt_reloc_name();
         for (k, &oi) in emit_order.iter().enumerate() {
             let o = &self.outs[oi];
+            let info_link = if o.name == plt_rel_name {
+                SHF_INFO_LINK
+            } else {
+                0
+            };
             let (sh_link, sh_info) = match o.name.as_str() {
                 n if n == dyn_rel_name => (dynsym_ndx, 0),
+                n if n == plt_rel_name => (dynsym_ndx, out_index(SYNTH_GOTPLT)),
                 SYNTH_DYNSYM => (
                     dynstr_ndx,
                     self.dyn_tables
@@ -613,7 +622,7 @@ impl<'a> LdsLinker<'a> {
                 Elf64Shdr {
                     sh_name: shstr_names[k],
                     sh_type: o.shtype,
-                    sh_flags: o.flags,
+                    sh_flags: o.flags | info_link,
                     sh_addr: o.addr,
                     sh_offset: file_off[&oi],
                     sh_size: o.size,

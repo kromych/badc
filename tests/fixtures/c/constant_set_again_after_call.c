@@ -1,11 +1,12 @@
 // An operand-free value read past a call -- a constant, an object's or
 // a function's address -- is set again after the call rather than kept
 // across it. The shapes are the ones that reach the allocator with such
-// a range: a contracted multiply-add reading a constant its product read
-// before the call, a promoted local holding a constant, a phi income
-// through a split edge, a return value evaluated ahead of the call, a
-// wide constant, an f32 constant, an address read after two calls, and a
-// constant read past a call inside a loop, which keeps its register.
+// a range: a multiply-add contracted in its expression reading a constant
+// a product read before the call, a promoted local holding a constant, a
+// phi income through a split edge, a return value evaluated ahead of the
+// call, a wide constant, an f32 constant, an address read after two
+// calls, and a constant read past a call inside a loop, which keeps its
+// register.
 // The cases are not inlined and read their inputs through a volatile
 // array, so each keeps its shape. Exits 0 when every value is right, a
 // distinct code per failure.
@@ -24,8 +25,8 @@ __attribute__((noinline)) static double scale(double x) {
 
 __attribute__((noinline)) static long fma_constant(double a, double b) {
     double k0 = a * 2.0;
-    double s = scale(a) + scale(b);
-    return (long)(s + k0);
+    double s = scale(k0) + scale(b);
+    return (long)(s + a * 2.0);
 }
 
 __attribute__((noinline)) static long promoted_constant(long x) {
@@ -97,7 +98,7 @@ __attribute__((noinline)) static long two_runs(long x) {
 static volatile long in[] = {3, 5, 4, 1, 5, 11, 1, 4, 1, 1, 4, 1};
 
 int main(void) {
-    if (fma_constant((double)in[0], (double)in[1]) != 10)
+    if (fma_constant((double)in[0], (double)in[1]) != 11)
         return 1;
     if (promoted_constant(in[2]) != 5 + 1 + 5 + 20)
         return 2;
@@ -117,7 +118,7 @@ int main(void) {
         return 9;
     if (two_runs(in[11]) != 1 + 9 + 1 + 9 + 1 + 9 + 1 + 9)
         return 10;
-    if (log_sum != 3 + 5 + 4 + 5 + 1 + 5 + 11 + 1 + 2 + 4 + 1 + 2 + 1 + 2 + 3 + 0 + 1 + 2 + 3 +
+    if (log_sum != 6 + 5 + 4 + 5 + 1 + 5 + 11 + 1 + 2 + 4 + 1 + 2 + 1 + 2 + 3 + 0 + 1 + 2 + 3 +
                        10 + 20 + 30)
         return 11;
     return 0;

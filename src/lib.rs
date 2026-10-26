@@ -142,14 +142,15 @@ pub use c5::diag;
 
 #[allow(unused_imports)]
 pub use c5::{
-    AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, BinaryFormat, BuildId, C5Error, CodeModel,
+    AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, BinaryFormat, BuildId, C5Error, CStd, CodeModel,
     CompileOptions, Compiler, DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION, ElfClass,
-    ElfImageOptions, ExecForm, FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, Host,
-    IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
+    ElfImageOptions, ExecForm, FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol, Hardening,
+    Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions, OutputKind,
     Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Profiling, Program,
-    SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target, Trace, VariableInfo,
-    Vm, dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
-    jit_run_with_options, predefined_symbols, stack_guard_sysreg,
+    SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, SymVisibility, Target,
+    TargetSet, Trace, VariableInfo, Vm, dep_escape, dep_prerequisites, dep_render,
+    embedded_headers, fixed_register, jit_run, jit_run_with_options, predefined_symbols,
+    stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{
@@ -162,8 +163,9 @@ pub use c5::{StdHost, write_output_file};
 
 #[cfg(feature = "full")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_compiler_rt, embedded_libc,
-    embedded_runtime, read_archive, write_archive,
+    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, elf_archive_symbols,
+    embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, read_archive,
+    write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]
@@ -173,12 +175,14 @@ pub use c5::{
     NativeReloc, NativeSymSection, NativeSymbol, OrphanHandling, PendingImportReloc, PltTrampoline,
     Preemption, SectionContribution, SectionMap, SharedLibrary, TargetCLibrary, ZKeyword,
     ZKeywords, ZSupport, copy_candidates, detect_binary_format, emit_aarch64_plt, emit_plt_for,
-    emit_x86_64_plt, is_elf_object, is_ld_invocation, is_mach_o_dylib, is_mach_o_fat,
-    is_mach_o_object, is_native_object, is_tbd, library_bindings, link_native_objects,
+    emit_x86_64_plt, import_libraries, is_arm64x_native_member, is_coff_import_member,
+    is_coff_object, is_elf_object, is_ld_invocation, is_mach_o_dylib, is_mach_o_fat,
+    is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
     link_native_objects_with, link_native_objects_with_options,
     link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script, mach_o_fat_slice,
-    parse_lds_object, parse_linker_script, parse_mach_o_dylib, parse_native_elf,
-    parse_native_mach_o, parse_native_object, parse_shared_library, parse_tbd, parse_z_keyword,
-    read_archive_at, render_link_map, resolve_exec_stack, run_ld, write_executable_elf64,
+    os_error_text, parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
+    parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,
+    parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, read_archive_at,
+    render_link_map, resolve_exec_stack, run_ld, script_unreadable, write_executable_elf64,
     write_native_image_from_merged, write_native_image_from_merged_ex,
 };

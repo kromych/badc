@@ -396,7 +396,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v328 Imm(4602678819172646912)                         -> x0
     v329 LoadLocal { off=-1, kind=F64 }                   -> d0
     v330 Imm(4621819117588971520)                         -> x1
-    v331 Binop { op=fmul, lhs=v329, rhs=v330 }            -> d1
+    v331 Binop { op=fmul.c, lhs=v329, rhs=v330 }          -> d1
     v332 Fma { a=v329, b=v330, c=v328, neg_product=false, neg_addend=false } -> d0
     v333 LifetimeEnd(-1)                                  -> -
     v334 Imm(4630896685587890176)                         -> x2
@@ -420,11 +420,11 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v348 Imm(4602678819172646912)                         -> x2
     v349 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v350 Imm(1120403456)                                  -> x2 [f32]
-    v351 Binop { op=fmul, lhs=v349, rhs=v350 }            -> d1 [f32]
+    v351 Binop { op=fmul.c, lhs=v349, rhs=v350 }          -> d1 [f32]
     v352 BinopI { op=add, lhs=v344, rhs_imm=4 }           -> x6
     v353 LoadLocal { off=-2, disp=4, kind=F32 }           -> d1 [f32]
     v354 Imm(1092616192)                                  -> x6 [f32]
-    v355 Binop { op=fmul, lhs=v353, rhs=v354 }            -> d1 [f32]
+    v355 Binop { op=fmul.c, lhs=v353, rhs=v354 }          -> d1 [f32]
     v356 Fma { a=v349, b=v350, c=v355, neg_product=false, neg_addend=false } -> d0 [f32]
     v357 BinopI { op=add, lhs=v344, rhs_imm=8 }           -> x2
     v358 LoadLocal { off=-2, disp=8, kind=F32 }           -> d1 [f32]
@@ -453,11 +453,11 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v377 Imm(4602678819172646912)                         -> x7
     v378 LoadLocal { off=-3, kind=F64 }                   -> d0
     v379 Imm(4636737291354636288)                         -> x7
-    v380 Binop { op=fmul, lhs=v378, rhs=v379 }            -> d1
+    v380 Binop { op=fmul.c, lhs=v378, rhs=v379 }          -> d1
     v381 BinopI { op=add, lhs=v373, rhs_imm=8 }           -> x8
     v382 LoadLocal { off=-3, disp=8, kind=F64 }           -> d1
     v383 Imm(4621819117588971520)                         -> x8
-    v384 Binop { op=fmul, lhs=v382, rhs=v330 }            -> d1
+    v384 Binop { op=fmul.c, lhs=v382, rhs=v330 }          -> d1
     v385 Fma { a=v378, b=v379, c=v384, neg_product=false, neg_addend=false } -> d0
     v386 BinopI { op=add, lhs=v373, rhs_imm=16 }          -> x1
     v387 LoadLocal { off=-3, disp=16, kind=F64 }          -> d1
@@ -485,11 +485,11 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v405 Imm(4602678819172646912)                         -> x0
     v406 LoadLocal { off=-3, kind=F64 }                   -> d0
     v407 Imm(4636737291354636288)                         -> x2
-    v408 Binop { op=fmul, lhs=v406, rhs=v407 }            -> d1
+    v408 Binop { op=fmul.c, lhs=v406, rhs=v407 }          -> d1
     v409 BinopI { op=add, lhs=v373, rhs_imm=8 }           -> x1
     v410 LoadLocal { off=-3, disp=8, kind=F64 }           -> d1
     v411 Imm(4621819117588971520)                         -> x1
-    v412 Binop { op=fmul, lhs=v410, rhs=v411 }            -> d1
+    v412 Binop { op=fmul.c, lhs=v410, rhs=v411 }          -> d1
     v413 Fma { a=v406, b=v407, c=v412, neg_product=false, neg_addend=false } -> d0
     v414 BinopI { op=add, lhs=v373, rhs_imm=16 }          -> x2
     v415 LoadLocal { off=-3, disp=16, kind=F64 }          -> d1
@@ -521,7 +521,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v437 Imm(4602678819172646912)                         -> x7
     v438 Imm(0)                                           -> x7 [f32]
     v439 Imm(1092616192)                                  -> x7 [f32]
-    v440 Binop { op=fmul, lhs=v430, rhs=v439 }            -> d0 [f32]
+    v440 Binop { op=fmul.c, lhs=v430, rhs=v439 }          -> d0 [f32]
     v441 Imm(0)                                           -> x8
     v442 Imm(0)                                           -> x8 [f32]
     v443 Fma { a=v430, b=v439, c=v434, neg_product=false, neg_addend=false } -> d0 [f32]
@@ -549,7 +549,7 @@ fn ent_pc=24 n_params=0 variadic=false locals=9
     v461 Imm(4598175219545276416)                         -> x2
     v462 Imm(0)                                           -> x6
     v463 Imm(4621819117588971520)                         -> x6
-    v464 Binop { op=fmul, lhs=v405, rhs=v411 }            -> d0
+    v464 Binop { op=fmul.c, lhs=v405, rhs=v411 }          -> d0
     v465 Fma { a=v405, b=v411, c=v461, neg_product=false, neg_addend=false } -> d0
     v466 LifetimeEnd(0)                                   -> -
     v467 Imm(4617596992938311680)                         -> x0

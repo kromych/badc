@@ -128,6 +128,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Mcpy { .. }
         | Inst::AtomicRmw { .. }
         | Inst::AtomicCas { .. }
+        | Inst::AtomicCas16 { .. }
         | Inst::AtomicLoad { .. }
         | Inst::AtomicStore { .. }
         | Inst::Intrinsic { .. }

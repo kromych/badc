@@ -71,6 +71,7 @@ struct passwd {
 #pragma binding(libc::endpwent, "endpwent")
 #endif
 
+#ifndef _WIN32
 struct passwd *getpwuid(uid_t uid);
 struct passwd *getpwnam(char *name);
 // POSIX reentrant lookups: fill the caller's `struct passwd` + scratch
@@ -83,3 +84,4 @@ int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
 struct passwd *getpwent(void);
 void setpwent(void);
 void endpwent(void);
+#endif

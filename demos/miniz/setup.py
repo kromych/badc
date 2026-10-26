@@ -26,11 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "3.1.1"
-UPSTREAM_SHA = "d10b03cc73475af673df40f06e5cefd1d5f940d9"  # github richgel999/miniz tag 3.1.1
+VERSION = "3.1.2"
+UPSTREAM_SHA = "77d0dce8627735138c51770d1799a1ef48f2117d"  # github richgel999/miniz tag 3.1.2
 ASSET = f"miniz-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "cb28402bb2af93bdc331b60d16807e89727d1712a2d0a7ba0cac79a3e406fe40"
+SHA256 = "f0446d863f9c19926ad9483c523fdc42e42b8d4a6a431d27e09d49c79a140d9a"
 WANTED = ("miniz.c", "miniz.h")
 
 

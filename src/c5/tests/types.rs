@@ -460,6 +460,36 @@ fn call_with_return_prototype_is_silent() {
     );
 }
 
+/// A `#pragma binding` is not a declaration (C99 6.7): a unit's typedef of
+/// the bound name declares it, as an object or an enumerator of that name
+/// does, while a name a prototype has claimed stays a function the typedef
+/// clashes with.
+#[test]
+fn typedef_takes_a_name_only_a_binding_names() {
+    use crate::{Compiler, Target};
+    let unclaimed = "#pragma dylib(gdi32, \"gdi32.dll\")\n\
+        #pragma binding(gdi32::Rectangle, \"Rectangle\")\n\
+        typedef struct { int x; } Rectangle;\n\
+        int main(void) { Rectangle r = {1}; return r.x - 1; }\n";
+    let claimed = unclaimed.replace(
+        "typedef",
+        "int Rectangle(void *dc, int l, int t, int r, int b);\ntypedef",
+    );
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        Compiler::with_target(unclaimed.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let err = Compiler::with_target(claimed.clone(), target)
+            .compile()
+            .expect_err("a prototyped name is a function");
+        assert!(
+            err.to_string()
+                .contains("clashes with prior non-typedef declaration"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn shadowing_fnptr_param_does_not_clobber_signature() {
     // A prototype whose fn-ptr parameter reuses a bound library
@@ -2146,6 +2176,296 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
             .compile()
             .unwrap();
         assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// C23 6.7.2.3 (tag compatibility): from `-std=c23` a structure, union or
+/// enumeration redefined in its scope with compatible content declares the
+/// same type, and before C23 any redefinition is an error, as gcc 16 gates
+/// it (its default gnu23 included). The accepted and rejected cases are
+/// gcc's: a member of an untagged type each definition spells anew, other
+/// member types, bit-field widths, alignment, `packed`, union member order
+/// and enumerator values make the definitions differ.
+#[test]
+fn a_compatible_tag_redefinition_is_taken_from_c23() {
+    use crate::{CStd, CompileOptions, Compiler, Target};
+    const SAME: &str = "struct S { int a; struct S *next; union { int u; float f; }; int b[3]; };\n\
+        struct S { int a; struct S *next; union { int u; float f; }; int b[3]; };\n\
+        union U { int i; float f; }; union U { int i; float f; };\n\
+        enum E { E0, E1 = 5 }; enum E { E0, E1 = 5 };\n\
+        struct timeval { long tv_sec; long tv_usec; };\n\
+        void f(void) { struct timeval { long s; }; struct timeval { long s; }; }\n\
+        int main(void) { struct S s; s.a = 1; s.next = &s; s.u = E1;\n\
+          return s.next->a + s.u - 6; }\n";
+    let differ = [
+        "struct S { struct { int x; } m; }; struct S { struct { int x; } m; };",
+        "struct T { long a; }; struct T { int a; };",
+        "struct V { int a : 3; }; struct V { int a : 4; };",
+        "struct X { char c; int i; }; struct X { char c; _Alignas(8) int i; };",
+        "struct W { char c; int i; }; struct W { char c; int i; } __attribute__((packed));",
+        "union U { int a; float b; }; union U { float b; int a; };",
+        "enum F { F0, F1 }; enum F { F0, F1 = 3 };",
+        "enum G { G0, G1 }; enum G { G0 };",
+    ];
+    let compile = |src: &str, std: &str| {
+        let opts = CompileOptions::default().with_std(CStd::from_dialect(std).unwrap());
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    for std in ["c23", "gnu2x"] {
+        let program = compile(SAME, std).unwrap_or_else(|e| panic!("{std}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{std}");
+        for src in differ {
+            let err = compile(src, std).map(|_| ()).expect_err(src).to_string();
+            assert!(err.contains("redefined with different"), "{src}: {err}");
+        }
+    }
+    for std in ["c17", "gnu11"] {
+        let err = compile(SAME, std).map(|_| ()).expect_err(std).to_string();
+        assert!(err.contains("struct `S` already defined"), "{std}: {err}");
+    }
+}
+
+/// On the PE targets an enum named before its definition is complete with
+/// `int`'s layout, as MSVC and clang's Microsoft compatibility mode (the
+/// windows-msvc default) complete it, so it may type a member; the
+/// definition then completes it as on the other targets. clang 22 accepts
+/// the unit for both windows-msvc triples, where it returns 0, and rejects
+/// it elsewhere, as badc does. A definition needing another size after
+/// such a use is an error, one never defined stays `int`-sized, and one
+/// reached through a pointer only takes the type badc's PE targets give
+/// any enum (the windows-gnu one).
+#[test]
+fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef enum _INTERFACE_TYPE INTERFACE_TYPE;\n\
+        typedef struct _IO_SPACE {\n\
+          unsigned long Request; INTERFACE_TYPE InterfaceType; unsigned long BusNumber;\n\
+        } IO_SPACE;\n\
+        _Static_assert(sizeof(INTERFACE_TYPE) == 4 && _Alignof(INTERFACE_TYPE) == 4, \"\");\n\
+        typedef enum _INTERFACE_TYPE { Internal, Isa, Eisa } INTERFACE_TYPE;\n\
+        int main(void) {\n\
+          IO_SPACE s; s.InterfaceType = Eisa;\n\
+          return (int)s.InterfaceType - 2 + (int)(sizeof(IO_SPACE) != 12); }\n";
+    const WIDE: &str = "enum E; struct S { enum E e; };\nenum E { E_HI = 0x100000000LL };\n";
+    const POINTER: &str = "enum W *pw;\nenum W { W_HI = 0x100000000LL };\n\
+        int main(void) { return sizeof *pw != 8; }\n";
+    const NEVER: &str = "enum U u;\nstruct S { enum U m; int k; };\n\
+        int main(void) { enum U l; return (int)(sizeof u + sizeof l + sizeof(struct S)) - 16; }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for src in [SRC, POINTER, NEVER] {
+            let program = Compiler::with_target(src.to_string(), t)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+        }
+        let err = Compiler::with_target(WIDE.to_string(), t)
+            .compile()
+            .expect_err("wide")
+            .to_string();
+        assert!(err.contains("must have the size of `int`"), "{t:?}: {err}");
+    }
+    let err = Compiler::with_target(SRC.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("linux-x64")
+        .to_string();
+    assert!(
+        err.contains("field `InterfaceType` has incomplete type"),
+        "{err}"
+    );
+}
+
+/// The Microsoft declarator modifiers on the PE targets, as clang 22 takes
+/// them for both windows-msvc triples (which accept the unit): `__ptr64`,
+/// `__w64`, `__sptr` and `__uptr` leave the type as it is, an `__unaligned`
+/// access reads and writes misaligned data, and `__builtin_alignof` is
+/// `_Alignof`. The other targets do not take them, as gcc and clang do not.
+#[test]
+fn microsoft_declarator_modifiers_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef void *__ptr64 HANDLE64;\n\
+        typedef int __w64 INT_W64;\n\
+        typedef void * __sptr __ptr64 SP64;\n\
+        typedef void * __uptr __ptr64 UP64;\n\
+        typedef struct { unsigned int s_addr; } IN_ADDR;\n\
+        int read_unaligned(const char *p) { return *(const int __unaligned *)(p + 1); }\n\
+        _Static_assert(sizeof(HANDLE64) == 8 && sizeof(INT_W64) == 4 && sizeof(UP64) == 8, \"\");\n\
+        _Static_assert(__builtin_alignof(IN_ADDR) == 4 && __builtin_alignof(char) == 1, \"\");\n\
+        _Static_assert(_Generic((int *__ptr64)0, int *: 1, default: 0), \"\");\n\
+        _Static_assert(_Generic((INT_W64)0, int: 1, default: 0), \"\");\n\
+        int main(void) {\n\
+          char b[12] = {0, 8, 7, 6, 5, 4, 3, 2, 1};\n\
+          __unaligned long long *pw = (__unaligned long long *)(b + 1);\n\
+          long long w = *pw;\n\
+          *pw = 0x1112131415161718LL;\n\
+          return !(w == 0x0102030405060708LL && read_unaligned(b) == 0x15161718); }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+    let err = Compiler::with_target(SRC.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("`__ptr64` on linux-x64")
+        .to_string();
+    assert!(
+        err.contains("expected `,` or `;` after declarator"),
+        "{err}"
+    );
+}
+
+/// MSVC's `__ptr32`, as clang 22 takes it for x86_64- and
+/// aarch64-pc-windows-msvc: a 4-byte pointer, sign-extended when it widens.
+/// The fixture runs under the interpreter for both PE targets; a
+/// `__ptr32` that follows no `*`, a zero-extended one and a static address
+/// in one are refused.
+#[test]
+fn a_ptr32_pointer_is_four_bytes_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("msvc_ptr32.c", t), 0, "{t:?}");
+    }
+    for (src, text) in [
+        (
+            "int __ptr32 x;",
+            "`__ptr32` qualifies a pointer, after its `*`",
+        ),
+        (
+            "__ptr32 int *q;",
+            "`__ptr32` qualifies a pointer, after its `*`",
+        ),
+        (
+            "int __seg_gs * __ptr32 p;",
+            "`__ptr32` with a named address space is not supported",
+        ),
+        (
+            "int * __uptr __ptr32 u;",
+            "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+        ),
+        (
+            "int x;\nint * __ptr32 p = &x;",
+            "a `__ptr32` pointer's static initializer is not an integer constant",
+        ),
+        ("int * __ptr32 p;\nint **q = &p;", "init=int* __ptr32 *"),
+    ] {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::with_target(src.clone(), Target::WindowsX64)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(err.contains(text), "{src}: {err}");
+    }
+}
+
+/// C23 6.4.1: under `-std=c23` / `gnu23` `bool` names `_Bool`, and `true`
+/// and `false` are its constants 1 and 0 (6.4.4.6), with or without
+/// `<stdbool.h>`, which then defines none of them as a macro. Before C23
+/// they are identifiers a program may declare. gcc 16.2.1 (`-std=c23`) and
+/// clang 22 accept the C23 unit and its run returns 0.
+#[test]
+fn c23_bool_true_and_false_are_keywords() {
+    use crate::{CStd, CompileOptions, Compiler, Target};
+    const SRC: &str = "static bool flip(bool b) { return !b; }\n\
+        _Static_assert(_Generic(true, bool: 1, default: 0) && sizeof(false) == 1, \"bool\");\n\
+        #include <stdbool.h>\n\
+        #ifdef bool\n#error bool is a macro\n#endif\n\
+        int main(void) {\n\
+          bool t = true;\n\
+          return (flip(false) == t && sizeof(bool) == 1 && (bool)2 == 1 && true + true == 2) ? 0 : 1; }\n";
+    for t in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        for name in ["c23", "gnu2x"] {
+            let opts = CompileOptions::default().with_std(CStd::from_dialect(name).unwrap());
+            let program = Compiler::with_options(SRC.to_string(), t, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?} {name}: {e}"));
+            assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?} {name}");
+        }
+    }
+    let c17 = "int bool = 2, true = 1;
+int main(void) { return bool - 2 * true; }
+";
+    let opts = CompileOptions::default().with_std(CStd::from_dialect("c17").unwrap());
+    let program = Compiler::with_options(c17.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .unwrap();
+    assert_eq!(super::Vm::new(program).run().unwrap(), 0);
+}
+
+/// `__builtin_va_list` is `char *` where the ABI makes `va_list` a single
+/// cursor (Microsoft x64 and ARM64, Apple arm64), so a header's own
+/// `typedef char *va_list;` (MSVC's `vadefs.h`) redeclares `<stdarg.h>`'s
+/// with the same type. clang 22 accepts the unit for both windows-msvc
+/// triples and Apple clang 21 on macOS.
+#[test]
+fn va_list_is_a_char_pointer_where_the_abi_makes_it_a_cursor() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef char *va_list;\n\
+        #include <stdarg.h>\n\
+        _Static_assert(__builtin_types_compatible_p(__builtin_va_list, char *), \"char *\");\n\
+        _Static_assert(_Generic((va_list)0, char *: 1, default: 0), \"generic\");\n\
+        int sum(int n, ...) {\n\
+          va_list ap, aq; int s = 0;\n\
+          va_start(ap, n); va_copy(aq, ap);\n\
+          while (n--) s += va_arg(ap, int);\n\
+          s += va_arg(aq, int);\n\
+          va_end(aq); va_end(ap); return s; }\n\
+        int main(void) { return sum(3, 1, 2, 3) != 7; }\n";
+    for t in [
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let program = Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// Once its list ends, every constant of an enumeration with a value outside
+/// `int` has the enumerated type (C23 6.7.2.2, gcc's `finish_enum` in every
+/// mode), so `U0 - 1` is unsigned and `_Generic` selects `enum U`; inside the
+/// list a constant has its value's type. The other constants stay `int`. gcc
+/// 16.2.1 (`-std=gnu99`) and clang 22 accept the unit, and both report the
+/// `-Wenum-conversion` of lines 6 and 7 alone.
+#[test]
+fn constants_of_an_enum_wider_than_int_have_the_enumerated_type() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "enum U { U0, U1 = 0x80000000 };\n\
+        enum B { B0, B1 = 0x100000000LL };\n\
+        enum S { S0 = -1, S1 = 0x80000000 };\n\
+        enum D { D0 = 0x80000000, D1 = -D0, D2 = sizeof(D0) };\n\
+        enum N { N0 = -1, N1 };\n\
+        enum N n = U0;\n\
+        void f(void) { enum N a = U1; enum N b = N1; (void)a; (void)b; }\n\
+        _Static_assert(U0 - 1 > 0, \"U0 - 1\");\n\
+        _Static_assert(_Generic(U0, enum U: 1, default: 0), \"U0\");\n\
+        _Static_assert(_Generic(B0, enum B: 1, default: 0) && sizeof(B0) == 8, \"B0\");\n\
+        _Static_assert(_Generic(S0, enum S: 1, default: 0) && sizeof(S0) == 8, \"S0\");\n\
+        _Static_assert(D1 == 0x80000000u && D2 == 4, \"D1 and D2\");\n\
+        _Static_assert(_Generic(N0, int: 1, default: 0), \"N0\");\n\
+        int main(void) { return U0 - 1 > 0 && -U1 == 0x80000000u ? 0 : 1; }\n";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts =
+            crate::CompileOptions::default().with_diag(super::diag_config(&["enum-conversion"]));
+        let program = Compiler::with_options(SRC.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let lines: Vec<u32> = program
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::ENUM_CONVERSION)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect();
+        assert_eq!(lines, [6, 7], "{t:?}");
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
     }
 }
 

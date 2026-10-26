@@ -34,8 +34,7 @@ impl<'a> Walker<'a> {
                 // precision, so the lexer's f64 pattern narrows to the
                 // f32 one and the value is tagged f32.
                 if is_float_ty(*ty) {
-                    let f32_bits = f64::from_bits(*bits) as f32;
-                    return Ok(b.imm_f32(f32_bits.to_bits()));
+                    return Ok(b.imm_f32(crate::c5::softfp::f64_to_f32(*bits)));
                 }
                 Ok(b.imm(*bits as i64))
             }
@@ -178,6 +177,7 @@ impl<'a> Walker<'a> {
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => self.walk_intrinsic(b, *kind, args),
+            Expr::MsIntrinsic { .. } => self.walk_ms_intrinsic(b, id),
             Expr::InlineAsm(idx) => self.walk_inline_asm(b, *idx),
             Expr::LabelAddr(label) => {
                 // GCC `&&label`: materialize the address of the label's

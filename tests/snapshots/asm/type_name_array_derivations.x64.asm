@@ -38,7 +38,7 @@ Disassembly of section .text:
                	retq
 
 <pick>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <main>:

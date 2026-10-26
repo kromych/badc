@@ -38,11 +38,11 @@ Disassembly of section .text:
                	retq
 
 <getfp>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <getfp_t>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <vsum>:
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm0
@@ -155,7 +155,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x10, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x8(%rax), %rax
                	movq	%rcx, %xmm0
                	callq	*%rax
@@ -165,7 +165,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x20, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm0
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x40, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm0
@@ -187,7 +187,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x80, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x10(%rax), %rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm0
@@ -233,7 +233,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x1000, %rbx           # imm = 0x1000
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	movq	%rcx, %xmm0
                	callq	*%rax
@@ -243,7 +243,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x2000, %rbx           # imm = 0x2000
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
@@ -268,7 +268,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-<rip>, %rdx      # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	xorl	%ebx, %ebx
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
@@ -337,7 +337,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x80, %rbx
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	decq	%rax
                	incq	%rax
                	leaq	0x1(%rax), %r12
@@ -394,7 +394,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x4, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
@@ -406,7 +406,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x8, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x8(%rax), %rax
                	callq	*%rax
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000

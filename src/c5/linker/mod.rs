@@ -15,7 +15,8 @@
 //!                                                  |
 //!                  archive::write_archive ---> libbaz.a
 //!   foo.o, bar.o, libbaz.a, plus -l/-L paths
-//!      |  parse_native_elf -> link_native_objects -> emit_*_plt
+//!      |  parse_native_object (ELF / Mach-O / COFF)
+//!      |    -> link_native_objects -> emit_*_plt
 //!      v
 //!   MergedNative  ->  write_native_image_from_merged
 //!      v
@@ -35,6 +36,8 @@ mod archive;
 #[cfg(feature = "std")]
 pub(crate) mod attributes;
 #[cfg(feature = "std")]
+pub(crate) mod coff_object;
+#[cfg(feature = "std")]
 pub(crate) mod comdat;
 #[cfg(feature = "std")]
 pub(crate) mod default_script;
@@ -47,6 +50,7 @@ pub(crate) mod gnu_property;
 mod got_relax;
 #[cfg(feature = "std")]
 mod image;
+mod import_slots;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod lds;
@@ -101,11 +105,19 @@ fn tagged(module: &str, msg: &str) -> alloc::string::String {
 
 #[cfg(feature = "std")]
 pub use archive::read_archive_at;
-pub use archive::{ArchiveMember, read_archive, write_archive};
+pub use archive::{
+    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use coff_object::{
+    ImportMember, import_libraries, is_arm64x_native_member, is_coff_import_member, is_coff_object,
+    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
-pub use ld_driver::{is_ld_invocation, run_ld};
+pub use ld_driver::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use lds::{LinkerScript, parse_linker_script};
@@ -136,7 +148,7 @@ pub use map::{ArchiveInclusion, render_link_map};
 pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
     detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
-    parse_shared_library,
+    parse_native_object_for, parse_shared_library,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

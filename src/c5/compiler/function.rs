@@ -26,7 +26,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base::ImplicitInt;
-use super::types::{add_ptr_level, apply_qual_bits};
+use super::types::add_ptr_level;
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together
@@ -44,6 +44,14 @@ pub(super) struct ParsedParams {
     pub(super) fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
     /// The array size expressions of the parameters, in declaration order.
     pub(super) sizes: Vec<ParamSize>,
+    /// The tags the list declared; a definition's block continues their scope.
+    pub(super) tags: Vec<(alloc::string::String, usize)>,
+    /// The enumeration constants the list declared, `(symbol, type,
+    /// value, enumeration)`; a definition's block continues their scope too.
+    pub(super) enumerators: Vec<(usize, i64, i64, Option<u32>)>,
+    /// The `-Wstrict-prototypes` record of a list that declares no
+    /// prototype.
+    pub(super) unprototyped: Option<u32>,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -54,6 +62,19 @@ pub(super) struct ParsedParams {
 pub(super) struct ParamSize {
     pub(super) at: crate::c5::lexer::LexerSnapshot,
     pub(super) outer_names: Vec<usize>,
+    /// The bound of the array the parameter points to, which makes it
+    /// variably modified (C99 6.7.5.2): its type takes the byte count the
+    /// evaluation stores.
+    pub(super) vm: Option<VmParam>,
+}
+
+/// A variably modified parameter: its symbol, the element type of the
+/// array it points to, and the pointer levels above that array.
+#[derive(Clone, Copy)]
+pub(super) struct VmParam {
+    pub(super) sym: usize,
+    pub(super) elem: i64,
+    pub(super) levels: i64,
 }
 
 impl core::fmt::Debug for ParamSize {
@@ -106,6 +127,9 @@ impl ParsedParams {
             enum_tags: p.enum_tags,
             fn_types: p.fn_types,
             sizes: Vec::new(),
+            tags: Vec::new(),
+            enumerators: Vec::new(),
+            unprototyped: None,
         }
     }
 
@@ -164,6 +188,36 @@ impl Compiler {
     /// A parameter's attributes describe that parameter, not the declarator
     /// the list belongs to, so the enclosing ones are detached across the
     /// list the way the other declarator carriers are.
+    /// Open the scope of the ordinary identifiers a parameter list or an
+    /// old-style declaration list declares, its enumeration constants.
+    pub(super) fn open_param_list_scope(&mut self) {
+        self.block_scopes.push(Vec::new());
+        self.param_list_scopes += 1;
+    }
+
+    /// Close [`Self::open_param_list_scope`]'s scope, returning the
+    /// enumeration constants it declared as `(symbol, type, value,
+    /// enumeration)`.
+    pub(super) fn close_param_list_scope(&mut self) -> Vec<(usize, i64, i64, Option<u32>)> {
+        self.param_list_scopes -= 1;
+        let mut enumerators = Vec::new();
+        for b in self
+            .block_scopes
+            .pop()
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+        {
+            let s = &self.symbols[b.idx];
+            if s.class == Token::Num as i64 {
+                enumerators.push((b.idx, s.type_, s.val, s.enumeration));
+            }
+            self.restore_block_shadow(b);
+        }
+        enumerators.reverse();
+        enumerators
+    }
+
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_attrs = core::mem::take(&mut self.pending.attrs);
         // The enclosing declarator's function-pointer carriers and function
@@ -187,10 +241,33 @@ impl Compiler {
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
+        let line = self.lex.line;
+        self.tag_scopes.push();
+        self.open_param_list_scope();
         let mut r = self.parse_function_params_inner();
+        if let Ok(params) = &mut r
+            && params.form != ParamForm::Prototype
+            && self.in_user_source()
+        {
+            params.unprototyped = Some(self.note_unprototyped_list(line));
+        }
+        let enumerators = self.close_param_list_scope();
+        let tags = self.tag_scopes.pop();
+        for (name, id) in &tags {
+            if !self.structs[*id].is_anonymous {
+                let keyword = self.structs[*id].keyword();
+                let text = alloc::format!(
+                    "`{keyword} {name}` declared inside parameter list will not be visible \
+                     outside of this definition or declaration"
+                );
+                self.warn_at(Code::VISIBILITY, self.lex.line, text);
+            }
+        }
         let sizes = core::mem::replace(&mut self.param_sizes, outer_sizes);
         if let Ok(params) = &mut r {
             params.sizes = sizes;
+            params.tags = tags;
+            params.enumerators = enumerators;
         }
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
@@ -210,6 +287,31 @@ impl Compiler {
         p.fn_own_sig = outer_own;
         p.fn_decl_base = outer_base;
         r
+    }
+
+    /// Record a parameter list that declares no prototype (C99 6.7.5.3p14)
+    /// for gcc's `-Wstrict-prototypes`, reported with the declaration unless
+    /// a cast's type name or a definition takes it back.
+    fn note_unprototyped_list(&mut self, line: usize) -> u32 {
+        let id = self.unprototyped_lists.last().map_or(0, |&(id, ..)| id + 1);
+        self.unprototyped_lists
+            .push((id, self.lex.file.clone(), line));
+        id
+    }
+
+    /// A definition's own list: reported at the definition, and only when
+    /// no earlier declaration gave the function a prototype, as gcc does.
+    pub(super) fn claim_unprototyped_list(&mut self, params: &ParsedParams) {
+        if let Some(id) = params.unprototyped {
+            self.unprototyped_lists.retain(|&(i, ..)| i != id);
+        }
+    }
+
+    pub(super) fn report_unprototyped_lists(&mut self) {
+        for (_, file, line) in core::mem::take(&mut self.unprototyped_lists) {
+            let text = alloc::string::String::from("function declaration is not a prototype");
+            self.warn_at_file(Code::STRICT_PROTOTYPES, &file, line, text);
+        }
     }
 
     fn parse_function_params_inner(&mut self) -> Result<ParsedParams, C5Error> {
@@ -300,9 +402,9 @@ impl Compiler {
                 self.next()?;
                 ty = add_ptr_level(ty);
                 leading_ptr_count += 1;
+                let mut uptr = false;
                 while self.lex.tk == Token::TypeQual {
-                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                    self.next()?;
+                    ty = self.apply_pointer_qualifier(ty, &mut uptr)?;
                 }
             }
             // `A *p` for an array typedef `A` is a pointer to the array
@@ -525,6 +627,9 @@ impl Compiler {
             enum_tags,
             fn_types,
             sizes: Vec::new(),
+            tags: Vec::new(),
+            enumerators: Vec::new(),
+            unprototyped: None,
         })
     }
 

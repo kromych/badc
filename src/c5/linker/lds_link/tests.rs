@@ -2,7 +2,7 @@ use super::inputs::{RawReloc, strz};
 use super::*;
 use crate::c5::linker::default_script::default_script;
 use crate::c5::linker::lds::parse_linker_script;
-use crate::c5::linker::object::NativeMachine;
+use crate::c5::linker::object::DynamicImage;
 use crate::c5::linker::object::{Elf32Shdr, Elf64Shdr, read_struct};
 use crate::c5::linker::zkeyword::{ZKeywords, parse_z_keyword};
 use crate::c5::linker::{comdat, dynamic};
@@ -178,6 +178,8 @@ impl TestObj {
                 0
             } else if *sec == usize::MAX - 1 {
                 SHN_ABS
+            } else if *sec == usize::MAX - 2 {
+                SHN_COMMON
             } else {
                 (*sec + 1) as u16
             };
@@ -2680,16 +2682,17 @@ fn merge_fixed_pool_dedupes_and_rejects_underaligned() {
 
 fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
     SharedInput {
-        lib: SharedLibrary {
+        lib: DynamicImage {
             soname: soname.to_string(),
-            machine: NativeMachine::X86_64,
+            machine: EM_X86_64,
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
-            tls_exports: Default::default(),
-            object_sizes: Default::default(),
-            export_symbols: Default::default(),
-            export_versions: Default::default(),
-            from_image: true,
+            function_exports: funcs.iter().map(|s| s.to_string()).collect(),
+            copy_layout: data
+                .iter()
+                .map(|s| (s.to_string(), (8, 8, false)))
+                .collect(),
+            ..Default::default()
         },
         as_needed: false,
     }
@@ -2924,83 +2927,90 @@ fn a_shared_library_input_records_a_dependency() {
     );
 }
 
-/// A call to an imported function reaches it through a PLT stub and
-/// a load through a GOT slot the loader fills from a `GLOB_DAT`
-/// entry naming the symbol.
+/// `(offset, symbol index, type, addend)` of each entry of a RELA section.
+fn rela_entries(body: &[u8]) -> Vec<(u64, u32, u32, i64)> {
+    let word = |c: &[u8], at: usize| u64::from_le_bytes(c[at..at + 8].try_into().unwrap());
+    (body.as_chunks::<24>().0.iter())
+        .map(|c| {
+            let info = word(c, 8);
+            (
+                word(c, 0),
+                (info >> 32) as u32,
+                info as u32,
+                word(c, 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// GNU ld 2.46.1 gives a load through the GOT a slot `GLOB_DAT` fills, and
+/// a call a lazy PLT entry (x86-64 psABI, procedure linkage table): the
+/// header pushes `.got.plt[1]` and jumps through `.got.plt[2]`, the
+/// loader's; the entry jumps through its own `.got.plt` slot, which holds
+/// the entry's `push` until a `JUMP_SLOT` in `.rela.plt` binds it.
+/// `.dynamic` names the table and the slots. The called import takes no
+/// `.got` slot.
 #[test]
-fn an_import_binds_through_a_stub_and_a_got_slot() {
+fn an_import_is_called_through_a_lazy_plt_entry_and_loaded_through_a_got_slot() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
     let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
     let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
     let res = link_with_script(&script, objs, &opts).expect("links");
-    // Imports lead the table, in name order, so a relocation can
-    // name one by index.
-    let syms = image_dynsyms(&res.image);
-    assert_eq!(syms[1].0, "bar");
-    assert_eq!(syms[2].0, "foo");
-    assert_eq!((syms[1].2, syms[2].2), (SHN_UNDEF, SHN_UNDEF));
-
-    let (got_addr, _) = image_section(&res.image, ".got");
-    let (_, rela) = image_section(&res.image, ".rela.dyn");
-    let entries: Vec<(u64, u32, u32)> = rela
-        .as_chunks::<24>()
-        .0
-        .iter()
-        .map(|c| {
-            let info = u64::from_le_bytes(c[8..16].try_into().unwrap());
-            (
-                u64::from_le_bytes(c[..8].try_into().unwrap()),
-                (info >> 32) as u32,
-                info as u32,
-            )
-        })
-        .collect();
-    let glob: Vec<&(u64, u32, u32)> = entries
-        .iter()
-        .filter(|e| e.2 == rt::R_X86_64_GLOB_DAT)
-        .collect();
-    assert_eq!(glob.len(), 2, "one slot per import");
+    let img = &res.image;
+    let index = |name: &str| image_dynsyms(img).iter().position(|s| s.0 == name).unwrap() as u32;
+    let (got, got_body) = image_section(img, ".got");
+    assert_eq!(got_body.len(), 8, "one slot, the load's");
+    let (_, rela) = image_section(img, ".rela.dyn");
     assert_eq!(
-        (glob[0].0, glob[0].1),
-        (got_addr, 1),
-        "bar's slot names bar"
+        rela_entries(&rela),
+        [(got, index("bar"), rt::R_X86_64_GLOB_DAT, 0)]
     );
+    let (gotplt, gotplt_body) = image_section(img, ".got.plt");
+    let (plt, stubs) = image_section(img, ".plt");
+    let (_, relaplt) = image_section(img, ".rela.plt");
+    let slot = gotplt + 24;
     assert_eq!(
-        (glob[1].0, glob[1].1),
-        (got_addr + 8, 2),
-        "foo's slot names foo"
+        rela_entries(&relaplt),
+        [(slot, index("foo"), rt::R_X86_64_JUMP_SLOT, 0)]
     );
-
-    let (text_addr, text) = image_section(&res.image, ".text");
-    let (plt_addr, plt) = image_section(&res.image, ".plt");
-    assert_eq!(plt.len(), 16, "only the called import takes a stub");
-    let call = i32::from_le_bytes(text[1..5].try_into().unwrap()) as i64;
+    let rel = |at: u64, to: u64| (to.wrapping_sub(at) as u32).to_le_bytes();
+    let mut want = alloc::vec![0xff, 0x35];
+    want.extend(rel(plt + 6, gotplt + 8));
+    want.extend([0xff, 0x25]);
+    want.extend(rel(plt + 12, gotplt + 16));
+    want.extend([0x0f, 0x1f, 0x40, 0x00, 0xff, 0x25]);
+    want.extend(rel(plt + 22, slot));
+    want.extend([0x68, 0, 0, 0, 0, 0xe9]);
+    want.extend(rel(plt + 32, plt));
+    assert_eq!(stubs, want);
     assert_eq!(
-        text_addr as i64 + 5 + call,
-        plt_addr as i64,
-        "the call reaches the stub"
+        u64::from_le_bytes(gotplt_body[24..32].try_into().unwrap()),
+        plt + 22
     );
-    let load = i32::from_le_bytes(text[8..12].try_into().unwrap()) as i64;
+    let (text_addr, text) = image_section(img, ".text");
     assert_eq!(
-        text_addr as i64 + 12 + load,
-        got_addr as i64,
-        "the load keeps its GOT slot rather than relaxing to an address"
+        text_addr as i64 + 5 + u32_at(&text, 1) as i32 as i64,
+        (plt + 16) as i64
     );
+    assert_eq!(text[5..8], [0x48, 0x8b, 0x05], "the load keeps its slot");
     assert_eq!(
-        text[5..8],
-        [0x48, 0x8b, 0x05],
-        "so the load is not rewritten"
+        text_addr as i64 + 12 + u32_at(&text, 8) as i32 as i64,
+        got as i64
     );
-    // The stub jumps through the slot: ff 25 <rip-relative>.
-    assert_eq!(plt[..2], [0xff, 0x25]);
-    let disp = i32::from_le_bytes(plt[2..6].try_into().unwrap()) as i64;
-    assert_eq!(plt_addr as i64 + 6 + disp, got_addr as i64 + 8);
+    let tags = dyn_tags(img);
+    let tag = |t: u64| tags.iter().find(|e| e.0 == t).map(|e| e.1);
+    let (relaplt_addr, _) = image_section(img, ".rela.plt");
+    assert_eq!(tag(dynamic::DT_PLTGOT), Some(gotplt));
+    assert_eq!(tag(dynamic::DT_JMPREL), Some(relaplt_addr));
+    assert_eq!(tag(dynamic::DT_PLTRELSZ), Some(24));
+    assert_eq!(tag(dynamic::DT_PLTREL), Some(dynamic::DT_RELA));
 }
 
-/// A reference that would need the imported object copied into this
-/// image is refused rather than left pointing at nothing.
+/// A shared object's reference that would need the imported object copied
+/// into it is refused rather than left pointing at nothing: only an
+/// executable holds copies.
 #[test]
-fn a_direct_reference_to_imported_data_is_refused() {
+fn a_shared_objects_direct_reference_to_imported_data_is_refused() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
     let obj = TestObj::new()
         .sec(
@@ -3015,7 +3025,10 @@ fn a_direct_reference_to_imported_data_is_refused() {
         .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
         .build(EM_X86_64);
     let objs = alloc::vec![parse_lds_object("a.o", obj).expect("parses")];
-    let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])]);
+    let opts = LdsOptions {
+        shared: true,
+        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])])
+    };
     let e = alloc::format!(
         "{}",
         link_with_script(&script, objs, &opts).expect_err("refused")
@@ -3870,10 +3883,11 @@ fn emit_relocs_keeps_the_entries_relocations_name() {
     assert!(rows.iter().any(|(n, _, _)| n == ".Lstr"));
 }
 
-/// An unresolved default-visibility weak reference keeps
-/// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for
-/// its GOT entry) instead of resolving statically; a hidden global
-/// is emitted with local binding in a dynamic link.
+/// A shared object's unresolved default-visibility weak reference keeps
+/// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for its GOT
+/// entry), where a PIE linked against no library resolves it to 0 with
+/// none, as GNU ld 2.46.1 links them; a hidden global is emitted with
+/// local binding in a dynamic link.
 #[test]
 fn undefweak_keeps_symbol_entries_and_hidden_forces_local() {
     let script = parse_linker_script(
@@ -3907,14 +3921,29 @@ SECTIONS {
         .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
         .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
         .build(EM_AARCH64);
-    let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
-    let opts = LdsOptions {
-        emit: LdsEmit::Dyn,
-        pack_relative_relocs: true,
-        max_page_size: 0x10000,
-        ..Default::default()
+    let link = |shared: bool| {
+        let objs = alloc::vec![parse_lds_object("a.o", a.clone()).expect("parses")];
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            shared,
+            pack_relative_relocs: true,
+            max_page_size: 0x10000,
+            ..Default::default()
+        };
+        link_with_script(&script, objs, &opts).expect("links")
     };
-    let res = link_with_script(&script, objs, &opts).expect("links");
+    let pie = link(false).image;
+    let rela_size = |img: &[u8]| {
+        readelf_sections(img)
+            .iter()
+            .find(|s| s.0 == ".rela.dyn")
+            .map(|s| s.3)
+    };
+    assert!(
+        rela_size(&pie).is_none_or(|n| n == 0),
+        "a PIE resolves it to 0"
+    );
+    let res = link(true);
     let secs = readelf_sections(&res.image);
     let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
     assert_eq!(rela.3, 48, "GLOB_DAT for the GOT slot + ABS64 at the site");
@@ -4134,6 +4163,43 @@ fn i386_emit_relocs_writes_rel_tables() {
     let body = &res.image[rel.3 as usize..(rel.3 + rel.4) as usize];
     let info = u32::from_le_bytes(body[4..8].try_into().unwrap());
     assert_eq!(info & 0xff, rt::R_386_32);
+}
+
+/// An i386 shared object's dynamic relocations go in `.rel.dyn`, typed
+/// `SHT_REL` as GNU ld types it, so section-based tools read them.
+#[test]
+fn i386_shared_object_types_its_dynamic_relocations_rel() {
+    let script = parse_linker_script(
+        r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rel.dyn : { *(.rel.dyn) }
+  .text : { *(.text) }
+  .dynamic : { *(.dynamic) }
+  .data : { *(.data) }
+}
+"#,
+    )
+    .expect("script parses");
+    let a = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 4])
+        .sym("own", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        // Symtab: null(0), sections(1, 2), own(3).
+        .reloc(1, 0, 3, rt::R_386_32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let objs = alloc::vec![parse_lds_object("own.o", a).expect("parses")];
+    let opts = LdsOptions {
+        emit: LdsEmit::Dyn,
+        shared: true,
+        ..Default::default()
+    };
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let rel = elf32_section(&res.image, ".rel.dyn");
+    assert_eq!((rel.1, rel.6), (SHT_REL, 8), "{rel:?}");
+    assert!(rel.4 >= 8, "{rel:?}");
 }
 
 #[test]
@@ -4451,6 +4517,53 @@ fn aarch64_got_symbol_follows_ld() {
         };
         assert_eq!(shndx, want, "{emit:?}: section the entry names");
     }
+}
+
+/// A static aarch64 image gives each symbol a GOT reference names a `.got`
+/// slot holding its address, after the reserved header, and keeps the
+/// `adrp` + `ldr` reading it, as GNU ld 2.46.1 links it.
+#[test]
+fn a_static_aarch64_image_fills_a_got_slot_per_referenced_symbol() {
+    let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
+    // adrp x0, :got:target; ldr x0, [x0, :got_lo12:target]; ret
+    let code: Vec<u8> = [0x9000_0000u32, 0xf940_0000, 0xd65f_03c0]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+    let a = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &code)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .sym("target", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        // Symtab: null(0), sections(1, 2), _start(3), target(4).
+        .reloc(0, 0, 4, rt::R_AARCH64_ADR_GOT_PAGE, 0)
+        .reloc(0, 4, 4, rt::R_AARCH64_LD64_GOT_LO12_NC, 0)
+        .build(EM_AARCH64);
+    let objs = alloc::vec![parse_lds_object("a.o", a).expect("parses")];
+    let res = link_with_script(&script, objs, &LdsOptions::default()).expect("links");
+    let (got, bytes) = image_section(&res.image, ".got");
+    let (data, _) = image_section(&res.image, ".data");
+    assert_eq!(bytes.len(), 16, "the header and one slot");
+    assert_eq!(
+        u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+        data,
+        "the slot holds `target`"
+    );
+    let (text, insns) = image_section(&res.image, ".text");
+    let word = |k: usize| u32::from_le_bytes(insns[4 * k..4 * k + 4].try_into().unwrap());
+    let imm = ((word(0) >> 29) & 3) | ((word(0) >> 5) & 0x7_ffff) << 2;
+    let slot = got + 8;
+    assert_eq!(
+        (text & !0xfff) + ((imm as u64) << 12),
+        slot & !0xfff,
+        "adrp reaches the slot's page"
+    );
+    assert_eq!(word(1) & 0xffc0_0000, 0xf940_0000, "the ldr stays a load");
+    assert_eq!(
+        ((word(1) >> 10) & 0xfff) as u64 * 8,
+        slot & 0xfff,
+        "ldr reads the slot"
+    );
 }
 
 /// bfd emits no `_GLOBAL_OFFSET_TABLE_` where the link built no
@@ -5082,4 +5195,2603 @@ fn an_elf32_group_parses_and_deduplicates() {
         1,
         "one thunk body: {text:02x?}"
     );
+}
+
+// ------------------------------------- shared-object symbol binding
+
+/// A `-shared` layout naming every dynamic table, the PLT and the GOT,
+/// with symbols the script defines, plain, provided and hidden.
+const SHARED_SCRIPT: &str = r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rela.dyn : { *(.rela.*) }
+  .plt : { *(.plt) *(.plt.*) }
+  .text : { *(.text*) }
+  .rodata : { *(.rodata*) }
+  . = ALIGN(0x10000);
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) *(.igot) }
+  .got.plt : { *(.got.plt) *(.igot.plt) }
+  .data : { *(.data*) }
+  mysec : { *(mysec) }
+  .bss : { *(.bss*) }
+  script_sym = .;
+  hid_ref_sym = .;
+  prot_ref_sym = .;
+  PROVIDE(prov_sym = .);
+  HIDDEN(hid_sym = .);
+}
+"#;
+
+fn shared_opts(machine: u16) -> LdsOptions {
+    LdsOptions {
+        emit: LdsEmit::Dyn,
+        shared: true,
+        max_page_size: if machine == EM_AARCH64 {
+            0x10000
+        } else {
+            0x1000
+        },
+        ..Default::default()
+    }
+}
+
+/// `.dynsym` as `(name, st_info, st_other)`, in table order.
+fn dynsym_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
+    let (_, syms) = image_section(image, ".dynsym");
+    let (_, strtab) = image_section(image, ".dynstr");
+    syms.as_chunks::<24>()
+        .0
+        .iter()
+        .map(|e| {
+            let name = u32::from_le_bytes(e[..4].try_into().unwrap()) as usize;
+            (strz(&strtab, name), e[4], e[5])
+        })
+        .collect()
+}
+
+/// System V gABI, symbol visibility: a global takes the most
+/// constraining visibility among its definition and its references.
+/// Measured against GNU ld 2.46.1 `-shared -T`: a definition one
+/// reference declares hidden stays out of `.dynsym`, one a reference
+/// or its definition declares protected is exported as protected, and
+/// so are the `__start_` / `__stop_` bounds; a script symbol follows
+/// its references the same way.
+#[test]
+fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3; 16],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sec("mysec", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("pfunc", STB_GLOBAL, STT_FUNC, 0, 4, 1)
+        .vis(STV_PROTECTED)
+        .sym("u", STB_GLOBAL, STT_FUNC, 0, 8, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .build(EM_X86_64);
+    let names = [
+        ("data", STV_HIDDEN),
+        ("func", STV_PROTECTED),
+        ("__start_mysec", STV_DEFAULT),
+        ("hid_ref_sym", STV_HIDDEN),
+        ("prot_ref_sym", STV_PROTECTED),
+        ("script_sym", STV_DEFAULT),
+    ];
+    let mut refs = TestObj::new().sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 48]);
+    for (k, (name, vis)) in names.iter().enumerate() {
+        // Symtab: null(0), the section(1), then the names in order.
+        refs = refs
+            .sym(name, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .vis(*vis)
+            .reloc(0, 8 * k as u64, 2 + k as u32, rt::R_X86_64_64, 0);
+    }
+    let objs = alloc::vec![
+        parse_lds_object("defs.o", defs).expect("parses"),
+        parse_lds_object("refs.o", refs.build(EM_X86_64)).expect("parses"),
+    ];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let dynsym = dynsym_entries(&res.image);
+    let vis = |name: &str| dynsym.iter().find(|e| e.0 == name).map(|e| e.2 & 0x3);
+    for (name, want) in [
+        ("func", Some(STV_PROTECTED)),
+        ("pfunc", Some(STV_PROTECTED)),
+        ("u", Some(STV_DEFAULT)),
+        ("data", None),
+        ("__start_mysec", Some(STV_PROTECTED)),
+        ("hid_ref_sym", None),
+        ("prot_ref_sym", Some(STV_PROTECTED)),
+        ("script_sym", Some(STV_DEFAULT)),
+        ("prov_sym", None),
+        ("hid_sym", None),
+    ] {
+        assert_eq!(vis(name), want, "{name}");
+    }
+}
+
+/// A shared object imports a default-visibility weak reference nothing
+/// defines, as GNU ld 2.46.1 does: a WEAK UND `.dynsym` row named by the GOT
+/// slot's GLOB_DAT and the address field's R_X86_64_64, so the loader writes
+/// 0 or another component's definition rather than the load base.
+#[test]
+fn a_shared_object_imports_an_undefined_weak_reference() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let a = TestObj::new()
+        // mov w@GOTPCREL(%rip), %rax; ret
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("w", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        // Symtab: null(0), sections(1, 2), w(3).
+        .reloc(0, 3, 3, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .reloc(1, 0, 3, rt::R_X86_64_64, 0)
+        .build(EM_X86_64);
+    let objs = alloc::vec![parse_lds_object("w.o", a).expect("parses")];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let row = dynsym_entries(&res.image).into_iter().find(|e| e.0 == "w");
+    assert_eq!(
+        row.map(|e| (e.1, e.2)),
+        Some(((STB_WEAK << 4) | STT_NOTYPE, STV_DEFAULT))
+    );
+    let named: Vec<u32> = (dyn_relocs(&res.image).into_iter())
+        .filter(|r| r.2 == "w")
+        .map(|r| r.1)
+        .collect();
+    assert!(
+        named.contains(&rt::R_X86_64_GLOB_DAT) && named.contains(&rt::R_X86_64_64),
+        "{named:?}"
+    );
+}
+
+/// `.symtab` as `(name, st_info, st_other)`, in table order.
+fn symtab_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
+    let (_, syms) = image_section(image, ".symtab");
+    let (_, strtab) = image_section(image, ".strtab");
+    (syms.as_chunks::<24>().0.iter())
+        .map(|e| {
+            let name = u32::from_le_bytes(e[..4].try_into().unwrap()) as usize;
+            (strz(&strtab, name), e[4], e[5])
+        })
+        .collect()
+}
+
+/// In a shared object's `.symtab`, a global forced local by a hidden or
+/// internal visibility is written LOCAL DEFAULT, and a definition a
+/// reference declares protected GLOBAL PROTECTED, as GNU ld 2.46.1 writes
+/// them.
+#[test]
+fn a_shared_objects_symtab_states_the_merged_visibility_as_gnu_ld_does() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3; 16],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sym("hfunc", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .vis(STV_HIDDEN)
+        .sym("ifunc_", STB_GLOBAL, STT_FUNC, 0, 4, 1)
+        .vis(STV_INTERNAL)
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 8, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .build(EM_X86_64);
+    let refs = TestObj::new()
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 16])
+        // Symtab: null(0), the section(1), data(2), func(3).
+        .sym("data", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+        .vis(STV_HIDDEN)
+        .sym("func", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+        .vis(STV_PROTECTED)
+        .reloc(0, 0, 2, rt::R_X86_64_64, 0)
+        .reloc(0, 8, 3, rt::R_X86_64_64, 0)
+        .build(EM_X86_64);
+    let objs = alloc::vec![
+        parse_lds_object("defs.o", defs).expect("parses"),
+        parse_lds_object("refs.o", refs).expect("parses"),
+    ];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let symtab = symtab_entries(&res.image);
+    let row = |name: &str| {
+        let e = symtab
+            .iter()
+            .find(|e| e.0 == name)
+            .unwrap_or_else(|| panic!("{name}"));
+        (e.1 >> 4, e.2 & 0x3)
+    };
+    for (name, want) in [
+        ("hfunc", (STB_LOCAL, STV_DEFAULT)),
+        ("ifunc_", (STB_LOCAL, STV_DEFAULT)),
+        ("data", (STB_LOCAL, STV_DEFAULT)),
+        ("func", (STB_GLOBAL, STV_PROTECTED)),
+    ] {
+        assert_eq!(row(name), want, "{name}");
+    }
+}
+
+/// `.rela.dyn` as `(offset, type, symbol, addend)`, the symbol by name.
+fn dyn_relocs(image: &[u8]) -> Vec<(u64, u32, String, i64)> {
+    let syms = dynsym_entries(image);
+    let (_, rela) = image_section(image, ".rela.dyn");
+    let word = |c: &[u8], at: usize| u64::from_le_bytes(c[at..at + 8].try_into().unwrap());
+    (rela.as_chunks::<24>().0.iter())
+        .map(|c| {
+            let info = word(c, 8);
+            let sym = syms.get((info >> 32) as usize).map(|s| s.0.clone());
+            (
+                word(c, 0),
+                info as u32,
+                sym.unwrap_or_default(),
+                word(c, 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// The address of output section `name`, if the image has it.
+fn section_addr(image: &[u8], name: &str) -> Option<u64> {
+    readelf_sections(image)
+        .iter()
+        .find(|s| s.0 == name)
+        .map(|s| s.2)
+}
+
+fn u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+}
+
+/// `-shared` options under `-Bsymbolic` (`Some(true)`),
+/// `-Bsymbolic-functions` (`Some(false)`) or neither.
+fn binding_opts(machine: u16, symbolic: Option<bool>) -> LdsOptions {
+    LdsOptions {
+        symbolic: symbolic == Some(true),
+        symbolic_functions: symbolic == Some(false),
+        ..shared_opts(machine)
+    }
+}
+
+/// A unit calling `func`, loading `data`'s address through the GOT,
+/// and holding `&func` and `&data + 4` in `.data`: `.text` is the call,
+/// the GOT load, a return, then `func` at 16; `.data` is `data` and
+/// the two pointers. Symtab: null(0), sections(1, 2), func(3),
+/// data(4), caller(5).
+fn preemption_unit(machine: u16) -> Vec<u8> {
+    let mut text = [0u8; 20];
+    let (call, got_page, got_lo, abs) = if machine == EM_AARCH64 {
+        for (k, w) in [0x9400_0000u32, 0x9000_0000, 0xf940_0000, 0xd65f_03c0]
+            .iter()
+            .enumerate()
+        {
+            text[4 * k..4 * k + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        text[16..20].copy_from_slice(&0xd65f_03c0u32.to_le_bytes());
+        (
+            (0, rt::R_AARCH64_CALL26, 0),
+            Some((4, rt::R_AARCH64_ADR_GOT_PAGE)),
+            (8, rt::R_AARCH64_LD64_GOT_LO12_NC, 0),
+            rt::R_AARCH64_ABS64,
+        )
+    } else {
+        text[..12].copy_from_slice(&[0xe8, 0, 0, 0, 0, 0x48, 0x8b, 0x05, 0, 0, 0, 0]);
+        text[12] = 0xc3;
+        text[16] = 0xc3;
+        (
+            (1, rt::R_X86_64_PLT32, -4),
+            None,
+            (8, rt::R_X86_64_REX_GOTPCRELX, -4),
+            rt::R_X86_64_64,
+        )
+    };
+    let mut o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 24])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 16, 4)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .sym("caller", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+        .reloc(0, call.0, 3, call.1, call.2)
+        .reloc(0, got_lo.0, 4, got_lo.1, got_lo.2)
+        .reloc(1, 8, 3, abs, 0)
+        .reloc(1, 16, 4, abs, 4);
+    if let Some((at, rtype)) = got_page {
+        o = o.reloc(0, at, 4, rtype, 0);
+    }
+    o.build(machine)
+}
+
+fn link_preemption(machine: u16, symbolic: Option<bool>) -> LdsResult {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let objs = alloc::vec![parse_lds_object("u.o", preemption_unit(machine)).expect("parses")];
+    link_with_script(&script, objs, &binding_opts(machine, symbolic)).expect("links")
+}
+
+/// Where the call at the start of `.text` branches to.
+fn call_target(machine: u16, image: &[u8]) -> u64 {
+    let (text_addr, text) = image_section(image, ".text");
+    if machine == EM_AARCH64 {
+        let imm = (u32_at(&text, 0) & 0x03ff_ffff) << 6;
+        return text_addr.wrapping_add((((imm as i32) >> 6) as i64 * 4) as u64);
+    }
+    let disp = u32_at(&text, 1) as i32 as i64;
+    (text_addr as i64 + 5 + disp) as u64
+}
+
+/// GNU ld 2.46.1 `-shared -T`, measured with gcc objects on both
+/// targets: a call to the object's own default-visibility function goes
+/// through a lazy PLT entry past the header, and the entry through a
+/// `.got.plt` slot a `JUMP_SLOT` naming the definition's own `.dynsym`
+/// entry binds; the function takes no `.got` slot. `-Bsymbolic` and
+/// `-Bsymbolic-functions` call the function in place.
+#[test]
+fn a_shared_objects_call_to_its_own_function_takes_a_lazy_plt_entry() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let res = link_preemption(machine, None);
+        let plt = section_addr(&res.image, ".plt").expect("a .plt");
+        let entry = plt + if machine == EM_AARCH64 { 32 } else { 16 };
+        assert_eq!(call_target(machine, &res.image), entry, "{machine}");
+        let gotplt = section_addr(&res.image, ".got.plt").expect("a .got.plt");
+        let slot = gotplt + 24;
+        let (_, stubs) = image_section(&res.image, ".plt");
+        let stub = &stubs[(entry - plt) as usize..];
+        let through = if machine == EM_AARCH64 {
+            let page = ((u32_at(stub, 0) >> 29 & 3) | (u32_at(stub, 0) >> 5 & 0x7ffff) << 2) as u64;
+            (entry & !0xfff) + (page << 12) + ((u32_at(stub, 4) >> 10 & 0xfff) as u64) * 8
+        } else {
+            (entry as i64 + 6 + u32_at(stub, 2) as i32 as i64) as u64
+        };
+        assert_eq!(through, slot, "{machine}: the entry loads func's slot");
+        let relocs = dyn_relocs(&res.image);
+        let jump_slot = if machine == EM_AARCH64 {
+            rt::R_AARCH64_JUMP_SLOT
+        } else {
+            rt::R_X86_64_JUMP_SLOT
+        };
+        assert!(
+            relocs.contains(&(slot, jump_slot, String::from("func"), 0)),
+            "{machine}: {relocs:?}"
+        );
+        let (_, got) = image_section(&res.image, ".got");
+        let header = if machine == EM_AARCH64 { 8 } else { 0 };
+        assert_eq!(got.len(), header + 8, "{machine}: one .got slot, data's");
+        for symbolic in [Some(true), Some(false)] {
+            let res = link_preemption(machine, symbolic);
+            let func = find_sym(&image_symbols(&res.image), "func");
+            assert_eq!(call_target(machine, &res.image), func, "{symbolic:?}");
+        }
+    }
+}
+
+/// GNU ld 2.46.1 keeps a GOT reference to a preemptible definition on
+/// its slot, bound by `GLOB_DAT` against the definition, and writes the
+/// slot zero; x86-64 does not relax the load to an address.
+/// `-Bsymbolic` relaxes it, and `-Bsymbolic-functions` keeps an
+/// object's slot.
+#[test]
+fn a_got_reference_to_a_preemptible_definition_keeps_its_slot() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let glob_dat = if machine == EM_AARCH64 {
+            rt::R_AARCH64_GLOB_DAT
+        } else {
+            rt::R_X86_64_GLOB_DAT
+        };
+        for symbolic in [None, Some(false), Some(true)] {
+            let res = link_preemption(machine, symbolic);
+            let relocs = dyn_relocs(&res.image);
+            let data_slot = relocs
+                .iter()
+                .find(|r| r.1 == glob_dat && r.2 == "data")
+                .map(|r| r.0);
+            assert_eq!(
+                data_slot.is_some(),
+                symbolic != Some(true),
+                "{machine} {symbolic:?}: {relocs:?}"
+            );
+            let (_, text) = image_section(&res.image, ".text");
+            if machine == EM_X86_64 {
+                let kept = text[6] == 0x8b;
+                assert_eq!(kept, symbolic != Some(true), "{symbolic:?}: mov kept");
+            }
+            if let Some(slot) = data_slot {
+                let (got, body) = image_section(&res.image, ".got");
+                let at = (slot - got) as usize;
+                assert_eq!(body[at..at + 8], [0; 8], "{machine}: the loader fills it");
+            }
+        }
+    }
+}
+
+/// GNU ld 2.46.1 leaves an address-width field naming a preemptible
+/// definition to an `R_X86_64_64` / `R_AARCH64_ABS64` against the
+/// symbol, with the addend, and writes nothing in place.
+/// `-Bsymbolic-functions` takes a `RELATIVE` for the function only.
+#[test]
+fn an_address_field_names_a_preemptible_definition() {
+    for machine in [EM_X86_64, EM_AARCH64] {
+        let (abs, relative) = if machine == EM_AARCH64 {
+            (rt::R_AARCH64_ABS64, rt::R_AARCH64_RELATIVE)
+        } else {
+            (rt::R_X86_64_64, rt::R_X86_64_RELATIVE)
+        };
+        for (symbolic, func_form, data_form) in [
+            (None, abs, abs),
+            (Some(false), relative, abs),
+            (Some(true), relative, relative),
+        ] {
+            let res = link_preemption(machine, symbolic);
+            let (data_addr, data) = image_section(&res.image, ".data");
+            let relocs = dyn_relocs(&res.image);
+            let at = |off: u64| relocs.iter().find(|r| r.0 == data_addr + off).cloned();
+            let (_, ftype, fname, _) = at(8).expect("&func has a dynamic entry");
+            let (_, dtype, dname, daddend) = at(16).expect("&data + 4 has one");
+            assert_eq!((ftype, dtype), (func_form, data_form), "{symbolic:?}");
+            if func_form == abs {
+                assert_eq!(fname, "func");
+            }
+            if data_form == abs {
+                assert_eq!((dname.as_str(), daddend), ("data", 4));
+                assert_eq!(data[16..24], [0; 8], "{machine}: nothing in place");
+            }
+        }
+    }
+}
+
+/// GNU ld 2.46.1 on a field neither a stub, a slot nor a dynamic
+/// relocation can redirect: x86-64 refuses a PC-relative one in a
+/// read-only section and leaves one in a writable section to an
+/// `R_X86_64_PC32` against the symbol; aarch64 refuses `adrp` and binds
+/// a PC-relative data field directly. Under `-Bsymbolic` each binds
+/// directly.
+#[test]
+fn a_pc_relative_field_follows_ld_against_a_preemptible_definition() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = |machine: u16| {
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0; 4])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+            .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            .build(machine)
+    };
+    let site = |machine: u16, sec: &str, rtype: u32| {
+        let flags = if sec == ".text" {
+            SHF_ALLOC | SHF_EXECINSTR
+        } else {
+            SHF_ALLOC | SHF_WRITE
+        };
+        let body: &[u8] = if machine == EM_AARCH64 && sec == ".text" {
+            &[0, 0, 0, 0x90]
+        } else {
+            &[0x48, 0x8d, 0x05, 0, 0, 0, 0, 0]
+        };
+        let at = if machine == EM_X86_64 && sec == ".text" {
+            3
+        } else {
+            0
+        };
+        TestObj::new()
+            .sec(sec, SHT_PROGBITS, flags, 4, body)
+            .sym("data", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+            .reloc(0, at, 2, rtype, 0)
+            .build(machine)
+    };
+    let link = |machine: u16, sec: &str, rtype: u32, symbolic: bool| {
+        let objs = alloc::vec![
+            parse_lds_object("defs.o", defs(machine)).expect("parses"),
+            parse_lds_object("site.o", site(machine, sec, rtype)).expect("parses"),
+        ];
+        let opts = binding_opts(machine, symbolic.then_some(true));
+        link_with_script(&script, objs, &opts)
+    };
+    for (machine, sec, rtype) in [
+        (EM_X86_64, ".text", rt::R_X86_64_PC32),
+        (EM_AARCH64, ".text", rt::R_AARCH64_ADR_PREL_PG_HI21),
+    ] {
+        let e = alloc::format!("{}", link(machine, sec, rtype, false).expect_err("refused"));
+        assert!(
+            e.contains("site.o(.text+0x")
+                && e.contains("against symbol `data`")
+                && e.contains("when making a shared object")
+                && e.contains("recompile with -fPIC"),
+            "{e}"
+        );
+        link(machine, sec, rtype, true).expect("-Bsymbolic binds it");
+    }
+    let res = link(EM_X86_64, ".data", rt::R_X86_64_PC32, false).expect("links");
+    let relocs = dyn_relocs(&res.image);
+    assert!(
+        relocs
+            .iter()
+            .any(|r| r.1 == rt::R_X86_64_PC32 && r.2 == "data"),
+        "{relocs:?}"
+    );
+    let res = link(EM_AARCH64, ".data", rt::R_AARCH64_PREL32, false).expect("links");
+    assert!(
+        !readelf_sections(&res.image)
+            .iter()
+            .any(|s| s.0 == ".rela.dyn" && s.3 > 0),
+        "aarch64 binds the field in place"
+    );
+}
+
+/// GNU ld 2.46.1 binds every reference to a protected, hidden or
+/// internal definition, and to one the version script makes local,
+/// directly: the call reaches the function, the GOT load relaxes, and
+/// the pointer takes a `RELATIVE`.
+#[test]
+fn a_definition_the_loader_cannot_preempt_binds_directly() {
+    let base = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let local =
+        alloc::format!("{SHARED_SCRIPT}\nVERSION {{ V1 {{ global: caller; local: *; }}; }}");
+    let local = parse_linker_script(&local).expect("script parses");
+    let cases: [(&LinkerScript, u8); 4] = [
+        (&base, STV_PROTECTED),
+        (&base, STV_HIDDEN),
+        (&base, STV_INTERNAL),
+        (&local, STV_DEFAULT),
+    ];
+    for (script, vis) in cases {
+        let unit = preemption_unit(EM_X86_64);
+        let mut o = parse_lds_object("u.o", unit).expect("parses");
+        for s in o
+            .symbols
+            .iter_mut()
+            .filter(|s| s.name == "func" || s.name == "data")
+        {
+            s.other = vis;
+        }
+        let res = link_with_script(script, alloc::vec![o], &shared_opts(EM_X86_64)).expect("links");
+        let func = find_sym(&image_symbols(&res.image), "func");
+        assert_eq!(call_target(EM_X86_64, &res.image), func, "vis {vis}");
+        let (_, text) = image_section(&res.image, ".text");
+        assert_eq!(text[6], 0x8d, "vis {vis}: the load relaxes");
+        let relocs = dyn_relocs(&res.image);
+        assert!(
+            relocs.iter().all(|r| r.1 == rt::R_X86_64_RELATIVE),
+            "vis {vis}: {relocs:?}"
+        );
+    }
+}
+
+/// GNU ld 2.46.1 makes a symbol the script defines preemptible when it
+/// is exported, provided or not, and binds a hidden one directly. Under
+/// `-Bsymbolic-functions` an untyped script symbol binds directly, as
+/// bfd counts only an object as data.
+#[test]
+fn a_script_symbol_is_preemptible_unless_hidden() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let names = ["script_sym", "prov_sym", "hid_sym"];
+    let mut o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc3; 4],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 24]);
+    for (k, name) in names.iter().enumerate() {
+        o = o.sym(name, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0).reloc(
+            1,
+            8 * k as u64,
+            3 + k as u32,
+            rt::R_X86_64_64,
+            0,
+        );
+    }
+    let unit = o.build(EM_X86_64);
+    for (symbolic, want) in [
+        (None, [true, true, false]),
+        (Some(false), [false, false, false]),
+    ] {
+        let objs = alloc::vec![parse_lds_object("s.o", unit.clone()).expect("parses")];
+        let opts = binding_opts(EM_X86_64, symbolic);
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let relocs = dyn_relocs(&res.image);
+        for (name, preempted) in names.iter().zip(want) {
+            let named = relocs
+                .iter()
+                .any(|r| r.1 == rt::R_X86_64_64 && r.2 == *name);
+            assert_eq!(named, preempted, "{name} {symbolic:?}: {relocs:?}");
+        }
+    }
+}
+
+/// A `.note.badc` body listing `names` as data the unit reaches through
+/// a symbol (record 12).
+fn badc_extern_data_note(names: &[&str]) -> Vec<u8> {
+    let mut desc: Vec<u8> = Vec::new();
+    for n in names {
+        desc.extend_from_slice(n.as_bytes());
+        desc.push(0);
+    }
+    let mut note = Vec::new();
+    for w in [5u32, desc.len() as u32, 12] {
+        note.extend_from_slice(&w.to_le_bytes());
+    }
+    note.extend_from_slice(b"badc\0\0\0\0");
+    note.extend_from_slice(&desc);
+    note.resize(note.len().next_multiple_of(4), 0);
+    note
+}
+
+/// badc reaches an aarch64 object through an `adrp` / `add` pair its
+/// note lists, which a link rewrites into a load of the object's GOT
+/// slot where the object binds at load time. A preemptible definition
+/// takes the rewrite and a `GLOB_DAT`; a load through the pair's low
+/// bits is refused, since the pair's page is the slot's.
+#[test]
+fn a_noted_page_pair_loads_a_preemptible_definitions_slot() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let unit = |second: u32, rtype: u32| {
+        let mut text = Vec::new();
+        for w in [0x9000_0001u32, second, 0xd65f_03c0] {
+            text.extend_from_slice(&w.to_le_bytes());
+        }
+        TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+            .sec(".note.badc", SHT_NOTE, 0, 4, &badc_extern_data_note(&["g"]))
+            .sym("g", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+            // Symtab: null(0), sections(1..=3), g(4).
+            .reloc(0, 0, 4, rt::R_AARCH64_ADR_PREL_PG_HI21, 0)
+            .reloc(0, 4, 4, rtype, 0)
+            .build(EM_AARCH64)
+    };
+    // add x1, x1, :lo12:g, then ldr w1, [x1, :lo12:g].
+    let link = |second: u32, rtype: u32| {
+        let objs = alloc::vec![parse_lds_object("n.o", unit(second, rtype)).expect("parses")];
+        link_with_script(&script, objs, &shared_opts(EM_AARCH64))
+    };
+    let res = link(0x9100_0021, rt::R_AARCH64_ADD_ABS_LO12_NC).expect("links");
+    let (text_addr, text) = image_section(&res.image, ".text");
+    let relocs = dyn_relocs(&res.image);
+    let slot = relocs
+        .iter()
+        .find(|r| r.1 == rt::R_AARCH64_GLOB_DAT && r.2 == "g")
+        .unwrap_or_else(|| panic!("g's slot: {relocs:?}"))
+        .0;
+    let adrp = u32_at(&text, 0);
+    let page = ((adrp >> 29 & 3) | (adrp >> 5 & 0x7ffff) << 2) as u64;
+    assert_eq!(
+        (text_addr & !0xfff) + (page << 12),
+        slot & !0xfff,
+        "adrp takes the slot's page"
+    );
+    let ldr = 0xf940_0021 | (((slot & 0xfff) / 8) as u32) << 10;
+    assert_eq!(u32_at(&text, 4), ldr, "the add becomes ldr x1, [x1, slot]");
+    let e = link(0xb940_0021, rt::R_AARCH64_LDST32_ABS_LO12_NC).expect_err("refused");
+    assert!(
+        alloc::format!("{e}").contains("recompile with -fPIC"),
+        "{e}"
+    );
+}
+
+/// A script placing every section an i386 dynamic link builds.
+const I386_DYN_SCRIPT: &str = r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rel.dyn : { *(.rel.*) }
+  .plt : { *(.plt) }
+  .text : { *(.text*) }
+  . = ALIGN(0x1000);
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) }
+  .got.plt : { *(.got.plt) }
+  .data : { *(.data*) }
+  .bss : { *(.bss*) }
+}
+"#;
+
+/// `.rel.dyn` of an ELF32 image as `(offset, type, symbol)`.
+fn elf32_dyn_relocs(image: &[u8]) -> Vec<(u64, u32, String)> {
+    let names = elf32_symbols_of(image, ".dynsym", ".dynstr");
+    let Some(rel) = elf32_sections(image)
+        .into_iter()
+        .find(|s| s.0 == ".rel.dyn")
+    else {
+        return Vec::new();
+    };
+    let body = &image[rel.3 as usize..(rel.3 + rel.4) as usize];
+    (body.as_chunks::<8>().0.iter())
+        .map(|c| {
+            let info = u32_at(c, 4);
+            let sym = names.get((info >> 8) as usize).map(|s| s.0.clone());
+            (u32_at(c, 0) as u64, info & 0xff, sym.unwrap_or_default())
+        })
+        .collect()
+}
+
+/// `(name, value)` of every entry of the ELF32 symbol table `table`.
+fn elf32_symbols_of(image: &[u8], table: &str, strings: &str) -> Vec<(String, u64)> {
+    let secs = elf32_sections(image);
+    let (Some(t), Some(s)) = (
+        secs.iter().find(|s| s.0 == table),
+        secs.iter().find(|s| s.0 == strings),
+    ) else {
+        return Vec::new();
+    };
+    let names = &image[s.3 as usize..(s.3 + s.4) as usize];
+    let body = &image[t.3 as usize..(t.3 + t.4) as usize];
+    (body.as_chunks::<16>().0.iter())
+        .map(|e| (strz(names, u32_at(e, 0) as usize), u32_at(e, 4) as u64))
+        .collect()
+}
+
+fn i32_at(bytes: &[u8], at: usize) -> i64 {
+    u32_at(bytes, at) as i32 as i64
+}
+
+/// Opcode and ModRM of the loads [`i386_got_unit`] holds, in order.
+const I386_GOT_INSNS: [[u8; 2]; 10] = [
+    [0x8b, 0x83],
+    [0x85, 0x8b],
+    [0x03, 0x8b],
+    [0x3b, 0x93],
+    [0xff, 0x93],
+    [0xff, 0xa3],
+    [0xff, 0xb3],
+    [0x8b, 0x83],
+    [0x8b, 0x83],
+    [0x8b, 0x83],
+];
+
+/// i386 loads through the GOT as gas encodes them, each with `rtype`:
+/// `mov`, `test`, `add`, `cmp` and `push` of `loc`, a call and a jump
+/// through `fn`'s slot, `mov` of `loc + 4`'s slot, and `mov` of an
+/// absolute `abs` and of a hidden `hid`. `fn` is at 61 of `.text`;
+/// `.data` holds `loc` and, at 8, `hid`. Symtab: null(0), sections(1,
+/// 2), _start(3), fn(4), loc(5), hid(6), abs(7).
+fn i386_got_unit(rtype: u32) -> Vec<u8> {
+    let mut text = Vec::new();
+    for i in I386_GOT_INSNS {
+        text.extend_from_slice(&i);
+        text.extend_from_slice(&[0; 4]);
+    }
+    text.extend_from_slice(&[0xc3, 0xc3]);
+    let mut o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 12])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 61)
+        .sym("fn", STB_GLOBAL, STT_FUNC, 0, 61, 1)
+        .sym("loc", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .sym("hid", STB_GLOBAL, STT_OBJECT, 1, 8, 4)
+        .vis(STV_HIDDEN)
+        .sym("abs", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x1234, 0);
+    for (k, sym, addend) in [
+        (0, 5, 0),
+        (1, 5, 0),
+        (2, 5, 0),
+        (3, 5, 0),
+        (4, 4, 0),
+        (5, 4, 0),
+        (6, 5, 0),
+        (7, 5, 4),
+        (8, 7, 0),
+        (9, 6, 0),
+    ] {
+        o = o.reloc(0, 6 * k + 2, sym, rtype, addend);
+    }
+    o.build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// `-shared` (`Some(true)`), `-pie` (`Some(false)`) or a
+/// position-dependent executable (`None`).
+fn i386_opts(pic: Option<bool>) -> LdsOptions {
+    LdsOptions {
+        emit: if pic.is_some() {
+            LdsEmit::Dyn
+        } else {
+            LdsEmit::Exec
+        },
+        shared: pic == Some(true),
+        ..Default::default()
+    }
+}
+
+fn link_i386_with(objs: Vec<(&str, Vec<u8>)>, opts: &LdsOptions) -> Result<LdsResult, C5Error> {
+    let script = parse_linker_script(I386_DYN_SCRIPT).expect("script parses");
+    let objs = (objs.into_iter())
+        .map(|(n, b)| parse_lds_object(n, b).expect("parses"))
+        .collect();
+    link_with_script(&script, objs, opts)
+}
+
+/// [`link_i386_with`] under [`i386_opts`], a shared object linked
+/// `-Bsymbolic` so that its definitions bind in place.
+fn link_i386(objs: Vec<(&str, Vec<u8>)>, pic: Option<bool>) -> Result<LdsResult, C5Error> {
+    let opts = LdsOptions {
+        symbolic: pic == Some(true),
+        ..i386_opts(pic)
+    };
+    link_i386_with(objs, &opts)
+}
+
+/// The address of each of `names` in the image's `.symtab`.
+fn i386_addrs<const N: usize>(image: &[u8], names: [&str; N]) -> [i64; N] {
+    let syms = elf32_symbols_of(image, ".symtab", ".strtab");
+    names.map(|n| {
+        let s = syms.iter().find(|s| s.0 == n);
+        s.unwrap_or_else(|| panic!("no `{n}'")).1 as i64
+    })
+}
+
+/// GNU ld 2.46.1 relaxes `R_386_GOT32X` loads of a symbol the link
+/// resolves locally, measured on gas's encodings of each form: a
+/// position-dependent executable turns `mov`, `test`, an ALU op and
+/// `push` into immediates and a call or jump into a direct branch; a
+/// position-independent image turns only `mov` into `lea` of the
+/// GOT-relative offset, and `mov` of an absolute symbol into an
+/// immediate, and keeps the other loads on a slot `R_386_RELATIVE`
+/// fills. A nonzero addend keeps the slot in both.
+#[test]
+fn i386_got32x_loads_relax_as_gnu_ld_relaxes_them() {
+    for pic in [None, Some(false), Some(true)] {
+        let res = link_i386(alloc::vec![("u.o", i386_got_unit(rt::R_386_GOT32X))], pic)
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [t, f, l, h] = i386_addrs(img, ["_start", "fn", "loc", "hid"]);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let got = elf32_section(img, ".got");
+        assert_eq!(got.4, 4, "{pic:?}: one slot, for `loc + 4`");
+        let s = got.2 as i64;
+        let imm = |op: [u8; 2], v: i64| [op[0], op[1]].into_iter().chain((v as u32).to_le_bytes());
+        let mut want: Vec<u8> = Vec::new();
+        if pic.is_none() {
+            want.extend(imm([0xc7, 0xc0], l));
+            want.extend(imm([0xf7, 0xc1], l));
+            want.extend(imm([0x81, 0xc1], l));
+            want.extend(imm([0x81, 0xfa], l));
+        } else {
+            want.extend(imm([0x8d, 0x83], l - g));
+            want.extend(imm([0x85, 0x8b], s - g));
+            want.extend(imm([0x03, 0x8b], s - g));
+            want.extend(imm([0x3b, 0x93], s - g));
+        }
+        want.extend(imm([0x67, 0xe8], f - (t + 30)));
+        want.push(0xe9);
+        want.extend(((f - (t + 35)) as u32).to_le_bytes());
+        want.push(0x90);
+        if pic.is_none() {
+            want.extend(imm([0x2e, 0x68], l));
+        } else {
+            want.extend(imm([0xff, 0xb3], s - g));
+        }
+        want.extend(imm([0x8b, 0x83], s + 4 - g));
+        want.extend(imm([0xc7, 0xc0], 0x1234));
+        if pic.is_none() {
+            want.extend(imm([0xc7, 0xc0], h));
+        } else {
+            want.extend(imm([0x8d, 0x83], h - g));
+        }
+        want.extend([0xc3, 0xc3]);
+        assert_eq!(elf32_body(img, ".text"), want, "{pic:?}");
+        let slot = u32_at(elf32_body(img, ".got"), 0) as i64;
+        assert_eq!(slot, l, "{pic:?}: the slot holds `loc`");
+        if pic.is_some() {
+            let relocs = elf32_dyn_relocs(img);
+            assert_eq!(
+                relocs,
+                [(s as u64, rt::R_386_RELATIVE, String::new())],
+                "{pic:?}"
+            );
+        }
+    }
+}
+
+/// GNU ld 2.46.1 keeps every `R_386_GOT32` load on a slot: the field is
+/// the slot's offset from `_GLOBAL_OFFSET_TABLE_` plus the addend and
+/// the slot holds the address. A position-independent image fills each
+/// slot with an `R_386_RELATIVE` but the absolute symbol's, which holds
+/// a number, as bfd leaves it in a PIE.
+#[test]
+fn i386_got32_keeps_every_load_on_a_slot() {
+    for pic in [None, Some(false), Some(true)] {
+        let res = link_i386(alloc::vec![("u.o", i386_got_unit(rt::R_386_GOT32))], pic)
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [f, l, h] = i386_addrs(img, ["fn", "loc", "hid"]);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let (got_addr, got) = (elf32_section(img, ".got").2 as i64, elf32_body(img, ".got"));
+        assert_eq!(got.len(), 16, "{pic:?}: slots for loc, fn, abs and hid");
+        let text = elf32_body(img, ".text");
+        for (k, want, addend) in [
+            (0, l, 0),
+            (1, l, 0),
+            (2, l, 0),
+            (3, l, 0),
+            (4, f, 0),
+            (5, f, 0),
+            (6, l, 0),
+            (7, l, 4),
+            (8, 0x1234, 0),
+            (9, h, 0),
+        ] {
+            assert_eq!(text[6 * k..6 * k + 2], I386_GOT_INSNS[k], "kept form");
+            let slot = g + i32_at(text, 6 * k + 2) - addend - got_addr;
+            assert_eq!(i32_at(got, slot as usize), want, "{pic:?}: load {k}");
+        }
+        if pic.is_some() {
+            let relocs = elf32_dyn_relocs(img);
+            let abs_slot = (g + i32_at(text, 6 * 8 + 2)) as u64;
+            assert_eq!(relocs.len(), 3, "{relocs:?}");
+            assert!(
+                (relocs.iter()).all(|r| r.1 == rt::R_386_RELATIVE && r.0 != abs_slot),
+                "{relocs:?}"
+            );
+        }
+    }
+}
+
+/// A GOT load with no base register, as GNU ld 2.46.1 links it: a
+/// position-dependent executable relaxes `mov` and `call` and gives
+/// `lea foo@GOT` the slot's GOT-relative offset; a position-independent
+/// image refuses the `mov`, having no GOT address to give, and still
+/// takes the `lea`.
+#[test]
+fn an_i386_got_load_without_a_base_register_follows_gnu_ld() {
+    // mov loc@GOT, %eax; lea loc@GOT, %eax; call *fn@GOT; ret; fn: ret;
+    // the `mov` with `mov`, the call where `call`. Symtab: null(0),
+    // sections(1, 2), loc(3), _start(4), fn(5).
+    let unit = |mov: Option<u32>, call: bool| {
+        let text = [
+            0x8b, 0x05, 0, 0, 0, 0, 0x8d, 0x05, 0, 0, 0, 0, 0xff, 0x15, 0, 0, 0, 0, 0xc3, 0xc3,
+        ];
+        let mut o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+            .sym("loc", STB_LOCAL, STT_OBJECT, 1, 0, 4)
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 19)
+            .sym("fn", STB_GLOBAL, STT_FUNC, 0, 19, 1)
+            .reloc(0, 8, 3, rt::R_386_GOT32, 0);
+        if let Some(t) = mov {
+            o = o.reloc(0, 2, 3, t, 0);
+        }
+        if call {
+            o = o.reloc(0, 14, 5, rt::R_386_GOT32X, 0);
+        }
+        o.build_class(EM_386, ElfClass::Elf32, false)
+    };
+    let res = link_i386(
+        alloc::vec![("b.o", unit(Some(rt::R_386_GOT32X), true))],
+        None,
+    )
+    .expect("links");
+    let img = &res.image;
+    let [t, f, l] = i386_addrs(img, ["_start", "fn", "loc"]);
+    let (g, s) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got").2 as i64,
+    );
+    let text = elf32_body(img, ".text");
+    assert_eq!(text[..2], [0xc7, 0xc0]);
+    assert_eq!(i32_at(text, 2), l);
+    assert_eq!(text[6..8], [0x8d, 0x05]);
+    assert_eq!(i32_at(text, 8), s - g, "lea takes the offset");
+    assert_eq!(text[12..14], [0x67, 0xe8]);
+    assert_eq!(i32_at(text, 14), f - (t + 18));
+    for t in [rt::R_386_GOT32X, rt::R_386_GOT32] {
+        let e = link_i386(alloc::vec![("b.o", unit(Some(t), false))], Some(false))
+            .expect_err("refused");
+        let want = alloc::format!(
+            "b.o: direct GOT relocation {} against `loc' without base register can not be \
+             used when making a shared object",
+            rt::i386_reloc_desc(t)
+        );
+        assert!(alloc::format!("{e}").contains(&want), "{e}");
+    }
+    let res = link_i386(alloc::vec![("b.o", unit(None, false))], Some(false)).expect("links");
+    let img = &res.image;
+    let (g, got) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got"),
+    );
+    let text = elf32_body(img, ".text");
+    let lea = g + i32_at(text, 8);
+    assert!(
+        (got.2 as i64..(got.2 + got.4) as i64).contains(&lea),
+        "the lea names a slot"
+    );
+}
+
+/// Two objects' locals of one name are two symbols, and a GOT reference
+/// to each reaches a slot of its own.
+#[test]
+fn same_named_locals_take_a_got_slot_each() {
+    // mov loc@GOT(%ebx), %eax at 0; `loc` at `off` in `.data`.
+    // Symtab: null(0), sections(1, 2), loc(3).
+    let unit = |off: u64, entry: bool| {
+        let mut o = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0x8b, 0x83, 0, 0, 0, 0, 0xc3],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 16])
+            .sym("loc", STB_LOCAL, STT_OBJECT, 1, off, 4)
+            .reloc(0, 2, 3, rt::R_386_GOT32, 0);
+        if entry {
+            o = o.sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7);
+        }
+        o.build_class(EM_386, ElfClass::Elf32, false)
+    };
+    let res = link_i386(
+        alloc::vec![("a.o", unit(0, true)), ("b.o", unit(8, false))],
+        None,
+    )
+    .expect("links");
+    let img = &res.image;
+    let (g, got) = (
+        elf32_section(img, ".got.plt").2 as i64,
+        elf32_section(img, ".got"),
+    );
+    let (data, text) = (
+        elf32_section(img, ".data").2 as i64,
+        elf32_body(img, ".text"),
+    );
+    let body = elf32_body(img, ".got");
+    let held: Vec<i64> = [2, 10]
+        .iter()
+        .map(|&at| i32_at(body, (g + i32_at(text, at) - got.2 as i64) as usize))
+        .collect();
+    assert_eq!(held, [data, data + 16 + 8], "each object's `loc`");
+}
+
+/// GNU ld 2.46.1 builds neither `.got`, `.got.plt` nor
+/// `_GLOBAL_OFFSET_TABLE_` for a position-dependent executable whose
+/// every GOT load relaxes.
+#[test]
+fn an_i386_executable_whose_got_loads_all_relax_has_no_got() {
+    // mov loc@GOT(%ebx), %eax; ret. Symtab: null(0), sections(1, 2),
+    // _start(3), loc(4).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0x8b, 0x83, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7)
+        .sym("loc", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .reloc(0, 2, 4, rt::R_386_GOT32X, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let res = link_i386(alloc::vec![("a.o", o)], None).expect("links");
+    let img = &res.image;
+    let secs = elf32_sections(img);
+    assert!(
+        !secs.iter().any(|s| s.0.starts_with(".got")),
+        "{:?}",
+        secs.iter().map(|s| &s.0).collect::<Vec<_>>()
+    );
+    let syms = elf32_symbols_of(img, ".symtab", ".strtab");
+    assert!(!syms.iter().any(|s| s.0 == GOT_SYMBOL), "{syms:?}");
+    assert_eq!(elf32_body(img, ".text")[..2], [0xc7, 0xc0]);
+}
+
+/// An i386 unit calling `foo`, loading `bar`'s address through the GOT
+/// and holding `&bar` and `&_start` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), foo(4), bar(5).
+fn i386_import_user() -> Vec<u8> {
+    // call foo; mov bar@GOT(%ebx), %eax; ret
+    let text = [0xe8, 0, 0, 0, 0, 0x8b, 0x83, 0, 0, 0, 0, 0xc3];
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(0, 1, 4, rt::R_386_PLT32, -4)
+        .reloc(0, 7, 5, rt::R_386_GOT32X, 0)
+        .reloc(1, 0, 5, rt::R_386_32, 0)
+        .reloc(1, 4, 3, rt::R_386_32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// An i386 executable, position-independent where `pic`, against a
+/// library exporting `foo` and the object `bar`.
+fn i386_import_opts(pic: bool) -> LdsOptions {
+    let mut lib = shared_input("libone.so", &["foo"], &["bar"]);
+    lib.lib.machine = EM_386;
+    LdsOptions {
+        shared_libs: alloc::vec![lib],
+        interp: Some(String::from("/lib/ld-linux.so.2")),
+        ..i386_opts(pic.then_some(false))
+    }
+}
+
+/// The slot `.rel.dyn` binds to `name` by `rtype`.
+fn i386_slot(relocs: &[(u64, u32, String)], name: &str, rtype: u32) -> i64 {
+    let slot = relocs.iter().find(|r| r.1 == rtype && r.2 == name);
+    slot.unwrap_or_else(|| panic!("{name}'s slot: {relocs:?}"))
+        .0 as i64
+}
+
+/// The lazy i386 PLT GNU ld 2.46.1 writes for one called import, at
+/// `plt` with `.got.plt` at `g` and the import's slot at `slot`: through
+/// `%ebx`, which holds `g` at the call, in a position-independent image
+/// (`ff b3`, `ff a3`), and by absolute address otherwise (`ff 35`, `ff
+/// 25`); the entry pushes its relocation's offset and jumps to the header.
+fn i386_lazy_plt(pic: bool, plt: i64, g: i64, slot: i64) -> Vec<u8> {
+    let indirect = |op: u8, to: i64| {
+        let (modrm, field) = if pic {
+            (op | 0x83, to - g)
+        } else {
+            (op | 0x05, to)
+        };
+        [0xff, modrm]
+            .into_iter()
+            .chain((field as u32).to_le_bytes())
+    };
+    let mut want: Vec<u8> = Vec::new();
+    want.extend(indirect(0x30, g + 4));
+    want.extend(indirect(0x20, g + 8));
+    want.extend([0; 4]);
+    want.extend(indirect(0x20, slot));
+    want.extend([0x68, 0, 0, 0, 0, 0xe9]);
+    want.extend(((plt - (plt + 32)) as u32).to_le_bytes());
+    want
+}
+
+/// An i386 executable calls an import through a lazy PLT entry and loads
+/// it through a GOT slot `R_386_GLOB_DAT` fills, as GNU ld 2.46.1 links
+/// one (Intel386 psABI, procedure linkage table): the entry jumps through
+/// its `.got.plt` slot, which holds the entry's `push` until an
+/// `R_386_JUMP_SLOT` binds it; an address-width field naming the import
+/// takes an `R_386_32` against it. A PIE reaches the slots from `%ebx`; a
+/// position-dependent executable names their addresses, stays `ET_EXEC`
+/// and takes no `R_386_RELATIVE`.
+#[test]
+fn an_i386_executable_reaches_an_import_through_a_lazy_plt_entry() {
+    for pic in [true, false] {
+        let res = link_i386_with(
+            alloc::vec![("u.o", i386_import_user())],
+            &i386_import_opts(pic),
+        )
+        .expect("links");
+        let img = &res.image;
+        let relocs = elf32_dyn_relocs(img);
+        let foo = i386_slot(&relocs, "foo", rt::R_386_JUMP_SLOT);
+        let bar = i386_slot(&relocs, "bar", rt::R_386_GLOB_DAT);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        assert_eq!(foo, g + 12, "{pic}: the first slot past the loader's");
+        let (plt_addr, plt) = (elf32_section(img, ".plt").2 as i64, elf32_body(img, ".plt"));
+        assert_eq!(plt, i386_lazy_plt(pic, plt_addr, g, foo), "{pic}");
+        assert_eq!(i32_at(elf32_body(img, ".got.plt"), 12), plt_addr + 22);
+        let (t, text) = (
+            elf32_section(img, ".text").2 as i64,
+            elf32_body(img, ".text"),
+        );
+        assert_eq!(
+            t + 5 + i32_at(text, 1),
+            plt_addr + 16,
+            "the call reaches the entry"
+        );
+        assert_eq!(text[5..7], [0x8b, 0x83], "the load is kept");
+        assert_eq!(i32_at(text, 7), bar - g);
+        let data = elf32_section(img, ".data").2;
+        assert!(
+            relocs.contains(&(data, rt::R_386_32, String::from("bar"))),
+            "{relocs:?}"
+        );
+        let [start] = i386_addrs(img, ["_start"]);
+        if pic {
+            assert!(relocs.contains(&(data + 4, rt::R_386_RELATIVE, String::new())));
+        } else {
+            assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
+            assert!(
+                relocs.iter().all(|r| r.1 != rt::R_386_RELATIVE),
+                "{relocs:?}"
+            );
+            assert_eq!(
+                i32_at(elf32_body(img, ".data"), 4),
+                start,
+                "&_start in place"
+            );
+        }
+    }
+}
+
+/// A position-dependent x86-64 executable linked against a shared library
+/// is an `ET_EXEC` with the dynamic tables, as GNU ld 2.46.1 links one,
+/// its PLT entries reaching their slots through `%rip`.
+#[test]
+fn a_position_dependent_executable_imports_from_a_shared_library() {
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
+    };
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let img = &res.image;
+    assert_eq!(u16::from_le_bytes([img[16], img[17]]), ET_EXEC);
+    let tags = dyn_tags(img);
+    assert!(tags.iter().any(|t| t.0 == dynamic::DT_NEEDED), "{tags:?}");
+    let (_, relaplt) = image_section(img, ".rela.plt");
+    let slot = rela_entries(&relaplt)[0].0;
+    let (plt_addr, plt) = image_section(img, ".plt");
+    assert_eq!(plt[16..18], [0xff, 0x25]);
+    assert_eq!(
+        plt_addr as i64 + 22 + u32_at(&plt, 18) as i32 as i64,
+        slot as i64
+    );
+}
+/// An i386 shared object the engine links reads back as a library: its
+/// machine, its soname, and the objects among its exports.
+#[test]
+fn an_i386_shared_object_reads_back_as_a_library() {
+    // f: ret; .data: d. Symtab: null(0), sections(1, 2), f(3), d(4).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("f", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("d", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let opts = LdsOptions {
+        soname: Some(String::from("libone.so")),
+        ..i386_opts(Some(true))
+    };
+    let res = link_i386_with(alloc::vec![("l.o", o)], &opts).expect("links");
+    let lib = crate::c5::linker::object::read_dynamic_image(&res.image).expect("reads");
+    assert_eq!((lib.machine, lib.soname.as_str()), (EM_386, "libone.so"));
+    assert!(
+        ["f", "d"].iter().all(|n| lib.exports.contains(*n)),
+        "{lib:?}"
+    );
+    assert_eq!(lib.data_exports.iter().collect::<Vec<_>>(), ["d"]);
+}
+
+/// An i386 unit calling `func`, loading `data`'s address through the GOT
+/// and holding `&func` and `&data + 4` in `.data`: `.text` is the call,
+/// the load, a return, then `func` at 16; `.data` is `data` and the two
+/// pointers. Symtab: null(0), sections(1, 2), func(3), data(4),
+/// caller(5).
+fn i386_preemption_unit(vis: u8) -> Vec<u8> {
+    let mut text = [0u8; 17];
+    text[..12].copy_from_slice(&[0xe8, 0, 0, 0, 0, 0x8b, 0x83, 0, 0, 0, 0, 0xc3]);
+    text[16] = 0xc3;
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 12])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 16, 1)
+        .vis(vis)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .vis(vis)
+        .sym("caller", STB_GLOBAL, STT_FUNC, 0, 0, 12)
+        .reloc(0, 1, 3, rt::R_386_PLT32, -4)
+        .reloc(0, 7, 4, rt::R_386_GOT32X, 0)
+        .reloc(1, 4, 3, rt::R_386_32, 0)
+        .reloc(1, 8, 4, rt::R_386_32, 4)
+        .build_class(EM_386, ElfClass::Elf32, false)
+}
+
+/// GNU ld 2.46.1 links an i386 shared object's references to its own
+/// default-visibility definitions as the x86-64 and aarch64 ones, with
+/// the PLT reaching its slots through `%ebx` and each `R_386_32` keeping
+/// its addend in the field it names, the table being `SHT_REL`. A call
+/// goes through a lazy PLT entry whose slot `R_386_JUMP_SLOT` binds, a
+/// GOT load keeps a slot `R_386_GLOB_DAT` fills, and each pointer takes
+/// an `R_386_32` against its symbol. `-Bsymbolic` binds every reference directly, as does a
+/// protected or hidden definition; `-Bsymbolic-functions` the
+/// function's.
+#[test]
+fn an_i386_shared_objects_own_definitions_are_preemptible() {
+    for (vis, symbolic) in [
+        (STV_DEFAULT, None),
+        (STV_DEFAULT, Some(false)),
+        (STV_DEFAULT, Some(true)),
+        (STV_PROTECTED, None),
+        (STV_HIDDEN, None),
+    ] {
+        let what = alloc::format!("vis {vis} {symbolic:?}");
+        let opts = LdsOptions {
+            symbolic: symbolic == Some(true),
+            symbolic_functions: symbolic == Some(false),
+            ..i386_opts(Some(true))
+        };
+        let res = link_i386_with(alloc::vec![("u.o", i386_preemption_unit(vis))], &opts)
+            .unwrap_or_else(|e| panic!("{what}: {e}"));
+        let img = &res.image;
+        let [func, data] = i386_addrs(img, ["func", "data"]);
+        let relocs = elf32_dyn_relocs(img);
+        let g = elf32_section(img, ".got.plt").2 as i64;
+        let (t, text) = (
+            elf32_section(img, ".text").2 as i64,
+            elf32_body(img, ".text"),
+        );
+        let d = elf32_body(img, ".data");
+        let preempt_func = vis == STV_DEFAULT && symbolic.is_none();
+        let preempt_data = vis == STV_DEFAULT && symbolic != Some(true);
+        let call = t + 5 + i32_at(text, 1);
+        if preempt_func {
+            let slot = i386_slot(&relocs, "func", rt::R_386_JUMP_SLOT);
+            let plt_addr = elf32_section(img, ".plt").2 as i64;
+            let plt = elf32_body(img, ".plt");
+            assert_eq!(call, plt_addr + 16, "{what}");
+            assert_eq!(plt, i386_lazy_plt(true, plt_addr, g, slot), "{what}");
+            assert!(relocs.contains(&(data as u64 + 4, rt::R_386_32, String::from("func"))));
+            assert_eq!(i32_at(d, 4), 0, "{what}: the field holds the addend");
+        } else {
+            assert_eq!(call, func, "{what}");
+            assert!(relocs.contains(&(data as u64 + 4, rt::R_386_RELATIVE, String::new())));
+            assert_eq!(i32_at(d, 4), func, "{what}");
+        }
+        if preempt_data {
+            let slot = i386_slot(&relocs, "data", rt::R_386_GLOB_DAT);
+            assert_eq!((text[5], i32_at(text, 7)), (0x8b, slot - g), "{what}");
+            assert!(relocs.contains(&(data as u64 + 8, rt::R_386_32, String::from("data"))));
+            assert_eq!(i32_at(d, 8), 4, "{what}: the field holds the addend");
+        } else {
+            assert_eq!((text[5], i32_at(text, 7)), (0x8d, data - g), "{what}: lea");
+            assert!(relocs.contains(&(data as u64 + 8, rt::R_386_RELATIVE, String::new())));
+            assert_eq!(i32_at(d, 8), data + 4, "{what}");
+        }
+    }
+}
+
+/// GNU ld 2.46.1 leaves a PC-relative field naming an i386 shared
+/// object's preemptible definition to an `R_386_PC32` against it, in a
+/// writable section or not, the field keeping its addend, and binds an
+/// `R_386_GOTOFF` to the object's own definition.
+#[test]
+fn an_i386_pc_relative_field_takes_a_dynamic_relocation_and_gotoff_binds_directly() {
+    // .text: call func; lea data@GOTOFF(%ebx), %eax. .data: data, then
+    // `.long data - .`. Symtab: null(0), sections(1, 2), func(3), data(4).
+    let text = [0xe8, 0, 0, 0, 0, 0x8d, 0x83, 0, 0, 0, 0, 0xc3];
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 8])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 11, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .reloc(0, 1, 3, rt::R_386_PC32, -4)
+        .reloc(0, 7, 4, rt::R_386_GOTOFF, 0)
+        .reloc(1, 4, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let res = link_i386_with(alloc::vec![("u.o", o)], &i386_opts(Some(true))).expect("links");
+    let img = &res.image;
+    let relocs = elf32_dyn_relocs(img);
+    let (t, text) = (elf32_section(img, ".text").2, elf32_body(img, ".text"));
+    let [data] = i386_addrs(img, ["data"]);
+    assert!(
+        relocs.contains(&(t + 1, rt::R_386_PC32, String::from("func"))),
+        "{relocs:?}"
+    );
+    assert_eq!(i32_at(text, 1), -4, "the call keeps its addend");
+    assert!(relocs.contains(&(data as u64 + 4, rt::R_386_PC32, String::from("data"))));
+    let g = elf32_section(img, ".got.plt").2 as i64;
+    assert_eq!(
+        i32_at(text, 7),
+        data - g,
+        "GOTOFF binds the object's own data"
+    );
+}
+
+/// aarch64 `bl foo` and `ret`, then `&foo` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), foo(4).
+fn aarch64_pointer_user() -> Vec<u8> {
+    let mut text = Vec::new();
+    for w in [0x9400_0000u32, 0xd65f_03c0] {
+        text.extend_from_slice(&w.to_le_bytes());
+    }
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_AARCH64_CALL26, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+        .build(EM_AARCH64)
+}
+
+/// GNU ld 2.46.1's aarch64 PLT (AAELF64, PLT sequences): a 32-byte
+/// header that saves x16 and x30 and branches through `.got.plt[2]`,
+/// then per entry `adrp x16`, `ldr x17` of the entry's `.got.plt` slot,
+/// `add x16`, `br x17`; each slot holds the header's address until its
+/// `JUMP_SLOT` binds it. An executable gives a function whose address a
+/// data word holds an entry too; a position-dependent one makes the entry
+/// the function's address, which `.dynsym` states and the word holds with
+/// no relocation of its own, so the function compares equal across the
+/// image and the library.
+#[test]
+fn an_aarch64_executable_calls_through_a_lazy_plt_and_compares_function_addresses() {
+    let script = parse_linker_script(&default_script(false)).expect("parses");
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let objs = alloc::vec![parse_lds_object("a.o", aarch64_pointer_user()).expect("parses")];
+        let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+        lib.lib.machine = EM_AARCH64;
+        let opts = LdsOptions {
+            emit,
+            interp: Some(String::from("/lib/ld-linux-aarch64.so.1")),
+            shared_libs: alloc::vec![lib],
+            max_page_size: 0x10000,
+            ..LdsOptions::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let img = &res.image;
+        let (plt, stubs) = image_section(img, ".plt");
+        let (gotplt, slots) = image_section(img, ".got.plt");
+        let page = |at: u64, to: u64| {
+            let imm = ((to & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12) as u32 & 0x1f_ffff;
+            0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5
+        };
+        let lo = |to: u64| (to & 0xfff) as u32;
+        let (slot, entry) = (gotplt + 24, plt + 32);
+        let want: Vec<u32> = alloc::vec![
+            0xa9bf_7bf0,
+            page(plt + 4, gotplt + 16),
+            0xf940_0211 | (lo(gotplt + 16) / 8) << 10,
+            0x9100_0210 | lo(gotplt + 16) << 10,
+            0xd61f_0220,
+            0xd503_201f,
+            0xd503_201f,
+            0xd503_201f,
+            page(entry, slot),
+            0xf940_0211 | (lo(slot) / 8) << 10,
+            0x9100_0210 | lo(slot) << 10,
+            0xd61f_0220,
+        ];
+        let words: Vec<u32> = (0..stubs.len() / 4)
+            .map(|k| u32_at(&stubs, 4 * k))
+            .collect();
+        assert_eq!(words, want, "{emit:?}");
+        assert_eq!(u64::from_le_bytes(slots[24..32].try_into().unwrap()), plt);
+        let (_, relaplt) = image_section(img, ".rela.plt");
+        assert_eq!(
+            (rela_entries(&relaplt).iter())
+                .map(|e| (e.0, e.2))
+                .collect::<Vec<_>>(),
+            [(slot, rt::R_AARCH64_JUMP_SLOT)]
+        );
+        let (data, held) = image_section(img, ".data");
+        let foo = image_dynsyms(img)
+            .into_iter()
+            .find(|s| s.0 == "foo")
+            .unwrap();
+        let relocs = if section_addr(img, ".rela.dyn").is_some() {
+            dyn_relocs(img)
+        } else {
+            Vec::new()
+        };
+        let abs = relocs.into_iter().find(|r| r.0 == data);
+        if emit == LdsEmit::Exec {
+            assert_eq!(
+                (foo.1, foo.2),
+                (entry, SHN_UNDEF),
+                "the entry is foo's address"
+            );
+            assert_eq!(u64::from_le_bytes(held[..8].try_into().unwrap()), entry);
+            assert_eq!(abs, None);
+        } else {
+            assert_eq!(foo.1, 0);
+            assert_eq!(
+                abs.map(|r| (r.1, r.2)),
+                Some((rt::R_AARCH64_ABS64, String::from("foo")))
+            );
+        }
+    }
+}
+
+/// GNU ld 2.46.1 makes a default-visibility undefined weak symbol an
+/// executable reaches through the GOT a dynamic symbol, its slot bound by
+/// `GLOB_DAT`, so the loader writes 0 or a library's definition; the load
+/// is not relaxed.
+#[test]
+fn an_executable_imports_an_undefined_weak_symbol_it_reaches_through_the_got() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    // mov wk@GOTPCREL(%rip), %rax; ret. Symtab: null(0), section(1),
+    // _start(2), wk(3).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0, 0xc3],
+        )
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("wk", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 3, 3, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .build(EM_X86_64);
+    let objs = alloc::vec![parse_lds_object("a.o", o).expect("parses")];
+    let opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])]);
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let syms = image_dynsyms(&res.image);
+    assert!(
+        syms.iter().any(|s| s.0 == "wk" && s.2 == SHN_UNDEF),
+        "{syms:?}"
+    );
+    let (got, _) = image_section(&res.image, ".got");
+    let relocs = dyn_relocs(&res.image);
+    assert!(
+        relocs.contains(&(got, rt::R_X86_64_GLOB_DAT, String::from("wk"), 0)),
+        "{relocs:?}"
+    );
+    let (_, text) = image_section(&res.image, ".text");
+    assert_eq!(text[1], 0x8b, "the load is kept");
+}
+
+/// x86-64 `mov bar(%rip), %eax` (PC32), `mov $baz, %eax` (32S), `mov
+/// $foo, %eax` (32S) and `ret`, then `&bar` in `.data`. Symtab: null(0),
+/// sections(1, 2), _start(3), bar(4), baz(5), foo(6).
+fn direct_user() -> Vec<u8> {
+    let text = [
+        0x8b, 0x05, 0, 0, 0, 0, 0xc7, 0xc0, 0, 0, 0, 0, 0xc7, 0xc0, 0, 0, 0, 0, 0xc3,
+    ];
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 19)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("baz", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 2, 4, rt::R_X86_64_PC32, -4)
+        .reloc(1, 0, 4, rt::R_X86_64_64, 0)
+        .build(EM_X86_64)
+}
+
+/// GNU ld 2.46.1 gives an executable a copy of a library object its code
+/// reaches by an address the link fixes (System V gABI, `R_*_COPY`): in
+/// `.dynbss`, at the largest alignment up to the defining section's that
+/// divides the object's offset, or in `.data.rel.ro` for an object the
+/// library keeps read-only. `.dynsym` defines the object at its copy,
+/// which the loader fills and every reference names; a PIE leaves a data
+/// word naming it to a relocation against the symbol, where a
+/// position-dependent executable writes the copy's address. A function
+/// such code takes the address of has its PLT entry as its address.
+#[test]
+fn an_executable_reaches_an_imported_object_through_a_copy() {
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let mut o = parse_lds_object("a.o", direct_user()).expect("parses");
+        if emit == LdsEmit::Exec {
+            for (at, sym) in [(8, 5), (14, 6)] {
+                o.sections[0].relocs.push(RawReloc {
+                    offset: at,
+                    sym,
+                    rtype: rt::R_X86_64_32S,
+                    addend: 0,
+                });
+            }
+        }
+        let mut lib = shared_input("libc.so.6", &["foo"], &["bar", "baz"]);
+        lib.lib
+            .copy_layout
+            .insert(String::from("bar"), (12, 4, false));
+        lib.lib
+            .copy_layout
+            .insert(String::from("baz"), (4, 4, true));
+        let opts = LdsOptions {
+            emit,
+            ..dynamic_opts(alloc::vec![lib])
+        };
+        let res = link_with_script(&script, alloc::vec![o], &opts).expect("links");
+        let img = &res.image;
+        let what = alloc::format!("{emit:?}");
+        let syms = image_dynsyms(img);
+        let row = |n: &str| syms.iter().find(|s| s.0 == n).cloned().unwrap();
+        let bss = section_index(img, ".bss") as u16;
+        let bar = row("bar");
+        assert_eq!(bar.2, bss, "{what}: bar is defined at its copy");
+        let relocs = dyn_relocs(img);
+        assert!(
+            relocs.contains(&(bar.1, rt::R_X86_64_COPY, String::from("bar"), 0)),
+            "{what}: {relocs:?}"
+        );
+        let (t, text) = image_section(img, ".text");
+        assert_eq!(t as i64 + 6 + u32_at(&text, 2) as i32 as i64, bar.1 as i64);
+        let (data, word) = image_section(img, ".data");
+        if emit == LdsEmit::Dyn {
+            assert!(relocs.contains(&(data, rt::R_X86_64_64, String::from("bar"), 0)));
+            continue;
+        }
+        assert_eq!(u64::from_le_bytes(word[..8].try_into().unwrap()), bar.1);
+        let baz = row("baz");
+        assert_eq!(
+            baz.2,
+            section_index(img, ".data.rel.ro") as u16,
+            "read-only copy"
+        );
+        assert_eq!(u32_at(&text, 8) as u64, baz.1);
+        let foo = row("foo");
+        let (plt, _) = image_section(img, ".plt");
+        assert_eq!(
+            (foo.1, foo.2),
+            (plt + 16, SHN_UNDEF),
+            "foo's PLT entry is its address"
+        );
+        assert_eq!(u32_at(&text, 14) as u64, foo.1);
+    }
+}
+
+/// A library object's copy takes bfd's alignment: the largest power of two
+/// up to its section's alignment that divides its offset in the section;
+/// one in a read-only section is copied to `.data.rel.ro`.
+#[test]
+fn a_library_states_the_layout_a_copy_of_its_object_takes() {
+    // .data (align 32): a at 0, b at 8, c at 0x20; .rodata: r.
+    // Symtab: null(0), sections(1, 2), a(3), b(4), c(5), r(6).
+    let o = TestObj::new()
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 32, &[0; 0x28])
+        .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 4, &[0; 4])
+        .sym("a", STB_GLOBAL, STT_OBJECT, 0, 0, 4)
+        .sym("b", STB_GLOBAL, STT_OBJECT, 0, 8, 4)
+        .sym("c", STB_GLOBAL, STT_OBJECT, 0, 0x20, 8)
+        .sym("r", STB_GLOBAL, STT_OBJECT, 1, 0, 4)
+        .build(EM_X86_64);
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let objs = alloc::vec![parse_lds_object("l.o", o).expect("parses")];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let lib = crate::c5::linker::object::read_dynamic_image(&res.image).expect("reads");
+    let layout: Vec<(&str, (u64, u64, bool))> = (lib.copy_layout.iter())
+        .map(|(n, l)| (n.as_str(), *l))
+        .collect();
+    assert_eq!(
+        layout,
+        [
+            ("a", (4, 32, false)),
+            ("b", (4, 8, false)),
+            ("c", (8, 32, false)),
+            ("r", (4, 4, true)),
+        ]
+    );
+}
+
+/// GNU ld 2.46.1 writes an i386 `R_386_16` naming a load address with the
+/// link-time value in a position-independent link too, taking no dynamic
+/// relocation, and reports an `R_386_8` or `R_386_16` the value does not
+/// fit as truncated, as in any other link.
+#[test]
+fn an_i386_narrow_field_takes_the_link_time_value_in_a_position_independent_link() {
+    // .data: d, then `.word d`, `.word d + 2`, and `.byte d` where `byte`.
+    // Symtab: null(0), section(1), d(2).
+    let unit = |byte: bool| {
+        let o = TestObj::new()
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 9])
+            .sym("d", STB_GLOBAL, STT_OBJECT, 0, 0, 4)
+            .reloc(0, 4, 2, rt::R_386_16, 0)
+            .reloc(0, 6, 2, rt::R_386_16, 2);
+        if byte {
+            o.reloc(0, 8, 2, rt::R_386_8, 0)
+        } else {
+            o
+        }
+        .build_class(EM_386, ElfClass::Elf32, false)
+    };
+    for pic in [Some(true), Some(false)] {
+        let res = link_i386_with(alloc::vec![("n.o", unit(false))], &i386_opts(pic))
+            .unwrap_or_else(|e| panic!("{pic:?}: {e}"));
+        let img = &res.image;
+        let [d] = i386_addrs(img, ["d"]);
+        let data = elf32_body(img, ".data");
+        let half = |at: usize| u16::from_le_bytes([data[at], data[at + 1]]) as i64;
+        assert_eq!((half(4), half(6)), (d, d + 2), "{pic:?}");
+        assert!(elf32_dyn_relocs(img).is_empty(), "{pic:?}");
+        let e = link_i386_with(alloc::vec![("n.o", unit(true))], &i386_opts(pic))
+            .expect_err("does not fit");
+        assert!(
+            alloc::format!("{e}").contains("relocation truncated"),
+            "{e}"
+        );
+    }
+}
+
+/// `.text` with `_start`, and section `name` holding `foo - .` and, on
+/// x86-64, `foo`; `foo` is undefined.
+fn pc_word_user(machine: u16, name: &str, flags: u64) -> Vec<u8> {
+    // Symtab: null(0), sections(1, 2), _start(3), foo(4).
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3],
+        )
+        .sec(name, SHT_PROGBITS, flags, 8, &[0; 16])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0);
+    if machine == EM_386 {
+        return (o.reloc(1, 0, 4, rt::R_386_PC32, 0)).build_class(EM_386, ElfClass::Elf32, false);
+    }
+    (o.reloc(1, 0, 4, rt::R_X86_64_PC32, 0))
+        .reloc(1, 8, 4, rt::R_X86_64_64, 0)
+        .build(EM_X86_64)
+}
+
+/// A PC-relative word naming a library's function in an x86-64 PIE's data
+/// makes the function's PLT entry its address, as GNU ld 2.46.1 links it,
+/// so it compares equal to the library's own; an address-width word keeps
+/// its relocation against the symbol. A shared object leaves both to
+/// relocations naming the function and takes no PLT entry for them; a PIE
+/// or shared object's word in read-only data is refused.
+#[test]
+fn an_x86_64_pie_s_pc_relative_word_makes_a_library_function_s_plt_entry_its_address() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let rw = SHF_ALLOC | SHF_WRITE;
+    let link = |name: &str, flags: u64, shared: bool| {
+        let o = parse_lds_object("a.o", pc_word_user(EM_X86_64, name, flags)).expect("parses");
+        let opts = LdsOptions {
+            shared,
+            interp: (!shared).then(|| String::from("/lib64/ld-linux-x86-64.so.2")),
+            ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])])
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+    };
+    let img = link(".data", rw, false).expect("links").image;
+    let foo = image_dynsyms(&img).into_iter().find(|s| s.0 == "foo");
+    let (plt, _) = image_section(&img, ".plt");
+    assert_eq!(foo.map(|s| (s.1, s.2)), Some((plt + 16, SHN_UNDEF)));
+    let (data, word) = image_section(&img, ".data");
+    assert_eq!(
+        data as i64 + u32_at(&word, 0) as i32 as i64,
+        plt as i64 + 16
+    );
+    let relocs = dyn_relocs(&img);
+    assert!(
+        relocs.contains(&(data + 8, rt::R_X86_64_64, String::from("foo"), 0)),
+        "{relocs:?}"
+    );
+    assert!(
+        relocs.iter().all(|r| r.1 != rt::R_X86_64_PC32),
+        "{relocs:?}"
+    );
+    let img = link(".data", rw, true).expect("links").image;
+    let (data, _) = image_section(&img, ".data");
+    let relocs = dyn_relocs(&img);
+    assert!(
+        relocs.contains(&(data, rt::R_X86_64_PC32, String::from("foo"), 0)),
+        "{relocs:?}"
+    );
+    assert!(section_addr(&img, ".rela.plt").is_none(), "no PLT entry");
+    for shared in [false, true] {
+        let e = link(".rodata", SHF_ALLOC, shared).expect_err("refused");
+        assert!(
+            alloc::format!("{e}").contains("R_X86_64_PC32 (2) against `foo'"),
+            "{e}"
+        );
+    }
+}
+
+/// An i386 PC-relative word naming a library's function takes an
+/// `R_386_PC32` naming it in a PIE and a shared object, as GNU ld 2.46.1
+/// links it, the field holding the addend; a position-dependent
+/// executable makes the function's PLT entry its address.
+#[test]
+fn an_i386_pc_relative_word_naming_a_library_function_takes_a_relocation_naming_it() {
+    for pic in [Some(false), Some(true), None] {
+        let mut lib = shared_input("libone.so", &["foo"], &[]);
+        lib.lib.machine = EM_386;
+        let opts = LdsOptions {
+            shared_libs: alloc::vec![lib],
+            interp: (pic != Some(true)).then(|| String::from("/lib/ld-linux.so.2")),
+            ..i386_opts(pic)
+        };
+        let unit = pc_word_user(EM_386, ".data", SHF_ALLOC | SHF_WRITE);
+        let res = link_i386_with(alloc::vec![("u.o", unit)], &opts).expect("links");
+        let img = &res.image;
+        let data = elf32_section(img, ".data").2;
+        let relocs = elf32_dyn_relocs(img);
+        let foo = elf32_symbols_of(img, ".dynsym", ".dynstr")
+            .into_iter()
+            .find(|s| s.0 == "foo");
+        let field = i32_at(elf32_body(img, ".data"), 0);
+        if pic.is_some() {
+            let want = (data, rt::R_386_PC32, String::from("foo"));
+            assert!(relocs.contains(&want), "{pic:?}: {relocs:?}");
+            assert_eq!((foo.map(|s| s.1), field), (Some(0), 0), "{pic:?}");
+            continue;
+        }
+        let plt = elf32_section(img, ".plt").2;
+        assert_eq!(
+            foo.map(|s| s.1),
+            Some(plt + 16),
+            "the PLT entry is foo's address"
+        );
+        assert_eq!(data as i64 + field, plt as i64 + 16);
+        assert!(relocs.iter().all(|r| r.1 != rt::R_386_PC32), "{relocs:?}");
+    }
+}
+
+/// `.init` with `_init`, `.fini` with `_fini` and `myfini`, an entry each
+/// in `.init_array` and `.fini_array`, and one in `.preinit_array` where
+/// `pre`; `_start` calls the import `foo`.
+fn init_fini_user(pre: bool) -> Vec<u8> {
+    let sections = 5 + pre as u32;
+    let o = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xe8, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".init", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(
+            ".fini",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc3, 0xc3],
+        )
+        .sec(
+            ".init_array",
+            SHT_INIT_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        )
+        .sec(
+            ".fini_array",
+            SHT_FINI_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        );
+    let o = if pre {
+        o.sec(
+            ".preinit_array",
+            SHT_PREINIT_ARRAY,
+            SHF_ALLOC | SHF_WRITE,
+            8,
+            &[0; 8],
+        )
+    } else {
+        o
+    };
+    // Symtab: null(0), sections(1..=sections), then these in order.
+    (o.sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 6))
+        .sym("_init", STB_GLOBAL, STT_FUNC, 1, 0, 1)
+        .sym("_fini", STB_GLOBAL, STT_FUNC, 2, 0, 1)
+        .sym("myfini", STB_GLOBAL, STT_FUNC, 2, 1, 1)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .reloc(0, 1, sections + 5, rt::R_X86_64_PLT32, -4)
+        .build(EM_X86_64)
+}
+
+/// `.dynamic` names the `-init` and `-fini` functions the link defines in
+/// `DT_INIT` and `DT_FINI` and the arrays after them, ahead of the symbol
+/// tables, and `DT_SYMBOLIC` before the search path, in GNU ld 2.46.1's
+/// order; a shared object refuses `.preinit_array` input, as the gABI
+/// gives `DT_PREINIT_ARRAY` to an executable alone.
+#[test]
+fn dynamic_tags_name_the_init_and_fini_functions_ahead_of_the_arrays() {
+    use dynamic::{
+        DT_FINI, DT_FINI_ARRAY, DT_FINI_ARRAYSZ, DT_GNU_HASH, DT_HASH, DT_INIT, DT_INIT_ARRAY,
+        DT_INIT_ARRAYSZ, DT_NEEDED, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ, DT_RUNPATH, DT_SONAME,
+        DT_SYMBOLIC,
+    };
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let link = |pre: bool, opts: LdsOptions| {
+        let o = parse_lds_object("a.o", init_fini_user(pre)).expect("parses");
+        let libs = alloc::vec![shared_input("libc.so.6", &["foo"], &[])];
+        let opts = LdsOptions {
+            shared_libs: libs,
+            ..opts
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+    };
+    // The tags ahead of the hash tables, with their values.
+    let head = |img: &[u8]| -> Vec<(u64, u64)> {
+        (dyn_tags(img).into_iter())
+            .take_while(|t| t.0 != DT_HASH && t.0 != DT_GNU_HASH)
+            .collect()
+    };
+    let arrays = |img: &[u8]| {
+        let (init, fini) = (
+            section_addr(img, ".init_array"),
+            section_addr(img, ".fini_array"),
+        );
+        [
+            (DT_INIT_ARRAY, init.unwrap()),
+            (DT_INIT_ARRAYSZ, 8),
+            (DT_FINI_ARRAY, fini.unwrap()),
+            (DT_FINI_ARRAYSZ, 8),
+        ]
+    };
+    let img = link(true, dynamic_opts(Vec::new())).expect("links").image;
+    let (init, fini) = (section_addr(&img, ".init"), section_addr(&img, ".fini"));
+    let pre = section_addr(&img, ".preinit_array").unwrap();
+    let mut want = alloc::vec![
+        (DT_NEEDED, head(&img)[0].1),
+        (DT_INIT, init.unwrap()),
+        (DT_FINI, fini.unwrap()),
+        (DT_PREINIT_ARRAY, pre),
+        (DT_PREINIT_ARRAYSZ, 8),
+    ];
+    want.extend(arrays(&img));
+    assert_eq!(head(&img), want);
+    let shared = LdsOptions {
+        shared: true,
+        interp: None,
+        soname: Some(String::from("libx.so")),
+        symbolic: true,
+        rpath: alloc::vec![String::from("/opt/x")],
+        new_dtags: true,
+        fini_function: String::from("myfini"),
+        ..dynamic_opts(Vec::new())
+    };
+    let img = link(false, shared.clone()).expect("links").image;
+    let h = head(&img);
+    let tags: Vec<u64> = h.iter().map(|t| t.0).collect();
+    assert_eq!(
+        tags[..6],
+        [
+            DT_NEEDED,
+            DT_SONAME,
+            DT_SYMBOLIC,
+            DT_RUNPATH,
+            DT_INIT,
+            DT_FINI
+        ]
+    );
+    assert_eq!(h[5].1, section_addr(&img, ".fini").unwrap() + 1, "myfini");
+    assert_eq!(h[6..], arrays(&img));
+    let none = LdsOptions {
+        init_function: String::from("nosuch"),
+        ..shared.clone()
+    };
+    let img = link(false, none).expect("links").image;
+    assert!(
+        head(&img).iter().all(|t| t.0 != DT_INIT),
+        "no DT_INIT for nosuch"
+    );
+    let e = link(true, shared).expect_err("refused");
+    assert!(
+        alloc::format!("{e}").contains("a.o: .preinit_array section is not allowed in DSO"),
+        "{e}"
+    );
+}
+
+/// The symbol table lists each import as `.dynsym` does: undefined, with
+/// the type the library gives it and the binding of the references, as
+/// GNU ld 2.46.1 lists them.
+#[test]
+fn the_symbol_table_lists_the_imports() {
+    let body = [
+        0xe8, 0, 0, 0, 0, // call foo
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov bar@GOTPCREL(%rip), %rax
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov wk@GOTPCREL(%rip), %rax
+        0xc3,
+    ];
+    // Symtab: null(0), section(1), _start(2), foo(3), bar(4), wk(5).
+    let unit = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 20)
+        .sym("foo", STB_GLOBAL, STT_FUNC, usize::MAX, 0, 0)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .sym("wk", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 1, 3, rt::R_X86_64_PLT32, -4)
+        .reloc(0, 8, 4, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .reloc(0, 15, 5, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .build(EM_X86_64);
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", unit.clone()).expect("parses");
+        let opts = LdsOptions {
+            emit,
+            ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])])
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let mut und: Vec<(String, u8)> = (image_sym_rows(&img).into_iter())
+            .filter(|s| s.2 == SHN_UNDEF && !s.0.is_empty())
+            .map(|s| (s.0, s.1))
+            .collect();
+        und.sort();
+        let row = |n: &str, bind: u8, kind: u8| (String::from(n), (bind << 4) | kind);
+        assert_eq!(
+            und,
+            [
+                row("bar", STB_GLOBAL, STT_OBJECT),
+                row("foo", STB_GLOBAL, STT_FUNC),
+                row("wk", STB_WEAK, STT_NOTYPE),
+            ],
+            "{emit:?}"
+        );
+    }
+}
+
+/// An archive's symbol index lists what GNU ar 2.46.1 lists for an ELF
+/// object of either class: global, weak and GNU-unique definitions in a
+/// section, commons and absolute symbols, in table order; not locals or
+/// undefined names.
+#[test]
+fn the_archive_index_lists_an_elf_objects_definitions_in_either_class() {
+    for class in [ElfClass::Elf64, ElfClass::Elf32] {
+        let o = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                4,
+                &[0xc3; 4],
+            )
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+            .sym("l", STB_LOCAL, STT_FUNC, 0, 0, 1)
+            .sym("g", STB_GLOBAL, STT_FUNC, 0, 1, 1)
+            .sym("w", STB_WEAK, STT_FUNC, 0, 2, 1)
+            .sym("u", 10, STT_OBJECT, 1, 0, 4)
+            .sym("c", STB_GLOBAL, STT_OBJECT, usize::MAX - 2, 8, 8)
+            .sym("a", STB_GLOBAL, STT_NOTYPE, usize::MAX - 1, 0x1234, 0)
+            .sym("undef", STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .sym("wundef", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0);
+        let wide = class == ElfClass::Elf64;
+        let bytes = o.build_class(if wide { EM_X86_64 } else { EM_386 }, class, wide);
+        let names = crate::c5::linker::archive::elf_archive_symbols(&bytes).expect("reads");
+        assert_eq!(names, ["g", "w", "u", "c", "a"], "{class:?}");
+    }
+}
+
+/// `_start` calling `wf`, an undefined weak name, through `call wf@PLT`;
+/// where `addressed`, `movl $wf, %eax` takes its address first.
+fn weak_caller(addressed: bool) -> Vec<u8> {
+    let body = [0xb8, 0, 0, 0, 0, 0xe8, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), section(1), _start(2), wf(3).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &body)
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 11)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 6, 3, rt::R_X86_64_PLT32, -4);
+    if addressed {
+        o.reloc(0, 1, 3, rt::R_X86_64_32, 0)
+    } else {
+        o
+    }
+    .build(EM_X86_64)
+}
+
+/// An executable linked against a library calls an undefined weak name
+/// through a PLT entry its `JUMP_SLOT` binds, the name a weak undefined
+/// `.dynsym` row, so that a library the loader finds can define it; one
+/// its code also addresses directly resolves to 0, call and all. A shared
+/// object linked against no library imports it the same way. GNU ld
+/// 2.46.1 links each so on x86-64.
+#[test]
+fn an_undefined_weak_function_an_executable_calls_takes_a_plt_entry() {
+    let link = |emit: LdsEmit, shared: bool, addressed: bool| {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", weak_caller(addressed)).expect("parses");
+        let libs = if shared {
+            Vec::new()
+        } else {
+            alloc::vec![shared_input("libc.so.6", &["foo"], &[])]
+        };
+        let opts = LdsOptions {
+            emit,
+            shared,
+            interp: (!shared).then(|| String::from("/lib64/ld-linux-x86-64.so.2")),
+            ..dynamic_opts(libs)
+        };
+        link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image
+    };
+    for (emit, shared) in [
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Exec, false),
+        (LdsEmit::Dyn, true),
+    ] {
+        let what = alloc::format!("{emit:?} shared={shared}");
+        let img = link(emit, shared, false);
+        let wf = dynsym_entries(&img).into_iter().find(|s| s.0 == "wf");
+        assert_eq!(
+            wf.map(|s| s.1),
+            Some((STB_WEAK << 4) | STT_NOTYPE),
+            "{what}"
+        );
+        let (plt, _) = image_section(&img, ".plt");
+        let (t, text) = image_section(&img, ".text");
+        assert_eq!(
+            t as i64 + 10 + u32_at(&text, 6) as i32 as i64,
+            plt as i64 + 16,
+            "{what}"
+        );
+        let (_, rela) = image_section(&img, ".rela.plt");
+        let slots = rela_entries(&rela);
+        assert_eq!(slots.len(), 1, "{what}");
+        assert_eq!(slots[0].2, rt::R_X86_64_JUMP_SLOT, "{what}");
+    }
+    let img = link(LdsEmit::Exec, false, true);
+    assert!(dynsym_entries(&img).iter().all(|s| s.0 != "wf"));
+    let (t, text) = image_section(&img, ".text");
+    assert_eq!(u32_at(&text, 1), 0, "the address is 0");
+    assert_eq!(
+        t as i64 + 10 + u32_at(&text, 6) as i32 as i64,
+        0,
+        "the call reaches 0"
+    );
+}
+
+/// An aarch64 PIE linked against a library exports an undefined weak name
+/// a data word holds, which takes an `R_AARCH64_ABS64` naming it; a
+/// position-dependent executable writes 0 with no relocation, as GNU ld
+/// 2.46.1 links them.
+#[test]
+fn an_aarch64_pie_exports_an_undefined_weak_name_a_data_word_holds() {
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    let unit = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            4,
+            &[0xc0, 0x03, 0x5f, 0xd6],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_ABS64, 0)
+        .build(EM_AARCH64);
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", unit.clone()).expect("parses");
+        let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+        lib.lib.machine = EM_AARCH64;
+        let opts = LdsOptions {
+            emit,
+            interp: Some(String::from("/lib/ld-linux-aarch64.so.1")),
+            max_page_size: 0x10000,
+            ..dynamic_opts(alloc::vec![lib])
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let (data, word) = image_section(&img, ".data");
+        let relocs = match section_addr(&img, ".rela.dyn") {
+            Some(_) => dyn_relocs(&img),
+            None => Vec::new(),
+        };
+        if emit == LdsEmit::Dyn {
+            let want = (data, rt::R_AARCH64_ABS64, String::from("wf"), 0);
+            assert!(relocs.contains(&want), "{relocs:?}");
+        } else {
+            assert!(relocs.iter().all(|r| r.0 != data), "{relocs:?}");
+            assert_eq!(u64::from_le_bytes(word[..8].try_into().unwrap()), 0);
+        }
+    }
+}
+
+/// `.data` holding `bar - .` in a field of `rtype`; where `code`, `.text`
+/// also loads `bar` PC-relative, a reference that needs the object at a
+/// fixed address.
+fn pc_word_data_user(rtype: u32, code: bool) -> Vec<u8> {
+    let text = [0x8b, 0x05, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 7)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rtype, 0);
+    if code {
+        o.reloc(0, 2, 4, rt::R_X86_64_PC32, -4)
+    } else {
+        o
+    }
+    .build(EM_X86_64)
+}
+
+/// An executable whose only references to a library's data object are
+/// address-width PC-relative words in writable data leaves each to a
+/// relocation of its type naming the object and takes no copy, as GNU ld
+/// 2.46.1 links them. One that code also reaches at a fixed address
+/// copies the object and binds the word to the copy, and so does a
+/// narrower `R_X86_64_PC32` word, which the loader could not fill with a
+/// library's address more than 2 GiB away.
+#[test]
+fn a_writable_pc_relative_word_takes_a_dynamic_relocation_rather_than_a_copy() {
+    for emit in [LdsEmit::Dyn, LdsEmit::Exec] {
+        for (rtype, code) in [
+            (rt::R_X86_64_PC64, false),
+            (rt::R_X86_64_PC64, true),
+            (rt::R_X86_64_PC32, false),
+        ] {
+            let what = alloc::format!("{emit:?} {rtype} code={code}");
+            let script =
+                parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+            let o = parse_lds_object("a.o", pc_word_data_user(rtype, code)).expect("parses");
+            let opts = LdsOptions {
+                emit,
+                ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &[], &["bar"])])
+            };
+            let img = link_with_script(&script, alloc::vec![o], &opts)
+                .expect("links")
+                .image;
+            let (data, word) = image_section(&img, ".data");
+            let relocs = dyn_relocs(&img);
+            let dynamic = (data, rtype, String::from("bar"), 0);
+            if rtype == rt::R_X86_64_PC64 && !code {
+                assert!(relocs.contains(&dynamic), "{what}: {relocs:?}");
+                assert!(section_addr(&img, ".dynbss").is_none(), "{what}: no copy");
+                continue;
+            }
+            let bar = (image_dynsyms(&img).into_iter())
+                .find(|s| s.0 == "bar")
+                .unwrap();
+            assert!(!relocs.contains(&dynamic), "{what}: {relocs:?}");
+            assert!(relocs.contains(&(bar.1, rt::R_X86_64_COPY, String::from("bar"), 0)));
+            assert_eq!(
+                data as i64 + u32_at(&word, 0) as i32 as i64,
+                bar.1 as i64,
+                "{what}"
+            );
+        }
+    }
+}
+
+/// An i386 executable leaves a writable `R_386_PC32` word naming a
+/// library's data object to a relocation naming it, with no copy, as GNU
+/// ld 2.46.1 links one.
+#[test]
+fn an_i386_writable_pc_relative_word_takes_a_dynamic_relocation_rather_than_a_copy() {
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    let unit = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(1, 0, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    for pic in [Some(false), None] {
+        let mut lib = shared_input("libone.so", &[], &["bar"]);
+        lib.lib.machine = EM_386;
+        let opts = LdsOptions {
+            shared_libs: alloc::vec![lib],
+            interp: Some(String::from("/lib/ld-linux.so.2")),
+            ..i386_opts(pic)
+        };
+        let res = link_i386_with(alloc::vec![("u.o", unit.clone())], &opts).expect("links");
+        let data = elf32_section(&res.image, ".data").2;
+        let relocs = elf32_dyn_relocs(&res.image);
+        let want = (data, rt::R_386_PC32, String::from("bar"));
+        assert!(relocs.contains(&want), "{pic:?}: {relocs:?}");
+        assert!(relocs.iter().all(|r| r.1 != rt::R_386_COPY), "{pic:?}");
+    }
+}
+
+/// `_start` and an absolute field of `rtype` naming the library object
+/// `bar`, in `.data` where `writable` and in `.text` otherwise.
+fn narrow_import_user(machine: u16, rtype: u32, writable: bool) -> Vec<u8> {
+    let field = if writable { 1 } else { 0 };
+    // Symtab: null(0), sections(1, 2), _start(3), bar(4).
+    TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0; 8],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 4)
+        .sym("bar", STB_GLOBAL, STT_OBJECT, usize::MAX, 0, 0)
+        .reloc(field, 4, 4, rtype, 0)
+        .build(machine)
+}
+
+/// An absolute field narrower than an address cannot hold a library
+/// object's address in a PIE, and a position-dependent x86-64
+/// executable's writable data takes no copy for one, so GNU ld 2.46.1
+/// refuses both; a position-dependent executable's code reaches the
+/// object through a copy.
+#[test]
+fn a_narrow_absolute_field_naming_a_library_object_is_refused_where_gnu_ld_refuses_it() {
+    for (machine, rtype) in [
+        (EM_X86_64, rt::R_X86_64_32),
+        (EM_X86_64, rt::R_X86_64_32S),
+        (EM_AARCH64, rt::R_AARCH64_ABS32),
+    ] {
+        for (emit, writable, refused) in [
+            (
+                LdsEmit::Dyn,
+                false,
+                Some("a position-independent executable"),
+            ),
+            (
+                LdsEmit::Dyn,
+                true,
+                Some("a position-independent executable"),
+            ),
+            (
+                LdsEmit::Exec,
+                true,
+                (machine == EM_X86_64).then_some("a position-dependent executable"),
+            ),
+            (LdsEmit::Exec, false, None),
+        ] {
+            let what = alloc::format!("{machine} {rtype} {emit:?} writable={writable}");
+            let script =
+                parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+            let unit = narrow_import_user(machine, rtype, writable);
+            let o = parse_lds_object("a.o", unit).expect("parses");
+            let mut lib = shared_input("libc.so.6", &[], &["bar"]);
+            lib.lib.machine = machine;
+            let opts = LdsOptions {
+                emit,
+                max_page_size: 0x10000,
+                ..dynamic_opts(alloc::vec![lib])
+            };
+            let res = link_with_script(&script, alloc::vec![o], &opts);
+            match refused {
+                Some(kind) => {
+                    let e = alloc::format!("{}", res.expect_err("refused"));
+                    let want =
+                        alloc::format!("against symbol `bar` can not be used when making {kind}");
+                    assert!(e.contains(&want), "{what}: {e}");
+                }
+                None => {
+                    let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+                    let copy = match machine {
+                        EM_AARCH64 => rt::R_AARCH64_COPY,
+                        _ => rt::R_X86_64_COPY,
+                    };
+                    assert!(
+                        dyn_relocs(&img).iter().any(|r| r.1 == copy),
+                        "{what}: a copy"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// `_start` taking the address of the undefined weak name `wf` PC-relative
+/// (`lea wf(%rip), %rax`), and `.data` holding `wf - .`.
+fn weak_pc_user() -> Vec<u8> {
+    let text = [0x48, 0x8d, 0x05, 0, 0, 0, 0, 0xc3];
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 8)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 3, 4, rt::R_X86_64_PC32, -4)
+        .reloc(1, 0, 4, rt::R_X86_64_PC32, 0)
+        .build(EM_X86_64)
+}
+
+/// An x86-64 PIE's PC-relative reference in code to an undefined weak name
+/// would yield the load base rather than 0, so GNU ld 2.46.1 refuses it,
+/// with or without libraries; a position-dependent executable resolves it
+/// to 0.
+#[test]
+fn a_pies_pc_relative_reference_in_code_to_an_undefined_weak_name_is_refused() {
+    for (emit, libs) in [
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Dyn, true),
+        (LdsEmit::Exec, true),
+    ] {
+        let what = alloc::format!("{emit:?} libs={libs}");
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", weak_pc_user()).expect("parses");
+        let opts = match libs {
+            true => LdsOptions {
+                emit,
+                ..dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &[])])
+            },
+            false => LdsOptions {
+                emit,
+                ..LdsOptions::default()
+            },
+        };
+        let res = link_with_script(&script, alloc::vec![o], &opts);
+        if emit == LdsEmit::Exec {
+            let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+            let (t, text) = image_section(&img, ".text");
+            assert_eq!(t as i64 + 7 + u32_at(&text, 3) as i32 as i64, 0, "{what}");
+            continue;
+        }
+        let e = alloc::format!("{}", res.expect_err("refused"));
+        let want = "a.o(.text+0x3): R_X86_64_PC32 (2) against undefined symbol `wf` can not be \
+                    used when making a position-independent executable";
+        assert!(e.contains(want), "{what}: {e}");
+        assert!(!e.contains(".data"), "{what}: the data word links: {e}");
+    }
+}
+
+/// aarch64 code and data reaching the undefined weak name `wf`
+/// PC-relative: `adr`, `adrp` + `add`, and `.word wf - .`.
+fn aarch64_weak_pc_user() -> Vec<u8> {
+    let text: Vec<u8> = [0x1000_0000u32, 0x9000_0000, 0x9100_0000, 0xd65f_03c0]
+        .iter()
+        .flat_map(|w| w.to_le_bytes())
+        .collect();
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &text)
+        .sec(".rodata", SHT_PROGBITS, SHF_ALLOC, 4, &[0xff; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 16)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_AARCH64_ADR_PREL_LO21, 0)
+        .reloc(0, 4, 4, rt::R_AARCH64_ADR_PREL_PG_HI21, 0)
+        .reloc(0, 8, 4, rt::R_AARCH64_ADD_ABS_LO12_NC, 0)
+        .reloc(1, 0, 4, rt::R_AARCH64_PREL32, 0)
+        .build(EM_AARCH64)
+}
+
+/// GNU ld 2.46.1 resolves an aarch64 PC-relative field naming an undefined
+/// weak name as if the name were at the field, the page of it for `adrp`,
+/// so each field holds 0, in a position-dependent executable and a PIE
+/// linked against no library; a dynamically linked PIE refuses one for a
+/// name a library may bind.
+#[test]
+fn an_aarch64_pc_relative_field_naming_an_undefined_weak_name_holds_0() {
+    for (emit, libs) in [
+        (LdsEmit::Exec, false),
+        (LdsEmit::Dyn, false),
+        (LdsEmit::Dyn, true),
+    ] {
+        let what = alloc::format!("{emit:?} libs={libs}");
+        let script = parse_linker_script(&default_script(emit == LdsEmit::Dyn)).expect("parses");
+        let o = parse_lds_object("a.o", aarch64_weak_pc_user()).expect("parses");
+        let mut opts = LdsOptions {
+            emit,
+            max_page_size: 0x10000,
+            ..LdsOptions::default()
+        };
+        if libs {
+            let mut lib = shared_input("libc.so.6", &["foo"], &[]);
+            lib.lib.machine = EM_AARCH64;
+            opts.shared_libs = alloc::vec![lib];
+            opts.interp = Some(String::from("/lib/ld-linux-aarch64.so.1"));
+        }
+        let res = link_with_script(&script, alloc::vec![o], &opts);
+        if libs {
+            let e = alloc::format!("{}", res.expect_err("refused"));
+            assert!(e.contains("R_AARCH64_ADR_PREL_LO21"), "{what}: {e}");
+            assert!(e.contains("R_AARCH64_PREL32"), "{what}: {e}");
+            continue;
+        }
+        let img = res.unwrap_or_else(|e| panic!("{what}: {e}")).image;
+        let (_, text) = image_section(&img, ".text");
+        assert_eq!(u32_at(&text, 0), 0x1000_0000, "{what}: adr x0, .");
+        assert_eq!(
+            u32_at(&text, 4),
+            0x9000_0000,
+            "{what}: adrp x0, the page of ."
+        );
+        let (_, data) = image_section(&img, ".rodata");
+        assert_eq!(u32_at(&data, 0), 0, "{what}");
+    }
+}
+
+/// A PIE that names an interpreter is dynamically linked with no library
+/// on the command line too, so it imports an undefined weak function it
+/// calls, as GNU ld 2.46.1 links one; a PIE that names none resolves it.
+#[test]
+fn a_pie_with_an_interpreter_imports_an_undefined_weak_function_it_calls() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for interp in [Some(String::from("/lib64/ld-linux-x86-64.so.2")), None] {
+        let o = parse_lds_object("a.o", weak_caller(false)).expect("parses");
+        let opts = LdsOptions {
+            emit: LdsEmit::Dyn,
+            interp: interp.clone(),
+            ..LdsOptions::default()
+        };
+        let img = link_with_script(&script, alloc::vec![o], &opts)
+            .expect("links")
+            .image;
+        let slot = section_addr(&img, ".rela.plt").map(|_| {
+            let (_, rela) = image_section(&img, ".rela.plt");
+            rela_entries(&rela)
+        });
+        if interp.is_some() {
+            let wf = dynsym_entries(&img).into_iter().find(|s| s.0 == "wf");
+            assert_eq!(wf.map(|s| s.1), Some((STB_WEAK << 4) | STT_NOTYPE));
+            assert_eq!(slot.map(|s| s.len()), Some(1), "a JUMP_SLOT");
+        } else {
+            assert!(slot.is_none_or(|s| s.is_empty()), "no PLT entry");
+        }
+    }
+}
+
+/// `-z lazy` is the engine's binding, lazy PLT entries bound through
+/// `R_*_JUMP_SLOT`, so it is taken and records nothing; the later of it
+/// and `-z now` stands, as GNU ld 2.46.1 takes them.
+#[test]
+fn z_lazy_is_taken_and_the_later_of_it_and_z_now_stands() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for (keywords, now) in [
+        (&["lazy"][..], false),
+        (&["now", "lazy"], false),
+        (&["lazy", "now"], true),
+    ] {
+        let mut z = ZKeywords::default();
+        for kw in keywords {
+            z.push(parse_z_keyword(kw).unwrap());
+        }
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.take_z_keywords(&z).expect("the engine takes them");
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tag = |want: u64| (dyn_tags(&res.image).into_iter()).find(|&(t, _)| t == want);
+        let flags = tag(dynamic::DT_FLAGS).map(|t| t.1 & dynamic::DF_BIND_NOW);
+        assert_eq!(flags, now.then_some(dynamic::DF_BIND_NOW), "{keywords:?}");
+        let flags_1 = tag(dynamic::DT_FLAGS_1).map_or(0, |t| t.1 & dynamic::DF_1_NOW);
+        assert_eq!(flags_1 != 0, now, "{keywords:?}");
+    }
+}
+
+/// An i386 PIE leaves each `R_386_PC32` naming an undefined weak name to a
+/// relocation against it, in code (a text relocation) and in data alike,
+/// so that the field holds the distance to the name's final address, 0
+/// where nothing defines it; its code's call, a direct reference beside
+/// the field, takes no PLT entry and reaches 0. A position-dependent
+/// executable resolves the fields itself. GNU ld 2.46.1 links them so.
+#[test]
+fn an_i386_pies_pc_relative_field_naming_an_undefined_weak_name_takes_a_relocation() {
+    // .text: `.long wf - .`, `call wf@PLT`; .data: `.long wf - .`.
+    // Symtab: null(0), sections(1, 2), _start(3), wf(4).
+    let text = [0, 0, 0, 0, 0xe8, 0xfc, 0xff, 0xff, 0xff, 0xc3];
+    let unit = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 16, &text)
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0; 4])
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 10)
+        .sym("wf", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        .reloc(0, 0, 4, rt::R_386_PC32, 0)
+        .reloc(0, 5, 4, rt::R_386_PLT32, -4)
+        .reloc(1, 0, 4, rt::R_386_PC32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    for pic in [Some(false), None] {
+        let opts = LdsOptions {
+            interp: Some(String::from("/lib/ld-linux.so.2")),
+            textrel: TextRelCheck::Allow,
+            ..i386_opts(pic)
+        };
+        let res = link_i386_with(alloc::vec![("u.o", unit.clone())], &opts).expect("links");
+        let img = &res.image;
+        let relocs = elf32_dyn_relocs(img);
+        let (t, data) = (elf32_section(img, ".text").2, elf32_section(img, ".data").2);
+        let text = elf32_body(img, ".text");
+        assert_eq!(
+            t as i64 + 9 + i32_at(text, 5),
+            0,
+            "{pic:?}: the call reaches 0"
+        );
+        let dynsym = elf32_symbols_of(img, ".dynsym", ".dynstr");
+        if pic.is_none() {
+            assert!(relocs.iter().all(|r| r.2 != "wf"), "{relocs:?}");
+            assert!(dynsym.iter().all(|s| s.0 != "wf"), "not dynamic");
+            continue;
+        }
+        let pc32 = |at: u64| (at, rt::R_386_PC32, String::from("wf"));
+        assert!(
+            relocs.contains(&pc32(t)) && relocs.contains(&pc32(data)),
+            "{relocs:?}"
+        );
+        assert!(
+            relocs.iter().all(|r| r.1 != rt::R_386_JUMP_SLOT),
+            "no PLT entry: {relocs:?}"
+        );
+        assert!(dynsym.iter().any(|s| s.0 == "wf"), "a dynamic symbol");
+    }
 }

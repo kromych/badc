@@ -16,7 +16,7 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::initializer::DataStore;
-use super::redeclaration::{DeclaredType, Definition, Params, Spelled};
+use super::redeclaration::{DeclaredType, Definition, LinkClaim, Params, Spelled};
 use super::types::{
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_void_ty, strip_unsigned, struct_id_of,
     struct_ptr_depth,
@@ -390,16 +390,86 @@ impl Compiler {
                 continue;
             }
             self.parse_file_scope_declaration()?;
+            self.report_unprototyped_lists();
         }
+        self.report_unprototyped_lists();
         self.complete_tentative_definitions()?;
+        self.apply_pragma_weak()?;
         self.resolve_pending_aliases()?;
         self.place_object_aliases();
         // Before the asm `.globl` sweep: that directive is an explicit
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
+        self.apply_default_visibility();
         self.resolve_file_scope_asm_globl();
         self.resolve_file_scope_asm_weak();
+        self.reject_section_type_conflicts()?;
         self.warn_unused_static_functions();
+        Ok(())
+    }
+
+    /// GNU `section`: a named section holds code, writable data or read-only
+    /// data, by the first definition placed in it; a later definition of
+    /// another kind is "a section type conflict", as gcc reports it, so no
+    /// section of C definitions is both writable and executable. A `const`
+    /// object a relocation writes is read-only to gcc only without `-fPIC`,
+    /// which this unit does not know, so it conflicts with code alone.
+    fn reject_section_type_conflicts(&self) -> Result<(), C5Error> {
+        const CODE: u8 = 0;
+        const READ_ONLY: u8 = 1;
+        const WRITABLE: u8 = 2;
+        const RELRO: u8 = 3;
+        let relocated = |s: &crate::c5::symbol::Symbol| {
+            let elems = s.array_size.max(1) as u64;
+            let bytes = (s.reserved_data_bytes.max(0) as u64)
+                .max(self.size_of_type(s.type_) as u64 * elems);
+            let span = (s.val as u64)..(s.val as u64 + bytes);
+            (self.data_relocs.iter().map(|r| r.data_offset))
+                .chain(self.code_relocs.iter().map(|r| r.data_offset))
+                .chain(self.extern_data_relocs.iter().map(|r| r.data_offset))
+                .any(|off| span.contains(&off))
+        };
+        let mut placed: Vec<(usize, &str, u8)> = (0..self.symbols.len())
+            .filter_map(|i| {
+                let s = &self.symbols[i];
+                let section = s.section_name.as_deref()?;
+                let kind = if s.class == Token::Fun as i64 && s.defined_here {
+                    CODE
+                } else if s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.declares_no_storage()
+                {
+                    match (s.storage_is_const, s.is_thread_local || relocated(s)) {
+                        (true, false) => READ_ONLY,
+                        (true, true) => RELRO,
+                        (false, _) => WRITABLE,
+                    }
+                } else {
+                    return None;
+                };
+                Some((i, section, kind))
+            })
+            .collect();
+        placed.sort_by_key(|&(i, ..)| {
+            let b = &self.symbols[i].binding;
+            (b.decl_file, b.decl_line, i)
+        });
+        let mut first: alloc::collections::BTreeMap<&str, (usize, u8)> = Default::default();
+        for (i, section, kind) in placed {
+            let &mut (j, k) = first.entry(section).or_insert((i, kind));
+            let data = |k| k != CODE;
+            if k != kind && !(data(k) && data(kind) && (k == RELRO || kind == RELRO)) {
+                let (name, other) = (&self.symbols[i].name, &self.symbols[j].name);
+                return Err(self.compile_err_at(
+                    Code::INVALID_DECLARATION,
+                    self.symbols[i].binding.decl_line,
+                    format!(
+                        "`{name}` causes a section type conflict with `{other}` in `{section}`"
+                    ),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -628,6 +698,7 @@ impl Compiler {
             base_conv: None,
         };
         if is_typedef {
+            self.dllimport_on_type(false);
             return self.bind_file_scope_typedef(decl, &b, preconsumed_params, decl_fn);
         }
 
@@ -715,7 +786,10 @@ impl Compiler {
             };
         let prior_class = self.symbols[id_idx].class;
         let prior_type = self.symbols[id_idx].type_;
-        if prior_class != 0 && prior_class != Token::Typedef as i64 {
+        // A `#pragma binding` no prototype has claimed declares nothing.
+        let unclaimed_binding =
+            prior_class == Token::Sys as i64 && self.symbols[id_idx].implicit_return_int;
+        if prior_class != 0 && prior_class != Token::Typedef as i64 && !unclaimed_binding {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(
@@ -953,6 +1027,14 @@ impl Compiler {
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
         self.apply_symbol_attributes(id_idx);
+        let dll = super::dllimport::DllImportDecl {
+            definition: is_defining_declarator,
+            inline: self.pending.attrs.saw_inline_specifier,
+            internal: self.symbols[id_idx].saw_static_decl,
+        };
+        self.apply_dllimport(id_idx, dll)?;
+        let align = core::mem::take(&mut self.pending.attrs.align).max(0) as u32;
+        self.symbols[id_idx].code_align = self.symbols[id_idx].code_align.max(align);
         // Read the sticky request back so a definition follows what any
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.
@@ -966,12 +1048,25 @@ impl Compiler {
         // A `Sys` binding's stub signature is no declaration of the unit, so the
         // first one the unit spells starts the composite type.
         if !is_defining_declarator {
+            let prototype = params.form == super::function::ParamForm::Prototype;
+            let name = self.symbols[id_idx].name.clone();
+            *self.file_scope_fn_decls.entry(name).or_default() |= prototype;
             let ret = Spelled {
                 ty,
                 enum_tag: decl.base_enum_tag,
             };
-            let declared = DeclaredType::Function(ret, Params::of(&params, false), named);
-            self.declare_linked(id_idx, declared, declarator_line)?;
+            let ret_fn = self.symbols[id_idx]
+                .fn_type
+                .ret
+                .clone()
+                .map(|(r, d)| (*r, d));
+            let declared = DeclaredType::Function(ret, Params::of(&params, false), named, ret_fn);
+            let claim = if static_seen {
+                LinkClaim::Internal
+            } else {
+                LinkClaim::Prior
+            };
+            self.declare_linked(id_idx, declared, declarator_line, false, claim)?;
         }
         // For Sys symbols (header-bound libc functions),
         // also fold the variadic flag onto the matching
@@ -1003,10 +1098,20 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             },
+            ret_fn: self.symbols[id_idx]
+                .fn_type
+                .ret
+                .clone()
+                .map(|(r, d)| (*r, d)),
             conv: named,
             line: declarator_line,
             implicit_int,
             extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
+            claim: if static_seen {
+                LinkClaim::Internal
+            } else {
+                LinkClaim::Prior
+            },
         };
         self.parse_function_definition(id_idx, params, def)
     }
@@ -1148,6 +1253,32 @@ impl Compiler {
         Ok(())
     }
 
+    /// gcc's `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
+    /// definition, neither `inline` nor `main`, that no file-scope
+    /// declaration with a prototype / at all preceded. A block-scope
+    /// declaration is not visible there and counts for neither.
+    fn report_missing_declaration(&mut self, id_idx: usize, line: usize) {
+        let s = &self.symbols[id_idx];
+        if s.saw_static_decl
+            || s.saw_plain_inline_decl
+            || s.saw_extern_inline_decl
+            || s.name == "main"
+            || !self.in_user_source()
+        {
+            return;
+        }
+        let name = s.name.clone();
+        let declared = self.file_scope_fn_decls.get(&name).copied();
+        if declared != Some(true) {
+            let text = format!("no previous prototype for `{name}`");
+            self.warn_at(Code::MISSING_PROTOTYPES, line, text);
+        }
+        if declared.is_none() {
+            let text = format!("no previous declaration for `{name}`");
+            self.warn_at(Code::MISSING_DECLARATIONS, line, text);
+        }
+    }
+
     /// The definition: the K&R parameter declarations, the body, and the
     /// records the walker and the debug info read off the finished frame.
     fn parse_function_definition(
@@ -1172,7 +1303,16 @@ impl Compiler {
                 "parameter name omitted in a function definition",
             ));
         }
-        self.parse_kr_parameter_declarations(&mut params, def.line)?;
+        // The function's block, from the parameter list's tags (C99 6.2.1p4).
+        self.tag_scopes.push();
+        for (name, id) in core::mem::take(&mut params.tags) {
+            self.tag_scopes.bind(&name, id);
+        }
+        self.open_param_list_scope();
+        let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
+        let enumerators = self.close_param_list_scope();
+        kr?;
+        params.enumerators.extend(enumerators);
         self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1192,6 +1332,12 @@ impl Compiler {
             params.types.clone()
         };
         let prototyped = self.has_prototype(id_idx, &params);
+        self.claim_unprototyped_list(&params);
+        if !prototyped && self.in_user_source() {
+            let text = alloc::string::String::from("function declaration is not a prototype");
+            self.warn_at(Code::STRICT_PROTOTYPES, def.line, text);
+        }
+        self.report_missing_declaration(id_idx, def.line);
         self.symbols[id_idx].unprototyped_def = !prototyped;
         self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
@@ -1202,11 +1348,25 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
         }
+        // C99 7.12.2: the body is a compound statement, the scope of an
+        // `FP_CONTRACT` pragma within it.
+        let fp_contract = self.lex.fp_contract;
         self.next()?;
 
         let ent_pc = self.open_function_body(id_idx, &params);
+        // The function's block continues the scope of the enumeration
+        // constants its parameter list declared (C99 6.2.1p4).
+        for &(idx, ty, val, enumeration) in &params.enumerators {
+            self.rebind_scoped(idx)?;
+            let s = &mut self.symbols[idx];
+            (s.class, s.type_, s.val) = (Token::Num as i64, ty, val);
+            s.incomplete_enum_tag = None;
+            s.enumeration = enumeration;
+        }
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items(&params)?;
+        self.lex.fp_contract = fp_contract;
+        self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
@@ -1394,7 +1554,27 @@ impl Compiler {
             }
             self.restore_lex(size.at);
             self.expr(Token::Assign as i64)?;
-            items.extend(self.ast_emit_expr_stmt());
+            let Some(vm) = size.vm else {
+                items.extend(self.ast_emit_expr_stmt());
+                continue;
+            };
+            // The parameter's type takes the variable-length array whose byte
+            // count this evaluation stores.
+            if self.is_int128_ty(self.ty) {
+                self.ast_apply_assign_conv(self.size_t_ty());
+            }
+            let Some(dim) = self.ast_acc.take() else {
+                continue;
+            };
+            let (vla_ty, bound) = self.vla_bound_type(vm.elem, dim);
+            let pos = self.ast_src_pos();
+            items.push(
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos),
+            );
+            let declared = self.symbols[vm.sym].type_;
+            let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
+            self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;
         }
         self.restore_lex(resume);
         Ok(items)
@@ -1456,6 +1636,7 @@ impl Compiler {
         self.func_local_addr_taken = false;
         self.uses_alloca_in_current_fn = false;
         self.func_vla_decls = 0;
+        self.vla_type_sizes.clear();
         self.ast_reset();
 
         let ent_pc = self.next_ent_pc;
@@ -1584,14 +1765,6 @@ impl Compiler {
         // frame, or parses a statement.
         let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
         self.stmt_expr_arena_ranges.clear();
-        // C99 6.2.1: a tag declared in a function body has
-        // block scope. Push a tag scope so a struct / union /
-        // enum defined at the body top level is local to this
-        // function -- two functions defining the same tag do
-        // not collide, and a body-scope tag shadows a
-        // file-scope one. Nested blocks push their own scopes
-        // through parse_block_stmt.
-        self.tag_scopes.push();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
@@ -1623,17 +1796,17 @@ impl Compiler {
                 // level (and the inner blocks reached
                 // through parse_block_stmt).
                 self.parse_static_assert()?;
-            } else if self.lex.tk == Token::Typedef {
-                // C99 6.7.7: a typedef may appear at the
-                // function-body top level. `lex_is_type_start`
-                // does not cover the `typedef` storage-class
-                // keyword, so dispatch it here (the nested
-                // blocks reach the same handler through
-                // parse_block_stmt).
-                self.parse_block_typedef()?;
-            } else if self.lex_is_block_decl_start() {
+            } else if self.lex.tk == Token::Typedef || self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
-                self.parse_local_decl()?;
+                // C99 6.7.7: a typedef may appear at the function-body top
+                // level; `lex_is_block_decl_start` does not cover the
+                // `typedef` keyword. A variably modified one stores its
+                // array's size.
+                if self.lex.tk == Token::Typedef {
+                    self.parse_block_typedef()?;
+                } else {
+                    self.parse_local_decl()?;
+                }
                 let item_after = self.ast.stmts.len();
                 // Skip any statement-expression sub-statements
                 // interleaved by an initializer; they are
@@ -1672,7 +1845,6 @@ impl Compiler {
         }
         self.resolve_jumps()?;
         self.cleanup_scopes.pop();
-        self.tag_scopes.pop();
         self.local_label_scopes.close();
         // The body's own objects end with it, as a nested block's do.
         let mut slots: alloc::vec::Vec<i64> = self
@@ -2015,6 +2187,10 @@ impl Compiler {
             base_type_align,
             ..
         } = decl;
+        // A dllimport object is declared, never defined, here.
+        let extern_seen = extern_seen
+            || self.pending.attrs.dllimport
+                && self.target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
         let &DeclaratorBinding {
             id_idx,
             ty,
@@ -2030,12 +2206,27 @@ impl Compiler {
             ty,
             enum_tag: decl.base_enum_tag,
         };
+        let leads_to = (b.fn_ptr_indirection > 0)
+            .then(|| (self.symbols[id_idx].fn_type.clone(), b.fn_ptr_indirection));
+        let claim = match (static_seen, extern_seen) {
+            (true, _) => LinkClaim::Internal,
+            (false, true) => LinkClaim::Prior,
+            (false, false) => LinkClaim::External,
+        };
         self.declare_linked(
             id_idx,
-            DeclaredType::Object(spelled, bounds),
+            DeclaredType::Object(spelled, bounds, leads_to),
             signature_line,
+            thread_local,
+            claim,
         )?;
         self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
+        let dll = super::dllimport::DllImportDecl {
+            definition: self.lex.tk == Token::Assign,
+            inline: false,
+            internal: self.symbols[id_idx].linkage == crate::c5::symbol::Linkage::Internal,
+        };
+        self.apply_dllimport(id_idx, dll)?;
         if self.bind_object_alias(id_idx, ty)? {
             return Ok(());
         }
@@ -2393,7 +2584,6 @@ impl Compiler {
         // array-ness that the scalar `array_size == 0`
         // encoding would otherwise drop.
         self.symbols[id_idx].is_zero_len_array = final_size == 0;
-        self.reserve_zero_length_array_slot(id_idx);
         // Patch the deferred-outer placeholder in
         // `array_dims[0]` to the resolved row count.
         // Layout: total elements = outer * inner-dims-product,
@@ -2430,6 +2620,7 @@ impl Compiler {
             fresh
         };
         self.symbols[id_idx].val = off;
+        self.reserve_zero_length_array_slot(id_idx);
         self.write_array_init_into_data(off, ty, &elements)?;
         self.symbols[id_idx].has_initializer = true;
         self.symbols[id_idx].defined_here = true;
@@ -2875,6 +3066,37 @@ impl Compiler {
         }
     }
 
+    /// `#pragma weak`: a name binds weak as `.weak` does; `name = target` is a weak alias.
+    fn apply_pragma_weak(&mut self) -> Result<(), C5Error> {
+        use crate::c5::symbol::Linkage;
+        for (name, target) in core::mem::take(&mut self.pragma_weak) {
+            if !self.asm_weak_names.contains(&name) {
+                self.asm_weak_names.push(name.clone());
+            }
+            let Some(target) = target else {
+                continue;
+            };
+            let decl = self.symbols.iter().position(|s| {
+                s.link_name() == name
+                    && s.linkage == Linkage::External
+                    && (s.class == Token::Fun as i64 || s.class == Token::Glo as i64)
+            });
+            let Some(idx) = decl else {
+                Self::set_alias(&mut self.asm_sym_sets, &name, &target, 0);
+                continue;
+            };
+            if self.symbols[idx].defined_here && !self.symbols[idx].is_extern_decl {
+                let text = format!("`#pragma weak {name} = {target}` names a definition");
+                return Err(self.compile_err(Code::INVALID_DECLARATION, text));
+            }
+            let is_object = self.symbols[idx].class == Token::Glo as i64;
+            self.symbols[idx].is_weak = true;
+            self.symbols[idx].is_alias = true;
+            self.pending_aliases.push((idx, target, is_object));
+        }
+        Ok(())
+    }
+
     /// A file-scope `asm(".weak name");` binds the name weak, as the attribute does.
     fn resolve_file_scope_asm_weak(&mut self) {
         for name in &self.asm_weak_names {
@@ -2916,6 +3138,8 @@ impl Compiler {
                     });
                 continue;
             }
+            // References to an extern declaration's storage move onto the target's.
+            self.note_global_relocated(id_idx, is_object, self.symbols[tgt].val);
             self.symbols[id_idx].val = self.symbols[tgt].val;
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
@@ -2989,10 +3213,36 @@ impl Compiler {
     /// the identifier stays an undefined external reference that every
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
+    /// On Windows an inline function's external definition is pick-any, as
+    /// MSVC and clang's `*-windows-msvc` emit an `IMAGE_COMDAT_SELECT_ANY`.
+    /// gcc's `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default, as in gcc.
+    fn apply_default_visibility(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let Some(vis) = self.default_visibility else {
+            return;
+        };
+        for sym in self.symbols.iter_mut() {
+            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
+            if named
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.visibility_stated
+            {
+                sym.visibility = Some(vis);
+            }
+        }
+    }
+
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
+        let windows = self.target.is_windows();
         for sym in self.symbols.iter_mut() {
+            if sym.pick_any && !(sym.class == Token::Glo as i64 && sym.defined_here) {
+                sym.pick_any = false;
+            }
+            sym.is_weak |= sym.pick_any;
             // Only names this unit declared at file scope; the census
             // bits are the record of that, and symbols the parser
             // synthesizes keep whatever linkage they were built with.
@@ -3011,6 +3261,10 @@ impl Compiler {
             // collides with nothing the source can declare.
             if sym.is_inline_definition && sym.defined_here {
                 sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
+            }
+            if windows && sym.defined_here && !sym.is_inline_definition && !sym.is_gnu_inline {
+                sym.pick_any = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+                sym.is_weak |= sym.pick_any;
             }
         }
     }
@@ -3077,6 +3331,10 @@ impl Compiler {
         if self.pending.attrs.weak {
             self.symbols[id_idx].is_weak = true;
         }
+        // Settled once the unit ends: only an object this unit defines is.
+        if self.pending.attrs.selectany {
+            self.symbols[id_idx].pick_any = true;
+        }
         if self.pending.attrs.used {
             self.symbols[id_idx].is_used = true;
         }
@@ -3100,13 +3358,17 @@ impl Compiler {
         }
         // An explicit `visibility` attribute states the answer; without one
         // the enclosing `#pragma GCC visibility` extent supplies it.
-        let hidden = self
+        if let Some(visibility) = self
             .pending
             .attrs
             .visibility
-            .unwrap_or_else(|| self.lex.visibility_hidden());
-        if hidden {
-            self.symbols[id_idx].is_hidden = true;
+            .or_else(|| self.lex.visibility())
+        {
+            let sym = &mut self.symbols[id_idx];
+            sym.visibility_stated = true;
+            if visibility.is_some() {
+                sym.visibility = visibility;
+            }
         }
         if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);

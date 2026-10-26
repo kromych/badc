@@ -49,7 +49,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x1, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rax, (%rcx)
                	movl	(%rax), %edx
                	addq	$0xa, %rdx
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	movl	$0x3, -0x8(%rbp)
                	movq	%rax, (%rcx)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movl	(%rcx), %esi
                	addq	$0x1e, %rsi
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movq	%rdx, (%rax)
                	movl	$0x6, -0x8(%rbp)
                	movq	%rcx, (%rax)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movl	(%rcx), %esi
                	incq	%rsi
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %rdx
                	movabsq	$0x1122334455667788, %rcx # imm = 0x1122334455667788
                	movq	%rcx, -0x8(%rbp)
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rdi, (%rcx)
                	movq	(%rdi), %rsi
                	xorq	$0x1, %rsi
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movl	$0x9, -0x8(%rbp)
                	movq	%rdi, (%rax)
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movq	(%rdx), %rax
                	movl	(%rax), %esi
                	incq	%rsi
@@ -139,7 +139,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %r8       # <addr>
+               	leaq	<rip>, %r8 # <addr>
                	xorl	%eax, %eax
                	movq	%rax, %rsi
                	movl	%eax, -0x10(%rbp)

@@ -41,15 +41,21 @@ thousand tests, and fuzzing jobs run daily.
   single-source EFI application, its PE subsystem selected by
   `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
-  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.1.10`.
+  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.2.9`.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
-  [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).
+  [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/), and
+  [`OpenSSL`](./demos/openssl/) 4.1.0 as a badc Configure target with its
+  own `make test` (wired; the run waits on header gaps its build reaches).
 * _Graphics, math, and the rest_: [`stb`](./demos/README.md#stb),
   [`raylib`](./demos/raylib/) with a Lode Runner game,
+  [`Nuklear`](./demos/nuklear/), whose demo windows rendered headlessly give
+  the same frames under badc `-O0`, `-O` and the host compiler,
   [`kissfft`](./demos/kissfft/), the [`GUI`](./demos/gui_hello/) demos (one
   windowed program per OS family, each cross-compiled to every target), the
-  [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver, the NT native
+  [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver,
+  [`SimpleVisor`](./demos/simplevisor/), an Intel VT-x hypervisor built as a
+  native-subsystem driver and checked but never loaded, the NT native
   binaries ([`nt_hello`](./demos/README.md#nt_hello), an
   `IMAGE_SUBSYSTEM_NATIVE` PE that runs under `ntdll` alone, and
   [`nt_loader`](./demos/README.md#nt_loader), which spawns one through

@@ -14,12 +14,10 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSGD_ADD_LO12_NC, R_AARCH64_TLSGD_ADR_PAGE21,
     R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_DTPOFF32,
     R_X86_64_DTPOFF64, R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTTPOFF, R_X86_64_TLSDESC_CALL,
-    R_X86_64_TLSGD, R_X86_64_TLSLD,
+    R_X86_64_TLSGD, R_X86_64_TLSLD, aarch64_dtprel_field,
 };
 
-/// The module's thread-local block, named by a local-dynamic descriptor
-/// sequence; 0 from the thread pointer once the sequence is rewritten.
-pub(crate) const TLS_MODULE_BASE: &str = "_TLS_MODULE_BASE_";
+pub(crate) use crate::c5::object::elf_reloc_types::TLS_MODULE_BASE;
 
 /// The resolver a general- or local-dynamic sequence calls.
 pub(crate) const TLS_GET_ADDR: &str = "__tls_get_addr";
@@ -69,17 +67,19 @@ pub(crate) fn transitions(machine: NativeMachine, rtype: u32) -> bool {
                 | R_X86_64_GOTPC32_TLSDESC
                 | R_X86_64_TLSDESC_CALL
         ),
-        NativeMachine::Aarch64 => matches!(
-            rtype,
-            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21
-                | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC
-                | R_AARCH64_TLSGD_ADR_PAGE21
-                | R_AARCH64_TLSGD_ADD_LO12_NC
-                | R_AARCH64_TLSDESC_ADR_PAGE21
-                | R_AARCH64_TLSDESC_LD64_LO12
-                | R_AARCH64_TLSDESC_ADD_LO12
-                | R_AARCH64_TLSDESC_CALL
-        ),
+        NativeMachine::Aarch64 => {
+            matches!(
+                rtype,
+                R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21
+                    | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC
+                    | R_AARCH64_TLSGD_ADR_PAGE21
+                    | R_AARCH64_TLSGD_ADD_LO12_NC
+                    | R_AARCH64_TLSDESC_ADR_PAGE21
+                    | R_AARCH64_TLSDESC_LD64_LO12
+                    | R_AARCH64_TLSDESC_ADD_LO12
+                    | R_AARCH64_TLSDESC_CALL
+            ) || aarch64_dtprel_field(rtype).is_some()
+        }
     }
 }
 
@@ -99,11 +99,13 @@ pub(crate) fn is_initial_exec(machine: NativeMachine, rtype: u32) -> bool {
 /// Whether a relocation of this type belongs to the local-dynamic model,
 /// which reaches the module's own block only.
 pub(crate) fn is_local_dynamic(machine: NativeMachine, rtype: u32) -> bool {
-    machine == NativeMachine::X86_64
-        && matches!(
+    match machine {
+        NativeMachine::X86_64 => matches!(
             rtype,
             R_X86_64_TLSLD | R_X86_64_DTPOFF32 | R_X86_64_DTPOFF64
-        )
+        ),
+        NativeMachine::Aarch64 => aarch64_dtprel_field(rtype).is_some(),
+    }
 }
 
 /// Whether a relocation of this type opens a sequence calling `__tls_get_addr`.

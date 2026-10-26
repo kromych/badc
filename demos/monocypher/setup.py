@@ -28,11 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "4.0.2"
-UPSTREAM_SHA = "bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4"  # tarball sha256
+VERSION = "4.0.3"
+UPSTREAM_SHA = "a7cbae546fbdc489bca632c3747e1ceb8ca3d4bd39e2706a0916f28ccd280e50"  # tarball sha256
 ASSET = f"monocypher-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4"
+SHA256 = "a7cbae546fbdc489bca632c3747e1ceb8ca3d4bd39e2706a0916f28ccd280e50"
 # Core + optional Ed25519 (RFC 8032 with SHA-512). The smoke
 # harness wants the RFC 8032 vector to verify, which the
 # default `crypto_eddsa_*` API (BLAKE2b-based) doesn't satisfy

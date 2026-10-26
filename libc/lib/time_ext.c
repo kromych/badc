@@ -172,8 +172,8 @@ int gettimeofday(struct timeval *restrict tv, void *restrict tz) {
     return 0;
 }
 
-// msvcrt keeps localtime's, gmtime's and ctime's results per thread, so a
-// copy taken at once is the caller's alone.
+// msvcrt keeps localtime's, gmtime's, ctime's and asctime's results per
+// thread, so a copy taken at once is the caller's alone.
 struct tm *localtime_r(const time_t *t, struct tm *result) {
     struct tm *p = localtime(t);
     if (!p) {
@@ -198,6 +198,15 @@ char *ctime_r(const time_t *t, char *buf) {
         return NULL;
     }
     // ctime's text is the 26 bytes of "Www Mmm dd hh:mm:ss yyyy\n\0".
+    memcpy(buf, p, 26);
+    return buf;
+}
+
+char *asctime_r(const struct tm *restrict tm, char *restrict buf) {
+    char *p = asctime(tm);
+    if (!p) {
+        return NULL;
+    }
     memcpy(buf, p, 26);
     return buf;
 }

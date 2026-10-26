@@ -97,7 +97,7 @@ Disassembly of section .text:
                	retq
 
 <probe>:
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	%edx, %eax
                	movzwq	(%rcx,%rax,2), %rdx
                	testl	%edx, %edx

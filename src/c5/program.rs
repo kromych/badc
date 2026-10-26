@@ -89,6 +89,18 @@ pub enum SymVisibility {
 }
 
 impl SymVisibility {
+    /// GCC's `visibility` operand: `None` for an unknown one, `Some(None)`
+    /// for `default`.
+    pub fn from_gcc_name(name: &str) -> Option<Option<Self>> {
+        Some(match name {
+            "default" => None,
+            "hidden" => Some(SymVisibility::Hidden),
+            "internal" => Some(SymVisibility::Internal),
+            "protected" => Some(SymVisibility::Protected),
+            _ => return None,
+        })
+    }
+
     /// The `st_other` visibility value.
     pub fn stv(self) -> u8 {
         self as u8
@@ -332,6 +344,13 @@ pub struct Program {
     pub(crate) bind_trampoline_slots: bool,
     /// References name a weak definition by its symbol (relocatable output).
     pub(crate) weak_refs_by_name: bool,
+    /// References name an interposable definition by its symbol, so the link
+    /// decides its preemption (position-independent ELF relocatable output);
+    /// see [`crate::c5::symbol::Symbol::is_interposable_definition`].
+    pub(crate) interposable_refs: bool,
+    /// `-ffp-contract=fast`: `-O` contracts any product the add or subtract
+    /// using it is the only use of, not only a contractible one.
+    pub(crate) fp_contract_fast: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
     /// the initialization template the runtime copies per thread; the
@@ -360,6 +379,9 @@ pub struct Program {
     /// library). The VM and JIT ignore this field; only the
     /// shared-object writer paths consume it.
     pub exports: Vec<ExportedFunction>,
+    /// The objects `#pragma export` names, by link name: a shared-object
+    /// writer exports each, a link through the unit's export note.
+    pub exported_objects: Vec<String>,
     /// Per-target dylib + binding map produced by the preprocessor
     /// from the `#pragma comment(dylib, ...)` and
     /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.
@@ -456,6 +478,8 @@ pub struct Program {
     /// to warn when a relocatable emit drops the pragma (an object
     /// file does not carry it).
     pub entry_pragma: Option<String>,
+    /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
+    pub default_libs: Vec<String>,
     /// Function names the auto-include retry bound to a bundled
     /// header during [`crate::c5::Compiler::compile`]. The driver
     /// consults this in a multi-TU build: a name another input
@@ -522,6 +546,14 @@ pub struct Program {
 }
 
 impl Program {
+    /// The link names the unit declares or defines weak.
+    pub(crate) fn weak_link_names(&self) -> alloc::collections::BTreeSet<&str> {
+        (self.symbols.iter())
+            .filter(|s| s.is_weak && s.is_link_entity())
+            .map(|s| s.link_name())
+            .collect()
+    }
+
     /// Data slots holding a `&&label` address, each paired with the
     /// `ent_pc` of the function the label lives in. The slot needs a
     /// relocation and keeps that function reachable.
@@ -719,10 +751,13 @@ impl DataOffsets for Program {
             sys_trampolines: _,       // code address space
             bind_trampoline_slots: _, // a mode
             weak_refs_by_name: _,     // a mode
+            interposable_refs: _,     // a mode
+            fp_contract_fast: _,      // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
             exports: _,
+            exported_objects: _,
             dylibs: _,
             dllmain_pc: _,
             source_files: _,
@@ -732,6 +767,7 @@ impl DataOffsets for Program {
             enums: _,
             entry_name: _,
             entry_pragma: _,
+            default_libs: _,
             auto_includes: _,
             subsystem: _,
             finished_functions,
@@ -858,10 +894,13 @@ mod data_offset_tests {
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
+            fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             exports: Vec::new(),
+            exported_objects: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
             source_files: Vec::new(),
@@ -871,6 +910,7 @@ mod data_offset_tests {
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,
+            default_libs: Vec::new(),
             auto_includes: Vec::new(),
             data_align: 8,
             image_align_error: None,

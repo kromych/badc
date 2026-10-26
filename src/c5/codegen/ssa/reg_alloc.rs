@@ -406,8 +406,8 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
     }
     match inst {
         Inst::Binop { op, lhs, rhs } => {
-            let fp = super::super::ir::is_fp_comparison_op(*op)
-                || matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv);
+            let fp =
+                super::super::ir::is_fp_comparison_op(*op) || crate::c5::ir::is_fp_arith_op(*op);
             f(*lhs, fp);
             f(*rhs, fp);
         }
@@ -1436,7 +1436,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let site_regs = |inst: &Inst| -> u32 {
         if matches!(
             inst,
-            Inst::Mcpy { .. } | Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }
+            Inst::Mcpy { .. }
+                | Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
         ) {
             u32::MAX
         } else if target.is_x86_64() {
@@ -1566,6 +1569,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -1739,7 +1743,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::BitField { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
-                    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                    crate::c5::ir::is_fp_arith_op(*op)
                 } else {
                     !is_compare_op(*op)
                 }
@@ -1757,6 +1761,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -1894,6 +1899,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::Mcpy { .. }
                     | Inst::AtomicRmw { .. }
                     | Inst::AtomicCas { .. }
+                    | Inst::AtomicCas16 { .. }
                     | Inst::Phi { .. }
             )
         {
@@ -2572,7 +2578,7 @@ fn check_allocation(
 
     // Result-register read: a `RetPart` follows a call in its block, and
     // nothing between them sits in or implicitly writes its register.
-    let tls_call = tls_addr_is_call(target);
+    let tls_call = tls_addr_is_call(target, func);
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
@@ -3364,7 +3370,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
-            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => ResultKind::Fp,
+            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::FmulContractible | BinOp::Fdiv => {
+                ResultKind::Fp
+            }
             // FP comparisons return an integer 0/1.
             _ => ResultKind::Int,
         },
@@ -3404,7 +3412,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mzero { .. } => ResultKind::None,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
         // an integer scalar.
-        AtomicRmw { .. } | AtomicCas { .. } | AtomicLoad { .. } => ResultKind::Int,
+        AtomicRmw { .. } | AtomicCas { .. } | AtomicCas16 { .. } | AtomicLoad { .. } => {
+            ResultKind::Int
+        }
         AtomicStore { .. } => ResultKind::None,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
@@ -3660,7 +3670,7 @@ fn populate_return_hints(
     //     control flow means there is no back-edge / phi-merge gap
     //     that the broader per-value relaxation otherwise surfaces
     //     as a regression, absent in straight-line shapes.
-    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target));
+    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target, func));
     let has_call = func.insts.iter().any(call);
     let single_block = func.blocks.len() == 1;
     if has_call && !single_block {
@@ -3859,7 +3869,7 @@ fn compute_param_incoming_forbid(
     }
     // A `RetPart` reads its call's result register, which stays live from
     // the call to the part: a value defined between them stays off it.
-    let tls_call = tls_addr_is_call(target);
+    let tls_call = tls_addr_is_call(target, func);
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
@@ -4303,13 +4313,14 @@ fn compute_calls_after_def(
     // order: a value live across a call only on a branch or back-edge
     // path has that call outside its `[def, last_use]` pc interval, so
     // a pc-interval test misses it.
-    liveness.values_live_across_calls(func, tls_addr_is_call(target))
+    liveness.values_live_across_calls(func, tls_addr_is_call(target, func))
 }
 
-/// Whether the target's `Inst::TlsAddr` lowering issues a call: Mach-O
-/// invokes the TLV descriptor's routine through `blr`.
-pub(crate) fn tls_addr_is_call(target: Target) -> bool {
-    matches!(target, Target::MacOSAarch64)
+/// Whether `func`'s `Inst::TlsAddr` lowering issues a call: Mach-O invokes
+/// the TLV descriptor's routine through `blr`, and Linux `-fPIC` code its
+/// TLS descriptor's.
+pub(crate) fn tls_addr_is_call(target: Target, func: &FunctionSsa) -> bool {
+    matches!(target, Target::MacOSAarch64) || func.tls_dynamic
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
@@ -4770,7 +4781,7 @@ int main(void) { return 0; }
             true,
         )
         .expect("ssa");
-        crate::c5::codegen::passes::fma::run(&mut funcs);
+        crate::c5::codegen::passes::fma::run(&mut funcs, false);
         let f = funcs.iter().find(|f| f.name == "f").expect("f");
         assert!(f.insts.iter().any(|i| matches!(i, Inst::Fma { .. })));
         let spills_an_fma = |alloc: &Allocation| {
@@ -5552,6 +5563,7 @@ int main(void) { return 0; }
                             | Inst::Mcpy { .. }
                             | Inst::AtomicRmw { .. }
                             | Inst::AtomicCas { .. }
+                            | Inst::AtomicCas16 { .. }
                             | Inst::Phi { .. }
                     );
                 match kind {
@@ -5900,6 +5912,7 @@ int main(void) { return 0; }
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -6144,6 +6157,7 @@ int main(void) { return 0; }
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

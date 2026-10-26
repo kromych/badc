@@ -346,6 +346,28 @@ typedef struct _WSAPROTOCOL_INFOW {
     unsigned short   szProtocol[256];
 } WSAPROTOCOL_INFOW;
 typedef struct _WSAPROTOCOL_INFOW *LPWSAPROTOCOL_INFOW;
+typedef struct _WSAPROTOCOL_INFOA {
+    DWORD            dwServiceFlags1;
+    DWORD            dwServiceFlags2;
+    DWORD            dwServiceFlags3;
+    DWORD            dwServiceFlags4;
+    DWORD            dwProviderFlags;
+    GUID             ProviderId;
+    DWORD            dwCatalogEntryId;
+    WSAPROTOCOLCHAIN ProtocolChain;
+    int              iVersion;
+    int              iAddressFamily;
+    int              iMaxSockAddr;
+    int              iMinSockAddr;
+    int              iSocketType;
+    int              iProtocol;
+    int              iProtocolMaxOffset;
+    int              iNetworkByteOrder;
+    int              iSecurityScheme;
+    DWORD            dwMessageSize;
+    DWORD            dwProviderReserved;
+    CHAR             szProtocol[WSAPROTOCOL_LEN + 1];
+} WSAPROTOCOL_INFOA, *LPWSAPROTOCOL_INFOA;
 
 // WSASocketW dwFlags (winsock2.h).
 #define WSA_FLAG_OVERLAPPED        0x01
@@ -429,7 +451,10 @@ int WSASendTo(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumbe
 // length is in/out: callers pass the buffer size and read back the
 // bytes written.
 #pragma binding(ws2_32::WSAStringToAddressW, "WSAStringToAddressW")
+#pragma binding(ws2_32::WSAStringToAddressA, "WSAStringToAddressA")
 INT WSAStringToAddressW(LPWSTR AddressString, INT AddressFamily, LPWSAPROTOCOL_INFOW lpProtocolInfo,
+                        LPSOCKADDR lpAddress, LPINT lpAddressLength);
+INT WSAStringToAddressA(LPSTR AddressString, INT AddressFamily, LPWSAPROTOCOL_INFOA lpProtocolInfo,
                         LPSOCKADDR lpAddress, LPINT lpAddressLength);
 
 // Connect a socket, optionally exchanging connect-time data (winsock2.h).
@@ -441,7 +466,9 @@ int WSAConnect(SOCKET s, const struct sockaddr *name, int namelen, LPWSABUF lpCa
 
 #pragma binding(ws2_32::WSAIoctl,            "WSAIoctl")
 #pragma binding(ws2_32::WSASocketW,          "WSASocketW")
+#pragma binding(ws2_32::WSASocketA,          "WSASocketA")
 #pragma binding(ws2_32::WSADuplicateSocketW, "WSADuplicateSocketW")
+#pragma binding(ws2_32::WSADuplicateSocketA, "WSADuplicateSocketA")
 #pragma binding(ws2_32::select,              "select")
 #pragma binding(ws2_32::__WSAFDIsSet,        "__WSAFDIsSet")
 #pragma binding(ws2_32::getservbyport,       "getservbyport")
@@ -463,7 +490,10 @@ int WSAIoctl(SOCKET s, DWORD dwIoControlCode, LPVOID lpvInBuffer, DWORD cbInBuff
              LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 SOCKET WSASocketW(int af, int type, int protocol, LPWSAPROTOCOL_INFOW lpProtocolInfo, GROUP g,
                   DWORD dwFlags);
+SOCKET WSASocketA(int af, int type, int protocol, LPWSAPROTOCOL_INFOA lpProtocolInfo, GROUP g,
+                  DWORD dwFlags);
 int WSADuplicateSocketW(SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOW lpProtocolInfo);
+int WSADuplicateSocketA(SOCKET s, DWORD dwProcessId, LPWSAPROTOCOL_INFOA lpProtocolInfo);
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
            const struct timeval *timeout);
 struct servent *getservbyport(int port, const char *proto);
@@ -485,4 +515,10 @@ struct protoent {
     char **p_aliases;
     short  p_proto;
 };
+
+#define WSADuplicateSocket __MINGW_NAME_AW(WSADuplicateSocket)
+#define WSASocket __MINGW_NAME_AW(WSASocket)
+#define WSAStringToAddress __MINGW_NAME_AW(WSAStringToAddress)
+__MINGW_TYPEDEF_AW(WSAPROTOCOL_INFO)
+__MINGW_TYPEDEF_AW(LPWSAPROTOCOL_INFO)
 #endif

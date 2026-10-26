@@ -216,7 +216,7 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         // `is_thread_local` is the slot's storage, not the target's.
-        self.reject_thread_local_addr_const(target_idx)?;
+        self.reject_load_time_addr_const(target_idx)?;
         // A block-scope static's address anchors to its emission record;
         // the binding slot is restored at scope exit (see `ast_emit_ident`).
         let target_idx = self.symbols[target_idx]
@@ -375,6 +375,19 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
+        // A 32-bit pointer holding an address takes a 32-bit relocation,
+        // which the data writers do not emit. TODO: `IMAGE_REL_*_ADDR32`.
+        if super::types::is_ptr32_ty(var_ty) {
+            let cp = self.init_checkpoint();
+            let leaf = self.parse_constant_init_value();
+            if let Ok(InitLeaf { reloc, .. }) = leaf
+                && !matches!(reloc, InitElemReloc::None)
+            {
+                let text = "a `__ptr32` pointer's static initializer is not an integer constant";
+                return Err(self.compile_err_at(Code::UNSUPPORTED, line, text));
+            }
+            self.restore_init_checkpoint(cp);
+        }
         let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
@@ -385,9 +398,10 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok(InitLeaf { value, reloc, ty })
-                    if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
-                        && self.at_initializer_end() =>
+                Ok(InitLeaf {
+                    value, reloc, ty, ..
+                }) if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+                    && self.at_initializer_end() =>
                 {
                     if !fn_checked {
                         self.check_constant_init_conversion(
@@ -555,7 +569,9 @@ impl Compiler {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
                 Ok(leaf) if self.at_initializer_end() => {
-                    let InitLeaf { value, reloc, ty } = leaf;
+                    let InitLeaf {
+                        value, reloc, ty, ..
+                    } = leaf;
                     let flags = (leaf.is_zero_int(), false);
                     self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
                     if is_thread_local {
@@ -638,6 +654,13 @@ impl Compiler {
             } else {
                 self.restore_lex(after_open);
                 self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
+                // C99 6.6p3: the evaluated comma of `(a, b)`.
+                if self.lex.tk == ',' {
+                    return Err(self.compile_err(
+                        Code::CONSTANT_EXPRESSION,
+                        "a comma operator is evaluated in this constant expression",
+                    ));
+                }
                 self.accept(')')?;
                 return Ok(true);
             }
@@ -667,8 +690,11 @@ impl Compiler {
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
         self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
-        if let ConstVal::Int { val, ty } = cv {
+        if let ConstVal::Int { val, ty, .. } = cv {
             self.check_constant_conversion(val, ty, var_ty, 0, line);
+            if !self.initializes_as_is(ty, var_ty) {
+                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, line);
+            }
         }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a

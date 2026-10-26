@@ -2,7 +2,8 @@
 
 Demos that pull a third-party library (`miniz`, `kissfft`,
 `bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
-`monocypher`, `bearssl`, `lua`, `curl`, `picocom`, `screen`, `vim`)
+`monocypher`, `bearssl`, `lua`, `curl`, `raylib`, `picocom`, `screen`,
+`vim`, `simplevisor`, `nuklear`, `openssl`)
 fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
 produced `RemoteDisconnected` failures from the GitHub release
@@ -29,18 +30,27 @@ project's identifier for the release:
 | stb        | github nothings/stb pinned commit       | git             |
 | chibicc    | github rui314/chibicc last `main` commit| git             |
 | tinycc     | github TinyCC/tinycc `mob` HEAD commit  | git             |
+| ccc        | github anthropics/claudes-c-compiler `main` commit | git     |
 | tweetnacl  | tweetnacl.cr.yp.to static `.c` page     | content-sha256  |
 | monocypher | github LoupVaillant/Monocypher tag      | tarball-sha256  |
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
+| tcl        | SourceForge tcl release tarball         | tarball-sha256  |
 | curl       | curl.se release tarball                 | tarball-sha256  |
-| qemu       | git v11.1.1 tag; bundle assembled off   | git (assembled) |
-| pc-bios-x86| qemu 11.1.1 release tarball `pc-bios/`  | tarball-sha256  |
+| raylib     | github raysan5/raylib tag tarball       | tarball-sha256  |
+| python     | www.python.org release tarball          | tarball-sha256  |
+| python-frozen | `Python/frozen_modules/` of a host build | file-sha256  |
+| qemu       | git v11.1.2 tag; bundle assembled off   | git (assembled) |
+| pc-bios-x86| qemu 11.1.2 release tarball `pc-bios/`  | tarball-sha256  |
 | linux      | cdn.kernel.org release tarball          | tarball-sha256  |
+| edk2-mdepkg| edk2-stable tag; MdePkg subset packed   | packed-sha256   |
 | uemacs     | github torvalds/uemacs `master` commit  | git             |
 | picocom    | github npat-efault/picocom tag tarball  | tarball-sha256  |
 | screen     | ftp.gnu.org screen release tarball      | tarball-sha256  |
 | vim        | github vim/vim tag tarball              | tarball-sha256  |
+| simplevisor| github ionescu007/SimpleVisor commit    | git             |
+| nuklear    | github Immediate-Mode-UI tag tarball    | tarball-sha256  |
+| openssl    | openssl release tarball                 | tarball-sha256  |
 | kconfig-*  | `/boot/config` of a pinned cloud image  | file-sha256     |
 
 The full sha is recorded in `manifest.json` and in each
@@ -67,7 +77,7 @@ Each target is configured and built on a host of its own
 architecture, in a directory beside a git clone of the release
 tag named `qemu-rm` (the compile database names sources as
 `../qemu-rm/...`), and built with `ninja -d keeprsp` so the
-linker response files survive for the capture. The 11.1.1
+linker response files survive for the capture. The 11.1.2
 bundle was configured with:
 
 ```sh
@@ -103,6 +113,25 @@ system `-lfdt`. A bump diffs each target's `config-host.h` and
 `<arch>-softmmu-config-{target,devices}.h` against the previous
 capture; what differs should be only what upstream changed.
 
+## EDK II MdePkg subset (`edk2-mdepkg`)
+
+`demos/edk2` builds against `License.txt`, `MdePkg/MdePkg.dec`, the
+whole `MdePkg/Include` tree and the top-level sources of the seven
+libraries its application links, not the 200 MB tree.
+`build_edk2_subset.py` packs that subset from the GitHub archive of an
+`edk2-stable<YYYYMM>` tag into a reproducible tarball; the asset name
+carries the tag's `YYYYMM` and the first 8 hex digits of the packed
+file's own sha256, which `demos/edk2/setup.py` pins:
+
+```sh
+curl -LO https://github.com/tianocore/edk2/archive/refs/tags/edk2-stable202608.tar.gz
+python3 scripts/vendor_deps/build_edk2_subset.py \
+    --archive edk2-stable202608.tar.gz --version 202608 --out /tmp/edk2
+```
+
+The `202502` assets predate the packer and are kept for the commits
+that name them.
+
 ## x86 ROM set (`pc-bios-x86`)
 
 The trimmed source drops `pc-bios/` because those prebuilt blobs
@@ -116,9 +145,9 @@ gives it to its q35 machine. It is packed straight from an upstream
 release tarball, so no build directory is involved:
 
 ```sh
-curl -O https://download.qemu.org/qemu-11.1.1.tar.xz
+curl -O https://download.qemu.org/qemu-11.1.2.tar.xz
 python3 scripts/vendor_deps/build_qemu_bundle.py \
-    --pack-pc-bios qemu-11.1.1.tar.xz --out /tmp/roms
+    --pack-pc-bios qemu-11.1.2.tar.xz --out /tmp/roms
 ```
 
 The blob list is `PC_BIOS_X86` in that script; the asset name

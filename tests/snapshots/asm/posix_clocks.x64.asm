@@ -31,12 +31,12 @@ Disassembly of section .text:
                	subq	$0xc8, %rsp
                	pushq	%rbx
                	leaq	-0x80(%rbp), %rax
-               	leaq	<rip>, %rcx       # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	xorl	%ebx, %ebx
                	movl	%ebx, -0x8(%rbp)
-               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rbx,4), %edi
                	leaq	-0xb0(%rbp), %rsi
                	xorl	%eax, %eax
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movq	-0xa8(%rbp), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jge	<addr>
-               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax,%rbx,4), %edi
                	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax

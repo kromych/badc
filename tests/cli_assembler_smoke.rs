@@ -3114,3 +3114,316 @@ fn link_order_to_a_default_data_section_follows_the_compacted_index() {
     assert_eq!(header(".data.hot").3, index(".data"));
     assert_eq!(header(".bss.hot").3, index(".bss"));
 }
+
+/// `(name, type, binding, section name, value, size)` of each named symbol.
+fn named_syms(bytes: &[u8]) -> Vec<(String, u8, u8, String, u64, u64)> {
+    let headers = section_headers64(bytes);
+    (sym_table(bytes).into_iter())
+        .filter(|s| !s.0.is_empty() && !matches!(s.1 & 15, 3 | 4) && !s.0.starts_with('$'))
+        .map(|(name, info, shndx, value, size)| {
+            let section = match shndx {
+                0 => String::from("UND"),
+                0xfff2 => String::from("COM"),
+                i => headers[i as usize].0.clone(),
+            };
+            (name, info & 15, info >> 4, section, value, size)
+        })
+        .collect()
+}
+
+fn sym<'a>(
+    syms: &'a [(String, u8, u8, String, u64, u64)],
+    name: &str,
+) -> (u8, u8, &'a str, u64, u64) {
+    let s = syms.iter().find(|s| s.0 == name).expect(name);
+    (s.1, s.2, s.3.as_str(), s.4, s.5)
+}
+
+const STT_OBJECT: u8 = 1;
+const STT_FUNC: u8 = 2;
+const STB_LOCAL: u8 = 0;
+const STB_GLOBAL: u8 = 1;
+
+/// `@gnu_unique_object` makes an `STT_OBJECT` bound `STB_GNU_UNIQUE`, `.globl`,
+/// `.weak` or neither, and the OS/ABI GNU, as GNU as 2.46.1 writes them.
+#[test]
+fn a_gnu_unique_object_is_bound_stb_gnu_unique() {
+    const STB_GNU_UNIQUE: u8 = 10;
+    let src = "\t.data\n\t.globl v\n\t.type v, @gnu_unique_object\nv:\n\t.long 7\n\t.size v, 4\n\
+               \t.weak w\n\t.type w, @gnu_unique_object\nw:\n\t.long 8\n\t.size w, 4\n\
+               \t.type lu, @gnu_unique_object\nlu:\n\t.long 9\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let bytes = object_for("gnu-unique", src, target);
+        let syms = named_syms(&bytes);
+        assert_eq!(sym(&syms, "v"), (STT_OBJECT, STB_GNU_UNIQUE, ".data", 0, 4));
+        assert_eq!(sym(&syms, "w"), (STT_OBJECT, STB_GNU_UNIQUE, ".data", 4, 4));
+        assert_eq!(
+            sym(&syms, "lu"),
+            (STT_OBJECT, STB_GNU_UNIQUE, ".data", 8, 0)
+        );
+        assert_eq!(bytes[7], 3, "{target}: ELFOSABI_GNU");
+    }
+}
+
+/// `.comm` defines a common symbol in any section, its value the alignment;
+/// `.lcomm`, and `.comm` after `.local`, allocate a local object in `.bss`.
+/// The default alignments and values are GNU as 2.46.1's for the source.
+#[test]
+fn a_common_symbol_is_defined_whatever_the_current_section() {
+    let src = "\t.section .mysec,\"aw\",@progbits\n\t.long 1\n\t.comm c, 8, 8\n\t.comm a3, 3\n\
+               \t.comm a32, 32\n\t.text\n\t.comm b, 4, 1\n\t.lcomm p, 1\n\t.lcomm q, 12\n\
+               \t.lcomm r, 3\n\t.comm s, 8, 8\n\t.local s\n\t.local t\n\t.comm t, 4\n\
+               \t.section .mysec\n\t.long 2\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let bytes = object_for("common", src, target);
+        let syms = named_syms(&bytes);
+        for (name, align, size) in [("c", 8, 8), ("a3", 4, 3), ("a32", 16, 32), ("b", 1, 4)] {
+            assert_eq!(
+                sym(&syms, name),
+                (STT_OBJECT, STB_GLOBAL, "COM", align, size),
+                "{name}"
+            );
+        }
+        assert_eq!(sym(&syms, "s"), (STT_OBJECT, STB_GLOBAL, "COM", 8, 8));
+        for (name, offset, size) in [("p", 0, 1), ("q", 8, 12), ("r", 20, 3), ("t", 23, 4)] {
+            assert_eq!(
+                sym(&syms, name),
+                (STT_OBJECT, STB_LOCAL, ".bss", offset, size),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            section_data(&bytes, ".mysec"),
+            [1, 0, 0, 0, 2, 0, 0, 0],
+            "{target}"
+        );
+    }
+}
+
+/// `.type` and `.size` may precede the label they name in another section,
+/// and give a name nothing defines an undefined global, as in GNU as 2.46.1.
+#[test]
+fn a_type_before_its_label_applies_in_any_section() {
+    let src = "\t.type y, @object\n\t.size y, 4\n\t.type f2, @function\n\t.globl q\n\
+               \t.type q, @object\n\t.size q, 4\n\t.type n, @object\n\t.data\n\t.globl y\n\
+               y:\n\t.long 2\n\t.text\nf2:\n\tret\n\t.size f2, .-f2\n\
+               \t.section .rodata.z,\"a\",@progbits\n\t.type z, @object\nz:\n\t.quad 3\n\
+               \t.size z, 8\n";
+    let bytes = object_of("type-first", src);
+    let syms = named_syms(&bytes);
+    assert_eq!(sym(&syms, "y"), (STT_OBJECT, STB_GLOBAL, ".data", 0, 4));
+    assert_eq!(sym(&syms, "f2"), (STT_FUNC, STB_LOCAL, ".text", 0, 1));
+    assert_eq!(sym(&syms, "z"), (STT_OBJECT, STB_LOCAL, ".rodata.z", 0, 8));
+    assert_eq!(sym(&syms, "q"), (STT_OBJECT, STB_GLOBAL, "UND", 0, 4));
+    assert_eq!(sym(&syms, "n"), (STT_OBJECT, STB_GLOBAL, "UND", 0, 0));
+}
+
+/// A program links against a unit's common, `.lcomm` and unique objects.
+#[test]
+fn a_program_links_against_common_and_unique_symbols() {
+    let d = dir("common-link");
+    let bump = if cfg!(target_arch = "aarch64") {
+        "\tadrp x1, lv\n\tadd x1, x1, :lo12:lv\n\tldr w0, [x1]\n\tadd w0, w0, 1\n\tstr w0, [x1]\n\tret\n"
+    } else {
+        "\tincl lv(%rip)\n\tmovl lv(%rip), %eax\n\tret\n"
+    };
+    let src = format!(
+        "\t.section .mysec,\"aw\",@progbits\n\t.comm cvar, 8, 8\n\t.lcomm lv, 4\n\t.data\n\
+         \t.globl uv\n\t.type uv, @gnu_unique_object\nuv:\n\t.long 5\n\t.size uv, 4\n\t.text\n\
+         \t.globl bump\n\t.type bump, @function\nbump:\n{bump}"
+    );
+    write(&d, "u.s", &src);
+    write(
+        &d,
+        "m.c",
+        "extern long cvar;\nextern int uv;\nint bump(void);\n\
+         int main(void) { cvar = 3; return (int)cvar + uv + bump() - 9; }\n",
+    );
+    let t = format!("--target={TARGET}");
+    run_ok(&d, &["-q", &t, "m.c", "u.s", "-o", "m"]);
+    if cfg!(target_os = "linux") {
+        let status = Command::new(d.join("m")).status().expect("run");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
+/// `(offset, type, symbol, addend)` of each relocation of `section` in an
+/// ELF64 RELA object or an ELF32 REL one, whose addend is the field's.
+fn rel_entries(bytes: &[u8], section: &str) -> Vec<(u64, u32, String, i64)> {
+    let le = |o: usize, n: usize| {
+        let mut v = [0u8; 8];
+        v[..n].copy_from_slice(&bytes[o..o + n]);
+        u64::from_le_bytes(v)
+    };
+    let is64 = bytes[4] == 2;
+    let (w, shoff, shent, shnum, shstr) = if is64 {
+        (8, le(0x28, 8), le(0x3a, 2), le(0x3c, 2), le(0x3e, 2))
+    } else {
+        (4, le(0x20, 4), le(0x2e, 2), le(0x30, 2), le(0x32, 2))
+    };
+    // `(sh_name, sh_type, sh_offset, sh_size, sh_link, sh_info)`.
+    let sh = |i: u64| {
+        let h = (shoff + i * shent) as usize;
+        let at = |k: usize| {
+            if is64 {
+                [0, 4, 24, 32, 40, 44][k]
+            } else {
+                [0, 4, 16, 20, 24, 28][k]
+            }
+        };
+        let wide = |k: usize| if is64 && (k == 2 || k == 3) { 8 } else { 4 };
+        (0..6).map(|k| le(h + at(k), wide(k))).collect::<Vec<_>>()
+    };
+    let cstr = |o: u64| {
+        let o = o as usize;
+        let end = bytes[o..].iter().position(|&c| c == 0).unwrap();
+        String::from_utf8_lossy(&bytes[o..o + end]).into_owned()
+    };
+    let name_of = |i: u64| cstr(sh(shstr)[2] + sh(i)[0]);
+    let rel = (0..shnum).find(|&i| name_of(i) == section).expect(section);
+    let (r, symtab) = (sh(rel), sh(sh(rel)[4]));
+    let target = sh(r[5]);
+    let strtab = sh(symtab[4])[2];
+    let (esize, symsize) = if is64 { (24, 24) } else { (8, 16) };
+    (0..r[3] / esize)
+        .map(|k| {
+            let o = (r[2] + k * esize) as usize;
+            let (off, info) = (le(o, w), le(o + w, w));
+            let (sym, ty) = if is64 {
+                (info >> 32, info & 0xffff_ffff)
+            } else {
+                (info >> 8, info & 0xff)
+            };
+            let addend = if is64 {
+                le(o + 16, 8) as i64
+            } else {
+                le((target[2] + off) as usize, 4) as u32 as i32 as i64
+            };
+            let name = cstr(strtab + le((symtab[2] + sym * symsize) as usize, 4));
+            (off, ty as u32, name, addend)
+        })
+        .collect()
+}
+
+fn rel_list(rows: &[(u64, u32, &str, i64)]) -> Vec<(u64, u32, String, i64)> {
+    rows.iter()
+        .map(|&(o, t, s, a)| (o, t, String::from(s), a))
+        .collect()
+}
+
+/// The x86-64 relocation operators gas reads on an operand or a data value
+/// take GNU as 2.46.1's relocations: `@PLT` (a same-section target folds),
+/// `@GOTPCREL` (`[REX_]GOTPCRELX` on a relaxable load or branch), `@GOT`,
+/// `@GOTOFF`, `@TPOFF`, `@GOTTPOFF`, `@TLSGD`, `@TLSLD` and `@DTPOFF`.
+#[test]
+fn x86_64_relocation_operators_take_the_relocations_gas_writes() {
+    let src = "\t.text\n\t.globl f\nf:\n\tcall wf@PLT\n\tjmp wf@PLT\n\tcall loc@PLT\n\
+               \tmovq x@GOTPCREL(%rip), %rax\n\tmovl x@GOTPCREL(%rip), %eax\n\
+               \tcall *wf@GOTPCREL(%rip)\n\taddq x@GOTPCREL(%rip), %rax\n\
+               \tmovq x@GOTPCREL+8(%rip), %rax\n\tmovq x@GOT, %rax\n\tmovabsq $x@GOT, %rax\n\
+               \tmovabsq $x@GOTOFF, %rax\n\tmovl %fs:t@TPOFF, %eax\n\tmovq $t@TPOFF, %rax\n\
+               \tleaq t@TPOFF(%rax), %rcx\n\tmovq t@GOTTPOFF(%rip), %rax\n\
+               \tleaq t@TLSGD(%rip), %rdi\n\tleaq t@TLSLD(%rip), %rdi\n\
+               \tleaq t@DTPOFF(%rax), %rcx\n\tmovq t@DTPOFF+4(%rax), %rcx\nloc:\n\tret\n\
+               \t.data\n\t.quad x@GOTPCREL\n\t.long x@GOTPCREL\n\t.quad t@DTPOFF\n\
+               \t.long t@DTPOFF\n\t.quad x@GOTOFF\n\t.long wf@PLT\n\t.quad t@TPOFF\n\t.long t@TPOFF\n";
+    let bytes = object_of("x64-reloc-ops", src);
+    let text = rel_list(&[
+        (0x01, 4, "wf", -4),
+        (0x06, 4, "wf", -4),
+        (0x12, 42, "x", -4),
+        (0x18, 41, "x", -4),
+        (0x1e, 41, "wf", -4),
+        (0x25, 42, "x", -4),
+        (0x2c, 42, "x", 4),
+        (0x34, 3, "x", 0),
+        (0x3a, 27, "x", 0),
+        (0x44, 25, "x", 0),
+        (0x50, 23, "t", 0),
+        (0x57, 23, "t", 0),
+        (0x5e, 23, "t", 0),
+        (0x65, 22, "t", -4),
+        (0x6c, 19, "t", -4),
+        (0x73, 20, "t", -4),
+        (0x7a, 21, "t", 0),
+        (0x81, 21, "t", 4),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rela.text"), text);
+    let data = rel_list(&[
+        (0x00, 28, "x", 0),
+        (0x08, 9, "x", 0),
+        (0x0c, 17, "t", 0),
+        (0x14, 21, "t", 0),
+        (0x18, 25, "x", 0),
+        (0x20, 4, "wf", 0),
+        (0x24, 18, "t", 0),
+        (0x2c, 23, "t", 0),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rela.data"), data);
+}
+
+/// i386's `@PLT`, `@GOT` (`GOT32X` on a relaxable load or branch) and
+/// `@GOTOFF` take GNU as 2.46.1's relocations, the addend in the field.
+#[test]
+fn i386_relocation_operators_take_the_relocations_gas_writes() {
+    let d = dir("i386-reloc-ops");
+    write(
+        &d,
+        "b.s",
+        "\t.text\n\t.globl g\ng:\n\tcall f@PLT\n\tmovl x@GOT(%ebx), %eax\n\
+         \tleal x@GOTOFF(%ebx), %eax\n\tmovl x@GOTOFF(%ebx), %eax\n\tcall *f@GOT(%ebx)\n\
+         \t.data\n\t.long x@GOTOFF\n\t.long x@GOT\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=linux-x64", "-m32", "b.s", "-o", "b.o"],
+    );
+    let bytes = std::fs::read(d.join("b.o")).expect("object");
+    let text = rel_list(&[
+        (1, 4, "f", -4),
+        (7, 43, "x", 0),
+        (0xd, 9, "x", 0),
+        (0x13, 9, "x", 0),
+        (0x19, 43, "f", 0),
+    ]);
+    assert_eq!(rel_entries(&bytes, ".rel.text"), text);
+    assert_eq!(
+        rel_entries(&bytes, ".rel.data"),
+        rel_list(&[(0, 9, "x", 0), (4, 3, "x", 0)])
+    );
+}
+
+/// A function's asm statement calls through `@PLT`; an operator gas or the
+/// psABI has no relocation for is refused by name.
+#[test]
+fn relocation_operators_outside_their_forms_are_refused() {
+    let bytes = object_of_c("plt-in-c", "void f(void) { __asm__(\"call wf@PLT\"); }\n");
+    assert!(
+        rel_entries(&bytes, ".rela.text")
+            .iter()
+            .any(|r| r.1 == 4 && r.2 == "wf")
+    );
+    for (src, want) in [
+        (
+            "\t.text\n\tleaq x@GOTOFF(%rbx), %rax\n",
+            "relocation operator",
+        ),
+        ("\t.text\n\tcall wf@GOTPCREL\n", "other than `@PLT`"),
+    ] {
+        let d = dir("reloc-op-refused");
+        write(&d, "b.s", src);
+        let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "b.s", "-o", "b.o"]);
+        assert!(!ok && text.contains(want), "{src}: {text}");
+    }
+    let d = dir("reloc-op-in-c");
+    write(
+        &d,
+        "u.c",
+        "long f(void) { long v; __asm__(\"movq x@GOTPCREL(%%rip), %0\" : \"=r\"(v)); return v; }\n",
+    );
+    let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    assert!(
+        !ok && text.contains("only supported in file-scope asm"),
+        "{text}"
+    );
+}

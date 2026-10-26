@@ -55,7 +55,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	rdtscp
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax

@@ -22,9 +22,36 @@ fn expect_compile_error(src: &str, needle: &str) {
     }
 }
 
+/// [`expect_compile_error`] for x86-64 Linux: the incomplete-enum rules the
+/// PE targets relax, where MSVC completes an enum named before its
+/// definition as `int`.
+fn expect_compile_error_off_pe(src: &str, needle: &str) {
+    let msg = match Compiler::with_target(src.to_string(), crate::Target::LinuxX64).compile() {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("expected a compile error containing {needle:?} for {src:?}"),
+    };
+    assert!(msg.contains(needle), "expected {needle:?}, got {msg:?}");
+}
+
 #[test]
 fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
+}
+
+/// C99 6.10.3.4p3: a `#` in program text, one an expansion puts first on
+/// a line included, is no directive; it is named, not skipped with the
+/// rest of its line.
+#[test]
+fn a_hash_in_program_text_is_diagnosed() {
+    for (src, spelling) in [
+        ("int z = 1 # 2\n;\n", "`#`"),
+        ("int z = 1 ## 2\n;\n", "`##`"),
+        ("int w = 1 %: 2\n;\n", "`%:`"),
+        ("#define H #\nH pragma pack(1)\n", "`#`"),
+    ] {
+        let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
+        expect_compile_error(&src, &alloc::format!("stray {spelling} in program"));
+    }
 }
 
 /// GNU C's cast to a union takes a member of the operand's own type,
@@ -1427,24 +1454,6 @@ fn pragma_export_with_unknown_name_is_refused() {
 }
 
 #[test]
-fn pragma_export_with_global_data_is_refused() {
-    // `#pragma export(...)` only handles functions. Pointing it at a
-    // global variable surfaces a clear "not a function" diagnostic.
-    let src = "
-        int counter;
-        #pragma export(counter)
-        int main() { return 0; }
-    ";
-    let res = super::Compiler::new(super::with_prelude(src)).compile();
-    let err = res.expect_err("expected data-export to fail");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("expected a function"),
-        "expected non-function diagnostic, got: {msg}"
-    );
-}
-
-#[test]
 fn libc_call_with_struct_arg_compiles() {
     // A struct passed by value to a Token::Sys (libc) call is packed into the
     // platform-ABI argument registers (SysV / AAPCS64), no longer refused. The
@@ -1854,6 +1863,47 @@ fn a_switch_on_a_boolean_value_warns_for_a_label_it_cannot_take() {
     );
 }
 
+/// C99 6.2.1p4; a K&R declaration list's tags join the block, as gcc's do.
+#[test]
+fn a_definitions_parameter_tags_are_in_its_block() {
+    use crate::Target;
+    expect_compile_error(
+        "struct s { char c; }; \
+         int f(struct s { int a; } *p) { struct s { int b; } x; return p->a + x.b; } \
+         int main(void) { return 0; }",
+        "struct `s` already defined",
+    );
+    let src = "struct v { char c; };\n\
+               int kr(p) struct v { int x, y; } *p; { struct v w = { 3, 4 }; return p->x + w.y; }\n\
+               int main(void) { return sizeof(struct v) - 1; }\n";
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// As gcc does, and clang under -Wvisibility.
+#[test]
+fn a_tag_declared_in_a_parameter_list_is_reported() {
+    use crate::Target;
+    use crate::diag::Code;
+    let src = "struct t { char c; };\n\
+               void p(struct t { int a; } *);\n\
+               void q(struct u *);\n\
+               int r(struct v { int x; } *pv) { return pv->x; }\n\
+               void s(struct t *, struct { int y; } *);\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::VISIBILITY)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 3, 4], "{:?}", program.warnings);
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is
@@ -1925,6 +1975,60 @@ fn valid_numeric_literals_still_compile() {
                return (d==1000 && o==8 && b==5 && f==1500.0 && h==3.0 && u==255) ? 0 : 1; }";
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+/// MSVC's sized integer suffixes on the PE targets, as clang 22 reads them
+/// for a windows-msvc triple: `[u]i8` ... `[u]i64` name `char` (unsigned
+/// `char`), `short`, `int` and `long long`, the value must fit the width
+/// and is read at the suffix's signedness, and `#if` takes them unchanged.
+/// clang accepts the unit and rejects the four erroneous constants; the
+/// other targets reject the suffixes, as gcc and clang do there.
+#[test]
+fn microsoft_sized_integer_suffixes_type_the_constant_on_the_pe_targets() {
+    use crate::c5::Target;
+    let src = "#define T(x) _Generic((x), char: 1, unsigned char: 3, short: 4,\\\n\
+                 unsigned short: 5, int: 6, unsigned int: 7, long long: 10,\\\n\
+                 unsigned long long: 11, default: 99)\n\
+               #define UCHAR_C(x) (x##ui8)\n\
+               _Static_assert(T(1i8) == 1 && T(1ui8) == 3 && T(UCHAR_C(7)) == 3, \"8\");\n\
+               _Static_assert(T(1i16) == 4 && T(07ui16) == 5 && T(1I32) == 6, \"16, 32\");\n\
+               _Static_assert(T(1ui32) == 7 && T(1i64) == 10 && T(1Ui64) == 11, \"32, 64\");\n\
+               _Static_assert(0xffi8 == -1 && 0xffui8 == 255 && 4000000000i32 < 0, \"value\");\n\
+               _Static_assert(0b101i8 == 5 && 0x8000000000000000i64 < 0, \"bases\");\n\
+               #if !(0xffffffffffffffffui64 > 0 && -1i64 < 0 && 300i8 == 300 && -1ui8 > 0)\n\
+               #error \"#if\"\n\
+               #endif\n\
+               int main(void) { unsigned long long m = 0xffffffffffffffffui64;\n\
+                 return m + 1 == 0 && -1i64 < 0 && sizeof(1i8) == 1 ? 0 : 1; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let prog = crate::c5::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{target:?}");
+        for (bad, text) in [
+            ("300i8", "does not fit the 8 bits of its `i8` suffix"),
+            ("1i64u", "unexpected `u` after the number"),
+            ("1Li64", "unexpected `i` after the number"),
+            ("1.0i64", "unexpected `i` after the number"),
+        ] {
+            let unit = format!("long long v = {bad};\n");
+            let err = crate::c5::Compiler::with_target(unit, target)
+                .compile()
+                .expect_err(bad)
+                .to_string();
+            assert!(err.contains(text), "{target:?} {bad}: {err}");
+        }
+    }
+    for target in [Target::LinuxX64, Target::MacOSAarch64] {
+        let err = crate::c5::Compiler::with_target("long long v = 1i64;\n".to_string(), target)
+            .compile()
+            .expect_err("1i64")
+            .to_string();
+        assert!(
+            err.contains("unexpected `i` after the number"),
+            "{target:?}: {err}"
+        );
+    }
 }
 
 #[test]
@@ -3257,12 +3361,12 @@ fn object_of_incomplete_type_is_diagnosed() {
     );
     // C99 6.7.2.3p2: an enum used before its definition is incomplete, for
     // an automatic and a block-scope `static` object alike.
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          int main(void) { enum later e; enum later { A, B = 0x100000000 }; return 0; }",
         "object `e` has incomplete type",
     );
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          int main(void) { static enum later e; return 0; }\n\
          enum later { A };",
@@ -3296,7 +3400,7 @@ fn parameter_of_incomplete_type_in_a_definition_is_diagnosed() {
          int main(void) { return 0; }",
         "parameter `s` has incomplete type",
     );
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum later;\n\
          long f(enum later e) { enum later { A, B = 0x100000000 }; return e; }\n\
          int main(void) { return 0; }",
@@ -3356,7 +3460,7 @@ fn tags_share_one_scoped_name_space() {
     }
     // 6.2.1p4: a block's enum definition declares a type of its own, so the
     // file-scope declaration it shares a name with stays incomplete.
-    expect_compile_error(
+    expect_compile_error_off_pe(
         "enum E;\n\
          int f(void) { enum E { BIG = 0x100000000 }; return (int)sizeof(enum E); }\n\
          int main(void) { return (int)sizeof(enum E); }",
@@ -3418,7 +3522,7 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
         ("enum E; static enum E x;", "object `x` has incomplete type"),
         ("enum E; enum E x;", "object `x` has incomplete type"),
     ] {
-        expect_compile_error(
+        expect_compile_error_off_pe(
             &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
             msg,
         );
@@ -3485,7 +3589,7 @@ fn incomplete_type_is_rejected_where_its_object_is_needed() {
             ),
         ] {
             let src = alloc::format!("{}\nint main(void) {{ return 0; }}", src.replace('@', tag));
-            expect_compile_error(&src, &msg.replace('@', tag));
+            expect_compile_error_off_pe(&src, &msg.replace('@', tag));
         }
         // The lvalue itself stands where no value is read: its address, the
         // type of it, and an asm memory operand, which gcc accepts.
@@ -3823,6 +3927,308 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn visibility_takes_gccs_four_operands() {
+    // GCC `visibility` and `#pragma GCC visibility push`: default, hidden,
+    // internal or protected, kept as stated; another operand is refused.
+    use crate::c5::program::SymVisibility as V;
+    let program = Compiler::new(
+        "__attribute__((visibility(\"protected\"))) int p = 1;\n\
+         __attribute__((visibility(\"internal\"))) int i = 1;\n\
+         #pragma GCC visibility push(protected)\nint q = 1;\n\
+         __attribute__((visibility(\"default\"))) int d = 1;\n\
+         #pragma GCC visibility pop\nint main(void) { return 0; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let vis = |n: &str| {
+        program
+            .symbols
+            .iter()
+            .find(|s| s.name == n)
+            .expect(n)
+            .visibility
+    };
+    assert_eq!(
+        ["p", "i", "q", "d", "main"].map(vis),
+        [
+            Some(V::Protected),
+            Some(V::Internal),
+            Some(V::Protected),
+            None,
+            None
+        ]
+    );
+    expect_compile_error(
+        "__attribute__((visibility(\"bogus\"))) int b;\nint main(void) { return 0; }\n",
+        "`visibility` operand `bogus` is not one of default, hidden, protected or internal",
+    );
+}
+
+#[test]
+fn pragma_export_names_a_function_or_an_object_this_unit_defines() {
+    // An object with external linkage the unit defines is exported by its
+    // link name; a `static` one, an `extern` declaration and a thread-local
+    // are not objects a shared library exports.
+    let program = Compiler::new(
+        "int g = 1;\nint *pg = &g;\n#pragma export(g)\n#pragma export(pg)\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(program.exported_objects, ["g", "pg"]);
+    for src in [
+        "static int s = 1;\n#pragma export(s)\n",
+        "extern int e;\n#pragma export(e)\n",
+        "_Thread_local int t;\n#pragma export(t)\n",
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}int main(void) {{ return 0; }}\n"),
+            "is not a function or an object with external linkage",
+        );
+    }
+}
+
+#[test]
+fn a_named_section_holds_one_kind_of_definition() {
+    // GNU `section`: the first definition in a section sets its kind --
+    // code, writable data or read-only data -- and a definition of another
+    // kind is a section type conflict, as gcc reports it; a declaration
+    // places nothing. A `const` object a relocation writes sits with data
+    // of either kind.
+    let unit = |a: &str, b: &str| {
+        format!(
+            "int w0;\n__attribute__((section(\".tsec\"))) {a}\n\
+             __attribute__((section(\".tsec\"))) {b}\nint main(void) {{ return 0; }}\n"
+        )
+    };
+    let code = "int fn_a(void) { return 1; }";
+    let writable = "int w_b = 1;";
+    let zero = "int z_b;";
+    let read_only = "const int c_b = 2;";
+    let relocated = "int *const r_b = &w0;";
+    for (a, b) in [
+        (code, writable),
+        (writable, code),
+        (code, read_only),
+        (zero, code),
+        (writable, read_only),
+        (read_only, zero),
+        (code, relocated),
+    ] {
+        expect_compile_error(&unit(a, b), "section type conflict");
+    }
+    for (a, b) in [
+        (writable, zero),
+        ("int fd_a(void);", writable),
+        ("extern const int ec_a;", writable),
+        (read_only, relocated),
+        (relocated, writable),
+        (code, "int fn_b(void) { return 2; }"),
+    ] {
+        Compiler::new(unit(a, b))
+            .compile()
+            .unwrap_or_else(|e| panic!("{a} {b}: {e}"));
+    }
+}
+
+#[test]
+fn derived_type_spellings_agree_and_a_cast_names_no_array() {
+    // C99 6.7.7p3: a typedef's spelling and the abstract one denote the same
+    // pointer to an array of function pointers; 6.5.4p2: a cast names a
+    // scalar type, and 6.5.15p6 types `?:` by its non-null-constant arm.
+    let src = "typedef void (*fp)(void);\ntypedef fp arr4[4];\nextern arr4 *pa;\n\
+               extern void (*(*pa)[4])(void);\nvoid (*(*pb)[4])(void);\narr4 *pc = 0;\n\
+               struct T { int a; };\n\
+               int f(int c) { __typeof__(c ? (void *)0 : (struct T *)0) p = 0;\n\
+               struct T **q = &p; pb = pc; pc = pb; return q != 0; }\n\
+               int main(void) { return f(1) - 1; }\n";
+    assert_eq!(super::run_str(src), 0);
+    for src in [
+        "typedef int A[2]; int main(void) { int x[2]; (void)(A)x; return 0; }",
+        "int x[2]; int main(void) { (void)(int[2])x; return 0; }",
+    ] {
+        expect_compile_error(src, "cast specifies array type");
+    }
+}
+
+#[test]
+fn a_comma_operator_stands_in_an_unevaluated_constant_subexpression() {
+    // C99 6.6p3: a constant expression holds no comma operator except in a
+    // subexpression that is not evaluated.
+    for src in [
+        "enum { E = 1 ? 2 : (3, 4) }; int main(void) { return E - 2; }",
+        "int g = 0 ? (1, 2) : 3; int main(void) { return g - 3; }",
+        "int a[1 ? 2 : (3, 4)]; int main(void) { return sizeof a / sizeof a[0] - 2; }",
+        "int k = 1 || (2, 3); int main(void) { return k - 1; }",
+        "int main(void) { switch (2) { case 0 ? (1, 2) : 2: return 0; } return 1; }",
+    ] {
+        assert_eq!(super::run_str(src), 0, "{src}");
+    }
+    for src in [
+        "enum { F = (3, 4) }; int main(void) { return F; }",
+        "int h = (1, 2); int main(void) { return h; }",
+        "int main(void) { static int h = (1, 2); return h; }",
+        "int h[] = { (1, 2) }; int main(void) { return h[0]; }",
+    ] {
+        expect_compile_error(src, "a comma operator is evaluated");
+    }
+}
+
+#[test]
+fn every_conversion_to_a_pointer_takes_the_same_null_pointer_constants() {
+    // C99 6.3.2.3p3 with 6.6p6: an integer constant expression of value 0,
+    // whatever its spelling, converts to a pointer in an assignment, an
+    // argument, a return and an initializer, as it does in `?:`; a value
+    // read through a pointer cast is no integer constant expression, and a
+    // floating constant cast to an integer type is one.
+    use crate::diag::Code;
+    let warns = |body: &str| {
+        let src =
+            format!("int *ip; void take(int *); int x;\n{body}\nint main(void) {{ return 0; }}\n");
+        let program = Compiler::new(src)
+            .compile()
+            .unwrap_or_else(|e| panic!("{body}: {e}"));
+        program
+            .warnings
+            .iter()
+            .any(|w| w.code == Code::INT_CONVERSION)
+    };
+    for body in [
+        "void f(void) { ip = 1 - 1; }",
+        "void f(void) { ip = (char)0; }",
+        "void f(void) { take((unsigned char)256); }",
+        "int *g(void) { return 0 * 5; }",
+        "void f(void) { ip = sizeof(int) - 4; }",
+        "void f(void) { ip = (1 ? 0 : 1); }",
+        "void f(void) { ip = (int)0.5; }",
+        "void f(void) { int *lp = 2 - 2; (void)lp; }",
+    ] {
+        assert!(!warns(body), "{body}");
+    }
+    for body in [
+        "void f(void) { int z = 0; ip = z; }",
+        "void f(void) { ip = x * 0; }",
+        "void f(void) { ip = (long)(char *)0; }",
+    ] {
+        assert!(warns(body), "{body}");
+    }
+    expect_compile_error(
+        "int *f(int c) { __typeof__(c ? (void *)((long)(char *)0) : (int *)0) q = 0;\n\
+         int **r = &q; return *r; }\nint main(void) { return 0; }",
+        "incompatible pointer types",
+    );
+    Compiler::new(
+        "int *f(int c) { __typeof__(c ? (void *)((int)0.5) : (int *)0) q = 0;\n\
+         int **r = &q; return *r; }\nint main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn redeclarations_compare_the_function_types_pointers_lead_to() {
+    // C99 6.7p4: the declarations of one object or function have compatible
+    // types, which extends through the function types pointers lead to
+    // (6.7.5.3p15): their parameters, their variadic tails, their results
+    // and their calling conventions. The verdicts are clang's on x86-64.
+    use crate::Target;
+    let compile = |src: &str| {
+        Compiler::with_target(
+            format!("{src}\nint main(void) {{ return 0; }}\n"),
+            Target::LinuxX64,
+        )
+        .compile()
+        .map(|_| ())
+    };
+    for src in [
+        "extern int (*x)(int); extern int (*x)(long);",
+        "void take(int (*p)(int)); void take(int (*p)(long));",
+        "extern int (__attribute__((ms_abi)) **y)(int); extern int (**y)(int);",
+        "extern int (*a)(int, ...); extern int (*a)(int);",
+        "extern int (*b)(int); extern int (*b)(int, int);",
+        "extern int (*c)(void (*)(int)); extern int (*c)(void (*)(long));",
+        "extern int (*(*g)(void))(int); extern int (*(*g)(void))(long);",
+        "int (*h(void))(int); int (*h(void))(long);",
+        "extern int (*k[2])(int); extern int (*k[2])(long);",
+        "typedef int (*fp)(long); extern fp n; extern int (*n)(int);",
+        "int f(void) { extern int (*bx)(int); return 0; } extern int (*bx)(long);",
+        "enum E2; typedef int cb2(enum E2); void r2(cb2 *p); enum E2 { B }; \
+         void r2(int (*p)(long)) {}",
+    ] {
+        let err = compile(src).expect_err(src).to_string();
+        assert!(err.contains("conflicting types"), "{src}: {err}");
+    }
+    for src in [
+        "extern int (*d)(int); extern int (*d)(const int);",
+        "extern int (*e)(int *); extern int (*e)(int[]);",
+        "extern int (*f)(int); extern int (*f)();",
+        "typedef int (*fp)(int); extern fp m; extern int (*m)(int);",
+        "void q(int (*)(int)); void q(int (*p)(int));",
+        // C99 6.7.2.3p1: an enum declared ahead of its definition is one type
+        // with it, inside a function type too.
+        "enum E; typedef int cb(enum E); void r(cb *p); enum E { A }; void r(cb *p) {}",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+    // The attribute is inert off x86-64, as clang reads it.
+    Compiler::with_target(
+        "extern int (__attribute__((ms_abi)) **y)(int); extern int (**y)(int);\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn the_address_of_a_call_result_is_refused() {
+    // C99 6.5.3.2p1: a call's value is no lvalue, of pointer type too.
+    for src in [
+        "int *g(void); int main(void) { int **p = &g(); return p != 0; }",
+        "char **g(void); int main(void) { char ***p = &(g()); return p != 0; }",
+    ] {
+        expect_compile_error(src, "bad address-of");
+    }
+}
+
+#[test]
+fn thread_local_is_in_every_declaration_of_an_object_or_in_none() {
+    // C11 6.7.1p3, at file and block scope, in either order.
+    for (src, needle) in [
+        (
+            "long tv; extern __thread long tv;",
+            "thread-local declaration of `tv` follows non-thread-local declaration",
+        ),
+        (
+            "__thread long tv; extern long tv;",
+            "non-thread-local declaration of `tv` follows thread-local declaration",
+        ),
+        (
+            "long tv; long f(void) { extern __thread long tv; return tv; }",
+            "thread-local declaration of `tv` follows non-thread-local declaration",
+        ),
+        (
+            "long f(void) { extern __thread long tv; return tv; } long tv;",
+            "non-thread-local declaration of `tv` follows thread-local declaration",
+        ),
+    ] {
+        expect_compile_error(&format!("{src} int main(void) {{ return 0; }}"), needle);
+    }
+    let prog = Compiler::new(
+        "__thread long tv; extern __thread long tv;\n\
+         long f(void) { extern __thread long tv; return tv; }\n\
+         __thread long tv = 3;\nint main(void) { return f() != 3; }\n"
+            .to_string(),
+    )
+    .compile();
+    assert!(prog.is_ok(), "{:?}", prog.err());
+}
+
+#[test]
 fn static_local_array_initializer_over_bound_rejected() {
     // C99 6.7.8p2: an initializer may not provide a value for an object
     // outside the entity being initialized. The static-local allocator
@@ -4092,6 +4498,77 @@ fn static_initializer_diagnostic_names_what_failed() {
     );
 }
 
+/// The include hint and the auto-include retry name a header only on a
+/// target served it: `epoll_create1` is declared by `<sys/epoll.h>`, which
+/// glibc alone ships.
+#[test]
+fn the_include_hint_names_only_a_header_the_target_ships() {
+    use crate::{CompileOptions, Target};
+    for target in Target::ALL {
+        let linux = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+        let id = target.id_str();
+        let src = "static int x = epoll_create1(0); int main(void) { return x; }";
+        let opts = CompileOptions::default();
+        let err = Compiler::with_options(src.into(), target, opts.clone())
+            .compile()
+            .expect_err("not a constant expression");
+        let hinted = err.to_string().contains("try `#include <sys/epoll.h>`");
+        assert_eq!(hinted, linux, "{id}: {err}");
+        let src = "int main(void) { return epoll_create1(0); }";
+        match Compiler::with_options(src.into(), target, opts).compile() {
+            Ok(program) => assert!(linux && program.auto_includes == ["epoll_create1"], "{id}"),
+            Err(e) => assert!(
+                !linux && !e.to_string().contains("sys/epoll.h"),
+                "{id}: {e}"
+            ),
+        }
+    }
+}
+
+/// A served header declaring a name under another target's conditions is
+/// not hinted, and the retry does not include it: `<unistd.h>` declares
+/// `pipe2` on Linux alone, also where the unit includes it already, and
+/// `<intrin.h>` `__cpuid` on x86-64 and `_CountLeadingZeros` on AArch64.
+#[test]
+fn the_include_hint_names_a_header_declaring_the_name_on_the_target() {
+    use crate::{CompileOptions, Target};
+    let cases: [(&str, &str, &str, &[Target]); 4] = [
+        (
+            "",
+            "pipe2(0, 0)",
+            "unistd.h",
+            &[Target::LinuxX64, Target::LinuxAarch64],
+        ),
+        ("#include <unistd.h>\n", "pipe2(0, 0)", "unistd.h", &[]),
+        ("", "__cpuid(0, 0)", "intrin.h", &[Target::WindowsX64]),
+        (
+            "",
+            "_CountLeadingZeros(1)",
+            "intrin.h",
+            &[Target::WindowsAarch64],
+        ),
+    ];
+    for (prefix, call, header, hinted) in cases {
+        for target in Target::ALL {
+            let id = target.id_str();
+            let src =
+                alloc::format!("{prefix}static int x = {call}; int main(void) {{ return x; }}");
+            let opts = CompileOptions::default();
+            let msg = match Compiler::with_options(src, target, opts.clone()).compile() {
+                Ok(_) => continue,
+                Err(e) => e.to_string(),
+            };
+            let hint = msg.contains(&alloc::format!("try `#include <{header}>`"));
+            assert_eq!(hint, hinted.contains(&target), "{id} {call}: {msg}");
+            let src = alloc::format!("{prefix}int main(void) {{ return {call}; }}");
+            if let Ok(program) = Compiler::with_options(src, target, opts).compile() {
+                let retried = !program.auto_includes.is_empty();
+                assert!(!retried || hinted.contains(&target), "{id} {call}");
+            }
+        }
+    }
+}
+
 #[test]
 fn an_address_constant_initializes_only_an_object_that_holds_it() {
     // A static object narrower than a pointer, a floating one and a
@@ -4325,11 +4802,12 @@ fn an_array_of_an_incomplete_element_type_is_rejected() {
     const STRUCT_S: &str = "array has incomplete element type `struct S`";
     const VOID: &str = "array has incomplete element type `void`";
     let compile = |src: &str| {
-        Compiler::new(alloc::format!(
+        let src = alloc::format!(
             "struct S; enum E; typedef int T[]; typedef int Z[0]; typedef int F(void);\n\
              typedef void V;\n{src}\nint main(void) {{ return 0; }}\n"
-        ))
-        .compile()
+        );
+        // The PE targets complete an enum named before its definition.
+        Compiler::with_target(src, crate::Target::LinuxX64).compile()
     };
     for (src, needle) in [
         ("int a[2][];", UNKNOWN_SIZE),
@@ -4984,6 +5462,7 @@ fn call_arguments_are_separated_by_commas() {
         "int f(); int main(void) { return f(1 2); }",
         "int (*fp)(int, int); int main(void) { return fp(1 2); }",
         "int (*fp)(int, int); int main(void) { return (*fp)(1 2); }",
+        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
     ] {
         expect_syntax_error(
             src,
@@ -4996,10 +5475,6 @@ fn call_arguments_are_separated_by_commas() {
     ] {
         expect_syntax_error(src, "bad expression: got `)`");
     }
-    expect_syntax_error(
-        "int main(void) { char c; __builtin_prefetch(&c 0); return 0; }",
-        "close paren expected",
-    );
 }
 
 #[test]
@@ -5354,6 +5829,796 @@ fn static_init_reads_only_a_const_object_in_bounds() {
         expect_compile_error(
             &format!("{decls} {init}"),
             &format!("constant integer expected (got identifier `{name}`)"),
+        );
+    }
+}
+
+/// The value builtins take gcc's operands: their arity, the conversion of
+/// each operand to its parameter type, and integer constants for
+/// `__builtin_prefetch`'s access kind and locality, which outside their
+/// range warn as gcc does and are taken as 0.
+#[test]
+fn value_builtins_check_their_operands() {
+    let with_main = |body: &str| alloc::format!("{body}\nint main(void) {{ return 0; }}\n");
+    for (body, needle) in [
+        (
+            "long f(int x) { return __builtin_expect(x); }",
+            "too few arguments to `__builtin_expect` (expected 2, got 1)",
+        ),
+        (
+            "void f(void) { __builtin_prefetch(); }",
+            "too few arguments to `__builtin_prefetch` (expected 1 to 3, got 0)",
+        ),
+        (
+            "double f(void) { return __builtin_inf(1); }",
+            "too many arguments to `__builtin_inf` (expected 0)",
+        ),
+        (
+            "void *f(int *p) { return __builtin_assume_aligned(p, 8, 1, 2); }",
+            "too many arguments to `__builtin_assume_aligned` (expected 2 to 3)",
+        ),
+        (
+            "void f(int *p, int r) { __builtin_prefetch(p, r); }",
+            "argument 2 of `__builtin_prefetch` is not an integer constant expression",
+        ),
+        (
+            "struct s { int a; } v; int f(void) { return __builtin_isdigit(v); }",
+            "incompatible struct types in argument 1 of `__builtin_isdigit`",
+        ),
+        (
+            "int f(void) { return __builtin_toascii((void)0); }",
+            "`void` expression used as a value",
+        ),
+        (
+            "static double d = __builtin_nan(\"abc\");",
+            "`__builtin_nan` is constant only for a literal spelling a number",
+        ),
+    ] {
+        expect_compile_error(&with_main(body), needle);
+    }
+    let warnings = |body: &str| -> Vec<(crate::c5::diag::Code, String)> {
+        Compiler::new(with_main(body))
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .map(|w| (w.code, w.to_string()))
+            .collect()
+    };
+    let w = warnings("void f(int *p) { __builtin_prefetch(p, 2, 4); }");
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert_eq!(w[0].0, crate::c5::diag::Code::BUILTIN_ARGUMENT_RANGE);
+    assert!(
+        w[0].1
+            .contains("argument 3 of `__builtin_prefetch` is 4, not 0 to 3"),
+        "{w:?}"
+    );
+    let w = warnings("long f(int *p) { return __builtin_expect(p, 0); }");
+    assert!(
+        w.iter()
+            .any(|(c, t)| *c == crate::c5::diag::Code::INT_CONVERSION
+                && t.contains("argument 1 of `__builtin_expect`")),
+        "{w:?}"
+    );
+    // gcc takes any alignment value, constant or not.
+    assert!(
+        warnings("void *f(int *p, int a) { return __builtin_assume_aligned(p, a); }").is_empty()
+    );
+}
+
+/// gcc's `-Wstrict-prototypes` under C99's rules: a function declarator
+/// whose empty or identifier list declares no prototype (C99 6.7.5.3p14),
+/// in a declaration, a pointer, a typedef, a parameter, a member and a
+/// type name, but not in a cast's type name; a definition reports only
+/// when no earlier declaration gave the function a prototype. The lines
+/// are gcc 16.2.1's under `-std=gnu17` for the same unit.
+#[test]
+fn strict_prototypes_reports_where_gcc_does() {
+    let src = "int f();\n\
+               int g(void);\n\
+               int g() { return 0; }\n\
+               int h() { return 0; }\n\
+               int k(a) int a; { return a; }\n\
+               int (*fp)();\n\
+               typedef int T();\n\
+               void u(int (*cb)());\n\
+               struct s { int (*op)(); };\n\
+               int w(void) { int (*lp)() = 0; extern int e(); (void)lp; return sizeof(int (*)()); }\n\
+               void c(void) { (void)(int (*)(void))(int (*)())0; }\n\
+               void l(void) { int (*const *p)() = (int (*const[1])()){0}; (void)p; }\n\
+               int main(void) { return 0; }\n";
+    let lines = |selectors: &[&str]| -> Vec<u32> {
+        super::compile_str_bare_with_diags(src, selectors)
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::STRICT_PROTOTYPES)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    assert_eq!(lines(&["all", "extra"]), Vec::<u32>::new());
+    assert_eq!(
+        lines(&["strict-prototypes"]),
+        [1, 4, 5, 6, 7, 8, 9, 10, 10, 10, 12, 12]
+    );
+}
+
+/// gcc's `-Wmissing-prototypes` / `-Wmissing-declarations`: an external
+/// definition, neither `inline` nor `main`, with no earlier file-scope
+/// declaration having a prototype / at all. A block-scope declaration does
+/// not count. The lines are gcc 16.2.1's for the same units, and the
+/// declaration forms of the second unit each count, as in gcc.
+#[test]
+fn missing_prototypes_and_declarations_report_where_gcc_does() {
+    use crate::c5::diag::Code;
+    let lines = |src: &str, code: Code| -> Vec<u32> {
+        let selectors = ["missing-prototypes", "missing-declarations"];
+        super::compile_str_bare_with_diags(src, &selectors)
+            .warnings
+            .iter()
+            .filter(|w| w.code == code)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    let src = "int a(void) { return 0; }\n\
+               static int b(void) { return 0; }\n\
+               inline int c(void) { return 0; }\n\
+               extern inline int d(void) { return 0; }\n\
+               static inline int e(void) { return 0; }\n\
+               int main(void) { return 0; }\n\
+               int f();\n\
+               int f(void) { return 0; }\n\
+               int g(void);\n\
+               int g(void) { return 0; }\n\
+               void h(void) { extern int i(void); }\n\
+               int i(void) { return 0; }\n\
+               int j(x) int x; { return x; }\n\
+               __attribute__((weak)) int k(void) { return 0; }\n\
+               int l(void);\n\
+               static int l2(void);\n\
+               int m() { return 0; }\n";
+    assert_eq!(
+        lines(src, Code::MISSING_PROTOTYPES),
+        [1, 8, 11, 12, 13, 14, 17]
+    );
+    assert_eq!(
+        lines(src, Code::MISSING_DECLARATIONS),
+        [1, 11, 12, 13, 14, 17]
+    );
+    let declared = "typedef int fn_t(void);\n\
+                    fn_t foo1;\n\
+                    int foo1(void) { return 0; }\n\
+                    int x, foo2(void);\n\
+                    int foo2(void) { return 0; }\n\
+                    int (foo5)(void);\n\
+                    int (foo5)(void) { return 0; }\n\
+                    int foo6(void) __asm__(\"foo6_alias\");\n\
+                    int foo6(void) { return 0; }\n\
+                    int (*foo10(void))(void);\n\
+                    int (*foo10(void))(void) { return 0; }\n\
+                    __typeof__(foo1) foo11;\n\
+                    int foo11(void) { return 0; }\n\
+                    int main(void) { return 0; }\n";
+    assert_eq!(lines(declared, Code::MISSING_PROTOTYPES), Vec::<u32>::new());
+    assert_eq!(
+        lines(declared, Code::MISSING_DECLARATIONS),
+        Vec::<u32>::new()
+    );
+}
+
+/// gcc's `-Wcast-function-type` (in `-Wextra`): a cast between pointers to
+/// functions whose returns or common leading parameters differ other than
+/// as pointers, as integers of one precision, or in qualifiers;
+/// `void (*)(void)`, a variadic tail and a list without a prototype match.
+/// The lines are gcc 16.2.1's for the same unit on x86-64 and AArch64
+/// Linux; under LLP64 `long` has `int`'s precision, so 26 and 41 match.
+#[test]
+fn cast_function_type_reports_where_gcc_does() {
+    use crate::c5::Target;
+    let src = "typedef void (*v_v)(void);\n\
+               typedef int (*i_i)(int);\n\
+               typedef long (*l_l)(long);\n\
+               typedef int (*i_ii)(int, int);\n\
+               typedef int (*i_iv)(int, ...);\n\
+               typedef int (*i_u)();\n\
+               typedef void (*v_c)(char);\n\
+               typedef void (*v_uc)(unsigned char);\n\
+               typedef void (*v_s)(short);\n\
+               typedef void (*v_us)(unsigned short);\n\
+               typedef void (*v_u)(unsigned);\n\
+               typedef void (*v_i)(int);\n\
+               typedef void (*v_p)(void *);\n\
+               typedef void (*v_cp)(const char *);\n\
+               typedef double (*d_d)(double);\n\
+               typedef float (*f_f)(float);\n\
+               typedef void (*v_ll)(long long);\n\
+               typedef int (*i_ci)(const int);\n\
+               struct S { int a; };\n\
+               typedef void (*v_st)(struct S);\n\
+               typedef void (*v_st2)(struct S *);\n\
+               int fi(int x) { return x; }\n\
+               void use(void) {\n\
+               (void)(v_v)fi;          /* 24 */\n\
+               (void)(i_i)(v_v)0;      /* 25 */\n\
+               (void)(l_l)fi;          /* 26 */\n\
+               (void)(i_ii)fi;         /* 27 */\n\
+               (void)(i_iv)fi;         /* 28 */\n\
+               (void)(i_u)fi;          /* 29 */\n\
+               (void)(v_c)(v_uc)0;     /* 30 */\n\
+               (void)(v_s)(v_us)0;     /* 31 */\n\
+               (void)(v_u)(v_i)0;      /* 32 */\n\
+               (void)(v_p)(v_cp)0;     /* 33 */\n\
+               (void)(d_d)(f_f)0;      /* 34 */\n\
+               (void)(v_ll)(v_i)0;     /* 35 */\n\
+               (void)(i_ci)fi;         /* 36 */\n\
+               (void)(v_st)(v_st2)0;   /* 37 */\n\
+               (void)(v_i)fi;          /* 38 */\n\
+               (void)(i_i)(void *)fi;  /* 39 */\n\
+               (void)(int (*)(int, char))(int (*)(int, ...))0; /* 40 */\n\
+               (void)(long (*)(int))(int (*)(int))0; /* 41 */\n\
+               (void)(_Bool (*)(int))(char (*)(int))0; /* 42 */\n\
+               (void)(int (*)(int))(unsigned (*)(int))0; /* 43 */\n\
+               }\n\
+               int main(void){return 0;}\n";
+    let lines = |target: Target, selectors: &[&str]| -> Vec<u32> {
+        let opts = crate::CompileOptions::default().with_diag(super::diag_config(selectors));
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::CAST_FUNCTION_TYPE)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    let lp64 = [26, 27, 34, 35, 37, 38, 41, 42];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert_eq!(lines(target, &["cast-function-type"]), lp64, "{target:?}");
+        assert_eq!(lines(target, &["extra"]), lp64, "{target:?}");
+        assert_eq!(lines(target, &["all"]), Vec::<u32>::new(), "{target:?}");
+    }
+    let llp64 = lines(Target::WindowsX64, &["cast-function-type"]);
+    assert_eq!(llp64, [27, 34, 35, 37, 38, 42]);
+}
+
+/// GNU `designated_init` on a struct type: each initializer element with
+/// no designator for one of its members reports, braced or brace-elided,
+/// in a static, an automatic and a compound-literal initializer. The lines
+/// warned are gcc 16.2.1's for the same unit; gcc counts some elements on
+/// lines 16 and 17 differently but warns on the same lines.
+#[test]
+fn designated_init_reports_a_positional_member() {
+    let src = "struct s { int a, b; } __attribute__((designated_init));\n\
+               struct s x1 = { 1, 2 };\n\
+               struct s x2 = { .a = 1, 2 };\n\
+               struct s x3 = { 0 };\n\
+               struct s x4 = { };\n\
+               struct s x5 = { .a = 1, .b = 2 };\n\
+               struct t { struct s in; int c; };\n\
+               struct t y1 = { { 1, 2 }, 3 };\n\
+               struct s arr[2] = { { 1, 2 }, [1] = { 3 } };\n\
+               void f(void) { struct s l = { 5 }; struct s m = (struct s){ 6 }; (void)l; (void)m; }\n\
+               struct u { int a; };\n\
+               typedef struct __attribute__((designated_init)) { int q; } V;\n\
+               V v1 = { 1 };\n\
+               struct w { int z; } __attribute__((designated_init)) ww = { 4 };\n\
+               struct t y2 = { 1, 2, 3 };\n\
+               struct t y3 = { .in.a = 1, 2, 3 };\n\
+               struct s arr2[2] = { 1, 2, 3, 4 };\n\
+               struct t y4 = { .in = { .a = 1 }, 3 };\n\
+               #if __has_attribute(designated_init)\n\
+               int main(void) { return 0; }\n\
+               #endif\n";
+    let mut lines: Vec<u32> = super::compile_str_bare(src)
+        .warnings
+        .iter()
+        .filter(|w| w.code == crate::c5::diag::Code::DESIGNATED_INIT)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    lines.dedup();
+    assert_eq!(lines, [2, 3, 4, 8, 9, 10, 13, 14, 15, 16, 17]);
+    expect_compile_error(
+        "union __attribute__((designated_init)) u { int i; float f; };\nint main(void) { return 0; }\n",
+        "`designated_init` applies to a struct type only",
+    );
+}
+
+/// gcc's `-Wimplicit-fallthrough=5`: a statement completing into the label
+/// after it, unless a `fallthrough` attribute statement ends it. The lines
+/// are gcc 16.2.1's for the same units: an endless loop does not complete,
+/// whatever `break` it holds, a `do` loop completes when its body does, a
+/// nested switch when it breaks or its last statement completes, and a
+/// label landing on `break`, `goto`, a bare `return` or the switch's end is
+/// passed over, as gcc's lowering gives them.
+/// `longjmp` does not return on any target, whether the header binds it to
+/// the C library or lowers it as an intrinsic (C99 7.13.2.1p4).
+#[test]
+fn longjmp_ends_control_flow_on_every_target() {
+    let src = "#include <setjmp.h>\njmp_buf jb;\n\
+               int f(int x) { switch (x) { case 0: longjmp(jb, 1); case 1: return 2; } return 0; }\n\
+               int h(int x) { if (x) return 1; longjmp(jb, 2); }\n\
+               int main(void) { return 0; }\n";
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        let options = crate::CompileOptions::default().with_diag(super::diag_config(&[
+            "implicit-fallthrough=5",
+            "return-type",
+        ]));
+        let prog = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert!(prog.warnings.is_empty(), "{target:?}: {:?}", prog.warnings);
+    }
+}
+
+#[test]
+fn implicit_fallthrough_reports_where_gcc_does() {
+    let units = [
+        (
+            "void g(void);\n\
+               __attribute__((noreturn)) void die(void);\n\
+               int f(int x, int y) {\n\
+               switch (x) {\n\
+               case 0:\n\
+               g();\n\
+               case 1:\n\
+               g();\n\
+               break;\n\
+               case 2:\n\
+               g();\n\
+               __attribute__((fallthrough));\n\
+               case 3:\n\
+               case 4:\n\
+               if (y) return 1;\n\
+               case 5:\n\
+               if (y) return 1; else return 2;\n\
+               case 6:\n\
+               if (y) { g(); break; } else { return 2; }\n\
+               case 7:\n\
+               while (1) { if (y) return 3; }\n\
+               case 8:\n\
+               while (1) { if (y) break; }\n\
+               case 9:\n\
+               for (;;) { g(); }\n\
+               case 10:\n\
+               do { return 4; } while (0);\n\
+               case 11:\n\
+               do { if (y) continue; return 5; } while (0);\n\
+               case 12:\n\
+               die();\n\
+               case 13:\n\
+               __builtin_unreachable();\n\
+               case 14:\n\
+               { g(); }\n\
+               case 15:\n\
+               { g(); return 7; }\n\
+               case 16:\n\
+               switch (y) { case 1: return 1; default: return 2; }\n\
+               case 17:\n\
+               switch (y) { case 1: return 1; }\n\
+               case 18:\n\
+               goto out;\n\
+               case 19:\n\
+               ;\n\
+               case 20:\n\
+               g();\n\
+               lab:\n\
+               case 21:\n\
+               return 9;\n\
+               default:\n\
+               g();\n\
+               }\n\
+               out:\n\
+               return 0;\n\
+               }\n",
+            &[6, 15, 35, 47][..],
+        ),
+        (
+            "#include <stdlib.h>\n\
+               #include <setjmp.h>\n\
+               void g(void);\n\
+               jmp_buf jb;\n\
+               int f(int x, int y) {\n\
+               switch (x) {\n\
+               case 0:\n\
+               exit(1);\n\
+               case 1:\n\
+               abort();\n\
+               case 2:\n\
+               longjmp(jb, 1);\n\
+               case 3:\n\
+               do { g(); __builtin_unreachable(); } while (0);\n\
+               case 4:\n\
+               if (y) { g(); __attribute__((fallthrough)); } else { return 1; }\n\
+               case 5:\n\
+               { int z = 1; (void)z; }\n\
+               case 6:\n\
+               while (1) { switch (y) { case 0: break; } }\n\
+               case 7:\n\
+               for (int i = 0; ; i++) { if (i > y) return i; }\n\
+               case 8:\n\
+               do { g(); } while (y);\n\
+               case 9:\n\
+               __builtin_trap();\n\
+               case 10:\n\
+               if (y) return 1; else if (x) return 2; else return 3;\n\
+               case 11:\n\
+               g(); { case 12: g(); }\n\
+               case 13:\n\
+               return 0;\n\
+               }\n\
+               return -1;\n\
+               }\n",
+            &[18, 24, 30, 30],
+        ),
+        (
+            "void g(void);\n\
+               int f(int x, int y, int n) {\n\
+               int i;\n\
+               switch (x) {\n\
+               case 0:\n\
+               while (y) { g(); }\n\
+               case 1:\n\
+               for (i = 0; i < n; i++) g();\n\
+               case 2:\n\
+               while (1) { if (y) break; g(); }\n\
+               case 3:\n\
+               for (;;) { if (y) break; }\n\
+               case 4:\n\
+               do { g(); } while (0);\n\
+               case 5:\n\
+               do { if (y) break; g(); } while (1);\n\
+               case 6:\n\
+               switch (y) { case 1: g(); }\n\
+               case 7:\n\
+               switch (y) { case 1: return 1; default: g(); }\n\
+               case 8:\n\
+               g();\n\
+               case 9:\n\
+               break;\n\
+               case 10:\n\
+               g();\n\
+               case 11:\n\
+               return 3;\n\
+               case 12:\n\
+               g();\n\
+               case 13:\n\
+               goto out;\n\
+               case 14:\n\
+               if (y) g();\n\
+               case 15:\n\
+               g();\n\
+               default:\n\
+               g();\n\
+               case 16:\n\
+               { g(); }\n\
+               case 17:\n\
+               g();\n\
+               }\n\
+               out:\n\
+               return 0;\n\
+               }\n",
+            &[6, 8, 14, 18, 20, 26, 34, 36, 38, 40],
+        ),
+        // What precedes a switch body's first label is never reached, so it
+        // falls into nothing; gcc reports none of these.
+        (
+            "void g(void);\n\
+               int a(int x) { switch (x) { int c; case 1: c = 2; return c; default: return 0; } }\n\
+               int b(int x) { switch (x) { static const char s[] = \"x\"; default: return s[0]; } }\n\
+               int d(int x) { switch (x) { g(); case 1: return 1; } return 0; }\n\
+               int e(int x) { switch (x) { int c = 3; case 1: return c; } return 0; }\n",
+            &[],
+        ),
+    ];
+    for (src, want) in units {
+        let lines = |selectors: &[&str]| -> Vec<u32> {
+            let src = format!("{src}int main(void) {{ return 0; }}\n");
+            super::compile_str_bare_with_diags(&src, selectors)
+                .warnings
+                .iter()
+                .filter(|w| w.code == crate::c5::diag::Code::IMPLICIT_FALLTHROUGH)
+                .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+                .collect()
+        };
+        assert_eq!(lines(&["implicit-fallthrough=5"]), want);
+        assert_eq!(lines(&["all", "extra"]), Vec::<u32>::new());
+    }
+}
+
+/// `-Wvla-larger-than=N` reports a variable-length array whose size the
+/// size expression does not bound by N bytes, under optimization, as gcc
+/// 16 -O2 reports the same declarations (measured). A signed size may be
+/// negative, so it bounds nothing.
+#[test]
+fn vla_larger_than_reports_the_arrays_gcc_does() {
+    let src = "void use(char *, ...);\n\
+               void a(int n) { char v[n]; use(v); }\n\
+               void b(unsigned char n) { char v[n]; use(v); }\n\
+               void d(int n) { int v[n][4]; use((char *)v); }\n\
+               void e(unsigned n) { char v[n % 8]; use(v); }\n\
+               void g(int n) { use(0, sizeof(char[n])); }\n\
+               void sc(signed char n) { char v[n]; use(v); }\n\
+               void sh(unsigned short n) { char v[n]; use(v); }\n\
+               void un(unsigned n) { char v[n]; use(v); }\n\
+               void an(unsigned n) { char v[n & 15]; use(v); }\n\
+               void tr(unsigned n) { char v[n > 4 ? 4 : n]; use(v); }\n\
+               void pl(unsigned char n) { char v[n + 1]; use(v); }\n\
+               void mu(unsigned char n) { int v[n]; use((char *)v); }\n\
+               void bo(_Bool n) { char v[n]; use(v); }\n\
+               int main(void) { return 0; }\n";
+    let lines = |bound: Option<u64>, optimize: bool| -> Vec<u32> {
+        let options = crate::CompileOptions::default()
+            .with_optimize(optimize)
+            .with_vla_larger_than(bound)
+            .with_diag(super::diag_config(&["vla-larger-than"]));
+        Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::VLA_LARGER_THAN)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    for (bound, want) in [
+        (1, &[2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13][..]),
+        (100, &[2, 3, 4, 7, 8, 9, 12, 13]),
+        (255, &[2, 4, 7, 8, 9, 12, 13]),
+        (300, &[2, 4, 7, 8, 9, 13]),
+        (70000, &[2, 4, 7, 9]),
+        (1 << 40, &[2, 4, 7]),
+    ] {
+        assert_eq!(lines(Some(bound), true), want, "-Wvla-larger-than={bound}");
+    }
+    assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
+}
+
+/// The expressions of the associations `_Generic` does not select are
+/// unevaluated (C11 6.5.1.1p3) but checked: gcc 16.2.1 reports the same
+/// lines (-Wint-conversion, -Wenum-conversion), at file scope and in a
+/// function, whichever association is selected. None of them runs.
+#[test]
+fn unselected_generic_associations_are_checked_not_evaluated() {
+    let src = "enum A { A0, A1 };\n\
+               enum B { B0, B1 };\n\
+               int *gp; static int calls;\n\
+               int gi = _Generic(0, int: 1, long: (gp = 5));\n\
+               static int side(void) { return ++calls; }\n\
+               int f(int *p, int i, enum A a, enum B b) {\n\
+                 i = _Generic(0, int: 0, long: (p = 5));\n\
+                 b = _Generic(0, int: 0, long: (b = a));\n\
+                 i += _Generic(0, default: (p = 6), int: 3);\n\
+                 i += _Generic(0, long: \"str\", default: i, char: (p = 7));\n\
+                 i += _Generic(0, long: ({ int t = side(); t; }), default: 4);\n\
+                 return i + (int)b; }\n\
+               int main(void) { int x; return f(&x, 1, A1, B0) == 10 && calls == 0 && gi == 1 ? 0 : 1; }\n";
+    let options = crate::CompileOptions::default()
+        .with_diag(super::diag_config(&["int-conversion", "enum-conversion"]));
+    let program = Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+        .compile()
+        .expect("compile");
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4, 7, 8, 9, 10]);
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 0);
+}
+
+/// A diagnostic in an initializer of static storage duration is reported
+/// once, though the initializer may be parsed twice (as an address
+/// constant first, then as arithmetic): the checkpoint the first parse is
+/// undone to also drops what it reported. gcc 16 reports each line once.
+#[test]
+fn a_static_initializers_diagnostic_is_reported_once() {
+    let src = "int *gp;\n\
+               int gi = sizeof(gp = 5);\n\
+               void f(void) { static int s = sizeof(gp = 5); (void)s; }\n\
+               int *ga = &gi + sizeof(gp = 5);\n\
+               struct S { int a, b; } gs = { sizeof(gp = 5), 2 };\n\
+               int garr[] = { 1, sizeof(gp = 5) };\n\
+               static unsigned char uc = (unsigned char){ 300 };\n\
+               int main(void) { return 0; }\n";
+    let options = crate::CompileOptions::default().with_diag(super::diag_config(&[
+        "int-conversion",
+        "constant-conversion",
+    ]));
+    let program = Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+        .compile()
+        .expect("compile");
+    let lines = |code| -> Vec<u32> {
+        program
+            .warnings
+            .iter()
+            .filter(|w| w.code == code)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    assert_eq!(
+        lines(crate::c5::diag::Code::INT_CONVERSION),
+        [2, 3, 4, 5, 6]
+    );
+    // The arithmetic parse reports the compound literal's conversion as the
+    // undone one did, as clang 22 reports it (-Wconstant-conversion).
+    assert_eq!(lines(crate::c5::diag::Code::CONSTANT_CONVERSION), [7]);
+}
+
+/// An object declared through a variably modified typedef is bounded by
+/// the typedef's size expression, so `-Wvla-larger-than=` reports it where
+/// it reports the array that expression declares directly. (gcc 16 -O2
+/// reports either form or neither depending on how the array's address
+/// is passed on, so its lines are not the reference here.)
+#[test]
+fn vla_larger_than_reads_a_typedef_bound() {
+    let src = "void use(char *);\n\
+               void b(unsigned char n) { char v[n]; use(v); }\n\
+               void tb(unsigned char n) { typedef char U[n]; U v; use(v); }\n\
+               void mu(unsigned char n) { int v[n]; use((char *)v); }\n\
+               void tm(unsigned char n) { typedef int U[n]; U v; use((char *)v); }\n\
+               int main(void) { return 0; }\n";
+    let lines = |bound: u64| -> Vec<u32> {
+        let options = crate::CompileOptions::default()
+            .with_optimize(true)
+            .with_vla_larger_than(Some(bound))
+            .with_diag(super::diag_config(&["vla-larger-than"]));
+        Compiler::with_options(src.to_string(), crate::Target::LinuxX64, options)
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::VLA_LARGER_THAN)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect()
+    };
+    for (bound, want) in [(100, &[2, 3, 4, 5][..]), (255, &[4, 5]), (1020, &[])] {
+        assert_eq!(lines(bound), want, "-Wvla-larger-than={bound}");
+    }
+}
+
+/// gcc's `-Wenum-conversion` (in `-Wextra`): an assignment, initializer,
+/// prototyped argument or return converting a value of one enumerated type
+/// to another, the type compared being gcc's original one: an enumeration
+/// constant's enumeration (C99 6.7.2.2p3 types the constant `int`), a
+/// bit-field's declared type, two conditional arms' common enumeration.
+/// A bit-field narrower than its type has an integer type of its own as
+/// the target of a conversion or the value of a store, and an initializer
+/// of a type compatible with the object's, as the promoted `i ? a : a`
+/// is, initializes it as it is. The lines are gcc 16.2.1's for the same
+/// unit on x86-64 and AArch64 Linux; gcc reports 22 and 23 twice.
+#[test]
+fn enum_conversion_reports_where_gcc_does() {
+    use crate::c5::Target;
+    let src = "enum A { A0, A1 };\n\
+               enum B { B0, B1 };\n\
+               typedef enum B tb;\n\
+               typedef tb tb2;\n\
+               typedef enum A ta;\n\
+               enum { K0, K1 };\n\
+               enum __attribute__((packed)) P { P0, P1 };\n\
+               void takeb(enum B);\n\
+               void takevar(enum B, ...);\n\
+               void kd(b) enum B b; { (void)b; }\n\
+               struct s { enum B f; };\n\
+               struct bf { enum B f : 2; enum A g : 3; enum B h : 32; enum A k : 32; };\n\
+               struct pk { enum P f : 8; enum P g : 4; };\n\
+               enum A ra(void);\n\
+               enum A (*fpa)(void);\n\
+               enum B gb = A1;\n\
+               enum B gc = (enum A)0;\n\
+               enum B gd = 0 ? A1 : B1;\n\
+               enum B ge = 1 ? (enum A)0 : A1;\n\
+               enum B gf = +A1;\n\
+               enum B gg = 1 ? A1 : A1;\n\
+               struct bf gs = { A1, A0, A1, B1 };\n\
+               enum B ga[] = { A1, [2] = A0 };\n\
+               enum B rb(enum A a) { return a; }\n\
+               enum B rc(void) { return A1; }\n\
+               void f(enum A a, enum B b, int i, enum A *p, struct bf *pbf, struct s *ps, ta t, struct pk *pp) {\n\
+               enum B c = a;\n\
+               tb2 d = A1;\n\
+               enum B e = i ? a : a;\n\
+               enum B g = i ? A1 : A1;\n\
+               enum B h = i ? (enum A)0 : A1;\n\
+               struct s x = { a };\n\
+               enum B l = { a };\n\
+               static enum B sb = (A1);\n\
+               b = a;\n\
+               b = A0;\n\
+               b = (a);\n\
+               b = *p;\n\
+               b = p[0];\n\
+               b = ra();\n\
+               b = fpa();\n\
+               b = pbf->g;\n\
+               pbf->f = a;\n\
+               pbf->h = a;\n\
+               b = i ? a : A1;\n\
+               b = i ? A1 : K1;\n\
+               b = a ?: a;\n\
+               b = (i, A1);\n\
+               b = a++;\n\
+               b = (a = A0);\n\
+               b = ({ a; });\n\
+               b = ({ A1; });\n\
+               b = _Generic(0, int: a);\n\
+               b = __builtin_choose_expr(1, a, b);\n\
+               b = t;\n\
+               b = (ta)i;\n\
+               b = (enum B)a;\n\
+               b = i;\n\
+               i = a;\n\
+               b = +a;\n\
+               b += a;\n\
+               b = -a;\n\
+               b = K1;\n\
+               takeb(a);\n\
+               takeb(A1);\n\
+               takevar(B0, a);\n\
+               kd(a);\n\
+               (void)sizeof(b = a);\n\
+               i = 0 ? (b = a) : 0;\n\
+               ps->f = a;\n\
+               pp->f = a;\n\
+               pp->g = a;\n\
+               enum P q = a;\n\
+               {\n\
+               enum Z { A1 = 5 };\n\
+               a = A1;\n\
+               }\n\
+               a = A1;\n\
+               b = pbf->k++;\n\
+               b = (pbf->k = A0);\n\
+               b = (pbf->g = A0);\n\
+               b = pbf->g++;\n\
+               enum B m = 1 ? pbf->g : pbf->g;\n\
+               (void)c; (void)d; (void)e; (void)g; (void)h; (void)x; (void)l; (void)sb; (void)q; (void)m;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let rows = |target: Target, selectors: &[&str]| -> Vec<(u32, String)> {
+        let opts = crate::CompileOptions::default().with_diag(super::diag_config(selectors));
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"))
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::ENUM_CONVERSION)
+            .filter_map(|w| w.loc.as_ref().map(|l| (l.line, w.text.clone())))
+            .collect()
+    };
+    let gcc = [
+        16, 17, 21, 22, 22, 23, 23, 24, 25, 27, 28, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+        44, 45, 48, 49, 50, 51, 53, 54, 55, 56, 63, 64, 65, 68, 69, 70, 71, 73, 76, 79, 80, 83,
+    ];
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let found = rows(target, &["enum-conversion"]);
+        let lines: Vec<u32> = found.iter().map(|r| r.0).collect();
+        assert_eq!(lines, gcc, "{target:?}");
+        assert_eq!(rows(target, &["extra"]).len(), gcc.len(), "{target:?}");
+        assert!(rows(target, &["all"]).is_empty(), "{target:?}");
+        let text = |line: u32| found.iter().find(|r| r.0 == line).map(|r| r.1.as_str());
+        assert_eq!(
+            text(16),
+            Some("implicit conversion from `enum A` to `enum B`")
+        );
+        assert_eq!(
+            text(63),
+            Some("implicit conversion from `enum <anonymous>` to `enum B`")
+        );
+        assert_eq!(
+            text(76),
+            Some("implicit conversion from `enum Z` to `enum A`")
         );
     }
 }

@@ -468,8 +468,15 @@ fn cpuid_xgetbv_output_width() {
 fn get_cpuid_leaf_checks() {
     // <cpuid.h> __get_cpuid / __get_cpuid_count range-check the leaf against
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
-    // and leave the outputs untouched when they reject one.
-    assert_eq!(run_fixture("get_cpuid_leaf_checks.c"), 0);
+    // and leave the outputs untouched when they reject one. gcc installs the
+    // header for x86 alone.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("get_cpuid_leaf_checks.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 /// The interpreter runs an inline asm template in the assembler syntax of
@@ -1471,6 +1478,226 @@ fn builtin_overflow() {
     assert_eq!(run_fixture("builtin_overflow.c"), 0);
 }
 
+/// MSVC's intrinsics with no library function, declared by the unit and
+/// enabled with `#pragma intrinsic`, lower at the call site on the PE
+/// targets: no `#pragma intrinsic` warning, no call left for the link,
+/// and the barrier emits nothing (clang for a windows-msvc triple emits no
+/// call for it either). The fixture runs under the interpreter here and
+/// natively in the PE tables.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_intrinsics_lower_at_the_call_site() {
+    use crate::Target;
+    let src = super::load_fixture("msvc_intrinsics_self_declared.c");
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = crate::Compiler::with_target(src.clone(), t)
+            .compile()
+            .unwrap();
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let dump = super::perf_codegen::ssa_dump_for(
+            "void _ReadWriteBarrier(void);\nint x;\n\
+             int f(void) { x = 1; _ReadWriteBarrier(); return x; }\n",
+            "f",
+            t,
+            false,
+        );
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        assert_eq!(
+            run_fixture_for("msvc_intrinsics_self_declared.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+    let probe = "#if __has_builtin(_ReturnAddress) != defined(_WIN32)\n#error\n#endif\n\
+                 int main(void) { return 0; }\n";
+    for t in [Target::WindowsX64, Target::LinuxX64] {
+        crate::Compiler::with_target(probe.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+}
+
+#[cfg(feature = "full")]
+#[test]
+fn msvc_scalar_intrinsics_give_the_documented_values() {
+    use crate::{CompileOptions, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_intrinsics_values.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+        // A declaration in the SDK's spelling with `#pragma intrinsic`
+        // still lowers at the call site, with no warning.
+        let sdk = "typedef unsigned char BOOLEAN;\ntypedef unsigned long DWORD;\n\
+                   BOOLEAN _BitScanForward(DWORD *Index, DWORD Mask);\n\
+                   #pragma intrinsic(_BitScanForward, _InterlockedIncrement)\n\
+                   long _InterlockedIncrement(long volatile *);\n\
+                   int f(DWORD m, long *n) { DWORD i; _InterlockedIncrement(n);\n\
+                   return _BitScanForward(&i, m) ? (int)i : -1; }\n";
+        let program = crate::Compiler::with_options(
+            sdk.to_string(),
+            t,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let dump = super::perf_codegen::ssa_dump_for(sdk, "f", t, false);
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        assert!(dump.contains("AtomicRmw"), "{t:?}:\n{dump}");
+    }
+}
+
+#[cfg(feature = "native-emit")]
+#[test]
+fn msvc_instruction_intrinsics_encode_their_instructions() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let fixture = super::load_fixture("msvc_intrinsics_instructions.c");
+    let traps = "#include <intrin.h>\nvoid brk(void) { __debugbreak(); }\n\
+                 void ff(unsigned c) { __fastfail(c); }\n";
+    let object = |src: &str, t: Target| {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), t, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        crate::emit_native_with_options(&program, t, opts).unwrap_or_else(|e| panic!("{t:?}: {e}"))
+    };
+    let x64 = [
+        object(&fixture, Target::WindowsX64),
+        object(traps, Target::WindowsX64),
+    ]
+    .concat();
+    // cpuid, rdtsc, pause, a gs-relative 8-byte load, int3, int $0x29.
+    let x64_seqs: [&[u8]; 6] = [
+        &[0x0f, 0xa2],
+        &[0x0f, 0x31],
+        &[0xf3, 0x90],
+        &[0x65, 0x48, 0x8b],
+        &[0xcc],
+        &[0xcd, 0x29],
+    ];
+    for seq in x64_seqs {
+        assert!(x64.windows(seq.len()).any(|w| w == seq), "x64: {seq:02x?}");
+    }
+    let words: Vec<u32> = [fixture.as_str(), traps]
+        .into_iter()
+        .flat_map(|src| {
+            let obj = object(src, Target::WindowsAarch64);
+            let (words, _) = obj.as_chunks::<4>();
+            words
+                .iter()
+                .map(|w| u32::from_le_bytes(*w))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    // brk #0xf000 and #0xf003, dmb ish, dsb sy, isb, yield, wfe, sev, sevl.
+    for w in [
+        0xd43e0000u32,
+        0xd43e0060,
+        0xd5033bbf,
+        0xd5033f9f,
+        0xd5033fdf,
+        0xd503203f,
+        0xd503205f,
+        0xd503209f,
+        0xd50320bf,
+    ] {
+        assert!(words.contains(&w), "arm64: {w:08x}");
+    }
+    // crc32b, crc32cx, and mrs / msr of FPCR, in any registers.
+    for (mask, bits) in [
+        (0xffe0fc00u32, 0x1ac04000u32),
+        (0xffe0fc00, 0x9ac05c00),
+        (0xffffffe0, 0xd53b4400),
+        (0xffffffe0, 0xd51b4400),
+    ] {
+        assert!(words.iter().any(|w| w & mask == bits), "arm64: {bits:08x}");
+    }
+}
+
+#[test]
+fn msvc_intrinsics_check_their_operands() {
+    use crate::Target;
+    let err = |src: &str, t: Target| {
+        crate::Compiler::with_target(src.to_string(), t)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default()
+    };
+    let a64 = Target::WindowsAarch64;
+    let x64 = Target::WindowsX64;
+    let cases = [
+        (
+            "void f(void) { __dmb(16); }",
+            a64,
+            "argument 1 of `__dmb` is 16, not 0 to 15",
+        ),
+        (
+            "void f(unsigned t) { __dmb(t); }",
+            a64,
+            "argument 1 of `__dmb` is not an integer constant expression",
+        ),
+        (
+            "int f(unsigned long *i) { return _BitScanForward(i); }",
+            x64,
+            "too few arguments to `_BitScanForward` (expected 2, got 1)",
+        ),
+        (
+            "void f(void) { __yield(); }",
+            x64,
+            "unknown function `__yield`",
+        ),
+        (
+            "void f(int *i) { __cpuid(i, 0); }",
+            a64,
+            "unknown function `__cpuid`",
+        ),
+        (
+            "int f(long *p) { return _InterlockedIncrement(p); }",
+            Target::LinuxX64,
+            "unknown",
+        ),
+    ];
+    for (src, t, needle) in cases {
+        let src = format!("{src}\nint main(void) {{ return 0; }}\n");
+        let msg = err(&src, t);
+        assert!(msg.contains(needle), "{t:?} {src}: {msg}");
+    }
+    // `__assume(0)` and `__fastfail` end the path, so neither function
+    // falls off its end.
+    let probe = "#if !__has_builtin(_InterlockedIncrement) || !__has_builtin(__noop)\n#error\n\
+                 #endif\n#pragma intrinsic(_BitScanForward, __popcnt)\n\
+                 int f(int x) { if (x) return 5; __assume(0); }\n\
+                 int g(void) { __fastfail(3); }\n\
+                 int main(void) { return f(1) - 5; }\n";
+    for t in [x64, a64] {
+        let program = crate::Compiler::with_target(probe.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+    }
+}
+
+#[test]
+fn builtin_overflow_mixed_signedness() {
+    // The exact value decides when an operand's signedness or width
+    // differs from the result's, for LP64 and LLP64.
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            run_fixture_for("builtin_overflow_mixed_signedness.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
 #[test]
 fn builtin_parity() {
     // GCC `__builtin_parity` / `__builtin_parityll`: odd-set-bit predicate
@@ -2055,8 +2282,15 @@ fn integer_negate_shift_overflow() {
 
 #[test]
 fn posix_unix_headers() {
-    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h.
-    assert_eq!(run_fixture("posix_unix_headers.c"), 0);
+    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h, on the POSIX
+    // targets that ship them.
+    for target in [crate::Target::MacOSAarch64, crate::Target::LinuxX64] {
+        assert_eq!(
+            run_fixture_for("posix_unix_headers.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -3774,6 +4008,43 @@ fn extended_identifiers() {
     assert_eq!(run_fixture("extended_identifiers.c"), 0);
 }
 
+/// An unnamed member spelled with a structure or union typedef name, the
+/// `-fms-extensions` form, promotes like a tagged one, for LP64 and LLP64.
+#[test]
+fn unnamed_typedef_name_members_promote() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("unnamed_field_typedef_name.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
+fn dollar_signs_form_identifiers() {
+    // C99 6.4.2.1p1 leaves other identifier characters to the
+    // implementation; gcc and clang take `$` (`-fdollars-in-identifiers`),
+    // in macro names as in objects, functions and members.
+    let src = "#define __$allowed_on_parameter\n\
+               #define __allowed(p) __$allowed_##p\n\
+               struct s { int $m, a$; };\n\
+               static int $f(__allowed(on_parameter) int x) { return x; }\n\
+               int $count = 2;\n\
+               int main(void) {\n\
+                 struct s v = { 3, 4 };\n\
+                 int a$b$ = $f($count) + v.$m * v.a$;\n\
+                 return a$b$ - 14; }\n";
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ] {
+        assert_eq!(super::run_str_for(src, target), 0, "{target:?}");
+    }
+}
+
 #[test]
 fn const_object_array_bound() {
     // A static `const` integer object folds its value in a later constant
@@ -3936,7 +4207,9 @@ fn builtin_bswap_expect() {
 fn byteswap_glibc() {
     // glibc <byteswap.h>: bswap_16/32/64 and the __bswap_N spellings,
     // including the truncation to the operand width and the fold.
-    assert_eq!(run_fixture("byteswap_glibc.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(run_fixture_for("byteswap_glibc.c", target), 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -3972,8 +4245,11 @@ fn inline_byte_access_leaf() {
 
 #[test]
 fn sysexits_codes() {
-    // <sysexits.h>: the BSD exit-status codes, same on every target.
-    assert_eq!(run_fixture("sysexits_codes.c"), 0);
+    // <sysexits.h>: the BSD exit-status codes, the same on the POSIX
+    // targets that ship the header.
+    for target in [crate::Target::MacOSAarch64, crate::Target::LinuxX64] {
+        assert_eq!(run_fixture_for("sysexits_codes.c", target), 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -4013,10 +4289,16 @@ fn builtin_bit_byte_const() {
 
 #[test]
 fn scanf_fscanf_binding() {
-    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
-    // from <stdio.h>; the calls are guarded so the interp lane never
-    // reaches their (unimplemented) CallExt and never blocks on stdin.
-    assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared by <stdio.h>;
+    // the calls are guarded so the interp lane never reaches their
+    // (unimplemented) CallExt and never blocks on stdin. On Windows they
+    // are libc/lib/scanf_ext.c's, which the interpreter does not load; the
+    // native tables link and run the fixture there.
+    if crate::Target::default_target().is_windows() {
+        super::compile_fixture("scanf_fscanf_binding.c");
+    } else {
+        assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+    }
 }
 
 #[test]
@@ -4135,6 +4417,65 @@ fn struct_array_designator_resume() {
     // C99 6.7.8p17: a positional entry after a designated one in an array
     // of structs takes the next subobject, not the next outer row.
     assert_eq!(run_fixture("struct_array_designator_resume.c"), 0);
+}
+
+#[test]
+fn enumerator_scopes_of_parameter_lists() {
+    // C99 6.2.1p4: a prototype's enumeration constants end with it; a
+    // definition's, and its old-style declaration list's, with its block.
+    assert_eq!(run_fixture("enumerator_scopes_of_parameter_lists.c"), 0);
+}
+
+#[test]
+fn array_typedef_pointer_casts() {
+    // C99 6.7.7p3: `(A3 *)` with `typedef int A3[3]` points to the row, in
+    // a static initializer's cast and compound literal too.
+    assert_eq!(run_fixture("array_typedef_pointer_casts.c"), 0);
+}
+
+#[test]
+fn digraphs_spell_their_punctuators() {
+    // C99 6.4.6p3: the six digraphs behave as `[` `]` `{` `}` `#` `##` in
+    // directives, replacement lists and code; `#` keeps their spelling.
+    assert_eq!(run_fixture("digraphs_spell_their_punctuators.c"), 0);
+}
+
+#[test]
+fn designator_resumes_in_subobject() {
+    // C99 6.7.8p17: a positional entry after `[i].m`, `.m.x` or `.a[i]`
+    // takes the next subobject of the designated one's enclosing object;
+    // a designator after a brace-elided value belongs to the braced list.
+    assert_eq!(run_fixture("designator_resumes_in_subobject.c"), 0);
+}
+
+#[test]
+fn designator_completes_a_union() {
+    // C99 6.7.8p17: after a designated union member, the next positional
+    // initializer takes the member after the union.
+    assert_eq!(run_fixture("designator_completes_a_union.c"), 0);
+}
+
+#[test]
+fn member_qualifiers_stay_with_their_members() {
+    // C99 6.7.3: a `const` in a member's parameter list leaves the object
+    // declared with the structure type writable.
+    assert_eq!(
+        run_fixture("member_qualifiers_stay_with_their_members.c"),
+        0
+    );
+}
+
+#[test]
+fn fp_contract_stays_within_an_expression() {
+    // C99 6.5p8, 7.12.2: no contraction across an assignment, a call or an
+    // `FP_CONTRACT OFF` region.
+    assert_eq!(run_fixture("fp_contract_stays_within_an_expression.c"), 0);
+}
+
+#[test]
+fn atomic_int128_operations() {
+    // C11 7.17.7 on a 16-byte integer through the paired compare-exchange.
+    assert_eq!(run_fixture("atomic_int128_operations.c"), 0);
 }
 
 #[test]
@@ -5378,10 +5719,8 @@ fn builtin_choose_expr_selects_on_constant() {
     // constant `c` is non-zero, else `b`. badc provides it as a
     // constant-condition conditional thunk; only the taken branch is
     // evaluated, and the result folds to that branch (usable in constant
-    // contexts). Guarded by __GNUC__ so the `<_builtins.h>` thunk is in play.
+    // contexts).
     let src = "\
-#define __GNUC__ 4\n\
-#include <_builtins.h>\n\
 _Static_assert(__builtin_choose_expr(1, 7, 999) == 7, \"true picks a\");\n\
 _Static_assert(__builtin_choose_expr(0, 999, 3) == 3, \"false picks b\");\n\
 int main(void){\n\
@@ -5516,8 +5855,8 @@ fn vsnprintf_and_the_va_list_forms_are_declared_with_prototypes() {
 }
 
 #[test]
-fn builtin_expect_is_predefined() {
-    // `__builtin_expect` is predefined -- available in a translation
+fn builtin_expect_needs_no_header() {
+    // `__builtin_expect` is a builtin -- available in a translation
     // unit with no #include and no auto-include; its value is the
     // first operand.
     assert_eq!(run_fixture("builtin_expect_no_header.c"), 0);
@@ -6600,16 +6939,31 @@ fn ipproto_case_labels() {
 
 #[test]
 fn elf_header_types() {
-    // <elf.h> specification-fixed type and struct layouts.
-    assert_eq!(run_fixture("elf_header_types.c"), 0);
+    // <elf.h> specification-fixed type and struct layouts, on the glibc
+    // targets that ship the header.
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        assert_eq!(
+            run_fixture_for("elf_header_types.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
 fn syscall_numbers_on_every_target() {
     // <sys/syscall.h>, <asm/unistd.h> and <linux/unistd.h> on every target
-    // from any host: the kernel table on Linux, no number elsewhere.
+    // shipping them, from any host: the kernel table on Linux, no number on
+    // macOS, whose SDK has <sys/syscall.h> alone.
     for target in crate::Target::ALL {
-        for header in [None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")] {
+        let headers: &[Option<&str>] = match target {
+            crate::Target::LinuxX64 | crate::Target::LinuxAarch64 => {
+                &[None, Some("<asm/unistd.h>"), Some("<linux/unistd.h>")]
+            }
+            crate::Target::MacOSAarch64 => &[None],
+            crate::Target::WindowsX64 | crate::Target::WindowsAarch64 => &[],
+        };
+        for &header in headers {
             let defines = header.map(|h| ("UNISTD_HEADER".to_string(), h.to_string()));
             let opts = crate::CompileOptions::default().with_defines(defines.into_iter().collect());
             assert_eq!(
@@ -7544,14 +7898,20 @@ fn fnmatch_flags_follow_each_platform_libc() {
 fn byteswap_header_needs_no_platform_library() {
     // glibc's spelling over badc's byte-reversal builtins, which fold in
     // a constant expression, so the values are checked at compile time.
+    // The other targets' C libraries have no <byteswap.h>.
     let src = "#include <byteswap.h>\n\
         int ck[(bswap_16(0x0102)==0x0201 && bswap_32(0x01020304u)==0x04030201u \
              && bswap_64(0x0102030405060708ull)==0x0807060504030201ull \
              && __bswap_16(0x0102)==0x0201 && __bswap_32(0x01020304u)==0x04030201u \
              && __bswap_64(0x0102030405060708ull)==0x0807060504030201ull)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        let glibc = matches!(
+            target,
+            crate::Target::LinuxX64 | crate::Target::LinuxAarch64
+        );
+        assert_eq!(
             header_snippet_compiles(src, target),
+            glibc,
             "<byteswap.h> on {target:?}"
         );
     }
@@ -7560,7 +7920,8 @@ fn byteswap_header_needs_no_platform_library() {
 #[test]
 fn sysexits_codes_are_target_independent() {
     // sysexits(3) is a set of integer constants with no library, syscall
-    // or target dependency behind it.
+    // or target dependency behind it, in the C libraries of macOS and glibc;
+    // mingw-w64 has no <sysexits.h>.
     let src = "#include <sysexits.h>\n\
         int ck[(EX_OK==0 && EX__BASE==64 && EX_USAGE==64 && EX_DATAERR==65 \
              && EX_NOINPUT==66 && EX_NOUSER==67 && EX_NOHOST==68 \
@@ -7569,8 +7930,10 @@ fn sysexits_codes_are_target_independent() {
              && EX_TEMPFAIL==75 && EX_PROTOCOL==76 && EX_NOPERM==77 \
              && EX_CONFIG==78 && EX__MAX==78)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        let posix = !target.is_windows();
+        assert_eq!(
             header_snippet_compiles(src, target),
+            posix,
             "<sysexits.h> on {target:?}"
         );
     }
@@ -7666,8 +8029,8 @@ fn the_mach_process_inspection_headers_are_macos_only() {
         );
     }
 
-    // The file-format layouts describe fixed on-disk records, so they are
-    // readable from any host. Sizes are what clang reports against the
+    // The file-format layouts describe fixed on-disk records, and the SDK
+    // alone ships their headers. Sizes are what clang reports against the
     // macOS SDK; `struct nlist` keeps its 12-byte on-disk shape because
     // the SDK gates the in-core `char *n_name` on !__LP64__.
     let layout = "#include <mach-o/fat.h>\n#include <mach-o/nlist.h>\n\
@@ -7682,8 +8045,9 @@ fn the_mach_process_inspection_headers_are_macos_only() {
              && CPU_TYPE_X86_64==0x01000007 && CPU_TYPE_ARM64==0x0100000c \
              && CPU_SUBTYPE_ARM64E==2 && CPU_SUBTYPE_X86_64_ALL==3)?1:-1];\n";
     for target in ALL_TARGETS {
-        assert!(
+        assert_eq!(
             header_snippet_compiles(layout, target),
+            target == Target::MacOSAarch64,
             "the Mach-O record layouts on {target:?}"
         );
     }
@@ -8098,6 +8462,49 @@ fn integer_constant_added_to_an_address_constant() {
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
+}
+
+#[test]
+fn value_builtins_take_preprocessed_input() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // gcc and clang keep the builtins as calls in `-E` output, so a `.i`
+    // unit reaches the parser with them. Dropping the fixture's directive
+    // lines keeps its ASCII-classification block.
+    assert_eq!(run_fixture("value_builtins.c"), 0);
+    let text: String = super::load_fixture("value_builtins.c")
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let opts = CompileOptions::default().with_preprocessed(true);
+    let program = Compiler::with_options(text, Target::host(), opts)
+        .compile()
+        .expect("the preprocessed unit compiles");
+    assert_eq!(Vm::new(program).run().unwrap(), 0);
+}
+
+#[test]
+fn builtin_nan_reads_its_payload_as_gcc_does() {
+    // gcc 16 skips leading white space and a sign, reads a bare `0x` as 0
+    // and stops at the first NUL; clang calls `nan` for the signed form.
+    // clang also folds `__builtin_assume_aligned` of an address constant in
+    // a static initializer, which gcc rejects.
+    let src = "static unsigned long long bits(double d) {\n\
+                 union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
+               static double minus = __builtin_nan(\"-5\");\n\
+               static double space = __builtin_nan(\" 5\");\n\
+               static double bare = __builtin_nan(\"0x\");\n\
+               static double glued = __builtin_nan(\"1\\0\" \"2\");\n\
+               static int anchor;\n\
+               static void *aligned = __builtin_assume_aligned(&anchor, 8);\n\
+               int main(void) {\n\
+                 if (bits(minus) != 0x7ff8000000000005ull) return 1;\n\
+                 if (bits(space) != 0x7ff8000000000005ull) return 2;\n\
+                 if (bits(bare) != 0x7ff8000000000000ull) return 3;\n\
+                 if (bits(glued) != 0x7ff8000000000001ull) return 4;\n\
+                 return aligned == (void *)&anchor ? 0 : 5;\n\
+               }\n";
+    assert_eq!(run_str(src), 0);
 }
 
 #[test]

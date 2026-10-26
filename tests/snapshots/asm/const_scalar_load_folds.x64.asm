@@ -38,14 +38,14 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>

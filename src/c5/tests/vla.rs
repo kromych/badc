@@ -53,6 +53,144 @@ fn vla_array_type_runs_under_the_interpreter() {
     }
 }
 
+/// A block-scope typedef of a variable-length array type (C99 6.7.7p2)
+/// under the interpreter, for both data models.
+#[test]
+fn vla_typedef_runs_under_the_interpreter() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            super::run_fixture_for("vla_typedef_block_scope.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
+/// What a variably modified typedef may not declare: an object of static
+/// storage duration or with linkage (C99 6.7.5.2p2) and a member
+/// (6.7.2.1p8), which gcc 16 and clang 22 reject; a jump into its scope
+/// (6.8.6.1p1); and an array of it, which badc does not lay out.
+#[test]
+fn vla_typedef_constraints_are_diagnosed() {
+    for (body, text) in [
+        (
+            "static U u;",
+            "variable-length array `u` may not have static storage duration",
+        ),
+        (
+            "extern U u;",
+            "variable-length array `u` may not have linkage",
+        ),
+        (
+            "struct S { U m; } s;",
+            "field `m` has a variably modified type",
+        ),
+        (
+            "U a[2];",
+            "a non-constant inner array dimension is not supported",
+        ),
+        (
+            "typedef U W[3];",
+            "a non-constant inner array dimension is not supported",
+        ),
+    ] {
+        let src = alloc::format!("int f(int n) {{ typedef char U[n]; {body} return n; }}\n");
+        match Compiler::new(src).compile() {
+            Ok(_) => panic!("{body}: compiled"),
+            Err(e) => {
+                let msg = alloc::format!("{e}");
+                assert!(msg.contains(text), "{body}: {msg}");
+            }
+        }
+    }
+    let src = "int f(int n) { goto l; typedef char U[n]; l: return n; }\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("jumps into the scope of `U`"), "{msg}");
+    let src = "int n = 3; typedef char U[n];\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("only allowed at block scope"), "{msg}");
+}
+
+/// A block-scope pointer to a variable-length array (C99 6.7.5.2p2), its
+/// bound taken where the declaration is reached, under the interpreter for
+/// both data models; one with linkage and a jump into its scope are
+/// rejected, as gcc 16 and clang 22 reject them.
+#[test]
+fn a_block_scope_pointer_to_a_vla_takes_its_bound_where_declared() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            super::run_fixture_for("vla_pointer_block_scope.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+    for (src, text) in [
+        (
+            "void f(int n) { extern char (*p)[n]; }",
+            "an object with linkage cannot have a variably modified type",
+        ),
+        (
+            "void f(int n) { goto l; char (*p)[n]; l: (void)p; }",
+            "jumps into the scope of `p`",
+        ),
+    ] {
+        let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+        assert!(msg.contains(text), "{src}: {msg}");
+    }
+}
+
+/// Parameters of variably modified type, their bounds evaluated on entry
+/// (C99 6.9.1p10): `char (*p)[n]`, `int m[][n]`, `long m[n][n]` and a
+/// qualified pointer to a two-dimensional one, under the interpreter for
+/// both data models; gcc 16 and clang 22 run the fixture to 0.
+#[test]
+fn a_parameter_may_point_to_a_vla() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("vla_parameter.c", t), 0, "{t:?}");
+    }
+    let src = "int n = 2;\nvoid f(int (*p)[n], int n) { (void)p; }\n";
+    let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
+    assert!(msg.contains("which a later parameter declares"), "{msg}");
+}
+
+/// C99 6.5.3.4p2: `sizeof` of a variable-length array is evaluated, so it
+/// is no constant: an array bound of it declares a variable-length array
+/// (`int b[sizeof a]`), and a context that requires a constant rejects it,
+/// as gcc 16 does. The run's values are gcc's.
+#[test]
+fn sizeof_of_a_vla_is_not_a_constant() {
+    let src = "int f(int n) { char a[n];\n\
+               int b[sizeof a]; char c[sizeof a][2];\n\
+               _Static_assert(sizeof(sizeof a) == sizeof(void *), \"\");\n\
+               return (int)(sizeof b / sizeof b[0]) + (int)sizeof c * 10\n\
+                 + (int)sizeof(int[sizeof(char[n])]) * 100 + __builtin_constant_p(sizeof a); }\n\
+               int main(void) { return f(3) != 1263; }\n";
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        let program = Compiler::with_target(super::with_prelude(src), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+    for body in [
+        "switch (n) { case sizeof a: return 1; }",
+        "enum { E = sizeof a };",
+        "_Static_assert(sizeof a == 3, \"\");",
+        "static int x = sizeof a;",
+    ] {
+        let src = alloc::format!("int f(int n) {{ char a[n]; {body} return n; }}\n");
+        match Compiler::new(src).compile() {
+            Ok(_) => panic!("{body}: compiled"),
+            Err(e) => {
+                let msg = alloc::format!("{e}");
+                assert!(
+                    msg.contains("`sizeof` of a variable-length array is not a constant"),
+                    "{body}: {msg}"
+                );
+            }
+        }
+    }
+}
+
 /// An object declared through `typeof` of a VLA would need its storage
 /// sized at run time; it is rejected rather than declared as the element
 /// pointer the decayed operand has.

@@ -8,27 +8,116 @@
 //!
 //! Each header `#ifdef`s on the target macros (`__APPLE__`, `__linux__`,
 //! `_WIN32`) to pick the right `#pragma dylib(...)` and
-//! `#pragma binding(...)`, so one registry serves every target even though
-//! the underlying libraries are per-OS.
+//! `#pragma binding(...)`. Each entry also names the targets it is served
+//! on: those whose C library, SDK or compiler ships the header, as
+//! `libc/header-targets.txt` records them, plus the ones
+//! `BEYOND_REFERENCE` gives a reason for. On any other target the name
+//! is not found, as with the system compilers, so `__has_include` and
+//! `#include` probes select the target's own interfaces.
 //!
 //! Adding a header: drop the file under `libc/include/`, add an entry to
-//! [`EMBEDDED_HEADERS`], and document the symbols it binds at the top of
-//! the file.
+//! [`EMBEDDED_HEADERS`], document the symbols it binds at the top of the
+//! file, and measure its targets with `scripts/measure_header_targets.py`.
 
-/// The in-binary body of the header spelled `name` between the `#include`
-/// delimiters (`"sys/syscall.h"`), or `None` when the registry lacks it.
-/// `own_header` consults it after the on-disk header roots wherever the
-/// include search reaches the bundled set, for either include form. A name
-/// no search step resolves is a hard error, B1010, raised by `finish_include`.
-pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
-    EMBEDDED_HEADERS
-        .iter()
-        .find_map(|&(n, body)| if n == name { Some(body) } else { None })
+use crate::c5::codegen::Target;
+use crate::c5::preprocessor::Preprocessor;
+use alloc::string::String;
+
+/// A set of targets, one bit per [`Target`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TargetSet(u8);
+
+impl TargetSet {
+    const fn of(target: Target) -> TargetSet {
+        TargetSet(match target {
+            Target::MacOSAarch64 => 1,
+            Target::LinuxAarch64 => 2,
+            Target::LinuxX64 => 4,
+            Target::WindowsX64 => 8,
+            Target::WindowsAarch64 => 16,
+        })
+    }
+
+    pub(super) const fn or(self, other: TargetSet) -> TargetSet {
+        TargetSet(self.0 | other.0)
+    }
+
+    pub fn contains(self, target: Target) -> bool {
+        self.0 & TargetSet::of(target).0 != 0
+    }
 }
 
+const MACOS: TargetSet = TargetSet::of(Target::MacOSAarch64);
+const LINUX: TargetSet = TargetSet::of(Target::LinuxAarch64).or(TargetSet::of(Target::LinuxX64));
+const WINDOWS: TargetSet =
+    TargetSet::of(Target::WindowsX64).or(TargetSet::of(Target::WindowsAarch64));
+const POSIX: TargetSet = MACOS.or(LINUX);
+const ALL: TargetSet = POSIX.or(WINDOWS);
+const X86_64: TargetSet = TargetSet::of(Target::LinuxX64).or(TargetSet::of(Target::WindowsX64));
+const AARCH64: TargetSet = MACOS
+    .or(TargetSet::of(Target::LinuxAarch64))
+    .or(TargetSet::of(Target::WindowsAarch64));
+
+/// The registry entry spelled `name` between the `#include` delimiters
+/// (`"sys/syscall.h"`), whichever targets it is served on.
+fn registry_entry(name: &str) -> Option<&'static (&'static str, TargetSet, &'static str)> {
+    EMBEDDED_HEADERS.iter().find(|&&(n, _, _)| n == name)
+}
+
+/// The in-binary body of `name` for an `#include` on `target`, or `None`
+/// when the registry lacks it or does not serve it there. A bundled
+/// header including another (`from_bundled`) reaches every entry: the
+/// bundled headers are written against each other, and `<winsock2.h>`
+/// builds on `<sys/socket.h>` where the program is not served the
+/// latter. `own_header` consults it after the on-disk header roots
+/// wherever the include search reaches the bundled set, for either
+/// include form. A name no search step resolves is a hard error, B1010,
+/// raised by `finish_include`.
+pub(super) fn embedded_header(
+    name: &str,
+    target: Target,
+    from_bundled: bool,
+) -> Option<&'static str> {
+    let &(_, ts, body) = registry_entry(name)?;
+    (from_bundled || ts.contains(target)).then_some(body)
+}
+
+/// Whether the registry carries `name` and does not serve it on `target`:
+/// the program's `#include` of it is not part of the compiler's set
+/// there, whichever header root holds a copy.
+pub(super) fn withheld(name: &str, target: Target) -> bool {
+    registry_entry(name).is_some_and(|&(_, ts, _)| !ts.contains(target))
+}
+
+/// The headers served on targets whose reference toolchain lacks them,
+/// with those targets and the reason.
+#[cfg(test)]
+pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
+    (
+        "msvc_compat.h",
+        ALL,
+        "badc's own; a no-op off Windows, so one `-include msvc_compat.h` serves every target",
+    ),
+    (
+        "dlfcn.h",
+        WINDOWS,
+        "libc/lib/dlfcn_ext.c defines dlopen, dlsym, dlclose and dlerror over kernel32",
+    ),
+    (
+        "fnmatch.h",
+        WINDOWS,
+        "libc/lib/pattern.c defines fnmatch, which msvcrt lacks",
+    ),
+    (
+        "regex.h",
+        WINDOWS,
+        "libc/lib/pattern.c defines regcomp, regexec, regerror and regfree",
+    ),
+];
+
 /// Header names whose contents are part of the compiler implementation:
-/// the `__builtin_*` thunks every unit is given, and intrinsic wrappers
-/// built on badc's own inline-asm encoders. Another compiler's copy of such
+/// the intrinsic wrappers built on badc's own builtins and inline-asm
+/// encoders. Another compiler's copy of such
 /// a header is written against that compiler's builtins and can never
 /// compile here, so when a build line puts a foreign toolchain's private
 /// include directory on the search path (an `-isystem
@@ -37,9 +126,9 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// that flag withdraws the standard library headers, as it does in gcc,
 /// and leaves the compiler's own facilities in place. Ordinary headers keep
 /// the usual order (`-I` shadows the embedded set, as it does in gcc and
-/// clang).
+/// clang). Each is served on the architecture whose instructions it wraps,
+/// as gcc installs it.
 pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
-    "_builtins.h",
     "arm_neon.h",
     "x86intrin.h",
     "immintrin.h",
@@ -55,487 +144,256 @@ pub(super) fn compiler_owned_header(name: &str) -> bool {
     COMPILER_OWNED_HEADERS.contains(&name)
 }
 
-/// All bundled headers, as a `(name, body)` slice. Public so the
-/// CLI's `--dump-headers` flag can iterate the registry without
-/// reaching into the preprocessor.
-pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
+/// All bundled headers, as `(name, targets, body)`. Public so the CLI's
+/// `--dump-headers` and `--install` can write the registry out, for every
+/// target, without reaching into the preprocessor.
+pub fn embedded_headers() -> &'static [(&'static str, TargetSet, &'static str)] {
     EMBEDDED_HEADERS
 }
 
-/// Every header the registry knows about, as a `(name, body)` slice.
-/// Iterable -- the compiler walks this list when an unknown function
-/// call appears in source so it can suggest the right `#include`.
-/// `memory.h` is omitted: it's a legacy alias for `string.h` and
-/// would just produce duplicate hits in the diagnostic.
-pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
-    (
-        "_builtins.h",
-        include_str!("../../libc/include/_builtins.h"),
-    ),
-    ("arm_neon.h", include_str!("../../libc/include/arm_neon.h")),
-    (
-        "x86intrin.h",
-        include_str!("../../libc/include/x86intrin.h"),
-    ),
-    (
-        "immintrin.h",
-        include_str!("../../libc/include/immintrin.h"),
-    ),
-    (
-        "xmmintrin.h",
-        include_str!("../../libc/include/xmmintrin.h"),
-    ),
-    (
-        "emmintrin.h",
-        include_str!("../../libc/include/emmintrin.h"),
-    ),
-    (
-        "tmmintrin.h",
-        include_str!("../../libc/include/tmmintrin.h"),
-    ),
-    (
-        "smmintrin.h",
-        include_str!("../../libc/include/smmintrin.h"),
-    ),
-    (
-        "wmmintrin.h",
-        include_str!("../../libc/include/wmmintrin.h"),
-    ),
-    ("stdalign.h", include_str!("../../libc/include/stdalign.h")),
-    ("stddef.h", include_str!("../../libc/include/stddef.h")),
-    ("stdint.h", include_str!("../../libc/include/stdint.h")),
-    ("inttypes.h", include_str!("../../libc/include/inttypes.h")),
-    ("setjmp.h", include_str!("../../libc/include/setjmp.h")),
-    ("limits.h", include_str!("../../libc/include/limits.h")),
-    ("string.h", include_str!("../../libc/include/string.h")),
-    ("sched.h", include_str!("../../libc/include/sched.h")),
-    ("spawn.h", include_str!("../../libc/include/spawn.h")),
-    ("stdio.h", include_str!("../../libc/include/stdio.h")),
-    ("stdlib.h", include_str!("../../libc/include/stdlib.h")),
-    ("alloca.h", include_str!("../../libc/include/alloca.h")),
-    ("malloc.h", include_str!("../../libc/include/malloc.h")),
-    ("stdarg.h", include_str!("../../libc/include/stdarg.h")),
-    ("stdbool.h", include_str!("../../libc/include/stdbool.h")),
-    (
-        "stdnoreturn.h",
-        include_str!("../../libc/include/stdnoreturn.h"),
-    ),
-    (
-        "stdatomic.h",
-        include_str!("../../libc/include/stdatomic.h"),
-    ),
-    ("ctype.h", include_str!("../../libc/include/ctype.h")),
-    ("math.h", include_str!("../../libc/include/math.h")),
-    ("float.h", include_str!("../../libc/include/float.h")),
-    ("locale.h", include_str!("../../libc/include/locale.h")),
-    ("signal.h", include_str!("../../libc/include/signal.h")),
-    ("errno.h", include_str!("../../libc/include/errno.h")),
-    ("endian.h", include_str!("../../libc/include/endian.h")),
-    ("byteswap.h", include_str!("../../libc/include/byteswap.h")),
-    (
-        "sys/endian.h",
-        include_str!("../../libc/include/sys/endian.h"),
-    ),
-    (
-        "machine/endian.h",
-        include_str!("../../libc/include/machine/endian.h"),
-    ),
-    ("assert.h", include_str!("../../libc/include/assert.h")),
-    ("time.h", include_str!("../../libc/include/time.h")),
-    ("utime.h", include_str!("../../libc/include/utime.h")),
-    (
-        "sys/utime.h",
-        include_str!("../../libc/include/sys/utime.h"),
-    ),
-    ("netdb.h", include_str!("../../libc/include/netdb.h")),
-    ("err.h", include_str!("../../libc/include/err.h")),
-    ("ucontext.h", include_str!("../../libc/include/ucontext.h")),
-    (
-        "sys/ucontext.h",
-        include_str!("../../libc/include/sys/ucontext.h"),
-    ),
-    (
-        "sys/prctl.h",
-        include_str!("../../libc/include/sys/prctl.h"),
-    ),
-    (
-        "sys/epoll.h",
-        include_str!("../../libc/include/sys/epoll.h"),
-    ),
-    (
-        "sys/signalfd.h",
-        include_str!("../../libc/include/sys/signalfd.h"),
-    ),
-    (
-        "sys/reboot.h",
-        include_str!("../../libc/include/sys/reboot.h"),
-    ),
-    (
-        "sys/inotify.h",
-        include_str!("../../libc/include/sys/inotify.h"),
-    ),
-    (
-        "sys/utsname.h",
-        include_str!("../../libc/include/sys/utsname.h"),
-    ),
-    (
-        "sys/sysinfo.h",
-        include_str!("../../libc/include/sys/sysinfo.h"),
-    ),
-    ("grp.h", include_str!("../../libc/include/grp.h")),
-    ("langinfo.h", include_str!("../../libc/include/langinfo.h")),
-    ("iconv.h", include_str!("../../libc/include/iconv.h")),
-    (
-        "netinet/in.h",
-        include_str!("../../libc/include/netinet/in.h"),
-    ),
-    (
-        "netinet/tcp.h",
-        include_str!("../../libc/include/netinet/tcp.h"),
-    ),
-    (
-        "arpa/inet.h",
-        include_str!("../../libc/include/arpa/inet.h"),
-    ),
-    ("dirent.h", include_str!("../../libc/include/dirent.h")),
-    ("ftw.h", include_str!("../../libc/include/ftw.h")),
-    ("fts.h", include_str!("../../libc/include/fts.h")),
-    ("pwd.h", include_str!("../../libc/include/pwd.h")),
-    ("shadow.h", include_str!("../../libc/include/shadow.h")),
-    ("unistd.h", include_str!("../../libc/include/unistd.h")),
-    ("getopt.h", include_str!("../../libc/include/getopt.h")),
-    ("fcntl.h", include_str!("../../libc/include/fcntl.h")),
-    ("syslog.h", include_str!("../../libc/include/syslog.h")),
-    ("execinfo.h", include_str!("../../libc/include/execinfo.h")),
-    (
-        "sys/types.h",
-        include_str!("../../libc/include/sys/types.h"),
-    ),
-    ("sys/uio.h", include_str!("../../libc/include/sys/uio.h")),
-    ("sys/shm.h", include_str!("../../libc/include/sys/shm.h")),
-    ("sys/un.h", include_str!("../../libc/include/sys/un.h")),
-    ("net/if.h", include_str!("../../libc/include/net/if.h")),
-    (
-        "net/ethernet.h",
-        include_str!("../../libc/include/net/ethernet.h"),
-    ),
-    ("sys/file.h", include_str!("../../libc/include/sys/file.h")),
-    (
-        "sys/errno.h",
-        include_str!("../../libc/include/sys/errno.h"),
-    ),
-    (
-        "sys/cdefs.h",
-        include_str!("../../libc/include/sys/cdefs.h"),
-    ),
-    (
-        "CoreFoundation/CoreFoundation.h",
-        include_str!("../../libc/include/CoreFoundation/CoreFoundation.h"),
-    ),
-    (
-        "CommonCrypto/CommonCryptoError.h",
-        include_str!("../../libc/include/CommonCrypto/CommonCryptoError.h"),
-    ),
-    (
-        "CommonCrypto/CommonRandom.h",
-        include_str!("../../libc/include/CommonCrypto/CommonRandom.h"),
-    ),
-    (
-        "CoreVideo/CoreVideo.h",
-        include_str!("../../libc/include/CoreVideo/CoreVideo.h"),
-    ),
-    (
-        "CoreVideo/CVBase.h",
-        include_str!("../../libc/include/CoreVideo/CVBase.h"),
-    ),
-    (
-        "CoreVideo/CVReturn.h",
-        include_str!("../../libc/include/CoreVideo/CVReturn.h"),
-    ),
-    (
-        "CoreVideo/CVHostTime.h",
-        include_str!("../../libc/include/CoreVideo/CVHostTime.h"),
-    ),
-    (
-        "SystemConfiguration/SCDynamicStoreCopySpecific.h",
-        include_str!("../../libc/include/SystemConfiguration/SCDynamicStoreCopySpecific.h"),
-    ),
-    ("sys/attr.h", include_str!("../../libc/include/sys/attr.h")),
-    (
-        "libkern/OSByteOrder.h",
-        include_str!("../../libc/include/libkern/OSByteOrder.h"),
-    ),
-    (
-        "sys/paths.h",
-        include_str!("../../libc/include/sys/paths.h"),
-    ),
-    (
-        "sys/param.h",
-        include_str!("../../libc/include/sys/param.h"),
-    ),
-    (
-        "sys/syslimits.h",
-        include_str!("../../libc/include/sys/syslimits.h"),
-    ),
-    ("copyfile.h", include_str!("../../libc/include/copyfile.h")),
-    (
-        "mach/mach_time.h",
-        include_str!("../../libc/include/mach/mach_time.h"),
-    ),
-    (
-        "mach/mach.h",
-        include_str!("../../libc/include/mach/mach.h"),
-    ),
-    (
-        "mach/task.h",
-        include_str!("../../libc/include/mach/task.h"),
-    ),
-    (
-        "mach/vm_statistics.h",
-        include_str!("../../libc/include/mach/vm_statistics.h"),
-    ),
-    (
-        "mach/machine.h",
-        include_str!("../../libc/include/mach/machine.h"),
-    ),
-    (
-        "mach/vm_prot.h",
-        include_str!("../../libc/include/mach/vm_prot.h"),
-    ),
-    (
-        "mach/vm_region.h",
-        include_str!("../../libc/include/mach/vm_region.h"),
-    ),
-    (
-        "mach/mach_vm.h",
-        include_str!("../../libc/include/mach/mach_vm.h"),
-    ),
-    ("libproc.h", include_str!("../../libc/include/libproc.h")),
-    ("sys/proc.h", include_str!("../../libc/include/sys/proc.h")),
-    ("sysexits.h", include_str!("../../libc/include/sysexits.h")),
-    (
-        "sys/sys_domain.h",
-        include_str!("../../libc/include/sys/sys_domain.h"),
-    ),
-    (
-        "sys/sysctl.h",
-        include_str!("../../libc/include/sys/sysctl.h"),
-    ),
-    (
-        "mach-o/dyld.h",
-        include_str!("../../libc/include/mach-o/dyld.h"),
-    ),
-    (
-        "mach-o/loader.h",
-        include_str!("../../libc/include/mach-o/loader.h"),
-    ),
-    (
-        "mach-o/fat.h",
-        include_str!("../../libc/include/mach-o/fat.h"),
-    ),
-    (
-        "mach-o/nlist.h",
-        include_str!("../../libc/include/mach-o/nlist.h"),
-    ),
-    ("sys/stat.h", include_str!("../../libc/include/sys/stat.h")),
-    ("sys/mman.h", include_str!("../../libc/include/sys/mman.h")),
-    (
-        "sys/random.h",
-        include_str!("../../libc/include/sys/random.h"),
-    ),
-    (
-        "sys/syscall.h",
-        include_str!("../../libc/include/sys/syscall.h"),
-    ),
-    (
-        "asm/unistd.h",
-        include_str!("../../libc/include/asm/unistd.h"),
-    ),
-    (
-        "linux/unistd.h",
-        include_str!("../../libc/include/linux/unistd.h"),
-    ),
-    ("libintl.h", include_str!("../../libc/include/libintl.h")),
-    ("elf.h", include_str!("../../libc/include/elf.h")),
-    ("link.h", include_str!("../../libc/include/link.h")),
-    (
-        "linux/random.h",
-        include_str!("../../libc/include/linux/random.h"),
-    ),
-    (
-        "linux/auxvec.h",
-        include_str!("../../libc/include/linux/auxvec.h"),
-    ),
-    ("linux/fs.h", include_str!("../../libc/include/linux/fs.h")),
-    (
-        "linux/sched.h",
-        include_str!("../../libc/include/linux/sched.h"),
-    ),
-    (
-        "linux/wait.h",
-        include_str!("../../libc/include/linux/wait.h"),
-    ),
-    (
-        "linux/memfd.h",
-        include_str!("../../libc/include/linux/memfd.h"),
-    ),
-    (
-        "linux/futex.h",
-        include_str!("../../libc/include/linux/futex.h"),
-    ),
-    (
-        "linux/ioctl.h",
-        include_str!("../../libc/include/linux/ioctl.h"),
-    ),
-    (
-        "linux/types.h",
-        include_str!("../../libc/include/linux/types.h"),
-    ),
-    (
-        "linux/limits.h",
-        include_str!("../../libc/include/linux/limits.h"),
-    ),
-    ("sys/auxv.h", include_str!("../../libc/include/sys/auxv.h")),
-    (
-        "sys/pidfd.h",
-        include_str!("../../libc/include/sys/pidfd.h"),
-    ),
-    ("pty.h", include_str!("../../libc/include/pty.h")),
-    ("utmp.h", include_str!("../../libc/include/utmp.h")),
-    (
-        "sys/timerfd.h",
-        include_str!("../../libc/include/sys/timerfd.h"),
-    ),
-    (
-        "sys/sendfile.h",
-        include_str!("../../libc/include/sys/sendfile.h"),
-    ),
-    (
-        "sys/eventfd.h",
-        include_str!("../../libc/include/sys/eventfd.h"),
-    ),
-    (
-        "sys/sysmacros.h",
-        include_str!("../../libc/include/sys/sysmacros.h"),
-    ),
-    (
-        "sys/xattr.h",
-        include_str!("../../libc/include/sys/xattr.h"),
-    ),
-    (
-        "sys/mount.h",
-        include_str!("../../libc/include/sys/mount.h"),
-    ),
-    (
-        "sys/statvfs.h",
-        include_str!("../../libc/include/sys/statvfs.h"),
-    ),
-    ("sys/vfs.h", include_str!("../../libc/include/sys/vfs.h")),
-    (
-        "sys/socket.h",
-        include_str!("../../libc/include/sys/socket.h"),
-    ),
-    (
-        "sys/select.h",
-        include_str!("../../libc/include/sys/select.h"),
-    ),
-    ("sys/wait.h", include_str!("../../libc/include/sys/wait.h")),
-    (
-        "sys/resource.h",
-        include_str!("../../libc/include/sys/resource.h"),
-    ),
-    ("wctype.h", include_str!("../../libc/include/wctype.h")),
-    (
-        "sys/ioctl.h",
-        include_str!("../../libc/include/sys/ioctl.h"),
-    ),
-    ("sys/time.h", include_str!("../../libc/include/sys/time.h")),
-    (
-        "sys/times.h",
-        include_str!("../../libc/include/sys/times.h"),
-    ),
-    ("termios.h", include_str!("../../libc/include/termios.h")),
-    ("poll.h", include_str!("../../libc/include/poll.h")),
-    (
-        "malloc/malloc.h",
-        include_str!("../../libc/include/malloc/malloc.h"),
-    ),
-    ("strings.h", include_str!("../../libc/include/strings.h")),
-    ("libgen.h", include_str!("../../libc/include/libgen.h")),
-    ("util.h", include_str!("../../libc/include/util.h")),
-    ("glob.h", include_str!("../../libc/include/glob.h")),
-    ("fnmatch.h", include_str!("../../libc/include/fnmatch.h")),
-    ("regex.h", include_str!("../../libc/include/regex.h")),
-    ("pthread.h", include_str!("../../libc/include/pthread.h")),
-    (
-        "semaphore.h",
-        include_str!("../../libc/include/semaphore.h"),
-    ),
-    ("dlfcn.h", include_str!("../../libc/include/dlfcn.h")),
-    ("fenv.h", include_str!("../../libc/include/fenv.h")),
-    ("io.h", include_str!("../../libc/include/io.h")),
-    ("direct.h", include_str!("../../libc/include/direct.h")),
-    ("intrin.h", include_str!("../../libc/include/intrin.h")),
-    ("bcrypt.h", include_str!("../../libc/include/bcrypt.h")),
-    (
-        "TargetConditionals.h",
-        include_str!("../../libc/include/TargetConditionals.h"),
-    ),
-    (
-        "AvailabilityMacros.h",
-        include_str!("../../libc/include/AvailabilityMacros.h"),
-    ),
-    ("os/log.h", include_str!("../../libc/include/os/log.h")),
-    ("os/lock.h", include_str!("../../libc/include/os/lock.h")),
-    (
-        "crt_externs.h",
-        include_str!("../../libc/include/crt_externs.h"),
-    ),
-    ("windows.h", include_str!("../../libc/include/windows.h")),
-    ("winbase.h", include_str!("../../libc/include/winbase.h")),
-    ("winioctl.h", include_str!("../../libc/include/winioctl.h")),
-    ("pathcch.h", include_str!("../../libc/include/pathcch.h")),
-    ("psapi.h", include_str!("../../libc/include/psapi.h")),
-    (
-        "versionhelpers.h",
-        include_str!("../../libc/include/versionhelpers.h"),
-    ),
-    ("crtdbg.h", include_str!("../../libc/include/crtdbg.h")),
-    ("aclapi.h", include_str!("../../libc/include/aclapi.h")),
-    ("lmcons.h", include_str!("../../libc/include/lmcons.h")),
-    ("sddl.h", include_str!("../../libc/include/sddl.h")),
-    ("shlwapi.h", include_str!("../../libc/include/shlwapi.h")),
-    (
-        "sys/locking.h",
-        include_str!("../../libc/include/sys/locking.h"),
-    ),
-    ("wincrypt.h", include_str!("../../libc/include/wincrypt.h")),
-    ("tchar.h", include_str!("../../libc/include/tchar.h")),
-    (
-        "winapifamily.h",
-        include_str!("../../libc/include/winapifamily.h"),
-    ),
-    (
-        "sdkddkver.h",
-        include_str!("../../libc/include/sdkddkver.h"),
-    ),
-    ("cpuid.h", include_str!("../../libc/include/cpuid.h")),
-    ("winerror.h", include_str!("../../libc/include/winerror.h")),
-    ("process.h", include_str!("../../libc/include/process.h")),
-    ("conio.h", include_str!("../../libc/include/conio.h")),
-    ("winsock2.h", include_str!("../../libc/include/winsock2.h")),
-    ("ws2tcpip.h", include_str!("../../libc/include/ws2tcpip.h")),
-    ("mstcpip.h", include_str!("../../libc/include/mstcpip.h")),
-    ("mswsock.h", include_str!("../../libc/include/mswsock.h")),
-    ("iphlpapi.h", include_str!("../../libc/include/iphlpapi.h")),
-    ("ws2bth.h", include_str!("../../libc/include/ws2bth.h")),
-    ("Rpc.h", include_str!("../../libc/include/rpc.h")),
-    ("rpc.h", include_str!("../../libc/include/rpc.h")),
-    ("hvsocket.h", include_str!("../../libc/include/hvsocket.h")),
-    ("pshpack1.h", include_str!("../../libc/include/pshpack1.h")),
-    ("poppack.h", include_str!("../../libc/include/poppack.h")),
-    ("winternl.h", include_str!("../../libc/include/winternl.h")),
-    ("wchar.h", include_str!("../../libc/include/wchar.h")),
+/// A registry entry: the name, the targets it is served on and the body
+/// of `libc/include/<file>`, `<file>` being the name unless given.
+macro_rules! header {
+    ($name:literal, $targets:expr) => {
+        header!($name => $name, $targets)
+    };
+    ($name:literal => $file:literal, $targets:expr) => {
+        ($name, $targets, include_str!(concat!("../../libc/include/", $file)))
+    };
+}
+
+/// Every header the registry knows about, with the targets it is served
+/// on.
+pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
+    header!("arm_neon.h", AARCH64),
+    header!("x86intrin.h", X86_64),
+    header!("immintrin.h", X86_64),
+    header!("xmmintrin.h", X86_64),
+    header!("emmintrin.h", X86_64),
+    header!("tmmintrin.h", X86_64),
+    header!("smmintrin.h", X86_64),
+    header!("wmmintrin.h", X86_64),
+    header!("stdalign.h", ALL),
+    header!("stddef.h", ALL),
+    header!("stdint.h", ALL),
+    header!("inttypes.h", ALL),
+    header!("setjmp.h", ALL),
+    header!("limits.h", ALL),
+    header!("string.h", ALL),
+    header!("sched.h", ALL),
+    header!("spawn.h", POSIX),
+    header!("stdio.h", ALL),
+    header!("stdlib.h", ALL),
+    header!("alloca.h", POSIX),
+    header!("malloc.h", LINUX.or(WINDOWS)),
+    header!("stdarg.h", ALL),
+    header!("stdbool.h", ALL),
+    header!("iso646.h", ALL),
+    header!("stdnoreturn.h", ALL),
+    header!("stdatomic.h", ALL),
+    header!("ctype.h", ALL),
+    header!("math.h", ALL),
+    header!("tgmath.h", ALL),
+    header!("float.h", ALL),
+    header!("locale.h", ALL),
+    header!("signal.h", ALL),
+    header!("errno.h", ALL),
+    header!("endian.h", LINUX),
+    header!("byteswap.h", LINUX),
+    header!("sys/endian.h", MACOS),
+    header!("machine/endian.h", MACOS),
+    header!("assert.h", ALL),
+    header!("time.h", ALL),
+    header!("utime.h", ALL),
+    header!("sys/utime.h", WINDOWS),
+    header!("netdb.h", POSIX),
+    header!("err.h", POSIX),
+    header!("ucontext.h", POSIX),
+    header!("sys/ucontext.h", POSIX),
+    header!("sys/prctl.h", LINUX),
+    header!("sys/epoll.h", LINUX),
+    header!("sys/signalfd.h", LINUX),
+    header!("sys/reboot.h", POSIX),
+    header!("sys/inotify.h", LINUX),
+    header!("sys/utsname.h", POSIX),
+    header!("sys/sysinfo.h", LINUX),
+    header!("grp.h", POSIX),
+    header!("langinfo.h", POSIX),
+    header!("iconv.h", POSIX),
+    header!("netinet/in.h", POSIX),
+    header!("netinet/tcp.h", POSIX),
+    header!("arpa/inet.h", POSIX),
+    header!("dirent.h", ALL),
+    header!("ftw.h", ALL),
+    header!("fts.h", POSIX),
+    header!("pwd.h", POSIX),
+    header!("shadow.h", LINUX),
+    header!("unistd.h", ALL),
+    header!("getopt.h", ALL),
+    header!("fcntl.h", ALL),
+    header!("syslog.h", POSIX),
+    header!("execinfo.h", POSIX),
+    header!("sys/types.h", ALL),
+    header!("sys/uio.h", POSIX),
+    header!("sys/ipc.h", POSIX),
+    header!("sys/shm.h", POSIX),
+    header!("sys/sem.h", POSIX),
+    header!("sys/msg.h", POSIX),
+    header!("sys/queue.h", POSIX),
+    header!("sys/un.h", POSIX),
+    header!("net/if.h", POSIX),
+    header!("net/ethernet.h", POSIX),
+    header!("sys/file.h", ALL),
+    header!("sys/errno.h", POSIX),
+    header!("sys/cdefs.h", ALL),
+    header!("CoreFoundation/CoreFoundation.h", MACOS),
+    header!("CommonCrypto/CommonCryptoError.h", MACOS),
+    header!("CommonCrypto/CommonRandom.h", MACOS),
+    header!("CoreVideo/CoreVideo.h", MACOS),
+    header!("CoreVideo/CVBase.h", MACOS),
+    header!("CoreVideo/CVReturn.h", MACOS),
+    header!("CoreVideo/CVHostTime.h", MACOS),
+    header!("SystemConfiguration/SCDynamicStoreCopySpecific.h", MACOS),
+    header!("sys/attr.h", MACOS),
+    header!("libkern/OSByteOrder.h", MACOS),
+    header!("sys/paths.h", MACOS),
+    header!("sys/param.h", ALL),
+    header!("sys/syslimits.h", MACOS),
+    header!("copyfile.h", MACOS),
+    header!("mach/mach_time.h", MACOS),
+    header!("mach/mach.h", MACOS),
+    header!("mach/task.h", MACOS),
+    header!("mach/vm_statistics.h", MACOS),
+    header!("mach/machine.h", MACOS),
+    header!("mach/vm_prot.h", MACOS),
+    header!("mach/vm_region.h", MACOS),
+    header!("mach/mach_vm.h", MACOS),
+    header!("libproc.h", MACOS),
+    header!("sys/proc.h", MACOS),
+    header!("sysexits.h", POSIX),
+    header!("sys/sys_domain.h", MACOS),
+    header!("sys/sysctl.h", MACOS),
+    header!("mach-o/dyld.h", MACOS),
+    header!("mach-o/loader.h", MACOS),
+    header!("mach-o/fat.h", MACOS),
+    header!("mach-o/nlist.h", MACOS),
+    header!("sys/stat.h", ALL),
+    header!("sys/mman.h", POSIX),
+    header!("sys/random.h", POSIX),
+    header!("sys/syscall.h", POSIX),
+    header!("asm/unistd.h", LINUX),
+    header!("linux/unistd.h", LINUX),
+    header!("libintl.h", LINUX),
+    header!("elf.h", LINUX),
+    header!("link.h", LINUX),
+    header!("linux/random.h", LINUX),
+    header!("linux/auxvec.h", LINUX),
+    header!("linux/fs.h", LINUX),
+    header!("linux/sched.h", LINUX),
+    header!("linux/wait.h", LINUX),
+    header!("linux/memfd.h", LINUX),
+    header!("linux/mman.h", LINUX),
+    header!("linux/futex.h", LINUX),
+    header!("linux/ioctl.h", LINUX),
+    header!("linux/types.h", LINUX),
+    header!("linux/limits.h", LINUX),
+    header!("sys/auxv.h", LINUX),
+    header!("sys/pidfd.h", LINUX),
+    header!("pty.h", LINUX),
+    header!("utmp.h", POSIX),
+    header!("sys/timerfd.h", LINUX),
+    header!("sys/sendfile.h", LINUX),
+    header!("sys/eventfd.h", LINUX),
+    header!("sys/sysmacros.h", LINUX),
+    header!("sys/xattr.h", POSIX),
+    header!("sys/mount.h", POSIX),
+    header!("sys/statvfs.h", POSIX),
+    header!("sys/vfs.h", LINUX),
+    header!("sys/socket.h", POSIX),
+    header!("sys/select.h", POSIX),
+    header!("sys/wait.h", POSIX),
+    header!("sys/resource.h", POSIX),
+    header!("wctype.h", ALL),
+    header!("sys/ioctl.h", POSIX),
+    header!("sys/time.h", ALL),
+    header!("sys/times.h", POSIX),
+    header!("termios.h", POSIX),
+    header!("poll.h", POSIX),
+    header!("malloc/malloc.h", MACOS),
+    header!("strings.h", ALL),
+    header!("libgen.h", ALL),
+    header!("util.h", MACOS),
+    header!("glob.h", POSIX),
+    header!("fnmatch.h", ALL),
+    header!("regex.h", ALL),
+    header!("pthread.h", ALL),
+    header!("semaphore.h", ALL),
+    header!("mqueue.h", LINUX),
+    header!("aio.h", POSIX),
+    header!("nl_types.h", POSIX),
+    header!("monetary.h", POSIX),
+    header!("wordexp.h", POSIX),
+    header!("cpio.h", POSIX),
+    header!("tar.h", POSIX),
+    header!("fmtmsg.h", POSIX),
+    header!("search.h", ALL),
+    header!("ulimit.h", POSIX),
+    header!("utmpx.h", POSIX),
+    header!("ndbm.h", MACOS),
+    header!("dlfcn.h", ALL),
+    header!("fenv.h", ALL),
+    header!("io.h", WINDOWS),
+    header!("direct.h", WINDOWS),
+    header!("intrin.h", WINDOWS),
+    header!("bcrypt.h", WINDOWS),
+    header!("TargetConditionals.h", MACOS),
+    header!("AvailabilityMacros.h", MACOS),
+    header!("os/log.h", MACOS),
+    header!("os/lock.h", MACOS),
+    header!("crt_externs.h", MACOS),
+    header!("xlocale.h", MACOS),
+    header!("windows.h", WINDOWS),
+    header!("winbase.h", WINDOWS),
+    header!("stringapiset.h", WINDOWS),
+    header!("intsafe.h", WINDOWS),
+    header!("share.h", WINDOWS),
+    header!("corecrt.h", WINDOWS),
+    header!("winioctl.h", WINDOWS),
+    header!("pathcch.h", WINDOWS),
+    header!("psapi.h", WINDOWS),
+    header!("versionhelpers.h", WINDOWS),
+    header!("crtdbg.h", WINDOWS),
+    header!("aclapi.h", WINDOWS),
+    header!("lmcons.h", WINDOWS),
+    header!("sddl.h", WINDOWS),
+    header!("shlwapi.h", WINDOWS),
+    header!("sys/locking.h", WINDOWS),
+    header!("wincrypt.h", WINDOWS),
+    header!("tchar.h", WINDOWS),
+    header!("mbstring.h", WINDOWS),
+    header!("mbctype.h", WINDOWS),
+    header!("winapifamily.h", WINDOWS),
+    header!("sdkddkver.h", WINDOWS),
+    header!("cpuid.h", X86_64),
+    header!("winerror.h", WINDOWS),
+    header!("process.h", WINDOWS),
+    header!("conio.h", WINDOWS),
+    header!("winsock2.h", WINDOWS),
+    header!("ws2tcpip.h", WINDOWS),
+    header!("mstcpip.h", WINDOWS),
+    header!("mswsock.h", WINDOWS),
+    header!("iphlpapi.h", WINDOWS),
+    header!("ws2bth.h", WINDOWS),
+    header!("Rpc.h" => "rpc.h", WINDOWS),
+    header!("rpc.h", WINDOWS),
+    header!("hvsocket.h", WINDOWS),
+    header!("pshpack1.h", WINDOWS),
+    header!("pshpack2.h", WINDOWS),
+    header!("pshpack4.h", WINDOWS),
+    header!("wingdi.h", WINDOWS),
+    header!("poppack.h", WINDOWS),
+    header!("winternl.h", WINDOWS),
+    header!("wchar.h", ALL),
     // Opt-in MSVC-shape predefines: no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long
     // long`, the `__declspec(x)` family of empty-decorator
@@ -543,71 +401,26 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     // shaped C against the Windows backend opt in via
     // `badc -include msvc_compat.h ...`. Internally guarded by
     // `#ifdef _WIN32` so the same command line stays valid on
-    ("scsi/sg.h", include_str!("../../libc/include/scsi/sg.h")),
-    (
-        "linux/magic.h",
-        include_str!("../../libc/include/linux/magic.h"),
-    ),
-    (
-        "linux/falloc.h",
-        include_str!("../../libc/include/linux/falloc.h"),
-    ),
-    (
-        "linux/ppdev.h",
-        include_str!("../../libc/include/linux/ppdev.h"),
-    ),
-    (
-        "linux/parport.h",
-        include_str!("../../libc/include/linux/parport.h"),
-    ),
-    (
-        "linux/vm_sockets.h",
-        include_str!("../../libc/include/linux/vm_sockets.h"),
-    ),
-    (
-        "linux/time_types.h",
-        include_str!("../../libc/include/linux/time_types.h"),
-    ),
-    (
-        "linux/errqueue.h",
-        include_str!("../../libc/include/linux/errqueue.h"),
-    ),
-    (
-        "linux/blkzoned.h",
-        include_str!("../../libc/include/linux/blkzoned.h"),
-    ),
-    (
-        "linux/cdrom.h",
-        include_str!("../../libc/include/linux/cdrom.h"),
-    ),
-    (
-        "linux/dm-ioctl.h",
-        include_str!("../../libc/include/linux/dm-ioctl.h"),
-    ),
-    (
-        "linux/hdreg.h",
-        include_str!("../../libc/include/linux/hdreg.h"),
-    ),
-    ("linux/fd.h", include_str!("../../libc/include/linux/fd.h")),
-    (
-        "linux/can.h",
-        include_str!("../../libc/include/linux/can.h"),
-    ),
-    (
-        "linux/can/raw.h",
-        include_str!("../../libc/include/linux/can/raw.h"),
-    ),
-    // every host.
-    (
-        "msvc_compat.h",
-        include_str!("../../libc/include/msvc_compat.h"),
-    ),
+    header!("scsi/sg.h", LINUX),
+    header!("linux/magic.h", LINUX),
+    header!("linux/falloc.h", LINUX),
+    header!("linux/ppdev.h", LINUX),
+    header!("linux/parport.h", LINUX),
+    header!("linux/vm_sockets.h", LINUX),
+    header!("linux/time_types.h", LINUX),
+    header!("linux/errqueue.h", LINUX),
+    header!("linux/blkzoned.h", LINUX),
+    header!("linux/cdrom.h", LINUX),
+    header!("linux/dm-ioctl.h", LINUX),
+    header!("linux/hdreg.h", LINUX),
+    header!("linux/fd.h", LINUX),
+    header!("linux/can.h", LINUX),
+    header!("linux/can/raw.h", LINUX),
+    header!("msvc_compat.h", ALL),
     // Legacy alias: <memory.h> predates POSIX's consolidation of
-    // mem*/str* under <string.h>. Mapped from `embedded_header` but
-    // not enumerated here -- the suggestion path would otherwise
-    // emit two header names for any `mem*` symbol.
-    #[allow(dead_code)]
-    ("memory.h", include_str!("../../libc/include/memory.h")),
+    // mem*/str* under <string.h>. The binding index leaves it out, so
+    // the suggestion path names one header for a `mem*` symbol.
+    header!("memory.h", ALL),
 ];
 
 // Build-time-generated `&[(name, headers)]` sorted by name. Produced
@@ -618,15 +431,111 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
 // in priority-then-lexicographic scan order.
 include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 
-/// Look up a function name in the build-time-generated index and
-/// return the header that declares it, or `None` for a name we
-/// don't recognise. O(log N) over the binding index. Used by the
-/// compiler's "unknown function" diagnostic to suggest the right
-/// `#include`, and by `Compiler::compile_with_options` to drive
-/// the auto-include retry (force-include the header naming the
-/// missing symbol, then re-compile).
-pub(super) fn header_declaring(name: &str) -> Option<&'static str> {
-    headers_declaring(name).first().copied()
+/// The header the B2022 hint names and the auto-include retry includes:
+/// the first of the build-time index, which reads every target's
+/// declarations at once, that `target` is served and declares `name` on.
+pub(super) fn header_declaring(name: &str, target: Target) -> Option<&'static str> {
+    first_declaring(name, target, |h| declarations(h, target).contains(name))
+}
+
+fn first_declaring(
+    name: &str,
+    target: Target,
+    mut declares: impl FnMut(&'static str) -> bool,
+) -> Option<&'static str> {
+    (headers_declaring(name).iter().copied()).find(|&h| !withheld(h, target) && declares(h))
+}
+
+/// The macros, bindings and file-scope functions and objects of
+/// `#include <header>` on `target`, `_GNU_SOURCE` widening glibc's.
+fn declarations(header: &str, target: Target) -> alloc::collections::BTreeSet<String> {
+    let src = alloc::format!("#define _GNU_SOURCE 1\n#include <{header}>\n");
+    let mut pp = Preprocessor::new(target.id_str(), target, "0");
+    let Ok(text) = pp.process_probe(&src) else {
+        return Default::default();
+    };
+    let bindings = pp.dylibs.iter().flat_map(|d| d.bindings.iter());
+    (pp.macro_names().map(String::from))
+        .chain(bindings.map(|b| b.local_name.clone()))
+        .chain(file_scope_names(&text).map(String::from))
+        .collect()
+}
+
+/// The declarators at file scope of preprocessed `text` outside a
+/// `typedef`: a name after a specifier, `*`, `)` or a list's `,`, before
+/// `(` (a function) or `;`, `,`, `=`, `[` (an object).
+fn file_scope_names(text: &str) -> impl Iterator<Item = &str> {
+    let mut out = alloc::vec::Vec::new();
+    let bytes = text.as_bytes();
+    let (mut i, mut braces, mut parens) = (0, 0usize, 0usize);
+    let (mut typedef, mut line_start) = (false, true);
+    let mut prev: Result<&str, u8> = Err(b';');
+    while i < bytes.len() {
+        let c = bytes[i];
+        if line_start && c == b'#' {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        line_start = c == b'\n' || (line_start && c.is_ascii_whitespace());
+        match c {
+            _ if c.is_ascii_whitespace() => i += 1,
+            b'"' | b'\'' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != c {
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+                prev = Err(c);
+            }
+            b'0'..=b'9' => {
+                i = word_end(bytes, i);
+                prev = Err(c);
+            }
+            b'_' | b'a'..=b'z' | b'A'..=b'Z' => {
+                let start = i;
+                i = word_end(bytes, i);
+                let w = &text[start..i];
+                if braces == 0 && w == "typedef" {
+                    typedef = true;
+                } else if braces == 0 && !typedef {
+                    let next = text[i..].trim_start().bytes().next();
+                    let after = matches!(prev, Ok(p) if p != "typedef")
+                        || prev == Err(b'*')
+                        || prev == Err(b')')
+                        || (prev == Err(b',') && parens == 0);
+                    let function = next == Some(b'(');
+                    let object = parens == 0 && matches!(next, Some(b';' | b',' | b'=' | b'['));
+                    if after && (function || object) {
+                        out.push(w);
+                    }
+                }
+                prev = Ok(w);
+            }
+            _ => {
+                match c {
+                    b'{' => braces += 1,
+                    b'}' => braces = braces.saturating_sub(1),
+                    b'(' if braces == 0 => parens += 1,
+                    b')' if braces == 0 => parens = parens.saturating_sub(1),
+                    b';' if braces == 0 => (typedef, parens) = (false, 0),
+                    _ => {}
+                }
+                prev = Err(c);
+                i += 1;
+            }
+        }
+    }
+    out.into_iter()
+}
+
+/// The end of the identifier or pp-number starting at `i`.
+fn word_end(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && (bytes[i] == b'_' || bytes[i].is_ascii_alphanumeric()) {
+        i += 1;
+    }
+    i
 }
 
 /// Every header declaring `name`, in scan order -- the conventional
@@ -647,27 +556,42 @@ mod tests {
 
     #[test]
     fn header_declaring_finds_printf_in_stdio() {
-        assert_eq!(header_declaring("printf"), Some("stdio.h"));
+        assert_eq!(
+            header_declaring("printf", Target::LinuxX64),
+            Some("stdio.h")
+        );
     }
 
     #[test]
     fn header_declaring_finds_malloc_in_stdlib() {
-        assert_eq!(header_declaring("malloc"), Some("stdlib.h"));
+        assert_eq!(
+            header_declaring("malloc", Target::LinuxX64),
+            Some("stdlib.h")
+        );
     }
 
     #[test]
     fn header_declaring_finds_strlen_in_string() {
-        assert_eq!(header_declaring("strlen"), Some("string.h"));
+        assert_eq!(
+            header_declaring("strlen", Target::LinuxX64),
+            Some("string.h")
+        );
     }
 
     #[test]
     fn header_declaring_finds_pthread_create() {
-        assert_eq!(header_declaring("pthread_create"), Some("pthread.h"));
+        assert_eq!(
+            header_declaring("pthread_create", Target::LinuxX64),
+            Some("pthread.h")
+        );
     }
 
     #[test]
     fn header_declaring_finds_socket() {
-        assert_eq!(header_declaring("socket"), Some("sys/socket.h"));
+        assert_eq!(
+            header_declaring("socket", Target::LinuxX64),
+            Some("sys/socket.h")
+        );
     }
 
     #[test]
@@ -676,22 +600,40 @@ mod tests {
         // (e.g. under a USE_PREAD64 build flag); without the prototype they
         // are implicitly declared and the address-of trampoline forwards no
         // arguments.
-        assert_eq!(header_declaring("pread64"), Some("unistd.h"));
-        assert_eq!(header_declaring("pwrite64"), Some("unistd.h"));
+        assert_eq!(
+            header_declaring("pread64", Target::LinuxX64),
+            Some("unistd.h")
+        );
+        assert_eq!(
+            header_declaring("pwrite64", Target::LinuxX64),
+            Some("unistd.h")
+        );
     }
 
     #[test]
     fn header_declaring_finds_functions_a_header_defines() {
         // A library function a header provides as a `static inline`
         // definition rather than a prototype is found the same way.
-        assert_eq!(header_declaring("copysign"), Some("math.h"));
-        assert_eq!(header_declaring("strnlen"), Some("string.h"));
-        assert_eq!(header_declaring("imaxabs"), Some("inttypes.h"));
+        assert_eq!(
+            header_declaring("copysign", Target::LinuxX64),
+            Some("math.h")
+        );
+        assert_eq!(
+            header_declaring("strnlen", Target::LinuxX64),
+            Some("string.h")
+        );
+        assert_eq!(
+            header_declaring("imaxabs", Target::LinuxX64),
+            Some("inttypes.h")
+        );
     }
 
     #[test]
     fn header_declaring_returns_none_for_unknown() {
-        assert_eq!(header_declaring("definitely_not_in_any_header"), None);
+        assert_eq!(
+            header_declaring("definitely_not_in_any_header", Target::LinuxX64),
+            None
+        );
     }
 
     #[test]
@@ -699,25 +641,178 @@ mod tests {
         // `print` is not declared anywhere; it's a prefix of
         // `printf` but the trailing `(` and the binding ` ::printf,`
         // pattern guard against false hits.
-        assert_eq!(header_declaring("print"), None);
+        assert_eq!(header_declaring("print", Target::LinuxX64), None);
     }
 
-    /// Every registry header compiles alone for every target, with and without
-    /// `_GNU_SOURCE`; the one refusal accepted is the header's own `#error`.
+    /// `header`, then each name's address taken, or (`!declared`) the name
+    /// defined anew, which conflicts with a declaration or macro of it.
+    fn probe(header: &str, names: &[&str], declared: bool) -> alloc::string::String {
+        let mut s = alloc::format!("#define _GNU_SOURCE 1\n#include <{header}>\n");
+        for (k, n) in names.iter().enumerate() {
+            s += &if declared {
+                alloc::format!(
+                    "#ifndef {n}\nvoid *__badc_probe_{k}(void) {{ return (void *)&{n}; }}\n#endif\n"
+                )
+            } else {
+                alloc::format!(
+                    "#ifdef {n}\n#error {n}\n#endif\nstruct __badc_probe_{k} {{ char c; }} {n};\n"
+                )
+            };
+        }
+        s
+    }
+
+    /// The names whose probe does not compile, found by halving.
+    fn failing<'a>(
+        target: Target,
+        header: &str,
+        names: &[&'a str],
+        declared: bool,
+    ) -> alloc::vec::Vec<&'a str> {
+        use crate::{CompileOptions, Compiler};
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let src = probe(header, names, declared);
+        if names.is_empty() || Compiler::with_options(src, target, opts).compile().is_ok() {
+            return alloc::vec::Vec::new();
+        }
+        if names.len() == 1 {
+            return names.to_vec();
+        }
+        let (a, b) = names.split_at(names.len() / 2);
+        let mut out = failing(target, header, a, declared);
+        out.extend(failing(target, header, b, declared));
+        out
+    }
+
+    /// For every name of the build-time index and every target, the header
+    /// the hint names declares the name there, and every served header the
+    /// index lists ahead of it, or at all when no hint is given, does not,
+    /// as the compiler's own declarations decide.
     #[test]
-    fn every_embedded_header_compiles_on_every_target() {
+    fn include_hints_name_a_header_declaring_the_name_on_the_target() {
+        use alloc::collections::BTreeMap;
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL {
+            let mut declaring: BTreeMap<&str, alloc::vec::Vec<&str>> = BTreeMap::new();
+            let mut passed_over: BTreeMap<&str, alloc::vec::Vec<&str>> = BTreeMap::new();
+            let mut seen = BTreeMap::new();
+            for &(name, headers) in BINDING_TO_HEADER {
+                let hint = first_declaring(name, target, |h| {
+                    (seen.entry(h).or_insert_with(|| declarations(h, target))).contains(name)
+                });
+                for &h in headers.iter().filter(|h| !withheld(h, target)) {
+                    if Some(h) == hint {
+                        declaring.entry(h).or_default().push(name);
+                        break;
+                    }
+                    passed_over.entry(h).or_default().push(name);
+                }
+            }
+            for (h, names) in &declaring {
+                for n in failing(target, h, names, true) {
+                    failures.push(alloc::format!(
+                        "{}: <{h}> hinted, not declaring {n}",
+                        target.id_str()
+                    ));
+                }
+            }
+            // A type's name conflicts too, and has no address.
+            for (h, names) in &passed_over {
+                let conflicting = failing(target, h, names, false);
+                for n in conflicting
+                    .iter()
+                    .filter(|n| failing(target, h, &[n], true).is_empty())
+                {
+                    failures.push(alloc::format!(
+                        "{}: <{h}> passed over, declaring {n}",
+                        target.id_str()
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    fn ids(set: TargetSet) -> alloc::vec::Vec<&'static str> {
+        (Target::ALL.iter().filter(|t| set.contains(**t)))
+            .map(|t| t.id_str())
+            .collect()
+    }
+
+    /// Each entry is served on the targets whose reference toolchain ships
+    /// it -- the `y` and `p` cells of `libc/header-targets.txt`, which
+    /// `scripts/measure_header_targets.py` writes -- and on those
+    /// `BEYOND_REFERENCE` gives a reason for, which the reference lacks.
+    #[test]
+    fn target_sets_match_the_measured_reference() {
+        const TABLE: &str = include_str!("../../libc/header-targets.txt");
+        let columns: alloc::vec::Vec<Target> = (TABLE.lines())
+            .find_map(|l| l.strip_prefix("# name\t"))
+            .expect("the table names its columns")
+            .split('\t')
+            .map(|id| Target::parse(Some(id)).expect("a target id"))
+            .collect();
+        let mut rows = alloc::collections::BTreeMap::new();
+        for line in TABLE.lines().filter(|l| !l.starts_with('#')) {
+            let mut cells = line.split('\t');
+            let name = cells.next().expect("a name");
+            let measured = (columns.iter().zip(cells))
+                .filter(|(_, cell)| matches!(*cell, "y" | "p"))
+                .fold(TargetSet(0), |set, (t, _)| set.or(TargetSet::of(*t)));
+            rows.insert(name, measured);
+        }
+        let mut failures = alloc::vec::Vec::new();
+        for &(name, targets, _) in embedded_headers() {
+            let Some(measured) = rows.remove(name) else {
+                failures.push(alloc::format!("{name}: no measurement"));
+                continue;
+            };
+            let beyond = (BEYOND_REFERENCE.iter().filter(|e| e.0 == name))
+                .fold(TargetSet(0), |set, e| set.or(e.1));
+            if beyond.0 & measured.0 != 0 {
+                failures.push(alloc::format!(
+                    "{name}: a reason recorded where the reference ships it"
+                ));
+            }
+            if targets != measured.or(beyond) {
+                failures.push(alloc::format!(
+                    "{name}: served on {:?}, measured {:?}, beyond the reference {:?}",
+                    ids(targets),
+                    ids(measured),
+                    ids(beyond)
+                ));
+            }
+        }
+        failures.extend(
+            rows.keys()
+                .map(|n| alloc::format!("{n}: measured, not in the registry")),
+        );
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// Every registry header compiles alone, with and without `_GNU_SOURCE`,
+    /// on every target it is served on, and is not found on the others.
+    #[test]
+    fn every_embedded_header_compiles_where_it_is_served() {
         use crate::{CompileOptions, Compiler, Target};
         let mut failures = alloc::vec::Vec::new();
         for target in Target::ALL {
-            for &(name, _) in embedded_headers() {
+            for &(name, targets, _) in embedded_headers() {
                 for prefix in ["", "#define _GNU_SOURCE 1\n"] {
                     let src = alloc::format!("{prefix}#include <{name}>\n");
                     let opts = CompileOptions::default().with_no_entry_point(true);
-                    let Err(err) = Compiler::with_options(src, target, opts).compile() else {
-                        continue;
+                    let result = Compiler::with_options(src, target, opts).compile();
+                    let fine = match &result {
+                        Ok(_) => targets.contains(target),
+                        Err(e) => {
+                            !targets.contains(target) && alloc::format!("{e}").contains("[B1010]")
+                        }
                     };
-                    let msg = alloc::format!("{err}");
-                    if !(msg.starts_with(&alloc::format!("{name}:")) && msg.contains("[B1013]")) {
+                    if !fine {
+                        let msg = result
+                            .err()
+                            .map(|e| alloc::format!("{e}"))
+                            .unwrap_or_default();
                         failures.push(alloc::format!(
                             "{} <{name}> {prefix:?}: {msg}",
                             target.id_str()
@@ -910,7 +1005,7 @@ mod tests {
         for target in [Target::WindowsX64, Target::WindowsAarch64] {
             let mut src = alloc::string::String::from(
                 "#include <stdio.h>\n#include <string.h>\n#include <conio.h>\n\
-                 #include <sys/socket.h>\n\
+                 #include <winsock2.h>\n\
                  _Static_assert(_Generic(&__argc, int *: 1, default: 0)\n\
                    && _Generic(&__argv, char ***: 1, default: 0)\n\
                    && _Generic(&__wargv, wchar_t ***: 1, default: 0), \"data exports\");\n\
@@ -936,6 +1031,56 @@ mod tests {
                     warnings.iter().any(|w| w.contains(&text)),
                     "{}: {name}: {warnings:?}",
                     target.id_str()
+                );
+            }
+        }
+    }
+
+    /// <windows.h> defines the virtual-key codes, the mouse, IME, browser,
+    /// media, OEM and gamepad ranges included.
+    #[test]
+    fn windows_defines_the_virtual_key_codes() {
+        use crate::{Compiler, Target};
+        let src = "#include <windows.h>\n\
+                   _Static_assert(VK_LBUTTON == 0x01 && VK_MENU == 0x12 && VK_HANGUL == 0x15\n\
+                     && VK_APPS == 0x5D && VK_F24 == 0x87 && VK_LMENU == 0xA4\n\
+                     && VK_BROWSER_BACK == 0xA6 && VK_OEM_1 == 0xBA && VK_GAMEPAD_A == 0xC3\n\
+                     && VK_PACKET == 0xE7 && VK_OEM_CLEAR == 0xFE, \"virtual-key codes\");\n\
+                   int main(void) { return 0; }\n";
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            if let Err(e) = Compiler::with_target(src.to_string(), target).compile() {
+                panic!("{target:?}: {e}");
+            }
+        }
+    }
+
+    /// <linux/mman.h> gives the kernel's flags and agrees with <sys/mman.h>
+    /// in either include order: no redefinition, the UAPI headers' values.
+    #[test]
+    fn linux_mman_agrees_with_sys_mman_in_either_order() {
+        use crate::{CompileOptions, Compiler, Target};
+        for (target, arch) in [
+            (Target::LinuxX64, "MAP_32BIT == 0x40"),
+            (Target::LinuxAarch64, "PROT_BTI == 0x10"),
+        ] {
+            for (first, second) in [
+                ("sys/mman.h", "linux/mman.h"),
+                ("linux/mman.h", "sys/mman.h"),
+            ] {
+                let src = alloc::format!(
+                    "#include <{first}>\n#include <{second}>\n\
+                     _Static_assert(MLOCK_ONFAULT == 1 && PROT_READ == 1 && MREMAP_MAYMOVE == 1\n\
+                       && MAP_HUGE_2MB == (21U << 26) && sizeof(struct cachestat) == 40\n\
+                       && {arch}, \"mman\");\n"
+                );
+                let opts = CompileOptions::default().with_no_entry_point(true);
+                let program = Compiler::with_options(src, target, opts)
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{target:?} {first} then {second}: {e}"));
+                assert!(
+                    program.warnings.is_empty(),
+                    "{target:?}: {:?}",
+                    program.warnings
                 );
             }
         }

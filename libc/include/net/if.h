@@ -92,7 +92,9 @@ struct ifreq {
 #pragma binding(libc::if_nametoindex,   "if_nametoindex")
 #endif
 
+#ifndef _WIN32
 struct if_nameindex *if_nameindex(void);
 void if_freenameindex(struct if_nameindex *ptr);
 char *if_indextoname(unsigned int ifindex, char *ifname);
 unsigned int if_nametoindex(const char *ifname);
+#endif

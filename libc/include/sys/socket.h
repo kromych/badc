@@ -116,6 +116,14 @@ struct ucred {
 };
 #endif
 
+// SO_LINGER's argument; the same two ints in glibc and the macOS SDK.
+#if defined(__APPLE__) || defined(__linux__)
+struct linger {
+    int l_onoff;
+    int l_linger;
+};
+#endif
+
 // `struct sockaddr` is the address header passed by reference to bind /
 // connect / accept and pointed at by `addrinfo.ai_addr`. It is 16 bytes on
 // all three targets; the leading family field differs (BSD/macOS prefix a
@@ -177,10 +185,59 @@ struct sockaddr_storage {
 #pragma binding(libc::shutdown,   "_shutdown")
 #pragma binding(libc::socketpair, "_socketpair")
 #pragma binding(libc::sendfile,   "_sendfile")
+#pragma binding(libc::sendmsg,    "_sendmsg")
+#pragma binding(libc::recvmsg,    "_recvmsg")
+#pragma binding(libc::sockatmark, "_sockatmark")
 
-// Optional header / trailer iovecs for Darwin's sendfile(). `struct
-// iovec` is from <sys/uio.h>; only a pointer to it is needed here.
-struct iovec;
+#include <sys/uio.h>
+
+// The SDK's message header: msg_iovlen is an int and msg_controllen a
+// socklen_t, 48 bytes in all.
+struct msghdr {
+    void *msg_name;
+    socklen_t msg_namelen;
+    struct iovec *msg_iov;
+    int msg_iovlen;
+    void *msg_control;
+    socklen_t msg_controllen;
+    int msg_flags;
+};
+struct cmsghdr {
+    socklen_t cmsg_len;
+    int cmsg_level;
+    int cmsg_type;
+};
+
+// Ancillary data is aligned to 4 bytes, as the SDK's <machine/_param.h>
+// defines it; CMSG_NXTHDR of a null record is the first one (RFC 2292).
+#define __DARWIN_ALIGNBYTES32 (sizeof(unsigned int) - 1)
+#define __DARWIN_ALIGN32(p) \
+    ((unsigned long)((unsigned long)(p) + __DARWIN_ALIGNBYTES32) & ~__DARWIN_ALIGNBYTES32)
+#define CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + __DARWIN_ALIGN32(sizeof(struct cmsghdr)))
+#define CMSG_FIRSTHDR(mhdr) \
+    ((mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+     ? (struct cmsghdr *)(mhdr)->msg_control : (struct cmsghdr *)0L)
+#define CMSG_NXTHDR(mhdr, cmsg) \
+    ((char *)(cmsg) == (char *)0L ? CMSG_FIRSTHDR(mhdr) \
+     : ((((unsigned char *)(cmsg) + __DARWIN_ALIGN32((unsigned int)(cmsg)->cmsg_len) \
+          + __DARWIN_ALIGN32(sizeof(struct cmsghdr))) \
+         > ((unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen)) \
+        ? (struct cmsghdr *)0L \
+        : (struct cmsghdr *)(void *)((unsigned char *)(cmsg) \
+                                     + __DARWIN_ALIGN32((unsigned int)(cmsg)->cmsg_len))))
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define CMSG_SPACE(l) (__DARWIN_ALIGN32(sizeof(struct cmsghdr)) + __DARWIN_ALIGN32(l))
+#define CMSG_LEN(l)   (__DARWIN_ALIGN32(sizeof(struct cmsghdr)) + (l))
+#endif
+
+#define SCM_RIGHTS 0x01
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define SCM_TIMESTAMP           0x02
+#define SCM_CREDS               0x03
+#define SCM_TIMESTAMP_MONOTONIC 0x04
+#endif
+
+// Optional header / trailer iovecs for Darwin's sendfile().
 struct sf_hdtr {
     struct iovec *headers;
     int hdr_cnt;
@@ -196,10 +253,37 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_REUSEADDR  0x0004
 #define SO_KEEPALIVE  0x0008
 #define SO_BROADCAST  0x0020
+#define SO_REUSEPORT  0x0200
 #define SO_NOSIGPIPE  0x1022  // suppress SIGPIPE on writes to a broken socket
+#define SO_DEBUG      0x0001
+#define SO_ACCEPTCONN 0x0002
+#define SO_DONTROUTE  0x0010
+// The SDK's SO_LINGER counts ticks unless the program selects strict POSIX.
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define SO_LINGER     0x0080
+#define SO_LINGER_SEC 0x1080
+#else
+#define SO_LINGER     0x1080
+#endif
+#define SO_SNDLOWAT   0x1003
+#define SO_RCVLOWAT   0x1004
+#define SO_SNDTIMEO   0x1005
+#define SO_RCVTIMEO   0x1006
+#define SO_TYPE       0x1008
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2
+
+// send()/recv() flag bits (the SDK's sys/socket.h).
+#define MSG_OOB       0x1
+#define MSG_PEEK      0x2
+#define MSG_DONTROUTE 0x4
+#define MSG_EOR       0x8
+#define MSG_TRUNC     0x10
+#define MSG_CTRUNC    0x20
+#define MSG_WAITALL   0x40
+#define MSG_DONTWAIT  0x80
+#define MSG_NOSIGNAL  0x80000
 
 // macOS sockaddr_in includes a 1-byte sin_len at offset 0; the
 // portable thing is to memset to zero and then set bytes by name.
@@ -228,11 +312,19 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #pragma binding(libc::sendmmsg,   "sendmmsg")
 #pragma binding(libc::recvmmsg,   "recvmmsg")
 #pragma binding(libc::accept4,    "accept4")
+#pragma binding(libc::sockatmark, "sockatmark")
+#pragma binding(libc::__cmsg_nxthdr, "__cmsg_nxthdr")
 
 #define SOL_SOCKET    1
 #define SO_REUSEADDR  2
 #define SO_KEEPALIVE  9
 #define SO_BROADCAST  6
+#define SO_DEBUG      1
+#define SO_DONTROUTE  5
+#define SO_LINGER     13
+#define SO_RCVLOWAT   18
+#define SO_SNDLOWAT   19
+#define SO_ACCEPTCONN 30
 #define SHUT_RD       0
 #define SHUT_WR       1
 #define SHUT_RDWR     2
@@ -286,14 +378,10 @@ struct cmsghdr {
 #define CMSG_FIRSTHDR(mhdr) \
     ((size_t)(mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
      ? (struct cmsghdr *)(mhdr)->msg_control : (struct cmsghdr *)0)
-#define CMSG_NXTHDR(mhdr, cmsg) \
-    (((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len) + sizeof(struct cmsghdr) \
-      > (unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen) \
-     ? (struct cmsghdr *)0 \
-     : (struct cmsghdr *)((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len)))
-
-long sendmsg(int fd, const struct msghdr *msg, int flags);
-long recvmsg(int fd, struct msghdr *msg, int flags);
+// glibc's: a record shorter than its header, or one whose length runs past
+// the buffer, has no successor.
+#define CMSG_NXTHDR(mhdr, cmsg) __cmsg_nxthdr(mhdr, cmsg)
+struct cmsghdr *__cmsg_nxthdr(struct msghdr *mhdr, struct cmsghdr *cmsg);
 
 // Batched socket I/O (GNU/Linux): recvmmsg/sendmmsg transfer an array of
 // mmsghdr in one call, each pairing a msghdr with the byte count moved.
@@ -358,7 +446,9 @@ int socket(int domain, int type, int protocol);
 int bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int fd, int backlog);
 int accept(int fd, struct sockaddr *restrict addr, socklen_t *restrict addrlen);
+#ifdef __linux__
 int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+#endif
 int connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int getsockopt(int fd, int level, int optname, void *restrict optval,
@@ -371,7 +461,12 @@ ssize_t recv(int fd, void *buf, size_t n, int flags);
 ssize_t send(int fd, const void *buf, size_t n, int flags);
 #endif
 int shutdown(int fd, int how);
+#ifndef _WIN32
 int socketpair(int domain, int type, int protocol, int *sv);
+ssize_t sendmsg(int fd, const struct msghdr *msg, int flags);
+ssize_t recvmsg(int fd, struct msghdr *msg, int flags);
+int sockatmark(int fd);
+#endif
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 #ifdef _WIN32

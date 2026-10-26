@@ -50,5 +50,7 @@ typedef struct {
 // expansion on Windows walk paths via FindFirstFile directly.
 #endif
 
+#ifndef _WIN32
 int  glob(char *pattern, int flags, void *errfunc, glob_t *pglob);
 int  globfree(glob_t *pglob);
+#endif

@@ -27,6 +27,8 @@
 #define O_CLOEXEC    0x1000000
 #define O_NOFOLLOW   0x0100
 #define O_ACCMODE    0x0003
+#define O_SYNC       0x0080
+#define O_DSYNC      0x400000
 #endif
 #ifdef __linux__
 // splice() flags.
@@ -61,6 +63,9 @@
 // with __O_SYNC = 04000000. __O_SYNC is never used on its own.
 #define O_DSYNC      010000
 #define O_SYNC       04010000
+// The kernel has no separate read synchronization; glibc gives O_RSYNC
+// O_SYNC's value.
+#define O_RSYNC      O_SYNC
 // memfd file sealing (linux/fcntl.h): F_ADD_SEALS / F_GET_SEALS apply and
 // query the seal bitmask on a memfd_create() descriptor.
 #define F_LINUX_SPECIFIC_BASE 1024

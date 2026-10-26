@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier};
+use super::types::{add_ptr_level, is_decl_modifier};
 
 /// One derivation an abstract declarator spells (C99 6.7.6).
 pub(super) enum Derivation {
@@ -252,6 +252,7 @@ impl Compiler {
         let mut ptrs: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         // The convention the group's attributes name for the signature after it.
         let mut conv = None;
+        let mut uptr = false;
         loop {
             if self.at_attribute_specifier() {
                 let named = self.skip_attributes_for_conv()?;
@@ -260,10 +261,18 @@ impl Compiler {
             }
             if self.lex.tk == Token::MulOp {
                 ptrs.push(0);
+                uptr = false;
             } else if self.lex.tk != Token::TypeQual {
                 break;
             } else if let Some(quals) = ptrs.last_mut() {
+                uptr |= self.symbols[self.lex.curr_id_idx].name == "__uptr";
                 *quals |= self.lex_qualifier_bits();
+                if uptr && *quals & super::types::SEG_MASK == super::types::PTR32_SPACE {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+                    ));
+                }
             } else {
                 self.reject_leading_qualifier()?;
             }
@@ -370,6 +379,7 @@ impl Compiler {
         // A `vector_size` or `mode` attribute the declarator carries types
         // its own entity; left pending, it retyped the next declaration.
         let ty = self.apply_pending_type_attributes(ty)?;
+        self.check_ptr32_placement(ty)?;
         Ok((idx, ty, array_size, zero_len))
     }
 
@@ -434,12 +444,12 @@ impl Compiler {
             // the inner-only marker `add_ptr_level` just set (C99
             // 6.7.5.1p1). An attribute may sit here too
             // (`void * __attribute__((malloc)) p`).
+            let mut uptr = false;
             loop {
                 if self.lex.tk == Token::TypeQual {
                     outer_const |= self.lex_is_const_qual();
                     outer_restrict |= self.lex_is_restrict_qual();
-                    ty = apply_qual_bits(ty, self.lex_qualifier_bits());
-                    self.next()?;
+                    ty = self.apply_pointer_qualifier(ty, &mut uptr)?;
                 } else if self.at_attribute_specifier() {
                     self.skip_declarator_attributes(entity_start)?;
                 } else {
@@ -678,6 +688,11 @@ impl Compiler {
             // bounds a pointer to an array (`(*p)[N]`), whose
             // dimensions fold into the aggregate-backed pointee below.
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            // C99 6.7.5.2p2: at block scope the outermost pointee bound may
+            // be variable (`T (*p)[n]`), the pointer's type variably modified;
+            // a parameter's bound is evaluated on entry (6.9.1p10).
+            let mut vm_dim = None;
+            let mut vm_param = None;
             let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
@@ -760,7 +775,34 @@ impl Compiler {
                         // negative sentinel `array_agg_type` keeps.
                         pointee_dims.push(-1);
                     } else {
-                        let m = self.parse_constant_int()?;
+                        let vm = self.pending.vla_allowed || param_ctx;
+                        let m = if vm {
+                            self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                        } else {
+                            Some(self.parse_constant_int()?)
+                        };
+                        let Some(m) = m else {
+                            if vm_dim.is_some() || !pointee_dims.is_empty() {
+                                return Err(self.compile_err(
+                                    Code::UNSUPPORTED,
+                                    "a non-constant inner array dimension is not supported",
+                                ));
+                            }
+                            if param_ctx {
+                                vm_param = self.parse_param_array_size()?;
+                                self.accept(']')?;
+                                pointee_dims.push(-1);
+                                continue;
+                            }
+                            self.expr(Token::Assign as i64)?;
+                            self.require_integer_size(self.ty)?;
+                            if self.is_int128_ty(self.ty) {
+                                self.ast_apply_assign_conv(self.size_t_ty());
+                            }
+                            vm_dim = self.ast_acc.take();
+                            self.accept(']')?;
+                            continue;
+                        };
                         if m < 0 {
                             return Err(self.compile_err(
                                 Code::INVALID_DECLARATION,
@@ -815,7 +857,8 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
-            if !pointee_dims.is_empty() && !after_sig && inner_ptr_levels > 0 {
+            if (!pointee_dims.is_empty() || vm_dim.is_some()) && !after_sig && inner_ptr_levels > 0
+            {
                 // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
                 // the pointee dimensions into the aggregate-backed
                 // tag, one pointer level per inner `*`. Also covers
@@ -828,9 +871,34 @@ impl Compiler {
                     return Err(self.unknown_size_element_err());
                 }
                 self.require_complete_elements(outer_ty_before_inner, &pointee_dims)?;
-                self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
-                inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
-                    + inner_ptr_levels * (Ty::Ptr as i64))
+                self.pending.fn_chain_array_levels +=
+                    pointee_dims.len() as i64 + i64::from(vm_dim.is_some());
+                let mut pointee = if pointee_dims.is_empty() {
+                    outer_ty_before_inner
+                } else {
+                    self.array_agg_type(outer_ty_before_inner, &pointee_dims)
+                };
+                if let Some(dim) = vm_dim {
+                    let (vla_ty, bound) = self.vla_bound_type(pointee, dim);
+                    self.pending.vm_bound_stores.push(bound.store);
+                    pointee = vla_ty;
+                }
+                if let Some(mut size) = vm_param.take().filter(|_| idx != usize::MAX) {
+                    let rest = &pointee_dims[1..];
+                    let elem = if rest.is_empty() {
+                        outer_ty_before_inner
+                    } else {
+                        self.array_agg_type(outer_ty_before_inner, rest)
+                    };
+                    let levels = inner_ptr_levels;
+                    size.vm = Some(super::function::VmParam {
+                        sym: idx,
+                        elem,
+                        levels,
+                    });
+                    self.param_sizes.push(size);
+                }
+                inner_ty = (pointee + inner_ptr_levels * (Ty::Ptr as i64))
                     | (inner_ty & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK));
             }
             return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
@@ -1079,6 +1147,22 @@ impl Compiler {
             } else {
                 0
             };
+            if let Some(mut size) = self.pending.vm_param_bound.take()
+                && idx != usize::MAX
+                && full_dims.len() >= 2
+            {
+                let elem = if full_dims.len() > 2 {
+                    self.array_agg_type(ty, &full_dims[2..])
+                } else {
+                    ty
+                };
+                size.vm = Some(super::function::VmParam {
+                    sym: idx,
+                    elem,
+                    levels: 1,
+                });
+                self.param_sizes.push(size);
+            }
             if idx != usize::MAX {
                 // Always overwrite, even with 0, so a rebinding of a
                 // name that previously carried a multi-dim shape (a
@@ -1135,6 +1219,15 @@ impl Compiler {
             }
             let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
             else {
+                // A parameter's first inner bound may be variable: the
+                // adjusted parameter points to a variable-length array whose
+                // bound the definition evaluates on entry (C99 6.9.1p10).
+                if param_ctx && dims.is_empty() && self.pending.vm_param_bound.is_none() {
+                    self.pending.vm_param_bound = self.parse_param_array_size()?;
+                    self.consume(b']', "close bracket expected in array declarator")?;
+                    dims.push(-1);
+                    continue;
+                }
                 // A non-constant inner dimension makes the whole
                 // object a variably-modified type (C99 6.7.6.2); c5's
                 // stride model is compile-time only, so reject it

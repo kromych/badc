@@ -2082,7 +2082,10 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } | Inst::LoadLocal { off, .. } => agg_slots.contains(off),
-        Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
+        Inst::AtomicRmw { .. }
+        | Inst::AtomicCas { .. }
+        | Inst::AtomicCas16 { .. }
+        | Inst::AtomicStore { .. } => true,
         Inst::AtomicLoad { .. }
         | Inst::ParamPart { .. }
         | Inst::RetPart { .. }
@@ -3459,6 +3462,7 @@ fn splice_multi_block(
         is_noreturn: original.is_noreturn,
         conv: original.conv,
         general_regs_only: original.general_regs_only,
+        tls_dynamic: original.tls_dynamic,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
         const_params: original.const_params,

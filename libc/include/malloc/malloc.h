@@ -11,4 +11,6 @@
 #pragma binding(libc::malloc_size, "_malloc_size")
 #endif
 
+#ifdef __APPLE__
 size_t malloc_size(const void *ptr);
+#endif

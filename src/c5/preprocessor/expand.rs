@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use super::text::{MAX_LITERAL_PREFIX, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
 use crate::c5::codegen::Target;
-use crate::c5::ident::{self, key};
+use crate::c5::ident::{self, Dollar, key};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum TokKind {
@@ -69,26 +69,30 @@ pub(super) struct CachedBody {
     has_paste: bool,
 }
 
-/// The C99 6.4.6 punctuators badc lexes, longest first. `punct_len` and
+/// The C99 6.4.6 punctuators badc lexes, longest first, but for the one
+/// of four bytes, `%:%:`, which `punct_len` tests first. `punct_len` and
 /// the serializer's adjacency test both read this table, so a punctuator
 /// added here cannot be missed by either.
 const PUNCT3: [&[u8]; 3] = [b"<<=", b">>=", b"..."];
-const PUNCT2: [&[u8]; 20] = [
+const PUNCT2: [&[u8]; 25] = [
     b"##", b"->", b"++", b"--", b"<<", b">>", b"<=", b">=", b"==", b"!=", b"&&", b"||", b"+=",
-    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=",
+    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=", b"<:", b":>", b"<%", b"%>", b"%:",
 ];
 const PUNCT1: &[u8] = b"()[]{},;:?~!%^&*-+=<>|/.#";
 
-/// Byte pairs that are not badc punctuators yet still re-lex as one
-/// token when written adjacent: the C99 6.4.6 digraphs, the two comment
-/// openers (6.4.9), and the first two bytes of `...`. The serializer
-/// separates them; nothing else consults the set.
-const MERGE_ONLY2: [&[u8]; 8] = [b"<:", b":>", b"<%", b"%>", b"%:", b"//", b"/*", b".."];
+/// Byte pairs that are not punctuators yet still re-lex as one token
+/// when written adjacent: the two comment openers (6.4.9) and the first
+/// two bytes of `...`. The serializer separates them; nothing else
+/// consults the set.
+const MERGE_ONLY2: [&[u8]; 3] = [b"//", b"/*", b".."];
 
 /// Length of the punctuator starting at `at`, longest match first
 /// (C99 6.4.6), or 0.
 pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     let rest = &bytes[at..];
+    if rest.starts_with(b"%:%:") {
+        return 4;
+    }
     if PUNCT3.iter().any(|p| rest.starts_with(p)) {
         return 3;
     }
@@ -98,7 +102,24 @@ pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     if PUNCT1.contains(&rest[0]) { 1 } else { 0 }
 }
 
-fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
+/// C99 6.10.3p1: two replacement lists are identical when their tokens
+/// have the same number, order, spelling and white-space separation, any
+/// white space counting as one.
+pub(super) fn replacement_lists_identical(a: &str, b: &str, dollar: Dollar) -> bool {
+    let (mut ta, mut tb) = (Vec::new(), Vec::new());
+    lex_into(a, 0, &mut ta, dollar);
+    lex_into(b, 0, &mut tb, dollar);
+    let spelling =
+        |text: &'_ str, t: &Tok| (text[t.start as usize..t.end as usize].to_string(), t.space);
+    ta.len() == tb.len()
+        && ta.iter().zip(&tb).enumerate().all(|(i, (x, y))| {
+            let (sx, px) = spelling(a, x);
+            let (sy, py) = spelling(b, y);
+            sx == sy && (i == 0 || px == py)
+        })
+}
+
+fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>, dollar: Dollar) {
     let bytes = text.as_bytes();
     let mut i = 0;
     let mut space = false;
@@ -127,11 +148,11 @@ fn lex_into(text: &str, buf: u32, out: &mut Vec<Tok>) {
                 TokKind::Char
             };
         } else {
-            let np = pp_number_len(bytes, i);
+            let np = pp_number_len(bytes, i, dollar);
             if np > 0 {
                 i += np;
                 kind = TokKind::Number;
-            } else if let len @ 1.. = ident::ident_len(bytes, i) {
+            } else if let len @ 1.. = ident::ident_len(bytes, i, dollar) {
                 i += len;
                 kind = TokKind::Ident;
             } else {
@@ -192,6 +213,25 @@ struct Exp<'a> {
     filename: &'a str,
     line_no: usize,
     ar: &'a mut ExpScratch,
+    /// What the rescan of the line ended at.
+    tail: Tail,
+    /// Offset in the line's buffer of the last token the rescan took from
+    /// it, not from a replacement: a line joined for an invocation spans
+    /// several source lines.
+    src_pos: u32,
+}
+
+/// Arena id of the line [`Exp`] substitutes, the first buffer it adds.
+const LINE_BUF: u32 = 0;
+
+/// How the rescan of a line ends: complete, or at an invocation the
+/// following lines may supply -- a function-like macro name nothing
+/// follows, or one whose argument list is still open.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Tail {
+    Complete,
+    FnName,
+    OpenArgs,
 }
 
 impl<'a> Exp<'a> {
@@ -209,6 +249,8 @@ impl<'a> Exp<'a> {
             filename,
             line_no,
             ar,
+            tail: Tail::Complete,
+            src_pos: 0,
         }
     }
 
@@ -240,7 +282,7 @@ impl<'a> Exp<'a> {
     }
 
     fn is_punct(&self, t: Tok, s: &str) -> bool {
-        t.kind == TokKind::Punct && self.text(t) == s
+        t.kind == TokKind::Punct && self.pp.primary_spelling(self.text(t)) == s
     }
 
     fn add_buf(&mut self, buf: Rc<str>) -> u32 {
@@ -413,7 +455,13 @@ impl<'a> Exp<'a> {
             let text = self.text(t);
             if out.len() > first_at
                 && (t.space
-                    || (relex_safe && pp_tokens_would_merge(prev_kind, prev_text, text.as_bytes())))
+                    || (relex_safe
+                        && pp_tokens_would_merge(
+                            prev_kind,
+                            prev_text,
+                            text.as_bytes(),
+                            self.pp.dollar(),
+                        )))
             {
                 out.push(' ');
             }
@@ -434,7 +482,12 @@ impl<'a> Exp<'a> {
         text.push_str(self.text(right));
         let buf = self.add_buf(Rc::from(text));
         let mut toks = Vec::new();
-        lex_into(&self.ar.bufs[buf as usize].clone(), buf, &mut toks);
+        lex_into(
+            &self.ar.bufs[buf as usize].clone(),
+            buf,
+            &mut toks,
+            self.pp.dollar(),
+        );
         if let Some(f) = toks.first_mut() {
             f.space = left.space;
         }
@@ -623,7 +676,15 @@ impl<'a> Exp<'a> {
         rest.reverse();
         let mut out: Vec<Tok> = self.take_vec();
         out.reserve(rest.len());
+        // `rest[replaced..]` holds the replacements pushed for rescanning.
+        let mut replaced = usize::MAX;
         while let Some(tok) = rest.pop() {
+            if rest.len() < replaced {
+                replaced = usize::MAX;
+                if tok.buf == LINE_BUF {
+                    self.src_pos = tok.start;
+                }
+            }
             if tok.kind != TokKind::Ident {
                 out.push(tok);
                 continue;
@@ -657,6 +718,11 @@ impl<'a> Exp<'a> {
                 out.push(tok);
                 continue;
             }
+            if is_obj && matches!(name, "__DATE__" | "__TIME__") {
+                let line = self.src_line();
+                let text = format!("macro `{name}` might prevent reproducible builds");
+                pp.park_warning(super::DATE_TIME, self.filename, line, text);
+            }
             if is_fn {
                 let def = pp.fn_macros.get(name).unwrap();
                 // Function-like: an invocation only when `(` follows
@@ -667,14 +733,24 @@ impl<'a> Exp<'a> {
                     pp.check_macro_arity(name, def, &raw_args, self.filename, self.line_no);
                     let common = self.hs_intersect(tok.hs, rp_hs);
                     let inv = self.hs_with_name(common, name);
+                    let at = self.src_pos;
                     let mut sub = self.subst(name, def, &raw_args, &sep_space, inv, depth);
+                    // The replacement is at the line of the macro name, as gcc
+                    // gives it; each argument was at its own.
+                    self.src_pos = at;
                     if let Some(f) = sub.first_mut() {
                         f.space = tok.space;
                     }
                     sub.reverse();
+                    replaced = replaced.min(rest.len());
                     rest.append(&mut sub);
                     self.put_vec(sub);
                     continue;
+                }
+                if depth == 0 && rest.is_empty() {
+                    self.tail = Tail::FnName;
+                } else if depth == 0 && rest.last().is_some_and(|&t| self.is_punct(t, "(")) {
+                    self.tail = Tail::OpenArgs;
                 }
                 out.push(tok);
                 continue;
@@ -690,6 +766,7 @@ impl<'a> Exp<'a> {
                 f.space = tok.space;
             }
             btoks.reverse();
+            replaced = replaced.min(rest.len());
             rest.append(&mut btoks);
             self.put_vec(btoks);
         }
@@ -702,14 +779,20 @@ impl<'a> Exp<'a> {
     /// Its name set is `is_dynamic_predefine`, which the pre-scan in
     /// `line_mentions_macro` shares -- a name in one and not the other
     /// would never reach the expander.
+    /// The line of the source token the expansion is at.
+    fn src_line(&self) -> usize {
+        let line = &self.ar.bufs[LINE_BUF as usize];
+        self.line_no + line[..self.src_pos as usize].matches('\n').count()
+    }
+
     fn dynamic_predefine(&mut self, tok: Tok, out: &mut Vec<Tok>) -> bool {
-        let (line_no, filename) = (self.line_no, self.filename);
+        let filename = self.filename;
         if !is_dynamic_predefine(self.text(tok)) {
             return false;
         }
         match self.text(tok) {
             "__LINE__" => {
-                let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
+                let t = self.synth(format!("{}", self.src_line()), TokKind::Number, tok.space);
                 out.push(t);
             }
             "__FILE__" => {
@@ -747,7 +830,7 @@ impl<'a> Exp<'a> {
     fn has_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
         let known: fn(&str, Target) -> bool = match self.text(tok) {
             "__has_builtin" => super::builtins::has_builtin,
-            "__has_attribute" => |name, _| super::cond::is_known_attribute(name),
+            "__has_attribute" => super::cond::has_attribute,
             _ => return false,
         };
         let n = rest.len();
@@ -1058,6 +1141,22 @@ impl<'a> Exp<'a> {
 }
 
 impl Preprocessor {
+    /// The spelling a punctuator behaves as: a C99 6.4.6p3 digraph's
+    /// counterpart, any other punctuator itself. Assembler input has no
+    /// digraphs, following GNU cpp.
+    pub(super) fn primary_spelling<'s>(&self, p: &'s str) -> &'s str {
+        match p {
+            _ if self.asm_source => p,
+            "<:" => "[",
+            ":>" => "]",
+            "<%" => "{",
+            "%>" => "}",
+            "%:" => "#",
+            "%:%:" => "##",
+            _ => p,
+        }
+    }
+
     /// The body's buffer and token list, lexed on first use per
     /// definition (token `buf` ids are 0; callers remap into their
     /// arena).
@@ -1070,10 +1169,11 @@ impl Preprocessor {
         }
         let buf: Rc<str> = Rc::from(body);
         let mut toks = Vec::new();
-        lex_into(&buf, 0, &mut toks);
-        let has_paste = toks
-            .iter()
-            .any(|t| t.kind == TokKind::Punct && &buf[t.start as usize..t.end as usize] == "##");
+        lex_into(&buf, 0, &mut toks, self.dollar());
+        let has_paste = toks.iter().any(|t| {
+            t.kind == TokKind::Punct
+                && self.primary_spelling(&buf[t.start as usize..t.end as usize]) == "##"
+        });
         let toks = Rc::new(toks);
         cache.insert(
             name.to_string(),
@@ -1086,14 +1186,6 @@ impl Preprocessor {
         (buf, toks, has_paste)
     }
 
-    /// The identifier ending the replacement list `body` of the macro
-    /// `name`, or `None` when the list is empty or ends in another token.
-    fn trailing_identifier<'b>(&self, name: &str, body: &'b str) -> Option<&'b str> {
-        let (_, toks, _) = self.cached_body(name, body);
-        let last = toks.last().filter(|t| t.kind == TokKind::Ident)?;
-        Some(&body[last.start as usize..last.end as usize])
-    }
-
     /// Substitute every macro invocation in `line`. `filename` and
     /// `line_no` feed `__FILE__` / `__LINE__`, whose expansion changes
     /// per line and so can't live in the static macro table.
@@ -1103,6 +1195,19 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, true).0
+    }
+
+    /// [`Self::substitute`] for a content line, and how its rescan ended:
+    /// C99 6.10.3.4p1 rescans the replacement together with the rest of
+    /// the source, so an invocation an expansion forms may take its `(` or
+    /// its arguments from later lines.
+    pub(super) fn substitute_line<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> (Cow<'l, str>, Tail) {
         self.substitute_serialized(line, filename, line_no, true)
     }
 
@@ -1119,7 +1224,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, false)
+        self.substitute_serialized(line, filename, line_no, false).0
     }
 
     fn substitute_serialized<'l>(
@@ -1128,16 +1233,22 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
         relex_safe: bool,
-    ) -> Cow<'l, str> {
+    ) -> (Cow<'l, str>, Tail) {
         if !self.line_mentions_macro(line) {
-            return Cow::Borrowed(line);
+            return (Cow::Borrowed(line), Tail::Complete);
         }
         let mut scratch = self.exp_scratch.borrow_mut();
         let mut ex = Exp::new(self, filename, line_no, &mut scratch);
         let bid = ex.add_buf(Rc::from(line));
+        debug_assert_eq!(bid, LINE_BUF);
         let mut toks = ex.take_vec();
         toks.reserve(line.len() / 4 + 4);
-        lex_into(&ex.ar.bufs[bid as usize].clone(), bid, &mut toks);
+        lex_into(
+            &ex.ar.bufs[bid as usize].clone(),
+            bid,
+            &mut toks,
+            self.dollar(),
+        );
         let expanded = ex.expand_tokens(toks, 0);
         // Keep the line's own indentation: warning echoes and `-E`
         // output quote it.
@@ -1145,7 +1256,7 @@ impl Preprocessor {
         let mut out = String::from(indent);
         ex.serialize_into(&expanded, &mut out, relex_safe);
         ex.put_vec(expanded);
-        Cow::Owned(out)
+        (Cow::Owned(out), ex.tail)
     }
 
     /// Pre-scan: most lines name no macro at all, and copying them
@@ -1164,12 +1275,12 @@ impl Preprocessor {
                 i = skip_literal(bytes, i);
                 continue;
             }
-            let np = pp_number_len(bytes, i);
+            let np = pp_number_len(bytes, i, self.dollar());
             if np > 0 {
                 i += np;
                 continue;
             }
-            let len = ident::ident_len(bytes, i);
+            let len = ident::ident_len(bytes, i, self.dollar());
             if len > 0 {
                 let name = key(&line[i..i + len]);
                 i += len;
@@ -1230,9 +1341,8 @@ impl Preprocessor {
 
     /// C99 6.10.3.3p1: `##` shall not occur at the beginning or at the
     /// end of a replacement list, for either form of macro definition.
-    /// A leading `##` spells `##` and a trailing one ends in `#`, so
-    /// the two text tests are necessary conditions and only a body
-    /// passing one of them is lexed.
+    /// Such a list opens or closes with `##` or `%:%:`, so only a body
+    /// passing that text test is lexed.
     pub(super) fn check_paste_placement(
         &self,
         name: &str,
@@ -1240,14 +1350,16 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) {
-        if !body.starts_with("##") && !body.ends_with('#') {
+        let ends = |p: &str| body.starts_with(p) || body.ends_with(p);
+        if !ends("##") && !ends("%:%:") {
             return;
         }
         let mut toks = Vec::new();
-        lex_into(body, 0, &mut toks);
+        lex_into(body, 0, &mut toks, self.dollar());
         let is_paste = |t: Option<&Tok>| {
             t.is_some_and(|t| {
-                t.kind == TokKind::Punct && &body[t.start as usize..t.end as usize] == "##"
+                t.kind == TokKind::Punct
+                    && self.primary_spelling(&body[t.start as usize..t.end as usize]) == "##"
             })
         };
         if !is_paste(toks.first()) && !is_paste(toks.last()) {
@@ -1325,21 +1437,28 @@ pub(super) fn is_dynamic_predefine(name: &str) -> bool {
 /// identifier and pp-number continuation (6.4.2.1 / 6.4.8), the
 /// encoding prefixes `literal_prefix_len` accepts (6.4.4.4 / 6.4.5),
 /// the punctuator table `punct_len` matches, and the merge-only pairs.
-pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next_text: &[u8]) -> bool {
+pub(super) fn pp_tokens_would_merge(
+    prev_kind: TokKind,
+    prev: &[u8],
+    next_text: &[u8],
+    dollar: Dollar,
+) -> bool {
     let (Some(&last), Some(&next)) = (prev.last(), next_text.first()) else {
         return false;
     };
     // 6.4.2.1 / 6.4.8: an identifier or pp-number runs on through any
     // identifier character, and `\` before `u` or `U` and hex digits spells
     // a universal character name.
-    if matches!(prev_kind, TokKind::Ident | TokKind::Number) && ident::char_len(next_text, 0) > 0 {
+    if matches!(prev_kind, TokKind::Ident | TokKind::Number)
+        && ident::char_len(next_text, 0, dollar) > 0
+    {
         return true;
     }
     if last == b'\\' && matches!(next, b'u' | b'U') {
         let mut probe = [b'\\'; 10];
         let n = next_text.len().min(9);
         probe[1..=n].copy_from_slice(&next_text[..n]);
-        if ident::char_len(&probe[..=n], 0) > 0 {
+        if ident::char_len(&probe[..=n], 0, dollar) > 0 {
             return true;
         }
     }
@@ -1363,7 +1482,7 @@ pub(super) fn pp_tokens_would_merge(prev_kind: TokKind, prev: &[u8], next_text: 
     }
     let pair = [last, next];
     // A `.` before a digit opens a pp-number.
-    if last == b'.' && pp_number_len(&pair, 0) == 2 {
+    if last == b'.' && pp_number_len(&pair, 0, dollar) == 2 {
         return true;
     }
     punct_len(&pair, 0) == 2 || MERGE_ONLY2.iter().any(|p| *p == pair)
@@ -1391,6 +1510,24 @@ impl JoinScan {
     pub(super) fn new() -> Self {
         JoinScan {
             depth: 0,
+            quote: 0,
+            pending: false,
+        }
+    }
+
+    /// A scan whose text so far ends in a function-like macro name.
+    pub(super) fn awaiting_paren() -> Self {
+        JoinScan {
+            depth: 0,
+            quote: 0,
+            pending: true,
+        }
+    }
+
+    /// A scan whose text so far ends inside an argument list.
+    pub(super) fn open_args() -> Self {
+        JoinScan {
+            depth: 1,
             quote: 0,
             pending: false,
         }
@@ -1476,12 +1613,12 @@ impl JoinScan {
                 }
                 // Skip a pp-number whole (C99 6.4.8) so its
                 // identifier-shaped tail is not read as a head.
-                let np = pp_number_len(bytes, i);
+                let np = pp_number_len(bytes, i, pp.dollar());
                 if np > 0 {
                     i += np;
                     continue;
                 }
-                let len = ident::ident_len(bytes, i);
+                let len = ident::ident_len(bytes, i, pp.dollar());
                 if len > 0 {
                     let start = i;
                     i += len;
@@ -1512,30 +1649,13 @@ impl JoinScan {
     }
 }
 
-/// A name that heads a joinable invocation: a function-like macro, or an
-/// object-like macro whose replacement list *ends* in one. C99 6.10.3.4p1
-/// rescans the replacement list together with the tokens that follow, so
-/// it is the name ending the list that meets the `(` -- which may be on a
-/// later line (`#define dprint if (debug) print`).
+/// A name that heads a joinable invocation: a function-like macro. An
+/// invocation an expansion forms is joined after its rescan, which
+/// [`Preprocessor::substitute_line`] reports.
 fn join_head(name: &str, pp: &Preprocessor) -> bool {
-    let mut name = key(name);
-    for _ in 0..MAX_MACRO_DEPTH {
-        pp.obs_note(&name);
-        if pp.fn_macros.contains_key(&*name) {
-            return true;
-        }
-        let Some(body) = pp.macros.get(&*name) else {
-            return false;
-        };
-        let Some(tail) = pp.trailing_identifier(&name, body).map(key) else {
-            return false;
-        };
-        if tail == name {
-            return false;
-        }
-        name = Cow::Owned(tail.into_owned());
-    }
-    false
+    let name = key(name);
+    pp.obs_note(&name);
+    pp.fn_macros.contains_key(&*name)
 }
 
 /// Cap on the argument-expansion nesting depth. Generous: real code

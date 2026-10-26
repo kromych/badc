@@ -230,6 +230,17 @@ fn asm_reaches_an_imported_object_through_its_slot() {
     }
 }
 
+/// C11 7.22.4.7 under the JIT, which keeps the handler chains of its own:
+/// `quick_exit` runs the `at_quick_exit` handlers and no atexit handler.
+/// msvcrt.dll defines neither function.
+#[cfg(not(windows))]
+#[test]
+fn quick_exit_runs_its_handlers() {
+    let src = include_str!("../../../tests/fixtures/c/quick_exit_runs_its_handlers.c");
+    assert_eq!(jit_exit(src, &["quick-exit"]), 5);
+    assert_eq!(jit_exit_native_optimized(src, &["quick-exit-opt"]), 5);
+}
+
 /// The JIT image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {
@@ -2249,6 +2260,26 @@ fn jit_reads_binding_data_global() {
     );
 }
 
+/// A call to a function the unit declares, neither defines nor binds, and
+/// the loaded C library exports takes that export through a veneer, as a
+/// direct call and as a tail call; a native link takes it the same way.
+#[test]
+fn a_declared_c_library_function_runs_without_a_binding() {
+    let program = Compiler::new(
+        "int puts(const char *);\n\
+         int abs(int);\n\
+         static int tail(int x) { return abs(x); }\n\
+         int main(void) { return puts(\"\") < 0 || tail(-3) != 3; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(
+        jit_run(&program, &["jit-unbound-call".to_string()]).expect("run"),
+        0
+    );
+}
+
 /// Mirror the linker: a call to a declared-but-undefined extern must
 /// refuse to run instead of dispatching to whatever function sits at
 /// the placeholder-colliding ent_pc.
@@ -2297,6 +2328,25 @@ fn undefined_function_in_an_initializer_is_a_link_error() {
     let err = jit_run(&program, &["jit-undef-slot".to_string()]).expect_err("must not run");
     let msg = err.to_string();
     assert!(msg.contains("undefined reference to `svd`"), "{msg}");
+}
+
+/// A weak name nothing defines is the null address, as a link resolves it:
+/// its address in code and in a static initializer is 0 and the call it
+/// guards is not made; `#pragma weak` declares one, a weak definition binds.
+#[test]
+fn an_undefined_weak_name_is_the_null_address() {
+    let src = "extern int wv __attribute__((weak));\n\
+               extern int wf(void) __attribute__((weak));\n\
+               extern long pv;\n#pragma weak pv\n\
+               int dv __attribute__((weak)) = 5;\n\
+               int *pw = &wv;\nint (*fw)(void) = wf;\nlong *pp = &pv;\n\
+               int main(void) {\n\
+                 if (&wv || wf || &pv || pw || fw || pp) return 1;\n\
+                 if (wf) return wf();\n\
+                 return dv == 5 ? 0 : 2;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["weak-undef"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["weak-undef-opt"]), 0);
 }
 
 #[test]

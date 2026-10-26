@@ -247,21 +247,21 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0x156, %rax            # imm = 0x156
                	je	<addr>
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0x156, %rax            # imm = 0x156
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	movabsq	$0x405e200000000000, %rax # imm = 0x405E200000000000
                	movq	%rax, %xmm15

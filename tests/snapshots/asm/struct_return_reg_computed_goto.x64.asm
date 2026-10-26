@@ -26,13 +26,13 @@ Disassembly of section .text:
                	int3
 
 <simple>:
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
                	xorl	%eax, %eax
                	retq
 
 <ternary>:
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
                	movl	$0x1, %eax
                	retq

@@ -161,6 +161,14 @@ queue-coordinator skill's `scripts/run_gate.sh`.
   every platform, and `debug_assert!`s hold only there.
 - In shell loops whose exit status matters use `/usr/bin/grep`; the Bash tool's
   `grep` is a wrapper that can miss.
+- Stopping the gate on the Mac does not stop a lane's steps on its box: the
+  shell running the lane script finishes its current step there. A new run
+  started meanwhile used to check out over it and share its test files, caches
+  and snapshot directory, which failed `programs::file_io`, the snapshot drift
+  check and the tcl smoke with nothing wrong in the tree. Each lane now records
+  its shell in `.gate-lane` (`scripts/lane_guard.py`), and the checkout, or the
+  Mac lane's start, refuses a tree whose recorded shell still runs ("a previous
+  gate run's lane is still running"): wait for it, or stop it on the box.
 
 ## After the push
 

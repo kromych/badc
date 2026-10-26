@@ -317,7 +317,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %ecx
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi

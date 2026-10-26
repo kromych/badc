@@ -16,7 +16,9 @@ a selector is accepted:
   back, `-Werror` raises every warning, `-w` silences every warning.
   `-Wall`, `-Wextra` and `-Wpedantic` turn on the groups of the same
   names, following gcc's split. A code spelled `B2001` is accepted
-  wherever a name is.
+  wherever a name is. A gcc or clang warning badc does not implement is
+  accepted, and turning it on reports B7012; any other unknown name is
+  refused, except in `-Wno-<name>`, which gcc accepts for any name.
 * `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
   `pop`), `#pragma clang diagnostic ...` and MSVC's
   `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`
@@ -42,11 +44,14 @@ regenerates.
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
 | B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop with no matching push |
 | B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
+| B1008 | `date-time` | ignore | controllable | - | a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next |
+| B1009 | `undef` | ignore | controllable | - | an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0 |
 | B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match |
 | B1011 | `invalid-pragma` | error | hard | - | a pragma badc implements whose operand cannot be applied |
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |
 | B1013 | `error-directive` | error | hard | - | a `#error` directive reached in an active conditional block |
 | B1014 | `macro` | error | hard | - | a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list |
+| B1015 | `macro-redefined` | warning | controllable | default | a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old |
 | B2001 | `unused-variable` | ignore | controllable | all | a variable declared and never used |
 | B2002 | `unused-parameter` | ignore | controllable | extra | a parameter never used in the function body |
 | B2003 | `unused-but-set-variable` | ignore | controllable | all | a variable that is only ever assigned to |
@@ -59,6 +64,12 @@ regenerates.
 | B2010 | `shadowed-binding` | warning | controllable | default | a `#pragma binding` for a name an earlier binding already claimed |
 | B2011 | `implicit-int` | error | controllable | default | a declaration or type name with no type specifier, whose type defaults to `int` |
 | B2012 | `inline-asm` | warning | controllable | default | an `asm` statement that lists the stack pointer as clobbered or writes it through an output, where GNU C requires it to hold its value |
+| B2013 | `visibility` | warning | controllable | default | a tag declared in a parameter list, whose scope ends with the declaration or definition |
+| B2014 | `strict-prototypes` | ignore | controllable | - | a function declarator whose empty or identifier list declares no prototype, outside a cast and a definition an earlier prototype covers |
+| B2015 | `missing-prototypes` | ignore | controllable | - | an external function definition, neither `inline` nor `main`, that no file-scope declaration with a prototype precedes |
+| B2016 | `missing-declarations` | ignore | controllable | - | an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes |
+| B2017 | `implicit-fallthrough=5` | ignore | controllable | - | a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates |
+| B2018 | `vla-larger-than` | ignore | controllable | - | under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count |
 | B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
@@ -77,6 +88,10 @@ regenerates.
 | B3011 | `incompatible-pointer-types-discards-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **` |
 | B3012 | `switch-bool` | warning | controllable | default | a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both |
 | B3013 | `excess-initializers` | warning | controllable | default | a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped |
+| B3015 | `cast-function-type` | ignore | controllable | extra | a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision |
+| B3016 | `designated-init` | warning | controllable | default | an initializer element with no designator for a member of a struct declared `designated_init` |
+| B3017 | `enum-conversion` | ignore | controllable | extra | a value of one enumerated type, or a constant of one, assigned, initialized, passed or returned as another enumerated type |
+| B3014 | `builtin-argument-range` | warning | controllable | default | an integer constant operand of a builtin outside the values the builtin takes; 0 is used in its place |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |
@@ -103,6 +118,8 @@ regenerates.
 | B6003 | `merged-section-access` | warning | controllable | default | a relocation reaches past the end of the merged section it names |
 | B6004 | `execstack` | warning | controllable | default | the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack` |
 | B6005 | `rwx-segment` | warning | controllable | default | a segment the image loads is readable, writable and executable, or its thread-local segment executable |
+| B6006 | `local-import` | warning | controllable | default | a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition |
+| B6007 | `text-relocation` | warning | controllable | default | a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`) |
 | B6010 | `undefined-symbol` | error | hard | - | a reference no input object, archive or shared library defines |
 | B6011 | `duplicate-symbol` | error | hard | - | more than one input defines the same symbol |
 | B6012 | `relocation` | error | hard | - | a relocation the linker cannot apply, or a value its field cannot hold |
@@ -121,5 +138,5 @@ regenerates.
 | B7009 | `cross-target-output` | warning | note | - | the image is for another host and will not run where it was built |
 | B7010 | `freestanding-import` | warning | controllable | default | a freestanding image binds a shared-library symbol, so it runs through the dynamic loader |
 | B7011 | `dwarf-output` | warning | controllable | default | a `-gdwarf` option asks for a DWARF version or format the emitter does not produce |
-| B7012 | `unimplemented-warning-option` | warning | controllable | default | a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect |
+| B7012 | `unimplemented-warning-option` | warning | controllable | default | a diagnostic pragma or a `-W` option turns on a gcc or clang warning that badc does not implement, so it has no effect |
 | B9001 | `internal-error` | error | hard | - | an invariant inside badc did not hold |

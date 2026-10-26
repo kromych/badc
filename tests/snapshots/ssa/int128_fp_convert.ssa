@@ -2026,10 +2026,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=3
     v1037 Imm(0)                                           -> x1
     v1038 StoreLocal { off=-1, value=v1035, kind=I64 }     -> -
     v1039 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v1040 Binop { op=fmul, lhs=v1033, rhs=v1039 }          -> d2
+    v1040 Binop { op=fmul, lhs=v1033, rhs=v1039 }          -> d0
     v1041 ImmData(32)                                      -> x0
-    v1042 Load { addr=v1041, disp=0, kind=F64, volatile }  -> d2
-    v1043 Fma { a=v1033, b=v1039, c=v1042, neg_product=false, neg_addend=false } -> d0
+    v1042 Load { addr=v1041, disp=0, kind=F64, volatile }  -> d1
+    v1043 Binop { op=fadd, lhs=v1040, rhs=v1042 }          -> d0
     v1044 Imm(0)                                           -> x0
     v1045 StoreLocal { off=-1, value=v1043, kind=F64 }     -> -
     v1046 Imm(0)                                           -> x0

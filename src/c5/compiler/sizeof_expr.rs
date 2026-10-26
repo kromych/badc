@@ -729,10 +729,18 @@ impl Compiler {
             return Ok(self.function_type_layout(true));
         }
         // C99 6.5.3.4p2: a variable-length array type name is evaluated,
-        // storing the size its operand reads.
+        // storing the size its operand reads; a variably modified typedef
+        // stored it where its declaration was reached.
         if let Some(vm) = type_name.vla.filter(|_| type_name.is_vla) {
             self.pending.sizeof_vla_size_slot = Some(vm.slot);
             self.pending.sizeof_vla_store = Some(vm.store);
+            return Ok(0);
+        }
+        if let Some(slot) = self
+            .vla_value_slot(type_name.ty)
+            .filter(|_| type_name.is_vla)
+        {
+            self.pending.sizeof_vla_size_slot = Some(slot);
             return Ok(0);
         }
         if type_name.ptr_levels == 0 {

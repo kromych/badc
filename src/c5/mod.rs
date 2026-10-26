@@ -14,6 +14,7 @@ mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod ms_intrinsic;
 mod object;
 mod op;
 #[cfg(feature = "std")]
@@ -51,15 +52,16 @@ pub use {
         StackProtector, Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{
-        AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, StructDef, StructField,
+        AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CStd, CompileOptions, Compiler, FpContract,
+        StructDef, StructField,
     },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,
-    headers::embedded_headers,
+    headers::{TargetSet, embedded_headers},
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
-    program::{Program, VariableInfo},
+    program::{Program, SymVisibility, VariableInfo},
     vm::{Trace, Vm},
 };
 
@@ -79,20 +81,25 @@ pub use linker::{
     NativeReloc, NativeSymSection, NativeSymbol, OrphanHandling, PendingImportReloc, PltTrampoline,
     Preemption, SectionContribution, SectionMap, SharedLibrary, TargetCLibrary, ZKeyword,
     ZKeywords, ZSupport, copy_candidates, detect_binary_format, emit_aarch64_plt, emit_plt_for,
-    emit_x86_64_plt, is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object,
-    is_native_object, is_tbd, library_bindings, link_native_objects, link_native_objects_with,
-    link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
-    link_with_script, mach_o_fat_slice, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
-    parse_native_elf, parse_native_mach_o, parse_native_object, parse_shared_library, parse_tbd,
-    parse_z_keyword, render_link_map, resolve_exec_stack, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    emit_x86_64_plt, import_libraries, is_arm64x_native_member, is_coff_import_member,
+    is_coff_object, is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object,
+    is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
+    link_native_objects_with, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script, mach_o_fat_slice,
+    parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
+    parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,
+    parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, render_link_map,
+    resolve_exec_stack, write_executable_elf64, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
-pub use linker::{ArchiveMember, read_archive, write_archive};
+pub use linker::{
+    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+};
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
-pub use linker::{is_ld_invocation, run_ld};
+pub use linker::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]

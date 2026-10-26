@@ -100,7 +100,7 @@ struct stat {
     long            st_size;           /* offset 96, 8 bytes */
     long            st_blocks;         /* offset 104, 8 bytes */
     int             st_blksize;        /* offset 112, 4 bytes */
-    int             st_flags;          /* offset 116, 4 bytes */
+    unsigned int    st_flags;          /* offset 116, 4 bytes */
     int             st_gen;            /* offset 120, 4 bytes */
     int             st_lspare;         /* offset 124, 4 bytes */
     long            st_qspare0;        /* offset 128, 8 bytes */
@@ -171,6 +171,29 @@ struct stat {
     int  __unused0;          /* offset 120 */
     int  __unused1;          /* offset 124, struct ends at 128 */
 };
+#elif defined(_WIN32)
+#include <stddef.h>
+// msvcrt's structures, as mingw-w64's _mingw_stat64.h lays them out: a
+// 16-bit inode and mode, a 32-bit size (`i32`) or a 64-bit one, and 64-bit
+// times. struct stat is _stat64i32's, the one the 64-bit msvcrt.dll's
+// _stat, _fstat and _wstat fill; struct stat64 is _stat64's.
+#define _STAT_STRUCT_FIELDS(size_type)                                            \
+    unsigned int st_dev;                                                          \
+    unsigned short st_ino;                                                        \
+    unsigned short st_mode;                                                       \
+    short st_nlink;                                                               \
+    short st_uid;                                                                 \
+    short st_gid;                                                                 \
+    unsigned int st_rdev;                                                         \
+    size_type st_size;                                                            \
+    long long st_atime;                                                           \
+    long long st_mtime;                                                           \
+    long long st_ctime;
+struct _stat64i32 { _STAT_STRUCT_FIELDS(long) };
+struct _stat64 { _STAT_STRUCT_FIELDS(long long) };
+struct stat { _STAT_STRUCT_FIELDS(long) };
+struct stat64 { _STAT_STRUCT_FIELDS(long long) };
+#undef _STAT_STRUCT_FIELDS
 #else
 // Generic / fallback: matches Linux x86_64. 8-byte fields
 // throughout for safety.
@@ -213,30 +236,107 @@ struct stat {
 #pragma binding(libc::fstat, "fstat")
 #elif defined(_WIN32)
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::stat,  "_stat")
-#pragma binding(msvcrt::fstat, "_fstat")
+#pragma binding(msvcrt::stat,        "_stat")
+#pragma binding(msvcrt::fstat,       "_fstat")
+#pragma binding(msvcrt::wstat,       "_wstat")
+#pragma binding(msvcrt::stat64,      "_stat64")
+#pragma binding(msvcrt::fstat64,     "_fstat64")
+#pragma binding(msvcrt::wstat64,     "_wstat64")
+#pragma binding(msvcrt::_stat64i32,  "_stat")
+#pragma binding(msvcrt::_fstat64i32, "_fstat")
+#pragma binding(msvcrt::_wstat64i32, "_wstat")
+#pragma binding(msvcrt::_stat64,     "_stat64")
+#pragma binding(msvcrt::_fstat64,    "_fstat64")
+#pragma binding(msvcrt::_wstat64,    "_wstat64")
+// The CRT's names for the two layouts, as mingw-w64 maps them for 64-bit
+// time_t: each renames the structure tag and the function together.
+#define _stat     _stat64i32
+#define _fstat    _fstat64i32
+#define _wstat    _wstat64i32
+#define _stati64  _stat64
+#define _fstati64 _fstat64
+#define _wstati64 _wstat64
+#define __stat64  _stat64
+int _stat64i32(const char *path, struct _stat64i32 *buf);
+int _fstat64i32(int fd, struct _stat64i32 *buf);
+int _wstat64i32(const wchar_t *path, struct _stat64i32 *buf);
+int _stat64(const char *path, struct _stat64 *buf);
+int _fstat64(int fd, struct _stat64 *buf);
+int _wstat64(const wchar_t *path, struct _stat64 *buf);
+int wstat(const wchar_t *path, struct stat *buf);
+int stat64(const char *path, struct stat64 *buf);
+int fstat64(int fd, struct stat64 *buf);
+int wstat64(const wchar_t *path, struct stat64 *buf);
+#define _S_IFMT   0xF000
+#define _S_IFDIR  0x4000
+#define _S_IFCHR  0x2000
+#define _S_IFIFO  0x1000
+#define _S_IFREG  0x8000
+#define _S_IFBLK  0x6000
+#define _S_IREAD  0x0100
+#define _S_IWRITE 0x0080
+#define _S_IEXEC  0x0040
 #endif
 int stat(const char *path, struct stat *buf);
+#ifndef _WIN32
 int lstat(const char *path, struct stat *buf);
+#endif
 int fstat(int fd, struct stat *buf);
+
+#ifdef __APPLE__
+// The SDK's st_flags bits: the owner's (UF_*) and the superuser's (SF_*),
+// which chflags(2) sets.
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define UF_SETTABLE   0x0000ffff
+#define UF_NODUMP     0x00000001
+#define UF_IMMUTABLE  0x00000002
+#define UF_APPEND     0x00000004
+#define UF_OPAQUE     0x00000008
+#define UF_COMPRESSED 0x00000020
+#define UF_TRACKED    0x00000040
+#define UF_DATAVAULT  0x00000080
+#define UF_HIDDEN     0x00008000
+#define SF_SUPPORTED  0x009f0000
+#define SF_SETTABLE   0x3fff0000
+#define SF_SYNTHETIC  0xc0000000
+#define SF_ARCHIVED   0x00010000
+#define SF_IMMUTABLE  0x00020000
+#define SF_APPEND     0x00040000
+#define SF_RESTRICTED 0x00080000
+#define SF_NOUNLINK   0x00100000
+#define SF_FIRMLINK   0x00800000
+#define SF_DATALESS   0x40000000
+
+#pragma binding(libc::chflags,  "_chflags")
+#pragma binding(libc::lchflags, "_lchflags")
+#pragma binding(libc::fchflags, "_fchflags")
+int chflags(const char *path, unsigned int flags);
+int lchflags(const char *path, unsigned int flags);
+int fchflags(int fd, unsigned int flags);
+#endif
+#endif
 
 // Mode bits
 #define S_IFMT  0170000
 #define S_IFREG 0100000
 #define S_IFDIR 0040000
-#define S_IFLNK 0120000
 #define S_IFBLK 0060000
 #define S_IFCHR 0020000
 #define S_IFIFO 0010000
+#ifndef _WIN32
+#define S_IFLNK 0120000
 #define S_IFSOCK 0140000
+#endif
 
 #define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)
 #define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)
-#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)
 #define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)
 #define S_ISCHR(m)  (((m) & S_IFMT) == S_IFCHR)
 #define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)
+#ifndef _WIN32
+#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)
 #define S_ISSOCK(m) (((m) & S_IFMT) == S_IFSOCK)
+#endif
 
 #define S_IRUSR 0400
 #define S_IWUSR 0200
@@ -250,9 +350,11 @@ int fstat(int fd, struct stat *buf);
 #define S_IRWXU 0700
 #define S_IRWXG 070
 #define S_IRWXO 07
+#ifndef _WIN32
 #define S_ISUID 04000
 #define S_ISGID 02000
 #define S_ISVTX 01000
+#endif
 // The pre-POSIX spellings of the owner bits, still exported by both C
 // libraries.
 #define S_IREAD  S_IRUSR
@@ -366,27 +468,62 @@ int statfs(const char *path, struct statfs *buf);
 int fstatfs(int fd, struct statfs *buf);
 #endif
 
-#ifdef _WIN32
-// Windows CRT large-file stat. `struct _stati64` carries a 64-bit st_size;
-// msvcrt exposes the ANSI (`_stati64`) and wide (`_wstati64`) forms.
-struct _stati64 {
-    unsigned int   st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short          st_nlink;
-    short          st_uid;
-    short          st_gid;
-    unsigned int   st_rdev;
-    long long      st_size;
-    long long      st_atime;
-    long long      st_mtime;
-    long long      st_ctime;
-};
-#pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::_stati64,  "_stati64")
-#pragma binding(msvcrt::_wstati64, "_wstati64")
-#pragma binding(msvcrt::_fstati64, "_fstati64")
-int _stati64(const char *path, struct _stati64 *buf);
-int _wstati64(const unsigned short *path, struct _stati64 *buf);
-int _fstati64(int fd, struct _stati64 *buf);
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::mknod, "_mknod")
+#pragma binding(libc::mknodat, "_mknodat")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::mknod, "mknod")
+#pragma binding(libc::mknodat, "mknodat")
+#endif
+#include <sys/types.h>
+int mknod(const char *path, mode_t mode, dev_t dev);
+int mknodat(int fd, const char *path, mode_t mode, dev_t dev);
+#endif
+
+// The file-mode and directory-relative functions of <sys/stat.h> (POSIX).
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::chmod,     "_chmod")
+#pragma binding(libc::fchmod,    "_fchmod")
+#pragma binding(libc::fchmodat,  "_fchmodat")
+#pragma binding(libc::fstatat,   "_fstatat")
+#pragma binding(libc::futimens,  "_futimens")
+#pragma binding(libc::mkdir,     "_mkdir")
+#pragma binding(libc::mkdirat,   "_mkdirat")
+#pragma binding(libc::mkfifo,    "_mkfifo")
+#pragma binding(libc::mkfifoat,  "_mkfifoat")
+#pragma binding(libc::umask,     "_umask")
+#pragma binding(libc::utimensat, "_utimensat")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::chmod,     "chmod")
+#pragma binding(libc::fchmod,    "fchmod")
+#pragma binding(libc::fchmodat,  "fchmodat")
+#pragma binding(libc::fstatat,   "fstatat")
+#pragma binding(libc::futimens,  "futimens")
+#pragma binding(libc::mkdir,     "mkdir")
+#pragma binding(libc::mkdirat,   "mkdirat")
+#pragma binding(libc::mkfifo,    "mkfifo")
+#pragma binding(libc::mkfifoat,  "mkfifoat")
+#pragma binding(libc::umask,     "umask")
+#pragma binding(libc::utimensat, "utimensat")
+#endif
+int chmod(const char *path, mode_t mode);
+int fchmod(int fd, mode_t mode);
+int fchmodat(int fd, const char *path, mode_t mode, int flag);
+int fstatat(int fd, const char *restrict path, struct stat *restrict buf, int flag);
+int futimens(int fd, const struct timespec times[2]);
+int mkdir(const char *path, mode_t mode);
+int mkdirat(int fd, const char *path, mode_t mode);
+int mkfifo(const char *path, mode_t mode);
+int mkfifoat(int fd, const char *path, mode_t mode);
+mode_t umask(mode_t cmask);
+int utimensat(int fd, const char *path, const struct timespec times[2], int flag);
 #endif

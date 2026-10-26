@@ -15,7 +15,8 @@ use hashbrown::HashMap;
 
 use super::{
     Elf64Rela, Elf64Sym, MODULE, R_NONE, SHF_EXCLUDE, SHN_XINDEX, SHT_GROUP, SHT_LLVM_ADDRSIG,
-    SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, SHT_SYMTAB_SHNDX,
+    SHT_LLVM_DEPENDENT_LIBRARIES, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB,
+    SHT_SYMTAB_SHNDX,
 };
 
 /// One relocation, as read from a `.rela.<sec>` table.
@@ -233,8 +234,14 @@ pub fn parse_lds_object(source: &str, bytes: Vec<u8>) -> Result<LdsObject, C5Err
             continue;
         }
         match sh.sh_type {
-            SHT_SYMTAB | SHT_STRTAB | SHT_RELA | SHT_REL | SHT_GROUP | SHT_SYMTAB_SHNDX
-            | SHT_LLVM_ADDRSIG => continue,
+            SHT_SYMTAB
+            | SHT_STRTAB
+            | SHT_RELA
+            | SHT_REL
+            | SHT_GROUP
+            | SHT_SYMTAB_SHNDX
+            | SHT_LLVM_ADDRSIG
+            | SHT_LLVM_DEPENDENT_LIBRARIES => continue,
             _ => {}
         }
         // SHF_EXCLUDE keeps a section out of a final link whatever its

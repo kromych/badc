@@ -14,6 +14,11 @@
 // 3 release, 4 acq_rel. A compare-exchange failure order drops the release
 // side (0 for relaxed/release, 2 for acquire/acq_rel).
 //
+// Windows stack probes: `__chkstk` (MSVC, clang) and `___chkstk_ms` (mingw-w64)
+// touch each page of a frame larger than one, the size in rax on x86-64 with
+// rsp and every register but the flags kept; arm64's `__chkstk` takes it in
+// 16-byte units in x15 and may clobber x16 and x17.
+//
 // glibc non-shared wrappers: glibc keeps a few entry points only in the
 // static `libc_nonshared.a` (atexit, at_quick_exit, pthread_atfork), each a
 // thin wrapper over a symbol that IS in the shared `libc.so`. Providing them
@@ -76,6 +81,49 @@ BCRT_CAS_SIZES(rel, 3, 0)
 BCRT_CAS_SIZES(acq_rel, 4, 2)
 
 #endif // __aarch64__
+
+#if defined(_WIN32) && defined(__x86_64__)
+
+__asm__(".text\n"
+        ".globl __chkstk\n"
+        ".globl ___chkstk_ms\n"
+        "__chkstk:\n"
+        "___chkstk_ms:\n"
+        "  pushq %rcx\n"
+        "  pushq %rax\n"
+        "  leaq 24(%rsp), %rcx\n"
+        "  cmpq $0x1000, %rax\n"
+        "  jb 2f\n"
+        "1:\n"
+        "  subq $0x1000, %rcx\n"
+        "  orq $0, (%rcx)\n"
+        "  subq $0x1000, %rax\n"
+        "  cmpq $0x1000, %rax\n"
+        "  ja 1b\n"
+        "2:\n"
+        "  subq %rax, %rcx\n"
+        "  orq $0, (%rcx)\n"
+        "  popq %rax\n"
+        "  popq %rcx\n"
+        "  ret\n");
+
+#endif // _WIN32 && __x86_64__
+
+#if defined(_WIN32) && defined(__aarch64__)
+
+__asm__(".text\n"
+        ".globl __chkstk\n"
+        "__chkstk:\n"
+        "  lsl x16, x15, #4\n"
+        "  mov x17, sp\n"
+        "1:\n"
+        "  sub x17, x17, #4096\n"
+        "  subs x16, x16, #4096\n"
+        "  ldr xzr, [x17]\n"
+        "  b.gt 1b\n"
+        "  ret\n");
+
+#endif // _WIN32 && __aarch64__
 
 #ifdef __linux__
 

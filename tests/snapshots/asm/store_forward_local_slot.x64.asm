@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <forwards>:
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
                	movl	$0x1e, %eax
                	retq
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rcx         # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	$0x7, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
                	jmpq	*%rcx
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	$0x9, -0x8(%rbp)
                	movl	$0xa, %eax
                	movl	%eax, -0x8(%rbp)
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	retq
 
 <cross_block>:
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
                	movl	$0xc, %eax
                	retq

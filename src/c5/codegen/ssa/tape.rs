@@ -43,6 +43,7 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         is_noreturn: _,
         conv: _,
         general_regs_only: _,
+        tls_dynamic: _,
         is_weak: _,
         is_internal: _,
         section: _,

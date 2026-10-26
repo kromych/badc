@@ -63,10 +63,10 @@ class Source:
 SOURCES = [
     Source(
         name="miniz",
-        version="3.1.1",
-        url="https://github.com/richgel999/miniz/releases/download/3.1.1/miniz-3.1.1.zip",
+        version="3.1.2",
+        url="https://github.com/richgel999/miniz/releases/download/3.1.2/miniz-3.1.2.zip",
         ext=".zip",
-        upstream_sha="d10b03cc73475af673df40f06e5cefd1d5f940d9",
+        upstream_sha="77d0dce8627735138c51770d1799a1ef48f2117d",
         sha_kind="git",
     ),
     Source(
@@ -87,10 +87,10 @@ SOURCES = [
     ),
     Source(
         name="sqlite-amalgamation",
-        version="3530000",
-        url="https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip",
+        version="3540100",
+        url="https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip",
         ext=".zip",
-        upstream_sha="4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
+        upstream_sha="555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76",
         sha_kind="fossil",
     ),
     Source(
@@ -99,10 +99,10 @@ SOURCES = [
         # Version uses the commit's author date so the asset name
         # carries enough provenance to retrace a bump.
         name="stb",
-        version="20260415",
-        url="https://github.com/nothings/stb/archive/31c1ad37456438565541f4919958214b6e762fb4.zip",
+        version="20261023",
+        url="https://github.com/nothings/stb/archive/003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5.zip",
         ext=".zip",
-        upstream_sha="31c1ad37456438565541f4919958214b6e762fb4",
+        upstream_sha="003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5",
         sha_kind="git",
     ),
     Source(
@@ -122,10 +122,22 @@ SOURCES = [
         # because the last release tag (release_0_9_27, 2017). Version
         # embeds the commit's author date.
         name="tinycc",
-        version="20260513",
-        url="https://github.com/TinyCC/tinycc/archive/757507eb022f7af4be63dc9a72b299761181efbb.zip",
+        version="20261016",
+        url="https://github.com/TinyCC/tinycc/archive/e23dabed154a8495f3ac1ff3cc9d04fa1c207893.zip",
         ext=".zip",
-        upstream_sha="757507eb022f7af4be63dc9a72b299761181efbb",
+        upstream_sha="e23dabed154a8495f3ac1ff3cc9d04fa1c207893",
+        sha_kind="git",
+    ),
+    Source(
+        # Claude's C Compiler (ccc), a reference leg of the perf table built
+        # by tests/perf/build_ccc.py. No releases; pinned to the `main` head,
+        # author-date version. The asset is the upstream GitHub archive of
+        # the commit.
+        name="claudes-c-compiler",
+        version="20260205",
+        url="https://github.com/anthropics/claudes-c-compiler/archive/6f1b99acb2f4ec2414592136c2009fe7713deec3.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="6f1b99acb2f4ec2414592136c2009fe7713deec3",
         sha_kind="git",
     ),
     Source(
@@ -149,10 +161,10 @@ SOURCES = [
         # itself (github does not expose a stable commit sha for
         # the tag download).
         name="monocypher",
-        version="4.0.2",
-        url="https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.2.tar.gz",
+        version="4.0.3",
+        url="https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.3.tar.gz",
         ext=".tar.gz",
-        upstream_sha="bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4",
+        upstream_sha="a7cbae546fbdc489bca632c3747e1ceb8ca3d4bd39e2706a0916f28ccd280e50",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -183,10 +195,10 @@ SOURCES = [
         # (Lua is published as standalone tarballs, with no public
         # VCS or commit identifier).
         name="lua",
-        version="5.5.0",
-        url="https://www.lua.org/ftp/lua-5.5.0.tar.gz",
+        version="5.5.1",
+        url="https://www.lua.org/ftp/lua-5.5.1.tar.gz",
         ext=".tar.gz",
-        upstream_sha="57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d",
+        upstream_sha="1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -201,27 +213,38 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # raylib 6.0 -- the asset is the upstream GitHub archive of the
+        # 6.0 tag (commit dbc56a87da87d973a9c5baa4e7438a9d20121d28),
+        # pinned by its own sha256.
+        name="raylib",
+        version="6.0",
+        url="https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # Lua 5.5.0 official test suite -- published as a separate
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.
         name="lua-tests",
-        version="5.5.0",
-        url="https://www.lua.org/tests/lua-5.5.0-tests.tar.gz",
+        version="5.5.1",
+        url="https://www.lua.org/tests/lua-5.5.1-tests.tar.gz",
         ext=".tar.gz",
-        upstream_sha="5e47bbfad7db2965d69580e918ee64edeb8d8d32de404b8dae9ce5c6d76a1472",
+        upstream_sha="da07b543872dc0bb2ff12aabd0c248578d78df3eb6b67efdc537a46d455c7f31",
         sha_kind="tarball-sha256",
     ),
     Source(
-        # Tcl 8.6.14 -- the interpreter source distribution from
+        # Tcl 8.6.18 -- the interpreter source distribution from
         # SourceForge. Published as a standalone tarball with no public
         # commit identifier, so it is pinned by the tarball sha256. The
         # distribution carries its own `tests/` directory (the suite the
         # demo runs), so no separate test asset is needed.
         name="tcl",
-        version="8.6.14",
-        url="https://prdownloads.sourceforge.net/tcl/tcl8.6.14-src.tar.gz",
+        version="8.6.18",
+        url="https://prdownloads.sourceforge.net/tcl/tcl8.6.18-src.tar.gz",
         ext=".tar.gz",
-        upstream_sha="5880225babf7954c58d4fb0f5cf6279104ce1cd6aa9b71e9a6322540e1c4de66",
+        upstream_sha="14f9af32b1767ff718477a8f974ad03c34341097e6b43f4ce54644ee974e268e",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -240,10 +263,10 @@ SOURCES = [
         # demos/linux/setup.py. Published as a standalone tarball on
         # cdn.kernel.org, so pinned by the tarball sha256.
         name="linux",
-        version="7.1.10",
-        url="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.10.tar.xz",
+        version="7.2.9",
+        url="https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.9.tar.xz",
         ext=".tar.xz",
-        upstream_sha="67d2f4697a02f3bec98e744b1bdc307e920c24bb4e88b5ee97dc9a34e9aa9999",
+        upstream_sha="b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba",
         sha_kind="tarball-sha256",
     ),
     Source(
@@ -305,20 +328,52 @@ SOURCES = [
         # GNU Screen -- terminal multiplexer. The asset is the upstream
         # release tarball, pinned by its own sha256.
         name="screen",
-        version="5.0.0",
-        url="https://ftp.gnu.org/gnu/screen/screen-5.0.0.tar.gz",
+        version="5.0.2",
+        url="https://ftp.gnu.org/gnu/screen/screen-5.0.2.tar.gz",
         ext=".tar.gz",
-        upstream_sha="f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971",
+        upstream_sha="ca9a2c7e240919bc7ac12124593ae4529bb4eb5f7349d8857829b7e3f0b3b332",
         sha_kind="tarball-sha256",
     ),
     Source(
         # Vim -- the editor. The asset is the upstream GitHub archive of
-        # the v9.1.0800 tag, pinned by its own sha256.
+        # the v9.2.1226 tag, pinned by its own sha256.
         name="vim",
-        version="9.1.0800",
-        url="https://github.com/vim/vim/archive/refs/tags/v9.1.0800.tar.gz",
+        version="9.2.1226",
+        url="https://github.com/vim/vim/archive/refs/tags/v9.2.1226.tar.gz",
         ext=".tar.gz",
-        upstream_sha="3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303",
+        upstream_sha="c23d04422e829ed43beadd2ece18715580184a7340e5ec5abb569cd202a440d0",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # SimpleVisor -- Alex Ionescu's Intel VT-x hypervisor. No
+        # versioned releases; pinned to the master head, author-date
+        # version. The asset is the upstream GitHub archive of the commit.
+        name="simplevisor",
+        version="20181209",
+        url="https://github.com/ionescu007/SimpleVisor/archive/989d33b1bc6569965d7aad3bd50a8d35fa4c359e.zip",
+        ext=".zip",
+        upstream_sha="989d33b1bc6569965d7aad3bd50a8d35fa4c359e",
+        sha_kind="git",
+    ),
+    Source(
+        # Nuklear -- immediate-mode GUI. The asset is the upstream GitHub
+        # archive of commit a7353204d0, four past v4.13.3 (whose
+        # demo/gdi/main.c does not compile), pinned by its own sha256.
+        name="nuklear",
+        version="a7353204d0",
+        url="https://github.com/Immediate-Mode-UI/Nuklear/archive/a7353204d0f76fa38df9e9a2c02247b52c3bc878.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="fc259d261f0a0065bbb0805625ae18c0955a01cf1530646dec5e3334eb6dc8bf",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # OpenSSL -- the release tarball, pinned by the sha256 the release
+        # publishes beside it.
+        name="openssl",
+        version="4.1.0",
+        url="https://github.com/openssl/openssl/releases/download/openssl-4.1.0/openssl-4.1.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd",
         sha_kind="tarball-sha256",
     ),
     # Distribution kernel configurations, one per (distribution, architecture)

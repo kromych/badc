@@ -146,6 +146,7 @@ pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_d
         BinOp::Fadd
             | BinOp::Fsub
             | BinOp::Fmul
+            | BinOp::FmulContractible
             | BinOp::Fdiv
             | BinOp::Feq
             | BinOp::Fne

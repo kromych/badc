@@ -52,6 +52,10 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // linux-x64 only. Snapshotted via its `// snapshot-flags:`
     // directive; the relocation shape is locked by linker tests.
     "kernel_model_extern_data.c",
+    // <sys/syslimits.h> and <xlocale.h> are the macOS SDK's; glibc ships
+    // neither, so the include fails with B1010 on both swept targets.
+    "syslimits_path_max.c",
+    "xlocale_extended_functions_take_a_locale.c",
 ];
 
 /// Each calls a declared-but-undefined function from a statically dead
@@ -83,9 +87,10 @@ const DEAD_BRANCH_NEEDS_OPTIMIZE: &[&str] = &[
     "scoped_state_loop_dead_arm.c",
 ];
 
-/// Fixtures whose body carries inline asm specific to one ISA. The
-/// paired target lacks the instruction and rejects the compile by
-/// design; the native target still compiles and is checked. (TODO:
+/// Fixtures whose body carries inline asm specific to one ISA, or
+/// includes a header only that ISA's compiler installs. The paired
+/// target lacks the instruction or the header and rejects the compile
+/// by design; the native target still compiles and is checked. (TODO:
 /// lower these recognized asm intrinsics on the foreign target so the
 /// fixtures compile everywhere.)
 const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
@@ -169,6 +174,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_patch_site.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
     ("inline_asm_x64_m_global_call.c", "linux-aarch64"), // x86-64 indirect call through an "m" operand
     ("inline_asm_a64_trap_site_labels.c", "linux-x64"),  // aarch64 brk trap-table entry
+    ("get_cpuid_leaf_checks.c", "linux-aarch64"),        // gcc's x86 <cpuid.h>, absent on aarch64
 ];
 
 /// Targets the sweep below builds every fixture for. Also the set the
@@ -522,6 +528,9 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
+    // Stores to the C library's getopt state, a data import, which only the
+    // object-then-link path writes correctly on ELF.
+    ("getopt_long_permutes_operands.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot
@@ -601,6 +610,64 @@ fn linked_image_fixtures_run_on_the_native_target() {
 // Compiling `sub/main.c` from the parent directory must still find
 // `sub/helper.h`; a CWD-relative-only search would miss it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+/// `-fsyntax-only` as gcc 16 runs it: each unit through the front end (an
+/// assembler unit through the assembler) with its diagnostics and status,
+/// no output written whatever `-o` or `-c` asks for, and `-E` taking
+/// precedence.
+#[test]
+fn syntax_only_checks_units_and_writes_nothing() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-syntax-only");
+    for (name, body) in [
+        ("ok.c", "int main(void) { return 0; }\n"),
+        ("bad.c", "int main(void) { return x; }\n"),
+        ("warn.c", "int main(void) { int unused; return 0; }\n"),
+        ("good.s", "\t.text\n\tnop\n"),
+        ("bad.s", "garbage instruction here\n"),
+    ] {
+        std::fs::write(dir.join(name), body).expect("write unit");
+    }
+    let run = |args: &[&str]| {
+        Command::new(badc)
+            .arg("-fsyntax-only")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    for args in [
+        &["ok.c"][..],
+        &["-o", "out.o", "ok.c"],
+        &["-c", "ok.c"],
+        &["good.s"],
+    ] {
+        let out = run(args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for written in ["out.o", "ok.o", "a.out", "good.o"] {
+        assert!(!dir.join(written).exists(), "{written} written");
+    }
+    for (args, needle) in [
+        (&["bad.c"][..], "undefined variable x"),
+        (&["-Wall", "-Werror", "warn.c"], "unused variable"),
+        (&["ok.c", "bad.c"], "undefined variable x"),
+        (&["bad.s"], "garbage instruction here"),
+    ] {
+        let out = run(args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(needle),
+            "{args:?}: {err}"
+        );
+    }
+    let out = run(&["-E", "ok.c"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("int main(void)"));
+}
+
 #[test]
 fn quoted_include_resolves_relative_to_including_file() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -710,72 +777,234 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
     }
 }
 
+// A 16-byte read-modify-write is atomic under contention: four threads
+// adding to one `unsigned __int128` whose sum carries into the high half
+// lose no update, at -O0 and -O.
+#[cfg(unix)]
+#[test]
+fn int128_atomics_hold_under_contention() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-atomic128");
+    let src = dir.join("a.c");
+    std::fs::write(
+        &src,
+        "#include <pthread.h>\ntypedef unsigned __int128 u128;\n\
+         static u128 counter = ((u128)1 << 64) - 100000;\n\
+         static void *work(void *arg) {\n\
+           (void)arg;\n\
+           for (int i = 0; i < 100000; i++) __atomic_fetch_add(&counter, 1, __ATOMIC_SEQ_CST);\n\
+           return 0;\n\
+         }\n\
+         int main(void) {\n\
+           pthread_t t[4];\n\
+           for (int i = 0; i < 4; i++) pthread_create(&t[i], 0, work, 0);\n\
+           for (int i = 0; i < 4; i++) pthread_join(t[i], 0);\n\
+           return counter == ((u128)1 << 64) + 300000 ? 0 : 1;\n\
+         }\n",
+    )
+    .expect("write a.c");
+    let exe = dir.join("a");
+    for level in ["-O0", "-O"] {
+        let out = Command::new(badc)
+            .args(["-q", level])
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{level}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{level}: an update was lost");
+    }
+}
+
+// `-E` output keeps the builtins as calls, as gcc's does, and the `.i`
+// unit takes them. `__builtin_nan` of an operand other than a literal
+// spelling a number calls `nan` (C99 7.12.11.2), which the bundled
+// <math.h> binds on every target; the payload is the library's, which
+// the Universal CRT ignores. The exit status has bit 0 for a wrong
+// runtime NaN and bit 1 for a wrong literal one.
+#[test]
+fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-builtin-nan");
+    let src = dir.join("n.c");
+    std::fs::write(
+        &src,
+        "#include <math.h>\n\
+         #ifdef _WIN32\n#define LIBRARY_PAYLOAD 0\n#else\n#define LIBRARY_PAYLOAD 0x10\n#endif\n\
+         static unsigned long long bits(double d) {\n\
+           union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
+         int main(int argc, char **argv) {\n\
+           const char *s = __builtin_expect(argc > 5, 0) ? argv[0] : \"0x10\";\n\
+           unsigned long long lib = LIBRARY_PAYLOAD;\n\
+           return (bits(__builtin_nan(s)) != (0x7ff8000000000000ull | lib))\n\
+             | (bits(__builtin_nan(\"0x10\")) != 0x7ff8000000000010ull) << 1;\n\
+         }\n",
+    )
+    .expect("write n.c");
+    let unit = dir.join("n.i");
+    let out = Command::new(badc)
+        .args(["-q", "-E"])
+        .arg(&src)
+        .arg("-o")
+        .arg(&unit)
+        .output()
+        .expect("run badc -E");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = std::fs::read_to_string(&unit).expect("read n.i");
+    assert!(text.contains("__builtin_nan(s)"), "{text}");
+    let exe = dir.join(format!("n{}", std::env::consts::EXE_SUFFIX));
+    for level in ["-O0", "-O"] {
+        let out = Command::new(badc)
+            .args(["-q", level])
+            .arg(&unit)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{level}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{level}");
+    }
+}
+
+// `-ffp-contract=` selects where `-O` contracts a product with the add or
+// subtract using it (C99 6.5p8): `on`, the default, within one
+// expression; `fast` across statements too; `off` nowhere. With a = 1 +
+// 2^-30 and c = 1 + 2^-29, a*a - c is 2^-60 contracted and 0 otherwise;
+// the exit status has bit 0 for the one-expression form contracted and
+// bit 1 for the form across a declaration.
+#[test]
+fn fp_contract_selects_where_products_contract() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-fp-contract");
+    let src = dir.join("c.c");
+    std::fs::write(
+        &src,
+        "volatile double va = 1.0 + 0x1p-30, vc = 1.0 + 0x1p-29;\n\
+         double within(double a, double c) { return a * a - c; }\n\
+         double across(double a, double c) { double p = a * a; return p - c; }\n\
+         int main(void) { return (within(va, vc) != 0) | (across(va, vc) != 0) << 1; }\n",
+    )
+    .expect("write c.c");
+    let exe = dir.join(format!("c{}", std::env::consts::EXE_SUFFIX));
+    for (args, want) in [
+        (&["-O0"][..], 0),
+        (&["-O"][..], 1),
+        (&["-O", "-ffp-contract=on"][..], 1),
+        (&["-O", "-ffp-contract=fast"][..], 3),
+        (&["-O", "-ffp-contract=off"][..], 0),
+    ] {
+        let out = Command::new(badc)
+            .args(args)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(want), "{args:?}");
+    }
+    let out = Command::new(badc)
+        .args(["-ffp-contract=always", "-c"])
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success()
+            && String::from_utf8_lossy(&out.stderr).contains("unsupported argument `always`"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // A callee marked `always_inline` / `__forceinline` that the inliner
 // cannot substitute (here: a variadic body) draws a diagnostic naming
 // the function and the reason, so a silently-unhonored mandatory inline
-// request is visible. A body the inliner can substitute stays silent.
+// request is visible, at every level. A body the inliner can substitute
+// stays silent.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn always_inline_not_honored_warns() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let dir = TempDir::new("badc-ai");
 
-    let compile = |src: &std::path::Path, obj: &str| {
-        Command::new(badc)
-            .arg("--target=linux-x64")
-            .arg("-O")
-            .arg("-c")
-            .arg(src)
-            .arg("-o")
-            .arg(dir.join(obj))
-            .output()
-            .expect("run badc")
-    };
+    for level in ["-O", "-O0"] {
+        let compile = |src: &std::path::Path, obj: &str| {
+            Command::new(badc)
+                .arg("--target=linux-x64")
+                .arg(level)
+                .arg("-c")
+                .arg(src)
+                .arg("-o")
+                .arg(dir.join(obj))
+                .output()
+                .expect("run badc")
+        };
 
-    // Variadic always_inline: the inliner rejects it, so the request is
-    // unhonored and must warn.
-    let va = dir.join("va.c");
-    std::fs::write(
-        &va,
-        "#include <stdarg.h>\n\
+        // Variadic always_inline: the inliner rejects it, so the request is
+        // unhonored and must warn.
+        let va = dir.join("va.c");
+        std::fs::write(
+            &va,
+            "#include <stdarg.h>\n\
          static inline __attribute__((always_inline)) int s(int n, ...) {\n\
          \tva_list ap; va_start(ap, n); int t = 0;\n\
          \tfor (int i = 0; i < n; i++) t += va_arg(ap, int);\n\
          \tva_end(ap); return t; }\n\
          int main(void) { return s(2, 3, 4); }\n",
-    )
-    .expect("write va.c");
-    let out = compile(&va, "va.o");
-    assert!(
-        out.status.success(),
-        "compile failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("always_inline") && stderr.contains("`s`"),
-        "expected an always_inline diagnostic naming `s`, got: {stderr}"
-    );
+        )
+        .expect("write va.c");
+        let out = compile(&va, "va.o");
+        assert!(
+            out.status.success(),
+            "compile failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("always_inline") && stderr.contains("`s`"),
+            "expected an always_inline diagnostic naming `s`, got: {stderr}"
+        );
 
-    // A body the inliner can substitute draws no warning.
-    let ok = dir.join("ok.c");
-    std::fs::write(
-        &ok,
-        "static inline __attribute__((always_inline)) int a(int x, int y) { return x + y; }\n\
+        // A body the inliner can substitute draws no warning.
+        let ok = dir.join("ok.c");
+        std::fs::write(
+            &ok,
+            "static inline __attribute__((always_inline)) int a(int x, int y) { return x + y; }\n\
          int main(void) { return a(2, 3); }\n",
-    )
-    .expect("write ok.c");
-    let out2 = compile(&ok, "ok.o");
-    assert!(
-        out2.status.success(),
-        "compile failed: {}",
-        String::from_utf8_lossy(&out2.stderr)
-    );
-    assert!(
-        !String::from_utf8_lossy(&out2.stderr).contains("always_inline"),
-        "inlinable always_inline should be silent, got: {}",
-        String::from_utf8_lossy(&out2.stderr)
-    );
+        )
+        .expect("write ok.c");
+        let out2 = compile(&ok, "ok.o");
+        assert!(
+            out2.status.success(),
+            "compile failed: {}",
+            String::from_utf8_lossy(&out2.stderr)
+        );
+        assert!(
+            !String::from_utf8_lossy(&out2.stderr).contains("always_inline"),
+            "inlinable always_inline should be silent, got: {}",
+            String::from_utf8_lossy(&out2.stderr)
+        );
+    }
 }
 
 // The optimizer has a single level; every `-O<n>` form selects it and
@@ -1057,6 +1286,41 @@ fn interp_exits_with_the_program_status() {
     assert_eq!(interp.status.code(), Some(3));
     assert_eq!(String::from_utf8_lossy(&interp.stdout), "partial");
     assert_eq!(run("--jit").status.code(), Some(3));
+}
+
+// The address constants a function designator builds keep their offsets in
+// the image `-o` writes, under `--jit` and under `--interp`.
+#[test]
+fn function_designator_address_constants_keep_their_offsets() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("function_designator_address_constants.c");
+    let dir = TempDir::new("badc-fn-address-constants");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("p{opt}{}", std::env::consts::EXE_SUFFIX));
+        let out = Command::new(badc)
+            .arg(opt)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "-o {opt}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run image");
+        assert_eq!(run.status.code(), Some(0), "-o {opt}");
+        for mode in ["--jit", "--interp"] {
+            let out = Command::new(badc)
+                .arg(mode)
+                .arg(opt)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert_eq!(out.status.code(), Some(0), "{mode} {opt}");
+        }
+    }
 }
 
 // `--jit` exits with the status a program passes to `exit` from a nested

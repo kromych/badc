@@ -158,6 +158,8 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".set"
             | ".equ"
             | ".equiv"
+            | ".comm"
+            | ".lcomm"
     )
 }
 
@@ -174,7 +176,8 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".type")
         || text.contains(".size")
         || text.contains(".set")
-        || text.contains(".equ"))
+        || text.contains(".equ")
+        || text.contains("comm"))
     {
         return false;
     }
@@ -261,6 +264,9 @@ fn extract_asm_sections_impl(
         alloc::vec::Vec::new();
     // Arms of an open deferred conditional; `None` outside one.
     let mut cond_arms: Option<alloc::vec::Vec<AsmCondArm>> = None;
+    // The names `.local` declared so far, which make a later `.comm` local.
+    let mut locals: alloc::collections::BTreeSet<alloc::string::String> =
+        alloc::collections::BTreeSet::new();
     for piece in split_asm_statements(text) {
         let piece = piece.trim();
         if piece.is_empty() {
@@ -382,6 +388,60 @@ fn extract_asm_sections_impl(
         }
         if matches!(tok, ".rept" | ".rep") && now.is_some() {
             rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()));
+            continue;
+        }
+        if tok == ".local" {
+            locals.extend(
+                rest.split(',')
+                    .map(|n| alloc::string::String::from(n.trim())),
+            );
+        }
+        // gas: a common symbol in any section; a local one goes in `.bss`.
+        if matches!(tok, ".comm" | ".lcomm") {
+            let (name, size, align) = parse_common_args(tok, rest)?;
+            let local = tok == ".lcomm" || locals.contains(name);
+            let align = align.unwrap_or(match (tok, size) {
+                (".lcomm", 0) => 1,
+                (".lcomm", s) => (1u64 << s.ilog2()).min(8),
+                _ if local => 1,
+                (_, s) => s.max(1).next_power_of_two().min(16),
+            });
+            if local {
+                let idx = match blocks
+                    .iter()
+                    .position(|b| b.name == ".bss" && b.subsection == 0)
+                {
+                    Some(i) => i,
+                    None => {
+                        blocks.push(parse_section_args(".bss")?);
+                        blocks.len() - 1
+                    }
+                };
+                for (t, r) in [
+                    (".balign", alloc::format!("{align}")),
+                    (".type", alloc::format!("{name}, @object")),
+                    (".size", alloc::format!("{name}, {size}")),
+                ] {
+                    blocks[idx]
+                        .items
+                        .push(parse_section_item(t, &r, is_aarch64)?);
+                }
+                blocks[idx]
+                    .items
+                    .push(AsmSectionItem::Label(alloc::string::String::from(name)));
+                let fill = parse_section_item(".zero", &alloc::format!("{size}"), is_aarch64)?;
+                blocks[idx].items.push(fill);
+            } else {
+                let item = AsmSectionItem::Common {
+                    name: alloc::string::String::from(name),
+                    size,
+                    align,
+                };
+                match now {
+                    Some(idx) => blocks[idx].items.push(item),
+                    None => sym_items.push(item),
+                }
+            }
             continue;
         }
         match tok {
@@ -510,16 +570,46 @@ fn extract_asm_sections_impl(
     }))
 }
 
+/// `.comm` / `.lcomm name, size[, align]` as gas reads them on ELF. TODO:
+/// Mach-O's `as` reads the alignment as a power of two.
+fn parse_common_args<'a>(
+    tok: &str,
+    rest: &'a str,
+) -> Result<(&'a str, u64, Option<u64>), alloc::string::String> {
+    let bad = || alloc::format!("inline asm: `{tok} {rest}` is not `name, size[, align]`");
+    let args = split_top_commas(rest);
+    let (name, size) = match args.as_slice() {
+        [n, s] | [n, s, _] => (n.trim(), *s),
+        _ => return Err(bad()),
+    };
+    let size = eval_const_expr(size).filter(|v| *v >= 0).ok_or_else(bad)? as u64;
+    if !is_asm_symbol_name(name) {
+        return Err(bad());
+    }
+    let align = match args.get(2) {
+        Some(a) => Some(
+            eval_const_expr(a)
+                .filter(|v| *v > 0 && (*v as u64).is_power_of_two())
+                .ok_or_else(|| {
+                    alloc::format!("inline asm: `{tok}` alignment `{a}` is not a power of two")
+                })? as u64,
+        ),
+        None => None,
+    };
+    Ok((name, size, align))
+}
+
 /// Whether a directive selects the x86 encoding mode.
 fn is_code_mode_directive(tok: &str) -> bool {
     matches!(tok, ".code16" | ".code32" | ".code64")
 }
 
 /// Parse the argument list of `.pushsection` / `.section`:
-/// `name[,"flags"[,@type][,entsize][,link]]`. The entry size follows when
-/// the flags hold `M` and the ordering section when they hold `o`, in that
-/// order, as GNU as reads them; `M` without an entry size is dropped, as
-/// GNU as drops it.
+/// `name[,"flags"[,@type][,entsize][,link][,group[,comdat]]]`. The entry
+/// size follows when the flags hold `M`, the ordering section when they
+/// hold `o` and the group name when they hold `G`, in that order, as GNU as
+/// reads them; `M` without an entry size and `G` without a group name are
+/// dropped, as GNU as drops them.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
     let bad = |p: &str| alloc::format!("inline asm: bad section argument `{p}`");
     fn unquote(p: &str) -> Option<&str> {
@@ -558,6 +648,21 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     } else {
         None
     };
+    // GNU as makes a `.gnu.linkonce` group without a linkage a COMDAT one.
+    let mut group = None;
+    if flags.contains('G') {
+        match parts.next().map(|g| unquote(g).unwrap_or(g)) {
+            Some(g) if !g.is_empty() => {
+                let comdat = parts.next_if(|p| *p == "comdat").is_some()
+                    || name.starts_with(".gnu.linkonce");
+                group = Some(AsmSectionGroup {
+                    name: alloc::string::String::from(g),
+                    comdat,
+                });
+            }
+            _ => flags.retain(|c| c != 'G'),
+        }
+    }
     if let Some(p) = parts.next() {
         return Err(bad(p));
     }
@@ -570,6 +675,7 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         sh_type,
         entsize,
         link,
+        group,
         subsection: 0,
         items: alloc::vec::Vec::new(),
     })
@@ -1126,6 +1232,7 @@ pub(crate) fn parse_type_directive(rest: &str) -> Result<AsmSectionItem, alloc::
     let sym_type = match word {
         "function" | "STT_FUNC" => AsmSymType::Func,
         "object" | "STT_OBJECT" => AsmSymType::Object,
+        "gnu_unique_object" => AsmSymType::GnuUniqueObject,
         "notype" | "STT_NOTYPE" => AsmSymType::NoType,
         _ => return Err(alloc::format!("inline asm: unsupported `.type` `{ty}`")),
     };
@@ -1302,6 +1409,11 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
 pub(crate) fn parse_section_value(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
     if let Some(v) = eval_const_expr_wide(a) {
         return Ok(AsmSectionValue::Const(v));
+    }
+    if let Some((bare, op)) = split_reloc_op(a) {
+        let (name, addend) = asm_expr_sym_addend(&bare)
+            .ok_or_else(|| alloc::format!("inline asm: bad section value `{a}`"))?;
+        return Ok(AsmSectionValue::RelocOp { name, addend, op });
     }
     // A fully-enclosing parenthesis group is grouping only; strip it so
     // `((insn) - .)` (the aarch64 exception table) reduces like `(insn) - .`

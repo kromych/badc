@@ -2,19 +2,25 @@
 
 use crate::c5::linker::dynamic::{self, DynSym, VerDef};
 use crate::c5::linker::lds::glob_match;
-use crate::c5::object::elf_reloc_types as rt;
+use crate::c5::linker::object::DynamicImage;
+use crate::c5::object::elf_reloc_types::{self as rt, GOT_BASE_SYMBOL as GOT_SYMBOL};
 use crate::c5::object::relr::encode_relr;
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::got::{PLT_ENTRY_SIZE, index_map};
+use super::got::GotKey;
+use super::plt::{GOTPLT_RESERVED, PLT_ENTRY_SIZE, plt_header_size};
+use super::preempt::Reach;
+use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
-    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STT_NOTYPE, STT_OBJECT, STV_DEFAULT,
-    SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_HASH, SYNTH_PLT,
-    SYNTH_REL, SYNTH_RELA, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
-    machine_uses_rela,
+    SHN_UNDEF, SHT_PREINIT_ARRAY, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FUNC,
+    STT_NOTYPE, STT_OBJECT, STT_TLS, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC,
+    SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH, SYNTH_PLT,
+    SYNTH_REL, SYNTH_RELA, SYNTH_RELAPLT, SYNTH_RELPLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM,
+    ScriptSym, SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -58,10 +64,19 @@ impl<'a> LdsLinker<'a> {
         self.dyn_reloc_kind().0
     }
 
+    /// The PLT's relocation table, of the dynamic table's type.
+    pub(super) fn plt_reloc_name(&self) -> &'static str {
+        if machine_uses_rela(self.machine) {
+            SYNTH_RELAPLT
+        } else {
+            SYNTH_RELPLT
+        }
+    }
+
     /// Relocation types the dynamic tables are built from: the
     /// address-width absolute form the input uses, and the load-time
     /// forms bfd rewrites it to.
-    fn dyn_reloc_types(&self) -> (u32, u32, u32) {
+    pub(super) fn dyn_reloc_types(&self) -> (u32, u32, u32) {
         match self.machine {
             EM_AARCH64 => (
                 rt::R_AARCH64_ABS64,
@@ -77,38 +92,45 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Compute the ET_DYN dynamic-relocation payload (RELA + RELR) and
-    /// GOT slots from the previous pass's layout, updating the
-    /// synthetic input sections' sizes for this pass.
+    /// Compute the dynamic-relocation payload (RELA + RELR) and GOT
+    /// slots from the previous pass's layout, updating the synthetic
+    /// input sections' sizes for this pass. A position-dependent image
+    /// takes no RELATIVE entry.
     pub(super) fn size_dynamic_sections(&mut self) {
-        if self.opts.emit != LdsEmit::Dyn {
+        if !self.dynamic() {
+            self.size_static_got();
             return;
         }
+        let pic = self.opts.emit == LdsEmit::Dyn;
         self.dyn_relas.clear();
         self.relr_addrs.clear();
         // GOT slot set stays stable across passes (driven by reloc
         // types alone), so compute it once.
         if self.got_slots.is_empty() && self.got_map.is_empty() {
-            // Every import loads through a slot the loader fills, so
-            // each takes one whether or not an input names the GOT.
-            let mut slots: Vec<String> = self.imports.clone();
-            let mut map: HashMap<String, usize> = index_map(&slots);
+            // A slot is taken by a reference through the GOT alone, as
+            // GNU ld allocates them: to an import, to a preemptible
+            // definition, or one no relaxation removes. A call reaches
+            // its target through the PLT's own slot.
+            let mut slots: Vec<GotKey> = Vec::new();
+            let mut map: HashMap<GotKey, usize> = HashMap::new();
             for i in 0..self.insecs.len() {
                 let SecFate::Placed { .. } = self.fates[i] else {
                     continue;
                 };
                 let id = self.insecs[i];
                 for r in &self.objects[id.obj].sections[id.sec].relocs {
-                    if matches!(
-                        r.rtype,
-                        rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
-                    ) {
-                        let name = self.objects[id.obj].symbols[r.sym as usize].name.clone();
-                        if name.is_empty() {
+                    if self.got_slot_ref(id.obj, id.sec, r)
+                        || self.imported_through_got(id.obj, r)
+                        || matches!(
+                            self.reach_at(id.obj, id.sec, r),
+                            Reach::Got | Reach::NotedPair
+                        )
+                    {
+                        let Some(key) = self.got_key(id.obj, r.sym) else {
                             continue;
-                        }
-                        map.entry(name.clone()).or_insert_with(|| {
-                            slots.push(name);
+                        };
+                        map.entry(key.clone()).or_insert_with(|| {
+                            slots.push(key);
                             slots.len() - 1
                         });
                     }
@@ -140,6 +162,16 @@ impl<'a> LdsLinker<'a> {
             let base = self.outs[out].addr + p.off;
             let packable = self.objects[id.obj].sections[id.sec].addralign > 1;
             for r in &self.objects[id.obj].sections[id.sec].relocs {
+                // The loader fills a field naming a preemptible definition.
+                if self.reach_at(id.obj, id.sec, r) == Reach::Dynamic {
+                    sym_relas.push(DynReloc {
+                        offset: base + r.offset,
+                        rtype: r.rtype,
+                        addend: r.addend,
+                        sym: Some(self.objects[id.obj].symbols[r.sym as usize].name.clone()),
+                    });
+                    continue;
+                }
                 if r.rtype != abs_addr {
                     continue;
                 }
@@ -149,13 +181,21 @@ impl<'a> LdsLinker<'a> {
                 // keeps a symbol-based entry, as bfd leaves its
                 // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
-                    if self.undefweak_dynamic(id.obj, r.sym as usize) {
-                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                    let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                    // A position-dependent executable's word naming an
+                    // undefined weak import holds 0, as bfd writes it.
+                    let pde_weak =
+                        self.opts.emit == LdsEmit::Exec && self.undefined_weak_import(name);
+                    if self.import_of.contains_key(name)
+                        && !self.word_binds_canonical(name)
+                        && !self.word_binds_copy(name)
+                        && !pde_weak
+                    {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
                             rtype: abs_addr,
                             addend: r.addend,
-                            sym: self.dynsym_index(name),
+                            sym: Some(name.clone()),
                         });
                     }
                     continue;
@@ -169,23 +209,43 @@ impl<'a> LdsLinker<'a> {
                 ));
             }
         }
-        // GOT slots are RELATIVE targets too; a slot for an unresolved
-        // weak reference gets GLOB_DAT instead.
+        // GOT slots are RELATIVE targets too; a slot for an import, a
+        // preemptible definition or an unresolved weak reference gets
+        // GLOB_DAT instead.
         let slot_size = self.class.addr_size();
         if let Some(got_base) = self.got_slot_base() {
-            for (k, name) in self.got_slots.clone().iter().enumerate() {
+            for (k, key) in self.got_slots.iter().enumerate() {
                 let slot = got_base + k as u64 * slot_size;
-                if let Some(v) = self.resolve_name(name) {
-                    rel_addrs.push((slot, v as i64, true));
-                } else {
-                    sym_relas.push(DynReloc {
+                match (self.slot_value(key), key) {
+                    (Some(v), _) if self.slot_holds_load_address(key) => {
+                        rel_addrs.push((slot, v as i64, true))
+                    }
+                    // The slot holds a number the load base leaves alone.
+                    (Some(_), _) => {}
+                    (None, GotKey::Global(name)) => sym_relas.push(DynReloc {
                         offset: slot,
                         rtype: glob_dat,
                         addend: 0,
-                        sym: self.dynsym_index(name),
-                    });
+                        sym: Some(name.clone()),
+                    }),
+                    // A local in a discarded section: the slot stays zero.
+                    (None, GotKey::Local(..)) => {}
                 }
             }
+        }
+        // The loader fills each copy from the library's object.
+        for c in &self.copies {
+            if let Some(at) = self.copy_addr(&c.name) {
+                sym_relas.push(DynReloc {
+                    offset: at,
+                    rtype: self.copy_reloc_type(),
+                    addend: 0,
+                    sym: Some(c.name.clone()),
+                });
+            }
+        }
+        if !pic {
+            rel_addrs.clear();
         }
         rel_addrs.sort_by_key(|&(a, _, _)| a);
         let mut relas: Vec<DynReloc> = Vec::new();
@@ -198,7 +258,7 @@ impl<'a> LdsLinker<'a> {
                     offset: addr,
                     rtype: relative,
                     addend,
-                    sym: 0,
+                    sym: None,
                 });
             }
         }
@@ -211,7 +271,11 @@ impl<'a> LdsLinker<'a> {
         let nones = match self.dyn_nones {
             Some(n) => n,
             None => {
-                let n = self.count_reserved_none_slots();
+                let n = if pic {
+                    self.count_reserved_none_slots()
+                } else {
+                    0
+                };
                 self.dyn_nones = Some(n);
                 n
             }
@@ -226,7 +290,14 @@ impl<'a> LdsLinker<'a> {
         let got_header = self.got_reserved() != 0
             && (!self.got_slots.is_empty() || self.kept_synth(SYNTH_DYNAMIC).is_some());
         let (rela_name, _, rela_ent) = self.dyn_reloc_kind();
+        let plt_rel_name = self.plt_reloc_name();
         let slot = self.class.addr_size();
+        let called = self.plt_syms.len() as u64;
+        let plt = if called == 0 {
+            0
+        } else {
+            plt_header_size(self.machine) + called * PLT_ENTRY_SIZE
+        };
         let synth = self.synth_obj;
         for sec in &mut self.objects[synth].sections {
             if let Some(&size) = dyn_sizes.get(sec.name.as_str()) {
@@ -237,13 +308,71 @@ impl<'a> LdsLinker<'a> {
                 sec.size = (nones + self.dyn_relas.len() as u64) * rela_ent;
                 continue;
             }
+            if sec.name == plt_rel_name {
+                sec.size = called * rela_ent;
+                continue;
+            }
             match sec.name.as_str() {
                 SYNTH_RELR => sec.size = relr_words.len() as u64 * slot,
                 SYNTH_GOT => {
                     let header = if got_header { slot } else { 0 };
                     sec.size = header + self.got_slots.len() as u64 * slot;
                 }
-                SYNTH_PLT => sec.size = self.plt_syms.len() as u64 * PLT_ENTRY_SIZE,
+                SYNTH_GOTPLT => sec.size = (GOTPLT_RESERVED + called) * slot,
+                SYNTH_PLT => sec.size = plt,
+                _ => {}
+            }
+        }
+    }
+
+    /// A static image's GOT, as GNU ld lays it out: after the header it
+    /// reserves, a slot per symbol a GOT reference that keeps one names,
+    /// which the link fills with the symbol's address. On x86 bfd drops
+    /// `.got.plt` from an image with no slot and no stub that does not
+    /// name `_GLOBAL_OFFSET_TABLE_`.
+    fn size_static_got(&mut self) {
+        if self.got_slots.is_empty() {
+            let mut slots: Vec<GotKey> = Vec::new();
+            let mut map: HashMap<GotKey, usize> = HashMap::new();
+            for i in 0..self.insecs.len() {
+                let SecFate::Placed { .. } = self.fates[i] else {
+                    continue;
+                };
+                let id = self.insecs[i];
+                for r in &self.objects[id.obj].sections[id.sec].relocs {
+                    if !self.got_slot_ref(id.obj, id.sec, r) {
+                        continue;
+                    }
+                    if let Some(key) = self.got_key(id.obj, r.sym)
+                        && !map.contains_key(&key)
+                    {
+                        map.insert(key.clone(), slots.len());
+                        slots.push(key);
+                    }
+                }
+            }
+            self.got_slots = slots;
+            self.got_map = map;
+        }
+        let slot = self.class.addr_size();
+        // bfd reserves the header for a slot or a reference to the GOT base.
+        let reserve = !self.got_slots.is_empty() || self.referenced.contains(GOT_SYMBOL);
+        let header = if self.got_reserved() != 0 && reserve {
+            slot
+        } else {
+            0
+        };
+        let size = header + self.got_slots.len() as u64 * slot;
+        let got_plt = if !self.got_on_got_plt() || reserve || !self.plt_syms.is_empty() {
+            3 * slot
+        } else {
+            0
+        };
+        let synth = self.synth_obj;
+        for sec in &mut self.objects[synth].sections {
+            match sec.name.as_str() {
+                SYNTH_GOT => sec.size = size,
+                SYNTH_GOTPLT => sec.size = got_plt,
                 _ => {}
             }
         }
@@ -282,7 +411,7 @@ impl<'a> LdsLinker<'a> {
     /// The version index the script assigns `name`, or `None` when the
     /// script makes it local. Exact patterns are consulted before
     /// wildcards, as bfd matches them.
-    fn version_of(&self, name: &str) -> Option<u16> {
+    pub(super) fn version_of(&self, name: &str) -> Option<u16> {
         let nodes = self.script.versions().unwrap_or(&[]);
         if nodes.is_empty() {
             return Some(dynamic::VER_NDX_GLOBAL);
@@ -312,24 +441,56 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Defined symbols a loader may resolve against, as bfd selects
-    /// them: global or weak, not hidden, and kept by the version
-    /// script. Each version definition also contributes a symbol
-    /// naming itself.
+    /// them: global or weak, neither hidden nor internal by any input's
+    /// entry, and kept by the version script. A protected one carries
+    /// its visibility. Each version definition also contributes a
+    /// symbol naming itself.
+    /// The symbol table row of the import `name`: undefined with the
+    /// type the library gives it, defined at its copy where the image
+    /// holds one, and valued at its PLT entry where that is its address.
+    pub(super) fn import_row(&self, name: &str, out_shndx: &dyn Fn(usize) -> u16) -> DynSym {
+        let bind = if self.weak_imports.contains(name) {
+            STB_WEAK
+        } else {
+            STB_GLOBAL
+        };
+        let lib = |pick: fn(&DynamicImage) -> &BTreeSet<String>| {
+            (self.opts.shared_libs.iter()).any(|l| pick(&l.lib).contains(name))
+        };
+        let kind = if lib(|l| &l.function_exports) {
+            STT_FUNC
+        } else if lib(|l| &l.data_exports) {
+            STT_OBJECT
+        } else if lib(|l| &l.tls_exports) {
+            STT_TLS
+        } else {
+            STT_NOTYPE
+        };
+        let mut sym = DynSym {
+            name: String::from(name),
+            info: (bind << 4) | kind,
+            other: STV_DEFAULT,
+            shndx: SHN_UNDEF,
+            value: 0,
+            size: 0,
+            version: dynamic::VER_NDX_GLOBAL,
+        };
+        if let (Some(at), Some(o)) = (self.copy_addr(name), self.copy_out(name)) {
+            let size = self.copies[self.copy_of[name]].size;
+            (sym.info, sym.shndx, sym.value, sym.size) =
+                ((bind << 4) | STT_OBJECT, out_shndx(o), at, size);
+        } else if self.canonical.contains(name) {
+            sym.value = self.stub_or_slot(name, Reach::Plt).unwrap_or(0);
+        }
+        sym
+    }
+
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
-        // Imports come first and in their own order: a dynamic
-        // relocation names one by the index that ordering fixes.
-        let mut out: Vec<DynSym> = self
-            .imports
-            .iter()
-            .map(|name| DynSym {
-                name: name.clone(),
-                info: (STB_GLOBAL << 4) | STT_NOTYPE,
-                other: STV_DEFAULT,
-                shndx: SHN_UNDEF,
-                value: 0,
-                size: 0,
-                version: dynamic::VER_NDX_GLOBAL,
-            })
+        // Imports come first and in their own order. An executable defines
+        // a copied object at its copy, and states a function's PLT entry
+        // where that is the function's address.
+        let mut out: Vec<DynSym> = (self.imports.iter())
+            .map(|name| self.import_row(name, out_shndx))
             .collect();
         let mut names: Vec<&String> = self.globals.keys().collect();
         names.sort();
@@ -338,7 +499,8 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             let (obj_i, sym_i) = self.globals[name];
-            if self.objects[obj_i].symbols[sym_i].other & 0x3 != STV_DEFAULT {
+            let vis = self.visibility_of(name);
+            if matches!(vis, STV_INTERNAL | STV_HIDDEN) {
                 continue;
             }
             let Some(v) = self.version_of(name) else {
@@ -348,7 +510,7 @@ impl<'a> LdsLinker<'a> {
                 out.push(DynSym {
                     name: fs.name,
                     info: fs.info,
-                    other: fs.other,
+                    other: (fs.other & !0x3) | vis,
                     shndx: fs.shndx,
                     value: fs.value,
                     size: fs.size,
@@ -359,7 +521,8 @@ impl<'a> LdsLinker<'a> {
         let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
         script_syms.sort_by(|a, b| a.0.cmp(b.0));
         for (name, s) in script_syms {
-            if s.hidden {
+            let vis = most_constraining(self.visibility_of(name), s.vis.unwrap_or(STV_DEFAULT));
+            if s.hidden || matches!(vis, STV_INTERNAL | STV_HIDDEN) {
                 continue;
             }
             let Some(v) = self.version_of(name) else {
@@ -373,7 +536,7 @@ impl<'a> LdsLinker<'a> {
             out.push(DynSym {
                 name: name.clone(),
                 info: (STB_GLOBAL << 4) | s.kind,
-                other: STV_DEFAULT,
+                other: vis,
                 shndx,
                 value: s.val.v,
                 size: 0,
@@ -397,7 +560,7 @@ impl<'a> LdsLinker<'a> {
 
     pub(super) fn build_dyn_tables(&mut self, out_shndx: &dyn Fn(usize) -> u16) {
         self.dyn_tables = None;
-        if self.opts.emit != LdsEmit::Dyn || self.kept_synth(SYNTH_DYNSYM).is_none() {
+        if !self.dynamic() || self.kept_synth(SYNTH_DYNSYM).is_none() {
             return;
         }
         let exports = self.collect_dyn_exports(out_shndx);
@@ -482,6 +645,7 @@ impl<'a> LdsLinker<'a> {
             strsz: t.map(|t| t.dynstr().len() as u64).unwrap_or(0),
             symtab: addr(SYNTH_DYNSYM),
             rela: sized(self.dyn_reloc_name()),
+            plt: sized(self.plt_reloc_name()).and_then(|j| Some((addr(SYNTH_GOTPLT)?, j))),
             use_rela: machine_uses_rela(self.machine),
             relr: sized(SYNTH_RELR),
             verdef: addr(SYNTH_VERDEF).map(|a| (a, t.map(|t| t.verdef_count).unwrap_or(0))),
@@ -503,10 +667,28 @@ impl<'a> LdsLinker<'a> {
             executable: !self.opts.shared,
             flags: self.opts.dynamic_flags,
             flags_1: self.opts.dynamic_flags_1,
+            init: self.final_sym_value(&self.opts.init_function),
+            fini: self.final_sym_value(&self.opts.fini_function),
             preinit_array: self.out_extent(".preinit_array"),
             init_array: self.out_extent(".init_array"),
             fini_array: self.out_extent(".fini_array"),
         }
+    }
+
+    /// The refusal of a shared object whose `.preinit_array` holds input:
+    /// the gABI gives `DT_PREINIT_ARRAY` to an executable alone, and GNU
+    /// ld names each input carrying one.
+    pub(super) fn preinit_array_in_shared_object(&self) -> Option<String> {
+        let out = (self.outs.iter()).position(|o| o.name == ".preinit_array" && !o.removed)?;
+        let fed = (0..self.insecs.len()).any(|i| self.fates[i] == SecFate::Placed { out });
+        if !self.opts.shared || !fed {
+            return None;
+        }
+        let lines: Vec<String> = (self.objects.iter())
+            .filter(|o| o.sections.iter().any(|s| s.shtype == SHT_PREINIT_ARRAY))
+            .map(|o| format!("{}: .preinit_array section is not allowed in DSO", o.source))
+            .collect();
+        Some(lines.join("\n"))
     }
 
     /// `(address, size)` of a kept output section.
@@ -515,6 +697,49 @@ impl<'a> LdsLinker<'a> {
             .iter()
             .find(|o| o.name == name && o.alloc && !o.removed)
             .map(|o| (o.addr, o.size))
+    }
+
+    /// GNU ld's line for each input section a dynamic relocation writes
+    /// into read-only memory: one per symbol a relocation names, at the
+    /// first such section, and one per section a load-address fixup
+    /// writes into.
+    pub(super) fn text_relocation_sites(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        let mut named: HashSet<&str> = HashSet::new();
+        for i in 0..self.insecs.len() {
+            let SecFate::Placed { out } = self.fates[i] else {
+                continue;
+            };
+            let o = &self.outs[out];
+            if !o.alloc || o.removed || o.flags & SHF_WRITE != 0 || !self.placements[i].placed {
+                continue;
+            }
+            let id = self.insecs[i];
+            let sec = &self.objects[id.obj].sections[id.sec];
+            let lo = o.addr + self.placements[i].off;
+            let within = |a: u64| a >= lo && a < lo + sec.size;
+            let at = || format!("{}: ", self.objects[id.obj].source);
+            let mut fixup = self.relr_addrs.iter().any(|&a| within(a));
+            for d in self.dyn_relas.iter().filter(|d| within(d.offset)) {
+                match &d.sym {
+                    Some(n) if named.insert(n) => lines.push(format!(
+                        "{}relocation against `{n}' in read-only section `{}'",
+                        at(),
+                        sec.name
+                    )),
+                    Some(_) => {}
+                    None => fixup = true,
+                }
+            }
+            if fixup {
+                lines.push(format!(
+                    "{}relocation in read-only section `{}'",
+                    at(),
+                    sec.name
+                ));
+            }
+        }
+        lines
     }
 
     /// True when a dynamic relocation applies to a section the loader

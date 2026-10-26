@@ -35,7 +35,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rax # <addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax

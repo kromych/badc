@@ -244,7 +244,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	fstpt	-0x20(%rbp)
                	fldt	-0x20(%rbp)
@@ -258,7 +258,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	fstpt	-0x20(%rbp)
                	fldt	-0x20(%rbp)

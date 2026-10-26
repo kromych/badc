@@ -147,7 +147,7 @@ pub(crate) fn default_output_path(source: &str, target: Target, mode: Mode) -> P
 pub(crate) fn install_embedded(dir: &std::path::Path) -> std::io::Result<(usize, usize)> {
     fn write_tree<'a>(
         root: &std::path::Path,
-        entries: impl Iterator<Item = &'a (&'a str, &'a str)>,
+        entries: impl Iterator<Item = (&'a str, &'a str)>,
     ) -> std::io::Result<usize> {
         let mut n = 0;
         for (name, body) in entries {
@@ -160,8 +160,11 @@ pub(crate) fn install_embedded(dir: &std::path::Path) -> std::io::Result<(usize,
         }
         Ok(n)
     }
-    let headers = write_tree(&dir.join("include"), badc::embedded_headers().iter())?;
-    let runtime = write_tree(&dir.join("lib"), badc::embedded_runtime().iter())?;
+    let headers = badc::embedded_headers()
+        .iter()
+        .map(|&(name, _, body)| (name, body));
+    let headers = write_tree(&dir.join("include"), headers)?;
+    let runtime = write_tree(&dir.join("lib"), badc::embedded_runtime().iter().copied())?;
     Ok((headers, runtime))
 }
 

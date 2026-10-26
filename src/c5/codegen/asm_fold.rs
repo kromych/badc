@@ -4,7 +4,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::{AddrPart, Build, DataFixup, OutputKind, Target, UnitDef, UnitDefs};
+use super::{
+    AddrPart, Build, DataFixup, DataPcRelReloc, OutputKind, Target, TextPcRelReloc, UnitDef,
+    UnitDefs,
+};
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 
@@ -33,22 +36,23 @@ impl AsmLabelPlacement {
     }
 }
 
+/// A 4- or 8-byte pc-relative word (`.long sym - .`), which needs no
+/// load-time relocation within one image.
+fn is_pcrel_word(r: &crate::c5::asm::AsmSectionReloc) -> bool {
+    r.kind == crate::c5::asm::AsmRelocKind::Data && r.pcrel && matches!(r.width, 4 | 8)
+}
+
 /// The anchor, part and addend of the fixup a folded field takes when the
-/// writer must place its target: an aarch64 page or in-page half, or an
-/// x86-64 rel32 anchored three bytes ahead of the field.
+/// writer must place its target: an aarch64 page or in-page half.
 fn image_field_fixup(
     r: &crate::c5::asm::AsmSectionReloc,
     at: usize,
-    is_a64: bool,
 ) -> Option<(usize, AddrPart, i64)> {
     use crate::c5::asm::AsmRelocKind;
     match r.kind {
         AsmRelocKind::A64AdrpPage21 => Some((at, AddrPart::Page, r.addend)),
         AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => {
             Some((at, AddrPart::InPage, r.addend))
-        }
-        AsmRelocKind::Data if !is_a64 && r.pcrel && r.width == 4 && at >= 3 => {
-            Some((at - 3, AddrPart::Whole, r.addend + 4))
         }
         _ => None,
     }
@@ -152,7 +156,7 @@ pub(crate) fn fold_asm_sections(
                 // its tail is the only writable byte range left to grow.
                 // Materialize the zero-fill so appending cannot move a bss
                 // object; the payload needs file backing regardless.
-                if !s.relocs.is_empty() {
+                if !s.relocs.iter().all(is_pcrel_word) {
                     return Err(err(
                         Code::OBJECT_FORMAT,
                         alloc::format!(
@@ -212,14 +216,11 @@ pub(crate) fn fold_asm_sections(
     let mut image_fields: Vec<(UnitDef, usize, AddrPart, i64)> = Vec::new();
     for &i in &folded {
         let s = &build.asm_sections[i];
-        let AsmLabelPlacement::Text(base) = bases[i].expect("folded section has a base") else {
-            continue;
-        };
+        let placed = bases[i].expect("folded section has a base");
         for r in &s.relocs {
-            let at = base + r.offset as usize;
             let def = match &r.target {
                 AsmSectionTarget::Text(off) => UnitDef::Text(*off),
-                AsmSectionTarget::OwnSection(off) => UnitDef::Text(base + *off as usize),
+                AsmSectionTarget::OwnSection(off) => placed.plus(*off as usize).as_def(),
                 AsmSectionTarget::Symbol(name) => match label_at
                     .get(name.as_str())
                     .map(|p| p.as_def())
@@ -247,6 +248,27 @@ pub(crate) fn fold_asm_sections(
                     ));
                 }
             };
+            // A pc-relative word in the data image holds the distance, which
+            // the image writer computes once both ends have an address.
+            let base = match placed {
+                AsmLabelPlacement::Text(base) => base,
+                AsmLabelPlacement::Data(base) => {
+                    let (target_offset, target_in_data) = match def {
+                        UnitDef::Text(off) => (off as u64, false),
+                        UnitDef::Data(off) => (off, true),
+                    };
+                    build.data_pcrel_relocs.push(DataPcRelReloc {
+                        slot_data_offset: (base + r.offset as usize) as u64,
+                        target_offset: target_offset.wrapping_add_signed(r.addend),
+                        target_anchor: target_offset,
+                        target_in_data,
+                        width: r.width,
+                        image_relative: false,
+                    });
+                    continue;
+                }
+            };
+            let at = base + r.offset as usize;
             let page_pair = matches!(
                 r.kind,
                 AsmRelocKind::A64AdrpPage21
@@ -255,9 +277,19 @@ pub(crate) fn fold_asm_sections(
             );
             let target_off = match def {
                 UnitDef::Text(off) if !page_pair => off,
+                // A pc-relative word naming data holds the distance, which the
+                // image writer computes once the data has an address.
+                UnitDef::Data(off) if is_pcrel_word(r) => {
+                    build.text_pcrel_relocs.push(TextPcRelReloc {
+                        site_text_offset: at as u64,
+                        target_data_offset: off.wrapping_add_signed(r.addend),
+                        target_anchor: off,
+                        width: r.width,
+                    });
+                    continue;
+                }
                 def => {
-                    let Some((instr_offset, part, addend)) = image_field_fixup(r, at, is_a64)
-                    else {
+                    let Some((instr_offset, part, addend)) = image_field_fixup(r, at) else {
                         return Err(err(
                             Code::OBJECT_FORMAT,
                             alloc::format!(

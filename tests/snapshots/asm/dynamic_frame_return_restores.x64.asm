@@ -325,9 +325,9 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movq	%rbx, %r12
                	imulq	%rcx, %r12
@@ -402,22 +402,22 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x38(%rsp), %rcx
                	addq	%rax, %rcx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	imulq	%rbx, %rax
                	cmpq	%rax, %r12
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x8(%rax), %rax
                	imulq	%rbx, %rax
                	cmpq	%rax, %r13
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x10(%rax), %rax
                	imulq	%rbx, %rax
                	cmpq	%rax, %r14
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x18(%rax), %rax
                	imulq	%rbx, %rax
                	cmpq	%rax, %r15
@@ -430,7 +430,7 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x20(%rax), %rdx
                	imulq	%rbx, %rdx
                	movq	%rdx, %r10
@@ -443,7 +443,7 @@ Disassembly of section .text:
                	movq	0x50(%rsp), %rax
                	cmpq	%r10, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	0x30(%rax), %rdx
                	imulq	%rbx, %rdx
                	movq	%rdx, %r10

@@ -20,9 +20,12 @@ mod convert;
 mod decl_base;
 mod declarator;
 mod diag;
+mod dllimport;
 mod emit;
+mod enum_conversion;
 mod enum_decl;
 mod expr;
+mod fallthrough;
 mod fn_types;
 mod function;
 mod global_init;
@@ -30,11 +33,14 @@ mod initializer;
 mod jumps;
 mod locals;
 mod loop_idiom;
+mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
+mod value_builtin;
+mod vla_bound;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
 #[cfg(all(test, not(debug_assertions)))]
@@ -174,6 +180,9 @@ pub struct StructDef {
     /// that member. Set only when the attribute is honored
     /// (`mark_transparent_union`).
     pub is_transparent_union: bool,
+    /// GNU `designated_init`: an initializer names each member it gives a
+    /// value by a designator.
+    pub designated_init: bool,
     /// A cast type-name in this unit names the aggregate. C99 6.5.4 makes
     /// that a use of the type whatever becomes of the value, so debug info
     /// keeps a DIE for it with no object of the type declared.
@@ -206,6 +215,7 @@ impl StructDef {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum,
@@ -582,6 +592,9 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
+    /// gcc's `-fvisibility=`: the visibility of a definition with external
+    /// linkage that no attribute or `#pragma GCC visibility` states.
+    pub default_visibility: Option<crate::c5::program::SymVisibility>,
     /// `--gnu` -- when true the preprocessor defines the GCC identity
     /// macros (`__GNUC__` and the rest, via
     /// [`Preprocessor::enable_gnu`]). Off by default: badc implements
@@ -598,6 +611,8 @@ pub struct CompileOptions {
     /// single flag selects release semantics (optimization passes plus
     /// asserts compiled out). Explicit `-D` / `-U` flags override.
     pub optimize: bool,
+    /// `-Wvla-larger-than=N`, in bytes; see [`vla_bound`].
+    pub vla_larger_than: Option<u64>,
     /// `-fgnu89-inline` -- make [`InlineModel::Gnu89`] the unit's
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
@@ -643,6 +658,71 @@ pub struct CompileOptions {
     /// without an initializer holds on entry to its scope; see
     /// [`AutoVarInit`].
     pub auto_var_init: AutoVarInit,
+    /// `-ffp-contract=`; see [`FpContract`].
+    pub fp_contract: FpContract,
+    /// `-std=`; see [`CStd`].
+    pub std: CStd,
+}
+
+/// The edition of the C standard a unit is compiled to (`-std=`), held as
+/// the `__STDC_VERSION__` it predefines (C99 6.10.8): `None` for C90,
+/// which predefines none. Without `-std` badc compiles C11.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CStd(pub Option<u32>);
+
+impl Default for CStd {
+    fn default() -> Self {
+        Self(Some(201112))
+    }
+}
+
+impl CStd {
+    /// The editions gcc's `-std=` names, the GNU dialect included, as
+    /// gcc 16 predefines `__STDC_VERSION__` for them; `None` for a name
+    /// gcc does not take.
+    pub fn from_dialect(name: &str) -> Option<Self> {
+        let year = match name {
+            "iso9899:1990" => "90",
+            "iso9899:199409" => return Some(Self(Some(199409))),
+            "iso9899:1999" | "iso9899:199x" => "99",
+            "iso9899:2011" => "11",
+            "iso9899:2017" | "iso9899:2018" => "17",
+            "iso9899:2024" => "23",
+            _ => name
+                .strip_prefix("gnu")
+                .or_else(|| name.strip_prefix('c'))?,
+        };
+        let version = match year {
+            "89" | "90" => None,
+            "99" | "9x" => Some(199901),
+            "11" | "1x" => Some(201112),
+            "17" | "18" => Some(201710),
+            "23" | "2x" => Some(202311),
+            "2y" => Some(202500),
+            _ => return None,
+        };
+        Some(Self(version))
+    }
+
+    /// C23 6.4.1: `bool`, `true` and `false` are keywords.
+    pub fn c23_keywords(self) -> bool {
+        self.0.is_some_and(|v| v >= 202311)
+    }
+}
+
+/// `-ffp-contract=`: where a floating product may be contracted with the
+/// add or subtract that uses it into one rounding (C99 6.5p8), at `-O`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FpContract {
+    /// Nowhere.
+    Off,
+    /// Within one expression while `#pragma STDC FP_CONTRACT` is on (C99
+    /// 7.12.2), clang's default.
+    #[default]
+    On,
+    /// Wherever the product has no other use, across statements and the
+    /// pragma aside, gcc's GNU-mode default.
+    Fast,
 }
 
 /// `-ftrivial-auto-var-init=`: the initialization the compiler supplies
@@ -750,6 +830,12 @@ impl CompileOptions {
         self
     }
 
+    /// Select where products contract (`-ffp-contract=`).
+    pub fn with_fp_contract(mut self, mode: FpContract) -> Self {
+        self.fp_contract = mode;
+        self
+    }
+
     /// Select plain `char`'s signedness (`-fsigned-char` /
     /// `-funsigned-char`); `None` restores the target default.
     pub fn with_char_signed(mut self, signed: Option<bool>) -> Self {
@@ -789,6 +875,11 @@ impl CompileOptions {
         self.gnu_dialect = on;
         self
     }
+    /// Select the edition of the C standard (`-std=`).
+    pub fn with_std(mut self, std: CStd) -> Self {
+        self.std = std;
+        self
+    }
     /// Replace the `-D` predefine list.
     pub fn with_defines(mut self, defines: Vec<(String, String)>) -> Self {
         self.defines = defines;
@@ -802,6 +893,11 @@ impl CompileOptions {
     /// Enable the `-O` predefines. See [`Self::optimize`].
     pub fn with_optimize(mut self, on: bool) -> Self {
         self.optimize = on;
+        self
+    }
+    /// See [`Self::vla_larger_than`].
+    pub fn with_vla_larger_than(mut self, bound: Option<u64>) -> Self {
+        self.vla_larger_than = bound;
         self
     }
     /// Replace the `-I` include-search-path list.
@@ -870,6 +966,11 @@ impl CompileOptions {
     /// [`Self::export_all_functions`].
     pub fn with_export_all_functions(mut self, on: bool) -> Self {
         self.export_all_functions = on;
+        self
+    }
+    /// See [`Self::default_visibility`].
+    pub fn with_default_visibility(mut self, v: Option<crate::c5::program::SymVisibility>) -> Self {
+        self.default_visibility = v;
         self
     }
     /// Drop the "must define main" requirement. Returns a
@@ -1096,6 +1197,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// leading `[expr]` was non-constant and `vla_allowed`. `None` for
     /// a constant-dimension array. Consumed by the local-decl site.
     pub vla_dim_expr: Option<crate::c5::ast::ExprId>,
+    /// The byte-count stores of the variable-length arrays a block-scope
+    /// declarator's pointer points to, which run where the declaration is
+    /// reached (C99 6.8p3). Consumed by the declaration's site.
+    pub vm_bound_stores: alloc::vec::Vec<crate::c5::ast::ExprId>,
+    /// A parameter's variable first inner bound, which its declarator's
+    /// bounds then attach to the parameter.
+    pub vm_param_bound: Option<function::ParamSize>,
     /// True when the declarator's leading dimension was spelled `[0]`.
     /// Both `T x[0]` and `T x[]` reach the object allocators as
     /// `array_size == -1`, but they declare different objects: `[0]` is
@@ -1365,6 +1473,7 @@ pub(super) struct DeclAttrs {
     /// diagnostic for the declared locals.
     pub maybe_unused: bool,
     pub transparent_union: bool,
+    pub designated_init: bool,
     /// `_Alignas(N)` / `aligned(N)` / `__declspec(align(N))`, 0 for none.
     pub align: i64,
     /// The `_Alignas(N)` share of `align`: C11 6.7.5 makes it raise-only and
@@ -1384,6 +1493,8 @@ pub(super) struct DeclAttrs {
     /// `__declspec(dllexport)`: the name joins the export list, as by
     /// `#pragma export`.
     pub dllexport: bool,
+    /// `__declspec(dllimport)`, see [`dllimport`].
+    pub dllimport: bool,
     pub constructor: bool,
     pub destructor: bool,
     /// The `N` of `constructor(N)` / `destructor(N)`.
@@ -1394,15 +1505,16 @@ pub(super) struct DeclAttrs {
     /// `uninitialized`: the object is left out of `-ftrivial-auto-var-init`.
     pub uninitialized: bool,
     pub weak: bool,
+    pub selectany: bool,
     /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
     /// target's own, including where the attribute is inert.
     pub call_conv: Option<crate::c5::codegen::CallConv>,
     /// `used`: the definition stays in the object unreferenced.
     pub used: bool,
-    /// `visibility(...)`: `Some(true)` for `"hidden"` / `"internal"`,
-    /// `Some(false)` for the preemptible spellings, `None` for the
-    /// `#pragma GCC visibility` extent's choice.
-    pub visibility: Option<bool>,
+    /// `visibility(...)`: `Some` of the visibility it names (`Some(None)`
+    /// for `"default"`), `None` for the `#pragma GCC visibility` extent's
+    /// choice.
+    pub visibility: Option<Option<crate::c5::program::SymVisibility>>,
     pub section: Option<alloc::string::String>,
     pub patchable_entry: Option<(u32, u32)>,
     pub no_instrument: bool,
@@ -1452,17 +1564,6 @@ impl Pending {
     /// Record that the base names no array.
     pub(super) fn clear_base_array(&mut self) {
         self.set_base_array(0, alloc::vec::Vec::new(), false);
-    }
-
-    /// Detach the base-array carriers, leaving none recorded.
-    pub(super) fn take_base_array(&mut self) -> (i64, alloc::vec::Vec<i64>, bool) {
-        let taken = (
-            self.typedef_base_array_size,
-            core::mem::take(&mut self.typedef_base_array_dims),
-            self.typedef_base_zero_len,
-        );
-        self.clear_base_array();
-        taken
     }
 
     /// Detach the specifier carriers; the nested block starts clean, as
@@ -1585,6 +1686,8 @@ impl Default for Pending {
             declarator_outer_restrict: false,
             vla_allowed: false,
             vla_dim_expr: None,
+            vm_bound_stores: alloc::vec::Vec::new(),
+            vm_param_bound: None,
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             sizeof_vla_store: None,
@@ -1769,6 +1872,10 @@ pub struct Compiler {
     /// innermost level. Empty at the function-body top level, whose
     /// bindings use the per-symbol `h_*` slots instead.
     block_scopes: Vec<Vec<stmt::BlockShadow>>,
+    /// Parameter lists being parsed: each holds a level of
+    /// `block_scopes` for the enumeration constants it declares
+    /// (C99 6.2.1p4), at file scope too.
+    param_list_scopes: u32,
 
     // --- Codegen state ---
     /// Next available `ent_pc` identifier for a user function or
@@ -1853,6 +1960,11 @@ pub struct Compiler {
     /// exit. Reset on each new function definition.
     func_vla_decls: usize,
 
+    /// The byte count expression of each variable-length array type, by
+    /// the slot the count is stored in: the `-Wvla-larger-than=` bound of
+    /// an object declared through the type.
+    vla_type_sizes: hashbrown::HashMap<i64, super::ast::ExprId>,
+
     /// Half-open `self.ast.stmts` ranges owned by statement
     /// expressions `({ ... })` parsed in the current function. A
     /// statement expression pushes its block's statements into the
@@ -1874,6 +1986,14 @@ pub struct Compiler {
     /// The integer literals that stand for a folded `__builtin_object_size`,
     /// which C does not count as integer constant expressions.
     folded_builtin_lits: Vec<super::ast::ExprId>,
+    /// The `fallthrough` attribute statements of the function being parsed.
+    fallthrough_marks: hashbrown::HashSet<super::ast::StmtId>,
+    /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
+    /// reports: `(id, file, line)`.
+    unprototyped_lists: Vec<(u32, String, usize)>,
+    /// The functions a file-scope declaration that is no definition named,
+    /// and whether one of those declarations had a prototype.
+    file_scope_fn_decls: hashbrown::HashMap<String, bool>,
 
     /// Nesting depth of unevaluated constant-expression operands
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
@@ -1913,6 +2033,10 @@ pub struct Compiler {
     /// one, and its pointer depth: the prototype a call through it takes.
     pub(super) expr_fns:
         alloc::collections::BTreeMap<super::ast::ExprId, (super::symbol::FnType, i64)>,
+
+    /// The enumerated type of an expression whose node type does not give
+    /// it: a constant, a conditional, a unary `+` (none) sharing its node.
+    pub(super) expr_enums: alloc::collections::BTreeMap<super::ast::ExprId, Option<i64>>,
 
     /// ExprIds matching values on the c5 stack-machine stack --
     /// the stack push records the current `ast_acc` here;
@@ -2048,6 +2172,8 @@ pub struct Compiler {
     /// `.set name, target` symbol aliases from file-scope asm, merged
     /// onto `Program::function_aliases`.
     pub(super) asm_sym_sets: Vec<(String, String, i64)>,
+    /// `#pragma weak` names and their alias targets, in source order.
+    pragma_weak: Vec<(String, Option<String>)>,
     /// `.file "name"` operands from file-scope asm, in directive order.
     pub(super) asm_file_names: Vec<String>,
     /// `.ident` strings from file-scope asm, in directive order.
@@ -2075,6 +2201,8 @@ pub struct Compiler {
     /// preprocessor. Default `None` means "PE writer
     /// picks `Console`". Read only by the PE writers.
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    /// `#pragma comment(lib, ...)` names drained from the preprocessor.
+    pp_default_libs: Vec<String>,
 
     /// `#pragma intrinsic("name")` map drained from the
     /// preprocessor. Used at declaration time to stamp
@@ -2294,6 +2422,7 @@ pub struct Compiler {
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
     export_all_functions: bool,
+    default_visibility: Option<crate::c5::program::SymVisibility>,
     /// Mirror of [`CompileOptions::no_builtin`] and
     /// [`CompileOptions::no_builtin_fns`]. Read by the library-name
     /// folds, which decline under them, and by a builtin's fallback
@@ -2304,10 +2433,17 @@ pub struct Compiler {
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
     /// transforms that are optimizations rather than lowerings.
     optimize: bool,
+    /// Mirror of [`CompileOptions::std`].
+    std: CStd,
+    vla_larger_than: Option<u64>,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
+    preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
     wrapv: bool,
+    /// Mirror of [`CompileOptions::fp_contract`].
+    fp_contract: FpContract,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
     /// automatic object without an initializer is bound.
     auto_var_init: AutoVarInit,
@@ -2483,10 +2619,6 @@ pub struct Compiler {
     pp_reuse: Option<PpReuse>,
 }
 
-/// Header of `__builtin_*` thunks every translation unit is given; see
-/// [`Compiler::configure_preprocessor`].
-const BUILTIN_THUNK_HEADER: &str = "_builtins.h";
-
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -2578,6 +2710,17 @@ impl Compiler {
         Ok((text, pp.include_records))
     }
 
+    /// The `#define` lines of the macros `source` ends with (gcc's `-dM -E`).
+    pub fn preprocess_macros(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Result<Vec<String>, C5Error> {
+        let mut pp = Self::configure_preprocessor(target, &opts);
+        pp.process(&source)?;
+        Ok(pp.macro_definitions())
+    }
+
     /// Assemble one GNU-as source unit for `target`, yielding the program the
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two
@@ -2616,6 +2759,7 @@ impl Compiler {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         pp.set_source_label(&opts.source_label);
+        pp.set_std(opts.std);
         pp.set_track_includes(opts.track_includes);
         pp.set_keep_pragmas(opts.keep_pragmas);
         pp.set_preprocessed(opts.preprocessed);
@@ -2640,21 +2784,6 @@ impl Compiler {
         }
         pp.set_nostdinc(opts.nostdinc);
         pp.set_no_builtin(opts.no_builtin);
-        // The GCC `__builtin_*` library thunks, which gcc and clang give
-        // every unit with no `#include`. The header is only `#define`s of
-        // names C99 7.1.3 reserves to the implementation, so it declares
-        // nothing and orders nothing; supplying it up front rather than
-        // on a parse failure keeps the compile to one front-end pass. It
-        // goes ahead of the driver's `-include` list because a forced
-        // include may itself be a translation unit's body, and the thunks
-        // have to be visible to it as they are to the main source.
-        if !opts
-            .force_includes
-            .iter()
-            .any(|h| h == BUILTIN_THUNK_HEADER)
-        {
-            pp.add_force_include(BUILTIN_THUNK_HEADER);
-        }
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
@@ -2790,6 +2919,7 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
+        let pragma_weak = pp.weak_pragmas;
         // The preprocessor's diagnostics head the unit's, and the pragmas
         // it recorded are keyed on byte offsets into `preprocessed`, which
         // is what the lexer reads, so they govern the parser's as well.
@@ -2799,11 +2929,18 @@ impl Compiler {
         let pp_system_headers = pp.system_headers;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
+        let pp_default_libs = pp.default_libs;
         let pp_intrinsics = pp.intrinsics;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
         let shadowed = lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
+        if opts.std.c23_keywords() {
+            lexer::init_c23_keywords(&mut symbols, &mut symbol_index);
+        }
+        if target.ms_extensions() {
+            lexer::init_ms_keywords(&mut symbols, &mut symbol_index);
+        }
         // The dead-store bookkeeping is a cost the parser pays only when
         // the row reports somewhere, which a pragma decides as much as
         // the command line does.
@@ -2850,6 +2987,9 @@ impl Compiler {
             l.wchar_bytes = wchar.bytes;
             l.wchar_signed = wchar.signed;
             l.char_signed = opts.plain_char_signed(target);
+            l.ms_int_suffixes = target.ms_extensions();
+            l.fp_contract_default = opts.fp_contract == FpContract::On;
+            l.fp_contract = l.fp_contract_default;
             l
         };
         Self {
@@ -2858,6 +2998,7 @@ impl Compiler {
             symbol_index,
             scope_bound: Vec::new(),
             block_scopes: Vec::new(),
+            param_list_scopes: 0,
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
@@ -2884,15 +3025,20 @@ impl Compiler {
             func_local_addr_taken: false,
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
+            vla_type_sizes: hashbrown::HashMap::new(),
             stmt_expr_arena_ranges: Vec::new(),
             const_unevaluated: 0,
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
+            fallthrough_marks: hashbrown::HashSet::new(),
+            unprototyped_lists: Vec::new(),
+            file_scope_fn_decls: hashbrown::HashMap::new(),
             const_object_fold: 0,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             expr_fns: alloc::collections::BTreeMap::new(),
+            expr_enums: alloc::collections::BTreeMap::new(),
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),
@@ -2919,6 +3065,7 @@ impl Compiler {
             asm_global_names: Vec::new(),
             asm_visibility: Vec::new(),
             asm_sym_sets: Vec::new(),
+            pragma_weak,
             asm_file_names: Vec::new(),
             asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),
@@ -2926,6 +3073,7 @@ impl Compiler {
             system_headers: pp_system_headers,
             pp_entrypoint,
             pp_subsystem,
+            pp_default_libs,
             pp_intrinsics,
             tls_data: Vec::new(),
             tls_init_size: 0,
@@ -2960,12 +3108,17 @@ impl Compiler {
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
+            default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
+            preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
+            fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
+            std: opts.std,
+            vla_larger_than: opts.vla_larger_than,
             elf_class: opts.elf_class,
             inline_model: if opts.gnu89_inline {
                 crate::c5::symbol::InlineModel::Gnu89
@@ -3074,34 +3227,44 @@ impl Compiler {
     }
 
     /// Resolve `#pragma export(<name>)` directives against the
-    /// now-finalised symbol table. Each name must resolve to a
-    /// `Token::Fun` (a function defined in this translation
-    /// unit); anything else gets a clear diagnostic so a
-    /// misspelled export doesn't silently produce a shared object
-    /// missing the symbol the user expected.
+    /// now-finalised symbol table: the functions, and the names of the
+    /// objects with external linkage, this unit defines. Anything else
+    /// gets a clear diagnostic so a misspelled export doesn't silently
+    /// produce a shared object missing the symbol the user expected.
     ///
     /// Drains `self.pending_exports` -- callers should only invoke
     /// once on the way out of `compile()`.
-    fn resolve_exports(&mut self) -> Result<Vec<crate::c5::program::ExportedFunction>, C5Error> {
+    fn resolve_exports(
+        &mut self,
+    ) -> Result<(Vec<crate::c5::program::ExportedFunction>, Vec<String>), C5Error> {
+        use crate::c5::symbol::Linkage;
         let mut exports = Vec::with_capacity(self.pending_exports.len());
+        let mut objects = Vec::new();
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
                 return Err(self.compile_err(
                     Code::UNDECLARED_IDENTIFIER,
                     format!(
                         "`#pragma export({name})` -- no such symbol; the name must \
-                     refer to a function defined in this source"
+                     refer to a function or an object defined in this source"
                     ),
                 ));
             };
-            if self.symbols[idx].class != Token::Fun as i64 {
+            let sym = &self.symbols[idx];
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.is_thread_local
+            {
+                objects.push(sym.link_name().into());
+                continue;
+            }
+            if sym.class != Token::Fun as i64 {
                 return Err(self.compile_err(
                     Code::INVALID_PRAGMA,
                     format!(
-                        "`#pragma export({name})` -- expected a function, but `{name}` \
-                     is class {} (only locally-defined functions are exportable today; \
-                     globals would need data-export support that isn't wired up yet)",
-                        self.symbols[idx].class
+                        "`#pragma export({name})` -- `{name}` is not a function or an \
+                         object with external linkage this source defines"
                     ),
                 ));
             }
@@ -3136,7 +3299,7 @@ impl Compiler {
                 });
             }
         }
-        Ok(exports)
+        Ok((exports, objects))
     }
 
     fn failed(&mut self, e: C5Error) -> C5Error {
@@ -3182,10 +3345,9 @@ impl Compiler {
         // Auto-include retry. Each pass that fails on an undeclared
         // function names the header declaring it; force-include that
         // header and run again. Looping (rather than retrying once)
-        // resolves a chain -- a `__builtin_*` thunk header pulling in
-        // the library function's header -- and several independent
-        // missing headers. The force-include set only grows, and a
-        // header already in it ends the loop, so progress is monotone.
+        // resolves several independent missing headers. The
+        // force-include set only grows, and a header already in it ends
+        // the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
         let mut auto_names: Vec<String> = Vec::new();
         loop {
@@ -3209,13 +3371,11 @@ impl Compiler {
             if opts.declines_auto_include(&name) {
                 return Err(e);
             }
-            let header = match super::headers::header_declaring(&name) {
+            let header = match super::headers::header_declaring(&name, target) {
                 Some(h) => h,
                 None => return Err(e),
             };
-            // The thunk header is always in scope, so a failure naming
-            // one of its macros is not something a retry can fix.
-            if header == BUILTIN_THUNK_HEADER || opts.force_includes.iter().any(|h| h == header) {
+            if opts.force_includes.iter().any(|h| h == header) {
                 return Err(e);
             }
             opts.force_includes.push(header.to_string());
@@ -3377,11 +3537,7 @@ impl Compiler {
             // its references route through the GOT / loader import
             // instead of an uninitialized local slot.
             for sym in self.symbols.iter_mut() {
-                if sym.class == Token::Glo as i64
-                    && sym.linkage == Linkage::External
-                    && sym.is_extern_decl
-                    && !sym.has_initializer
-                {
+                if sym.declares_no_storage() {
                     sym.defined_here = false;
                     sym.val = 0;
                 }
@@ -3515,7 +3671,7 @@ impl Compiler {
         let (entry_pc, dllmain_pc, resolved_entry_name) = self
             .resolve_entry_and_dllmain_pcs()
             .map_err(|e| self.failed(e))?;
-        let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
+        let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
@@ -3561,12 +3717,15 @@ impl Compiler {
             tls_init_size: self.tls_init_size,
             tls_align: self.tls_align,
             exports,
+            exported_objects,
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
             sys_trampolines: self.sys_trampolines,
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
+            fp_contract_fast: self.fp_contract == FpContract::Fast,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,
@@ -3594,6 +3753,7 @@ impl Compiler {
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             entry_pragma: self.pp_entrypoint.clone(),
+            default_libs: core::mem::take(&mut self.pp_default_libs),
             auto_includes: Vec::new(),
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit

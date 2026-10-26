@@ -7,7 +7,7 @@ use super::{
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
-use crate::c5::ident::{self, is_ident};
+use crate::c5::ident::{self, Dollar, is_ident};
 use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -55,8 +55,8 @@ impl Preprocessor {
             }
             let is_operator = c == b'_'
                 && bytes[i..].starts_with(b"_Pragma")
-                && !ident::char_ends_at(bytes, i)
-                && ident::char_len(bytes, i + 7) == 0;
+                && !ident::char_ends_at(bytes, i, self.dollar())
+                && ident::char_len(bytes, i + 7, self.dollar()) == 0;
             if let Some((args, next)) = is_operator
                 .then(|| parse_pragma_operator_args(text, i + 7))
                 .flatten()
@@ -71,8 +71,8 @@ impl Preprocessor {
             // the operand is raw tokens rather than a string literal.
             let is_msvc_operator = c == b'_'
                 && bytes[i..].starts_with(b"__pragma")
-                && !ident::char_ends_at(bytes, i)
-                && ident::char_len(bytes, i + 8) == 0;
+                && !ident::char_ends_at(bytes, i, self.dollar())
+                && ident::char_len(bytes, i + 8, self.dollar()) == 0;
             if let Some((args, next)) = is_msvc_operator
                 .then(|| parse_msvc_pragma_args(text, i + 8))
                 .flatten()
@@ -107,7 +107,9 @@ impl Preprocessor {
                 self.pragma_once_files.insert(site.file.to_string());
             }
             PragmaDirective::Other => {
-                let lexer_reads = pragma_is_pack(args) || pragma_is_visibility(args);
+                let lexer_reads = pragma_is_pack(args)
+                    || pragma_is_visibility(args, self.dollar())
+                    || pragma_is_fp_contract(args, self.dollar());
                 if !lexer_reads {
                     self.parse_pragma(args, site)?;
                 }
@@ -144,18 +146,18 @@ impl Preprocessor {
         };
         // Record the directives feeding the side outputs the compile
         // consumes, so a reused pass can replay them in order.
-        if self.reuse.is_some()
-            && [
-                "dylib(",
-                "binding(",
-                "export(",
-                "intrinsic(",
-                "entrypoint(",
-                "subsystem(",
-            ]
-            .iter()
-            .any(|p| args.starts_with(p))
-        {
+        let side_output = [
+            "dylib(",
+            "binding(",
+            "export(",
+            "intrinsic(",
+            "entrypoint(",
+            "subsystem(",
+            "comment(",
+        ]
+        .iter()
+        .any(|p| args.starts_with(p));
+        if self.reuse.is_some() && (side_output || pragma_weak_operand(args).is_some()) {
             let rec = self.reuse.as_deref_mut().expect("checked above");
             rec.pragma_events
                 .push((args.to_string(), line_no, filename.to_string()));
@@ -202,6 +204,20 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), site);
         }
+        if let Some(lib) = args
+            .strip_prefix("comment(")
+            .and_then(|s| s.strip_suffix(')'))
+            .and_then(|s| s.split_once(','))
+            .filter(|(kind, _)| kind.trim() == "lib")
+            .map(|(_, operand)| operand.trim())
+        {
+            self.parse_pragma_comment_lib(lib, site);
+            return Ok(());
+        }
+        if let Some(operand) = pragma_weak_operand(args) {
+            self.parse_pragma_weak(operand, site);
+            return Ok(());
+        }
         // Borland / Watcom `#pragma warn -<code>` form (`-rch`,
         // `-aus`, ...). Parsed for visibility into `warn_disabled`;
         // see `parse_pragma_warn` for the syntax.
@@ -215,15 +231,20 @@ impl Preprocessor {
         // vendor pragmas (diagnostic selection, `optimize`, `target`,
         // `push_options`, `loop`, ...) and the C99 6.10.6 `STDC` pragmas
         // (FP_CONTRACT, FENV_ACCESS, CX_LIMITED_RANGE) are compiler hints
-        // / evaluation modes c5 does not act on. Accept them silently
-        // rather than warning on every occurrence; everything else falls
-        // through to the unknown-pragma warning.
+        // / evaluation modes c5 does not act on, and `region` / `endregion`
+        // mark an editor's outline, which gcc and clang accept silently
+        // on every target. Accept them rather than warning on every
+        // occurrence; everything else falls through to the unknown-pragma
+        // warning.
         let directive = args.split('(').next().unwrap_or(args).trim();
         let head = directive.split_whitespace().next().unwrap_or("");
         if matches!(head, "GCC" | "clang") && self.parse_pragma_diagnostic(args, site) {
             return Ok(());
         }
-        if matches!(head, "pack" | "once" | "STDC" | "GCC" | "clang") {
+        if matches!(
+            head,
+            "pack" | "once" | "STDC" | "GCC" | "clang" | "region" | "endregion"
+        ) {
             return Ok(());
         }
         self.warn(
@@ -455,7 +476,9 @@ impl Preprocessor {
                 continue;
             };
             let action = action.trim();
-            let ids = rest;
+            // MSVC expands macros in the IDs, as its own headers rely on
+            // (`#pragma warning(disable: _VCRUNTIME_DISABLED_WARNINGS)`).
+            let ids = self.substitute(rest, site.file, site.line);
             let mut ids_parsed: Vec<u32> = Vec::new();
             let mut had_bad_token = false;
             for tok in ids.split_whitespace() {
@@ -589,7 +612,7 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let name = inner.trim();
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -649,7 +672,7 @@ impl Preprocessor {
                 continue;
             }
             if let Some(name) = item.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-                if !is_ident(name) {
+                if !is_ident(name, self.dollar()) {
                     return Err(C5Error::at(
                         Code::INVALID_PRAGMA,
                         filename,
@@ -674,10 +697,12 @@ impl Preprocessor {
                 if let Some(id) = self.registered_intrinsic(name) {
                     self.intrinsics.insert(name.to_string(), id);
                 }
-            } else if is_ident(item) {
+            } else if is_ident(item, self.dollar()) {
                 if let Some(id) = self.registered_intrinsic(item) {
                     self.intrinsics.insert(item.to_string(), id);
-                } else if !builtins::is_builtin(item) {
+                } else if !builtins::is_builtin(item)
+                    && !builtins::is_ms_intrinsic(item, self.target)
+                {
                     self.warn(
                         IGNORED_PRAGMA_INTRINSIC,
                         site,
@@ -775,7 +800,7 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<(), C5Error> {
         let name = inner.trim();
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -791,6 +816,50 @@ impl Preprocessor {
             self.exports.push(symbol.into_owned());
         }
         Ok(())
+    }
+
+    /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
+    fn parse_pragma_weak(&mut self, operand: &str, site: Site<'_>) {
+        let (name, target) = match operand.split_once('=') {
+            Some((n, t)) => (n.trim(), Some(t.trim())),
+            None => (operand, None),
+        };
+        let dollar = self.dollar();
+        if !is_ident(name, dollar) || target.is_some_and(|t| !is_ident(t, dollar)) {
+            let text = format!("malformed `#pragma weak {operand}` -- ignored");
+            self.warn(PRAGMA_SYNTAX, site, text);
+            return;
+        }
+        let target = target.map(|t| ident::key(t).into_owned());
+        self.weak_pragmas
+            .push((ident::key(name).into_owned(), target));
+    }
+
+    /// `#pragma comment(lib, "name")`, MSVC's default library (clang's
+    /// `/DEFAULTLIB:` on COFF, `.deplibs` on ELF); adjacent literals concatenate.
+    fn parse_pragma_comment_lib(&mut self, operand: &str, site: Site<'_>) {
+        let mut name = String::new();
+        let mut rest = operand;
+        while let Some(body) = rest.strip_prefix('"') {
+            let Some(end) = body.find('"') else {
+                break;
+            };
+            name.push_str(&body[..end]);
+            rest = body[end + 1..].trim_start();
+        }
+        if !rest.is_empty() || name.is_empty() {
+            self.warn(
+                PRAGMA_SYNTAX,
+                site,
+                format!(
+                    "`#pragma comment(lib, ...)` expects a library name in quotes, got `{operand}`"
+                ),
+            );
+            return;
+        }
+        if !self.default_libs.contains(&name) {
+            self.default_libs.push(name);
+        }
     }
 
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib
@@ -822,7 +891,7 @@ impl Preprocessor {
                 "`#pragma dylib(...)` arg is empty",
             ));
         }
-        if !is_ident(name) {
+        if !is_ident(name, self.dollar()) {
             return Err(C5Error::at(
                 Code::INVALID_PRAGMA,
                 filename,
@@ -1092,6 +1161,13 @@ impl WarningAction {
     }
 }
 
+/// The operand of a `weak` pragma: `name` or `name = target`.
+fn pragma_weak_operand(args: &str) -> Option<&str> {
+    let rest = args.strip_prefix("weak")?;
+    rest.starts_with(|c: char| c.is_ascii_whitespace())
+        .then(|| rest.trim())
+}
+
 /// True when `args` is the head of a `pack(...)` pragma -- the
 /// preprocessor passes those through verbatim so the lexer can
 /// fold them into its pack state at the right source position
@@ -1107,10 +1183,22 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
     rest.trim_start().starts_with('(')
 }
 
+/// True when `args` is `STDC FP_CONTRACT ...` (C99 7.12.2), whose state
+/// holds from its position, so like `pack` the line goes through to the
+/// lexer.
+pub(super) fn pragma_is_fp_contract(args: &str, dollar: Dollar) -> bool {
+    let Some(rest) = args.trim_start().strip_prefix("STDC") else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    rest.strip_prefix("FP_CONTRACT")
+        .is_some_and(|r| ident::char_len(r.as_bytes(), 0, dollar) == 0)
+}
+
 /// True when `args` is the head of a `GCC visibility` pragma. Its extent
 /// is a source range, so like `pack` the line goes through to the lexer
 /// rather than being consumed here.
-pub(super) fn pragma_is_visibility(args: &str) -> bool {
+pub(super) fn pragma_is_visibility(args: &str, dollar: Dollar) -> bool {
     let Some(rest) = args.trim_start().strip_prefix("GCC") else {
         return false;
     };
@@ -1120,5 +1208,5 @@ pub(super) fn pragma_is_visibility(args: &str) -> bool {
     // A following `push` / `pop` must be a separate token, so anything
     // that continues the identifier (`visibility_mode`) is a different
     // pragma.
-    ident::char_len(rest.as_bytes(), 0) == 0
+    ident::char_len(rest.as_bytes(), 0, dollar) == 0
 }

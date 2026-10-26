@@ -108,6 +108,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::fscanf,    "_fscanf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::vsscanf,   "_vsscanf")
+#pragma binding(libc::vfscanf,   "_vfscanf")
+#pragma binding(libc::vscanf,    "_vscanf")
 #pragma binding(libc::fopen,     "_fopen")
 #pragma binding(libc::freopen,   "_freopen")
 #pragma binding(libc::fclose,    "_fclose")
@@ -142,6 +144,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::setvbuf,   "_setvbuf")
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
+#pragma binding(libc::renameat,  "_renameat")
 #pragma binding(libc::dlsym,     "_dlsym")
 // POSIX.1-2008 `open_memstream` -- creates a FILE * backed
 // by a heap buffer the libc grows as the program writes
@@ -150,6 +153,9 @@ typedef struct __c5_fpos_t fpos_t;
 // on every `fflush` / `fclose`. Available on macOS 10.13+
 // and every recent Linux C library / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
+#pragma binding(libc::wprintf, "_wprintf")
+// POSIX.1-2008 `fmemopen`: a stream over a caller buffer.
+#pragma binding(libc::fmemopen, "_fmemopen")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
@@ -183,12 +189,16 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::vfprintf,  "vfprintf")
 #pragma binding(libc::vsprintf,  "vsprintf")
 #pragma binding(libc::vsnprintf, "vsnprintf")
-#pragma binding(libc::scanf,     "scanf")
-#pragma binding(libc::fscanf,    "fscanf")
-#pragma binding(libc::sscanf,    "sscanf")
-// va_list input scan + GNU allocating printf variants; their prototypes
-// follow the bindings.
-#pragma binding(libc::vsscanf,   "vsscanf")
+// The C99 scanners glibc's <stdio.h> selects through C17, where `%as` is a
+// floating conversion and a literal `s`; the plain names keep the GNU
+// allocating `%as`, `%aS` and `%a[`.
+#pragma binding(libc::scanf,     "__isoc99_scanf")
+#pragma binding(libc::fscanf,    "__isoc99_fscanf")
+#pragma binding(libc::sscanf,    "__isoc99_sscanf")
+#pragma binding(libc::vsscanf,   "__isoc99_vsscanf")
+#pragma binding(libc::vfscanf,   "__isoc99_vfscanf")
+#pragma binding(libc::vscanf,    "__isoc99_vscanf")
+// GNU allocating printf variants; their prototypes follow the bindings.
 #pragma binding(libc::asprintf,  "asprintf")
 #pragma binding(libc::vasprintf, "vasprintf")
 #pragma binding(libc::fopen,     "fopen")
@@ -225,11 +235,14 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::setvbuf,   "setvbuf")
 #pragma binding(libc::remove,    "remove")
 #pragma binding(libc::rename,    "rename")
+#pragma binding(libc::renameat,  "renameat")
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
 // POSIX `open_memstream` -- same shape as on macOS, exported
 // directly by the Linux C library / musl.
 #pragma binding(libc::open_memstream, "open_memstream")
+#pragma binding(libc::wprintf, "wprintf")
+#pragma binding(libc::fmemopen, "fmemopen")
 // X/Open `cuserid` -- a glibc export; absent from libSystem and msvcrt.
 #pragma binding(libc::cuserid, "cuserid")
 // POSIX `popen` / `pclose` -- not in C89 but universally
@@ -263,35 +276,13 @@ typedef struct __c5_fpos_t fpos_t;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::printf,    "printf")
-#pragma binding(msvcrt::wprintf,   "wprintf")
-#pragma binding(msvcrt::fprintf,   "fprintf")
-#pragma binding(msvcrt::sprintf,   "sprintf")
-// The original `snprintf` only landed in msvcrt circa VS2015, and
-// `_snprintf` deviates from C99 7.19.6.5 (returns -1 and omits the
-// NUL on truncation). The standard `snprintf` / `vsnprintf`
-// spellings carry no binding here: they resolve at link time against
-// the conforming definitions in the auto-linked runtime, which wrap
-// `_vsnprintf` + `_vscprintf`. The underscored spellings keep the
-// msvcrt entry points for source written against msvcrt semantics.
-// Note that msvcrt's printf family prints infinity / NaN as
-// `1.#INF` / `1.#IND` / `1.#QNAN` rather than C99 `inf` / `nan`;
-// programs that classify formatted output by a digit-prefix regex
-// misclassify the msvcrt output as numeric.
-// Routing through `ucrtbase` would emit the C99 spelling but its
-// entry points fail with STATUS_ENTRYPOINT_NOT_FOUND at PE load
-// time on the GitHub Windows runners -- the documented UCRT import
-// path is via the `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not
-// ucrtbase directly. Tracked under the TODO marker until c5 grows
-// support for the UCRT proxy DLLs.
+// The C99 printf family carries no binding here: libc/lib/printf_ext.c
+// defines it, msvcrt.dll's printing 1.#INF / 1.#IND / 1.#QNAN for an
+// infinity or NaN, ignoring %hh and returning -1 from _vsnprintf for a
+// truncated output. The underscored spellings keep the msvcrt entry points
+// for source written against msvcrt semantics.
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
-#pragma binding(msvcrt::vprintf,   "vprintf")
-#pragma binding(msvcrt::vfprintf,  "vfprintf")
-#pragma binding(msvcrt::vsprintf,  "vsprintf")
-#pragma binding(msvcrt::scanf,     "scanf")
-#pragma binding(msvcrt::fscanf,    "fscanf")
-#pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
 #pragma binding(msvcrt::fclose,    "fclose")
@@ -317,7 +308,6 @@ typedef struct __c5_fpos_t fpos_t;
 // The legacy msvcrt.dll exports no _ftelli64 (unlike _fseeki64); UCRT does.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::_ftelli64, "_ftelli64")
-#pragma binding(ucrtbase::__stdio_common_vsscanf, "__stdio_common_vsscanf")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -333,6 +323,10 @@ typedef struct __c5_fpos_t fpos_t;
 // MultiByteToWideChar and then calls _wfopen. The Windows CRT
 // spells the entry point with the leading underscore.
 #pragma binding(msvcrt::_wfopen,   "_wfopen")
+#pragma binding(msvcrt::_fsopen,   "_fsopen")
+#pragma binding(msvcrt::_wfsopen,  "_wfsopen")
+#pragma binding(msvcrt::freopen_s, "freopen_s")
+#pragma binding(msvcrt::_wfreopen_s, "_wfreopen_s")
 // `_wpopen` / `_pclose` drive a command pipe whose command line
 // needs UTF-16. The Windows CRT spells the popen entry point with a
 // leading underscore on both the byte-string and wide-string
@@ -351,12 +345,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_isatty,        "_isatty")
 #pragma binding(msvcrt::_setmode,       "_setmode")
 #pragma binding(msvcrt::_access,        "_access")
-#pragma binding(msvcrt::_stat,          "_stat")
-#pragma binding(msvcrt::_stat64,        "_stat64")
-#pragma binding(msvcrt::_fstat64,       "_fstat64")
 #pragma binding(msvcrt::_waccess,       "_waccess")
 #pragma binding(msvcrt::_wfreopen,      "_wfreopen")
-#pragma binding(msvcrt::_wstat,         "_wstat")
 #pragma binding(msvcrt::_wchmod,        "_wchmod")
 #pragma binding(msvcrt::_wmkdir,        "_wmkdir")
 #pragma binding(msvcrt::_wunlink,       "_wunlink")
@@ -370,7 +360,12 @@ typedef struct __c5_fpos_t fpos_t;
 // MSVC CRT does so.
 #pragma binding(msvcrt::fgetws,         "fgetws")
 #pragma binding(msvcrt::fputws,         "fputws")
+// The legacy arm64 msvcrt.dll does not export `_getws`; UCRT does.
+#if defined(__aarch64__)
+#pragma binding(ucrtbase::_getws,       "_getws")
+#else
 #pragma binding(msvcrt::_getws,         "_getws")
+#endif
 #pragma binding(msvcrt::_putws,         "_putws")
 #pragma binding(msvcrt::_wgetenv,       "_wgetenv")
 #pragma binding(msvcrt::_wputenv,       "_wputenv")
@@ -415,9 +410,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::__getmainargs,  "__getmainargs")
 #pragma binding(msvcrt::_getch,         "_getch")
 #pragma binding(msvcrt::_kbhit,         "_kbhit")
-#pragma binding(msvcrt::_msize,         "_msize")
-#pragma binding(msvcrt::_open,          "_open")
-#pragma binding(msvcrt::_wopen,         "_wopen")
+#pragma binding(msvcrt::_vscprintf,     "_vscprintf")
+#pragma binding(msvcrt::_vscwprintf,    "_vscwprintf")
 #pragma binding(msvcrt::_locking,       "_locking")
 #pragma binding(msvcrt::_get_osfhandle, "_get_osfhandle")
 #pragma binding(msvcrt::_open_osfhandle, "_open_osfhandle")
@@ -478,8 +472,10 @@ int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // Alias forms used by source that pre-rewrites the standard
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
+#ifdef _WIN32
 int _snprintf(char *buf, int size, char *fmt, ...);
 int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+#endif
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.
 int scanf(const char *fmt, ...);
@@ -491,18 +487,12 @@ int sscanf(const char *src, const char *fmt, ...);
 int asprintf(char **strp, char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
 #endif
-// C99 7.19.6.14. msvcrt.dll has no vsscanf; the Universal CRT's header
-// defines it over ucrtbase's scanner, which reads no FILE.
-#ifdef _WIN32
-int __stdio_common_vsscanf(unsigned long long options, const char *src, size_t len,
-                           const char *fmt, void *locale, __builtin_va_list ap);
-static inline int vsscanf(const char *src, const char *fmt, __builtin_va_list ap)
-{
-    return __stdio_common_vsscanf(0, src, (size_t)-1, fmt, 0, ap);
-}
-#else
+// C99 7.19.6.14 vsscanf, 7.19.6.9 vfscanf and 7.19.6.11 vscanf. On Windows
+// libc/lib/scanf_ext.c defines these and the three above: msvcrt.dll's
+// scanners miss C99's conversions, and it exports no va_list form.
 int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
-#endif
+int vfscanf(FILE *restrict stream, const char *restrict format, __builtin_va_list arg);
+int vscanf(const char *restrict format, __builtin_va_list arg);
 FILE *fopen(const char *path, const char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by
 // programs that re-route stdin / stdout / stderr to a file.
@@ -574,9 +564,14 @@ int setvbuf(FILE *stream, char *buf, int mode, size_t size);
 int remove(const char *path);
 int rename(const char *old_path, const char *new_path);
 #ifndef _WIN32
+// POSIX: rename relative to the directory descriptors `oldfd` and `newfd`.
+int renameat(int oldfd, const char *old_path, int newfd, const char *new_path);
+#endif
+#ifndef _WIN32
 // POSIX open_memstream(3). Caller passes addresses of (char *,
 // size_t) slots the libc updates as bytes are written.
 FILE *open_memstream(char **bufp, size_t *sizep);
+FILE *fmemopen(void *restrict buf, size_t size, const char *restrict mode);
 #endif
 // POSIX.1-2008 delimited line input: read through the next `delim`
 // (newline for `getline`) into a heap buffer `*lineptr` of capacity
@@ -599,6 +594,10 @@ int dprintf(int fd, const char *fmt, ...);
 int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
 FILE *_wfopen(unsigned short *path, unsigned short *mode);
+FILE *_fsopen(const char *path, const char *mode, int shflag);
+FILE *_wfsopen(const wchar_t *path, const wchar_t *mode, int shflag);
+int   freopen_s(FILE **pfile, const char *path, const char *mode, FILE *stream);
+int   _wfreopen_s(FILE **pfile, const wchar_t *path, const wchar_t *mode, FILE *stream);
 FILE *_wpopen(unsigned short *cmd, unsigned short *mode);
 FILE *_popen(char *cmd, char *mode);
 int   _pclose(FILE *stream);
@@ -606,65 +605,8 @@ int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
 int   _access(char *path, int mode);
-// MSVC CRT stat-result shapes: `st_size`, `st_mode`, `st_mtime` and
-// `st_ctime` live at the offsets the runtime writes. The 64-bit-time
-// variant (`_stat64`) handles files past 2038.
-struct _stat {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-struct _stat64 {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-// `__stat64` is an internal MSVC alias for `_stat64`, and some
-// sources spell it so. Same layout, same use; declared as its own
-// struct because c5's struct-tag namespace doesn't track aliases.
-struct __stat64 {
-    unsigned int  st_dev;
-    unsigned short st_ino;
-    unsigned short st_mode;
-    short         st_nlink;
-    short         st_uid;
-    short         st_gid;
-    unsigned int  st_rdev;
-    long long     st_size;
-    long long     st_atime;
-    long long     st_mtime;
-    long long     st_ctime;
-};
-#define _S_IFMT       0xF000
-#define _S_IFDIR      0x4000
-#define _S_IFCHR      0x2000
-#define _S_IFIFO      0x1000
-#define _S_IFREG      0x8000
-#define _S_IREAD      0x0100
-#define _S_IWRITE     0x0080
-#define _S_IEXEC      0x0040
-int   _stat(char *path, struct _stat *buf);
-int   _stat64(char *path, struct _stat64 *buf);
-int   _fstat64(int fd, void *buf);
 int   _waccess(unsigned short *path, int mode);
 FILE *_wfreopen(unsigned short *path, unsigned short *mode, FILE *stream);
-int   _wstat(unsigned short *path, struct _stat *buf);
 int   _wchmod(unsigned short *path, int mode);
 int   _wmkdir(unsigned short *path);
 int   _wunlink(unsigned short *path);
@@ -717,9 +659,8 @@ extern wchar_t **__wargv;
 int   __getmainargs(int *argc, char ***argv, char ***envp, int do_wildcard, void *startup_info);
 int   _getch(void);
 int   _kbhit(void);
-long long _msize(void *p);
-int   _open(char *path, int flags, int mode);
-int   _wopen(const unsigned short *path, int flags, int mode);
+int   _vscprintf(const char *format, __builtin_va_list ap);
+int   _vscwprintf(const wchar_t *format, __builtin_va_list ap);
 int   _locking(int fd, int mode, long nbytes);
 long long _get_osfhandle(int fd);
 int _open_osfhandle(long long osfhandle, int flags);
@@ -803,6 +744,61 @@ struct _wfinddata64_t {
 #define _O_U8TEXT     0x40000
 #define O_TEXT        _O_TEXT
 #define O_BINARY      _O_BINARY
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::printf_s, "printf_s")
+int printf_s(const char *_Format, ...);
+#pragma binding(msvcrt::fprintf_s, "fprintf_s")
+int fprintf_s(FILE *_File, const char *_Format, ...);
+#pragma binding(msvcrt::sprintf_s, "sprintf_s")
+int sprintf_s(char *_DstBuf, size_t _DstSize, const char *_Format, ...);
+#pragma binding(msvcrt::vprintf_s, "vprintf_s")
+int vprintf_s(const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::vfprintf_s, "vfprintf_s")
+int vfprintf_s(FILE *_File, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::vsprintf_s, "vsprintf_s")
+int vsprintf_s(char *_DstBuf, size_t _Size, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_snprintf_s, "_snprintf_s")
+int _snprintf_s(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, ...);
+#pragma binding(msvcrt::_vsnprintf_s, "_vsnprintf_s")
+int _vsnprintf_s(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_printf_s_l, "_printf_s_l")
+int _printf_s_l(const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vprintf_s_l, "_vprintf_s_l")
+int _vprintf_s_l(const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_fprintf_s_l, "_fprintf_s_l")
+int _fprintf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vfprintf_s_l, "_vfprintf_s_l")
+int _vfprintf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_sprintf_s_l, "_sprintf_s_l")
+int _sprintf_s_l(char *_DstBuf, size_t _DstSize, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vsprintf_s_l, "_vsprintf_s_l")
+int _vsprintf_s_l(char *_DstBuf, size_t _DstSize, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::_snprintf_s_l, "_snprintf_s_l")
+int _snprintf_s_l(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_vsnprintf_s_l, "_vsnprintf_s_l")
+int _vsnprintf_s_l(char *_DstBuf, size_t _DstSize, size_t _MaxCount, const char *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
+#pragma binding(msvcrt::scanf_s, "scanf_s")
+int scanf_s(const char *_Format, ...);
+#pragma binding(msvcrt::fscanf_s, "fscanf_s")
+int fscanf_s(FILE *_File, const char *_Format, ...);
+#pragma binding(msvcrt::sscanf_s, "sscanf_s")
+int sscanf_s(const char *_Src, const char *_Format, ...);
+#pragma binding(msvcrt::_snscanf_s, "_snscanf_s")
+int _snscanf_s(const char *_Src, size_t _MaxCount, const char *_Format, ...);
+#pragma binding(msvcrt::_scanf_s_l, "_scanf_s_l")
+int _scanf_s_l(const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_fscanf_s_l, "_fscanf_s_l")
+int _fscanf_s_l(FILE *_File, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_sscanf_s_l, "_sscanf_s_l")
+int _sscanf_s_l(const char *_Src, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::_snscanf_s_l, "_snscanf_s_l")
+int _snscanf_s_l(const char *_Src, size_t _MaxCount, const char *_Format, _locale_t _Locale, ...);
+#pragma binding(msvcrt::fopen_s, "fopen_s")
+errno_t fopen_s(FILE **_File, const char *_Filename, const char *_Mode);
+#pragma binding(msvcrt::tmpnam_s, "tmpnam_s")
+errno_t tmpnam_s(char *_Buf, rsize_t _Size);
 #endif
 void *dlsym(void *__restrict handle, const char *__restrict name);
 
@@ -899,4 +895,16 @@ static char *__c5_lazy_stream(int idx) {
 #define _vsprintf  vsprintf
 #ifndef _WIN32
 #define _vsnprintf vsnprintf
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::tempnam, "_tempnam")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::tempnam, "tempnam")
+#endif
+char *tempnam(const char *dir, const char *pfx);
 #endif

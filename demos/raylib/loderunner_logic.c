@@ -6,27 +6,28 @@
 
 #include <string.h>
 
-/* 30 columns wide; rows shorter than MAP_W are padded with empty cells
- * by level_load, so exact column counts are not required here. */
+/* MAP_W columns by MAP_H rows; the 'S' columns at both edges are the
+ * exit ladders. From the start every gold is reachable without digging,
+ * and the exit once it opens; test_loderunner checks both. */
 const char *const LEVEL_ASCII[MAP_H] = {
     "S                            S",
-    "S    $$$      HH      $$$     S",
-    "S#########    HH    #########SS",
-    "S       H     HH     H       SS",
-    "S  $    H  $  HH  $  H    $  SS",
-    "S#####  H#######H#######  ####S",
-    "S    H  H              H  H   S",
-    "S $  H  H  G      G    H  H $ S",
-    "S####H##H####H----H####H##H####",
-    "S    H       H    H       H   S",
-    "S $  H  $$$  H    H  $$$  H $  S",
-    "S####H#######H----H#######H####",
-    "S    H       =    =       H   S",
-    "S $$ H  G                 H $$ S",
-    "S===========     ============SS",
-    "S          H     H           SS",
-    "S    P     H     H     $$$    SS",
-    "S=============================S",
+    "S   $$$       HH       $$$   S",
+    "S#######H#    HH    #H#######S",
+    "S       H     HH     H       S",
+    "S  $    H  $  HH  $  H    $  S",
+    "S#######H#####HH#####H#######S",
+    "S    H  H     HH     H  H    S",
+    "S $  H  H  G  HH  G  H  H  $ S",
+    "S####H######H----H######H####S",
+    "S    H      H    H      H    S",
+    "S $  H  $$$ H    H $$$  H  $ S",
+    "S####H######H----H######H####S",
+    "S    H                  H    S",
+    "S $$ H  G               H $$ S",
+    "S==========H      H==========S",
+    "S          H      H          S",
+    "S    P     H      H   $$$    S",
+    "S============================S",
 };
 
 static int in_bounds(int x, int y) {
@@ -142,15 +143,25 @@ static void tick_holes(GameState *g) {
 
 static int sign(int v) { return v > 0 ? 1 : (v < 0 ? -1 : 0); }
 
+/* A live guard other than `self` holds (x,y). */
+static int guard_at(const GameState *g, int x, int y, int self) {
+    for (int k = 0; k < g->guard_count; k++)
+        if (k != self && g->guard[k].alive && g->guard[k].x == x && g->guard[k].y == y)
+            return 1;
+    return 0;
+}
+
 /* Greedy chase: close the larger gap first, using a ladder when the
  * row must change. Guards step at two thirds of the player's cadence so
- * the level stays winnable. */
+ * the level stays winnable. A guard never enters a cell another guard
+ * holds, and a dead one returns only once its start cell is free. */
 static void step_guards(GameState *g) {
     if (g->tick % 3 == 0) return;
     for (int i = 0; i < g->guard_count; i++) {
         Entity *gd = &g->guard[i];
         if (!gd->alive) {
-            if (--gd->respawn <= 0) {
+            if (--gd->respawn <= 0 && !guard_at(g, gd->home_x, gd->home_y, i) &&
+                !(g->player.x == gd->home_x && g->player.y == gd->home_y)) {
                 gd->x = gd->home_x;
                 gd->y = gd->home_y;
                 gd->alive = 1;
@@ -169,7 +180,9 @@ static void step_guards(GameState *g) {
         } else {
             mx = dx;
         }
-        move_entity(g, gd, mx, up, down);
+        Entity next = *gd;
+        move_entity(g, &next, mx, up, down);
+        if (!guard_at(g, next.x, next.y, i)) *gd = next;
     }
 }
 

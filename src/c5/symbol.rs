@@ -147,16 +147,26 @@ pub(crate) struct Symbol {
     /// reference links to address 0 instead of failing).
     pub is_weak: bool,
 
+    /// The link keeps any one unit's identical definition (MSVC's
+    /// `IMAGE_COMDAT_SELECT_ANY`); the object states it by `is_weak`.
+    pub pick_any: bool,
+
+    /// `dllimport` on the declarations so far: references go through the
+    /// import-address slot `__imp_<name>`.
+    pub dllimport: bool,
+
     /// `__attribute__((used))`: keep the definition in the object even
     /// when nothing in the unit references it.
     pub is_used: bool,
 
-    /// `__attribute__((visibility("hidden")))` (or `"internal"`): the
-    /// symbol is not preemptible, so the object writer marks it STV_HIDDEN
-    /// and addresses it PC-relative directly rather than through the GOT.
-    /// An undefined hidden reference resolves within the linked image, to 0
-    /// when it stays undefined, with no GOT entry.
-    pub is_hidden: bool,
+    /// `__attribute__((visibility(...)))`, or the `#pragma GCC visibility`
+    /// extent the declaration is in; `None` is default visibility. The
+    /// object writer states it on the symbol: hidden and internal keep the
+    /// name inside its component, protected exports it but binds the
+    /// component's own references to it.
+    pub visibility: Option<crate::c5::program::SymVisibility>,
+    /// An attribute or a `#pragma GCC visibility` extent gave `visibility`.
+    pub visibility_stated: bool,
 
     /// `__attribute__((section("name")))`: the named object section the
     /// symbol's bytes go to instead of the default `.text` / `.data` /
@@ -167,6 +177,10 @@ pub(crate) struct Symbol {
     /// declaration of the name: `N` NOPs at the entry, `M` of them ahead
     /// of the symbol, in place of `-fpatchable-function-entry=`.
     pub patchable_function_entry: Option<(u32, u32)>,
+
+    /// `__attribute__((aligned(N)))` on a function's declarations: the
+    /// largest `N`, the boundary its first instruction takes; 0 for none.
+    pub code_align: u32,
 
     /// `__attribute__((no_instrument_function))` seen on any declaration
     /// of the name: `-pg` emits no profiling call in the body.
@@ -410,6 +424,9 @@ pub(crate) struct Symbol {
     pub incomplete_enum_tag: Option<u32>,
     /// Scope-restore shadow for `incomplete_enum_tag`.
     pub h_incomplete_enum_tag: Option<u32>,
+    /// An enumeration constant's complete enumeration, a tag-registry id.
+    pub enumeration: Option<u32>,
+    pub h_enumeration: Option<u32>,
 
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
@@ -864,6 +881,19 @@ impl Symbol {
         self.is_weak && self.defined_here && self.linkage == Linkage::External
     }
 
+    /// A definition another component's may preempt (System V gABI, symbol
+    /// visibility): a function or an object of external linkage and default
+    /// visibility this unit defines, other than an alias or a thread-local.
+    pub fn is_interposable_definition(&self) -> bool {
+        self.defined_here
+            && self.linkage == Linkage::External
+            && self.visibility.is_none()
+            && !self.is_alias
+            && !self.is_thread_local
+            && !self.name.is_empty()
+            && (self.is_fun_entity() || self.class == crate::c5::token::Token::Glo as i64)
+    }
+
     /// Whether the slot denotes a function entity: a live `Token::Fun`
     /// binding, or a scoped function declaration whose name binding was
     /// unwound at scope exit (`class` back to 0) while `val`, the
@@ -878,6 +908,15 @@ impl Symbol {
     /// Whether the slot's name has a symbol of this unit's symbol table: a
     /// function entity, a file-scope object, or an object a block-scope
     /// `extern` declared, whatever binds the name now.
+    /// C99 6.9.2: an object with external linkage declared only `extern`,
+    /// with no initializer, is defined by another unit.
+    pub fn declares_no_storage(&self) -> bool {
+        self.class == crate::c5::token::Token::Glo as i64
+            && self.linkage == Linkage::External
+            && self.is_extern_decl
+            && !self.has_initializer
+    }
+
     pub fn is_link_entity(&self) -> bool {
         self.is_fun_entity()
             || self.class == crate::c5::token::Token::Glo as i64
@@ -919,10 +958,14 @@ impl crate::c5::layout::DataOffsets for Symbol {
             asm_name: _,   // an assembler symbol name, not an offset
             h_asm_name: _, // scope-restore shadow
             is_weak: _,
+            pick_any: _,
+            dllimport: _,
             is_used,
-            is_hidden: _,
+            visibility: _,
+            visibility_stated: _,
             section_name,
             patchable_function_entry: _,
+            code_align: _,
             no_instrument_function: _,
             no_stack_protector: _,
             is_noinline: _,
@@ -965,6 +1008,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_void_typedef: _,
             incomplete_enum_tag: _,
             h_incomplete_enum_tag: _,
+            enumeration: _,
+            h_enumeration: _,
             type_align: _,
             h_type_align: _,
             linkage: _,

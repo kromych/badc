@@ -38,20 +38,20 @@ Disassembly of section .text:
                	retq
 
 <get>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <get_half>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
 
 <pick>:
                	movslq	%edi, %rdi
                	testq	%rdi, %rdi
                	je	<addr>
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	retq
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	jmp	<addr>
 
 <main>:

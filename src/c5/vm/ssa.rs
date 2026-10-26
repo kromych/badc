@@ -1254,6 +1254,41 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = cur;
             return Ok(());
         }
+        Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            ..
+        } => {
+            // C11 7.17.7.4 on 16 bytes, single-threaded: compare the object
+            // with the comparand, store the replacement on a match, else
+            // write the prior contents over the comparand.
+            let a = frame.regs[*addr as usize];
+            let (e, d) = (
+                frame.regs[*expected as usize],
+                frame.regs[*desired as usize],
+            );
+            atomic_addr_check(a, "AtomicCas16")?;
+            let pair = |mem: &mut Memory, at: i64| -> Result<[i64; 2], C5Error> {
+                Ok([
+                    load_from_memory(mem, at as usize, LoadKind::I64)?,
+                    load_from_memory(mem, at as usize + 8, LoadKind::I64)?,
+                ])
+            };
+            mem.check_data_access(a as usize, 16, AccessKind::Read)?;
+            mem.check_data_access(a as usize, 16, AccessKind::Write)?;
+            let cur = pair(mem, a)?;
+            let matched = cur == pair(mem, e)?;
+            let (to, val) = if matched {
+                (a, pair(mem, d)?)
+            } else {
+                (e, cur)
+            };
+            store_to_memory(mem, to as usize, val[0], StoreKind::I64)?;
+            store_to_memory(mem, to as usize + 8, val[1], StoreKind::I64)?;
+            frame.regs[v as usize] = i64::from(matched);
+            return Ok(());
+        }
         // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the
         // single-threaded interpreter; the load zero-extends as the
         // native access does.
@@ -1583,6 +1618,45 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
             "vm_ssa: {name}: bad string argument"
         ))),
     }
+}
+
+/// Whether [`dispatch_callext`] defines `name`: a call to a function the
+/// unit declares but neither defines nor binds runs that definition, as a
+/// native link takes the one its C library offers.
+pub(super) fn interp_supplies(name: &str) -> bool {
+    matches!(
+        name,
+        "exit"
+            | "memcpy"
+            | "memmove"
+            | "memset"
+            | "memcmp"
+            | "write"
+            | "read"
+            | "close"
+            | "malloc"
+            | "free"
+            | "printf"
+            | "__iob_func"
+            | "errno_location"
+            | "fprintf"
+            | "fputs"
+            | "puts"
+            | "fputc"
+            | "putc"
+            | "fwrite"
+            | "fflush"
+            | "fileno"
+            | "putchar"
+            | "open"
+            | "getenv"
+            | "setenv"
+            | "_putenv_s"
+            | "dlopen"
+            | "dlsym"
+            | "dlclose"
+            | "dlerror"
+    )
 }
 
 /// Dispatch a libc binding by name. Implementations land here
@@ -3816,6 +3890,63 @@ mod tests {
     }
 
     #[test]
+    fn a_declared_function_the_interpreter_defines_runs_without_a_binding() {
+        // No header binds `printf` or `puts` here, as on Windows, where the
+        // C-library sources define the printf family; the interpreter's own
+        // definitions serve the calls.
+        let src = "int printf(const char *, ...);\nint puts(const char *);\n\
+                   int main(void) { return printf(\"%d\", 12) + puts(\"\") - 2; }\n";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        assert_eq!(crate::Vm::new(program).run().expect("run"), 0);
+    }
+
+    #[test]
+    fn every_function_the_interpreter_supplies_has_a_definition() {
+        let mut mem = Memory::new(&[0u8; 64]);
+        let names = [
+            "exit",
+            "memcpy",
+            "memmove",
+            "memset",
+            "memcmp",
+            "write",
+            "read",
+            "close",
+            "malloc",
+            "free",
+            "printf",
+            "__iob_func",
+            "errno_location",
+            "fprintf",
+            "fputs",
+            "puts",
+            "fputc",
+            "putc",
+            "fwrite",
+            "fflush",
+            "fileno",
+            "putchar",
+            "open",
+            "getenv",
+            "setenv",
+            "_putenv_s",
+            "dlopen",
+            "dlsym",
+            "dlclose",
+            "dlerror",
+        ];
+        for name in names {
+            assert!(interp_supplies(name), "{name}");
+            if let Err(C5Error::Runtime(m)) =
+                dispatch_callext(name, &[0; 4], &mut mem, &mut NullHost)
+            {
+                assert!(!m.contains("is not implemented"), "{name}: {m}");
+            }
+        }
+        assert!(!interp_supplies("snprintf"));
+    }
+
+    #[test]
     fn undefined_extern_call_is_undefined_reference() {
         // A declared-but-undefined callee must not dispatch to the
         // function whose ent_pc collides with the placeholder.
@@ -3844,6 +3975,31 @@ mod tests {
             "extern int missing_obj; int main(void) { return missing_obj + 7; }",
             "undefined reference to `missing_obj`",
         );
+    }
+
+    #[test]
+    fn a_static_initializer_naming_an_undefined_object_is_undefined_reference() {
+        expect_runtime_err(
+            "extern int nowhere; int *p = &nowhere; int main(void) { return p != 0; }",
+            "undefined reference to `nowhere`",
+        );
+    }
+
+    #[test]
+    fn an_undefined_weak_name_is_the_null_address() {
+        // The address of a weak function or object nothing defines is 0
+        // in code and in a static initializer, as a link resolves it; the
+        // call the address guards is not made.
+        let src = "extern int wv __attribute__((weak));\n\
+                   extern int wf(void) __attribute__((weak));\n\
+                   extern long pv;\n#pragma weak pv\n\
+                   int *pw = &wv;\nint (*fw)(void) = wf;\nlong *pp = &pv + 1;\n\
+                   int main(void) {\n\
+                     if (&wv || wf || &pv || pw || fw || pp != (long *)0 + 1) return 1;\n\
+                     return wf ? wf() : 0;\n\
+                   }\n";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        assert_eq!(crate::Vm::new(program).run().expect("run"), 0);
     }
 
     #[test]

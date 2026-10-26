@@ -4,6 +4,18 @@
 
 #include <stdarg.h>
 
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::err,    "_err")
+#pragma binding(libc::errx,   "_errx")
+#pragma binding(libc::warn,   "_warn")
+#pragma binding(libc::warnx,  "_warnx")
+#pragma binding(libc::verr,   "_verr")
+#pragma binding(libc::verrx,  "_verrx")
+#pragma binding(libc::vwarn,  "_vwarn")
+#pragma binding(libc::vwarnx, "_vwarnx")
+#endif
+
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::err,    "err")
@@ -16,6 +28,7 @@
 #pragma binding(libc::vwarnx, "vwarnx")
 #endif
 
+#ifndef _WIN32
 // The err/errx family prints the message and exits with eval.
 _Noreturn void err(int eval, const char *fmt, ...);
 _Noreturn void errx(int eval, const char *fmt, ...);
@@ -27,3 +40,4 @@ void warn(const char *fmt, ...);
 void warnx(const char *fmt, ...);
 void vwarn(const char *fmt, va_list ap);
 void vwarnx(const char *fmt, va_list ap);
+#endif

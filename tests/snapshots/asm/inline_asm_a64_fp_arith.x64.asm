@@ -28,10 +28,11 @@ Disassembly of section .text:
 <main>:
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
                	movabsq	$0x4020000000000000, %rcx # imm = 0x4020000000000000
-               	movabsq	$-0x3fe8000000000000, %rdx # imm = 0xC018000000000000
-               	movq	%rax, %xmm0
-               	movq	%rdx, %xmm14
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
+               	vmulsd	%xmm15, %xmm14, %xmm0
+               	movabsq	$-0x3fe8000000000000, %rax # imm = 0xC018000000000000
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm0
                	cvttsd2si	%xmm0, %rax
                	retq

@@ -510,6 +510,19 @@ pub(crate) enum Inst {
         width: u8,
         order: MemOrder,
     },
+    /// Atomic compare-and-exchange on the 16-byte object at `addr` (C11
+    /// 7.17.7.4): `expected` and `desired` are the addresses of 16-byte
+    /// objects holding the comparand and the replacement. On a mismatch
+    /// the prior contents are written to the object at `expected`. The
+    /// defined value is 1 on a match, else 0. `LOCK CMPXCHG16B` on
+    /// x86_64, `CASP` with the order's acquire and release bits on
+    /// aarch64 (LSE).
+    AtomicCas16 {
+        addr: ValueId,
+        expected: ValueId,
+        desired: ValueId,
+        order: MemOrder,
+    },
     /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
     /// zero-extended. `order` selects the access: on aarch64 a plain
     /// load for relaxed, the RCpc `ldapr` for acquire and `ldar` for
@@ -764,6 +777,7 @@ impl Inst {
             Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
+            Inst::AtomicCas16 { .. } => "AtomicCas16",
             Inst::AtomicLoad { .. } => "AtomicLoad",
             Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
@@ -885,6 +899,12 @@ impl Inst {
                 expected,
                 desired,
                 ..
+            }
+            | Inst::AtomicCas16 {
+                addr,
+                expected,
+                desired,
+                ..
             } => {
                 f(*addr);
                 f(*expected);
@@ -992,6 +1012,12 @@ impl Inst {
             }
             Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
+                addr,
+                expected,
+                desired,
+                ..
+            }
+            | Inst::AtomicCas16 {
                 addr,
                 expected,
                 desired,
@@ -1136,6 +1162,10 @@ pub(crate) enum BinOp {
     Fadd,
     Fsub,
     Fmul,
+    /// An `Fmul` whose product is an operand of an add or subtract of its
+    /// type in the same expression while `FP_CONTRACT` is on (C99 6.5p8,
+    /// 7.12.2), which `passes::fma` may contract with it; otherwise `Fmul`.
+    FmulContractible,
     Fdiv,
     Feq,
     Fne,
@@ -1263,6 +1293,7 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fadd
         | BinOp::Fsub
         | BinOp::Fmul
+        | BinOp::FmulContractible
         | BinOp::Fdiv
         | BinOp::Feq
         | BinOp::Fne
@@ -1272,6 +1303,14 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
     };
     Ok(v)
+}
+
+/// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
+pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::FmulContractible | BinOp::Fdiv
+    )
 }
 
 /// Integer division and remainder, signed and unsigned (C99 6.5.5).
@@ -2155,6 +2194,9 @@ pub(crate) struct FunctionSsa {
     pub conv: crate::c5::codegen::CallConv,
     /// `-mno-sse` / `-mgeneral-regs-only`: no vector register is used.
     pub general_regs_only: bool,
+    /// A thread-local's address comes from a TLS descriptor call (Linux
+    /// `-fPIC`), so `Inst::TlsAddr` clobbers what a call does.
+    pub tls_dynamic: bool,
     /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
     /// the function or one of its declarations, or a file-scope asm `.weak`
     /// naming it. A strong definition in another object replaces it at link
@@ -2621,6 +2663,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -2655,6 +2698,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_noreturn: _,
             conv: _,
             general_regs_only: _,
+            tls_dynamic: _,
             is_weak: _,
             is_internal: _,
             section: _,

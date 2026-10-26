@@ -542,9 +542,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v271 Imm(0)                                           -> x2
     v272 StoreLocal { off=-1, value=v270, kind=I64 }      -> -
     v273 LoadLocal { off=-1, kind=F64 }                   -> d1
-    v274 Binop { op=fmul, lhs=v267, rhs=v273 }            -> d2
+    v274 Binop { op=fmul, lhs=v267, rhs=v273 }            -> d0
     v275 Imm(4602678819172646912)                         -> x0
-    v276 Fma { a=v267, b=v273, c=v137, neg_product=false, neg_addend=true } -> d0
+    v276 Binop { op=fsub, lhs=v274, rhs=v137 }            -> d0
     v277 Imm(0)                                           -> x0
     v278 StoreLocal { off=-1, value=v276, kind=F64 }      -> -
     v279 LoadLocal { off=-1, kind=I64 }                   -> x2

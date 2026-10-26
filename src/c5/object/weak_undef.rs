@@ -7,10 +7,11 @@
 //!
 //! Each function takes the byte offset of the instruction it rewrites
 //! and returns `false` when the bytes at that offset are not the
-//! expected shape, leaving the caller to raise a diagnostic. Two
-//! callers share these: the multi-unit linker, which locates the site
-//! from a relocation, and the single-TU final-image emitter, which has
-//! the site recorded by codegen.
+//! expected shape, leaving the caller to raise a diagnostic. The
+//! multi-unit linker locates the site from a relocation; the single-TU
+//! final-image emitter and the JIT have the site recorded by codegen.
+
+use crate::c5::codegen::Machine;
 
 /// AArch64 `nop`.
 const AARCH64_NOP: u32 = 0xd503_201f;
@@ -111,6 +112,25 @@ fn x86_64_rip_ref_to_zero(text: &mut [u8], offset: usize, opcode: u8) -> bool {
     slot[2] = 0xC0 | reg;
     slot[3..7].copy_from_slice(&[0, 0, 0, 0]);
     true
+}
+
+/// The call or jump codegen records at `offset` -> a no-op.
+pub(crate) fn branch_to_nop(machine: Machine, text: &mut [u8], offset: usize) -> bool {
+    match machine {
+        Machine::X86_64 => x86_64_branch_to_nop(text, offset),
+        Machine::Aarch64 => aarch64_branch_to_nop(text, offset),
+    }
+}
+
+/// The address codegen forms at `offset` -- a `lea`, or an `adrp` and its
+/// `add` -- -> the constant 0.
+pub(crate) fn address_to_zero(machine: Machine, text: &mut [u8], offset: usize) -> bool {
+    match machine {
+        Machine::X86_64 => x86_64_lea_to_zero(text, offset),
+        Machine::Aarch64 => {
+            aarch64_adrp_to_zero(text, offset) && aarch64_add_lo12_to_zero(text, offset + 4)
+        }
+    }
 }
 
 #[cfg(test)]

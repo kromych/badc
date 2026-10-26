@@ -20,11 +20,8 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
-    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
-    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST16_ABS_LO12_NC, R_AARCH64_LDST32_ABS_LO12_NC,
-    R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32,
-    R_AARCH64_PREL64,
+    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+    R_AARCH64_CALL26, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
 };
 use crate::c5::object::unwind_info::{UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_MASK};
 
@@ -429,22 +426,8 @@ fn read_relocs(bytes: &[u8], sect: &Sect) -> Result<Vec<Reloc>, C5Error> {
 /// load / store the `LDST<n>` form for its access width. Mach-O leaves
 /// the width to the instruction; AAELF64 spells it in the type.
 fn pageoff12_rtype(insn: u32, site: &str) -> Result<u32, C5Error> {
-    if insn & 0xFF80_0000 == 0x9100_0000 {
-        return Ok(R_AARCH64_ADD_ABS_LO12_NC);
-    }
-    if insn & 0x3B00_0000 == 0x3900_0000 {
-        let size = insn >> 30;
-        let vector = (insn >> 26) & 1 != 0;
-        let opc = (insn >> 22) & 3;
-        // A vector access with `size == 0` and `opc<1>` set is 128-bit;
-        // every other form scales by `size`.
-        return Ok(match (size, vector && opc & 2 != 0) {
-            (0, true) => R_AARCH64_LDST128_ABS_LO12_NC,
-            (0, false) => R_AARCH64_LDST8_ABS_LO12_NC,
-            (1, _) => R_AARCH64_LDST16_ABS_LO12_NC,
-            (2, _) => R_AARCH64_LDST32_ABS_LO12_NC,
-            _ => R_AARCH64_LDST64_ABS_LO12_NC,
-        });
+    if let Some(rtype) = crate::c5::object::elf_reloc_types::aarch64_lo12_rtype(insn, false) {
+        return Ok(rtype);
     }
     Err(link_err(
         Code::MALFORMED_INPUT,
@@ -543,6 +526,9 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         prologue_ends: Vec::new(),
         early_returns: Vec::new(),
         extern_data_names: Vec::new(),
+        alternate_names: Vec::new(),
+        comdats: Vec::new(),
+        default_libs: Vec::new(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -552,6 +538,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_other: Vec::new(),
         compact_unwind,
         eh_frame,
+        pe_unwind: Vec::new(),
     })
 }
 
@@ -1483,6 +1470,10 @@ fn translate_reloc(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_LDST8_ABS_LO12_NC, R_AARCH64_LDST16_ABS_LO12_NC,
+        R_AARCH64_LDST32_ABS_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC,
+    };
 
     /// A malformed object is the user's input, not badc's invariant:
     /// the error carries the malformed-input row and no ICE marker.

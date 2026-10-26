@@ -103,7 +103,7 @@ Disassembly of section .text:
                	retq
 
 <members>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsbq	0x3(%rax), %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>

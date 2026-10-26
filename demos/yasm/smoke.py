@@ -24,6 +24,7 @@ Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -112,10 +113,13 @@ def stage_badc_python(rundir: Path) -> Path:
         check=True,
     )
     pybin = PYDEMO / ".cache" / f"obj-{badc_target()}" / "python"
-    srcs = sorted((PYDEMO / ".cache").glob("Python-*"))
-    if not pybin.is_file() or not srcs:
+    # The tree build.py compiled: a cache can hold other versions' trees too.
+    spec = importlib.util.spec_from_file_location("pydemo_build", PYDEMO / "build.py")
+    pybuild = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pybuild)
+    pysrc = pybuild.SRC
+    if not pybin.is_file() or not (pysrc / "Lib").is_dir():
         fail("badc-built python or its source tree not found")
-    pysrc = srcs[-1]
     exe = rundir / "python"
     shutil.copy2(pybin, exe)
     os.chmod(exe, 0o755)

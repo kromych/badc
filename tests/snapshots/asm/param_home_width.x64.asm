@@ -156,25 +156,25 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x50(%rbp)
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x48(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x40(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x38(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x30(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x28(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x20(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x18(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movabsq	$-0x5a5a5a5a5a5a5af9, %rdi # imm = 0xA5A5A5A5A5A5A507
                	xorl	%esi, %esi

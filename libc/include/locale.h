@@ -132,7 +132,68 @@ struct lconv {
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::setlocale,  "setlocale")
 #pragma binding(msvcrt::localeconv, "localeconv")
+#pragma binding(msvcrt::_create_locale,      "_create_locale")
+#pragma binding(msvcrt::_free_locale,        "_free_locale")
+#pragma binding(msvcrt::_get_current_locale, "_get_current_locale")
+#include <corecrt.h>
+_locale_t _create_locale(int category, const char *locale);
+void _free_locale(_locale_t locale);
+_locale_t _get_current_locale(void);
 #endif
 
 char *setlocale(int category, const char *locale);
 struct lconv *localeconv(void);
+
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX.1-2008 locale objects: locale_t and the calls that make, copy, free
+// and install one for the calling thread.
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::newlocale, "_newlocale")
+#pragma binding(libc::duplocale, "_duplocale")
+#pragma binding(libc::freelocale, "_freelocale")
+#pragma binding(libc::uselocale, "_uselocale")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::newlocale, "newlocale")
+#pragma binding(libc::duplocale, "duplocale")
+#pragma binding(libc::freelocale, "freelocale")
+#pragma binding(libc::uselocale, "uselocale")
+#endif
+#ifdef __APPLE__
+#define LC_COLLATE_MASK  (1 << 0)
+#define LC_CTYPE_MASK    (1 << 1)
+#define LC_MESSAGES_MASK (1 << 2)
+#define LC_MONETARY_MASK (1 << 3)
+#define LC_NUMERIC_MASK  (1 << 4)
+#define LC_TIME_MASK     (1 << 5)
+#define LC_ALL_MASK                                                                    \
+    (LC_COLLATE_MASK | LC_CTYPE_MASK | LC_MESSAGES_MASK | LC_MONETARY_MASK |             \
+     LC_NUMERIC_MASK | LC_TIME_MASK)
+#else
+#define LC_CTYPE_MASK    (1 << LC_CTYPE)
+#define LC_NUMERIC_MASK  (1 << LC_NUMERIC)
+#define LC_TIME_MASK     (1 << LC_TIME)
+#define LC_COLLATE_MASK  (1 << LC_COLLATE)
+#define LC_MONETARY_MASK (1 << LC_MONETARY)
+#define LC_MESSAGES_MASK (1 << LC_MESSAGES)
+// glibc's mask takes its six GNU categories, numbered 7 to 12, too.
+#define LC_ALL_MASK                                                                    \
+    (LC_CTYPE_MASK | LC_NUMERIC_MASK | LC_TIME_MASK | LC_COLLATE_MASK |                  \
+     LC_MONETARY_MASK | LC_MESSAGES_MASK | (0x3f << 7))
+#endif
+#define LC_GLOBAL_LOCALE ((locale_t)-1L)
+locale_t newlocale(int category_mask, const char *locale, locale_t base);
+locale_t duplocale(locale_t locobj);
+void freelocale(locale_t locobj);
+locale_t uselocale(locale_t newloc);
+#endif

@@ -7,7 +7,7 @@ Two-file core (`monocypher.c`, `monocypher.h`) with no external
 deps; the optional module adds two more files for the SHA-512
 families.
 
-Pinned at upstream tag `4.0.2`. Pulled through the badc
+Pinned at upstream tag `4.0.3`. Pulled through the badc
 vendor-deps mirror -- see `setup.py`.
 
 ## Vendored surface

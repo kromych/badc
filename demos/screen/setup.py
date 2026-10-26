@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Fetch GNU Screen from the badc vendor-deps mirror.
 
-Pins release 5.0.0. The asset on the `kromych/badc` release is the
+Pins release 5.0.2. The asset on the `kromych/badc` release is the
 upstream `ftp.gnu.org` tarball, named after the release and the first 8
 hex digits of its sha256; ``_fetch`` verifies the full digest before
 extraction, and the tree lands under
-``demos/screen/.cache/screen-5.0.0/``, used as upstream ships it. See
+``demos/screen/.cache/screen-5.0.2/``, used as upstream ships it. See
 ``scripts/vendor_deps/README.md`` for the auth model.
 
 Exits with status ``MISSING_ASSET``, naming the asset, when the release
@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "5.0.0"
-SHA256 = "f04a39d00a0e5c7c86a55338808903082ad5df4d73df1a2fd3425976aed94971"
+VERSION = "5.0.2"
+SHA256 = "ca9a2c7e240919bc7ac12124593ae4529bb4eb5f7349d8857829b7e3f0b3b332"
 ASSET = f"screen-{VERSION}-{SHA256[:8]}.tar.gz"
 RELEASE_TAG = "vendor-deps-v1"
 SRC_DIRNAME = f"screen-{VERSION}"

@@ -56,8 +56,8 @@ import ktree
 LINUX_DIR = Path(__file__).resolve().parent
 
 # The corpus: latest stable at the time of pinning, both architectures.
-DEFCONFIG_KERNEL = ("7.1.10",
-                    "67d2f4697a02f3bec98e744b1bdc307e920c24bb4e88b5ee97dc9a34e9aa9999")
+DEFCONFIG_KERNEL = ("7.2.9",
+                    "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba")
 
 # The architectures kbuild can be driven for from either host.
 ARCHES = sorted(karch.ARCHES)

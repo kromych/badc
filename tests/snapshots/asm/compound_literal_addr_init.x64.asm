@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <check_static>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	movl	(%rcx), %ecx
                	cmpl	$0x2a, %ecx
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movl	0x8(%rax), %eax
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	cmpl	$0x3, %ecx
                	jne	<addr>

@@ -394,6 +394,14 @@ pub(super) fn emit_inst(
         } => emit_atomic_cas(
             code, v, dst, *addr, *expected, *desired, *width, *order, alloc, frame, scratch,
         ),
+        Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            order,
+        } => emit_atomic_cas16(
+            code, dst, *addr, *expected, *desired, *order, alloc, frame, scratch,
+        ),
         Inst::AtomicLoad { addr, width, order } => {
             emit_atomic_load(code, dst, *addr, *width, *order, alloc, frame, scratch)
         }
@@ -442,7 +450,7 @@ pub(super) fn emit_inst(
             dst,
             frame,
             *offset,
-            target,
+            (target, func.tls_dynamic),
             cx.tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,

@@ -43,9 +43,6 @@ struct sched_param {
 #pragma binding(libc::sched_yield, "_sched_yield")
 #pragma binding(libc::sched_get_priority_max, "_sched_get_priority_max")
 #pragma binding(libc::sched_get_priority_min, "_sched_get_priority_min")
-// libSystem exports none of sched_setscheduler / sched_getscheduler /
-// sched_setparam / sched_getparam / sched_rr_get_interval; leaving
-// them unbound makes a use fail at link rather than at load.
 #endif
 
 #ifdef __linux__
@@ -68,7 +65,8 @@ struct sched_param {
 int sched_yield(void);
 int sched_get_priority_max(int policy);
 int sched_get_priority_min(int policy);
-#if defined(__APPLE__) || defined(__linux__)
+// libSystem exports none of these, and the SDK declares none.
+#ifdef __linux__
 int sched_setscheduler(int pid, int policy, const struct sched_param *param);
 int sched_getscheduler(int pid);
 int sched_setparam(int pid, const struct sched_param *param);

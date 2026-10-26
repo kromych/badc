@@ -1,6 +1,6 @@
 # The Linux kernel
 
-badc compiles every C translation unit of a Linux 7.1.10 `defconfig` kernel on
+badc compiles every C translation unit of a Linux 7.2.9 `defconfig` kernel on
 x86_64 and aarch64, links it, and the result boots. The harness is
 [`demos/linux/`](../demos/linux/), whose
 [README](../demos/linux/README.md) documents every script, flag and pin.
@@ -15,6 +15,10 @@ the 7.1.10 pin, and they differ only in which make targets were built:
 |---|---|---|---|
 | kernel image (`bzImage` / `Image`, vmlinux included, no modules) | 2921 | 4434 | `verify.py` |
 | kernel plus modules (` ... modules`) | 2953 | 10489 | `packages.py` |
+
+At the 7.2.9 pin the kernel image is 2942 units on x86_64 and 4283 on aarch64.
+A gcc build of arm64 `defconfig` drops by the same 152 units between the two
+releases (4471 to 4319), so the aarch64 decrease is the tree's.
 
 Both come from the same counter -- one manifest line per successful badc
 compile of a kernel C unit -- so the deltas are exactly the module corpus.

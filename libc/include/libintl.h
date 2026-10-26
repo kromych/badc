@@ -17,6 +17,7 @@
 #pragma binding(libc::bind_textdomain_codeset, "bind_textdomain_codeset")
 #endif
 
+#ifndef _WIN32
 char *gettext(const char *msgid);
 char *dgettext(const char *domainname, const char *msgid);
 char *dcgettext(const char *domainname, const char *msgid, int category);
@@ -28,3 +29,4 @@ char *dcngettext(const char *domainname, const char *msgid1,
 char *textdomain(const char *domainname);
 char *bindtextdomain(const char *domainname, const char *dirname);
 char *bind_textdomain_codeset(const char *domainname, const char *codeset);
+#endif

@@ -1,0 +1,237 @@
+
+fscanf_reads_whole_fields_across_threads.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<reader>:
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
+               	mov	x20, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	cbz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	sub	x2, x29, #0x8
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x1
+               	cset	x0, eq
+               	cbz	x0, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x2, [x1, x20, lsl #3]
+               	ldur	x0, [x29, #-0x8]
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	cmp	x0, x17
+               	mov	x0, #0x1                // =1
+               	b.lt	<addr>
+               	ldur	x0, [x29, #-0x8]
+               	mov	x17, #0x9640            // =38464
+               	movk	x17, #0x1, lsl #16
+               	cmp	x0, x17
+               	cset	x0, ge
+               	add	x0, x2, x0
+               	str	x0, [x1, x20, lsl #3]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, x20, lsl #3]
+               	ldur	x2, [x29, #-0x8]
+               	add	x1, x1, x2
+               	str	x1, [x0, x20, lsl #3]
+               	b	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	sub	x2, x29, #0x8
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x1
+               	cset	x0, eq
+               	cbnz	x0, <addr>
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
+               	ret
+
+<race>:
+               	stp	x20, x21, [sp, #-0x40]!
+               	str	x22, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x30]
+               	add	x29, sp, #0x30
+               	sxtw	x22, w0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	w22, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	xzr, [x2, #0x8]
+               	str	xzr, [x2]
+               	str	xzr, [x1, #0x8]
+               	str	xzr, [x1]
+               	adrp	x21, <page>
+               	add	x21, x21, <lo12>
+               	bl	<addr>
+               	str	x0, [x21]
+               	cbnz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x22, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x20, #0x0               // =0
+               	cbz	x22, <addr>
+               	ldr	x0, [x21]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	add	x2, x20, x17
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	b.ge	<addr>
+               	b	<addr>
+               	ldr	x0, [x21]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	add	x2, x20, x17
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
+               	b.lt	<addr>
+               	add	x20, x20, #0x1
+               	cmp	w20, #0xfa0
+               	b.lt	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	bl	<addr>
+               	mov	x1, #0x0                // =0
+               	sub	x0, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	mov	x3, x1
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x3                // =3
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x22, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x3, #0x1                // =1
+               	sub	x0, x29, #0x10
+               	add	x0, x0, #0x8
+               	mov	x1, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	ldur	x0, [x29, #-0x10]
+               	mov	x1, #0x0                // =0
+               	bl	<addr>
+               	ldur	x0, [x29, #-0x8]
+               	mov	x1, #0x0                // =0
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x0, [x0]
+               	bl	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	cbnz	x1, <addr>
+               	ldr	x0, [x0, #0x8]
+               	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
+               	add	x0, x1, x0
+               	mov	x17, #0x8e30            // =36400
+               	movk	x17, #0x1851, lsl #16
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x4                // =4
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x22, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x0, #0x0                // =0
+               	b	<addr>
+               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp, #0x30]
+               	ldr	x22, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+
+<main>:
+               	stp	x20, x21, [sp, #-0xc0]!
+               	stp	x29, x30, [sp, #0xb0]
+               	add	x29, sp, #0xb0
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
+               	ret
+               	mov	x20, #0x0               // =0
+               	sub	x21, x29, #0xa0
+               	bl	<addr>
+               	str	x0, [x21, x20, lsl #3]
+               	cbz	x0, <addr>
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x14
+               	b.lt	<addr>
+               	mov	x0, #0x0                // =0
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	add	x0, x0, #0xa
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
+               	ret
+               	mov	x20, #0x0               // =0
+               	sub	x0, x29, #0xa0
+               	ldr	x0, [x0, x20, lsl #3]
+               	bl	<addr>
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x14
+               	b.lt	<addr>
+               	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
+               	ret
+               	mov	x0, #0x5                // =5
+               	ldp	x29, x30, [sp, #0xb0]
+               	ldp	x20, x21, [sp], #0xc0
+               	ret

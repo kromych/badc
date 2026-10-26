@@ -70,6 +70,7 @@ struct dirent {
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::opendir,  "_opendir")
 #pragma binding(libc::readdir,  "_readdir")
+#pragma binding(libc::readdir_r,"_readdir_r")
 #pragma binding(libc::closedir, "_closedir")
 #pragma binding(libc::rewinddir,"_rewinddir")
 #pragma binding(libc::fdopendir,"_fdopendir")
@@ -82,6 +83,7 @@ struct dirent {
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::opendir,  "opendir")
 #pragma binding(libc::readdir,  "readdir")
+#pragma binding(libc::readdir_r,"readdir_r")
 #pragma binding(libc::closedir, "closedir")
 #pragma binding(libc::rewinddir,"rewinddir")
 #pragma binding(libc::fdopendir,"fdopendir")
@@ -94,6 +96,8 @@ DIR *opendir(char *path);
 // POSIX: open a directory stream on an already-open descriptor.
 DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dir);
+// POSIX: readdir into a caller's entry; *result is null at the end.
+int readdir_r(DIR *restrict dir, struct dirent *restrict entry, struct dirent **restrict result);
 int closedir(DIR *dir);
 void rewinddir(DIR *dir);
 // POSIX: the file descriptor backing an open directory stream.

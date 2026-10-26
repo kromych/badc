@@ -67,7 +67,9 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Ror => (lhs as u64).rotate_right(rhs as u32 & 63) as i64,
         BinOp::Fadd => (f64::from_bits(lhs as u64) + f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Fsub => (f64::from_bits(lhs as u64) - f64::from_bits(rhs as u64)).to_bits() as i64,
-        BinOp::Fmul => (f64::from_bits(lhs as u64) * f64::from_bits(rhs as u64)).to_bits() as i64,
+        BinOp::Fmul | BinOp::FmulContractible => {
+            (f64::from_bits(lhs as u64) * f64::from_bits(rhs as u64)).to_bits() as i64
+        }
         BinOp::Fdiv => (f64::from_bits(lhs as u64) / f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Feq => (f64::from_bits(lhs as u64) == f64::from_bits(rhs as u64)) as i64,
         BinOp::Fne => (f64::from_bits(lhs as u64) != f64::from_bits(rhs as u64)) as i64,
@@ -104,6 +106,7 @@ pub(crate) fn fold_binop(op: BinOp, lhs: i64, rhs: i64) -> Option<i64> {
         BinOp::Fadd
             | BinOp::Fsub
             | BinOp::Fmul
+            | BinOp::FmulContractible
             | BinOp::Fdiv
             | BinOp::Feq
             | BinOp::Fne

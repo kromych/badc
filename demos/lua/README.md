@@ -1,6 +1,6 @@
 # lua demo
 
-End-to-end exercise of badc against the upstream Lua 5.5.0
+End-to-end exercise of badc against the upstream Lua 5.5.1
 interpreter and its official test suite. `setup.py` fetches the
 release tarball plus the matching test suite, `smoke.py` builds
 the interpreter with badc at both `-O0` and `-O`, and runs a

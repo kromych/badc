@@ -30,13 +30,13 @@ Disassembly of section .text:
                	retq
 
 <two>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	shlq	%rdi
                	movl	%edi, (%rax)
                	retq
 
 <main>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	$0xa, (%rax)
                	xorl	%eax, %eax
                	retq

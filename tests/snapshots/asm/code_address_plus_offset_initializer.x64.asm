@@ -34,9 +34,9 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
-               	leaq	-<rip>, %rcx       # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	subq	%rcx, %rax
                	cmpq	$0x4, %rax
                	sete	%dl
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movq	(%rdx), %rdx
                	subq	%rcx, %rdx
                	cmpq	$0x8, %rdx
@@ -52,25 +52,25 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	0x8(%rcx), %rcx
-               	leaq	-<rip>, %rdx       # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
                	cmpq	$-0x2, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %ecx
                	cmpl	$0x3, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	0x8(%rcx), %rcx
-               	leaq	-<rip>, %rdx       # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
                	cmpq	$0x10, %rcx
                	sete	%cl

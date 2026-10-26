@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::inputs::RawReloc;
+use super::preempt::Reach;
 use super::sections::{is_debug_section, is_unwind_section};
 use super::{
     EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsLinker, MODULE, R_NONE, SHN_ABS, SHN_COMMON,
@@ -64,8 +65,56 @@ impl<'a> LdsLinker<'a> {
                         format!("{source}: access beyond end of merged section ({bad})"),
                     );
                 }
-                let target = self.resolve_reloc_target(id.obj, r, tolerant, &mut errors);
+                let reach = self.reach_at(id.obj, id.sec, r);
+                let refusal = (self.narrow_import_refusal(id.obj, id.sec, r))
+                    .or_else(|| self.weak_pc_refusal(id.obj, id.sec, r));
+                if let Some(e) = refusal {
+                    errors.push(e);
+                    continue;
+                }
+                let dyn_import = reach == Reach::Dynamic
+                    && (self.objects[id.obj].symbols.get(r.sym as usize))
+                        .is_some_and(|s| self.import_of.contains_key(&s.name));
+                let target = match reach {
+                    Reach::Plt | Reach::Got | Reach::NotedPair => {
+                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                        let at = self.stub_or_slot(name, reach);
+                        if at.is_none() {
+                            let what = if reach == Reach::Plt {
+                                "PLT stub"
+                            } else {
+                                "GOT slot"
+                            };
+                            let source = &self.objects[id.obj].source;
+                            errors.push(format!("{source}: no {what} for `{name}'"));
+                        }
+                        at.map(|v| v.wrapping_add(r.addend as u64))
+                    }
+                    // The field of a dynamic relocation against an import
+                    // holds the addend.
+                    Reach::Dynamic if dyn_import => Some(r.addend as u64),
+                    _ => {
+                        let flags = self.objects[id.obj].sections[id.sec].flags;
+                        let sa = self.resolve_reloc_target(id.obj, r, flags, tolerant, &mut errors);
+                        // A GOT reference that keeps its slot reaches the slot.
+                        if sa.is_some()
+                            && self.machine == EM_386
+                            && self.i386_got_slot_ref(id.obj, id.sec, r)
+                        {
+                            let slot = self.got_slot_addr(id.obj, r);
+                            if slot.is_none() {
+                                let source = &self.objects[id.obj].source;
+                                let name = self.objects[id.obj].symbol_name(r.sym as usize);
+                                errors.push(format!("{source}: no GOT slot for `{name}'"));
+                            }
+                            slot.map(|v| v.wrapping_add(r.addend as u64))
+                        } else {
+                            sa
+                        }
+                    }
+                };
                 let Some(s_plus_a) = target else { continue };
+                let s_plus_a = self.weak_pc_value(id.obj, r, p, s_plus_a);
                 if errors.len() > 40 {
                     break;
                 }
@@ -86,6 +135,23 @@ impl<'a> LdsLinker<'a> {
                     errors.push(e);
                     continue;
                 }
+                match reach {
+                    Reach::Refused => {
+                        errors.push(self.preempted_refusal(id.obj, id.sec, r));
+                        continue;
+                    }
+                    // The loader writes the field from the dynamic
+                    // relocation naming the symbol.
+                    Reach::Dynamic => continue,
+                    Reach::NotedPair => {
+                        let half = (id.obj, id.sec, r);
+                        if let Err(e) = self.apply_noted_pair(buf, site, p, s_plus_a, half) {
+                            errors.push(e);
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
                 self.apply_one(
                     buf,
                     site,
@@ -95,7 +161,7 @@ impl<'a> LdsLinker<'a> {
                     alloc,
                     relr_set,
                     &mut errors,
-                    id.obj,
+                    (id.obj, id.sec),
                 );
             }
         }
@@ -116,6 +182,7 @@ impl<'a> LdsLinker<'a> {
         &self,
         oi: usize,
         r: &RawReloc,
+        flags: u64,
         tolerant: bool,
         errors: &mut Vec<String>,
     ) -> Option<u64> {
@@ -157,8 +224,24 @@ impl<'a> LdsLinker<'a> {
                 return Some(s.val.v.wrapping_add(r.addend as u64));
             }
             if self.import_of.contains_key(&sym.name) {
-                if let Some(v) = self.import_target(&sym.name, r.rtype) {
+                if let Some(v) = self.import_target(&sym.name, r.rtype, flags) {
                     return Some(v.wrapping_add(r.addend as u64));
+                }
+                // An address-width field of a dynamic image takes a dynamic
+                // relocation against the import; the field holds the addend.
+                if self.dynamic()
+                    && r.rtype == self.dyn_reloc_types().0
+                    && !self.word_binds_copy(&sym.name)
+                {
+                    return Some(r.addend as u64);
+                }
+                if let Some(copy) = self.copy_addr(&sym.name) {
+                    return Some(copy.wrapping_add(r.addend as u64));
+                }
+                // An executable resolves an undefined weak import's other
+                // references to 0, as for one the link keeps local.
+                if !self.opts.shared && self.undefined_weak_import(&sym.name) {
+                    return Some(r.addend as u64);
                 }
                 errors.push(format!(
                     "{}: {} against `{}' cannot reach a shared library; \
@@ -222,7 +305,7 @@ impl<'a> LdsLinker<'a> {
         alloc: bool,
         relr_set: &HashSet<u64>,
         errors: &mut Vec<String>,
-        oi: usize,
+        (oi, si): (usize, usize),
     ) {
         let machine = self.machine;
         let name = || self.objects[oi].symbol_name(r.sym as usize);
@@ -298,9 +381,13 @@ impl<'a> LdsLinker<'a> {
                     w(buf, site, &[v as u8]);
                 }
                 rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX => {
-                    // An import has no link-time address to relax to;
-                    // the site keeps its load from the GOT slot.
-                    if self.import_of.contains_key(&name()) {
+                    // An import or a preemptible definition has no
+                    // link-time address to relax to; the site keeps its
+                    // load from the GOT slot.
+                    let target = name();
+                    if self.import_of.contains_key(&target)
+                        || (alloc && self.preemptible.contains(&target))
+                    {
                         let v = sa.wrapping_sub(p) as i64;
                         w(buf, site, &(v as i32).to_le_bytes());
                         return;
@@ -348,79 +435,12 @@ impl<'a> LdsLinker<'a> {
                     ));
                 }
             },
-            EM_386 => self.apply_i386(buf, site, p, sa, r, errors, oi),
+            EM_386 => self.apply_i386(buf, site, p, sa, r, (oi, si), errors),
             EM_AARCH64 => self.apply_aarch64(buf, site, p, sa, r, alloc, relr_set, errors, oi),
             _ => errors.push(format!(
                 "unsupported machine {}",
                 crate::c5::linker::relocatable::elf_machine_desc(machine)
             )),
-        }
-    }
-
-    /// Intel386 psABI: every type is `S + A`, `S + A - P` or a GOT-base
-    /// form, written at the field's own width. bfd complains on
-    /// overflow only where the field is narrower than an address.
-    #[allow(clippy::too_many_arguments)]
-    fn apply_i386(
-        &self,
-        buf: &mut [u8],
-        site: usize,
-        p: u64,
-        sa: u64,
-        r: &RawReloc,
-        errors: &mut Vec<String>,
-        oi: usize,
-    ) {
-        let name = || self.objects[oi].symbol_name(r.sym as usize);
-        let v = match r.rtype {
-            rt::R_386_32 | rt::R_386_16 | rt::R_386_8 => sa,
-            // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is
-            // already the GOT base plus the addend.
-            rt::R_386_PC32 | rt::R_386_PC16 | rt::R_386_PC8 | rt::R_386_GOTPC | rt::R_386_PLT32 => {
-                sa.wrapping_sub(p)
-            }
-            rt::R_386_GOTOFF => match self.got_symbol_addr() {
-                Some(g) => sa.wrapping_sub(g),
-                None => {
-                    errors.push(format!(
-                        "{} against `{}' with no GOT",
-                        rt::i386_reloc_desc(r.rtype),
-                        name()
-                    ));
-                    return;
-                }
-            },
-            other => {
-                errors.push(format!(
-                    "unsupported relocation {} against `{}'",
-                    rt::i386_reloc_desc(other),
-                    name()
-                ));
-                return;
-            }
-        };
-        let Some(width) = rt::i386_field_width(r.rtype) else {
-            return;
-        };
-        // bfd's `complain_overflow_bitfield` accepts a value that fits
-        // the field read either as signed or as unsigned. A 32-bit
-        // field holds every address of an ELF32 image.
-        let sv = v as i64;
-        let fits = match width {
-            1 => (-0x80..=0xff).contains(&sv),
-            2 => (-0x8000..=0xffff).contains(&sv),
-            _ => true,
-        };
-        if !fits {
-            errors.push(format!(
-                "relocation truncated: {} against `{}' (0x{v:x})",
-                rt::i386_reloc_desc(r.rtype),
-                name()
-            ));
-        }
-        let n = width as usize;
-        if site + n <= buf.len() {
-            buf[site..site + n].copy_from_slice(&v.to_le_bytes()[..n]);
         }
     }
 }

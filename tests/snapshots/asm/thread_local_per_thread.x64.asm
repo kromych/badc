@@ -63,7 +63,7 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	leaq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
-               	leaq	-<rip>, %rdx       # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	movq	%rsi, %rcx
                	callq	*%r12
                	movq	-0x10(%rbp), %rdi

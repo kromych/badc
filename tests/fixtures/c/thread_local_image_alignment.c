@@ -10,7 +10,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dlfcn.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 typedef struct __attribute__((aligned(16))) {
     long a, b;

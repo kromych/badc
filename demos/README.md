@@ -104,7 +104,7 @@ file-backed scenarios at both -O and noO. See
 
 ## lua/
 
-End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release, fetched on
+End-to-end of the upstream Lua 5.5.1 interpreter. Pinned release, fetched on
 demand by `demos/lua/setup.py`; builds the interpreter with badc at both -O and
 noO and runs a curated subset of the upstream test suite (`bitwise`, `calls`,
 `closure`, `constructs`, `coroutine`, `cstack`, `errors`, `events`, `goto`,
@@ -174,7 +174,7 @@ way through it, and ends the session with `C-a C-x`. POSIX only. See
 
 ## screen/
 
-[GNU Screen](https://www.gnu.org/software/screen/) 5.0.0, the terminal
+[GNU Screen](https://www.gnu.org/software/screen/) 5.0.2, the terminal
 multiplexer: `./configure` + `make` generate the derived sources and the
 host-`cc` reference, then the compile line for each of the 38 units is
 taken out of `make -n` and replayed through `badc -c`, and badc's linker
@@ -183,21 +183,39 @@ produces `screen` against the system terminfo and crypt libraries, at
 client/server pair -- a detached session driven over the session socket
 with `stuff`, `hardcopy` and `quit`, and an attached session under a
 pseudo-terminal -- and compares the window text and the terminal output
-with the reference build's. Linux only: upstream 5.0.0 does not compile
+with the reference build's. Linux only: upstream 5.0.2 does not compile
 on macOS with any compiler. See [`screen/README.md`](./screen/README.md).
 
 ## vim/
 
-[Vim](https://www.vim.org/) 9.1.0800, the largest hosted program in the
+[Vim](https://www.vim.org/) 9.2.1226, the largest hosted program in the
 demo set: `./configure` with every embedded interpreter and the GUI off,
 then `make`, generate the derived sources and the host-`cc` reference,
-and the compile line of each of the 123 objects the link consumed is
+and the compile line of each of the 137 objects the link consumed is
 replayed through `badc -c`. badc's linker produces the editor against
 the same libraries, at -O0 and -O. The smoke runs each binary in ex mode
 from a script and again under a pseudo-terminal from keystrokes, and
 checks the file each run writes and the terminal output against the
 reference build's. Linux only: the macOS build reaches SDK headers
 badc's own set does not carry. See [`vim/README.md`](./vim/README.md).
+
+## nuklear/
+
+[Nuklear](https://github.com/Immediate-Mode-UI/Nuklear) 4.13.3, the
+single-header immediate-mode GUI library, which has no unit tests: the
+smoke checks what upstream's CI checks with badc as the compiler (the header
+regenerated from `src/`, each `src/*.c` compiled on its own, the X11 demo
+built), then drives the upstream demo windows for 90 frames of scripted
+input through the rawfb software renderer and `nk_convert`, and requires
+every frame's digests to agree between badc -O0, badc -O and the host
+compiler. All five targets. See [`nuklear/README.md`](./nuklear/README.md).
+
+## openssl/
+
+[OpenSSL](https://openssl-library.org/) 4.1.0: Configure with a badc target,
+`make`, and OpenSSL's own `make test` over every recipe at -O0 and -O.
+Waits on header gaps the build reaches; see
+[`openssl/README.md`](./openssl/README.md).
 
 ## gui_hello/
 
@@ -210,11 +228,11 @@ since runners have no display server. See
 
 ## raylib/
 
-badc compiles raylib 5.5 (RGFW desktop backend) from source and
+badc compiles raylib 6.0 (RGFW desktop backend) from source and
 links a small game (Lode Runner) into a standalone binary. The
 pure game-logic self-test runs through badc on any host; the full
-standalone build + headless run is wired for macOS today (the X11
-/ Win32 header surface for the Linux / Windows ports is pending).
+standalone build links on macOS, Linux and Windows and renders a
+frame on macOS and, under Xvfb, on Linux.
 See [`raylib/README.md`](./raylib/README.md).
 
 ## stb/
@@ -260,7 +278,7 @@ assembler is then compiled from. See [`yasm/README.md`](./yasm/README.md).
 
 ## qemu/
 
-Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc --
+Builds the [QEMU](https://www.qemu.org/) 11.1.2 system emulator with badc --
 well over a thousand translation units per target (device models, the TCG code
 generator, the block layer, the QAPI-generated marshallers, the character /
 network back ends), the widest single exercise of the C front end and object
@@ -325,6 +343,14 @@ registers a `DRIVER_UNLOAD` callback so the service is
 stoppable via `sc stop`. Build-only; loading needs admin and
 test-signing on the target. Same compiler plumbing as
 `nt_hello`; differs only in entry signature.
+
+## simplevisor/
+
+[SimpleVisor](https://github.com/ionescu007/SimpleVisor), an Intel VT-x
+hypervisor, built from its upstream sources into a `windows-x64`
+native-subsystem `.sys` whose image and ntoskrnl imports the smoke checks;
+a user-mode harness runs its descriptor and MSR decode logic. The driver is
+never loaded. See [`simplevisor/README.md`](./simplevisor/README.md).
 
 ## nt_loader/
 

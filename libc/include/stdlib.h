@@ -50,6 +50,8 @@
 #pragma binding(libc::abort,   "_abort")
 #pragma binding(libc::exit,    "_exit")
 #pragma binding(libc::_Exit,   "__Exit")
+#pragma binding(libc::quick_exit,    "_quick_exit")
+#pragma binding(libc::at_quick_exit, "_at_quick_exit")
 #pragma binding(libc::system,  "_system")
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
@@ -63,6 +65,7 @@
 #pragma binding(libc::bsearch, "_bsearch")
 #pragma binding(libc::rand,    "_rand")
 #pragma binding(libc::srand,   "_srand")
+#pragma binding(libc::rand_r,  "_rand_r")
 #pragma binding(libc::atexit,  "_atexit")
 #pragma binding(libc::strtoul, "_strtoul")
 #pragma binding(libc::strtoull, "_strtoull")
@@ -112,6 +115,8 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::abort,   "abort")
 #pragma binding(libc::exit,    "exit")
 #pragma binding(libc::_Exit,   "_Exit")
+#pragma binding(libc::quick_exit,          "quick_exit")
+#pragma binding(libc::__cxa_at_quick_exit, "__cxa_at_quick_exit")
 #pragma binding(libc::system,  "system")
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
@@ -125,6 +130,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
+#pragma binding(libc::rand_r,  "rand_r")
 // The Linux C library doesn't export `atexit` as a regular dynamic symbol --
 // it's an inline that calls per-DSO `__cxa_atexit(handler, NULL,
 // dso_handle)`, so `dlsym(libc.so.6, "atexit")` returns NULL and
@@ -166,7 +172,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::atol,    "atol")
 // MSVC spells the long-long parse `_atoi64`.
 #pragma binding(msvcrt::atoll,   "_atoi64")
-#pragma binding(msvcrt::atof,    "atof")
 #pragma binding(msvcrt::strtol,  "strtol")
 #pragma binding(msvcrt::strtoul, "strtoul")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
@@ -178,10 +183,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 // what every other libc calls `strtoull`.
 #pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::_strtoui64, "_strtoui64")
-#pragma binding(msvcrt::strtod,  "strtod")
-// msvcrt.dll has no `strtold`; UCRT exports it but the
-// universally-available CRT here does not. Programs that
-// need `long double` parsing on Windows pin to UCRT.
 #pragma binding(msvcrt::abs,     "abs")
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
@@ -214,6 +215,71 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::wctomb,    "wctomb")
 #pragma binding(msvcrt::mbstowcs,  "mbstowcs")
 #pragma binding(msvcrt::wcstombs,  "wcstombs")
+#pragma binding(msvcrt::_itoa,     "_itoa")
+#pragma binding(msvcrt::_ltoa,     "_ltoa")
+#pragma binding(msvcrt::_ultoa,    "_ultoa")
+#pragma binding(msvcrt::_i64toa,   "_i64toa")
+#pragma binding(msvcrt::_ui64toa,  "_ui64toa")
+#pragma binding(msvcrt::itoa,      "_itoa")
+#pragma binding(msvcrt::ltoa,      "_ltoa")
+#pragma binding(msvcrt::ultoa,     "_ultoa")
+#pragma binding(msvcrt::_itow,     "_itow")
+#pragma binding(msvcrt::_ltow,     "_ltow")
+#pragma binding(msvcrt::_ultow,    "_ultow")
+#pragma binding(msvcrt::_i64tow,   "_i64tow")
+#pragma binding(msvcrt::_ui64tow,  "_ui64tow")
+#pragma binding(msvcrt::_ecvt,     "_ecvt")
+#pragma binding(msvcrt::_fcvt,     "_fcvt")
+#pragma binding(msvcrt::_gcvt,     "_gcvt")
+char *_itoa(int value, char *dst, int radix);
+char *_ltoa(long value, char *dst, int radix);
+char *_ultoa(unsigned long value, char *dst, int radix);
+char *_i64toa(long long value, char *dst, int radix);
+char *_ui64toa(unsigned long long value, char *dst, int radix);
+char *itoa(int value, char *dst, int radix);
+char *ltoa(long value, char *dst, int radix);
+char *ultoa(unsigned long value, char *dst, int radix);
+wchar_t *_itow(int value, wchar_t *dst, int radix);
+wchar_t *_ltow(long value, wchar_t *dst, int radix);
+wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
+wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
+wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
+char *_ecvt(double value, int ndigits, int *decpt, int *sign);
+char *_fcvt(double value, int ndigits, int *decpt, int *sign);
+char *_gcvt(double value, int ndigits, char *dst);
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_itoa_s, "_itoa_s")
+errno_t _itoa_s(int _Value, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ltoa_s, "_ltoa_s")
+errno_t _ltoa_s(long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ultoa_s, "_ultoa_s")
+errno_t _ultoa_s(unsigned long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_i64toa_s, "_i64toa_s")
+errno_t _i64toa_s(long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::_ui64toa_s, "_ui64toa_s")
+errno_t _ui64toa_s(unsigned long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+#pragma binding(msvcrt::getenv_s, "getenv_s")
+errno_t getenv_s(size_t *_ReturnSize, char *_DstBuf, rsize_t _DstSize, const char *_VarName);
+#pragma binding(msvcrt::_makepath_s, "_makepath_s")
+errno_t _makepath_s(char *_PathResult, size_t _Size, const char *_Drive, const char *_Dir, const char *_Filename, const char *_Ext);
+#pragma binding(msvcrt::_searchenv_s, "_searchenv_s")
+errno_t _searchenv_s(const char *_Filename, const char *_EnvVar, char *_ResultPath, size_t _SizeInBytes);
+#pragma binding(msvcrt::_splitpath_s, "_splitpath_s")
+errno_t _splitpath_s(const char *_FullPath, char *_Drive, size_t _DriveSize, char *_Dir, size_t _DirSize, char *_Filename, size_t _FilenameSize, char *_Ext, size_t _ExtSize);
+#define _CVTBUFSIZE (309 + 40)
+#define __max(a, b) (((a) > (b)) ? (a) : (b))
+#define __min(a, b) (((a) < (b)) ? (a) : (b))
+#ifndef _countof
+#define _countof(_Array) (sizeof(_Array) / sizeof(_Array[0]))
+#endif
+#pragma binding(msvcrt::mbstowcs_s, "mbstowcs_s")
+#pragma binding(msvcrt::wcstombs_s, "wcstombs_s")
+int mbstowcs_s(size_t *pconverted, wchar_t *dst, size_t dstsz, const char *src,
+               size_t count);
+int wcstombs_s(size_t *pconverted, char *dst, size_t dstsz, const wchar_t *src,
+               size_t count);
 // CRT data exports: the system error table and the wide / narrow
 // process environment blocks.
 #pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")
@@ -278,11 +344,13 @@ void *malloc(size_t size);
 void *calloc(size_t n, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
+#ifndef _WIN32
 // Aligned allocation. posix_memalign stores the block through memptr and
 // returns 0 or an errno value; memalign is a glibc extension.
 int posix_memalign(void **memptr, size_t alignment, size_t size);
 void *aligned_alloc(size_t alignment, size_t size);
 void *valloc(size_t size);
+#endif
 #ifdef __linux__
 void *memalign(size_t alignment, size_t size);
 #endif
@@ -297,21 +365,19 @@ double atof(const char *s);
 // width must match so the 64-bit return register is not narrowed.
 long strtol(const char *s, char **endp, int base);
 long long strtoll(const char *s, char **endp, int base);
-long long _strtoi64(const char *s, char **endp, int base);
-double strtod(const char *s, char **endp);
 #ifdef _WIN32
-// C99 7.20.1.3. msvcrt.dll exports no `strtof` (a UCRT addition).
-static inline float strtof(const char *s, char **endp) {
-    return (float)strtod(s, endp);
-}
-#else
-float strtof(const char *s, char **endp);
-// `long double` falls back to f64 in c5 (16-byte storage, 8-byte
-// precision) -- the return value flows through the long-double
-// load/store pipeline; the libc-side conversion happens at full
-// 80-bit precision and gets narrowed on the way back.
-long double strtold(const char *s, char **endp);
+long long _strtoi64(const char *s, char **endp, int base);
 #endif
+double strtod(const char *s, char **endp);
+// C99 7.20.1.3. On Windows libc/lib/strtod_ext.c defines these, strtod and
+// atof: msvcrt.dll's strtod reads no C99 infinity, NaN or hexadecimal form,
+// and it has no float or long double one. Elsewhere `long double` falls
+// back to f64 in c5 (16-byte storage, 8-byte precision) -- the return value
+// flows through the long-double load/store pipeline; the libc-side
+// conversion happens at full 80-bit precision and gets narrowed on the way
+// back.
+float strtof(const char *restrict s, char **restrict endp);
+long double strtold(const char *restrict s, char **restrict endp);
 int abs(int x);
 // C99 7.20.6.1: absolute value of a long / long long. Provided inline
 // rather than through a libc binding because the result reduces to a
@@ -365,6 +431,18 @@ static inline lldiv_t lldiv(long long n, long long d) {
 _Noreturn void abort(void);
 _Noreturn void exit(int status);
 _Noreturn void _Exit(int status);
+#ifndef _WIN32
+// C11 7.22.4.7 and 7.22.4.3, where the C library defines them; msvcrt.dll
+// exports neither. The Linux C library's `at_quick_exit` is a static
+// wrapper over `__cxa_at_quick_exit`, reached as `atexit` is.
+_Noreturn void quick_exit(int status);
+#ifdef __linux__
+int __cxa_at_quick_exit(void (*handler)(void), void *dso);
+#define at_quick_exit(handler) __cxa_at_quick_exit((handler), 0)
+#else
+int at_quick_exit(void (*handler)(void));
+#endif
+#endif
 int system(const char *cmd);
 char *getenv(const char *name);
 #ifdef _WIN32
@@ -390,6 +468,10 @@ void *bsearch(const void *key, const void *base, size_t n, size_t size,
               int (*cmp)(const void *, const void *));
 int rand(void);
 void srand(unsigned int seed);
+#ifndef _WIN32
+// POSIX: rand's sequence over a caller-held state.
+int rand_r(unsigned int *seed);
+#endif
 #ifdef __linux__
 // See the binding-block comment above. `__cxa_atexit` takes a
 // 1-arg handler signature `void (*)(void *)`; c5 callees with
@@ -405,7 +487,9 @@ int atexit(void (*handler)(void));
 // type; an `int` declaration truncates the result to its low 32 bits.
 unsigned long strtoul(const char *s, char **endp, int base);
 unsigned long long strtoull(const char *s, char **endp, int base);
+#ifdef _WIN32
 unsigned long long _strtoui64(const char *s, char **endp, int base);
+#endif
 #ifdef _WIN32
 // The msvcrt `_spawn*` / `_cwait` family and its mode constants live in
 // <process.h> (matching MSVC), not here: defining `P_WAIT` etc. in <stdlib.h>
@@ -418,9 +502,11 @@ unsigned long long _strtoui64(const char *s, char **endp, int base);
 char *_fullpath(char *absPath, char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
-int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
+#ifndef _WIN32
+// mingw-w64 declares mktemp in <io.h>.
 char *mktemp(char *templ);
+int mkstemps(char *templ, int suffixlen);
 long random(void);
 void srandom(unsigned int seed);
 // SVID 48-bit linear-congruential PRNG family. drand48 returns a double
@@ -438,6 +524,7 @@ char *ptsname(int fd);
 int ptsname_r(int fd, char *buf, unsigned long buflen);
 // System load averages over 1/5/15 minutes (BSD).
 int getloadavg(double *loadavg, int nelem);
+#endif
 
 /* GCC / clang `__clear_cache(begin, end)` is the runtime hint
 ** that makes instructions newly written into [begin, end)
@@ -500,12 +587,62 @@ static inline char *canonicalize_file_name(const char *path) {
 #endif
 
 #ifdef _WIN32
-#pragma binding(kernel32::FlushInstructionCache, "FlushInstructionCache")
-#pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")
-int FlushInstructionCache(void *hProcess, void *lpBaseAddress, long long dwSize);
-void *GetCurrentProcess(void);
+// kernel32's FlushInstructionCache under a reserved name, so the Win32
+// declarations of <windows.h> or the SDK's headers are the only ones of
+// that name; (HANDLE)-1 is GetCurrentProcess()'s pseudo handle.
+#pragma binding(kernel32::__badc_FlushInstructionCache, "FlushInstructionCache")
+int __badc_FlushInstructionCache(void *hProcess, const void *lpBaseAddress,
+                                 unsigned long long dwSize);
 static inline void __clear_cache(void *__begin, void *__end) {
-    FlushInstructionCache(GetCurrentProcess(), __begin,
-                          (long long)((char *)__end - (char *)__begin));
+    __badc_FlushInstructionCache((void *)(long long)-1, __begin,
+                                 (unsigned long long)((char *)__end - (char *)__begin));
 }
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::a64l, "_a64l")
+#pragma binding(libc::l64a, "_l64a")
+#pragma binding(libc::erand48, "_erand48")
+#pragma binding(libc::jrand48, "_jrand48")
+#pragma binding(libc::lcong48, "_lcong48")
+#pragma binding(libc::nrand48, "_nrand48")
+#pragma binding(libc::seed48, "_seed48")
+#pragma binding(libc::initstate, "_initstate")
+#pragma binding(libc::setstate, "_setstate")
+#pragma binding(libc::realpath, "_realpath")
+#pragma binding(libc::setkey, "_setkey")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::a64l, "a64l")
+#pragma binding(libc::l64a, "l64a")
+#pragma binding(libc::erand48, "erand48")
+#pragma binding(libc::jrand48, "jrand48")
+#pragma binding(libc::lcong48, "lcong48")
+#pragma binding(libc::nrand48, "nrand48")
+#pragma binding(libc::seed48, "seed48")
+#pragma binding(libc::initstate, "initstate")
+#pragma binding(libc::setstate, "setstate")
+#pragma binding(libc::realpath, "realpath")
+#endif
+// The rest of the XSI 48-bit generator family, the radix-64 conversions and
+// the random(3) state calls; setkey is libSystem's only, glibc having
+// dropped it with encrypt.
+long a64l(const char *s);
+char *l64a(long value);
+double erand48(unsigned short xsubi[3]);
+long jrand48(unsigned short xsubi[3]);
+void lcong48(unsigned short param[7]);
+long nrand48(unsigned short xsubi[3]);
+unsigned short *seed48(unsigned short seed16v[3]);
+char *initstate(unsigned int seed, char *state, size_t size);
+#ifdef __APPLE__
+char *setstate(const char *state);
+void setkey(const char *key);
+char *realpath(const char *restrict path, char *restrict resolved);
+#else
+char *setstate(char *state);
+#endif
 #endif

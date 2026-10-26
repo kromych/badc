@@ -43,7 +43,12 @@
 #ifdef __linux__
 #define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
 #endif
-#define IPV6_V6ONLY  26 // Linux value; macOS=27 -- set via setsockopt only
+// The Linux number, and the BSD one macOS and Winsock share.
+#ifdef __linux__
+#define IPV6_V6ONLY  26
+#else
+#define IPV6_V6ONLY  27
+#endif
 
 // IP / IPv6 per-packet class-of-service option names for setsockopt. The
 // numbering is BSD-derived on macOS and distinct on Linux.
@@ -207,6 +212,52 @@ struct ipv6_mreq {
     unsigned int ipv6mr_interface; // interface index
 };
 
+// Packet information: the interface and addresses of a datagram, set or
+// received as IP_PKTINFO / IPV6_PKTINFO ancillary data (ip(7), RFC 3542
+// section 6.1). glibc declares in6_pktinfo under _GNU_SOURCE.
+#ifdef __linux__
+#define IP_PKTINFO       8
+#define IPV6_2292PKTINFO 2
+#define IPV6_RECVPKTINFO 49
+#define IPV6_PKTINFO     50
+struct in_pktinfo {
+    int ipi_ifindex;
+    struct in_addr ipi_spec_dst;
+    struct in_addr ipi_addr;
+};
+#ifdef _GNU_SOURCE
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    unsigned int ipi6_ifindex;
+};
+#endif
+#endif
+
+// The SDK's packet information outside strict POSIX (<netinet/in.h>,
+// <netinet6/in6.h>): IPV6_PKTINFO is RFC 3542's option under
+// __APPLE_USE_RFC_3542, RFC 2292's under __APPLE_USE_RFC_2292, else undefined.
+#if defined(__APPLE__) && (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))
+#define IP_PKTINFO       26
+#define IP_RECVPKTINFO   IP_PKTINFO
+#define IPV6_2292PKTINFO 19
+struct in_pktinfo {
+    unsigned int ipi_ifindex;
+    struct in_addr ipi_spec_dst;
+    struct in_addr ipi_addr;
+};
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    unsigned int ipi6_ifindex;
+};
+#if defined(__APPLE_USE_RFC_3542) && defined(__APPLE_USE_RFC_2292)
+#error "__APPLE_USE_RFC_3542 and __APPLE_USE_RFC_2292 cannot be both defined"
+#elif defined(__APPLE_USE_RFC_3542)
+#define IPV6_RECVPKTINFO 61
+#define IPV6_PKTINFO     46
+#elif defined(__APPLE_USE_RFC_2292)
+#define IPV6_PKTINFO     IPV6_2292PKTINFO
+#endif
+#endif
 
 // IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is
 // the all-zero unspecified address (POSIX guarantees its value), provided here

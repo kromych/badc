@@ -766,6 +766,7 @@ impl AsmParseFold {
             AsmSectionItem::Global(_)
             | AsmSectionItem::Local(_)
             | AsmSectionItem::Weak(_)
+            | AsmSectionItem::Common { .. }
             | AsmSectionItem::Visibility { .. }
             | AsmSectionItem::Type { .. }
             | AsmSectionItem::Size { .. }
@@ -1156,6 +1157,7 @@ fn measure_round_inner(
                 | AsmSectionItem::Type { .. }
                 | AsmSectionItem::Size { .. }
                 | AsmSectionItem::Weak(_)
+                | AsmSectionItem::Common { .. }
                 | AsmSectionItem::Local(_)
                 | AsmSectionItem::Visibility { .. }
                 | AsmSectionItem::CondDiag(_)
@@ -1408,7 +1410,7 @@ pub(crate) struct MaterializedLabel {
 
 /// Materialize the parsed section blocks: resolve operand constants and
 /// label references, lay out the bytes, and merge into the sink by
-/// `(name, flags, sh_type)`. `operands` resolves an `i`-class operand to
+/// `(name, flags, sh_type, group)`. `operands` resolves an `i`-class operand to
 /// its constant, or to the relocation target of the link-time address it
 /// names instead (`.long %c0 - .`); `label_off` resolves a template-label
 /// name to its location -- an emitted-stream text offset or a deferred
@@ -1465,6 +1467,7 @@ pub(crate) fn materialize_asm_sections(
     let non_local = asm_non_local_names(blocks, sink);
     let weak_only = asm_weak_only_names(blocks, sink);
     let mut weak_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+    let mut commons: alloc::vec::Vec<(alloc::string::String, u64, u64)> = alloc::vec::Vec::new();
     // `.globl` is a unit-level declaration in GNU as: the name it binds
     // external may be defined in any section of the unit, before or after.
     let mut global_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
@@ -1846,6 +1849,9 @@ pub(crate) fn materialize_asm_sections(
                 // out. `.set name, sym` is a unit-level alias; the file-scope
                 // parse records both, the operand emit paths reject them.
                 AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
+                AsmSectionItem::Common { name, size, align } => {
+                    commons.push((name.clone(), *size, *align))
+                }
                 // Visibility is carried by name to the object writer, which
                 // sets `st_other` wherever the symbol is emitted.
                 AsmSectionItem::Visibility { .. } => {}
@@ -2223,6 +2229,22 @@ pub(crate) fn materialize_asm_sections(
                                     }
                                 }
                             }
+                            AsmSectionValue::RelocOp { name, addend, op } => {
+                                sec.relocs.push(AsmSectionReloc {
+                                    offset: sec.bytes.len() as u32,
+                                    width: *width,
+                                    kind: AsmRelocKind::Op {
+                                        op: *op,
+                                        relax: AsmGotRelax::No,
+                                    },
+                                    pcrel: false,
+                                    branch: false,
+                                    signed: false,
+                                    target: AsmSectionTarget::Symbol(name.clone()),
+                                    addend: *addend,
+                                });
+                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                            }
                             AsmSectionValue::OperandReloc {
                                 idx,
                                 goto,
@@ -2544,6 +2566,9 @@ pub(crate) fn materialize_asm_sections(
     // written: a `.weak` naming a label of its own statement has to see a
     // definition this call has not published yet. Templates carrying `.weak`
     // skip the loop entirely, so it is not on the export-table path.
+    for (name, size, align) in commons {
+        sink.record_common(&name, size, align);
+    }
     for name in &weak_names {
         let AsmSectionSink {
             sections,
@@ -2588,21 +2613,9 @@ pub(crate) fn materialize_asm_sections(
     }
     // A `.globl` naming no label in the section declares an external symbol,
     // not a definition here; it defines no section symbol. A `.type` / `.size`
-    // that stays pending named a label the section never defines -- rejected
-    // (a forward `.type` before its label was filled in by the definition).
-    // Only this call's sections can hold a pending entry: every call drops
-    // its own below, so none survives into the next.
-    // A `.set name, symbol` alias is a symbol of the unit with no label of
-    // its own, so a `.type` / `.size` over one stays pending here; the
-    // attributes are recorded below for the symbol the object writer builds.
-    let aliased: alloc::collections::BTreeSet<&str> = blocks
-        .iter()
-        .flat_map(|b| &b.items)
-        .filter_map(|it| match it {
-            AsmSectionItem::SymSet { name, .. } => Some(name.as_str()),
-            _ => None,
-        })
-        .collect();
+    // still pending names a symbol another section, a `.set` or nothing
+    // defines: as in gas, the attributes go to that symbol, an undefined one
+    // when nothing defines it. Every call drops its own pending entries below.
     // A `.set` whose value reduced to a location defines the name as a
     // label of the owning section, as GNU as does, so a field referencing
     // it relocates against a definition.
@@ -2635,16 +2648,6 @@ pub(crate) fn materialize_asm_sections(
     }
     for &(sec_idx, from) in &touched {
         let s = sink.sections.at_mut(sec_idx);
-        if let Some(l) = s.labels[from..].iter().find(|l| {
-            l.offset == PENDING_LABEL
-                && (l.sym_type != AsmSymType::NoType || l.size.is_some())
-                && !aliased.contains(l.name.as_str())
-        }) {
-            return Err(alloc::format!(
-                "inline asm: `.type`/`.size` names undefined label `{}`",
-                l.name
-            ));
-        }
         let carry: alloc::vec::Vec<(alloc::string::String, AsmSymType, Option<u64>)> = s.labels
             [from..]
             .iter()

@@ -139,6 +139,7 @@ mod jit_impl {
     use super::super::{AddrPart, Build, NativeOptions, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
+    use crate::c5::object::weak_undef;
     use alloc::format;
     use alloc::string::String;
     // Only the POSIX bind_imports path uses `to_string` (for the
@@ -173,6 +174,9 @@ mod jit_impl {
         /// pointer; the lifetime is owned by the JIT data region the
         /// caller passed in (typically NULL or a `&__dso_handle`).
         static JIT_ATEXIT_CHAIN: RefCell<Vec<(extern "C" fn(*mut c_void), usize)>> =
+            const { RefCell::new(Vec::new()) };
+        /// The `at_quick_exit` handlers, which `quick_exit` runs instead.
+        static JIT_QUICK_EXIT_CHAIN: RefCell<Vec<extern "C" fn()>> =
             const { RefCell::new(Vec::new()) };
     }
 
@@ -249,12 +253,28 @@ mod jit_impl {
         end_program(status, true)
     }
 
-    /// Replacement for `_exit`, `_Exit` and `quick_exit`, which run no
-    /// atexit handler (C99 7.20.4.4, POSIX `_exit`); the bundled headers
-    /// offer no `at_quick_exit`.
+    /// Replacement for `_exit` and `_Exit`, which run no atexit handler
+    /// (C99 7.20.4.4, POSIX `_exit`).
     extern "C" fn jit_immediate_exit_thunk(status: c_int) -> ! {
         JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().clear());
+        JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().clear());
         end_program(status, false)
+    }
+
+    /// Replacement for `quick_exit`: the `at_quick_exit` handlers run, last
+    /// registered first, and then no atexit handler (C11 7.22.4.7).
+    extern "C" fn jit_quick_exit_thunk(status: c_int) -> ! {
+        while let Some(handler) = JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().pop()) {
+            handler();
+        }
+        jit_immediate_exit_thunk(status)
+    }
+
+    /// Replacement for `at_quick_exit` and glibc's `__cxa_at_quick_exit`,
+    /// whose second operand names the registering object.
+    extern "C" fn jit_at_quick_exit_thunk(handler: extern "C" fn(), _dso: *mut c_void) -> c_int {
+        JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().push(handler));
+        0
     }
 
     /// End the guest program with `status`. On the worker thread the call
@@ -498,8 +518,10 @@ mod jit_impl {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             "exit" => jit_exit_thunk as *const () as usize as u64,
-            "_exit" | "_Exit" | "quick_exit" => {
-                jit_immediate_exit_thunk as *const () as usize as u64
+            "_exit" | "_Exit" => jit_immediate_exit_thunk as *const () as usize as u64,
+            "quick_exit" => jit_quick_exit_thunk as *const () as usize as u64,
+            "at_quick_exit" | "__cxa_at_quick_exit" => {
+                jit_at_quick_exit_thunk as *const () as usize as u64
             }
             _ => 0,
         }
@@ -515,16 +537,25 @@ mod jit_impl {
         }
     }
 
+    type PriorExitChains = (
+        Vec<(extern "C" fn(*mut c_void), usize)>,
+        Vec<extern "C" fn()>,
+    );
+
     /// Save the current thread's atexit chain (any entries left over
     /// from a nested `jit_run` invocation on the same thread) so the
     /// outer call's drain does not consume them. Restore by passing
     /// the returned Vec to [`restore_jit_atexit_chain`].
-    fn take_prior_jit_atexit_chain() -> Vec<(extern "C" fn(*mut c_void), usize)> {
-        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect())
+    fn take_prior_jit_atexit_chain() -> PriorExitChains {
+        (
+            JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect()),
+            JIT_QUICK_EXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect()),
+        )
     }
 
-    fn restore_jit_atexit_chain(prior: Vec<(extern "C" fn(*mut c_void), usize)>) {
-        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = prior);
+    fn restore_jit_atexit_chain((atexit, quick): PriorExitChains) {
+        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = atexit);
+        JIT_QUICK_EXIT_CHAIN.with(|chain| *chain.borrow_mut() = quick);
     }
 
     pub fn jit_run(
@@ -578,18 +609,43 @@ mod jit_impl {
         let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
-        // An extern call site left has no link step to resolve it, and would
-        // branch to the zeroed placeholder: refuse it as the linker would.
-        if let Some(site) = build.user_extern_call_sites.first() {
-            return Err(undefined_reference(&site.symbol_name));
-        }
+        let weak = program.weak_link_names();
+        let machine = if target.is_aarch64() {
+            super::super::Machine::Aarch64
+        } else {
+            super::super::Machine::X86_64
+        };
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
-        route_jit_data_imports(&mut build)?;
+        route_jit_data_imports(&mut build, &weak, machine)?;
 
         // One slot per import, holding what dlsym finds, read as a loader's GOT.
         let mut got_region = GotRegion::new(build.imports.imports.len())?;
         got_region.bind_imports(&build.imports)?;
+        // A call to a function the unit declares and neither defines nor
+        // binds takes the loaded C library's export of that name, as a
+        // dynamic linker's lookup would; the JIT has no link step to join
+        // the C-library sources a native link offers. A weak name nothing
+        // exports is the null address; any other is refused.
+        for site in core::mem::take(&mut build.user_extern_call_sites) {
+            let name = site.symbol_name.as_str();
+            let addr = match atexit_thunk_addr(name) {
+                0 => got_region.resolve_symbol(name),
+                a => a,
+            };
+            let bound = if addr != 0 {
+                branch_to_veneer(machine, &mut build.text, site.instr_offset, addr)
+            } else if weak.contains(name) {
+                weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset)
+            } else {
+                return Err(undefined_reference(name));
+            };
+            if !bound {
+                return Err(C5Error::internal(format!(
+                    "JIT: the call to `{name}` is not a branch"
+                )));
+            }
+        }
         // A data import's slot must resolve, as the code dereferences it.
         for fx in &build.got_fixups {
             if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
@@ -737,6 +793,35 @@ mod jit_impl {
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+            }
+        }
+        // A pc-relative word of the data image holds the distance to its
+        // target, in the data image or the code.
+        if !build.data_pcrel_relocs.is_empty()
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.data_pcrel_relocs {
+                if r.image_relative {
+                    return Err(C5Error::internal(
+                        "JIT: an image-relative data slot has no image base",
+                    ));
+                }
+                let base = if r.target_in_data {
+                    data_vmaddr
+                } else {
+                    code_vmaddr
+                };
+                let at = r.slot_data_offset as usize;
+                let value = (base + r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                let width = r.width as usize;
+                let fits = width == 8 || i32::try_from(value).is_ok();
+                let Some(slot) = bytes.get_mut(at..at + width).filter(|_| fits) else {
+                    return Err(C5Error::internal(format!(
+                        "JIT: data pcrel slot {at:#x} cannot take {value:#x}"
+                    )));
+                };
+                slot.copy_from_slice(&value.to_le_bytes()[..width]);
             }
         }
         // `&&label` initializer slots: the emit already resolved each
@@ -1052,6 +1137,51 @@ mod jit_impl {
         )
     }
 
+    /// Point the call or tail branch at `offset` to a veneer appended to
+    /// `text` that jumps to the absolute `addr`: `jmp [rip+0]` and the
+    /// address on x86-64, `ldr x16, #8; br x16` and the address on AArch64.
+    fn branch_to_veneer(
+        machine: super::super::Machine,
+        text: &mut Vec<u8>,
+        offset: usize,
+        addr: u64,
+    ) -> bool {
+        use super::super::Machine;
+        match machine {
+            Machine::X86_64 => {
+                let at = text.len();
+                let Ok(rel) = i32::try_from(at as i64 - (offset as i64 + 5)) else {
+                    return false;
+                };
+                if !matches!(text.get(offset), Some(0xE8 | 0xE9)) {
+                    return false;
+                }
+                text[offset + 1..offset + 5].copy_from_slice(&rel.to_le_bytes());
+                text.extend_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
+                text.extend_from_slice(&addr.to_le_bytes());
+                true
+            }
+            Machine::Aarch64 => {
+                text.resize((text.len() + 7) & !7, 0);
+                let at = text.len();
+                let Some(insn) = text.get(offset..offset + 4) else {
+                    return false;
+                };
+                let insn = u32::from_le_bytes([insn[0], insn[1], insn[2], insn[3]]);
+                let delta = (at as i64 - offset as i64) / 4;
+                if !matches!(insn & 0x7C00_0000, 0x1400_0000) || delta >= 1 << 25 {
+                    return false;
+                }
+                let patched = (insn & 0xFC00_0000) | (delta as u32 & 0x03FF_FFFF);
+                text[offset..offset + 4].copy_from_slice(&patched.to_le_bytes());
+                text.extend_from_slice(&0x5800_0050u32.to_le_bytes());
+                text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+                text.extend_from_slice(&addr.to_le_bytes());
+                true
+            }
+        }
+    }
+
     /// Mirror the linker's undefined-symbol diagnostic wording.
     fn undefined_reference(name: &str) -> C5Error {
         C5Error::hard(
@@ -1076,15 +1206,30 @@ mod jit_impl {
 
     /// Route `#pragma binding(data ...)` references, asm operands included,
     /// through flat-lookup imports in the fake GOT. A leftover reference has
-    /// no binding and no definition anywhere: refuse it like the linker would.
-    fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
+    /// no binding and no definition anywhere: it is the null address if the
+    /// name is weak, and refused like the linker would otherwise.
+    fn route_jit_data_imports(
+        build: &mut Build,
+        weak: &alloc::collections::BTreeSet<&str>,
+        machine: super::super::Machine,
+    ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmSectionTarget;
         let mut slots = super::super::DataImportSlots::new(build, true, "the JIT");
         for r in core::mem::take(&mut build.user_extern_data_refs) {
-            if !slots.binds(&r.symbol_name) {
+            if slots.binds(&r.symbol_name) {
+                slots.route_ref(build, &r)?;
+            } else if !weak.contains(r.symbol_name.as_str()) {
                 return Err(undefined_reference(&r.symbol_name));
+            } else if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
+                return Err(C5Error::hard(
+                    Code::RELOCATION,
+                    format!(
+                        "unresolved weak reference to `{}`: cannot resolve the referencing \
+                         instruction to address 0",
+                        r.symbol_name
+                    ),
+                ));
             }
-            slots.route_ref(build, &r)?;
         }
         for fx in core::mem::take(&mut build.asm_sym_fixups) {
             match &fx.target {
@@ -1758,6 +1903,17 @@ mod jit_impl {
                 // `owned` gates release in Drop.
                 self.lib_handles.push((h, owned));
             }
+            // The C runtime joins the set as `dlopen(NULL)` does on POSIX,
+            // for the calls `resolve_symbol` answers that no binding names.
+            let crt = c"msvcrt.dll".as_ptr();
+            let mut h = unsafe { GetModuleHandleA(crt) };
+            let owned = h.is_null();
+            if owned {
+                h = unsafe { LoadLibraryA(crt) };
+            }
+            if !h.is_null() {
+                self.lib_handles.push((h, owned));
+            }
             for (i, imp) in imports.imports.iter().enumerate() {
                 let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
                 if addr == 0 {
@@ -1929,6 +2085,19 @@ mod jit_impl {
                 fx.part,
                 "func fixup",
             )?;
+        }
+        for r in &build.text_pcrel_relocs {
+            let at = r.site_text_offset as usize;
+            let value =
+                (data_vmaddr + r.target_data_offset) as i64 - (code_vmaddr + at as u64) as i64;
+            let width = r.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok();
+            let Some(field) = code.get_mut(at..at + width).filter(|_| fits) else {
+                return Err(C5Error::internal(format!(
+                    "JIT: text pcrel field at +{at:#x} cannot take {value:#x}"
+                )));
+            };
+            field.copy_from_slice(&value.to_le_bytes()[..width]);
         }
         apply_jit_asm_sym_fixups(code, code_vmaddr, data_vmaddr, build)?;
         Ok(())

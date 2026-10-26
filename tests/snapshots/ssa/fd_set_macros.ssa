@@ -358,7 +358,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     v276 LifetimeEnd(-16)                                 -> -
     terminator Return(v275)   (exit_acc=v275)
   block 40  start_pc=0
-    v277 ImmData(12)                                      -> x7
+    v277 ImmData(8)                                       -> x7
     v278 CallExt { binding_idx=0, args=[v277], fp_arg_mask=0x0 } -> x0
     v279 Imm(0)                                           -> x0
     v280 LifetimeEnd(-16)                                 -> -

@@ -215,7 +215,9 @@ impl Compiler {
                 } => mark(&mut set, *child),
                 // The walker takes the address of an identifier operand
                 // of these without an `&` node in the tree.
-                Expr::Intrinsic { args, .. } | Expr::Atomic { args, .. } => {
+                Expr::Intrinsic { args, .. }
+                | Expr::Atomic { args, .. }
+                | Expr::MsIntrinsic { args, .. } => {
                     for a in args {
                         mark(&mut set, *a);
                     }

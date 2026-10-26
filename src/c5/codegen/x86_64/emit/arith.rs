@@ -7,7 +7,7 @@ fn fp_arith_opcode(op: BinOp) -> Option<u8> {
     Some(match op {
         BinOp::Fadd => 0x58,
         BinOp::Fsub => 0x5C,
-        BinOp::Fmul => 0x59,
+        BinOp::Fmul | BinOp::FmulContractible => 0x59,
         BinOp::Fdiv => 0x5E,
         _ => return None,
     })

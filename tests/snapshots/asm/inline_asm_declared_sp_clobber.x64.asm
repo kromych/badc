@@ -246,7 +246,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	leaq	(%rcx,%rcx,4), %r12
                	movq	(%rax), %rcx

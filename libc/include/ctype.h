@@ -58,6 +58,25 @@
 #pragma binding(msvcrt::isupper,  "isupper")
 #pragma binding(msvcrt::tolower,  "tolower")
 #pragma binding(msvcrt::toupper,  "toupper")
+#pragma binding(msvcrt::_isctype,   "_isctype")
+#pragma binding(msvcrt::_isctype_l, "_isctype_l")
+#pragma binding(msvcrt::isleadbyte, "isleadbyte")
+#pragma binding(msvcrt::_isleadbyte_l, "_isleadbyte_l")
+#include <corecrt.h>
+#define _UPPER    0x1
+#define _LOWER    0x2
+#define _DIGIT    0x4
+#define _SPACE    0x8
+#define _PUNCT    0x10
+#define _CONTROL  0x20
+#define _BLANK    0x40
+#define _HEX      0x80
+#define _LEADBYTE 0x8000
+#define _ALPHA    (0x0100 | _UPPER | _LOWER)
+int _isctype(int c, int type);
+int _isctype_l(int c, int type, _locale_t locale);
+int isleadbyte(int c);
+int _isleadbyte_l(int c, _locale_t locale);
 #endif
 
 // isascii: the C macro form; no libc symbol.
@@ -85,3 +104,63 @@ static inline int isblank(int c) {
 static inline int toascii(int c) {
     return c & 0x7f;
 }
+
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX.1-2008 classification and case mapping in a given locale.
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::isalnum_l, "_isalnum_l")
+#pragma binding(libc::isalpha_l, "_isalpha_l")
+#pragma binding(libc::isblank_l, "_isblank_l")
+#pragma binding(libc::iscntrl_l, "_iscntrl_l")
+#pragma binding(libc::isdigit_l, "_isdigit_l")
+#pragma binding(libc::isgraph_l, "_isgraph_l")
+#pragma binding(libc::islower_l, "_islower_l")
+#pragma binding(libc::isprint_l, "_isprint_l")
+#pragma binding(libc::ispunct_l, "_ispunct_l")
+#pragma binding(libc::isspace_l, "_isspace_l")
+#pragma binding(libc::isupper_l, "_isupper_l")
+#pragma binding(libc::isxdigit_l, "_isxdigit_l")
+#pragma binding(libc::tolower_l, "_tolower_l")
+#pragma binding(libc::toupper_l, "_toupper_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::isalnum_l, "isalnum_l")
+#pragma binding(libc::isalpha_l, "isalpha_l")
+#pragma binding(libc::isblank_l, "isblank_l")
+#pragma binding(libc::iscntrl_l, "iscntrl_l")
+#pragma binding(libc::isdigit_l, "isdigit_l")
+#pragma binding(libc::isgraph_l, "isgraph_l")
+#pragma binding(libc::islower_l, "islower_l")
+#pragma binding(libc::isprint_l, "isprint_l")
+#pragma binding(libc::ispunct_l, "ispunct_l")
+#pragma binding(libc::isspace_l, "isspace_l")
+#pragma binding(libc::isupper_l, "isupper_l")
+#pragma binding(libc::isxdigit_l, "isxdigit_l")
+#pragma binding(libc::tolower_l, "tolower_l")
+#pragma binding(libc::toupper_l, "toupper_l")
+#endif
+int isalnum_l(int c, locale_t locale);
+int isalpha_l(int c, locale_t locale);
+int isblank_l(int c, locale_t locale);
+int iscntrl_l(int c, locale_t locale);
+int isdigit_l(int c, locale_t locale);
+int isgraph_l(int c, locale_t locale);
+int islower_l(int c, locale_t locale);
+int isprint_l(int c, locale_t locale);
+int ispunct_l(int c, locale_t locale);
+int isspace_l(int c, locale_t locale);
+int isupper_l(int c, locale_t locale);
+int isxdigit_l(int c, locale_t locale);
+int tolower_l(int c, locale_t locale);
+int toupper_l(int c, locale_t locale);
+#endif

@@ -51,7 +51,10 @@ const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
+const SHT_GROUP: u32 = 17;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
+const SHF_WRITE: u64 = 0x1;
 const SHF_EXECINSTR: u64 = 0x4;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
@@ -78,6 +81,14 @@ struct Elf64Dyn {
     d_val: u64,
 }
 
+/// ELF32 counterpart of [`Elf64Dyn`].
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf32Dyn {
+    d_tag: i32,
+    d_val: u32,
+}
+
 /// ELF note header: the fixed prefix before a note's name and
 /// descriptor payloads.
 #[repr(C)]
@@ -91,6 +102,7 @@ struct Elf64Nhdr {
 const _: () = {
     assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
     assert!(core::mem::size_of::<Elf64Dyn>() == 16);
+    assert!(core::mem::size_of::<Elf32Dyn>() == 8);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
@@ -231,6 +243,8 @@ pub struct SharedLibrary {
     /// the leading underscore; an ELF or PE image's export names are
     /// already the loader's, so it states none.
     pub export_symbols: alloc::collections::BTreeMap<String, String>,
+    /// The ordinal a PE import library imports a name by (`IMPORT_OBJECT_ORDINAL`).
+    pub export_ordinals: alloc::collections::BTreeMap<String, u16>,
     /// The default symbol version of each export the library versions,
     /// read from the same bytes as the export set. The image records it
     /// as the import's version requirement, so the loader binds the
@@ -239,6 +253,13 @@ pub struct SharedLibrary {
     /// tables, and for a description with no file behind it -- there
     /// the target's manifest states the requirement.
     pub export_versions: alloc::collections::BTreeMap<String, String>,
+    /// The names the library's dynamic symbols reference and do not define,
+    /// which an executable defining one exports (GNU ld's `ref_dynamic`).
+    pub references: alloc::collections::BTreeSet<String>,
+    /// The subset of `exports` of protected visibility (`STV_PROTECTED`):
+    /// the library binds its own references to them, so an image may not
+    /// take a copy of one.
+    pub protected_exports: alloc::collections::BTreeSet<String>,
     /// Whether this record was read from a library image. A description
     /// the target supplies instead -- the C library its headers describe
     /// -- carries no version data of its own, so the link must not read
@@ -252,8 +273,54 @@ pub struct SharedLibrary {
 /// the exports are every `.dynsym` entry that is defined (not
 /// `SHN_UNDEF`) and externally bound (`STB_GLOBAL` / `STB_WEAK`).
 pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
-    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
-    let machine = elf_machine(ehdr.e_machine)?;
+    let image = read_dynamic_image(bytes)?;
+    Ok(SharedLibrary {
+        soname: image.soname,
+        machine: elf_machine(image.machine)?,
+        exports: image.exports,
+        data_exports: image.data_exports,
+        tls_exports: image.tls_exports,
+        object_sizes: image.object_sizes,
+        export_symbols: alloc::collections::BTreeMap::new(),
+        export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
+        from_image: true,
+        export_ordinals: Default::default(),
+        references: image.references,
+        protected_exports: image.protected_exports,
+    })
+}
+
+/// The dynamic interface an ELF shared object of either class states:
+/// what [`SharedLibrary`] records of it, and the `e_machine` it is
+/// built for.
+#[derive(Debug, Clone, Default)]
+pub struct DynamicImage {
+    pub machine: u16,
+    pub soname: String,
+    pub exports: alloc::collections::BTreeSet<String>,
+    pub data_exports: alloc::collections::BTreeSet<String>,
+    /// The exports typed as functions, `STT_FUNC` or `STT_GNU_IFUNC`.
+    pub function_exports: alloc::collections::BTreeSet<String>,
+    /// Size, alignment and read-only-ness of each data export, which a
+    /// copy of it in an executable takes. The alignment is bfd's: the
+    /// largest power of two up to the defining section's that divides the
+    /// object's offset in it.
+    pub copy_layout: alloc::collections::BTreeMap<String, (u64, u64, bool)>,
+    pub tls_exports: alloc::collections::BTreeSet<String>,
+    pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
+    pub references: alloc::collections::BTreeSet<String>,
+    pub protected_exports: alloc::collections::BTreeSet<String>,
+}
+
+/// Read [`DynamicImage`] from a little-endian ELF image of either class.
+pub fn read_dynamic_image(bytes: &[u8]) -> Result<DynamicImage, C5Error> {
+    let class = bytes.get(4).copied().and_then(ElfClass::from_ei_class);
+    let elf32 = class == Some(ElfClass::Elf32);
+    let ehdr: Elf64Ehdr = if elf32 {
+        read_struct::<Elf32Ehdr>(bytes, 0)?.into()
+    } else {
+        read_struct(bytes, 0)?
+    };
     let read_cstr = |off: usize| -> String {
         let start = off.min(bytes.len());
         let mut end = start;
@@ -263,13 +330,24 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         String::from_utf8_lossy(&bytes[start..end]).into_owned()
     };
     let shdr = |i: usize| -> Result<Elf64Shdr, C5Error> {
-        read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)
+        let at = ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize;
+        if elf32 {
+            Ok(read_struct::<Elf32Shdr>(bytes, at)?.into())
+        } else {
+            read_struct(bytes, at)
+        }
     };
-    let mut soname = String::new();
-    let mut exports = alloc::collections::BTreeSet::new();
-    let mut data_exports = alloc::collections::BTreeSet::new();
-    let mut tls_exports = alloc::collections::BTreeSet::new();
-    let mut object_sizes = alloc::collections::BTreeMap::new();
+    let sym_at = |at: usize| -> Result<Elf64Sym, C5Error> {
+        if elf32 {
+            Ok(read_struct::<Elf32Sym>(bytes, at)?.into())
+        } else {
+            read_struct(bytes, at)
+        }
+    };
+    let mut image = DynamicImage {
+        machine: ehdr.e_machine,
+        ..DynamicImage::default()
+    };
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -279,17 +357,24 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 continue;
             }
             for j in 0..(sh.sh_size as usize / entsize) {
-                let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
-                // SHN_UNDEF (0) is an import, not an export; STB_LOCAL (0)
-                // has no external linkage. Keep STB_GLOBAL (1) / STB_WEAK (2)
-                // definitions.
+                let sym = sym_at(sh.sh_offset as usize + j * entsize)?;
+                // STB_LOCAL (0) has no external linkage. Of the STB_GLOBAL
+                // (1) / STB_WEAK (2) / STB_GNU_UNIQUE (10) entries, SHN_UNDEF
+                // (0) is a reference and the rest are definitions.
                 let bind = sym.st_info >> 4;
-                if sym.st_shndx == 0 || (bind != 1 && bind != 2) {
+                if !matches!(bind, 1 | 2 | 10) {
                     continue;
                 }
                 let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
                 if name.is_empty() {
                     continue;
+                }
+                if sym.st_shndx == 0 {
+                    image.references.insert(name);
+                    continue;
+                }
+                if sym.st_other & 3 == STV_PROTECTED {
+                    image.protected_exports.insert(name.clone());
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.
@@ -297,46 +382,58 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 // shows, capped at the targets' `max_align_t`.
                 match sym.st_info & 0xf {
                     STT_OBJECT => {
+                        if let Ok(home) = shdr(sym.st_shndx as usize) {
+                            let off = sym.st_value.wrapping_sub(home.sh_addr);
+                            let mut align = home.sh_addralign.max(1).next_power_of_two();
+                            while off % align != 0 {
+                                align /= 2;
+                            }
+                            let readonly = home.sh_flags & SHF_WRITE == 0;
+                            (image.copy_layout)
+                                .insert(name.clone(), (sym.st_size, align, readonly));
+                        }
                         let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
-                        object_sizes.insert(name.clone(), (sym.st_size, align));
-                        data_exports.insert(name.clone());
+                        image
+                            .object_sizes
+                            .insert(name.clone(), (sym.st_size, align));
+                        image.data_exports.insert(name.clone());
                     }
                     STT_TLS => {
-                        tls_exports.insert(name.clone());
+                        image.tls_exports.insert(name.clone());
+                    }
+                    STT_FUNC | STT_GNU_IFUNC => {
+                        image.function_exports.insert(name.clone());
                     }
                     _ => {}
                 }
-                exports.insert(name);
+                image.exports.insert(name);
             }
         } else if sh.sh_type == SHT_DYNAMIC {
             let strtab = shdr(sh.sh_link as usize)?;
-            let entsize = if sh.sh_entsize == 0 {
-                core::mem::size_of::<Elf64Dyn>()
-            } else {
-                sh.sh_entsize as usize
+            let entsize = match (sh.sh_entsize, elf32) {
+                (0, true) => core::mem::size_of::<Elf32Dyn>(),
+                (0, false) => core::mem::size_of::<Elf64Dyn>(),
+                (n, _) => n as usize,
             };
             for j in 0..(sh.sh_size as usize / entsize) {
-                let ent: Elf64Dyn = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
-                if ent.d_tag == 0 {
+                let at = sh.sh_offset as usize + j * entsize;
+                let (tag, val) = if elf32 {
+                    let d: Elf32Dyn = read_struct(bytes, at)?;
+                    (d.d_tag as i64, d.d_val as u64)
+                } else {
+                    let d: Elf64Dyn = read_struct(bytes, at)?;
+                    (d.d_tag, d.d_val)
+                };
+                if tag == 0 {
                     break; // DT_NULL terminates the array
                 }
-                if ent.d_tag == DT_SONAME {
-                    soname = read_cstr(strtab.sh_offset as usize + ent.d_val as usize);
+                if tag == DT_SONAME {
+                    image.soname = read_cstr(strtab.sh_offset as usize + val as usize);
                 }
             }
         }
     }
-    Ok(SharedLibrary {
-        soname,
-        machine,
-        exports,
-        data_exports,
-        tls_exports,
-        object_sizes,
-        export_symbols: alloc::collections::BTreeMap::new(),
-        export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
-        from_image: true,
-    })
+    Ok(image)
 }
 
 /// The architecture an ELF `e_machine` names.
@@ -603,6 +700,17 @@ impl RelocSite<'_> {
         ))
     }
 
+    /// A thread-local form naming an offset from the thread pointer or
+    /// into the executable's block, which a shared object does not know.
+    pub(crate) fn tls_in_shared_object(&self) -> C5Error {
+        self.located(&format!(
+            "{} against symbol `{}` cannot be used when making a shared object; recompile \
+             with -fPIC",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
     /// An absolute relocation in an image the loader places at an
     /// address of its choosing. See [`absolute_in_pie_body`].
     pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {
@@ -662,6 +770,25 @@ pub(crate) fn locate_reloc(source: &str, section: &str, offset: u64) -> String {
 /// input, naming the output kind. Both link engines report through
 /// this; the body carries no diagnostic prefix, since the script engine
 /// collects several and wraps them once.
+/// The refusal of a PIE's PC-relative field naming an undefined weak
+/// symbol, which resolves to 0 and so lies a load address away.
+pub(crate) fn weak_pc_in_pie_body(location: &str, reloc: &str, symbol: &str) -> String {
+    format!(
+        "{location}: {reloc} against undefined symbol `{symbol}` can not be used when making a \
+         position-independent executable: the symbol resolves to 0, which the field reaches only \
+         at the link address; recompile with -fPIE"
+    )
+}
+
+/// The refusal of an absolute field narrower than an address naming a
+/// symbol a shared library defines, which the loader alone places.
+pub(crate) fn narrow_import_body(location: &str, reloc: &str, symbol: &str, kind: &str) -> String {
+    format!(
+        "{location}: {reloc} against symbol `{symbol}` can not be used when making {kind}: \
+         the field cannot hold the address the loader binds the symbol to; recompile with -fPIE"
+    )
+}
+
 pub(crate) fn absolute_in_pie_body(
     location: &str,
     reloc: &str,
@@ -677,6 +804,23 @@ pub(crate) fn absolute_in_pie_body(
         "{location}: {reloc} against symbol `{symbol}` can not be used when making {kind}: \
          the reference needs an absolute address, which no load address supplies"
     )
+}
+
+/// Refusal for a field no dynamic relocation fills against a definition
+/// the loader may preempt: the reference would keep the image's own
+/// definition. GNU ld declines the same input.
+pub(crate) fn preemptible_in_shared_body(location: &str, reloc: &str, symbol: &str) -> String {
+    format!(
+        "{location}: {reloc} against symbol `{symbol}` can not be used when making a shared \
+         object: the symbol may bind externally, and the reference reaches it through neither \
+         the GOT nor the PLT; recompile with -fPIC"
+    )
+}
+
+/// The names a `.note.badc` body lists as data a unit reaches through a
+/// symbol (record 12). A body that does not parse lists none.
+pub(crate) fn badc_note_extern_data(body: &[u8]) -> Vec<String> {
+    BadcNote::parse(body).map_or_else(|_| Vec::new(), |n| n.extern_data_names)
 }
 
 /// Which section a symbol's value lives in.
@@ -706,6 +850,8 @@ pub enum NativeSymSection {
     /// address the image writer decides, and a reference to it parks
     /// until the writer commits the GOT's placement.
     Got,
+    /// PE `__ImageBase`, which the writer places.
+    ImageBase,
     /// `SHN_COMMON` -- C99 6.9.2 tentative definition. The
     /// symbol carries a size (`NativeSymbol::size`) and a
     /// requested byte alignment (`NativeSymbol::value`); the
@@ -750,6 +896,7 @@ pub const STT_FUNC: u8 = 2;
 pub const STT_SECTION: u8 = 3;
 pub const STT_FILE: u8 = 4;
 pub const STT_TLS: u8 = 6;
+pub const STT_GNU_IFUNC: u8 = 10;
 /// `st_other & 0x3` -- the only visibility that reaches the dynamic
 /// symbol table.
 pub const STV_DEFAULT: u8 = 0;
@@ -1018,6 +1165,13 @@ pub struct NativeObject {
     /// classify binds a slot rather than a call stub. A branch is
     /// classified by its kind and never consults this.
     pub extern_data_names: Vec<String>,
+    /// `(name, alternate)`: an undefined `name` resolves to `alternate`, from
+    /// a COFF weak external or a `/alternatename:` directive.
+    pub alternate_names: Vec<(String, String)>,
+    /// COFF COMDAT groups; one group per key keeps its definitions.
+    pub comdats: Vec<Comdat>,
+    /// A COFF object's `/DEFAULTLIB:` libraries, searched after the inputs.
+    pub default_libs: Vec<String>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1045,6 +1199,38 @@ pub struct NativeObject {
     /// A Mach-O object's `__LD,__compact_unwind` and `__TEXT,__eh_frame`.
     pub compact_unwind: Vec<CompactUnwindEntry>,
     pub eh_frame: Option<EhFrameInput>,
+    /// A COFF object's `.pdata` entries, which replace the writer's.
+    pub pe_unwind: Vec<PeUnwindEntry>,
+}
+
+/// A `.pdata` `RUNTIME_FUNCTION` (PE/COFF specification 5.5); `end` is x86-64's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeUnwindEntry {
+    pub begin: SymRef,
+    pub end: Option<SymRef>,
+    pub data: PeUnwindData,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeUnwindData {
+    /// The `UNWIND_INFO` / `.xdata` record the entry names.
+    Info(SymRef),
+    /// An arm64 entry's packed unwind word.
+    Packed(u32),
+}
+
+/// A COFF COMDAT group (PE/COFF specification 5.5.6).
+#[derive(Debug, Clone)]
+pub struct Comdat {
+    /// The leader: the external symbol the COMDAT section defines first.
+    pub key: String,
+    /// `IMAGE_COMDAT_SELECT_*`.
+    pub selection: u8,
+    /// The leader section's size and its checksum.
+    pub size: u64,
+    pub checksum: u32,
+    /// Indices in [`NativeObject::sections`], associative ones included.
+    pub sections: Vec<u32>,
 }
 
 /// A symbol of the unit, by index, and an addend.
@@ -1096,16 +1282,33 @@ pub fn is_elf_object(bytes: &[u8]) -> bool {
 }
 
 /// True when `bytes` is a relocatable object in a format the linker
-/// reads: ELF `ET_REL` or Mach-O `MH_OBJECT`.
+/// reads: ELF `ET_REL`, Mach-O `MH_OBJECT` or a COFF object.
 pub fn is_native_object(bytes: &[u8]) -> bool {
-    is_elf_object(bytes) || super::mach_o_object::is_mach_o_object(bytes)
+    (is_elf_object(bytes) && bytes.get(16..18) == Some(&ET_REL.to_le_bytes()))
+        || super::mach_o_object::is_mach_o_object(bytes)
+        || super::coff_object::is_coff_object(bytes)
 }
 
-/// Parse a relocatable object of either format the linker reads,
+/// Parse a relocatable object of any format the linker reads,
 /// dispatching on the leading magic.
 pub fn parse_native_object(bytes: &[u8]) -> Result<NativeObject, C5Error> {
+    parse_object_on(bytes, None)
+}
+
+/// [`parse_native_object`] for a link on `machine`, which a
+/// machine-independent COFF object takes.
+pub fn parse_native_object_for(
+    bytes: &[u8],
+    machine: NativeMachine,
+) -> Result<NativeObject, C5Error> {
+    parse_object_on(bytes, Some(machine))
+}
+
+fn parse_object_on(bytes: &[u8], link: Option<NativeMachine>) -> Result<NativeObject, C5Error> {
     if super::mach_o_object::is_mach_o_object(bytes) {
         super::mach_o_object::parse_native_mach_o(bytes)
+    } else if super::coff_object::is_coff_object(bytes) {
+        super::coff_object::parse_native_coff(bytes, link)
     } else {
         parse_native_elf(bytes)
     }
@@ -1164,7 +1367,19 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
     };
+    let mut default_libs = Vec::new();
+    for &i in &roles.deplibs {
+        default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
+    }
     let debug = debug_sections(bytes, &shdrs, shstrtab_bytes, &roles)?;
+    let comdats = elf_comdats(
+        bytes,
+        &shdrs,
+        &roles.groups,
+        &symbols,
+        &sections,
+        &record_of,
+    )?;
 
     Ok(NativeObject {
         source: String::new(),
@@ -1204,6 +1419,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         prologue_ends: note.prologue_ends,
         early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
+        alternate_names: Vec::new(),
+        comdats,
+        default_libs,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,
@@ -1213,6 +1431,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_other: debug.other,
         compact_unwind: Vec::new(),
         eh_frame: None,
+        pe_unwind: Vec::new(),
     })
 }
 
@@ -1336,6 +1555,10 @@ struct SectionRoles {
     /// `.rela.<section>` sections whose target joined a merged family.
     rela_sections: Vec<usize>,
     badc_note: Option<usize>,
+    /// `.deplibs` sections: the libraries `#pragma comment(lib, ...)` names.
+    deplibs: Vec<usize>,
+    /// `SHT_GROUP` sections.
+    groups: Vec<usize>,
     debug_info: Option<usize>,
     debug_abbrev: Option<usize>,
     debug_line: Option<usize>,
@@ -1365,6 +1588,8 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         symtab: None,
         rela_sections: Vec::new(),
         badc_note: None,
+        deplibs: Vec::new(),
+        groups: Vec::new(),
         debug_info: None,
         debug_abbrev: None,
         debug_line: None,
@@ -1406,6 +1631,14 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         };
         if let Some(slot) = channel {
             *slot = Some(i);
+            continue;
+        }
+        if sh.sh_type == SHT_LLVM_DEPENDENT_LIBRARIES {
+            roles.deplibs.push(i);
+            continue;
+        }
+        if sh.sh_type == SHT_GROUP {
+            roles.groups.push(i);
             continue;
         }
         if name.starts_with(".debug_") && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS) {
@@ -1664,6 +1897,54 @@ fn concat_families(
     })
 }
 
+/// The `GRP_COMDAT` groups of an object (System V gABI, "Section Groups"),
+/// keyed on the signature symbol's name, or on its section's name for a
+/// section symbol. GNU ld keeps the first group of each signature, which is
+/// COFF's `IMAGE_COMDAT_SELECT_ANY`; a group without the flag is not
+/// deduplicated.
+fn elf_comdats(
+    bytes: &[u8],
+    shdrs: &[Elf64Shdr],
+    groups: &[usize],
+    symbols: &[NativeSymbol],
+    sections: &[InputSection],
+    record_of: &[Option<u32>],
+) -> Result<Vec<Comdat>, C5Error> {
+    const GRP_COMDAT: u32 = 1;
+    const STT_SECTION: u8 = 3;
+    let mut out = Vec::new();
+    for &g in groups {
+        let words: Vec<u32> = (section_slice(bytes, &shdrs[g])?.as_chunks::<4>().0.iter())
+            .map(|w| u32::from_le_bytes(*w))
+            .collect();
+        if words.first().is_none_or(|&flags| flags & GRP_COMDAT == 0) {
+            continue;
+        }
+        let sig = symbols.get(shdrs[g].sh_info as usize).ok_or_else(|| {
+            link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                "a section group names no signature symbol",
+            )
+        })?;
+        let key = match sig.input_section {
+            Some(s) if sig.kind == STT_SECTION => sections[s as usize].name.clone(),
+            _ => sig.name.clone(),
+        };
+        let members: Vec<u32> = (words[1..].iter())
+            .filter_map(|&m| record_of.get(m as usize).copied().flatten())
+            .collect();
+        out.push(Comdat {
+            key,
+            selection: super::comdat::IMAGE_COMDAT_SELECT_ANY,
+            size: 0,
+            checksum: 0,
+            sections: members,
+        });
+    }
+    Ok(out)
+}
+
 /// Input-section records in placement order, and each section index's.
 fn input_section_records(
     shdrs: &[Elf64Shdr],
@@ -1772,7 +2053,12 @@ fn decode_symbols(
     );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
-        let binding = sym.st_info >> 4;
+        // GNU ld links an `STB_GNU_UNIQUE` definition as a global one. TODO:
+        // keep the binding in a shared library's dynamic symbols.
+        let binding = match sym.st_info >> 4 {
+            10 => 1,
+            b => b,
+        };
         let kind = sym.st_info & 0xf;
         let (section, value_offset) = shndx_map.lookup(sym.st_shndx);
         symbols.push(NativeSymbol {

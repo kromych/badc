@@ -86,6 +86,8 @@ pub(crate) enum Parsed {
 pub(crate) struct FrontEnd {
     pub(crate) gnu: bool,
     pub(crate) gnu_dialect: bool,
+    /// `-std=`'s edition.
+    pub(crate) std: badc::CStd,
     pub(crate) gnu89_inline: bool,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
@@ -94,9 +96,14 @@ pub(crate) struct FrontEnd {
     /// `-fstrict-overflow`, the last one given winning.
     pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
+    pub(crate) fp_contract: badc::FpContract,
+    /// gcc `-fvisibility=`; `None` is default.
+    pub(crate) default_visibility: Option<badc::SymVisibility>,
     pub(crate) nostdinc: bool,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
+    /// gcc `-dM`: `-E` prints the macro definitions in place of the text.
+    pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
     pub(crate) defines: Vec<(String, String)>,
@@ -112,6 +119,8 @@ pub(crate) struct FrontEnd {
     /// before the pragmas in a translation unit apply.
     pub(crate) diag: badc::diag::Config,
     pub(crate) optimize: bool,
+    /// `-Wvla-larger-than=`, in bytes.
+    pub(crate) vla_larger_than: Option<u64>,
     /// The host's implicit system header directories, resolved against
     /// the target after parsing.
     pub(crate) system_include_paths: Vec<String>,
@@ -142,6 +151,11 @@ pub(crate) struct Codegen {
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
+    /// The last of the PIC flags was `-fpie` / `-fPIE`.
+    pub(crate) fpie: bool,
+    /// 1 for `-fpic` / `-fpie`, 2 for `-fPIC` / `-fPIE`: the value gcc
+    /// gives `__pic__` and `__pie__`.
+    pub(crate) pic_level: u8,
     /// `-fno-pic` / `-fno-pie`, tracked apart from `fpic` because the
     /// absence of any PIC flag and an explicit opt-out choose different
     /// `const` placements in a `-c` object.
@@ -174,6 +188,8 @@ impl Default for Codegen {
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
+            fpie: false,
+            pic_level: 0,
             fno_pic: false,
             code_model: badc::CodeModel::Small,
             hardening: badc::Hardening::NONE,
@@ -316,6 +332,8 @@ pub(crate) struct Cli {
     pub(crate) target: Target,
     pub(crate) output_path: Option<PathBuf>,
     pub(crate) compile_only: bool,
+    /// `-fsyntax-only`: each unit through the front end, nothing written.
+    pub(crate) syntax_only: bool,
     /// `--freestanding`: no embedded startup runtime, and the program's
     /// own entry becomes the image entry.
     pub(crate) freestanding: bool,
@@ -379,8 +397,8 @@ impl Cli {
     pub(crate) fn image_options(&self, exec_stack: bool) -> badc::ImageOptions {
         let link = &self.link;
         badc::ImageOptions {
-            export_all: link.export_all,
-            export_data: link.export_data,
+            export_all: link.export_all || self.exports_definitions(),
+            export_data: link.export_data || self.exports_definitions(),
             emit_relocs: link.emit_relocs,
             exec_form: self.exec_form(),
             strip_debug: link.strip_debug,
@@ -394,6 +412,17 @@ impl Cli {
                 symbolic: link.symbolic && self.mode == Mode::SharedLibrary,
             },
         }
+    }
+
+    /// Whether the image exports each default-visibility definition, as GNU ld
+    /// and ld64 do for an ELF or Mach-O shared library; link.exe exports a
+    /// DLL's `dllexport` ones.
+    pub(crate) fn exports_definitions(&self) -> bool {
+        self.mode == Mode::SharedLibrary
+            && matches!(
+                self.target.binary_format(),
+                badc::BinaryFormat::Elf | badc::BinaryFormat::MachO
+            )
     }
 
     /// Which of its own definitions the image binds through `.dynsym`.
@@ -515,6 +544,7 @@ struct Parser {
     link: Link,
     output_path: Option<PathBuf>,
     compile_only: bool,
+    syntax_only: bool,
     freestanding: bool,
     quiet: bool,
     badc_home: Option<PathBuf>,
@@ -531,6 +561,8 @@ struct Parser {
     /// The `--explain` selector, resolved once the whole line is read.
     explain: Option<String>,
     target_spec: Option<String>,
+    /// `-arch <name>`, checked against the target once it is known.
+    arch: Option<String>,
     mcpu: Option<String>,
     dep: DepFlags,
     /// `-mcmodel=tiny`, which lowers as `small` and is checked against
@@ -547,6 +579,9 @@ struct Parser {
     /// The `-gdwarf` family's request, checked against what the
     /// emitter produces once the whole line is read.
     dwarf: DwarfRequest,
+    /// The `-W` / `-Werror=` spellings that turn on a gcc or clang warning
+    /// badc does not implement, reported once the whole line is read.
+    unimplemented_warnings: Vec<String>,
     #[cfg(feature = "codegen_test")]
     pressure_caps: Vec<(&'static str, String)>,
 }
@@ -583,11 +618,17 @@ fn byte_size(spec: &str) -> Option<u64> {
     number.parse::<u64>().ok()?.checked_mul(scale)
 }
 
-/// What a `-W` option's selector names. `arg` is the option as written,
-/// so the rejection quotes what the user typed.
-fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
-    badc::diag::Selector::parse(sel)
-        .ok_or_else(|| ParseError::diag(format!("badc: error: unknown warning option `{arg}`")))
+/// What a `-W` option's selector names: a catalogue selector, or `None`
+/// for a warning gcc or clang defines that badc does not implement. `arg`
+/// is the option as written, so the rejection quotes what the user typed.
+fn selector(sel: &str, arg: &str) -> Result<Option<badc::diag::Selector>, ParseError> {
+    match badc::diag::Selector::parse(sel) {
+        Some(s) => Ok(Some(s)),
+        None if badc::diag::defined_elsewhere(sel) => Ok(None),
+        None => Err(ParseError::diag(format!(
+            "badc: error: unknown warning option `{arg}`"
+        ))),
+    }
 }
 
 /// Read the argument vector, which is the whole input. Every
@@ -770,6 +811,9 @@ impl Parser {
     /// (`-Wa,`, `-Wp,`) keeps it.
     fn diagnostic_option(&mut self, arg: &str) -> Result<bool, ParseError> {
         match arg {
+            // gcc's original spellings of `-Wpedantic` and `-Werror=pedantic`.
+            "-pedantic" => self.diag_level("pedantic", arg, badc::diag::Level::Warning)?,
+            "-pedantic-errors" => self.diag_error("pedantic", arg, true)?,
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
@@ -793,6 +837,25 @@ impl Parser {
                     badc::diag::Level::Warning,
                 );
             }
+            s if s.starts_with("-Wvla-larger-than=") => {
+                let Some(bound) = byte_size(&s["-Wvla-larger-than=".len()..]) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}` takes a byte size: \
+                         -Wvla-larger-than=<n>[kB|KiB|MB|MiB|GB|GiB]"
+                    )));
+                };
+                self.front.vla_larger_than = Some(bound);
+                self.front.diag.set_level(
+                    badc::diag::Code::VLA_LARGER_THAN,
+                    badc::diag::Level::Warning,
+                );
+            }
+            s if s == "-Wimplicit-fallthrough"
+                || s == "-Wno-implicit-fallthrough"
+                || s.starts_with("-Wimplicit-fallthrough=") =>
+            {
+                self.fallthrough_level(s)?
+            }
             "-Wframe-larger-than" => {
                 return Err(ParseError::diag(
                     "badc: error: `-Wframe-larger-than` takes a byte size: \
@@ -811,14 +874,26 @@ impl Parser {
     }
 
     /// `-W<sel>` / `-Wno-<sel>`: set the level of one row, or of every
-    /// row a group holds.
+    /// row a group holds. A `-Wno-` of a name badc never reports holds
+    /// already; gcc takes it whatever the name.
     fn diag_level(
         &mut self,
         sel: &str,
         arg: &str,
         level: badc::diag::Level,
     ) -> Result<(), ParseError> {
-        match selector(sel, arg)? {
+        let silenced = level == badc::diag::Level::Ignore;
+        let named = match selector(sel, arg) {
+            Err(_) if silenced => return Ok(()),
+            named => named?,
+        };
+        let Some(named) = named else {
+            if !silenced {
+                self.unimplemented_warnings.push(arg.to_string());
+            }
+            return Ok(());
+        };
+        match named {
             badc::diag::Selector::Group(g) if level >= badc::diag::Level::Warning => {
                 self.front.diag.enable_group(g);
             }
@@ -836,9 +911,46 @@ impl Parser {
         Ok(())
     }
 
+    /// gcc's `-Wimplicit-fallthrough[=N]` is one setting, the last level
+    /// winning. badc implements level 5, where only the `fallthrough`
+    /// attribute annotates; levels 1 to 4 also read comments, which the
+    /// preprocessor drops.
+    fn fallthrough_level(&mut self, arg: &str) -> Result<(), ParseError> {
+        let level = match arg {
+            "-Wno-implicit-fallthrough" => 0,
+            "-Wimplicit-fallthrough" => 3,
+            s => match s["-Wimplicit-fallthrough=".len()..].parse::<u8>() {
+                Ok(n) if n <= 5 => n,
+                _ => {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}`: the level is not between 0 and 5"
+                    )));
+                }
+            },
+        };
+        let on = if level == 5 {
+            badc::diag::Level::Warning
+        } else {
+            badc::diag::Level::Ignore
+        };
+        self.front
+            .diag
+            .set_level(badc::diag::Code::IMPLICIT_FALLTHROUGH, on);
+        if (1..=4).contains(&level) {
+            self.unimplemented_warnings.push(arg.to_string());
+        }
+        Ok(())
+    }
+
     /// `-Werror=<sel>` / `-Wno-error=<sel>`.
     fn diag_error(&mut self, sel: &str, arg: &str, on: bool) -> Result<(), ParseError> {
-        match selector(sel, arg)? {
+        let Some(named) = selector(sel, arg)? else {
+            if on {
+                self.unimplemented_warnings.push(arg.to_string());
+            }
+            return Ok(());
+        };
+        match named {
             badc::diag::Selector::Group(g) => {
                 for row in badc::diag::rows().filter(|r| r.groups.contains(g)) {
                     self.front.diag.error_for(row.code, on);
@@ -923,6 +1035,7 @@ impl Parser {
             // `-c` emits one relocatable object per source instead of
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
+            "-fsyntax-only" => self.syntax_only = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
             "--verify-ssa" => self.codegen.verify_ssa = true,
@@ -989,8 +1102,16 @@ impl Parser {
 
     /// Preprocessor and language-dialect options.
     fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
+        if arg == "-arch" {
+            self.arch = Some(operand(iter, "badc: error: -arch requires a name")?);
+            return Ok(true);
+        }
         let front = &mut self.front;
         match arg {
+            // gcc's `-pthread`; the threads live in the target's C library as
+            // badc describes it, so the link adds no library.
+            "-pthread" => front.defines.push(("_REENTRANT".into(), "1".into())),
+            "-dM" => front.dump_macros = true,
             "-D" => {
                 let s = operand(iter, "badc: error: -D requires NAME[=VALUE]")?;
                 match s.split_once('=') {
@@ -1174,6 +1295,31 @@ impl Parser {
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
+            s if s.starts_with("-fvisibility=") => {
+                let spec = &s["-fvisibility=".len()..];
+                front.default_visibility =
+                    badc::SymVisibility::from_gcc_name(spec).ok_or_else(|| {
+                        ParseError::diag(format!(
+                            "badc: error: unrecognized visibility value `{spec}` (default, hidden, \
+                         protected or internal)"
+                        ))
+                    })?;
+            }
+            // gcc / clang `-ffp-contract=`: where `-O` contracts a product
+            // with the add or subtract using it (C99 6.5p8).
+            s if s.starts_with("-ffp-contract=") => {
+                front.fp_contract = match &s["-ffp-contract=".len()..] {
+                    "off" => badc::FpContract::Off,
+                    "on" => badc::FpContract::On,
+                    "fast" => badc::FpContract::Fast,
+                    spec => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: unsupported argument `{spec}` to `-ffp-contract=` \
+                             (supported: off, on, fast)"
+                        )));
+                    }
+                };
+            }
             // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
             // spelled with a library function's own name is an ordinary
             // call the compiler may not fold. `-ffreestanding` also drops
@@ -1196,26 +1342,19 @@ impl Parser {
             // that are not C (linker scripts, generated headers). Without
             // `-E` it has no effect, as under gcc.
             "-P" => front.no_line_markers = true,
-            // gcc / clang `-std=<dialect>`: badc compiles C99 with the
-            // GNU extensions always available, so the dialect selects
-            // only whether `__STRICT_ANSI__` is defined.
+            // gcc / clang `-std=<dialect>`: the edition, which sets
+            // `__STDC_VERSION__` and the C23 keywords, and the GNU dialect,
+            // which suppresses `__STRICT_ANSI__`; the GNU extensions stay
+            // available either way. A name gcc does not take is rejected,
+            // since a caller that misspells the dialect gets another one.
             s if s.starts_with("-std=") => {
-                // The C dialect families gcc names: `cNN` / `gnuNN` and
-                // the `iso9899:` spellings, which are strict ISO. A name
-                // outside them is rejected rather than read as strict
-                // ISO, since a caller that misspells the dialect gets the
-                // other one.
                 let dialect = &s["-std=".len()..];
-                let known = dialect.starts_with("gnu")
-                    || dialect.starts_with("iso9899:")
-                    || (dialect.starts_with('c')
-                        && dialect[1..].chars().all(|c| c.is_ascii_digit())
-                        && dialect.len() > 1);
-                if !known {
+                let Some(std) = badc::CStd::from_dialect(dialect) else {
                     return Err(ParseError::plain(format!(
                         "badc: error: unknown C dialect `{dialect}` (-std=)"
                     )));
-                }
+                };
+                front.std = std;
                 front.gnu_dialect = dialect.starts_with("gnu");
             }
             _ => return Ok(false),
@@ -1300,13 +1439,20 @@ impl Parser {
             // relocation reaches the object, so a consumer that relocates
             // it wholesale at load can take it. The flags choose
             // relocation shapes; an executable's form is `-pie` /
-            // `-no-pie`.
+            // `-no-pie`. The last one given wins, as in gcc.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
                 code.fpic = true;
+                code.fpie = matches!(arg, "-fPIE" | "-fpie");
+                code.pic_level = if matches!(arg, "-fpic" | "-fpie") {
+                    1
+                } else {
+                    2
+                };
                 code.fno_pic = false;
             }
             "-fno-pic" | "-fno-PIC" | "-fno-pie" | "-fno-PIE" => {
                 code.fpic = false;
+                code.fpie = false;
                 code.fno_pic = true;
             }
             // gcc / clang `-fno-jump-tables`: a switch never dispatches
@@ -1709,6 +1855,8 @@ impl Parser {
                 };
                 link.subsystem = Some(parsed);
             }
+            "-mwindows" => link.subsystem = Some(badc::Subsystem::Windows),
+            "-mconsole" => link.subsystem = Some(badc::Subsystem::Console),
             // GNU ld surface for script-driven links. `-T FILE` /
             // `--script=FILE` select the script; the rest mirror GNU ld's
             // options of the same names.
@@ -1845,18 +1993,28 @@ impl Parser {
         Ok(Some(out))
     }
 
-    /// Report what the `-gdwarf` family asked for and the emitter does
-    /// not produce. Resolved after the whole line is read, so a
-    /// `-Wno-dwarf-output` or `-Werror=dwarf-output` written later on it
-    /// applies; a row that resolves to an error rejects the line, as
-    /// `-Werror` does at any other phase boundary.
-    fn report_dwarf_request(&self, mode: Mode) -> Result<Vec<String>, ParseError> {
-        if !self.codegen.emit_debug_info || !mode.writes_debug_info() {
-            // Nothing is written, so nothing can differ from the request.
-            return Ok(Vec::new());
-        }
+    /// Report the options the line asked for and badc does not honor: a
+    /// warning it does not implement, and what the `-gdwarf` family asked
+    /// of the emitter. Resolved after the whole line is read, so a `-Wno-`
+    /// or `-Werror=` of the row written later on it applies; a row that
+    /// resolves to an error rejects the line, as `-Werror` does at any
+    /// other phase boundary.
+    fn report_option_requests(&self, mode: Mode) -> Result<Vec<String>, ParseError> {
         let mut sink = badc::diag::Sink::new(self.front.diag.clone(), Default::default());
-        if let Some((version, spelling)) = &self.dwarf.version
+        for spelling in &self.unimplemented_warnings {
+            sink.emit(
+                badc::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
+                None,
+                format!(
+                    "`{spelling}` names a gcc or clang warning badc does not implement; \
+                     it has no effect"
+                ),
+            );
+        }
+        // Nothing is written without debug information, so nothing can
+        // differ from a DWARF request.
+        let dwarf = self.codegen.emit_debug_info && mode.writes_debug_info();
+        if let Some((version, spelling)) = self.dwarf.version.as_ref().filter(|_| dwarf)
             && *version != badc::DWARF_VERSION
         {
             sink.emit(
@@ -1868,7 +2026,7 @@ impl Parser {
                 ),
             );
         }
-        if let Some((bits, spelling)) = &self.dwarf.format_bits
+        if let Some((bits, spelling)) = self.dwarf.format_bits.as_ref().filter(|_| dwarf)
             && *bits != badc::DWARF_FORMAT_BITS
         {
             sink.emit(
@@ -1907,7 +2065,7 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
-        let diagnostics = self.report_dwarf_request(mode)?;
+        let diagnostics = self.report_option_requests(mode)?;
         let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
             let names = Target::ALL
                 .iter()
@@ -1925,9 +2083,11 @@ impl Parser {
                 Err(e) => return Err(ParseError::diag(format!("badc: error: {e}"))),
             }
         }
+        self.check_arch(target)?;
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
+        self.define_pic_macros(target);
         self.check_code_model(mode, target)?;
         self.check_exec_form(mode, target)?;
         self.link.check_groups()?;
@@ -1994,6 +2154,7 @@ impl Parser {
             target,
             output_path: self.output_path,
             compile_only: self.compile_only,
+            syntax_only: self.syntax_only,
             freestanding: self.freestanding,
             quiet: self.quiet,
             badc_home: self.badc_home,
@@ -2010,6 +2171,29 @@ impl Parser {
             #[cfg(feature = "codegen_test")]
             pressure_caps: self.pressure_caps,
         })))
+    }
+
+    /// Apple clang's `-arch <name>`: a Darwin target's own architecture; any
+    /// other, or any other target, is refused, as clang refuses it for Linux.
+    fn check_arch(&self, target: Target) -> Result<(), ParseError> {
+        const DARWIN: [&str; 15] = [
+            "i386", "x86_64", "x86_64h", "arm64", "arm64e", "arm64_32", "armv6", "armv6m", "armv7",
+            "armv7s", "armv7k", "armv7m", "armv7em", "ppc", "ppc64",
+        ];
+        let Some(arch) = self.arch.as_deref() else {
+            return Ok(());
+        };
+        let message = match target {
+            Target::MacOSAarch64 if arch == "arm64" => return Ok(()),
+            Target::MacOSAarch64 if DARWIN.contains(&arch) => {
+                format!(
+                    "`-arch {arch}` names an architecture badc does not build for macOS; its macOS target is arm64"
+                )
+            }
+            Target::MacOSAarch64 => format!("invalid arch name `-arch {arch}`"),
+            other => format!("unsupported option `-arch` for target `{}`", other.id_str()),
+        };
+        Err(ParseError::diag(format!("badc: error: {message}")))
     }
 
     /// `-pg`, `-fpatchable-function-entry=` and `-fstack-protector*`
@@ -2240,6 +2424,30 @@ impl Parser {
         Ok(())
     }
 
+    /// gcc's `__pic__` / `__PIC__` and, for the PIE flags, `__pie__` /
+    /// `__PIE__` on an ELF target, valued by the last PIC flag; the
+    /// Mach-O and PE targets predefine `__PIC__` whatever the flags.
+    /// `-D` and `-U` still win.
+    fn define_pic_macros(&mut self, target: Target) {
+        if target.binary_format() != badc::BinaryFormat::Elf || !self.codegen.fpic {
+            return;
+        }
+        let pic = self.codegen.pic_level;
+        let pie = if self.codegen.fpie { pic } else { 0 };
+        for (name, value) in [
+            ("__pic__", pic),
+            ("__PIC__", pic),
+            ("__pie__", pie),
+            ("__PIE__", pie),
+        ] {
+            if value != 0 && !self.front.defines.iter().any(|(n, _)| n == name) {
+                self.front
+                    .defines
+                    .push((name.to_string(), value.to_string()));
+            }
+        }
+    }
+
     /// `-pie` / `-no-pie` pick the form of an executable the link
     /// writes, which `--freestanding` fixes and only ELF leaves open.
     fn check_exec_form(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
@@ -2330,12 +2538,16 @@ impl FrontEnd {
             .with_short_wchar(self.short_wchar)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
+            .with_fp_contract(self.fp_contract)
+            .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
             .with_gnu_dialect(self.gnu_dialect)
+            .with_std(self.std)
             .with_optimize(self.optimize)
+            .with_vla_larger_than(self.vla_larger_than)
             .with_defines(tu_defines(label, &self.defines))
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
@@ -2374,6 +2586,7 @@ impl Codegen {
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
         opts.pic = self.fpic;
+        opts.pie = self.fpie;
         opts.pic_link = pic_link;
         opts.code_model = self.code_model;
         opts.hardening = self.hardening;
@@ -2780,6 +2993,29 @@ mod tests {
     }
 
     #[test]
+    fn vla_larger_than_takes_a_byte_size_and_keeps_the_w_grammar() {
+        use badc::diag::Level;
+        let bound = |args: &[&str]| parse(args).front.vla_larger_than;
+        assert_eq!(bound(&["a.c"]), None);
+        assert_eq!(bound(&["-Wvla-larger-than=1", "a.c"]), Some(1));
+        assert_eq!(bound(&["-Wvla-larger-than=4KiB", "a.c"]), Some(4096));
+        let sel = "vla-larger-than";
+        assert_eq!(level(&["a.c"], sel), Level::Ignore);
+        assert_eq!(level(&["-Wvla-larger-than=1", "a.c"], sel), Level::Warning);
+        assert_eq!(
+            level(&["-Wvla-larger-than=1", "-Wno-vla-larger-than", "a.c"], sel),
+            Level::Ignore
+        );
+        assert_eq!(
+            level(
+                &["-Wvla-larger-than=1", "-Werror=vla-larger-than=", "a.c"],
+                sel
+            ),
+            Level::Error
+        );
+    }
+
+    #[test]
     fn frame_larger_than_takes_a_byte_size_and_keeps_the_w_grammar() {
         use badc::diag::Level;
         let bound = |args: &[&str]| parse(args).codegen.frame_larger_than;
@@ -2904,20 +3140,125 @@ mod tests {
 
     #[test]
     fn an_unknown_warning_selector_is_refused() {
-        assert_eq!(
-            reject(&["-Wno-such-warning", "a.c"]),
-            (
-                "badc: error: unknown warning option `-Wno-such-warning`".to_string(),
-                1
-            )
+        // gcc refuses a name it does not define, except in `-Wno-`, which
+        // asks for nothing it reports.
+        for arg in [
+            "-Wsuch-warning",
+            "-Werror=such-warning",
+            "-Wno-error=such-warning",
+        ] {
+            assert_eq!(
+                reject(&[arg, "a.c"]),
+                (format!("badc: error: unknown warning option `{arg}`"), 1),
+            );
+        }
+        let cli = parse(&["-Wno-such-warning", "a.c"]);
+        assert!(cli.diagnostics.is_empty(), "{:?}", cli.diagnostics);
+    }
+
+    /// A warning gcc or clang defines and badc does not implement is taken:
+    /// turned on, it reports that it has no effect, under the `-W` grammar
+    /// of its row; turned off, it already holds.
+    #[test]
+    fn a_warning_badc_does_not_implement_is_taken_and_reported() {
+        let reported = |args: &[&str]| parse(args).diagnostics;
+        for arg in ["-Wshadow", "-Werror=cast-align", "-Wimplicit-fallthrough=3"] {
+            let lines = reported(&[arg, "a.c"]);
+            assert_eq!(lines.len(), 1, "{arg}: {lines:?}");
+            assert!(
+                lines[0].contains(&format!("`{arg}` names a gcc or clang warning"))
+                    && lines[0].ends_with("[B7012] [-Wunimplemented-warning-option]"),
+                "{arg}: {lines:?}"
+            );
+        }
+        for args in [
+            &["-Wno-shadow", "a.c"][..],
+            &["-Wno-error=shadow", "a.c"],
+            &["-Wshadow", "-Wno-unimplemented-warning-option", "a.c"],
+        ] {
+            assert!(reported(args).is_empty(), "{args:?}");
+        }
+        let (text, status) = reject(&["-Werror", "-Wshadow", "a.c"]);
+        assert!(
+            text.contains("[B7012]") && text.contains("warnings treated as errors"),
+            "{text}"
         );
+        assert_eq!(status, 1);
+    }
+
+    /// gcc's `-Wimplicit-fallthrough[=N]` is one setting, the last level
+    /// winning; badc implements level 5 and reports levels 1 to 4, which
+    /// also read comments, as not implemented. gcc refuses a level past 5.
+    #[test]
+    fn implicit_fallthrough_takes_its_level() {
+        use badc::diag::Level;
+        let row = "implicit-fallthrough=5";
         assert_eq!(
-            reject(&["-Werror=no-such-warning", "a.c"]),
-            (
-                "badc: error: unknown warning option `-Werror=no-such-warning`".to_string(),
-                1
-            )
+            level(&["-Wimplicit-fallthrough=5", "a.c"], row),
+            Level::Warning
         );
+        for args in [
+            &[
+                "-Wimplicit-fallthrough=5",
+                "-Wno-implicit-fallthrough",
+                "a.c",
+            ][..],
+            &[
+                "-Wimplicit-fallthrough=5",
+                "-Wimplicit-fallthrough=0",
+                "a.c",
+            ],
+            &["-Wimplicit-fallthrough=5", "-Wimplicit-fallthrough", "a.c"],
+        ] {
+            assert_eq!(level(args, row), Level::Ignore, "{args:?}");
+        }
+        assert!(
+            parse(&["-Wimplicit-fallthrough=5", "a.c"])
+                .diagnostics
+                .is_empty()
+        );
+        let lines = parse(&["-Wimplicit-fallthrough=3", "a.c"]).diagnostics;
+        assert!(
+            lines.len() == 1 && lines[0].contains("[B7012]"),
+            "{lines:?}"
+        );
+        let (text, _) = reject(&["-Wimplicit-fallthrough=6", "a.c"]);
+        assert!(text.contains("not between 0 and 5"), "{text}");
+    }
+
+    /// gcc's `-Wunused` names the `-Wunused-*` rows other than
+    /// `-Wunused-parameter`, which it turns on only beside `-Wextra`.
+    #[test]
+    fn wunused_selects_the_unused_rows() {
+        use badc::diag::Level;
+        for row in [
+            "unused-variable",
+            "unused-but-set-variable",
+            "unused-function",
+        ] {
+            assert_eq!(level(&["-Wunused", "a.c"], row), Level::Warning, "{row}");
+            assert_eq!(
+                level(&["-Wall", "-Wno-unused", "a.c"], row),
+                Level::Ignore,
+                "{row}"
+            );
+        }
+        assert_eq!(
+            level(&["-Wunused", "a.c"], "unused-parameter"),
+            Level::Ignore
+        );
+    }
+
+    /// gcc's `-Wenum-conversion` names a row badc implements: taken with no
+    /// B7012, and turned on by `-Wextra`, not by `-Wall`.
+    #[test]
+    fn enum_conversion_names_its_row() {
+        use badc::diag::Level;
+        let row = "enum-conversion";
+        assert!(parse(&["-Wenum-conversion", "a.c"]).diagnostics.is_empty());
+        assert_eq!(level(&["-Wenum-conversion", "a.c"], row), Level::Warning);
+        assert_eq!(level(&["-Wextra", "a.c"], row), Level::Warning);
+        assert_eq!(level(&["-Wall", "a.c"], row), Level::Ignore);
     }
 
     #[test]
@@ -3055,6 +3396,45 @@ mod tests {
             reject(&["-jx", "a.c"]),
             ("badc: error: unknown option `-jx`".to_string(), 1)
         );
+    }
+
+    #[test]
+    fn the_last_pic_flag_chooses_the_form_and_the_gcc_macros() {
+        let macros = |args: &[&str]| -> Vec<(String, String)> {
+            let cli = parse(args);
+            (cli.front.defines.iter())
+                .filter(|(n, _)| {
+                    matches!(n.as_str(), "__pic__" | "__PIC__" | "__pie__" | "__PIE__")
+                })
+                .cloned()
+                .collect()
+        };
+        let both = |pic: &str, pie: Option<&str>| {
+            let mut v = vec![
+                ("__pic__".to_string(), pic.to_string()),
+                ("__PIC__".to_string(), pic.to_string()),
+            ];
+            if let Some(pie) = pie {
+                v.push(("__pie__".to_string(), pie.to_string()));
+                v.push(("__PIE__".to_string(), pie.to_string()));
+            }
+            v
+        };
+        let linux = "--target=linux-x64";
+        assert_eq!(macros(&[linux, "a.c"]), vec![]);
+        assert_eq!(macros(&[linux, "-fpic", "a.c"]), both("1", None));
+        assert_eq!(macros(&[linux, "-fPIE", "a.c"]), both("2", Some("2")));
+        assert_eq!(macros(&[linux, "-fPIE", "-fPIC", "a.c"]), both("2", None));
+        assert_eq!(
+            macros(&[linux, "-fPIC", "-fpie", "a.c"]),
+            both("1", Some("1"))
+        );
+        assert_eq!(macros(&[linux, "-fPIE", "-fno-pic", "a.c"]), vec![]);
+        assert_eq!(macros(&["--target=macos-aarch64", "-fPIE", "a.c"]), vec![]);
+        let pie = parse(&[linux, "-fPIC", "-fPIE", "a.c"]).codegen;
+        assert!(pie.fpic && pie.fpie);
+        let pic = parse(&[linux, "-fPIE", "-fpic", "a.c"]).codegen;
+        assert!(pic.fpic && !pic.fpie);
     }
 
     #[test]
@@ -3452,6 +3832,13 @@ mod tests {
     }
 
     #[test]
+    fn syntax_only_combines_with_the_output_modes() {
+        let cli = parse(&["-fsyntax-only", "-c", "a.c"]);
+        assert!(cli.syntax_only && cli.compile_only);
+        assert!(!parse(&["a.c"]).syntax_only);
+    }
+
+    #[test]
     fn link_map_takes_both_spellings_and_requires_a_link() {
         assert_eq!(
             parse(&["-Map=link.map", "a.c"]).link.map_path.unwrap(),
@@ -3661,6 +4048,10 @@ mod tests {
                 .0
                 .contains("unknown kind `nope`")
         );
+        let gui = parse(&["-mconsole", "-mwindows", "a.o"]);
+        assert_eq!(gui.link.subsystem, Some(badc::Subsystem::Windows));
+        let cui = parse(&["-mwindows", "-mconsole", "a.o"]);
+        assert_eq!(cui.link.subsystem, Some(badc::Subsystem::Console));
     }
 
     #[test]
@@ -3692,20 +4083,33 @@ mod tests {
         );
     }
 
+    /// `-std=` selects the GNU dialect and the edition, as gcc 16 names
+    /// them; a name gcc rejects is rejected.
     #[test]
-    fn dialect_selects_only_strict_conformance() {
+    fn dialect_selects_the_edition_and_strict_conformance() {
         assert!(parse(&["-std=gnu11", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=c99", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
         assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
-        assert_eq!(
-            reject(&["-std=fortran", "a.c"]),
-            (
-                "badc: error: unknown C dialect `fortran` (-std=)".to_string(),
-                1
-            )
-        );
+        let edition = |s: &str| parse(&[s, "a.c"]).front.std.0;
+        assert_eq!(parse(&["a.c"]).front.std.0, Some(201112));
+        assert_eq!(edition("-std=gnu89"), None);
+        assert_eq!(edition("-std=iso9899:199409"), Some(199409));
+        assert_eq!(edition("-std=c9x"), Some(199901));
+        assert_eq!(edition("-std=gnu18"), Some(201710));
+        assert_eq!(edition("-std=c2x"), Some(202311));
+        assert_eq!(edition("-std=iso9899:2024"), Some(202311));
+        assert_eq!(edition("-std=gnu2y"), Some(202500));
+        for name in ["fortran", "c95", "c24", "gnu", "c"] {
+            assert_eq!(
+                reject(&[&format!("-std={name}"), "a.c"]),
+                (
+                    format!("badc: error: unknown C dialect `{name}` (-std=)"),
+                    1
+                )
+            );
+        }
     }
 
     #[test]
@@ -3765,5 +4169,51 @@ mod tests {
         assert_eq!(level(&["-Werror=inline", "a.c"]), Level::Error);
         // Not a member of any group, as in gcc.
         assert_eq!(level(&["-Wall", "-Wextra", "a.c"]), Level::Ignore);
+    }
+
+    /// gcc's `-pthread`, `-pedantic` / `-pedantic-errors` and `-dM`, and the
+    /// Darwin driver's `-arch`, which names the macOS target's arm64 alone.
+    #[test]
+    fn gcc_and_darwin_driver_options_take_their_meanings() {
+        let defines = parse(&["-pthread", "-c", "a.c"]).front.defines;
+        assert!(defines.contains(&("_REENTRANT".to_string(), "1".to_string())));
+        let diag = |args: &[&str]| format!("{:?}", parse(args).front.diag);
+        assert_eq!(diag(&["-pedantic", "a.c"]), diag(&["-Wpedantic", "a.c"]));
+        assert_eq!(
+            diag(&["-pedantic-errors", "a.c"]),
+            diag(&["-Werror=pedantic", "a.c"])
+        );
+        assert!(parse(&["-dM", "-E", "a.c"]).front.dump_macros);
+        let mac = "--target=macos-aarch64";
+        parse(&[mac, "-arch", "arm64", "-c", "a.c"]);
+        for (args, want) in [
+            (
+                &[mac, "-arch", "x86_64"][..],
+                "badc does not build for macOS",
+            ),
+            (
+                &[mac, "-arch", "sparc"][..],
+                "invalid arch name `-arch sparc`",
+            ),
+            (
+                &[X64, "-arch", "x86_64"][..],
+                "unsupported option `-arch` for target `linux-x64`",
+            ),
+        ] {
+            let args = [args, &["-c", "a.c"]].concat();
+            let (message, _) = reject(&args);
+            assert!(message.contains(want), "{args:?}: {message}");
+        }
+        let hidden = parse(&["-fvisibility=hidden", "-c", "a.c"])
+            .front
+            .default_visibility;
+        assert_eq!(hidden, Some(badc::SymVisibility::Hidden));
+        let last = parse(&["-fvisibility=hidden", "-fvisibility=default", "-c", "a.c"]);
+        assert_eq!(last.front.default_visibility, None);
+        let (message, _) = reject(&["-fvisibility=secret", "-c", "a.c"]);
+        assert!(
+            message.contains("unrecognized visibility value"),
+            "{message}"
+        );
     }
 }

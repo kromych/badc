@@ -56,6 +56,7 @@ libm.so.6 acoshf
 libm.so.6 asinf
 libm.so.6 atan2f
 libm.so.6 atanhf
+libm.so.6 coshf
 libm.so.6 exp
 libm.so.6 exp2
 libm.so.6 expf
@@ -71,6 +72,7 @@ libm.so.6 pow
 libm.so.6 powf
 libm.so.6 remainder
 libm.so.6 remainderf
+libm.so.6 sinhf
 libm.so.6 sqrtf
 libm.so.6 tgammaf
 
@@ -95,3 +97,32 @@ libc.so.6 glob
     signal 0 and on an out-of-range signal number. POSIX leaves the
     first case undefined and <pthread.h> states nothing about it.
 libc.so.6 pthread_kill
+
+[-] GLIBC_2.24 stopped running, from quick_exit, the thread-local
+    destructors __cxa_thread_atexit_impl registers. Contrasted on glibc
+    2.43, x86_64 and aarch64: both definitions run the at_quick_exit
+    handlers, skip the atexit chain and end with the status; only a
+    destructor so registered tells them apart. <stdlib.h> declares no
+    way to register one, so the interface it states is the same for both.
+libc.so.6 quick_exit
+
+[-] lgamma, lgammaf and lgammal have a GLIBC_2.23 definition, and
+    lgammaf one at GLIBC_2.43, at addresses other than the floor's.
+    Contrasted through dlvsym on glibc 2.43, x86_64 and aarch64, over
+    the poles, zeros, infinities, NaN, subnormals and -40 to 40 in steps
+    of 0.37, and lgammaf over 1045763 inputs spread across the finite
+    floats: identical results, errno and signgam. <math.h> declares
+    neither signgam nor _LIB_VERSION.
+libm.so.6 lgamma
+libm.so.6 lgammaf
+libm.so.6 lgammal
+
+[GLIBC_2.22] fmemopen, as POSIX.1-2008 specifies it. Contrasted through
+    dlvsym on glibc 2.43, x86_64 and aarch64: for a stream opened "r"
+    on a 16-byte buffer holding "abc", fseek(SEEK_END) lands at 3 at the
+    floor's definition and at 16, the size, at GLIBC_2.22, which POSIX
+    requires; and "wb" writes no terminating null byte at the floor's
+    definition, where POSIX gives `b` no effect and GLIBC_2.22 writes
+    it. Both write the null byte in "w" mode, start "a" at the first
+    null byte and read back a NULL-buffer "w+" stream.
+libc.so.6 fmemopen

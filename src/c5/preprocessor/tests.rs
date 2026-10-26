@@ -296,6 +296,7 @@ fn gnu_predefine_set_is_locked() {
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8", "1"),
         ("__GNUC_STDC_INLINE__", "1"),
         ("__STRICT_ANSI__", "1"),
@@ -316,12 +317,6 @@ fn gnu_predefine_set_is_locked() {
     ));
     want.sort();
     assert_eq!(added, want, "the --gnu predefine set changed");
-    // A 16-byte compare-exchange has no lowering, so the width the
-    // `__sync_*` family does not cover stays unclaimed.
-    assert!(
-        !gnu.macros
-            .contains_key("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16")
-    );
     // `-std=gnu*` drops the ISO-conformance macro and nothing else.
     let mut gnu_dialect = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
     gnu_dialect.enable_gnu(false, false);
@@ -418,17 +413,13 @@ fn vendor_and_stdc_pragmas_are_silent() {
 }
 
 #[test]
-fn builtin_expect_is_predefined() {
-    // `__builtin_expect(exp, c)` is available with no header and no
-    // auto-include; the expansion is the first operand.
+fn builtins_reach_the_parser_unexpanded() {
+    // gcc and clang keep a builtin's call in their preprocessed output, so
+    // the parser takes it from `-E` text as from a source file.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let out = pp
-        .process("int f(int v) { return __builtin_expect(v > 1, 1); }\n")
-        .expect("preprocessor failed");
-    assert!(
-        out.contains("(v > 1)") && !out.contains("__builtin_expect"),
-        "expected the predefined expansion, got: {out}"
-    );
+    let src = "int f(int v) { return __builtin_expect(v > 1, 1) + __builtin_isdigit(v); }\n";
+    let out = pp.process(src).expect("preprocessor failed");
+    assert!(out.contains(src.trim_end()), "got: {out}");
 }
 
 #[test]
@@ -632,7 +623,9 @@ fn the_code_model_predefine_names_the_selected_model() {
 /// Sizes and underlying types the layout engine fixes across targets:
 /// `long double` takes the target ABI's storage size (16 on both Linux
 /// targets, 8 elsewhere; no `__float80` / `__float128` exists to
-/// describe), `wint_t` is the bundled <wchar.h>'s `int`, a bare
+/// describe), `wint_t` is the bundled <wchar.h>'s `int` and on Windows
+/// the C runtime's `unsigned short` (gcc for x86_64-w64-mingw32 predefines
+/// `short unsigned int` and 2), a bare
 /// `__attribute__((aligned))` resolves to 16, and `__WCHAR_TYPE__`
 /// agrees with `__SIZEOF_WCHAR_T__` on every target.
 /// `__CHAR16_TYPE__` / `__CHAR32_TYPE__` name the types C11
@@ -649,20 +642,30 @@ fn type_size_predefines_match_the_layout_engine() {
         "#if defined(__SIZEOF_FLOAT80__) || defined(__SIZEOF_FLOAT128__)\n",
         "phantom-float\n#endif\n",
     );
-    for (t, wchar, ld) in [
-        (Target::LinuxX64, "int = 4", 16),
-        (Target::LinuxAarch64, "unsigned int = 4", 16),
-        (Target::MacOSAarch64, "int = 4", 8),
-        (Target::WindowsX64, "unsigned short = 2", 8),
-        (Target::WindowsAarch64, "unsigned short = 2", 8),
+    for (t, wchar, ld, (wint, wint_size)) in [
+        (Target::LinuxX64, "int = 4", 16, ("int", 4)),
+        (Target::LinuxAarch64, "unsigned int = 4", 16, ("int", 4)),
+        (Target::MacOSAarch64, "int = 4", 8, ("int", 4)),
+        (
+            Target::WindowsX64,
+            "unsigned short = 2",
+            8,
+            ("unsigned short", 2),
+        ),
+        (
+            Target::WindowsAarch64,
+            "unsigned short = 2",
+            8,
+            ("unsigned short", 2),
+        ),
     ] {
         let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
         let out = pp.process(probe).expect("preprocessor failed");
         assert!(
-            out.contains(&format!("ld {ld} wint 4 align 16 .")),
+            out.contains(&format!("ld {ld} wint {wint_size} align 16 .")),
             "{t:?}: {out}"
         );
-        assert!(out.contains("winttype int ."), "{t:?}: {out}");
+        assert!(out.contains(&format!("winttype {wint} .")), "{t:?}: {out}");
         assert!(out.contains(&format!("wchar {wchar} .")), "{t:?}: {out}");
         assert!(
             out.contains("c16 unsigned short c32 unsigned int ."),
@@ -843,6 +846,136 @@ fn cli_empty_define_expands_to_nothing() {
         "empty define leaked a 1: {out:?}"
     );
     assert!(out.contains("int x = 1;"));
+}
+
+/// C99 6.10.3p2: a macro redefined with another kind, parameter list or
+/// replacement list draws a warning, the new definition replacing the old;
+/// an identical list (white-space separation alike, 6.10.3p1) and a
+/// redefinition inside a system header do not. The lines are the ones gcc
+/// 16 and clang 22 report for the same unit.
+#[test]
+fn a_macro_redefined_differently_is_reported() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    let out = pp
+        .process(
+            "#define A(x) x\n#define A(x) L##x\n\
+             #define B 1\n#define B 2\n\
+             #define C(x, y) x + y\n#define C(x,  y)   x   +   y\n\
+             #define D a+b\n#define D a + b\n\
+             #define E \"a  b\"\n#define E \"a b\"\n\
+             #define F(x) x\n#define F(y) y\n\
+             #define G 1\n#define G(x) 1\n\
+             #define H(...) __VA_ARGS__\n#define H(...) __VA_ARGS__\n\
+             #define EXIT_SUCCESS 1\n#include <stdlib.h>\n\
+             int b = B, s = EXIT_SUCCESS;\n",
+        )
+        .expect("preprocessor failed");
+    assert!(out.contains("int b = 2, s = 0;"), "{out}");
+    let lines: Vec<u32> = pp
+        .sink
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code == super::MACRO_REDEFINED)
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 4, 8, 10, 12, 14]);
+    assert_eq!(
+        pp.sink.diagnostics()[0].text,
+        "`A` redefined",
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+/// The empty `__counted_by` family is badc's fallback for an attribute it
+/// does not implement, which neither gcc nor clang predefines, so a
+/// definition replaces it with no diagnostic; a definition replacing that
+/// one, or a predefine gcc and clang also make, is reported as theirs is.
+#[test]
+fn a_definition_replaces_a_fallback_predefine_silently() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.process(
+        "#define __counted_by(member) __attribute__((__counted_by__(member)))\n\
+         #define __counted_by_le(member) __counted_by(member)\n\
+         #define __counted_by_be\n\
+         #define __counted_by(member) member\n\
+         #define __CHAR_BIT__ 9\n",
+    )
+    .expect("preprocessor failed");
+    let lines: Vec<u32> = pp
+        .sink
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code == super::MACRO_REDEFINED)
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4, 5]);
+}
+
+/// gcc and clang read `-D NAME[=BODY]` as `#define NAME BODY` (`1` without
+/// `=`), so a name with a parameter list defines a function-like macro and
+/// an operand the directive rejects is an error. The expansions are gcc
+/// 16's and clang 22's for the same options.
+#[test]
+fn cli_define_takes_the_define_directives_operand() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    for (name, body) in [
+        ("SQ(x)", "((x)*(x))"),
+        ("ONE(x)", "1"),
+        ("ADD(a,b)", "a+b"),
+        ("V(...)", "f(__VA_ARGS__)"),
+        ("E()", "e=1"),
+        ("OBJ", "a=b"),
+    ] {
+        pp.define(name, body);
+    }
+    let out = pp
+        .process("#ifdef SQ\nint a = SQ(7), b = ONE(5), c = ADD(2, 3);\n#endif\nV(1, 2) E() OBJ\n")
+        .expect("preprocessor failed");
+    assert!(
+        out.contains("int a = ((7)*(7)), b = 1, c = 2+3;"),
+        "got: {out:?}"
+    );
+    assert!(out.contains("f(1, 2) e=1 a=b"), "got: {out:?}");
+    for (name, text) in [
+        ("1X", "macro name must be an identifier"),
+        ("F(1)", "`1` is not a macro parameter"),
+        ("F(x,x)", "duplicate macro parameter `x`"),
+        ("F(x", "expected `,` or `)` after macro parameter `x`"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.define(name, "x");
+        let err = pp.process("int i;\n").unwrap_err().to_string();
+        assert!(
+            err.contains(&format!("<command-line>:1: error: `-D {name}`: {text}")),
+            "{name}: {err}"
+        );
+    }
+}
+
+/// C99 6.10.3p10 closes a function-like macro's identifier list with `)`;
+/// a line ending inside it is an error that defines nothing, as gcc 16
+/// and clang 22 report it, and none in a skipped group.
+#[test]
+fn an_unclosed_macro_parameter_list_is_an_error() {
+    for (src, text) in [
+        ("F(x 1", "expected `,` or `)` after macro parameter `x`"),
+        ("F(x", "expected `)` before end of line"),
+        ("F(x, y", "expected `)` before end of line"),
+        ("F(", "macro parameter expected before end of line"),
+        ("F(x,", "macro parameter expected before end of line"),
+        ("F(...", "expected `)` after `...`"),
+        ("F(x...", "expected `)` after `...`"),
+    ] {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let err = pp
+            .process(&format!("#define {src}\nint F;\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(&format!(":1: error: {text}")), "{src}: {err}");
+    }
+    let out = process("#if 0\n#define F(x\n#endif\nint F;\n");
+    assert!(out.contains("int F;"), "{out}");
 }
 
 #[test]
@@ -1251,6 +1384,54 @@ fn hash_is_not_stringize_in_object_like_body() {
     );
 }
 
+// C99 6.4.6p3: `%:` and `%:%:` behave as `#` and `##` in directives and
+// replacement lists; the output keeps every digraph's spelling.
+#[test]
+fn digraphs_open_directives_and_operate_in_replacement_lists() {
+    let out = process(
+        "%:define S(x) %:x\n  %: define C(a, b) a %:%: b\n%:ifdef S\n\
+         const char *s = S(<: %>);\nint C(x, y)<:2:> = <% 1 %>;\n%:endif\n",
+    );
+    assert!(out.contains("const char *s = \"<: %>\";"), "{out}");
+    assert!(out.contains("int xy<:2:> = <% 1 %>;"), "{out}");
+    let e = process_err("%:define T(a) a %:%:\n");
+    assert!(e.contains("`##` cannot appear at either end"), "{e}");
+}
+
+// C99 7.12.2: `FP_CONTRACT` holds from its position, so the directive and
+// the `_Pragma` form reach the lexer as a line of their own.
+#[test]
+fn fp_contract_pragma_passes_through() {
+    let out =
+        process("#pragma STDC FP_CONTRACT OFF\nint x; _Pragma(\"STDC FP_CONTRACT ON\") int y;\n");
+    assert!(out.contains("#pragma STDC FP_CONTRACT OFF\n"), "{out}");
+    assert!(out.contains("\n#pragma STDC FP_CONTRACT ON\n"), "{out}");
+}
+
+// C99 6.10.3.4p3: an expansion that starts a line with `#` is text; the
+// output indents it so, as GNU cpp writes it, except for assembler input.
+#[test]
+fn a_hash_an_expansion_puts_first_stays_text() {
+    let src = "#define H #\nH pragma pack(1)\n";
+    assert!(
+        process(src).contains("\n # pragma pack(1)\n"),
+        "{}",
+        process(src)
+    );
+    assert!(
+        process_asm(src).contains("\n# pragma pack(1)\n"),
+        "{}",
+        process_asm(src)
+    );
+}
+
+// GNU cpp reads assembler input without digraphs: a `%:` line is text.
+#[test]
+fn asm_source_has_no_digraphs() {
+    let out = process_asm("%:define X 1\nX\n");
+    assert!(out.contains("%:define X 1\nX\n"), "{out}");
+}
+
 // C99 6.10.3.3p1 constraint, stated for either form of definition.
 #[test]
 fn paste_at_replacement_list_end_is_an_error() {
@@ -1462,6 +1643,57 @@ fn process_asm(source: &str) -> String {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.set_asm_source(true);
     pp.process(source).expect("preprocessor failed")
+}
+
+/// `__STDC_VERSION__` follows the edition `-std=` selects, undefined for
+/// C90 (C99 6.10.8), and C23 reads `true` and `false` in `#if` as 1 and 0
+/// (C23 6.10.2) without a definition of either; the values are gcc 16's.
+#[test]
+fn the_edition_sets_stdc_version_and_the_c23_if_keywords() {
+    let src = "#ifdef __STDC_VERSION__\nv = __STDC_VERSION__;\n#endif\n\
+               #if true && !false\nc23 = 1;\n#endif\n#ifdef true\nmacro = 1;\n#endif\n";
+    let run = |std: Option<crate::c5::CStd>| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        if let Some(std) = std {
+            pp.set_std(std);
+        }
+        pp.process(src).expect("preprocessor failed")
+    };
+    let edition = |name| crate::c5::CStd::from_dialect(name);
+    assert!(run(None).contains("v = 201112L;"));
+    assert!(!run(edition("c90")).contains("v ="));
+    assert!(run(edition("gnu99")).contains("v = 199901L;"));
+    let c23 = run(edition("c23"));
+    assert!(
+        c23.contains("v = 202311L;") && c23.contains("c23 = 1;"),
+        "{c23}"
+    );
+    assert!(!c23.contains("macro") && !run(edition("c17")).contains("c23 ="));
+}
+
+/// `$` is an identifier character in C and not in assembler-with-cpp, as
+/// gcc 16 and clang 22 take it (`-fdollars-in-identifiers` is on for C):
+/// `$FOO` is one name in C, while assembly expands the `FOO` of `$FOO`.
+/// The expansions are theirs for the same lines.
+#[test]
+fn dollar_forms_identifiers_in_c_and_not_in_assembly() {
+    let lines = "#define FOO 5\n#define CAT(a, b) a##b\n\
+                 movl $FOO, %eax\na$FOO FOO$ 1$FOO CAT($, FOO)\n";
+    let c = process(&format!(
+        "#define __$allowed_on_parameter\n#define __allowed(p) __$allowed_##p\n\
+         #ifdef __$allowed_on_parameter\n__allowed(on_parameter) int x;\n#endif\n{lines}"
+    ));
+    assert!(c.contains("int x;\n") && !c.contains("allowed"), "{c}");
+    assert!(
+        c.contains("movl $FOO, %eax\na$FOO FOO$ 1$FOO $FOO\n"),
+        "{c}"
+    );
+    let asm = process_asm(lines);
+    assert!(asm.contains("movl $5, %eax\na$5 5$ 1$5 $5\n"), "{asm}");
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_asm_source(true);
+    let err = pp.process("#define $x 1\n").unwrap_err().to_string();
+    assert!(err.contains("macro name must be an identifier"), "{err}");
 }
 
 /// Assembler-with-cpp: a `#` line naming no directive is text, passed
@@ -1879,6 +2111,94 @@ fn has_include_operator_in_if() {
     assert!(!out.contains("int bogus;"), "{out:?}");
 }
 
+/// A bundled header is found only on the targets whose C library, SDK or
+/// compiler ships it, by `__has_include` and by `#include` alike: Apple
+/// clang finds `<mach/mach.h>` and none of `<sys/epoll.h>`, `<windows.h>`
+/// and `<sys/inotify.h>`, and gcc installs `<immintrin.h>` for x86 alone.
+#[test]
+fn bundled_headers_are_found_only_where_the_target_ships_them() {
+    const NAMES: [&str; 9] = [
+        "sys/epoll.h",
+        "windows.h",
+        "mach/mach.h",
+        "sys/inotify.h",
+        "immintrin.h",
+        "arm_neon.h",
+        "malloc.h",
+        "dlfcn.h",
+        "stdio.h",
+    ];
+    let probe: String = (NAMES.iter().enumerate())
+        .map(|(i, n)| format!("#if __has_include(<{n}>)\nfound_{i}\n#endif\n"))
+        .collect();
+    let shared = ["dlfcn.h", "stdio.h"];
+    let expect = [
+        (Target::MacOSAarch64, &["mach/mach.h", "arm_neon.h"][..]),
+        (
+            Target::LinuxX64,
+            &["sys/epoll.h", "sys/inotify.h", "immintrin.h", "malloc.h"],
+        ),
+        (
+            Target::LinuxAarch64,
+            &["sys/epoll.h", "sys/inotify.h", "arm_neon.h", "malloc.h"],
+        ),
+        (
+            Target::WindowsX64,
+            &["windows.h", "immintrin.h", "malloc.h"],
+        ),
+        (
+            Target::WindowsAarch64,
+            &["windows.h", "arm_neon.h", "malloc.h"],
+        ),
+    ];
+    for (target, own) in expect {
+        let id = target.id_str();
+        let out = Preprocessor::new(id, target, "0").process(&probe).unwrap();
+        for (i, name) in NAMES.iter().enumerate() {
+            let ships = own.contains(name) || shared.contains(name);
+            let has = out.lines().any(|l| l.trim() == format!("found_{i}"));
+            assert_eq!(has, ships, "{id}: __has_include(<{name}>)");
+            let include =
+                Preprocessor::new(id, target, "0").process(&format!("#include <{name}>\n"));
+            match include {
+                Ok(_) => assert!(ships, "{id}: <{name}> found"),
+                Err(e) => assert!(
+                    !ships && e.to_string().contains("[B1010]"),
+                    "{id}: <{name}>: {e}"
+                ),
+            }
+        }
+    }
+}
+
+/// A name the target is not served stays unfound when the installed header
+/// tree carries it, since that tree serves every target; a bundled header
+/// still reaches it, as `<winsock2.h>` reaches `<sys/socket.h>` on Windows.
+#[test]
+fn a_withheld_bundled_name_is_reached_only_from_the_bundled_headers() {
+    let root = std::env::temp_dir().join(format!("badc-withheld-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("sys")).unwrap();
+    std::fs::write(root.join("sys/epoll.h"), "int installed_epoll;\n").unwrap();
+    std::fs::write(root.join("extra.h"), "int installed_extra;\n").unwrap();
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0");
+    pp.add_own_header_root(root.to_str().unwrap());
+    let out = pp
+        .process("#if __has_include(<sys/epoll.h>)\nint epoll;\n#endif\n#include <extra.h>\n")
+        .unwrap();
+    std::fs::remove_dir_all(&root).ok();
+    assert!(!out.contains("epoll"), "{out}");
+    assert!(out.contains("int installed_extra;"), "{out}");
+    let windows =
+        |src: &str| Preprocessor::new("windows-x64", Target::WindowsX64, "0").process(src);
+    let socket = windows("#include <sys/socket.h>\n").expect_err("not a mingw-w64 header");
+    assert!(socket.to_string().contains("[B1010]"), "{socket}");
+    let out = windows("#include <winsock2.h>\n").unwrap();
+    assert!(
+        out.contains("SOCK_STREAM") || out.contains("socket"),
+        "{out}"
+    );
+}
+
 #[test]
 fn unknown_include_is_a_hard_error() {
     // A header that resolves nowhere aborts the compile, as in
@@ -1947,6 +2267,31 @@ fn pragma_warning_disable_silences_the_ids_it_names() {
     let src = format!("#pragma warning(disable : 4068)\n{UNKNOWN_PRAGMA_LINE}");
     let _ = pp.process(&src).expect("preprocessor failed");
     assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
+/// MSVC expands macros in a `#pragma warning` action's IDs, which its own
+/// headers rely on, and documents `#pragma region` / `#pragma endregion`
+/// as outline markers, which gcc 16 and clang 22 accept silently on every
+/// target; clang for a windows-msvc triple accepts the unit with `-Wall`.
+#[test]
+fn pragma_warning_expands_its_ids_and_region_is_silent() {
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let src = format!(
+        "#define DISABLED_WARNINGS 4514 4068\n\
+         #pragma warning(push)\n\
+         #pragma warning(disable : DISABLED_WARNINGS)\n\
+         {UNKNOWN_PRAGMA_LINE}\
+         #pragma region Desktop Family\n\
+         int x;\n\
+         #pragma endregion\n\
+         #pragma warning(pop)\n\
+         #pragma region\n\
+         #pragma endregion trailing text\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+    assert_eq!(pp.sink.diagnostics()[0].loc.as_ref().unwrap().line, 11);
 }
 
 #[test]
@@ -2612,10 +2957,10 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
     let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
     owned.set_nostdinc(true);
     let out = owned
-        .process("#include <_builtins.h>\nint f(int x) { return __builtin_expect(x, 1); }\n")
-        .expect("the __builtin_* thunk header stays reachable");
+        .process("#include <x86intrin.h>\n")
+        .expect("the compiler's intrinsic header stays reachable");
     std::fs::remove_dir_all(&base).ok();
-    assert!(out.contains("return (x);"), "{out}");
+    assert!(out.contains("__bsfd"), "{out}");
 }
 
 #[test]
@@ -3268,7 +3613,7 @@ fn fuzz_source(seed: u64, len: usize) -> String {
 /// over 6000 generated sources.
 #[test]
 fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             strip_c_comments(body),
             strip_c_comments_ref(body),
@@ -3290,7 +3635,7 @@ fn strip_c_comments_matches_reference_over_corpus_and_fuzz() {
 /// full-rescan reference over the same corpus and generated sources.
 #[test]
 fn unfold_matches_reference_over_corpus_and_fuzz() {
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             unfold_line_continuations(body),
             unfold_ref(body),
@@ -3314,7 +3659,7 @@ fn unfold_matches_reference_over_corpus_and_fuzz() {
 #[test]
 fn unfold_and_strip_matches_composition_over_corpus_and_fuzz() {
     let reference = |s: &str| strip_c_comments(&unfold_line_continuations(s));
-    for (name, body) in crate::c5::headers::embedded_headers() {
+    for (name, _, body) in crate::c5::headers::embedded_headers() {
         assert_eq!(
             unfold_and_strip(body),
             reference(body),
@@ -3603,31 +3948,18 @@ fn builtin_table_answers_all_three_roles() {
 }
 
 /// `__has_builtin` answers 1 for every builtin badc accepts, however it is
-/// supplied: each row of the table, each library alias, each `__builtin_`
-/// macro <_builtins.h> or the predefines define, and on the x86 targets
-/// each vector builtin, which the other targets refuse.
+/// supplied: each row of the table, each library alias, and on the x86
+/// targets each vector builtin, which the other targets refuse. No
+/// `__builtin_` name is a predefined macro.
 #[test]
 fn has_builtin_reports_every_accepted_builtin() {
     use super::builtins;
-    let thunks = crate::c5::headers::embedded_headers()
-        .iter()
-        .find(|(n, _)| *n == "_builtins.h")
-        .expect("_builtins.h is bundled")
-        .1;
-    let macros: Vec<&str> = thunks
-        .lines()
-        .filter_map(|l| l.trim_start().strip_prefix("#define "))
-        .map(|d| d.split(['(', ' ']).next().unwrap_or(d))
-        .chain(PREDEFINED_FN_MACROS.iter().map(|m| m.0))
-        .filter(|n| n.starts_with("__builtin_"))
-        .collect();
-    assert!(macros.len() >= 16, "macros found: {macros:?}");
-    for m in &macros {
-        assert!(
-            builtins::is_builtin(m),
-            "`{m}` is a macro with no table row"
-        );
-    }
+    assert!(
+        PREDEFINED_FN_MACROS
+            .iter()
+            .all(|m| !m.0.starts_with("__builtin_")),
+        "a builtin defined as a macro is unknown in preprocessed input"
+    );
     let mut names: Vec<String> = builtins::BUILTINS
         .iter()
         .filter(|b| !matches!(b.supply, builtins::Supply::Library(_)))
@@ -3863,7 +4195,12 @@ fn merge_test_covers_every_punctuator_pair() {
         for b in 0u8..=255 {
             if super::expand::punct_len(&[a, b], 0) == 2 {
                 assert!(
-                    pp_tokens_would_merge(super::expand::TokKind::Punct, &[a], &[b]),
+                    pp_tokens_would_merge(
+                        super::expand::TokKind::Punct,
+                        &[a],
+                        &[b],
+                        crate::c5::ident::Dollar::Ident
+                    ),
                     "punctuator {:?} is not separated by the serializer",
                     core::str::from_utf8(&[a, b]).unwrap_or("<non-utf8>")
                 );
@@ -4471,6 +4808,7 @@ fn directive_kind(line: &str) -> &'static str {
     match parse_directive(line, false) {
         Directive::Define(..) => "define",
         Directive::DefineFn(..) => "define-fn",
+        Directive::DefineUnclosed(..) => "define-unclosed",
         Directive::Undef(_) => "undef",
         Directive::Ifdef(_) => "ifdef",
         Directive::Ifndef(_) => "ifndef",
@@ -4570,6 +4908,24 @@ fn export_and_dylib_declarations_are_ordered_and_unique() {
     assert!(pp.dylibs[0].bindings.is_empty());
 }
 
+/// `#pragma weak` takes a name or `name = target`, through either form
+/// of the directive, in source order; a malformed operand is reported
+/// and ignored.
+#[test]
+fn pragma_weak_records_names_and_aliases() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.process(
+        "#pragma weak a\n_Pragma(\"weak b = c\")\n#pragma weak d=e\n\
+         #pragma weak 1x\n#pragma weak f =\n",
+    )
+    .expect("preprocess");
+    let got: Vec<(&str, Option<&str>)> = (pp.weak_pragmas.iter())
+        .map(|(n, t)| (n.as_str(), t.as_deref()))
+        .collect();
+    assert_eq!(got, [("a", None), ("b", Some("c")), ("d", Some("e"))]);
+    assert_eq!(codes(&pp), vec![PRAGMA_SYNTAX, PRAGMA_SYNTAX]);
+}
+
 /// The lexed-body cache is keyed by macro name; a redefinition must
 /// re-lex even when the new body is the same length as the old.
 #[test]
@@ -4641,6 +4997,7 @@ fn target_predefines_are_locked() {
     ];
     // The object format's, not the OS's: the Linux targets are the ELF ones.
     const ELF: &[(&str, &str)] = &[("__ELF__", "1")];
+    const ALWAYS_PIC: &[(&str, &str)] = &[("__pic__", "2"), ("__PIC__", "2")];
     const WINDOWS: &[(&str, &str)] = &[
         ("_WIN32", "1"),
         ("_WIN64", "1"),
@@ -4656,6 +5013,7 @@ fn target_predefines_are_locked() {
         .chain(MACOS)
         .chain(LINUX)
         .chain(ELF)
+        .chain(ALWAYS_PIC)
         .chain(WINDOWS)
         .copied()
         .collect();
@@ -4663,9 +5021,24 @@ fn target_predefines_are_locked() {
         let want: Vec<(&str, &str)> = match target {
             Target::LinuxX64 => X86_64.iter().chain(LINUX).chain(ELF).copied().collect(),
             Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).chain(ELF).copied().collect(),
-            Target::MacOSAarch64 => AARCH64.iter().chain(MACOS).copied().collect(),
-            Target::WindowsX64 => X86_64.iter().chain(WINDOWS).copied().collect(),
-            Target::WindowsAarch64 => AARCH64.iter().chain(WINDOWS).copied().collect(),
+            Target::MacOSAarch64 => AARCH64
+                .iter()
+                .chain(MACOS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
+            Target::WindowsX64 => X86_64
+                .iter()
+                .chain(WINDOWS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
+            Target::WindowsAarch64 => AARCH64
+                .iter()
+                .chain(WINDOWS)
+                .chain(ALWAYS_PIC)
+                .copied()
+                .collect(),
         };
         let pp = Preprocessor::new(spec, target, "0.1.0");
         for (name, _) in &every {
@@ -4698,6 +5071,9 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         PRAGMA_SYNTAX,
         PRAGMA_POP_WITHOUT_PUSH,
         IGNORED_PRAGMA_INTRINSIC,
+        DATE_TIME,
+        UNDEF,
+        super::MACRO_REDEFINED,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
@@ -5255,4 +5631,214 @@ fn macro_parameters_are_separated_by_commas() {
         out.contains("h(4, 5) g(6, 7)") && out.contains("1 2+3"),
         "{out}"
     );
+}
+
+/// C99 6.10.3.4p1: the rescan takes the rest of the source with the
+/// replacement, so a function-like macro name that ends an expansion is
+/// invoked by a `(` on a later line, past blank lines. A token between
+/// them, a directive line or an argument's own expansion ends the
+/// lookahead, and a discarded first expansion leaves `__COUNTER__` as it
+/// was. The expected lines are gcc's and clang's.
+#[test]
+fn an_expansion_ending_in_a_function_like_name_takes_a_later_lines_paren() {
+    let out = process(
+        "#define tail(x) x tailfn\n#define tailfn(y) <y>\n#define EMPTY\n\
+         #define obj tailfn\n#define id(x) x\n\
+         A: tail(1)\n(3)\n\
+         B: tail(1) EMPTY\n(3)\n\
+         C: tail(1)\n\n(3)\n\
+         D: obj\n(4)\n\
+         E: id(tailfn)\n(5)\n\
+         F: tail(1)\n#define Z 9\n(6)\n\
+         G: tail(1)\n  (7) after\n\
+         H: tail(1)\n(tail(2)\n)\n(8)\n\
+         I: tailfn\n\n(9)\n\
+         K: tail(__COUNTER__)\n(__COUNTER__)\n\
+         L: __COUNTER__\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A: 1 <3>",
+            "B: 1 tailfn",
+            "(3)",
+            "C: 1 <3>",
+            "D: <4>",
+            "E: <5>",
+            "F: 1 tailfn",
+            "(6)",
+            "G: 1 <7> after",
+            "H: 1 <2 tailfn>",
+            "(8)",
+            "I: <9>",
+            "K: 0 <1>",
+            "L: 2",
+        ],
+        "{out}"
+    );
+}
+
+/// An invocation an expansion forms may take its argument list from the
+/// lines after it, its `(` included; the expected lines are gcc's and
+/// clang's.
+#[test]
+fn an_invocation_an_expansion_forms_takes_arguments_from_later_lines() {
+    let out = process(
+        "#define print(f, ...) P(f, __VA_ARGS__)\n#define dprint if (d) print\n\
+         #define call(f) f\n#define nest(x) x nest2\n#define nest2(a, b) [a|b]\n\
+         A: call(print)(\"x\",\n 1);\n\
+         B: dprint(\"y\",\n 2);\n\
+         C: nest(0)(1,\n 2) tail\n\
+         D: call(print)(\"z\", (1,\n 2), 3);\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A: P(\"x\", 1);",
+            "B: if (d) P(\"y\", 2);",
+            "C: 0 [1|2] tail",
+            "D: P(\"z\", (1, 2), 3);",
+        ],
+        "{out}"
+    );
+}
+
+/// C99 6.10.8: `__LINE__` is the line of the source token the expansion
+/// is at, also inside a joined invocation and after one; the expected
+/// lines are gcc's and, but for the replacement list's in C, clang's.
+#[test]
+fn line_in_an_invocation_spanning_lines_is_its_own_tokens_line() {
+    let out = process(
+        "#define L __LINE__\n#define f(x, y) x y\n#define g(x) x __LINE__\n\
+         A f(1,\n2\n) __LINE__\n\
+         B f(L,\nL)\n\
+         C g(\n__LINE__\n)\n\
+         D __LINE__ f(__LINE__,\n__LINE__), __LINE__\n\
+         E g(1 &&\n 3)\n",
+    );
+    let lines: Vec<String> = out
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "A 1 2 6",
+            "B 7 8",
+            "C 10 9",
+            "D 12 12 13, 13",
+            "E 1 && 3 14"
+        ],
+        "{out}"
+    );
+}
+
+/// gcc's `-Wdate-time`: each expansion of `__DATE__` or `__TIME__`,
+/// through another macro too, at the line of the name expanded; a test of
+/// whether one is defined expands nothing. Off unless asked for.
+#[test]
+fn date_time_reports_each_expansion() {
+    let src = "const char *d = __DATE__;\n\
+               #ifdef __DATE__\n\
+               #endif\n\
+               #if defined(__TIME__)\n\
+               #endif\n\
+               #define STAMP __TIME__\n\
+               const char *t = STAMP;\n";
+    let lines = |src: &str| -> Vec<(u32, Code)> {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let _ = pp.process(src).expect("preprocessor failed");
+        pp.sink
+            .diagnostics()
+            .iter()
+            .map(|d| (d.loc.as_ref().unwrap().line, d.code))
+            .collect()
+    };
+    assert_eq!(lines(src), vec![]);
+    let asked = format!("#pragma GCC diagnostic warning \"-Wdate-time\"\n{src}");
+    assert_eq!(lines(&asked), vec![(2, DATE_TIME), (8, DATE_TIME)]);
+}
+
+/// gcc's `-Wundef`: an identifier left in an evaluated `#if` / `#elif`
+/// operand after expansion, which is 0. A short-circuited or not-taken
+/// operand, a `defined` operand, a skipped group and an `#elif` after a
+/// taken group evaluate nothing. Off unless asked for.
+#[test]
+fn undef_reports_each_evaluated_identifier() {
+    let src = "#if FOO\n#endif\n\
+               #if 0 && BAR\n#endif\n\
+               #if 1 || BAZ\n#endif\n\
+               #if 1 ? 2 : QUX\n#endif\n\
+               #if defined(NOPE) || defined NOPE2\n#endif\n\
+               #if X1 + X2\n#endif\n\
+               #define F(x) x\n\
+               #if F(Y1)\n#endif\n\
+               #if F\n#endif\n\
+               #if 0\n#if INSKIP\n#endif\n#endif\n\
+               #if 1\n#elif ELIFX\n#endif\n\
+               #ifdef Z1\n#elif Z2\n#endif\n\
+               #define A B\n\
+               #if A\n#endif\n";
+    let lines = |src: &str| -> Vec<u32> {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let _ = pp.process(src).expect("preprocessor failed");
+        pp.sink
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == UNDEF)
+            .map(|d| d.loc.as_ref().unwrap().line)
+            .collect()
+    };
+    assert_eq!(lines(src), Vec::<u32>::new());
+    let asked = format!("#pragma GCC diagnostic warning \"-Wundef\"\n{src}");
+    assert_eq!(lines(&asked), vec![2, 12, 12, 15, 17, 27, 30]);
+}
+
+/// gcc's `__<T>_WIDTH__` predefines, each the width of the target's type
+/// for `T`: gcc 16 on linux-x64 (also -m32) and linux-aarch64, Apple clang
+/// 21's on macos-aarch64 (which omits the SCHAR and LONG_LONG rows), and on
+/// Windows the widths of badc's own LLP64 types.
+#[test]
+fn width_predefines_follow_the_targets_types() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = concat!(
+        "w __SCHAR_WIDTH__ __SHRT_WIDTH__ __INT_WIDTH__ __LONG_WIDTH__ __LONG_LONG_WIDTH__ ",
+        "__INTMAX_WIDTH__ __INTPTR_WIDTH__ __PTRDIFF_WIDTH__ __SIZE_WIDTH__ ",
+        "__INT_LEAST8_WIDTH__ __INT_LEAST16_WIDTH__ __INT_LEAST32_WIDTH__ __INT_LEAST64_WIDTH__ ",
+        "__INT_FAST8_WIDTH__ __INT_FAST16_WIDTH__ __INT_FAST32_WIDTH__ __INT_FAST64_WIDTH__ ",
+        "__SIG_ATOMIC_WIDTH__ __WCHAR_WIDTH__ __WINT_WIDTH__\n",
+    );
+    let lp64 = "w 8 16 32 64 64 64 64 64 64 8 16 32 64 8 64 64 64 32 32 32";
+    for (target, want) in [
+        (Target::LinuxX64, lp64),
+        (Target::LinuxAarch64, lp64),
+        (
+            Target::MacOSAarch64,
+            "w 8 16 32 64 64 64 64 64 64 8 16 32 64 8 16 32 64 32 32 32",
+        ),
+        (
+            Target::WindowsX64,
+            "w 8 16 32 32 64 64 64 64 64 8 16 32 64 8 32 32 64 32 16 16",
+        ),
+    ] {
+        let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(out.contains(want), "{target:?}: {out}");
+    }
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
+    let out = pp.process(probe).expect("preprocessor failed");
+    let ilp32 = "w 8 16 32 32 64 64 32 32 32 8 16 32 64 8 32 32 64 32 32 32";
+    assert!(out.contains(ilp32), "ILP32: {out}");
 }

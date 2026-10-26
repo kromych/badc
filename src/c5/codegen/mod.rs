@@ -334,6 +334,13 @@ impl Target {
         self.is_windows()
     }
 
+    /// Whether the Microsoft C extensions apply, as clang enables them by
+    /// default for a windows-msvc triple (`-fms-extensions`), on the PE
+    /// targets.
+    pub fn ms_extensions(self) -> bool {
+        self.is_windows()
+    }
+
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.
@@ -1322,6 +1329,8 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
+    /// The ordinal a PE import names in place of [`Self::real_symbol`].
+    pub ordinal: Option<u16>,
     /// What the symbol is; the ELF writer republishes it on the
     /// undefined `.dynsym` entry.
     pub kind: ImportKind,
@@ -1566,6 +1575,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
+            ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
@@ -1573,6 +1583,32 @@ impl ResolvedImports {
             param_types: b.param_types.clone(),
         });
         Ok(())
+    }
+
+    /// Import `exit` from the C library when the image binds that library
+    /// and no binding for the name is in scope. The import takes a binding
+    /// index past the binding table, which no call site carries.
+    pub fn include_libc_exit(&mut self, program: &Program) {
+        let Some(dylib_index) = self.dylibs.iter().position(|d| d.name == "libc") else {
+            return;
+        };
+        if self.imports.iter().any(|i| i.local_name == "exit") {
+            return;
+        }
+        let bindings: usize = program.dylibs.iter().map(|d| d.bindings.len()).sum();
+        self.imports.push(ResolvedImport {
+            binding_idx: bindings as i64,
+            local_name: "exit".to_string(),
+            real_symbol: "exit".to_string(),
+            dylib_index,
+            flat_lookup: false,
+            ordinal: None,
+            kind: crate::c5::codegen::ImportKind::Function,
+            is_variadic: false,
+            fixed_args: 1,
+            return_type_tag: 0,
+            param_types: alloc::vec![super::token::Ty::Int as i64],
+        });
     }
 
     /// Add a dylib no import references, for images that depend on a
@@ -1703,6 +1739,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
+                ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
@@ -1716,13 +1753,19 @@ impl ResolvedImports {
         // appears as an `Inst::CallExt`; it is collected here instead.
         // Every such binding in scope is carried through, and its
         // library with it; synth_build emits a COPY relocation only
-        // when the final image defines the local symbol (the runtime
-        // supplies `environ` for every hosted image, so the binding
-        // binds it to the host's data object).
+        // when the final ELF image defines the local symbol zero-filled
+        // (the runtime supplies `environ` for every hosted image, so the
+        // binding binds it to the host's data object).
+        // A binding naming a dllimport object is one too: a PE import
+        // table does not tell data from functions.
+        let dllimport_objects: alloc::collections::BTreeSet<&str> = (program.symbols.iter())
+            .filter(|s| s.dllimport && s.class == crate::c5::token::Token::Glo as i64)
+            .map(|s| s.name.as_str())
+            .collect();
         let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
         for spec in &program.dylibs {
             for b in &spec.bindings {
-                if !b.is_data {
+                if !b.is_data && !dllimport_objects.contains(b.local_name.as_str()) {
                     continue;
                 }
                 let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
@@ -1876,6 +1919,9 @@ pub(crate) enum DynamicExportSection {
     /// space [`DataFixup`] addresses, so an offset at or past
     /// `Build::data.len()` names a `.bss` byte.
     Data,
+    /// Byte offset within the TLS template, `.tdata` then `.tbss`: an ELF
+    /// `STT_TLS` symbol's value.
+    Tls,
 }
 
 /// `.init_array` / `.fini_array` placement in the merged data segment.
@@ -2080,14 +2126,10 @@ pub(crate) struct Build {
     /// left for a load-of-data-address sequence. The writer patches it
     /// with the page-relative address of `__data + data_offset`.
     pub data_fixups: Vec<DataFixup>,
-    /// Sites naming the GOT base. Populated only by the multi-object
-    /// synthesizer, from a reference to `_GLOBAL_OFFSET_TABLE_`; the
-    /// ELF writer resolves them against the `.got` it lays out and the
-    /// other container writers reject them.
-    pub got_base_fixups: Vec<GotBaseFixup>,
-    /// GOT-relative fields, populated and resolved like
-    /// `got_base_fixups`; see [`GotRelField`].
-    pub got_rel_fields: Vec<GotRelField>,
+    /// Sites naming the GOT base (ELF) or `__ImageBase` (PE).
+    pub base_fixups: Vec<BaseFixup>,
+    /// Fields holding the distance between two image addresses; see [`ImageRelField`].
+    pub image_rel_fields: Vec<ImageRelField>,
     /// Object-linked PC-relative fields that read an import's slot.
     /// Populated only by the multi-object synthesizer; see
     /// [`GotPcRelFixup`].
@@ -2210,6 +2252,11 @@ pub(crate) struct Build {
     /// take (variant II rounds the block size up to it, variant I the
     /// TCB reserve).
     pub tls_align: usize,
+    /// A shared library's thread-local GOT entries, the text fields reading
+    /// them, and whether an initial-exec one needs the static TLS block.
+    pub tls_got: Vec<TlsGotEntry>,
+    pub tls_got_fields: Vec<TlsGotField>,
+    pub static_tls: bool,
     /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
     /// lowering site on a Win64 target. The writer reserves a
     /// 4-byte `_tls_index` slot in `.data`, builds the
@@ -2217,6 +2264,8 @@ pub(crate) struct Build {
     /// displacement to the slot. Empty for non-Win64 targets and
     /// for Win64 programs with no `_Thread_local` globals.
     pub tls_index_fixups: Vec<TlsIndexFixup>,
+    /// The data-byte offset of a link-defined `_tls_index` the TLS directory names.
+    pub tls_index_slot: Option<u64>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
     /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the
@@ -2268,6 +2317,9 @@ pub(crate) struct Build {
     /// Data slots holding a `&&label` address, filled by native emit
     /// once each owning function's block layout is final.
     pub label_relocs: Vec<LabelReloc>,
+    /// `.data` and `_Thread_local` template slots naming `__ImageBase`.
+    pub image_base_slots: Vec<ImageBaseSlot>,
+    pub tls_image_base_slots: Vec<ImageBaseSlot>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
     /// [`Program::exports`]. Empty for executable output;
     /// populated for shared-library output, when the
@@ -2283,6 +2335,9 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// The exports of protected visibility, which an ELF image states as
+    /// `STV_PROTECTED` in `.dynsym`.
+    pub protected_exports: alloc::collections::BTreeSet<String>,
     /// A linked image's static symbol table past its import trampolines,
     /// locals first. Empty where no link produced the build.
     pub image_symbols: Vec<ImageSymbol>,
@@ -2432,6 +2487,10 @@ pub(crate) struct Build {
     /// then falls back to the coarse whole-`.text` entry and the DWARF
     /// builder to the post-prologue rule.
     pub fn_unwind: Vec<FnUnwind>,
+    /// The arm64 functions whose frames the linker decoded.
+    pub a64_unwind: Vec<A64Unwind>,
+    /// Functions the inputs' own unwind tables describe.
+    pub pe_unwind: Vec<PeUnwindRange>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
     /// reloc per entry against the target section's symbol.
@@ -2539,6 +2598,30 @@ pub(crate) struct FnUnwind {
     pub frame_alloc_end: u32,
 }
 
+/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's codes.
+#[derive(Debug, Clone)]
+pub(crate) struct A64Unwind {
+    pub begin: u32,
+    pub end: u32,
+    pub codes: Vec<u8>,
+}
+
+/// An input's `RUNTIME_FUNCTION`: `[begin, end)` in `Build::text`, and its unwind data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PeUnwindRange {
+    pub begin: u64,
+    pub end: u64,
+    pub data: PeUnwindRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PeUnwindRef {
+    /// The `UNWIND_INFO` record at this data-byte offset.
+    Info(u64),
+    /// An arm64 packed unwind word.
+    Packed(u32),
+}
+
 /// A function whose entry test branches to a return placed after the body,
 /// ahead of the frame (`ssa::early_exit`). Offsets are from `begin`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -2606,17 +2689,79 @@ pub(crate) struct GotFixup {
     pub is_data_load: bool,
 }
 
-/// A site holding the GOT base plus `got_offset`, the value
-/// `_GLOBAL_OFFSET_TABLE_` names. Same encoding shapes as
-/// [`DataFixup`]; the writer supplies the table's runtime address.
+/// A shared library's thread-local GOT entry: the dynamic TLS model it
+/// serves (psABI TLS supplement, AAELF64) and the variable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct TlsGotEntry {
+    pub kind: TlsGotKind,
+    pub target: TlsGotTarget,
+}
+
+/// A descriptor pair, a general-dynamic module index and offset, a
+/// local-dynamic module index, or an initial-exec offset from the thread
+/// pointer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TlsGotKind {
+    Descriptor,
+    ModuleOffset,
+    Module,
+    TpOffset,
+}
+
+impl TlsGotKind {
+    pub(crate) fn words(self) -> usize {
+        match self {
+            TlsGotKind::TpOffset => 1,
+            _ => 2,
+        }
+    }
+}
+
+/// An offset into this module's block, or a thread-local import by index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TlsGotTarget {
+    Local(u64),
+    Import(usize),
+}
+
+/// A text field addressing a TLS GOT entry: the x86-64 field or the
+/// AArch64 instruction at `site_text_offset`, `addend` an x86-64 RIP bias.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GotBaseFixup {
+pub(crate) struct TlsGotField {
+    pub site_text_offset: u64,
+    pub entry: usize,
+    pub form: TlsGotForm,
+    pub addend: i64,
+}
+
+/// A RIP-relative disp32 (`entry + addend - field`), an `adrp` to the
+/// entry's page, or the `ldr` / `add` taking its offset in the page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TlsGotForm {
+    Pc32,
+    A64Page,
+    A64Lo12,
+}
+
+/// A site holding a link-defined base plus `offset`: the GOT base
+/// `_GLOBAL_OFFSET_TABLE_` names, or PE's `__ImageBase`. Same encoding
+/// shapes as [`DataFixup`]; the writer supplies the base's address.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BaseFixup {
     /// Byte offset within `Build::text` of the relocated instruction.
     pub instr_offset: usize,
-    /// Byte offset from the table's base.
-    pub got_offset: i64,
+    /// [`ImageAddr::GotBase`] or [`ImageAddr::ImageBase`].
+    pub base: ImageAddr,
+    pub offset: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A pointer-sized data slot holding PE's `__ImageBase` plus `addend`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ImageBaseSlot {
+    pub data_offset: u64,
+    pub addend: i64,
 }
 
 /// A 32-bit PC-relative field of an object-linked x86-64 instruction
@@ -2631,13 +2776,11 @@ pub(crate) struct GotPcRelFixup {
     pub addend: i64,
 }
 
-/// A field of an object-linked x86-64 instruction holding the distance
-/// between two image addresses, one of them the GOT base: the forms the
-/// medium and large PIC code models address through
-/// `_GLOBAL_OFFSET_TABLE_` (psABI 4.4.1). The field takes
-/// `to + addend - from`.
+/// A field of an object-linked instruction holding `to + addend - from`: the
+/// x86-64 medium and large PIC forms relative to `_GLOBAL_OFFSET_TABLE_`
+/// (psABI 4.4.1), and PE's image-relative ones, from `__ImageBase`.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GotRelField {
+pub(crate) struct ImageRelField {
     /// Byte offset of the field within `Build::text`.
     pub site_text_offset: u64,
     pub to: ImageAddr,
@@ -2654,6 +2797,8 @@ pub(crate) enum ImageAddr {
     Site,
     /// The GOT base `_GLOBAL_OFFSET_TABLE_` names.
     GotBase,
+    /// The image's base address, PE `__ImageBase`.
+    ImageBase,
     /// A `Build::text` byte offset.
     Text(u64),
     /// A byte offset in the data-byte space, zero-fill tail included.
@@ -2920,6 +3065,8 @@ pub(crate) struct DataPcRelReloc {
     pub target_in_data: bool,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,
+    /// The slot holds the RVA `target_vaddr - image base`, not a distance.
+    pub image_relative: bool,
 }
 
 /// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte
@@ -3095,6 +3242,11 @@ pub(crate) enum ElfTpoffTarget {
     /// thread pointer (R_X86_64_GOTTPOFF, R_AARCH64_TLSIE_*); an executable
     /// link rewrites it to local-exec where it defines the variable.
     InitialExec(String),
+    /// Linux `-fPIC`: the TLS descriptor sequence starting at the fixup,
+    /// of the named variable, or of the module's block followed by this
+    /// unit offset into it.
+    Descriptor(String),
+    ModuleDescriptor(u64),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B
@@ -3182,6 +3334,49 @@ pub(crate) struct UserExternDataRef {
     /// would be wrong. `addend` is the operand's constant offset less the
     /// 4-byte PC-relative end skew.
     pub direct_pcrel: Option<i64>,
+    /// `symbol_name` is a dllimport entity's import-address slot
+    /// `__imp_<name>`, which the reference reads instead of a GOT entry.
+    pub import_slot: bool,
+}
+
+/// A PE image reaches a dllimport entity through its import-address slot
+/// `__imp_<name>`: each address reference reads the slot. The address of a
+/// header-bound import becomes such a reference too.
+pub(crate) fn read_import_slots(
+    program: &crate::c5::program::Program,
+    imports: &ResolvedImports,
+    call_sites: &mut Vec<RelocCallSite>,
+    data_refs: &mut Vec<UserExternDataRef>,
+) {
+    use crate::c5::token::Token;
+    let imported = |s: &&crate::c5::symbol::Symbol| s.dllimport && !s.defined_here;
+    let named: alloc::collections::BTreeSet<&str> = (program.symbols.iter())
+        .filter(|s| imported(s) && s.class != Token::Sys as i64)
+        .map(|s| s.link_name())
+        .collect();
+    let bound: alloc::collections::BTreeSet<i64> = (program.symbols.iter())
+        .filter(|s| imported(s) && s.class == Token::Sys as i64)
+        .map(|s| s.val)
+        .collect();
+    for r in data_refs.iter_mut() {
+        if r.direct_pcrel.is_none() && named.contains(r.symbol_name.as_str()) {
+            r.symbol_name = alloc::format!("__imp_{}", r.symbol_name);
+            r.import_slot = true;
+        }
+    }
+    call_sites.retain(|s| {
+        let import = &imports.imports[s.import_index];
+        if !s.is_addr || !bound.contains(&import.binding_idx) {
+            return true;
+        }
+        data_refs.push(UserExternDataRef {
+            instr_offset: s.instr_offset,
+            symbol_name: alloc::format!("__imp_{}", import.real_symbol),
+            direct_pcrel: None,
+            import_slot: true,
+        });
+        false
+    });
 }
 
 /// Relocation for a function-pointer literal (`Inst::ImmCode`).
@@ -3384,6 +3579,7 @@ impl DataImportSlots {
             real_symbol,
             dylib_index,
             flat_lookup: self.flat,
+            ordinal: None,
             kind: if self.flat {
                 ImportKind::Function
             } else {
@@ -3953,6 +4149,13 @@ pub struct NativeOptions {
     /// targets directly, which unwind-data discovery requires. The
     /// image's own form is the link's; see [`ExecForm`].
     pub pic: bool,
+    /// `-fPIE` / `-fpie`: with [`Self::pic`], the code is for an
+    /// executable, whose own definitions no other module preempts (System
+    /// V gABI symbol resolution). They bind directly instead of through
+    /// ELF symbol interposition, and a thread-local takes the executable
+    /// TLS models (local-exec for the unit's own, initial-exec for
+    /// another module's) instead of a TLS descriptor.
+    pub pie: bool,
     /// The object is compiled for a link that applies its relocations
     /// after mapping, as a position-independent image does (ELF
     /// `ET_DYN`, PE base relocations, Mach-O dyld rebases). `const`
@@ -4380,6 +4583,7 @@ impl NativeOptions {
             jump_tables: true,
             sibling_calls: true,
             pic: false,
+            pie: false,
             pic_link: false,
             code_model: CodeModel::Small,
             elf_class: ElfClass::Elf64,
@@ -4502,21 +4706,6 @@ pub(crate) fn lower_for_with_prebuilt(
         Some(p) => ResolvedImports::resolve_with(program, &p.funcs)?,
         None => ResolvedImports::resolve(program)?,
     };
-    // Linux ELF's `_start` always tail-calls libc `exit` so glibc
-    // gets to flush stdio and run atexit before the kernel reaps us.
-    // The SSA walk only finds bindings the user's code calls --
-    // a `int main() { return 42; }` carries no call into `exit` --
-    // so force-include it here. Resolves through the same
-    // `program.dylibs` lookup as user-emitted bindings would, so a
-    // source that omits `<stdlib.h>` still gets the friendly
-    // "no `#pragma binding(... ::exit, ...)`" error.
-    // Linux ELF executables tail-call libc `exit` from
-    // `_start`; force-including the binding lets the writer
-    // emit the call even if user code never names it.
-    // Shared libraries skip this -- they have no `_start`,
-    // and pulling in an unused libc reference would surface
-    // a "no `#pragma binding(libc::exit, ...)`" error on
-    // sources that legitimately don't include `<stdlib.h>`.
     // A canary's failure branch names `__stack_chk_fail`, which only the
     // relocatable writer records a relocation for. Every path the driver
     // takes compiles to relocatable objects and links them; the single-TU
@@ -4573,24 +4762,22 @@ pub(crate) fn lower_for_with_prebuilt(
         ));
     }
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
-    // Only force-include libc `exit` when the user
-    // already declared a binding for it (typically via
-    // `#include <stdlib.h>`). When no `exit` binding is in
-    // scope, the ELF `_start` stub falls back to a direct
-    // `sys_exit_group` syscall and the resulting binary has no
-    // libc dependency at all -- so trivial fixtures like
-    // `int main() { return argc; }` compile without any header
-    // include.
+    // C99 5.1.2.2.3: returning from `main` calls `exit`, which flushes
+    // the streams (7.20.4.3p4). The ELF `_start` stub calls libc's `exit`
+    // when an `exit` binding is in scope or the image binds the C library
+    // already; an image with neither ends in `sys_exit_group` and has no
+    // libc dependency.
     let exit_binding_in_scope = program
         .dylibs
         .iter()
         .flat_map(|d| d.bindings.iter())
         .any(|b| b.local_name == "exit");
-    if !is_shared
-        && matches!(target, Target::LinuxAarch64 | Target::LinuxX64)
-        && exit_binding_in_scope
-    {
-        imports.force_include_by_name("exit", program)?;
+    if !is_shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+        if exit_binding_in_scope {
+            imports.force_include_by_name("exit", program)?;
+        } else if options.output_kind == OutputKind::Executable {
+            imports.include_libc_exit(program);
+        }
     }
     // macOS arm64 `_Thread_local`: each TLV descriptor's getter slot
     // is bound to libSystem's `__tlv_bootstrap` by dylib ordinal, so
@@ -4659,7 +4846,7 @@ pub(crate) fn encode_file_asm_section_code(
 
 /// Decides which direct-branch fixups must become by-name call
 /// relocations because the callee is resolved at link time rather than
-/// at emit time. Two reasons:
+/// at emit time. Three reasons:
 ///
 /// * The call site and the callee live in different object sections
 ///   (`__attribute__((section("name")))`). Sections are placed
@@ -4668,6 +4855,8 @@ pub(crate) fn encode_file_asm_section_code(
 /// * The callee is `__attribute__((weak))`. A strong definition in a
 ///   sibling unit overrides it (ELF STB_WEAK), so the call must name
 ///   the symbol and let the linker pick the winner.
+/// * The callee is interposable under [`Program::interposable_refs`]:
+///   whether another component preempts it is the link's to decide.
 ///
 /// Empty (never matches) for non-relocatable output, which has no link
 /// step to defer to.
@@ -4680,6 +4869,10 @@ pub(crate) struct RelocCalleeCtx {
     names: alloc::vec::Vec<String>,
     /// `ent_pc` of every function defined here with weak linkage.
     weak: alloc::collections::BTreeSet<usize>,
+    /// `ent_pc` of every interposable function defined here, under
+    /// [`Program::interposable_refs`]: the link decides whether another
+    /// component preempts it.
+    interposable: alloc::collections::BTreeSet<usize>,
 }
 
 impl RelocCalleeCtx {
@@ -4688,7 +4881,7 @@ impl RelocCalleeCtx {
     /// the branch resolves in place.
     pub(crate) fn reloc_callee(&self, site_off: usize, target_pc: usize) -> Option<&str> {
         let &(callee_sec, name_idx) = self.by_pc.get(&target_pc)?;
-        if !self.weak.contains(&target_pc) {
+        if !self.weak.contains(&target_pc) && !self.interposable.contains(&target_pc) {
             let i = self.starts.partition_point(|&(s, _)| s <= site_off);
             let site_sec = if i == 0 { 0 } else { self.starts[i - 1].1 };
             if site_sec == callee_sec {
@@ -4702,6 +4895,15 @@ impl RelocCalleeCtx {
     pub(crate) fn weak_target(&self, target_pc: usize) -> Option<&str> {
         let &(_, name_idx) = self.by_pc.get(&target_pc)?;
         self.weak
+            .contains(&target_pc)
+            .then(|| self.names[name_idx].as_str())
+    }
+
+    /// The interposable definition at `target_pc`, whose address a reference
+    /// takes as it takes an undefined function's.
+    pub(crate) fn interposable_target(&self, target_pc: usize) -> Option<&str> {
+        let &(_, name_idx) = self.by_pc.get(&target_pc)?;
+        self.interposable
             .contains(&target_pc)
             .then(|| self.names[name_idx].as_str())
     }
@@ -4722,6 +4924,7 @@ pub(crate) fn reloc_callee_ctx(
         by_pc: alloc::collections::BTreeMap::new(),
         names: alloc::vec::Vec::new(),
         weak: alloc::collections::BTreeSet::new(),
+        interposable: alloc::collections::BTreeSet::new(),
     };
     if output_kind != OutputKind::Relocatable {
         return empty;
@@ -4740,7 +4943,11 @@ pub(crate) fn reloc_callee_ctx(
         .filter(|s| s.is_weak)
         .map(|s| s.def_link_name())
         .collect();
-    if section_of.is_empty() && weak_names.is_empty() {
+    let interposable_names: alloc::collections::BTreeSet<&str> = defined_funcs()
+        .filter(|s| program.interposable_refs && !s.is_weak && s.is_interposable_definition())
+        .map(|s| s.def_link_name())
+        .collect();
+    if section_of.is_empty() && weak_names.is_empty() && interposable_names.is_empty() {
         return empty;
     }
     // Intern the section names; id 0 is the default section.
@@ -4760,6 +4967,9 @@ pub(crate) fn reloc_callee_ctx(
         let name_idx = ctx.names.len();
         if weak_names.contains(f.name.as_str()) {
             ctx.weak.insert(f.ent_pc);
+        }
+        if interposable_names.contains(f.name.as_str()) {
+            ctx.interposable.insert(f.ent_pc);
         }
         ctx.names.push(f.name.clone());
         ctx.by_pc.insert(f.ent_pc, (sec, name_idx));

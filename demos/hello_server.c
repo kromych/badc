@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/select.h>
 #include <fcntl.h>
 
 #ifdef _WIN32
-#include <windows.h>
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <sys/select.h>
 #endif
 
 // Async "Hello, World!" HTTP server.
@@ -25,11 +26,11 @@
 //   curl http://localhost:8080/       # -> Hello, World!
 //
 // The byte-level constants (AF_INET, SOL_SOCKET, ...) and the
-// libc / Winsock symbol bindings come from <sys/socket.h>; the
-// dialect-driven choices that don't fit in a header (the macOS
-// sin_len byte, the close vs closesocket spelling, the fcntl vs
-// ioctlsocket non-blocking dance) sit behind the few #ifdefs
-// below.
+// libc / Winsock symbol bindings come from <sys/socket.h> (on
+// Windows, <winsock2.h>); the dialect-driven choices that don't fit
+// in a header (the macOS sin_len byte, the close vs closesocket
+// spelling, the fcntl vs ioctlsocket non-blocking dance) sit behind
+// the few #ifdefs below.
 
 // htons(8080): high byte 0x1F, low byte 0x90.
 #define PORT_HI       0x1F
@@ -47,26 +48,6 @@
 int *slot_fd;
 int *slot_state;
 int *slot_written;
-
-void fdset_zero(char *fds) {
-    memset(fds, 0, FD_SET_BYTES);
-}
-
-void fdset_set(char *fds, int fd) {
-    int byte_off;
-    int bit;
-    byte_off = fd / 8;
-    bit = fd & 7;
-    *(fds + byte_off) = *(fds + byte_off) | (1 << bit);
-}
-
-int fdset_isset(char *fds, int fd) {
-    int byte_off;
-    int bit;
-    byte_off = fd / 8;
-    bit = fd & 7;
-    return (*(fds + byte_off) >> bit) & 1;
-}
 
 // Cross-platform "close this socket fd" wrapper.
 void sock_close(int fd) {
@@ -148,8 +129,8 @@ void close_slot(int i) {
 
 int main() {
     int listener;
-    char *rfds;
-    char *wfds;
+    fd_set *rfds;
+    fd_set *wfds;
     int i;
     int nfds;
     int rc;
@@ -189,25 +170,27 @@ int main() {
         i = i + 1;
     }
 
-    rfds = malloc(FD_SET_BYTES);
-    wfds = malloc(FD_SET_BYTES);
+    // POSIX's fd_set is a descriptor bitmap, Winsock's an array of SOCKETs;
+    // the FD_* macros of <sys/select.h> and <winsock2.h> address each.
+    rfds = malloc(sizeof(fd_set));
+    wfds = malloc(sizeof(fd_set));
     scratch = malloc(1024);
 
     printf("hello_server: listening on 0.0.0.0:8080 (Ctrl-C to quit)\n");
 
     while (1) {
-        fdset_zero(rfds);
-        fdset_zero(wfds);
-        fdset_set(rfds, listener);
+        FD_ZERO(rfds);
+        FD_ZERO(wfds);
+        FD_SET(listener, rfds);
         nfds = listener;
 
         i = 0;
         while (i < MAX_CLIENTS) {
             if (slot_state[i] == SLOT_READING) {
-                fdset_set(rfds, slot_fd[i]);
+                FD_SET(slot_fd[i], rfds);
                 if (slot_fd[i] > nfds) nfds = slot_fd[i];
             } else if (slot_state[i] == SLOT_WRITING) {
-                fdset_set(wfds, slot_fd[i]);
+                FD_SET(slot_fd[i], wfds);
                 if (slot_fd[i] > nfds) nfds = slot_fd[i];
             }
             i = i + 1;
@@ -216,7 +199,7 @@ int main() {
         rc = select(nfds + 1, rfds, wfds, 0, 0);
         if (rc < 0) break;
 
-        if (fdset_isset(rfds, listener)) {
+        if (FD_ISSET(listener, rfds)) {
             client = accept(listener, 0, 0);
             if (client >= 0) {
                 idx = find_free_slot();
@@ -233,7 +216,7 @@ int main() {
 
         i = 0;
         while (i < MAX_CLIENTS) {
-            if (slot_state[i] == SLOT_READING && fdset_isset(rfds, slot_fd[i])) {
+            if (slot_state[i] == SLOT_READING && FD_ISSET(slot_fd[i], rfds)) {
                 // Drain whatever the client sent (request line +
                 // headers); we don't parse it. recv works on all
                 // three platforms; read would be POSIX-only.
@@ -243,7 +226,7 @@ int main() {
                 } else {
                     slot_state[i] = SLOT_WRITING;
                 }
-            } else if (slot_state[i] == SLOT_WRITING && fdset_isset(wfds, slot_fd[i])) {
+            } else if (slot_state[i] == SLOT_WRITING && FD_ISSET(slot_fd[i], wfds)) {
                 n = send(slot_fd[i],
                          response + slot_written[i],
                          response_len - slot_written[i],

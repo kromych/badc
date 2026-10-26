@@ -64,10 +64,20 @@ struct timespec {
 // Winsock's select() reads `struct timeval` as two 32-bit `long` fields
 // (LLP64), so the whole object is 8 bytes. A 64-bit field would place
 // tv_usec where select expects tv_sec's high half, zeroing the timeout.
+// mingw-w64's time.h and winsock2.h share it, and the timer macros, under
+// _TIMEVAL_DEFINED.
+#ifndef _TIMEVAL_DEFINED
+#define _TIMEVAL_DEFINED
 struct timeval {
     long tv_sec;
     long tv_usec;
 };
+#define timerisset(tvp) ((tvp)->tv_sec || (tvp)->tv_usec)
+#define timercmp(tvp, uvp, cmp)                                                   \
+    ((tvp)->tv_sec cmp (uvp)->tv_sec ||                                            \
+     ((tvp)->tv_sec == (uvp)->tv_sec && (tvp)->tv_usec cmp (uvp)->tv_usec))
+#define timerclear(tvp) (tvp)->tv_sec = (tvp)->tv_usec = 0
+#endif
 #elif defined(__APPLE__)
 struct timespec {
     long tv_sec;
@@ -141,7 +151,6 @@ typedef long clock_t;
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::nanosleep,     "_nanosleep")
-// libSystem exports no clock_nanosleep; unbound so a use fails at link.
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
@@ -151,6 +160,8 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::ctime,         "_ctime")
+#pragma binding(libc::asctime,       "_asctime")
+#pragma binding(libc::asctime_r,     "_asctime_r")
 #pragma binding(libc::strftime,      "_strftime")
 #pragma binding(libc::strptime,      "_strptime")
 #pragma binding(libc::tzset,         "_tzset")
@@ -184,6 +195,9 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "gmtime_r")
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::ctime,         "ctime")
+#pragma binding(libc::asctime,       "asctime")
+#pragma binding(libc::asctime_r,     "asctime_r")
+#pragma binding(libc::clock_getcpuclockid, "clock_getcpuclockid")
 #pragma binding(libc::strftime,      "strftime")
 #pragma binding(libc::strptime,      "strptime")
 #pragma binding(libc::tzset,         "tzset")
@@ -204,6 +218,7 @@ typedef long clock_t;
 #pragma binding(msvcrt::localtime,"localtime")
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::ctime,    "ctime")
+#pragma binding(msvcrt::asctime,  "asctime")
 #pragma binding(msvcrt::strftime, "strftime")
 #pragma binding(msvcrt::tzset,    "_tzset")
 // msvcrt.dll exports the tzset outputs as data on both x64 and
@@ -215,8 +230,19 @@ typedef long clock_t;
 #pragma binding(data msvcrt::daylight, "_daylight")
 // msvcrt has none of the POSIX clocks, nanosleep or gettimeofday, which
 // mingw-w64 declares here; libc/lib/time_ext.c defines them over
-// kernel32. The reentrant localtime_r / gmtime_r / ctime_r are declared,
-// as there, under `_POSIX_C_SOURCE` alone.
+// kernel32. The reentrant localtime_r / gmtime_r / ctime_r / asctime_r are
+// declared, as there, under `_POSIX_C_SOURCE` alone.
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_ctime32_s, "_ctime32_s")
+errno_t _ctime32_s(char *_Buf, size_t _SizeInBytes, const __time32_t *_Time);
+#pragma binding(msvcrt::_ctime64_s, "_ctime64_s")
+errno_t _ctime64_s(char *_Buf, size_t _SizeInBytes, const __time64_t *_Time);
+#pragma binding(msvcrt::_strdate_s, "_strdate_s")
+errno_t _strdate_s(char *_Buf, size_t _SizeInBytes);
+#pragma binding(msvcrt::_strtime_s, "_strtime_s")
+errno_t _strtime_s(char *_Buf, size_t _SizeInBytes);
 #if defined(_POSIX_C_SOURCE) && !defined(_POSIX_THREAD_SAFE_FUNCTIONS)
 #define _POSIX_THREAD_SAFE_FUNCTIONS 200112L
 #endif
@@ -238,10 +264,12 @@ typedef int clockid_t;
 time_t time(time_t *out);
 clock_t clock(void);
 int clock_gettime(clockid_t clk_id, struct timespec *ts);
+#ifndef __APPLE__
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
-// `remain` receives the unslept interval on EINTR.
+// `remain` receives the unslept interval on EINTR. libSystem has none.
 int clock_nanosleep(clockid_t clk_id, int flags, const struct timespec *request,
                     struct timespec *remain);
+#endif
 int clock_settime(clockid_t clk_id, const struct timespec *ts);
 int clock_getres(clockid_t clk_id, struct timespec *res);
 int nanosleep(const struct timespec *req, struct timespec *rem);
@@ -262,9 +290,17 @@ struct tm *gmtime_r(const time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
 char *ctime_r(const time_t *t, char *buf);
+// POSIX asctime_r: asctime's text in the caller's 26-byte buffer.
+char *asctime_r(const struct tm *restrict tm, char *restrict buf);
 #endif
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
 char *ctime(const time_t *t);
+// C99 7.23.3.1 asctime.
+char *asctime(const struct tm *tm);
+#ifdef __linux__
+// POSIX: the CPU-time clock of a process.
+int clock_getcpuclockid(int pid, clockid_t *clock_id);
+#endif
 size_t strftime(char *buf, size_t max, const char *fmt, const struct tm *tm);
 #ifdef __linux__
 // POSIX per-process timers. `timer_t` is an opaque handle glibc defines
@@ -299,3 +335,40 @@ void tzset(void);
 extern char *tzname[2];
 extern long timezone;
 extern int daylight;
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::getdate, "_getdate")
+#pragma binding(data libc::getdate_err, "_getdate_err")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::getdate, "getdate")
+#pragma binding(data libc::getdate_err, "getdate_err")
+#endif
+// getdate's failure code, 1 to 8 as XSI numbers them.
+extern int getdate_err;
+struct tm *getdate(const char *string);
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strftime_l, "_strftime_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strftime_l, "strftime_l")
+#endif
+size_t strftime_l(char *restrict s, size_t maxsize, const char *restrict format,
+                  const struct tm *restrict timeptr, locale_t locale);
+#endif

@@ -54,7 +54,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	-<rip>, %rdi       # <addr>
+               	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
                	movq	%rsi, %rdx
                	xorl	%eax, %eax

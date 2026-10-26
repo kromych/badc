@@ -1,6 +1,6 @@
 # raylib
 
-badc compiles [raylib](https://github.com/raysan5/raylib) 5.5 from
+badc compiles [raylib](https://github.com/raysan5/raylib) 6.0 from
 source and links a small game (Lode Runner) into a standalone binary.
 Unlike `gui_hello`, which binds the platform window APIs directly, this
 demo builds the whole graphics library through badc: the only external
@@ -18,14 +18,17 @@ bundled `glad`, loaded at runtime; the OS frameworks (Cocoa / CoreVideo
 / CoreGraphics / OpenGL on macOS) are recorded as `LC_LOAD_DYLIB`
 commands so their Objective-C classes register at launch.
 
-The build is asset-free: rectangles and text only (the embedded default
-font), so no image or audio file loaders are compiled.
+Every raylib module is compiled with `config.h`'s feature set passed as
+`-D` flags, so the game loads its sprites from `assets/` (and its sound on
+macOS, the one target that links `raudio`); without them it renders
+procedurally. The MP3 decoder is left out (it is NEON-only) and the other
+decoders' SIMD paths are off.
 
 ## Layout
 
 | File | Role |
 |------|------|
-| `setup.py` | Fetch + sha-verify raylib 5.5; patch `config.h` to the asset-free profile. |
+| `setup.py` | Fetch + sha-verify raylib 6.0 from the vendor-deps mirror and extract `src/`. |
 | `loderunner.h` / `loderunner_logic.c` | Game state + the pure `level_step` logic (references no raylib symbol). |
 | `loderunner.c` | The renderer (`level_draw`) and frame loop; the only raylib caller. |
 | `test_loderunner.c` | Headless logic self-test; links the pure logic, runs on any host. |
@@ -35,11 +38,12 @@ font), so no image or audio file loaders are compiled.
 ## Workflow
 
 ```sh
-python demos/raylib/smoke.py        # logic self-test on any host;
-                                    # full standalone build + headless
-                                    # run on macOS.
+python demos/raylib/smoke.py        # logic self-test, standalone build
+                                    # and (see Platform status) a
+                                    # rendered frame.
 
 # Play it (macOS, with a display):
+python demos/raylib/smoke.py --out-dir demos/raylib/.build
 ./demos/raylib/.build/loderunner    # arrows / WASD move; Q / E dig;
                                     # R restarts. Collect the gold, then
                                     # climb the exit ladders.
@@ -73,6 +77,7 @@ xcrun stapler staple loderunner.app
 
 ## Platform status
 
-macOS is the standalone target today. The Linux (X11 / GLX) and Windows
-(Win32 / WGL) header surfaces RGFW needs are not yet authored as badc
-headers, so on those hosts `smoke.py` runs the logic self-test only.
+The standalone game builds on macOS (Cocoa), Linux (X11 / GLX) and
+Windows (Win32 / WGL). It renders a frame on macOS and, under `Xvfb`, on
+Linux; on Windows the smoke checks that every PE import resolves and that
+the subsystem is GUI.

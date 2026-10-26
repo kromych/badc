@@ -19,10 +19,10 @@ fn codes_are_unique() {
 
 /// Canonical names are unique, and a spelling more than one row carries is
 /// one of the deliberate shared spellings: clang's group spanning a
-/// top-level and a nested qualifier discard.
+/// top-level and a nested qualifier discard, and gcc's `-Wunused`.
 #[test]
 fn names_and_aliases_are_unique() {
-    const SHARED: [&str; 1] = ["incompatible-pointer-types-discards-qualifiers"];
+    const SHARED: [&str; 2] = ["incompatible-pointer-types-discards-qualifiers", "unused"];
     let mut names = BTreeSet::new();
     for row in rows() {
         assert!(names.insert(row.name), "duplicate name `{}`", row.name);

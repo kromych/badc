@@ -23,6 +23,7 @@ pub(crate) const R_X86_64_COPY: u32 = 5;
 pub(crate) const R_X86_64_GLOB_DAT: u32 = 6;
 pub(crate) const R_X86_64_JUMP_SLOT: u32 = 7;
 pub(crate) const R_X86_64_RELATIVE: u32 = 8;
+pub(crate) const R_X86_64_GOT32: u32 = 3;
 pub(crate) const R_X86_64_GOTPCREL: u32 = 9;
 pub(crate) const R_X86_64_32: u32 = 10;
 pub(crate) const R_X86_64_32S: u32 = 11;
@@ -30,6 +31,11 @@ pub(crate) const R_X86_64_16: u32 = 12;
 pub(crate) const R_X86_64_8: u32 = 14;
 pub(crate) const R_X86_64_PC16: u32 = 13;
 pub(crate) const R_X86_64_PC8: u32 = 15;
+/// The module's thread-local block, named by a local-dynamic descriptor
+/// sequence; 0 from the thread pointer once the sequence is rewritten.
+pub(crate) const TLS_MODULE_BASE: &str = "_TLS_MODULE_BASE_";
+
+pub(crate) const R_X86_64_DTPMOD64: u32 = 16;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF64: u32 = 18;
 pub(crate) const R_X86_64_TLSGD: u32 = 19;
@@ -45,13 +51,22 @@ pub(crate) const R_X86_64_GOTOFF64: u32 = 25;
 pub(crate) const R_X86_64_GOTPC32: u32 = 26;
 /// `G + A`: the symbol's GOT slot as a distance from the GOT base.
 pub(crate) const R_X86_64_GOT64: u32 = 27;
+pub(crate) const R_X86_64_GOTPCREL64: u32 = 28;
 pub(crate) const R_X86_64_GOTPC64: u32 = 29;
 /// `L + A - GOT`: the symbol's call entry as a distance from the GOT base.
 pub(crate) const R_X86_64_PLTOFF64: u32 = 31;
 pub(crate) const R_X86_64_GOTPC32_TLSDESC: u32 = 34;
 pub(crate) const R_X86_64_TLSDESC_CALL: u32 = 35;
+pub(crate) const R_X86_64_TLSDESC: u32 = 36;
 pub(crate) const R_X86_64_GOTPCRELX: u32 = 41;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+// ---- PE/COFF forms no ELF psABI numbers ----
+/// `S + A - ImageBase` in 32 bits, the RVA of COFF's `ADDR32NB` on both
+/// machines; numbered past every psABI range.
+pub(crate) const R_PE_ADDR32NB: u32 = 0x1_0003;
+/// The image base, PE `__ImageBase`: the address of the DOS header.
+pub(crate) const IMAGE_BASE_SYMBOL: &str = "__ImageBase";
 
 // ---- i386 ----
 pub(crate) const R_386_32: u32 = 1;
@@ -68,6 +83,7 @@ pub(crate) const R_386_16: u32 = 20;
 pub(crate) const R_386_PC16: u32 = 21;
 pub(crate) const R_386_8: u32 = 22;
 pub(crate) const R_386_PC8: u32 = 23;
+pub(crate) const R_386_GOT32X: u32 = 43;
 
 // ---- aarch64 ----
 pub(crate) const R_AARCH64_ABS64: u32 = 257;
@@ -89,6 +105,7 @@ pub(crate) const R_AARCH64_MOVW_SABS_G2: u32 = 272;
 pub(crate) const R_AARCH64_LD_PREL_LO19: u32 = 273;
 pub(crate) const R_AARCH64_ADR_PREL_LO21: u32 = 274;
 pub(crate) const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+pub(crate) const R_AARCH64_ADR_PREL_PG_HI21_NC: u32 = 276;
 pub(crate) const R_AARCH64_TSTBR14: u32 = 279;
 pub(crate) const R_AARCH64_CONDBR19: u32 = 280;
 pub(crate) const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
@@ -103,6 +120,14 @@ pub(crate) const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 pub(crate) const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 pub(crate) const R_AARCH64_TLSGD_ADR_PAGE21: u32 = 513;
 pub(crate) const R_AARCH64_TLSGD_ADD_LO12_NC: u32 = 514;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G2: u32 = 523;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G1: u32 = 524;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G1_NC: u32 = 525;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G0: u32 = 526;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G0_NC: u32 = 527;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_HI12: u32 = 528;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_LO12: u32 = 529;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC: u32 = 530;
 pub(crate) const R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21: u32 = 541;
 pub(crate) const R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC: u32 = 542;
 pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G2: u32 = 544;
@@ -113,6 +138,11 @@ pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G0_NC: u32 = 548;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12: u32 = 550;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
+pub(crate) const R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC: u32 = 553;
+pub(crate) const R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC: u32 = 555;
+pub(crate) const R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC: u32 = 557;
+pub(crate) const R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC: u32 = 559;
+pub(crate) const R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC: u32 = 571;
 pub(crate) const R_AARCH64_TLSDESC_ADR_PAGE21: u32 = 562;
 pub(crate) const R_AARCH64_TLSDESC_LD64_LO12: u32 = 563;
 pub(crate) const R_AARCH64_TLSDESC_ADD_LO12: u32 = 564;
@@ -121,8 +151,46 @@ pub(crate) const R_AARCH64_COPY: u32 = 1024;
 pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
 pub(crate) const R_AARCH64_JUMP_SLOT: u32 = 1026;
 pub(crate) const R_AARCH64_RELATIVE: u32 = 1027;
+pub(crate) const R_AARCH64_TLS_DTPMOD64: u32 = 1028;
 pub(crate) const R_AARCH64_TLS_DTPREL64: u32 = 1029;
 pub(crate) const R_AARCH64_TLS_TPREL64: u32 = 1030;
+pub(crate) const R_AARCH64_TLSDESC: u32 = 1031;
+
+/// The AAELF64 type of an in-page offset in `insn`: `ADD` for an `add`
+/// immediate, `LDST<n>` of an unsigned-offset load / store's access size
+/// (thread-pointer-relative when `tprel`), `None` for another instruction.
+pub(crate) fn aarch64_lo12_rtype(insn: u32, tprel: bool) -> Option<u32> {
+    if insn & 0x7F80_0000 == 0x1100_0000 {
+        return Some(if tprel {
+            R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
+        } else {
+            R_AARCH64_ADD_ABS_LO12_NC
+        });
+    }
+    if insn & 0x3B00_0000 != 0x3900_0000 {
+        return None;
+    }
+    let size = insn >> 30;
+    let vector = (insn >> 26) & 1 != 0;
+    let opc = (insn >> 22) & 3;
+    // A vector access with `size == 0` and `opc<1>` set is 128-bit.
+    let log2 = match (size, vector && opc & 2 != 0) {
+        (0, true) => 4,
+        (s, _) => s,
+    };
+    Some(match (log2, tprel) {
+        (0, false) => R_AARCH64_LDST8_ABS_LO12_NC,
+        (1, false) => R_AARCH64_LDST16_ABS_LO12_NC,
+        (2, false) => R_AARCH64_LDST32_ABS_LO12_NC,
+        (3, false) => R_AARCH64_LDST64_ABS_LO12_NC,
+        (_, false) => R_AARCH64_LDST128_ABS_LO12_NC,
+        (0, true) => R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC,
+        (1, true) => R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC,
+        (2, true) => R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC,
+        (3, true) => R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC,
+        (_, true) => R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC,
+    })
+}
 
 /// Access size in bytes that an `R_AARCH64_LDST<n>_ABS_LO12_NC`
 /// relocation scales its immediate by, or `None` for any other type.
@@ -208,6 +276,8 @@ pub(crate) enum TprelField {
     Add { hi: bool, check: bool },
     /// A MOVW group, as [`aarch64_movw_field`] describes one.
     Movw(u8, bool, Option<u32>),
+    /// An unsigned-offset load / store, bits `[11:0]` scaled by the access size.
+    Ldst(u32),
 }
 
 /// [`TprelField`] of an aarch64 local-exec relocation type. The checked
@@ -227,11 +297,48 @@ pub(crate) fn aarch64_tprel_field(rtype: u32) -> Option<TprelField> {
             hi: false,
             check: false,
         },
+        R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC => TprelField::Ldst(1),
+        R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC => TprelField::Ldst(2),
+        R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC => TprelField::Ldst(4),
+        R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC => TprelField::Ldst(8),
+        R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC => TprelField::Ldst(16),
         R_AARCH64_TLSLE_MOVW_TPREL_G2 => signed(2),
         R_AARCH64_TLSLE_MOVW_TPREL_G1 => signed(1),
         R_AARCH64_TLSLE_MOVW_TPREL_G0 => signed(0),
         R_AARCH64_TLSLE_MOVW_TPREL_G1_NC => TprelField::Movw(1, false, None),
         R_AARCH64_TLSLE_MOVW_TPREL_G0_NC => TprelField::Movw(0, false, None),
+        _ => return None,
+    })
+}
+
+/// An aarch64 reference to the symbol's GOT slot: the `adrp` page of the
+/// slot and the `ldr` that reads it.
+pub(crate) const fn aarch64_got_slot_ref(rtype: u32) -> bool {
+    matches!(rtype, R_AARCH64_ADR_GOT_PAGE | R_AARCH64_LD64_GOT_LO12_NC)
+}
+
+/// [`TprelField`] of an aarch64 local-dynamic relocation type, whose
+/// value is the offset into the module's block (`DTPREL(S + A)`).
+pub(crate) fn aarch64_dtprel_field(rtype: u32) -> Option<TprelField> {
+    let signed = |n: u8| TprelField::Movw(n, true, Some(16 * (n as u32 + 1) + 1));
+    Some(match rtype {
+        R_AARCH64_TLSLD_ADD_DTPREL_HI12 => TprelField::Add {
+            hi: true,
+            check: true,
+        },
+        R_AARCH64_TLSLD_ADD_DTPREL_LO12 => TprelField::Add {
+            hi: false,
+            check: true,
+        },
+        R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC => TprelField::Add {
+            hi: false,
+            check: false,
+        },
+        R_AARCH64_TLSLD_MOVW_DTPREL_G2 => signed(2),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G1 => signed(1),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G0 => signed(0),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G1_NC => TprelField::Movw(1, false, None),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G0_NC => TprelField::Movw(0, false, None),
         _ => return None,
     })
 }
@@ -320,11 +427,17 @@ pub(crate) fn aarch64_abs_field(rtype: u32) -> Option<(u32, AbsCheck)> {
 /// type <n>` otherwise. Diagnostics name a relocation the way
 /// `readelf -r` prints it.
 pub(crate) fn x86_64_reloc_desc(rtype: u32) -> String {
+    if rtype == R_PE_ADDR32NB {
+        return "IMAGE_REL_AMD64_ADDR32NB".into();
+    }
     desc(X86_64_RELOC_NAMES, rtype)
 }
 
 /// aarch64 counterpart of [`x86_64_reloc_desc`].
 pub(crate) fn aarch64_reloc_desc(rtype: u32) -> String {
+    if rtype == R_PE_ADDR32NB {
+        return "IMAGE_REL_ARM64_ADDR32NB".into();
+    }
     desc(AARCH64_RELOC_NAMES, rtype)
 }
 
@@ -383,7 +496,7 @@ pub(crate) fn i386_field_width(rtype: u32) -> Option<u32> {
         R_386_8 | R_386_PC8 => Some(1),
         R_386_16 | R_386_PC16 => Some(2),
         R_386_32 | R_386_PC32 | R_386_GOT32 | R_386_PLT32 | R_386_GLOB_DAT | R_386_JUMP_SLOT
-        | R_386_RELATIVE | R_386_GOTOFF | R_386_GOTPC | R_386_COPY => Some(4),
+        | R_386_RELATIVE | R_386_GOTOFF | R_386_GOTPC | R_386_COPY | R_386_GOT32X => Some(4),
         _ => None,
     }
 }
@@ -734,6 +847,26 @@ mod tests {
             R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
             "R_AARCH64_TLSLE_ADD_TPREL_LO12_NC",
         );
+        a(
+            R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC",
+        );
         a(R_AARCH64_COPY, "R_AARCH64_COPY");
         a(R_AARCH64_GLOB_DAT, "R_AARCH64_GLOB_DAT");
         a(R_AARCH64_JUMP_SLOT, "R_AARCH64_JUMP_SLOT");
@@ -798,9 +931,9 @@ mod tests {
         use alloc::string::ToString;
         let header = crate::c5::headers::embedded_headers()
             .iter()
-            .find(|(name, _)| *name == "elf.h")
+            .find(|(name, _, _)| *name == "elf.h")
             .expect("elf.h is part of the embedded set")
-            .1;
+            .2;
         let mut checked = 0;
         for line in header.lines() {
             let rest = match line.strip_prefix("#define R_") {

@@ -58,14 +58,10 @@ impl ZKeyword {
     /// persona's final link.
     pub fn in_script_link(self) -> ZSupport {
         match self {
-            ZKeyword::Relro(false)
-            | ZKeyword::Text(false)
-            | ZKeyword::Defs(true)
-            | ZKeyword::SeparateCode(false) => ZSupport::Holds,
-            ZKeyword::Relro(true) => ZSupport::Refused("the link writes no PT_GNU_RELRO"),
-            ZKeyword::Now(false) => {
-                ZSupport::Refused("every import binds when the image is loaded")
+            ZKeyword::Relro(false) | ZKeyword::Defs(true) | ZKeyword::SeparateCode(false) => {
+                ZSupport::Holds
             }
+            ZKeyword::Relro(true) => ZSupport::Refused("the link writes no PT_GNU_RELRO"),
             ZKeyword::Defs(false) => ZSupport::Refused("an unresolved reference is an error"),
             ZKeyword::SeparateCode(true) => {
                 ZSupport::Refused("code shares its load with the read-only data on its pages")
@@ -134,6 +130,11 @@ impl ZKeywords {
     pub fn push(&mut self, kw: ZKeyword) {
         self.0.retain(|k| !k.same_kind(kw));
         self.0.push(kw);
+    }
+
+    /// Drop the keyword of `kw`'s kind, so that the default stands again.
+    pub fn clear_kind(&mut self, kw: ZKeyword) {
+        self.0.retain(|k| !k.same_kind(kw));
     }
 
     pub fn iter(&self) -> impl Iterator<Item = ZKeyword> + '_ {
@@ -206,7 +207,7 @@ pub fn parse_z_keyword(kw: &str) -> Result<ZKeyword, String> {
         "execstack" | "noexecstack" => ZKeyword::ExecStack(kw == "execstack"),
         "relro" | "norelro" => ZKeyword::Relro(kw == "relro"),
         "now" | "lazy" => ZKeyword::Now(kw == "now"),
-        "text" | "notext" => ZKeyword::Text(kw == "text"),
+        "text" | "notext" | "textoff" => ZKeyword::Text(kw == "text"),
         "defs" | "undefs" => ZKeyword::Defs(kw == "defs"),
         "muldefs" => ZKeyword::Muldefs,
         "pack-relative-relocs" | "nopack-relative-relocs" => {
@@ -348,9 +349,9 @@ mod tests {
             ("relro", 'R', 'H', 'H'),
             ("norelro", 'H', 'R', 'R'),
             ("now", 'A', 'H', 'H'),
-            ("lazy", 'R', 'R', 'R'),
+            ("lazy", 'A', 'R', 'R'),
             ("text", 'A', 'H', 'H'),
-            ("notext", 'H', 'H', 'H'),
+            ("notext", 'A', 'H', 'H'),
             ("defs", 'H', 'H', 'A'),
             ("undefs", 'R', 'R', 'H'),
             ("muldefs", 'A', 'R', 'R'),
@@ -402,18 +403,11 @@ mod tests {
                 ZKeyword::ExecStack(false),
             ]
         );
-        assert_eq!(
-            z.refusal(ZKeyword::in_script_link),
-            None,
-            "now replaced lazy"
-        );
         z.push(ZKeyword::Now(false));
         assert_eq!(
-            z.refusal(ZKeyword::in_script_link),
-            Some((
-                ZKeyword::Now(false),
-                "every import binds when the image is loaded"
-            ))
+            z.get(|kw| matches!(kw, ZKeyword::Now(_)).then_some(kw)),
+            Some(ZKeyword::Now(false))
         );
+        assert_eq!(z.refusal(ZKeyword::in_script_link), None);
     }
 }

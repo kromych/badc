@@ -522,7 +522,7 @@ pub(crate) fn body_keeps_frame_record(
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }
-        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target, func),
         Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.
         Inst::Intrinsic { kind, .. } => {
@@ -1671,6 +1671,11 @@ pub(crate) fn extern_fn_targets(
         if !sym.is_fun_entity() || sym.defined_here {
             continue;
         }
+        // A dllimport function is called through its import slot.
+        if sym.dllimport {
+            out.remove(&(sym.val as usize));
+            continue;
+        }
         if let Some(t) = out.get_mut(&(sym.val as usize)) {
             // Two symbols naming one import would leave the reference
             // ambiguous; the entry then identifies neither.
@@ -2208,6 +2213,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // info so the emitted code is identical with and without -g. A probe
     // skips it: the stop discards the records it feeds the emitters, and
     // the retry runs it on the reported bodies.
+    // gcc and clang inline an `always_inline` function at every level; at -O0
+    // the inliner takes those calls alone.
+    if !native.optimize && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
+        let code_syms = defined_fn_syms(program);
+        let extern_fns = extern_fn_targets(program);
+        pipeline.run("passes::inline::run mandatory", &mut ssa_funcs, |funcs| {
+            super::super::passes::inline::run(
+                funcs,
+                0,
+                target.abi(),
+                &code_syms,
+                &extern_fns,
+                &mut sink,
+            );
+        });
+    }
     if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)
@@ -2415,11 +2436,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::rotate::run", &mut ssa_funcs, |funcs| {
             super::super::passes::rotate::run(funcs);
         });
-        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
-        // -O). Runs after the inliner so products exposed by parameter
-        // substitution into an add/sub become contractible.
+        // Fused multiply-add contraction (C99 6.5p8). Runs after the
+        // inliner: an inlined body keeps the products its expressions
+        // contract, and under `-ffp-contract=fast` a product reaching an
+        // add through a parameter contracts too.
+        let fast = program.fp_contract_fast;
         pipeline.run("passes::fma::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::fma::run(funcs);
+            super::super::passes::fma::run(funcs, fast);
         });
         // Prove a null comparison of a const array's relocated pointer
         // member false. Runs after constfold has folded the constant
@@ -2661,6 +2684,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
         f.general_regs_only = native.no_fp_regs;
+        f.tls_dynamic = native.pic
+            && !native.pie
+            && matches!(
+                target,
+                super::Target::LinuxX64 | super::Target::LinuxAarch64
+            );
     }
     // At -O the operand-free values are set again past the calls they
     // would otherwise cross, then each function is allocated and
@@ -2694,6 +2723,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .collect();
     let fn_align = native.min_function_alignment.max(1) as usize;
     st.text_align = st.text_align.max(fn_align);
+    // `aligned(N)` on a function raises its own entry's boundary.
+    let code_aligns: alloc::collections::BTreeMap<&str, usize> = (program.symbols.iter())
+        .filter(|s| s.code_align > 1 && s.class == crate::c5::token::Token::Fun as i64)
+        .map(|s| (s.def_link_name(), s.code_align as usize))
+        .collect();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         let entry = super::FunctionEntry::of(func_ssa, &native);
@@ -2701,7 +2735,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // multiple of N, the gap filled with no-ops. Under
         // `-fpatchable-function-entry` that byte opens the no-op area, of
         // which `nops_before` precede the symbol.
-        b.align_entry(&mut st, fn_align);
+        let align = fn_align.max(
+            code_aligns
+                .get(func_ssa.name.as_str())
+                .copied()
+                .unwrap_or(1),
+        );
+        st.text_align = st.text_align.max(align);
+        b.align_entry(&mut st, align);
         if entry.nops_before + entry.nops_after > 0 {
             st.patchable_entries.push(super::EntryArea {
                 func: st.func_ent_pcs.len(),
@@ -2836,7 +2877,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // to emit a by-name call relocation against each import's external
     // symbol; final-image writers ignore the list and rely on the
     // trampolines below.
-    let reloc_call_sites: alloc::vec::Vec<super::RelocCallSite> = st
+    let mut reloc_call_sites: alloc::vec::Vec<super::RelocCallSite> = st
         .plt_call_fixups
         .iter()
         .map(|f| super::RelocCallSite {
@@ -2881,6 +2922,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: (*name).into(),
                 direct_pcrel: None,
+                import_slot: false,
             });
             continue;
         }
@@ -2889,6 +2931,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: name.into(),
                 direct_pcrel: B::WEAK_ADDR_PCREL,
+                import_slot: false,
+            });
+            continue;
+        }
+        if let Some(name) = reloc_ctx.interposable_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: None,
+                import_slot: false,
             });
             continue;
         }
@@ -2946,6 +2998,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         }
     }
 
+    if native.output_kind == super::OutputKind::Relocatable
+        && target.binary_format() == super::BinaryFormat::Pe
+    {
+        super::read_import_slots(
+            program,
+            imports,
+            &mut reloc_call_sites,
+            &mut st.user_extern_data_refs,
+        );
+    }
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
         // Relocatable objects carry no entry point; the linker picks it once
         // every TU is merged. `entry_pc` may legitimately be 0 here
@@ -2985,8 +3047,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         preemptible_imports: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit
         // has no table to name.
-        got_base_fixups: alloc::vec::Vec::new(),
-        got_rel_fields: alloc::vec::Vec::new(),
+        base_fixups: alloc::vec::Vec::new(),
+        image_rel_fields: alloc::vec::Vec::new(),
         got_pcrel_fixups: alloc::vec::Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,
@@ -3031,6 +3093,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
+        a64_unwind: alloc::vec::Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs: st.user_extern_data_refs,
@@ -3045,6 +3108,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_init_size: program.tls_init_size,
         tls_align: program.tls_align,
         tls_index_fixups: st.tls_index_fixups,
+        tls_index_slot: None,
+        pe_unwind: alloc::vec::Vec::new(),
+        tls_got: alloc::vec::Vec::new(),
+        tls_got_fields: alloc::vec::Vec::new(),
+        static_tls: false,
         data_relocs: alloc::vec::Vec::new(),
         extern_data_relocs: alloc::vec::Vec::new(),
         code_relocs: alloc::vec::Vec::new(),
@@ -3052,8 +3120,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_extern_data_relocs: alloc::vec::Vec::new(),
         tls_code_relocs: alloc::vec::Vec::new(),
         label_relocs: st.label_relocs,
+        image_base_slots: alloc::vec::Vec::new(),
+        tls_image_base_slots: alloc::vec::Vec::new(),
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
+        protected_exports: Default::default(),
         image_symbols: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,

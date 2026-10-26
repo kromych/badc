@@ -778,6 +778,7 @@ impl Compiler {
         s.h_fn_type = s.fn_type.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
+        s.h_enumeration = s.enumeration.take();
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -852,6 +853,7 @@ impl Compiler {
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.fn_type = core::mem::take(&mut sym.h_fn_type);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
+        sym.enumeration = sym.h_enumeration.take();
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -909,6 +911,7 @@ impl Compiler {
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.fn_type == sym.h_fn_type
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
+            && sym.enumeration == sym.h_enumeration
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size
@@ -1020,9 +1023,10 @@ impl Compiler {
     /// block-scope or C89-implicit function declaration): diagnose a
     /// same-scope redeclaration, save the outer binding for the scope's
     /// exit, and mark a function-body binding for the function-exit
-    /// restore. No-op at file scope, where the binding is permanent.
+    /// restore. No-op at file scope outside a parameter list, where the
+    /// binding is permanent.
     pub(super) fn rebind_scoped(&mut self, idx: usize) -> Result<(), C5Error> {
-        if !self.in_function_body() {
+        if !self.in_function_body() && self.param_list_scopes == 0 {
             return Ok(());
         }
         if self.binds_in_current_scope(idx) {
@@ -1055,7 +1059,9 @@ impl Compiler {
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
         self.folded_builtin_lits.clear();
+        self.fallthrough_marks.clear();
         self.expr_fns.clear();
+        self.expr_enums.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
@@ -1098,6 +1104,7 @@ impl Compiler {
         self.next_ent_pc += 1;
         self.rewrite_loop_idioms();
         self.expr_fns.clear();
+        self.expr_enums.clear();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
@@ -1413,6 +1420,7 @@ impl Compiler {
         op_ty: i64,
         nsw: bool,
     ) {
+        self.mark_contractible(op, rhs);
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(
             Expr::CompoundAssign {
@@ -1959,10 +1967,45 @@ impl Compiler {
         } else {
             self.ty
         };
+        self.mark_contractible(op, lhs);
+        self.mark_contractible(op, rhs);
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
+    }
+
+    /// C99 6.5p8, 7.12.2: while `FP_CONTRACT` is on, a product that is an
+    /// operand of an add or subtract `op` may be contracted with it; the
+    /// pass does so where nothing else reads the product and it has the
+    /// add's precision. A GCC vector node keeps its nominal opcode, and
+    /// the lanes of a floating one contract as scalars do.
+    fn mark_contractible(&mut self, op: super::super::ir::BinOp, operand: ExprId) {
+        use super::super::ir::BinOp;
+        use super::types::{is_floating_scalar, is_vector_ty, struct_id_of};
+        if !self.lex.fp_contract {
+            return;
+        }
+        let Expr::Binary {
+            op: product,
+            ty: product_ty,
+            ..
+        } = *self.ast.expr(operand)
+        else {
+            return;
+        };
+        let fp_lanes = is_vector_ty(&self.structs, product_ty)
+            && is_floating_scalar(self.structs[struct_id_of(product_ty)].fields[0].ty);
+        let contracts = match (op, product) {
+            (BinOp::Fadd | BinOp::Fsub, BinOp::Fmul) => true,
+            (BinOp::Add | BinOp::Sub | BinOp::Fadd | BinOp::Fsub, BinOp::Mul | BinOp::Fmul) => {
+                fp_lanes
+            }
+            _ => false,
+        };
+        if contracts && let Expr::Binary { op, .. } = self.ast.expr_mut(operand) {
+            *op = BinOp::FmulContractible;
+        }
     }
 
     /// Helper for the unary arms: wraps the accumulator with the

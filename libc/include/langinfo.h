@@ -4,7 +4,7 @@
 
 #pragma once
 
-typedef int nl_item;
+#include <nl_types.h> // nl_item
 
 #ifdef __APPLE__
 #define CODESET 0
@@ -16,7 +16,9 @@ typedef int nl_item;
 #pragma binding(libc::nl_langinfo, "nl_langinfo")
 #endif
 
+#ifndef _WIN32
 char *nl_langinfo(nl_item item);
+#endif
 
 // nl_langinfo item numbers (POSIX 7.21). Per-target values; CODESET above.
 #ifndef _DATE_FMT
@@ -418,4 +420,24 @@ char *nl_langinfo(nl_item item);
 #if defined(__APPLE__)
 #define YESSTR 54
 #endif
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::nl_langinfo_l, "_nl_langinfo_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::nl_langinfo_l, "nl_langinfo_l")
+#endif
+char *nl_langinfo_l(nl_item item, locale_t locale);
 #endif

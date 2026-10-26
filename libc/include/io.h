@@ -5,8 +5,15 @@
 
 #ifdef _WIN32
 
+#include <stddef.h>
+
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::_open,    "_open")
+#pragma binding(msvcrt::_wopen,   "_wopen")
+#pragma binding(msvcrt::_sopen,   "_sopen")
+#pragma binding(msvcrt::_wsopen,  "_wsopen")
+#pragma binding(msvcrt::_sopen_s, "_sopen_s")
+#pragma binding(msvcrt::_wsopen_s, "_wsopen_s")
 #pragma binding(msvcrt::_close,   "_close")
 #pragma binding(msvcrt::_read,    "_read")
 #pragma binding(msvcrt::_write,   "_write")
@@ -26,8 +33,16 @@
 #pragma binding(msvcrt::mkdir,    "_mkdir")
 #pragma binding(msvcrt::rmdir,    "_rmdir")
 #pragma binding(msvcrt::chdir,    "_chdir")
+#pragma binding(msvcrt::chmod,    "_chmod")
+#pragma binding(msvcrt::mktemp,   "_mktemp")
 
-int       _open(char *path, int oflag, int pmode);
+// The mode is read only with _O_CREAT.
+int       _open(const char *path, int oflag, ...);
+int       _wopen(const wchar_t *path, int oflag, ...);
+int       _sopen(const char *path, int oflag, int shflag, ...);
+int       _wsopen(const wchar_t *path, int oflag, int shflag, ...);
+int       _sopen_s(int *pfh, const char *path, int oflag, int shflag, int pmode);
+int       _wsopen_s(int *pfh, const wchar_t *path, int oflag, int shflag, int pmode);
 int       _close(int fd);
 int       _read(int fd, void *buf, unsigned int count);
 int       _write(int fd, void *buf, unsigned int count);
@@ -44,13 +59,23 @@ int       _commit(int fd);
 // The POSIX spellings, which <unistd.h> reaches through this header.
 int       open(const char *path, int oflag, ...);
 long      lseek(int fd, long offset, int origin);
-// The CRT's directory calls under their POSIX names, as mingw-w64
-// declares them here; its mkdir takes no mode.
+// The CRT's directory and file calls under their POSIX names, as
+// mingw-w64 declares them here; its mkdir takes no mode.
 int       mkdir(const char *path);
 int       rmdir(const char *path);
 int       chdir(const char *path);
+int       chmod(const char *path, int mode);
+char     *mktemp(char *templ);
 
-#define _S_IREAD  0400
-#define _S_IWRITE 0200
+#include <corecrt.h>
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::_access_s, "_access_s")
+errno_t _access_s(const char *_Filename, int _AccessMode);
+#pragma binding(msvcrt::_mktemp_s, "_mktemp_s")
+errno_t _mktemp_s(char *_TemplateName, size_t _Size);
+
+#define _S_IREAD  0x0100
+#define _S_IWRITE 0x0080
 
 #endif

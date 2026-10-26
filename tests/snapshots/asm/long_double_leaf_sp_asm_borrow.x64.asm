@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <narrow>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
                	retq
 
 <widen>:
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	(%rax)
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	callq	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	%xmm0, (%rax)
                	leaq	-0x80(%rbp), %rdx
                	xorl	%eax, %eax
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x128, %rax            # imm = 0x128
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movsd	(%rax), %xmm0
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
@@ -122,7 +122,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x128, %rax            # imm = 0x128
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	fldt	(%rax)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0

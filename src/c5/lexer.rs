@@ -5,7 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::error::C5Error;
-use super::ident;
+use super::ident::{self, Dollar};
 use super::symbol::Symbol;
 use super::token::{Tok, Token, Ty};
 
@@ -52,9 +52,8 @@ enum PackDirective {
 /// [`Lexer::visibility_stack`] by [`Lexer::apply_visibility_directive`].
 #[derive(Debug, Clone, Copy)]
 enum VisibilityDirective {
-    /// `push(<vis>)` -- the payload is whether `<vis>` is non-preemptible
-    /// (`hidden` / `internal`).
-    Push(bool),
+    /// `push(<vis>)`, `None` for `default`.
+    Push(Option<crate::c5::program::SymVisibility>),
     /// `pop` -- drop one frame (no-op at the bottom).
     Pop,
 }
@@ -170,6 +169,14 @@ pub enum StrPrefix {
     Wide,
     Char16,
     Char32,
+}
+
+/// What an initializer list holds after a `,` (C99 6.7.8p1).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum InitEntry {
+    Close,
+    Designator,
+    Value,
 }
 
 impl StrPrefix {
@@ -353,9 +360,21 @@ fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
     let after_open = rest.strip_prefix('(')?;
     let close = after_open.find(')')?;
     let vis = after_open[..close].trim();
-    Some(VisibilityDirective::Push(
-        vis == "hidden" || vis == "internal",
-    ))
+    crate::c5::program::SymVisibility::from_gcc_name(vis).map(VisibilityDirective::Push)
+}
+
+/// `pragma STDC FP_CONTRACT ON|OFF|DEFAULT` (C99 7.12.2) as the state it
+/// sets, `None` for `DEFAULT`; `None` from the outer option for another line.
+fn parse_pragma_fp_contract_line(body: &[u8]) -> Option<Option<bool>> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("STDC")?.trim_start();
+    match rest.strip_prefix("FP_CONTRACT")?.trim() {
+        "ON" => Some(Some(true)),
+        "OFF" => Some(Some(false)),
+        "DEFAULT" => Some(None),
+        _ => None,
+    }
 }
 
 /// Snapshot of the lexer's positional state plus every attribute
@@ -371,6 +390,7 @@ pub(crate) struct LexerSnapshot {
     curr_id_idx: usize,
     int_suffix_long: u8,
     int_suffix_unsigned: bool,
+    int_suffix_width: u8,
     int_is_decimal: bool,
     float_suffix_f32: bool,
     float_suffix_long: bool,
@@ -493,6 +513,12 @@ pub(crate) struct Lexer {
     /// true if any `u`/`U` appeared in the suffix.
     pub int_suffix_long: u8,
     pub int_suffix_unsigned: bool,
+    /// The bit width a Microsoft sized suffix (`i8`, `ui16`, `i32`, `i64`)
+    /// gives the most recent `Token::Num`; 0 without one.
+    pub int_suffix_width: u8,
+    /// Whether the Microsoft sized integer suffixes are taken (the PE
+    /// targets). Set from the target after construction.
+    pub ms_int_suffixes: bool,
     /// `true` when the most recent `Token::Num` was written in decimal.
     /// C99 6.4.4.1 lets a hexadecimal, octal, or binary constant take
     /// an unsigned type when no signed type at its rank fits, while a
@@ -589,7 +615,13 @@ pub(crate) struct Lexer {
     /// Scanned inline like `pack`, and read by the declaration
     /// paths as the default for a declaration that carries no explicit
     /// `visibility` attribute.
-    visibility_stack: Vec<bool>,
+    visibility_stack: Vec<Option<crate::c5::program::SymVisibility>>,
+    /// Whether `#pragma STDC FP_CONTRACT` is on at the current position
+    /// (C99 7.12.2): a product may be contracted with the add or subtract
+    /// of the same expression that uses it. Scanned inline like `pack`.
+    pub(crate) fp_contract: bool,
+    /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
+    pub(crate) fp_contract_default: bool,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -697,10 +729,62 @@ impl Default for SymbolIndex {
     }
 }
 
+/// Respell the C99 6.4.6p3 digraphs `<:` `:>` `<%` `%>` as the
+/// punctuators they behave as, padded with a space so offsets hold.
+/// Literals and comments keep their bytes. `%:` and `%:%:` spell `#` and
+/// `##`, which are not tokens of translation phase 7, and stay.
+fn respell_digraphs(src: &mut [u8]) {
+    let mut i = 0;
+    while i + 1 < src.len() {
+        let swap = match [src[i], src[i + 1]] {
+            [b'<', b':'] => b'[',
+            [b':', b'>'] => b']',
+            [b'<', b'%'] => b'{',
+            [b'%', b'>'] => b'}',
+            // Longer punctuators sharing a first byte (C99 6.4p4).
+            [b'<', b'<' | b'='] | [b'%', b':' | b'='] => {
+                i += 2;
+                continue;
+            }
+            [q @ (b'"' | b'\''), _] => {
+                i += 1;
+                while i < src.len() && src[i] != q && src[i] != b'\n' {
+                    i += if src[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+                continue;
+            }
+            [b'/', b'/'] => {
+                i += src[i..]
+                    .iter()
+                    .position(|&b| b == b'\n')
+                    .unwrap_or(src.len() - i);
+                continue;
+            }
+            [b'/', b'*'] => {
+                i += 2 + src[i + 2..]
+                    .windows(2)
+                    .position(|w| w == b"*/")
+                    .map_or(src.len() - i - 2, |k| k + 2);
+                continue;
+            }
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
+        src[i] = swap;
+        src[i + 1] = b' ';
+        i += 2;
+    }
+}
+
 impl Lexer {
     pub fn new(source: String) -> Self {
+        let mut src = source.into_bytes();
+        respell_digraphs(&mut src);
         Self {
-            src: source.into_bytes(),
+            src,
             line_index: core::cell::OnceCell::new(),
             pos: 0,
             tok_start: 0,
@@ -711,6 +795,8 @@ impl Lexer {
             curr_id_idx: 0,
             int_suffix_long: 0,
             int_suffix_unsigned: false,
+            int_suffix_width: 0,
+            ms_int_suffixes: false,
             int_is_decimal: true,
             float_suffix_f32: false,
             float_suffix_long: false,
@@ -728,16 +814,33 @@ impl Lexer {
             // happen via `apply_pack_directive`.
             pack: DEFAULT_PACK,
             pack_saved: Vec::new(),
-            visibility_stack: vec![false],
+            visibility_stack: vec![None],
+            fp_contract: true,
+            fp_contract_default: true,
         }
     }
 
-    /// Whether the visibility in effect at the current source position is
-    /// non-preemptible, i.e. inside a `#pragma GCC visibility
-    /// push(hidden)` (or `internal`) extent. Default visibility outside
-    /// any such extent.
-    pub fn visibility_hidden(&self) -> bool {
-        *self.visibility_stack.last().unwrap_or(&false)
+    /// C99 6.10.3.2, 6.10.3.3: `#` and `##`, or `%:` and `%:%:`, at
+    /// `tok_start` in program text, where no rule takes them.
+    fn stray_hash(&self) -> C5Error {
+        let rest = &self.src[self.tok_start..];
+        let len = [&b"%:%:"[..], b"##", b"%:", b"#"]
+            .iter()
+            .find(|p| rest.starts_with(p))
+            .map_or(1, |p| p.len());
+        let spelling = String::from_utf8_lossy(&rest[..len]);
+        C5Error::at(
+            Code::INVALID_TOKEN,
+            &self.file,
+            self.line,
+            format!("stray `{spelling}` in program: it operates only in a directive"),
+        )
+    }
+
+    /// The visibility the `#pragma GCC visibility` extent at the current
+    /// source position states (`Some(None)` for default); `None` outside any.
+    pub fn visibility(&self) -> Option<Option<crate::c5::program::SymVisibility>> {
+        (self.visibility_stack.len() > 1).then(|| *self.visibility_stack.last().unwrap())
     }
 
     /// Active `#pragma pack(N)` value at the current source
@@ -1365,9 +1468,9 @@ impl Lexer {
 
     fn apply_visibility_directive(&mut self, dir: VisibilityDirective) {
         match dir {
-            VisibilityDirective::Push(hidden) => self.visibility_stack.push(hidden),
+            VisibilityDirective::Push(vis) => self.visibility_stack.push(vis),
             VisibilityDirective::Pop => {
-                // Keep the bottom frame so `visibility_hidden()` always
+                // Keep the bottom frame so `visibility()` always
                 // has an answer; popping past it is a user error.
                 if self.visibility_stack.len() > 1 {
                     self.visibility_stack.pop();
@@ -1409,7 +1512,28 @@ impl Lexer {
         while p < self.src.len() && self.src[p].is_ascii_whitespace() {
             p += 1;
         }
-        ident::ident_len(&self.src, p) > 0
+        ident::ident_len(&self.src, p, Dollar::Ident) > 0
+    }
+
+    /// Whether the bytes after the current `__attribute__` token spell
+    /// `((fallthrough));` (or `__fallthrough__`): the GNU attribute
+    /// statement, a null statement rather than a declaration.
+    pub fn peek_fallthrough_statement(&self) -> bool {
+        let mut p = self.pos;
+        let mut eat = |want: &[u8]| {
+            while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+                p += 1;
+            }
+            let hit = self.src[p..].starts_with(want);
+            p += if hit { want.len() } else { 0 };
+            hit
+        };
+        eat(b"(")
+            && eat(b"(")
+            && (eat(b"fallthrough") || eat(b"__fallthrough__"))
+            && eat(b")")
+            && eat(b")")
+            && eat(b";")
     }
 
     /// Whether a `?` appears at the current grouping depth before the
@@ -1462,6 +1586,7 @@ impl Lexer {
             curr_id_idx: self.curr_id_idx,
             int_suffix_long: self.int_suffix_long,
             int_suffix_unsigned: self.int_suffix_unsigned,
+            int_suffix_width: self.int_suffix_width,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
             float_suffix_long: self.float_suffix_long,
@@ -1487,6 +1612,7 @@ impl Lexer {
         self.curr_id_idx = s.curr_id_idx;
         self.int_suffix_long = s.int_suffix_long;
         self.int_suffix_unsigned = s.int_suffix_unsigned;
+        self.int_suffix_width = s.int_suffix_width;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
         self.float_suffix_long = s.float_suffix_long;
@@ -1516,6 +1642,48 @@ impl Lexer {
             return true;
         }
         self.src[p] == b'.' && p + 1 < self.src.len() && self.src[p + 1].is_ascii_digit()
+    }
+
+    /// The entry after the current position, which follows a `,` of an
+    /// initializer list: its `}`, a designator (`[`, or `.` and a member
+    /// name), or a value.
+    pub fn peek_initializer_entry(&self) -> InitEntry {
+        let p = self.skip_trivia(self.pos);
+        match self.src.get(p) {
+            Some(b'}') => InitEntry::Close,
+            Some(b'[') => InitEntry::Designator,
+            Some(b'.')
+                if ident::ident_len(&self.src, self.skip_trivia(p + 1), Dollar::Ident) > 0 =>
+            {
+                InitEntry::Designator
+            }
+            _ => InitEntry::Value,
+        }
+    }
+
+    /// The offset of the first byte at or after `p` that is not white
+    /// space, a comment or a `#` line (a line marker or a pragma).
+    fn skip_trivia(&self, mut p: usize) -> usize {
+        let src = &self.src;
+        loop {
+            while p < src.len() && src[p].is_ascii_whitespace() {
+                p += 1;
+            }
+            let rest = &src[p.min(src.len())..];
+            if rest.starts_with(b"/*") {
+                p = rest[2..]
+                    .windows(2)
+                    .position(|w| w == b"*/")
+                    .map_or(src.len(), |k| p + k + 4);
+            } else if rest.starts_with(b"//") || rest.first() == Some(&b'#') {
+                p = rest
+                    .iter()
+                    .position(|&b| b == b'\n')
+                    .map_or(src.len(), |k| p + k);
+            } else {
+                return p;
+            }
+        }
     }
 
     /// Count top-level comma-separated items in a brace list, starting
@@ -1594,9 +1762,15 @@ impl Lexer {
 
     /// Consume the C99 6.4.4.1 integer suffix (`u`/`U` and one or two
     /// `l`/`L` in any combination) and record it in the suffix fields
-    /// the expression parser types the literal from. Shared by every
-    /// integer base so no base drops the suffix.
-    fn lex_int_suffix(&mut self) {
+    /// the expression parser types the literal from, then set `ival` to
+    /// `val`. Shared by every integer base so no base drops the suffix.
+    ///
+    /// Where `ms_int_suffixes` holds, `[u]i8`, `[u]i16`, `[u]i32` and
+    /// `[u]i64` in place of the `l`s fix the width (MSVC's sized
+    /// suffixes, as clang reads them under `-fms-extensions`): the value
+    /// must fit the width's bits and is read at the signedness the `u`
+    /// gives, so `0x80000000i32` is negative.
+    fn lex_int_suffix(&mut self, val: i64) -> Result<(), C5Error> {
         let mut l_count: u8 = 0;
         let mut u_seen = false;
         while self.pos < self.src.len() && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L') {
@@ -1608,6 +1782,33 @@ impl Lexer {
         }
         self.int_suffix_long = l_count.min(2);
         self.int_suffix_unsigned = u_seen;
+        self.ival = val;
+        let Some((width, len)) = self.ms_int_width(self.pos).filter(|_| l_count == 0) else {
+            return Ok(());
+        };
+        let bits = u32::from(width);
+        if bits < 64 && (val as u64) >> bits != 0 {
+            let suffix = String::from_utf8_lossy(&self.src[self.pos..self.pos + len]);
+            return Err(C5Error::at(
+                Code::INVALID_TOKEN,
+                &self.file,
+                self.line,
+                format!("integer constant does not fit the {bits} bits of its `{suffix}` suffix"),
+            ));
+        }
+        self.pos += len;
+        self.int_suffix_width = width;
+        if !u_seen && bits < 64 {
+            self.ival = (val << (64 - bits)) >> (64 - bits);
+        }
+        Ok(())
+    }
+
+    /// [`ms_sized_suffix`] at `at`, where the target takes the suffixes.
+    fn ms_int_width(&self, at: usize) -> Option<(u8, usize)> {
+        self.ms_int_suffixes
+            .then(|| ms_sized_suffix(&self.src[at..]))
+            .flatten()
     }
 
     /// Finalise a numeric constant: a digit/suffix run must not be
@@ -1619,7 +1820,7 @@ impl Lexer {
     fn end_number(&self) -> Result<(), C5Error> {
         if self.pos < self.src.len() {
             let c = self.src[self.pos];
-            let len = ident::char_len(&self.src, self.pos);
+            let len = ident::char_len(&self.src, self.pos, Dollar::Ident);
             if len > 0 && !c.is_ascii_digit() {
                 let shown = String::from_utf8_lossy(&self.src[self.pos..self.pos + len]);
                 return Err(C5Error::at(
@@ -1737,6 +1938,7 @@ impl Lexer {
         // explicitly before returning a `Token::Num`.
         self.int_suffix_long = 0;
         self.int_suffix_unsigned = false;
+        self.int_suffix_width = 0;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
         self.float_suffix_long = false;
@@ -1755,6 +1957,12 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
+                // The preprocessor writes the lines below at column 0 and
+                // indents program text that would start there; any other
+                // `#` is an operator outside a directive.
+                if self.pos > 1 && self.src[self.pos - 2] != b'\n' {
+                    return Err(self.stray_hash());
+                }
                 // Three `#`-line shapes survive into the lexer:
                 //   * GNU line markers `# N "file" [flags]` --
                 //     emitted by the preprocessor at every
@@ -1789,29 +1997,32 @@ impl Lexer {
                     self.apply_pack_directive(dir);
                 } else if let Some(dir) = parse_pragma_visibility_line(body) {
                     self.apply_visibility_directive(dir);
+                } else if let Some(state) = parse_pragma_fp_contract_line(body) {
+                    self.fp_contract = state.unwrap_or(self.fp_contract_default);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic()
                 || c == '_'
+                || c == '$'
                 || ((c == '\\' || c as u32 >= 0x80)
-                    && ident::ident_len(&self.src, self.pos - 1) > 0)
+                    && ident::ident_len(&self.src, self.pos - 1, Dollar::Ident) > 0)
             {
                 let start = self.pos - 1;
                 let mut hash: i64 = c as i64;
                 // A universal character name or a UTF-8 character sends the
                 // spelling through the 6.4.2.1p3 check and the name key.
-                let mut extended = !(c.is_ascii_alphabetic() || c == '_');
+                let mut extended = !(c.is_ascii_alphabetic() || c == '_' || c == '$');
                 if extended {
-                    self.pos = start + ident::char_len(&self.src, start);
+                    self.pos = start + ident::char_len(&self.src, start, Dollar::Ident);
                 }
                 while self.pos < self.src.len() {
                     let nc = self.src[self.pos];
-                    if nc.is_ascii_alphanumeric() || nc == b'_' {
+                    if nc.is_ascii_alphanumeric() || nc == b'_' || nc == b'$' {
                         hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                         self.pos += 1;
                         continue;
                     }
-                    match ident::char_len(&self.src, self.pos) {
+                    match ident::char_len(&self.src, self.pos, Dollar::Ident) {
                         0 => break,
                         len => {
                             extended = true;
@@ -1883,8 +2094,7 @@ impl Lexer {
                         val = val.wrapping_mul(8).wrapping_add(digit);
                         self.pos += 1;
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -1922,8 +2132,7 @@ impl Lexer {
                             ),
                         ));
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -1987,8 +2196,7 @@ impl Lexer {
                             "hex literal `0x` has no digits",
                         ));
                     }
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     self.int_is_decimal = false;
                     return self.end_number();
@@ -2017,10 +2225,10 @@ impl Lexer {
                 // no float-suffix `f`/`F` can follow because the
                 // standard doesn't allow it on integer literals.
                 if self.pos < self.src.len()
-                    && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    && (matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                        || self.ms_int_width(self.pos).is_some())
                 {
-                    self.lex_int_suffix();
-                    self.ival = val;
+                    self.lex_int_suffix(val)?;
                     self.tk = Tok(Token::Num as i64);
                     return self.end_number();
                 }
@@ -2270,6 +2478,9 @@ impl Lexer {
                         }
                     }
                     '%' => {
+                        if next_char == ':' {
+                            return Err(self.stray_hash());
+                        }
                         if next_char == '=' {
                             self.pos += 1;
                             self.tk = Tok(Token::AssignOp as i64);
@@ -2456,6 +2667,46 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
     index.record(hash);
 }
 
+/// The Microsoft keywords the PE targets take, as clang does for a
+/// windows-msvc triple: `__ptr32` makes the pointer it follows 32 bits
+/// wide; `__ptr64` (a pointer is 64 bits there already), `__w64` (a
+/// portability marker), `__sptr` / `__uptr` (how a 32-bit pointer extends)
+/// and `__unaligned` (an access that may be misaligned, which both PE
+/// targets' loads and stores allow) qualify without effect; and
+/// `__builtin_alignof` is `_Alignof`.
+/// TODO: `_Alignof` of an `__unaligned` type, which clang reports as 1.
+pub(crate) fn init_ms_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
+    for name in [
+        "__ptr32",
+        "__ptr64",
+        "__w64",
+        "__sptr",
+        "__uptr",
+        "__unaligned",
+    ] {
+        add_keyword(symbols, index, name, Token::TypeQual as i64);
+    }
+    add_keyword(symbols, index, "__builtin_alignof", Token::Alignof as i64);
+}
+
+/// C23 6.4.1's `bool`, `true` and `false`: `bool` spells `_Bool`, and the
+/// other two are its constants 1 and 0 (C23 6.4.4.6), bound as named
+/// constants the way an enumeration constant is.
+pub(crate) fn init_c23_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
+    add_keyword(symbols, index, "bool", Token::IntMod as i64);
+    for (name, val) in [("true", 1), ("false", 0)] {
+        symbols.push(Symbol {
+            name: name.to_string(),
+            token: Token::Id as i64,
+            class: Token::Num as i64,
+            type_: Ty::Bool as i64,
+            val,
+            ..Default::default()
+        });
+        index.record(hash_name(name.as_bytes()));
+    }
+}
+
 /// Reserved words that map to a non-`Id` token. Library function
 /// names used to be listed here so the lexer's pre-seeded set could
 /// upgrade them to `Token::Sys` later; the
@@ -2610,6 +2861,23 @@ const KEYWORDS: &[(&str, Token)] = &[
 /// future tooling that wants to enumerate the badc prelude.
 ///
 /// Constants like `PROT_READ` used to live here too, but they were
+/// The width and length of the Microsoft sized integer suffix (`i8`,
+/// `I16`, `i32`, `i64`) opening `bytes`.
+pub(crate) fn ms_sized_suffix(bytes: &[u8]) -> Option<(u8, usize)> {
+    if !matches!(bytes.first(), Some(b'i' | b'I')) {
+        return None;
+    }
+    let digits = bytes[1..].iter().take_while(|b| b.is_ascii_digit()).count();
+    let width = match &bytes[1..1 + digits] {
+        b"8" => 8,
+        b"16" => 16,
+        b"32" => 32,
+        b"64" => 64,
+        _ => return None,
+    };
+    Some((width, 1 + digits))
+}
+
 /// moved into `headers/badc-{target}.h` and now reach the compiler
 /// through the preprocessor's `#define` table instead. The
 /// `Constant` variant is retained because it's part of the public
@@ -2823,6 +3091,19 @@ mod tests {
         lex.ival
     }
 
+    // C99 6.4p4: each digraph is the longest punctuator at its offset, and
+    // literals and comments hold the bytes as they are.
+    #[test]
+    fn digraphs_respell_as_the_punctuators_they_behave_as() {
+        let lex = Lexer::new(
+            "a<:1:> <%x%> %:>  <<: <=% %=> \"<:\" '%>' /* <% */ // :>\n<::>".to_string(),
+        );
+        assert_eq!(
+            core::str::from_utf8(&lex.src).unwrap(),
+            "a[ 1]  { x}  %:>  <<: <=% %=> \"<:\" '%>' /* <% */ // :>\n[ ] "
+        );
+    }
+
     /// Drive the lexer over `src` until EOF or the first error.
     fn lex_all(src: &str) -> Result<(), C5Error> {
         let mut lex = Lexer::new(src.to_string());
@@ -2837,13 +3118,24 @@ mod tests {
         }
     }
 
+    // The preprocessor's own `#` lines open their line; a `#` anywhere
+    // else is program text.
+    #[test]
+    fn a_hash_line_opens_its_line() {
+        lex_all("#pragma pack(1)\nint x;\n# 7 \"f.c\"\nint y;\n").expect("column 0");
+        for src in ["int x; #pragma pack(1)\n", "  # 7 \"f.c\"\n"] {
+            let err = lex_all(src).expect_err(src);
+            assert!(format!("{err}").contains("stray `#`"), "{src}: {err}");
+        }
+    }
+
     #[test]
     fn unrecognized_bytes_are_lex_errors() {
         // A byte that cannot start a preprocessing token (C99 6.4) must
-        // be diagnosed, not dropped -- `*$p` re-synchronizing as `*p`
+        // be diagnosed, not dropped -- `*@p` re-synchronizing as `*p`
         // compiles a different program.
         for (src, shown) in [
-            ("int b = *$p;", "`$`"),
+            ("int b = *@p;", "`@`"),
             ("int a = `3`;", "``"),
             ("int a @ b;", "`@`"),
             ("int caf\u{d7};", "`\u{d7}` (U+00D7)"),

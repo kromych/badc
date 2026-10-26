@@ -108,7 +108,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	addq	$-0x18, %rcx
                	movq	(%rcx), %rcx
-               	leaq	-<rip>, %rdx      # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
                	cmpq	$0x4, %rcx
                	sete	%cl
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	addq	$-0x18, %rcx
                	movq	0x8(%rcx), %rcx
-               	leaq	-<rip>, %rdx      # <addr>
+               	leaq	-<rip>, %rdx # <addr>
                	subq	%rdx, %rcx
                	cmpq	$0x8, %rcx
                	sete	%cl
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x18, %rax
                	movq	0x10(%rax), %rax
-               	leaq	-<rip>, %rcx      # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	subq	%rcx, %rax
                	cmpq	$-0x2, %rax
                	sete	%al

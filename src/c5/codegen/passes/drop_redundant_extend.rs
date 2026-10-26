@@ -337,6 +337,16 @@ fn compute_high_observed_through(
                     observe(&mut hi, &mut work, *desired);
                 }
             }
+            Inst::AtomicCas16 {
+                addr,
+                expected,
+                desired,
+                ..
+            } => {
+                for a in [addr, expected, desired] {
+                    observe(&mut hi, &mut work, *a);
+                }
+            }
             Inst::Phi { .. } => {}
         }
     }
@@ -1096,6 +1106,7 @@ mod tests {
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

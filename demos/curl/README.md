@@ -15,9 +15,9 @@ backend. The other protocols (FTP, SMTP, LDAP, ...) are compiled out via the
 
 ## Layout
 
-`setup.py` fetches the pinned tarball (vendor-deps mirror, falling back to
-`curl.se`) and drops curl's `lib/` tree in `src/` and the public headers in
-`include/curl/`. Committed alongside:
+`setup.py` fetches the pinned tarball from the vendor-deps mirror and drops
+curl's `lib/` tree in `src/` and the public headers in `include/curl/`.
+Committed alongside:
 
 * `curl_config.h` -- the hand-written build configuration (curl normally
   generates this from configure/CMake). Describes exactly the POSIX surface

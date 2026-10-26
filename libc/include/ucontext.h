@@ -13,7 +13,15 @@
 #pragma binding(libc::swapcontext, "swapcontext")
 #endif
 
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(__APPLE__) && defined(_XOPEN_SOURCE)
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::getcontext,  "_getcontext")
+#pragma binding(libc::setcontext,  "_setcontext")
+#pragma binding(libc::makecontext, "_makecontext")
+#pragma binding(libc::swapcontext, "_swapcontext")
+#endif
+
+#if (defined(__APPLE__) && defined(_XOPEN_SOURCE)) || defined(__linux__)
 int  getcontext(ucontext_t *ucp);
 int  setcontext(const ucontext_t *ucp);
 void makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...);

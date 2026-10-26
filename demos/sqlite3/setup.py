@@ -29,11 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
 import _fetch  # noqa: E402
 
-VERSION = "3530000"  # 3.53.0 (April 2026)
-UPSTREAM_SHA = "4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b"  # SQLite Fossil release hash for 3.53.0
+VERSION = "3540100"  # 3.54.1 (October 2026)
+UPSTREAM_SHA = "555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"  # SQLite Fossil release hash for 3.54.1
 ASSET = f"sqlite-amalgamation-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
-SHA256 = "bf3733d7c71b3ab0f6fd8a9ea0052ad87fa037d94333e14ce09878ba3492c3b0"
+SHA256 = "0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9"
 WANTED = ("sqlite3.c", "sqlite3.h", "sqlite3ext.h", "shell.c")
 
 

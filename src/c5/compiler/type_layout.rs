@@ -249,6 +249,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum: false,
@@ -271,7 +272,8 @@ impl Compiler {
     ///     (System V AMD64 ABI 3.5.7) as an array of one element.
     ///   * AAPCS64 (Linux aarch64): the `__va_list` record (AAPCS64
     ///     Appendix B) as an array of one element.
-    ///   * Every other target: a single `void *` cursor.
+    ///   * Every other target: a `char *` cursor, the type Microsoft's
+    ///     x64 and ARM64 conventions and Apple's arm64 ABI give it.
     ///
     /// The record is registered once, on first use; the one-element
     /// array dimension rides `pending.typedef_base_array_size`, the
@@ -299,7 +301,7 @@ impl Compiler {
                 ],
                 32,
             ),
-            _ => return ptr,
+            _ => return super::types::plain_char_ty(self.lex.char_signed) + Ty::Ptr as i64,
         };
         self.pending.set_base_array(1, Vec::new(), false);
         if let Some(id) = self
@@ -347,6 +349,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum: false,
@@ -533,6 +536,7 @@ impl Compiler {
             is_array: false,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum: false,
@@ -621,6 +625,7 @@ impl Compiler {
             is_array: true,
             is_anonymous: false,
             is_transparent_union: false,
+            designated_init: false,
             cast_named: false,
             vla_size_slot: None,
             is_enum: false,
@@ -676,6 +681,14 @@ impl Compiler {
         def.vla_size_slot = Some(size_slot);
         self.structs.push(def);
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The byte-count slot of `ty` when it is a variable-length array type.
+    pub(super) fn vla_value_slot(&self, ty: i64) -> Option<i64> {
+        let id = struct_id_of(ty);
+        is_struct_value_ty(ty)
+            .then(|| self.structs.get(id)?.vla_size_slot)
+            .flatten()
     }
 
     /// The byte-count slot of the variable-length array `ty` points to.
@@ -794,7 +807,16 @@ impl Compiler {
     /// Pointers to such a tag are complete types and are excluded.
     pub(super) fn incomplete_aggregate_tag(&self, ty: i64) -> Option<usize> {
         let sid = struct_id_of(ty);
-        (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
+        (is_struct_value_ty(ty) && !self.structs[sid].is_complete && !self.is_ms_forward_enum(sid))
+            .then_some(sid)
+    }
+
+    /// Whether the tag entry `id` is an enum named before its definition
+    /// on a target taking the Microsoft extensions, where MSVC and clang
+    /// complete it as an `int` (the entry carries `int`'s layout).
+    pub(super) fn is_ms_forward_enum(&self, id: usize) -> bool {
+        let s = &self.structs[id];
+        self.target.ms_extensions() && s.is_enum && s.enum_underlying.is_none()
     }
 
     /// Whether the aggregate tag `ty` names, at any pointer depth, is
@@ -804,6 +826,7 @@ impl Compiler {
         let s = &self.structs[struct_id_of(ty)];
         match s.fields.first().filter(|_| s.is_array) {
             _ if s.vla_size_slot.is_some() => false,
+            None if self.is_ms_forward_enum(struct_id_of(ty)) => false,
             Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
             Some(f) => f.array_size < 0,
             None => !s.is_complete,
@@ -899,6 +922,9 @@ impl Compiler {
         if is_long_double_scalar(ty) {
             return self.target.long_double().size();
         }
+        if super::types::is_ptr32_ty(ty) {
+            return 4;
+        }
         // Unsigned bit is orthogonal to width: `unsigned char` is
         // still 1 byte, `unsigned int` is still 4 bytes. Strip it
         // before consulting the band identity.
@@ -945,6 +971,9 @@ impl Compiler {
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
         if is_long_double_scalar(ty) {
             return self.target.long_double().align();
+        }
+        if super::types::is_ptr32_ty(ty) {
+            return 4;
         }
         let ty = strip_unsigned(ty);
         if ty == Ty::Float as i64 {
@@ -1605,18 +1634,26 @@ impl TagScopes {
         self.scopes.push(Vec::new());
     }
 
-    pub(super) fn pop(&mut self) {
+    /// Close the innermost scope; its bindings, in binding order.
+    pub(super) fn pop(&mut self) -> Vec<(alloc::string::String, usize)> {
         let depth = self.scopes.len() as u32 - 1;
-        for name in self.scopes.pop().unwrap_or_default() {
-            if let Some(ids) = self.by_name.get_mut(&name) {
-                while ids.last().is_some_and(|&(d, _)| d == depth) {
-                    ids.pop();
-                }
+        let mut bound = Vec::new();
+        for name in self.scopes.pop().unwrap_or_default().into_iter().rev() {
+            let Some(ids) = self.by_name.get_mut(&name) else {
+                continue;
+            };
+            if let Some(&(d, id)) = ids.last()
+                && d == depth
+            {
+                ids.pop();
                 if ids.is_empty() {
                     self.by_name.remove(&name);
                 }
+                bound.push((name, id));
             }
         }
+        bound.reverse();
+        bound
     }
 
     pub(super) fn bind(&mut self, name: &str, id: usize) {

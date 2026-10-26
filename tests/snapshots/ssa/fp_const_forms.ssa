@@ -32,7 +32,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(4616189618054758400)                         -> x0
-    v9   Binop { op=fmul, lhs=v1, rhs=v8 }                -> d3
+    v9   Binop { op=fmul.c, lhs=v1, rhs=v8 }              -> d3
     v10  Imm(0)                                           -> x1 [f32]
     v11  FpCast { kind=F32ToF64, value=v5 }               -> d1
     v12  Fma { a=v1, b=v8, c=v11, neg_product=false, neg_addend=false } -> d0
@@ -169,7 +169,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
   block 1  start_pc=0
     v14  Imm(0)                                           -> x0
     v15  Imm(4602678819172646912)                         -> x12
-    v16  Binop { op=fmul, lhs=v7, rhs=v15 }               -> d0
+    v16  Binop { op=fmul.c, lhs=v7, rhs=v15 }             -> d0
     v17  Imm(4598175219545276416)                         -> x0
     v18  Call { target_pc=0, args=[v17], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v19  Fma { a=v7, b=v15, c=v18, neg_product=false, neg_addend=false } -> [spill 0]
@@ -320,7 +320,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
   block 13  start_pc=0
     v89  Imm(0)                                           -> x0
     v90  Imm(4629418941960159232)                         -> x0
-    v91  Binop { op=fmul, lhs=v2, rhs=v90 }               -> d0
+    v91  Binop { op=fmul.c, lhs=v2, rhs=v90 }             -> d0
     v92  Imm(4593671619917905920)                         -> x1
     v93  Fma { a=v2, b=v90, c=v92, neg_product=false, neg_addend=true } -> d0
     v94  Imm(4629383757588070400)                         -> x0
@@ -359,7 +359,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
   block 18  start_pc=0
     v118 Imm(0)                                           -> x0 [f32]
     v119 Imm(1040187392)                                  -> x0 [f32]
-    v120 Binop { op=fmul, lhs=v5, rhs=v119 }              -> d0 [f32]
+    v120 Binop { op=fmul.c, lhs=v5, rhs=v119 }            -> d0 [f32]
     v121 Imm(1065353216)                                  -> x1 [f32]
     v122 Fma { a=v5, b=v119, c=v121, neg_product=false, neg_addend=false } -> d0 [f32]
     v123 Imm(1066401792)                                  -> x0 [f32]
@@ -609,10 +609,10 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
   block 51  start_pc=0
     v302 Imm(0)                                           -> x0
     v303 Imm(4602678819172646912)                         -> x0
-    v304 Binop { op=fmul, lhs=v2, rhs=v303 }              -> d0
+    v304 Binop { op=fmul.c, lhs=v2, rhs=v303 }            -> d0
     v305 Imm(4598175219545276416)                         -> x1
     v306 Fma { a=v2, b=v303, c=v305, neg_product=false, neg_addend=false } -> d0
-    v307 Binop { op=fmul, lhs=v306, rhs=v2 }              -> d1
+    v307 Binop { op=fmul.c, lhs=v306, rhs=v2 }            -> d1
     v308 Imm(4593671619917905920)                         -> x0
     v309 Fma { a=v306, b=v2, c=v308, neg_product=false, neg_addend=false } -> d0
     v310 Binop { op=fmul, lhs=v309, rhs=v2 }              -> d0

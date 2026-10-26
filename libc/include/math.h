@@ -156,6 +156,9 @@
 #pragma binding(libc::hypotl, "_hypot")
 #pragma binding(libc::fminl, "_fmin")
 #pragma binding(libc::fmaxl, "_fmax")
+#pragma binding(libc::nan, "_nan")
+#pragma binding(libc::nanf, "_nanf")
+#pragma binding(libc::nanl, "_nan")
 #pragma binding(libc::nextafterl, "_nextafter")
 #pragma binding(libc::remainderl, "_remainder")
 #pragma binding(libc::ldexpl, "_ldexp")
@@ -166,6 +169,18 @@
 #pragma binding(libc::llroundl, "_llround")
 #pragma binding(libc::lrintl, "_lrint")
 #pragma binding(libc::llrintl, "_llrint")
+#pragma binding(libc::logb, "_logb")
+#pragma binding(libc::logbf, "_logbf")
+#pragma binding(libc::logbl, "_logb")
+#pragma binding(libc::lgamma, "_lgamma")
+#pragma binding(libc::lgammaf, "_lgammaf")
+#pragma binding(libc::lgammal, "_lgamma")
+#pragma binding(libc::remquo, "_remquo")
+#pragma binding(libc::remquof, "_remquof")
+#pragma binding(libc::remquol, "_remquo")
+#pragma binding(libc::nexttoward, "_nexttoward")
+#pragma binding(libc::nexttowardf, "_nexttowardf")
+#pragma binding(libc::nexttowardl, "_nexttoward")
 #endif
 
 #ifdef __linux__
@@ -308,6 +323,9 @@
 #pragma binding(libm::hypotl, "hypotl")
 #pragma binding(libm::fminl, "fminl")
 #pragma binding(libm::fmaxl, "fmaxl")
+#pragma binding(libm::nan, "nan")
+#pragma binding(libm::nanf, "nanf")
+#pragma binding(libm::nanl, "nanl")
 #pragma binding(libm::nextafterl, "nextafterl")
 #pragma binding(libm::remainderl, "remainderl")
 #pragma binding(libm::ldexpl, "ldexpl")
@@ -323,6 +341,18 @@
 #pragma binding(libm::copysignl, "copysignl")
 #pragma binding(libm::fdiml, "fdiml")
 #pragma binding(libm::fmal, "fmal")
+#pragma binding(libm::logb, "logb")
+#pragma binding(libm::logbf, "logbf")
+#pragma binding(libm::logbl, "logbl")
+#pragma binding(libm::lgamma, "lgamma")
+#pragma binding(libm::lgammaf, "lgammaf")
+#pragma binding(libm::lgammal, "lgammal")
+#pragma binding(libm::remquo, "remquo")
+#pragma binding(libm::remquof, "remquof")
+#pragma binding(libm::remquol, "remquol")
+#pragma binding(libm::nexttoward, "nexttoward")
+#pragma binding(libm::nexttowardf, "nexttowardf")
+#pragma binding(libm::nexttowardl, "nexttowardl")
 #endif
 
 #ifdef _WIN32
@@ -495,6 +525,9 @@
 #pragma binding(msvcrt::hypotl, "_hypot")
 #pragma binding(ucrtbase::fminl, "fmin")
 #pragma binding(ucrtbase::fmaxl, "fmax")
+#pragma binding(ucrtbase::nan, "nan")
+#pragma binding(ucrtbase::nanf, "nanf")
+#pragma binding(ucrtbase::nanl, "nan")
 #pragma binding(msvcrt::nextafterl, "_nextafter")
 #pragma binding(ucrtbase::remainderl, "remainder")
 #pragma binding(msvcrt::ldexpl, "ldexp")
@@ -505,6 +538,20 @@
 #pragma binding(ucrtbase::llroundl, "llround")
 #pragma binding(ucrtbase::lrintl, "lrint")
 #pragma binding(ucrtbase::llrintl, "llrint")
+// msvcrt.dll exports none of the C99 logb, lgamma, remquo and nexttoward
+// names; ucrtbase.dll exports each.
+#pragma binding(ucrtbase::logb, "logb")
+#pragma binding(ucrtbase::logbf, "logbf")
+#pragma binding(ucrtbase::logbl, "logb")
+#pragma binding(ucrtbase::lgamma, "lgamma")
+#pragma binding(ucrtbase::lgammaf, "lgammaf")
+#pragma binding(ucrtbase::lgammal, "lgamma")
+#pragma binding(ucrtbase::remquo, "remquo")
+#pragma binding(ucrtbase::remquof, "remquof")
+#pragma binding(ucrtbase::remquol, "remquo")
+#pragma binding(ucrtbase::nexttoward, "nexttoward")
+#pragma binding(ucrtbase::nexttowardf, "nexttowardf")
+#pragma binding(ucrtbase::nexttowardl, "nexttoward")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -547,10 +594,28 @@
 #define FP_NORMAL 4
 #endif
 
-// C99 7.12.3.1 / 7.12.3.6 / 7.12.11.1: classify, test the sign, and
-// copy the sign by inspecting the IEEE-754 binary64 fields directly,
-// so they need no math-library call. copysignf reuses the double form;
-// a float magnitude widens to double exactly.
+// C99 7.12.3: the classification macros take any real floating type and
+// classify the value in its own type. Each dispatches on the argument's
+// size, as the macOS SDK does, to a form that inspects the IEEE-754
+// binary32 or binary64 fields directly, so none needs a library call. The
+// functions keep the macros' names so `(isnan)(x)` and `&isnan` still name
+// a callable, as the double form.
+static inline int __badc_fpclassifyf(float x) {
+    union {
+        float f;
+        unsigned int u;
+    } a;
+    a.f = x;
+    unsigned int exp = (a.u >> 23) & 0xff;
+    unsigned int man = a.u & 0x7fffff;
+    if (exp == 0) {
+        return man == 0 ? FP_ZERO : FP_SUBNORMAL;
+    }
+    if (exp == 0xff) {
+        return man == 0 ? FP_INFINITE : FP_NAN;
+    }
+    return FP_NORMAL;
+}
 static inline int fpclassify(double x) {
     union {
         double d;
@@ -567,17 +632,18 @@ static inline int fpclassify(double x) {
     }
     return FP_NORMAL;
 }
-// C99 7.12.3.4 / 7.12.3.3 / 7.12.3.2. Defined in terms of fpclassify so
-// they need no math-library call. A float argument widens to double
-// exactly, so the double form covers both.
-static inline int isnan(double x) {
-    return fpclassify(x) == FP_NAN;
+// TODO: classify in the long double format once long double values are
+// held in it; until then a long double value is a binary64 one.
+static inline int __badc_fpclassifyl(long double x) {
+    return fpclassify((double)x);
 }
-static inline int isinf(double x) {
-    return fpclassify(x) == FP_INFINITE;
-}
-static inline int isfinite(double x) {
-    return fpclassify(x) >= FP_ZERO;
+static inline int __badc_signbitf(float x) {
+    union {
+        float f;
+        unsigned int u;
+    } a;
+    a.f = x;
+    return (int)(a.u >> 31);
 }
 static inline int signbit(double x) {
     union {
@@ -587,6 +653,31 @@ static inline int signbit(double x) {
     a.d = x;
     return (int)(a.u >> 63);
 }
+static inline int __badc_signbitl(long double x) {
+    return signbit((double)x);
+}
+static inline int isnan(double x) {
+    return fpclassify(x) == FP_NAN;
+}
+static inline int isinf(double x) {
+    return fpclassify(x) == FP_INFINITE;
+}
+static inline int isfinite(double x) {
+    return fpclassify(x) >= FP_ZERO;
+}
+static inline int isnormal(double x) {
+    return fpclassify(x) == FP_NORMAL;
+}
+#define fpclassify(x) \
+    (sizeof(x) == sizeof(float) ? __badc_fpclassifyf(x) \
+     : sizeof(x) == sizeof(double) ? fpclassify(x) : __badc_fpclassifyl(x))
+#define isnan(x) (fpclassify(x) == FP_NAN)
+#define isinf(x) (fpclassify(x) == FP_INFINITE)
+#define isfinite(x) (fpclassify(x) >= FP_ZERO)
+#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+#define signbit(x) \
+    (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \
+     : sizeof(x) == sizeof(double) ? signbit(x) : __badc_signbitl(x))
 // C99 7.12.14 relational macros. The standard forms avoid the "invalid"
 // FP exception on a NaN operand; the emitted code does not raise that
 // exception, so the plain relational operators yield the same result
@@ -597,6 +688,8 @@ static inline int signbit(double x) {
 #define islessequal(x, y) ((x) <= (y))
 #define islessgreater(x, y) ((x) < (y) || (x) > (y))
 #define isunordered(x, y) (isnan(x) || isnan(y))
+// C99 7.12.11.1: copysign copies the sign bit; copysignf reuses the double
+// form, a float magnitude widening to double exactly.
 static inline double copysign(double x, double y) {
     union {
         double d;
@@ -812,6 +905,10 @@ long double atan2l(long double x, long double y);
 long double hypotl(long double x, long double y);
 long double fminl(long double x, long double y);
 long double fmaxl(long double x, long double y);
+// C99 7.12.11.2: the quiet NaN whose payload `tagp` spells.
+double nan(const char *tagp);
+float nanf(const char *tagp);
+long double nanl(const char *tagp);
 long double nextafterl(long double x, long double y);
 long double remainderl(long double x, long double y);
 long double ldexpl(long double x, int exp);
@@ -822,6 +919,19 @@ long lroundl(long double x);
 long long llroundl(long double x);
 long lrintl(long double x);
 long long llrintl(long double x);
+// C99 7.12.6.11 logb, 7.12.8.3 lgamma, 7.12.10.3 remquo, 7.12.11.4 nexttoward.
+double logb(double x);
+float logbf(float x);
+long double logbl(long double x);
+double lgamma(double x);
+float lgammaf(float x);
+long double lgammal(long double x);
+double remquo(double x, double y, int *quo);
+float remquof(float x, float y, int *quo);
+long double remquol(long double x, long double y, int *quo);
+double nexttoward(double x, long double y);
+float nexttowardf(float x, long double y);
+long double nexttowardl(long double x, long double y);
 #ifdef __linux__
 long double scalbnl(long double x, int n);
 long double scalblnl(long double x, long n);
@@ -868,3 +978,31 @@ static inline long double fmal(long double x, long double y, long double z) {
 #pragma intrinsic("ceilf")
 #pragma intrinsic("trunc")
 #pragma intrinsic("truncf")
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::j0, "_j0")
+#pragma binding(libc::j1, "_j1")
+#pragma binding(libc::jn, "_jn")
+#pragma binding(libc::y0, "_y0")
+#pragma binding(libc::y1, "_y1")
+#pragma binding(libc::yn, "_yn")
+#endif
+#ifdef __linux__
+#pragma dylib(libm, "libm.so.6")
+#pragma binding(libm::j0, "j0")
+#pragma binding(libm::j1, "j1")
+#pragma binding(libm::jn, "jn")
+#pragma binding(libm::y0, "y0")
+#pragma binding(libm::y1, "y1")
+#pragma binding(libm::yn, "yn")
+#endif
+// XSI Bessel functions of the first (j) and second (y) kind.
+double j0(double x);
+double j1(double x);
+double jn(int n, double x);
+double y0(double x);
+double y1(double x);
+double yn(int n, double x);
+#endif

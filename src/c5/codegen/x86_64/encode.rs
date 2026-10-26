@@ -741,6 +741,18 @@ pub(crate) fn emit_lock_cmpxchg_mem_r(
     emit_modrm_mem(code, reg, base, disp);
 }
 
+/// `LOCK CMPXCHG16B [base + disp]` -- compare rdx:rax with the 16-byte
+/// memory operand and on a match store rcx:rbx there, else load it into
+/// rdx:rax; ZF reports the match (Intel SDM Vol.2). Encoding: `F0 REX.W 0F
+/// C7 /1`. The operand must be 16-byte aligned.
+pub(crate) fn emit_lock_cmpxchg16b_mem(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    emit_byte(code, 0xF0);
+    emit_byte(code, rex(true, false, false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xC7);
+    emit_modrm_mem(code, Reg(1), base, disp);
+}
+
 /// `LOCK AND` / `OR` / `XOR [base + disp], reg` -- combine the memory
 /// operand with `reg` atomically, keeping no prior contents (Intel SDM
 /// Vol.2, the r/m, r forms with the `F0` LOCK prefix). Encoding: `F0 [66]

@@ -1173,7 +1173,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jbe	<addr>
-               	movq	<rip>, %rax      # <addr>
+               	movq	<rip>, %rax # <addr>
                	fldt	-0x70(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0

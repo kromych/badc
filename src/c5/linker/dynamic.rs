@@ -41,6 +41,12 @@ pub const DT_SYMENT: u64 = 11;
 pub const DT_SONAME: u64 = 14;
 pub const DT_SYMBOLIC: u64 = 16;
 pub const DT_DEBUG: u64 = 21;
+pub const DT_PLTRELSZ: u64 = 2;
+pub const DT_PLTGOT: u64 = 3;
+pub const DT_PLTREL: u64 = 20;
+pub const DT_JMPREL: u64 = 23;
+pub const DT_INIT: u64 = 12;
+pub const DT_FINI: u64 = 13;
 pub const DT_INIT_ARRAY: u64 = 25;
 pub const DT_FINI_ARRAY: u64 = 26;
 pub const DT_INIT_ARRAYSZ: u64 = 27;
@@ -274,6 +280,8 @@ pub struct DynTables {
     pub verdef_count: u16,
     /// `sh_info` for `.dynsym`: one past the last local entry.
     pub first_global: u32,
+    /// Each named entry's `.dynsym` index.
+    index: alloc::collections::BTreeMap<String, u32>,
 }
 
 impl DynTables {
@@ -282,6 +290,10 @@ impl DynTables {
     }
     pub fn str_offset(&self, name: &str) -> u32 {
         self.strtab.offset_of(name)
+    }
+    /// `.dynsym` index of the entry named `name`.
+    pub fn index_of(&self, name: &str) -> Option<u32> {
+        self.index.get(name).copied()
     }
 }
 
@@ -297,9 +309,11 @@ pub fn build_tables(
 ) -> DynTables {
     // Symbols a loader can find go in bucket order after the ones it
     // cannot (the null entry and any undefined). bfd records the first
-    // hashed index as `symndx` and hashes nothing below it.
+    // hashed index as `symndx` and hashes nothing below it. An undefined
+    // symbol with a value, the PLT entry an executable gives a function
+    // as its address, is one the loader finds.
     let (imports, defined): (Vec<usize>, Vec<usize>) =
-        (0..exports.len()).partition(|&i| exports[i].shndx == 0);
+        (0..exports.len()).partition(|&i| exports[i].shndx == 0 && exports[i].value == 0);
     let nbuckets = bucket_count(defined.len());
     let mut hashed: Vec<(usize, u32)> = defined
         .iter()
@@ -383,6 +397,10 @@ pub fn build_tables(
         // Only the null entry is local; bfd emits every dynamic symbol
         // it keeps as global or weak.
         first_global: 1,
+        index: (symbols.iter().enumerate().skip(1))
+            .rev()
+            .map(|(i, s)| (s.name.clone(), i as u32))
+            .collect(),
     }
 }
 
@@ -490,6 +508,9 @@ pub struct DynAddrs {
     pub strsz: u64,
     pub symtab: Option<u64>,
     pub rela: Option<(u64, u64)>,
+    /// `.got.plt` and `(address, size)` of the PLT's relocations, where
+    /// the image has a PLT.
+    pub plt: Option<(u64, (u64, u64))>,
     /// The dynamic relocation table carries explicit addends
     /// (`DT_RELA`); i386 uses `DT_REL`.
     pub use_rela: bool,
@@ -513,6 +534,9 @@ pub struct DynAddrs {
     /// `DT_FLAGS` and `DT_FLAGS_1` bits the `-z` keywords record.
     pub flags: u64,
     pub flags_1: u64,
+    /// Addresses of the `-init` and `-fini` functions.
+    pub init: Option<u64>,
+    pub fini: Option<u64>,
     /// `(address, size)` of `.preinit_array`, `.init_array` and
     /// `.fini_array`, so a loader runs what they hold.
     pub preinit_array: Option<(u64, u64)>,
@@ -530,12 +554,29 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     if let Some(off) = a.soname {
         tags.push((DT_SONAME, off as u64));
     }
-    if let Some((off, runpath)) = a.rpath {
-        tags.push((if runpath { DT_RUNPATH } else { DT_RPATH }, off as u64));
-    }
     if a.symbolic {
         tags.push((DT_SYMBOLIC, 0));
         flags |= DF_SYMBOLIC;
+    }
+    if let Some((off, runpath)) = a.rpath {
+        tags.push((if runpath { DT_RUNPATH } else { DT_RPATH }, off as u64));
+    }
+    // A loader runs DT_INIT before the array (gABI, Initialization and
+    // Termination Functions).
+    for (v, tag) in [(a.init, DT_INIT), (a.fini, DT_FINI)] {
+        if let Some(v) = v {
+            tags.push((tag, v));
+        }
+    }
+    for (arr, tag, sz) in [
+        (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
+        (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),
+        (a.fini_array, DT_FINI_ARRAY, DT_FINI_ARRAYSZ),
+    ] {
+        if let Some((addr, size)) = arr.filter(|&(_, s)| s > 0) {
+            tags.push((tag, addr));
+            tags.push((sz, size));
+        }
     }
     if let Some(v) = a.hash {
         tags.push((DT_HASH, v));
@@ -556,15 +597,11 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     if a.executable {
         tags.push((DT_DEBUG, 0));
     }
-    for (arr, tag, sz) in [
-        (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
-        (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),
-        (a.fini_array, DT_FINI_ARRAY, DT_FINI_ARRAYSZ),
-    ] {
-        if let Some((addr, size)) = arr.filter(|&(_, s)| s > 0) {
-            tags.push((tag, addr));
-            tags.push((sz, size));
-        }
+    if let Some((pltgot, (jmprel, size))) = a.plt {
+        tags.push((DT_PLTGOT, pltgot));
+        tags.push((DT_PLTRELSZ, size));
+        tags.push((DT_PLTREL, if a.use_rela { DT_RELA } else { DT_REL }));
+        tags.push((DT_JMPREL, jmprel));
     }
     if let Some((addr, size)) = a.rela {
         let (t, sz, ent) = if a.use_rela {

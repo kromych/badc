@@ -42,19 +42,46 @@ struct rlimit {
 #define RLIM_NLIMITS 16
 #endif
 
+#include <sys/time.h>
+
+// getrusage's selectors and record, as glibc and the macOS SDK lay it out:
+// two `struct timeval` times and fourteen `long` counters.
 #define RUSAGE_SELF      0
 #define RUSAGE_CHILDREN (-1)
+#ifdef __linux__
+#define RUSAGE_THREAD    1
+#endif
+struct rusage {
+    struct timeval ru_utime;
+    struct timeval ru_stime;
+    long ru_maxrss;
+    long ru_ixrss;
+    long ru_idrss;
+    long ru_isrss;
+    long ru_minflt;
+    long ru_majflt;
+    long ru_nswap;
+    long ru_inblock;
+    long ru_oublock;
+    long ru_msgsnd;
+    long ru_msgrcv;
+    long ru_nsignals;
+    long ru_nvcsw;
+    long ru_nivcsw;
+};
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::getrlimit, "_getrlimit")
 #pragma binding(libc::setrlimit, "_setrlimit")
+#pragma binding(libc::getrusage, "_getrusage")
 #endif
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::getrlimit, "getrlimit")
 #pragma binding(libc::setrlimit, "setrlimit")
 #pragma binding(libc::prlimit, "prlimit64")
+#pragma binding(libc::getrusage, "getrusage")
 #endif
 
 int getrlimit(int resource, struct rlimit *rlp);
@@ -65,6 +92,24 @@ int setrlimit(int resource, const struct rlimit *rlp);
 int prlimit(int pid, int resource, const struct rlimit *new_limit,
             struct rlimit *old_limit);
 #endif
-// getrusage itself is declared in <unistd.h>; the RUSAGE_* selectors
-// above are the resource.h half of its interface.
+int getrusage(int who, struct rusage *r_usage);
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::getpriority, "_getpriority")
+#pragma binding(libc::setpriority, "_setpriority")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::getpriority, "getpriority")
+#pragma binding(libc::setpriority, "setpriority")
+#endif
+#include <sys/types.h>
+#define PRIO_PROCESS 0
+#define PRIO_PGRP    1
+#define PRIO_USER    2
+int getpriority(int which, id_t who);
+int setpriority(int which, id_t who, int value);
 #endif

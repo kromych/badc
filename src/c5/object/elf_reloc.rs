@@ -12,7 +12,7 @@ use core::ops::Range;
 
 use super::super::codegen::map_syms::{self, MapClass, MapMark};
 use super::super::error::C5Error;
-use super::super::program::{ExportedFunction, Program, SymVisibility};
+use super::super::program::{Program, SymVisibility};
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget};
 use super::elf_class::{
@@ -39,12 +39,20 @@ use super::elf_reloc_types::{
     R_AARCH64_MOVW_SABS_G2, R_AARCH64_MOVW_UABS_G0, R_AARCH64_MOVW_UABS_G0_NC,
     R_AARCH64_MOVW_UABS_G1, R_AARCH64_MOVW_UABS_G1_NC, R_AARCH64_MOVW_UABS_G2,
     R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
-    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21,
+    R_AARCH64_TLSDESC_CALL, R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_AARCH64_TLSLD_ADD_DTPREL_HI12,
+    R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC, R_AARCH64_TLSLE_ADD_TPREL_HI12,
     R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32,
-    R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTTPOFF, R_X86_64_PC8, R_X86_64_PC16,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64, R_X86_64_GOTPC32_TLSDESC,
+    R_X86_64_GOTTPOFF, R_X86_64_PC8, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, R_X86_64_TLSDESC_CALL, R_X86_64_TPOFF32, TLS_MODULE_BASE,
     i386_field_width, i386_reloc_desc,
+};
+use super::elf_reloc_types::{
+    R_386_GOT32, R_386_GOT32X, R_386_GOTOFF, R_X86_64_GOT32, R_X86_64_GOT64, R_X86_64_GOTOFF64,
+    R_X86_64_GOTPCREL, R_X86_64_GOTPCREL64, R_X86_64_GOTPCRELX, R_X86_64_TLSGD, R_X86_64_TLSLD,
+    R_X86_64_TPOFF64,
 };
 
 const ELF_DATA_LSB: u8 = 1;
@@ -63,6 +71,9 @@ const SHT_NOBITS: u32 = 8;
 const SHT_INIT_ARRAY: u32 = 14;
 const SHT_FINI_ARRAY: u32 = 15;
 const SHT_PREINIT_ARRAY: u32 = 16;
+const SHT_GROUP: u32 = 17;
+const GRP_COMDAT: u32 = 1;
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 
 // `.note.badc` record types and the `desc` each one carries. The linker
 // parses them back; a record with an empty payload is not emitted.
@@ -144,11 +155,15 @@ const SHF_MERGE: u64 = 0x10;
 const SHF_STRINGS: u64 = 0x20;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHF_LINK_ORDER: u64 = 0x80;
+const SHF_GROUP: u64 = 0x200;
 const SHF_TLS: u64 = 0x400;
 
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
+const STB_GNU_UNIQUE: u8 = 10;
+const ELFOSABI_GNU: u8 = 3;
+const SHN_COMMON: u16 = 0xfff2;
 const STV_DEFAULT: u8 = 0;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
@@ -905,6 +920,8 @@ struct AsmLabelSym<'a> {
     value: u64,
     global: bool,
     weak: bool,
+    /// `@gnu_unique_object`: bound `STB_GNU_UNIQUE`, and non-local as `global`.
+    unique: bool,
     st_type: u8,
     st_size: u64,
     merge: bool,
@@ -929,7 +946,8 @@ struct Layout {
     sizes: Vec<u64>,
     attr_sizes: Vec<u64>,
     asm_placements: Vec<(usize, u64)>,
-    gnu_property_note: Option<(usize, u64, Vec<u8>)>,
+    /// Bodies the writer builds: `.note.gnu.property`, `.deplibs`.
+    writer_bodies: Vec<(usize, u64, Vec<u8>)>,
     jt_placement: Option<(usize, u64)>,
     /// The entry and base of the 8-byte, then the 4-byte literal run.
     literal_placements: [Option<(usize, u64)>; 2],
@@ -938,6 +956,19 @@ struct Layout {
     text_shadowed: bool,
     data_shadowed: bool,
     bss_shadowed: bool,
+    /// The section groups, whose `.group` sections precede the named
+    /// entries as the gABI places a group ahead of its members.
+    groups: Vec<SectionGroup>,
+}
+
+/// A section group (System V gABI, "Section Groups").
+struct SectionGroup {
+    name: String,
+    comdat: bool,
+    /// The carve entries the group holds.
+    members: Vec<usize>,
+    /// The signature symbol's `.symtab` index.
+    sym: u32,
 }
 
 /// Positions in the `.strtab` name list, one per symbol class.
@@ -959,6 +990,7 @@ struct NameStarts {
     asm_text_labels: usize,
     asm_decl_set: usize,
     asm_decl_undef: usize,
+    asm_commons: usize,
     map: usize,
 }
 
@@ -980,7 +1012,9 @@ struct Names<'a> {
     undef_alias_end: BTreeMap<&'a str, (&'a str, i64)>,
     user_extern_names: Vec<&'a str>,
     extern_fn_by_pc: BTreeMap<usize, &'a str>,
-    weak_fn_by_pc: BTreeMap<usize, &'a str>,
+    /// The functions a reference names by symbol: weak ones, and the
+    /// interposable ones under `Program::interposable_refs`.
+    named_fn_by_pc: BTreeMap<usize, &'a str>,
     defined_data_globals: Vec<(&'a str, i64, u64)>,
     defined_data_locals: Vec<(&'a str, i64, u64)>,
     defined_tls_globals: Vec<(&'a str, i64, u64)>,
@@ -993,6 +1027,8 @@ struct Names<'a> {
     asm_text_label_syms: Vec<AsmTextLabelSym<'a>>,
     asm_decl_set: Vec<(&'a str, AsmSymValue)>,
     asm_decl_undef: Vec<&'a AsmSymDecl>,
+    /// `.comm` symbols no other definition of the unit takes the place of.
+    asm_commons: Vec<&'a AsmSymDecl>,
     /// Names a GOT-addressed reference reaches; the slot is per symbol, so
     /// such a label keeps its own entry.
     got_ref_names: BTreeSet<&'a str>,
@@ -1100,6 +1136,7 @@ struct Output {
     count: usize,
     shstrtab: Vec<u8>,
     shstrtab_offs: Vec<u32>,
+    group_names_start: usize,
     named_names_start: usize,
     named_rela_names_start: usize,
     named_rela_pos: Vec<usize>,
@@ -1173,6 +1210,7 @@ pub(super) fn write_relocatable(
     w.build_tail_sections()?;
     w.emit_debug_relocs()?;
     w.drop_unreferenced_section_symbols()?;
+    w.bind_group_signatures();
     w.plan_sections();
     w.build_shstrtab();
     w.emit_text_section()?;
@@ -1488,7 +1526,7 @@ impl<'a> RelocWriter<'a> {
                     b'M' => flags |= SHF_MERGE,
                     b'S' => flags |= SHF_STRINGS,
                     b'o' => flags |= SHF_LINK_ORDER,
-                    b'G' => {}
+                    b'G' => flags |= SHF_GROUP,
                     b'T' => {
                         return Err(asm_section_err(&s.name, "the `T` (TLS) section flag"));
                     }
@@ -1520,7 +1558,7 @@ impl<'a> RelocWriter<'a> {
                 .layout
                 .carve
                 .table
-                .get_or_insert(&s.name, sh_type, flags, align)
+                .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
                 .map_err(Self::internal)?;
             // The first block to give an entry size or an ordering section
             // sets it, as GNU as keeps a section's first attributes.
@@ -1576,7 +1614,25 @@ impl<'a> RelocWriter<'a> {
                 )
                 .map_err(Self::internal)?;
             let base = self.place_in_entry(e, gnu_property_align, body.len() as u64);
-            self.layout.gnu_property_note = Some((e, base, body));
+            self.layout.writer_bodies.push((e, base, body));
+        }
+        // `#pragma comment(lib, ...)`'s names, NUL-terminated, as clang writes them.
+        if !self.program.default_libs.is_empty() {
+            let body: Vec<u8> = (self.program.default_libs.iter())
+                .flat_map(|n| n.bytes().chain([0]))
+                .collect();
+            let table = &mut self.layout.carve.table;
+            let e = table
+                .get_or_insert(
+                    ".deplibs",
+                    SHT_LLVM_DEPENDENT_LIBRARIES,
+                    SHF_MERGE | SHF_STRINGS,
+                    1,
+                )
+                .map_err(Self::internal)?;
+            table.entries[e].entsize = 1;
+            let base = self.place_in_entry(e, 1, body.len() as u64);
+            self.layout.writer_bodies.push((e, base, body));
         }
         let tables_len = build.rodata.tables_len();
         if tables_len > 0 {
@@ -1609,12 +1665,29 @@ impl<'a> RelocWriter<'a> {
             self.layout.literal_placements[k] = Some((e, base));
         }
         let layout = &mut self.layout;
+        let mut group_of: BTreeMap<&str, usize> = BTreeMap::new();
+        for (k, e) in layout.carve.table.entries.iter().enumerate() {
+            let Some(g) = &e.group else { continue };
+            let at = *group_of.entry(g.name.as_str()).or_insert_with(|| {
+                layout.groups.push(SectionGroup {
+                    name: g.name.clone(),
+                    comdat: false,
+                    members: Vec::new(),
+                    sym: 0,
+                });
+                layout.groups.len() - 1
+            });
+            layout.groups[at].comdat |= g.comdat;
+            layout.groups[at].members.push(k);
+        }
+        let named_base = self.base_sections + layout.groups.len();
         for k in 0..layout.carve.table.entries.len() {
-            layout.carve.shndx.push((self.base_sections + k) as u16);
+            layout.carve.shndx.push((named_base + k) as u16);
             layout.carve.sym_idx.push(0);
         }
         let shadowed = |name: &str, empty: bool| -> bool {
-            empty && layout.carve.table.entries.iter().any(|e| e.name == name)
+            empty
+                && (layout.carve.table.entries.iter()).any(|e| e.name == name && e.group.is_none())
         };
         layout.text_shadowed = shadowed(".text", build.text.is_empty());
         layout.data_shadowed =
@@ -1697,7 +1770,10 @@ impl<'a> RelocWriter<'a> {
                 (".bss", layout.bss_shadowed, syms.bss_sym_idx),
             ]
             .into_iter()
-            .find(|&(name, dropped, _)| dropped && carve.table.entries[k].name == name)
+            .find(|&(name, dropped, _)| {
+                let e = &carve.table.entries[k];
+                dropped && e.name == name && e.group.is_none()
+            })
             .map(|(_, _, sym)| sym);
             if let Some(sym) = inherited {
                 carve.sym_idx[k] = sym;
@@ -1758,13 +1834,17 @@ impl<'a> RelocWriter<'a> {
         names.visibility = program
             .symbols
             .iter()
-            .filter(|s| s.is_hidden && s.is_link_entity() && !s.name.is_empty())
-            .map(|s| (s.link_name(), SymVisibility::Hidden))
+            .filter(|s| s.is_link_entity() && !s.name.is_empty())
+            .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
+        let interposable: BTreeSet<&str> = (program.symbols.iter())
+            .filter(|s| program.interposable_refs && s.is_interposable_definition())
+            .map(|s| s.def_link_name())
+            .collect();
         for (&ent_pc, name) in build.func_ent_pcs.iter().zip(&build.func_names) {
-            if names.weak_names.contains(name.as_str()) {
-                names.weak_fn_by_pc.insert(ent_pc, name.as_str());
+            if names.weak_names.contains(name.as_str()) || interposable.contains(name.as_str()) {
+                names.named_fn_by_pc.insert(ent_pc, name.as_str());
             }
         }
         names.func_strs.reserve(build.func_ent_pcs.len());
@@ -1806,6 +1886,14 @@ impl<'a> RelocWriter<'a> {
 
     /// A hidden name is not preemptible, so the direct page-relative pair
     /// is correct and keeps the GOT empty.
+    fn ref_form(&self, r: &crate::c5::codegen::UserExternDataRef) -> ExternAddrForm {
+        if r.import_slot {
+            ExternAddrForm::ImportSlot
+        } else {
+            self.extern_addr_form(&r.symbol_name)
+        }
+    }
+
     fn extern_addr_form(&self, name: &str) -> ExternAddrForm {
         if self
             .names
@@ -1819,6 +1907,15 @@ impl<'a> RelocWriter<'a> {
             Machine::X86_64 if self.kernel_abs => ExternAddrForm::Abs32,
             Machine::X86_64 => ExternAddrForm::Got,
             Machine::Aarch64 if self.names.weak_names.contains(name) => ExternAddrForm::Got,
+            // A position-independent ELF object reaches a name that may bind
+            // elsewhere through its GOT slot, the form any AAELF64 link takes
+            // in a shared object; badc's link relaxes it where it defines it.
+            Machine::Aarch64
+                if self.build.pic_link
+                    && self.target.binary_format() == crate::c5::codegen::BinaryFormat::Elf =>
+            {
+                ExternAddrForm::Got
+            }
             Machine::Aarch64 => ExternAddrForm::Direct,
         }
     }
@@ -1869,11 +1966,19 @@ impl<'a> RelocWriter<'a> {
                 }
             })
             .collect();
+        names.asm_commons = (build.asm_sym_decls.iter())
+            .filter(|d| {
+                d.common.is_some()
+                    && !names.asm_label_names.contains(d.name.as_str())
+                    && !names.defined_fn_names.contains(d.name.as_str())
+            })
+            .collect();
         names.asm_defined_labels = names
             .asm_label_names
             .iter()
             .copied()
             .chain(names.asm_set_defs.iter().map(|&(n, _)| n))
+            .chain(names.asm_commons.iter().map(|d| d.name.as_str()))
             .collect();
         names.defined_obj_by_name = program
             .symbols
@@ -2086,16 +2191,21 @@ impl<'a> RelocWriter<'a> {
         let build = self.build;
         if self.elf_tls_interop {
             for f in &build.elf_tpoff_fixups {
-                if let super::ElfTpoffTarget::Extern(name)
-                | super::ElfTpoffTarget::InitialExec(name) = &f.target
-                    && !self.names.extern_tls_names.contains(&name.as_str())
+                let name = match &f.target {
+                    super::ElfTpoffTarget::Extern(name)
+                    | super::ElfTpoffTarget::InitialExec(name)
+                    | super::ElfTpoffTarget::Descriptor(name) => name.as_str(),
+                    super::ElfTpoffTarget::ModuleDescriptor(_) => TLS_MODULE_BASE,
+                    super::ElfTpoffTarget::Local(_) => continue,
+                };
+                if !self.names.extern_tls_names.contains(&name)
                     && !self
                         .names
                         .defined_tls_globals
                         .iter()
-                        .any(|(n, _, _)| n == name)
+                        .any(|(n, _, _)| *n == name)
                 {
-                    self.names.extern_tls_names.push(name.as_str());
+                    self.names.extern_tls_names.push(name);
                 }
             }
         }
@@ -2113,6 +2223,11 @@ impl<'a> RelocWriter<'a> {
                 let merge = carve.table.entries[e].flags & SHF_MERGE != 0;
                 s.labels.iter().map(move |l| {
                     let d = this.sym_decl(l.name.as_str());
+                    let ty = match l.sym_type {
+                        AsmSymType::NoType => d.map_or(AsmSymType::NoType, |d| d.sym_type),
+                        t => t,
+                    };
+                    let unique = ty == AsmSymType::GnuUniqueObject;
                     AsmLabelSym {
                         name: l.name.as_str(),
                         shndx: if l.absolute.is_some() { SHN_ABS } else { shndx },
@@ -2121,16 +2236,15 @@ impl<'a> RelocWriter<'a> {
                             Some(v) => v as u64,
                             None => base + l.offset as u64,
                         },
-                        global: match d.map(|d| d.bind) {
-                            Some(AsmSymBind::Global) => true,
-                            Some(AsmSymBind::Local) => false,
-                            _ => l.global,
-                        },
+                        global: unique
+                            || match d.map(|d| d.bind) {
+                                Some(AsmSymBind::Global) => true,
+                                Some(AsmSymBind::Local) => false,
+                                _ => l.global,
+                            },
                         weak: l.weak || weak_names.contains(l.name.as_str()),
-                        st_type: st_type_of(match l.sym_type {
-                            AsmSymType::NoType => d.map_or(AsmSymType::NoType, |d| d.sym_type),
-                            t => t,
-                        }),
+                        unique,
+                        st_type: st_type_of(ty),
                         st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
                         merge,
                     }
@@ -2150,6 +2264,9 @@ impl<'a> RelocWriter<'a> {
                 name: n,
                 offset: l.text_offset,
                 bind: match d.map(|d| d.bind) {
+                    _ if d.is_some_and(|d| d.sym_type == AsmSymType::GnuUniqueObject) => {
+                        STB_GNU_UNIQUE
+                    }
                     Some(AsmSymBind::Global) => STB_GLOBAL,
                     Some(AsmSymBind::Weak) => STB_WEAK,
                     _ if weak_names.contains(n) => STB_WEAK,
@@ -2170,7 +2287,10 @@ impl<'a> RelocWriter<'a> {
             .asm_sym_decls
             .iter()
             .filter(|d| {
-                d.bind == AsmSymBind::Global
+                // gas: a name only `.type` or `.size` gives is an undefined global.
+                let attrs = d.sym_type != AsmSymType::NoType || d.size.is_some();
+                (d.bind == AsmSymBind::Global || d.bind == AsmSymBind::Default && attrs)
+                    && d.common.is_none()
                     && d.value.is_none()
                     && this.is_unreached(d.name.as_str())
                     && !this.names.asm_global_undef.contains(&d.name.as_str())
@@ -2223,6 +2343,8 @@ impl<'a> RelocWriter<'a> {
         all.extend(names.asm_decl_set.iter().map(|(n, _)| *n));
         names.at.asm_decl_undef = all.len();
         all.extend(names.asm_decl_undef.iter().map(|d| d.name.as_str()));
+        names.at.asm_commons = all.len();
+        all.extend(names.asm_commons.iter().map(|d| d.name.as_str()));
         names.at.map = all.len();
         if self.machine == Machine::Aarch64 {
             all.push(MapClass::Code.symbol_name());
@@ -2746,9 +2868,14 @@ impl<'a> RelocWriter<'a> {
             if !(l.global || l.weak) {
                 continue;
             }
+            let bind = match (l.unique, l.weak) {
+                (true, _) => STB_GNU_UNIQUE,
+                (_, true) => STB_WEAK,
+                _ => STB_GLOBAL,
+            };
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.asm_labels + j],
-                st_info: pack_sym_info(if l.weak { STB_WEAK } else { STB_GLOBAL }, l.st_type),
+                st_info: pack_sym_info(bind, l.st_type),
                 st_other: self.vis_for(l.name),
                 st_shndx: l.shndx,
                 st_value: l.value,
@@ -2896,6 +3023,12 @@ impl<'a> RelocWriter<'a> {
         }
         for i in 0..self.names.user_extern_data_names.len() {
             let name = self.names.user_extern_data_names[i];
+            // A callee whose address is taken too has one undefined entry.
+            if let Some(k) = self.names.user_extern_names.iter().position(|&n| n == name) {
+                let idx = self.syms.user_extern_sym_idx[k];
+                self.syms.user_extern_data_sym_idx.push(idx);
+                continue;
+            }
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.user_extern_data + i],
                 st_info: pack_sym_info(self.bind_for(name), STT_NOTYPE),
@@ -2928,11 +3061,16 @@ impl<'a> RelocWriter<'a> {
         }
         for i in 0..self.names.asm_global_undef.len() {
             let name = self.names.asm_global_undef[i];
+            let d = self.sym_decl(name);
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.asm_global_undef + i],
-                st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+                st_info: pack_sym_info(
+                    STB_GLOBAL,
+                    st_type_of(d.map_or_else(Default::default, |d| d.sym_type)),
+                ),
                 st_other: self.vis_for(name),
                 st_shndx: SHN_UNDEF,
+                st_size: d.and_then(|d| d.size).unwrap_or(0),
                 ..Default::default()
             };
             self.syms.push(sym);
@@ -2947,6 +3085,22 @@ impl<'a> RelocWriter<'a> {
                 ..Default::default()
             };
             self.syms.push(sym);
+        }
+        for i in 0..self.names.asm_commons.len() {
+            let d = self.names.asm_commons[i];
+            let (size, align) = d.common.unwrap_or_default();
+            let sym = Elf64Sym {
+                st_name: self.names.name_offs[self.names.at.asm_commons + i],
+                st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
+                st_other: self.vis_for(&d.name),
+                st_shndx: SHN_COMMON,
+                st_value: align,
+                st_size: size,
+            };
+            let idx = self.syms.push(sym);
+            self.syms
+                .asm_label_symidx
+                .insert(d.name.as_str(), idx as u32);
         }
         for i in 0..self.names.defined_tls_globals.len() {
             let (name, off, size) = self.names.defined_tls_globals[i];
@@ -3083,20 +3237,65 @@ impl<'a> RelocWriter<'a> {
                     .expect("extern_tls_names contains every fixup's symbol name");
                 self.syms.extern_tls_sym_idx[pos] as u64
             };
+            let section_sym = |off: u64| {
+                let off = off as i64;
+                if off >= tls_init_len {
+                    (self.syms.tbss_sec_sym, off - tls_init_len)
+                } else {
+                    (self.syms.tdata_sec_sym, off)
+                }
+            };
             for f in &build.elf_tpoff_fixups {
+                let at = f.imm_offset as u64;
+                // A descriptor sequence is relocated against its variable or
+                // the module base, then, for the module base, the variable's
+                // offset in the block against its section.
+                let (desc_sym, block_offset) = match &f.target {
+                    super::ElfTpoffTarget::Descriptor(name) => (Some(extern_sym(name)), None),
+                    super::ElfTpoffTarget::ModuleDescriptor(off) => {
+                        (Some(extern_sym(TLS_MODULE_BASE)), Some(section_sym(*off)))
+                    }
+                    _ => (None, None),
+                };
+                if let Some(sym_idx) = desc_sym {
+                    let call: &[(u64, u32, i64)] = match machine {
+                        Machine::X86_64 => &[
+                            (at + 3, R_X86_64_GOTPC32_TLSDESC, -4),
+                            (at + 7, R_X86_64_TLSDESC_CALL, 0),
+                        ],
+                        Machine::Aarch64 => &[
+                            (at, R_AARCH64_TLSDESC_ADR_PAGE21, 0),
+                            (at + 4, R_AARCH64_TLSDESC_LD64_LO12, 0),
+                            (at + 8, R_AARCH64_TLSDESC_ADD_LO12, 0),
+                            (at + 12, R_AARCH64_TLSDESC_CALL, 0),
+                        ],
+                    };
+                    let dtp: &[(u64, u32)] = match machine {
+                        Machine::X86_64 => &[(at + 21, R_X86_64_DTPOFF32)],
+                        Machine::Aarch64 => &[
+                            (at + 24, R_AARCH64_TLSLD_ADD_DTPREL_HI12),
+                            (at + 28, R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC),
+                        ],
+                    };
+                    for &(r_offset, rtype, addend) in call {
+                        Self::push_rela(&mut table, r_offset, sym_idx, rtype, addend);
+                    }
+                    if let Some((sec, addend)) = block_offset {
+                        for &(r_offset, rtype) in dtp {
+                            Self::push_rela(&mut table, r_offset, sec, rtype, addend);
+                        }
+                    }
+                    continue;
+                }
                 let (sym_idx, r_addend, initial_exec) = match &f.target {
                     super::ElfTpoffTarget::Extern(name) => (extern_sym(name), 0i64, false),
                     super::ElfTpoffTarget::InitialExec(name) => (extern_sym(name), 0i64, true),
                     super::ElfTpoffTarget::Local(off) => {
-                        let off = *off as i64;
-                        if off >= tls_init_len {
-                            (self.syms.tbss_sec_sym, off - tls_init_len, false)
-                        } else {
-                            (self.syms.tdata_sec_sym, off, false)
-                        }
+                        let (sec, off) = section_sym(*off);
+                        (sec, off, false)
                     }
+                    _ => unreachable!("descriptor sites are relocated above"),
                 };
-                let at = f.imm_offset as u64;
                 let relocs: &[(u64, u32, i64)] = match (machine, initial_exec) {
                     (Machine::X86_64, false) => &[(at, R_X86_64_TPOFF32, r_addend)],
                     (Machine::X86_64, true) => &[(at, R_X86_64_GOTTPOFF, -4)],
@@ -3206,7 +3405,7 @@ impl<'a> RelocWriter<'a> {
         let mut table = core::mem::take(&mut self.relocs.text);
         for r in &build.user_extern_data_refs {
             let name = r.symbol_name.as_str();
-            let form = self.extern_addr_form(name);
+            let form = self.ref_form(r);
             // An alias name resolves against its defined (weak) symbol; the
             // reference form stays symbolic so the linker's binding decides
             // which definition the address names.
@@ -3251,6 +3450,9 @@ impl<'a> RelocWriter<'a> {
             match form {
                 ExternAddrForm::Got => {
                     emit_got_ref_relocs(machine, &mut table, r.instr_offset as u64, sym_idx)
+                }
+                ExternAddrForm::ImportSlot => {
+                    emit_import_slot_relocs(machine, &mut table, r.instr_offset as u64, sym_idx)
                 }
                 ExternAddrForm::Abs32 => {
                     emit_abs32_ref_reloc(&mut table, r.instr_offset as u64, sym_idx, base)
@@ -3425,6 +3627,48 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
+    /// The type a gas relocation operator names for a field of `width`, as
+    /// GNU as 2.46.1 picks it.
+    fn asm_op_reloc_type(
+        &self,
+        op: crate::c5::asm::AsmRelocOp,
+        relax: crate::c5::asm::AsmGotRelax,
+        width: u8,
+        section_name: &str,
+    ) -> Result<u32, C5Error> {
+        use crate::c5::asm::{AsmGotRelax as X, AsmRelocOp as O};
+        Ok(match (self.abi, op, width, relax) {
+            (RelocAbi::X86_64, O::Plt, 4, _) => R_X86_64_PLT32,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::No) => R_X86_64_GOTPCREL,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::Relaxable) => R_X86_64_GOTPCRELX,
+            (RelocAbi::X86_64, O::GotPcRel, 4, X::RelaxableRex) => R_X86_64_REX_GOTPCRELX,
+            (RelocAbi::X86_64, O::GotPcRel, 8, _) => R_X86_64_GOTPCREL64,
+            (RelocAbi::X86_64, O::Got, 4, _) => R_X86_64_GOT32,
+            (RelocAbi::X86_64, O::Got, 8, _) => R_X86_64_GOT64,
+            (RelocAbi::X86_64, O::GotOff, 8, _) => R_X86_64_GOTOFF64,
+            (RelocAbi::X86_64, O::TpOff, 4, _) => R_X86_64_TPOFF32,
+            (RelocAbi::X86_64, O::TpOff, 8, _) => R_X86_64_TPOFF64,
+            (RelocAbi::X86_64, O::GotTpOff, 4, _) => R_X86_64_GOTTPOFF,
+            (RelocAbi::X86_64, O::TlsGd, 4, _) => R_X86_64_TLSGD,
+            (RelocAbi::X86_64, O::TlsLd, 4, _) => R_X86_64_TLSLD,
+            (RelocAbi::X86_64, O::DtpOff, 4, _) => R_X86_64_DTPOFF32,
+            (RelocAbi::X86_64, O::DtpOff, 8, _) => R_X86_64_DTPOFF64,
+            (RelocAbi::I386, O::Plt, 4, _) => R_386_PLT32,
+            (RelocAbi::I386, O::Got, 4, X::No) => R_386_GOT32,
+            (RelocAbi::I386, O::Got, 4, _) => R_386_GOT32X,
+            (RelocAbi::I386, O::GotOff, 4, _) => R_386_GOTOFF,
+            _ => {
+                return Err(asm_section_err(
+                    section_name,
+                    &alloc::format!(
+                        "has a {width}-byte field with a relocation operator ({op:?}) this \
+                         psABI has no relocation for"
+                    ),
+                ));
+            }
+        })
+    }
+
     /// The relocation type of an inline-asm section data field.
     fn asm_data_reloc_type(
         &self,
@@ -3536,6 +3780,12 @@ impl<'a> RelocWriter<'a> {
                         section_syms.contains(&sym_idx),
                         self.layout.carve.table.entries[e].name.as_str(),
                     )?,
+                    RK::Op { op, relax } => self.asm_op_reloc_type(
+                        op,
+                        relax,
+                        r.width,
+                        self.layout.carve.table.entries[e].name.as_str(),
+                    )?,
                     kind => a64_insn_reloc_type(kind)
                         .expect("every instruction-field kind maps to a type"),
                 };
@@ -3615,10 +3865,15 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// A pointer-to-data initializer's target: a weak definition by its symbol.
+    /// A pointer-to-data initializer's target: a weak definition, and an
+    /// interposable one under `Program::interposable_refs`, by its symbol.
     fn data_target_ref(&self, r: &crate::c5::program::DataReloc) -> (u64, i64) {
-        let target = r.target_sym.map(|i| &self.program.symbols[i as usize]);
-        if let Some(s) = target.filter(|s| s.is_weak_definition())
+        let program = self.program;
+        let target = r.target_sym.map(|i| &program.symbols[i as usize]);
+        let named = |s: &&crate::c5::symbol::Symbol| {
+            s.is_weak_definition() || program.interposable_refs && s.is_interposable_definition()
+        };
+        if let Some(s) = target.filter(named)
             && let Some(&idx) = self.syms.defined_data_symidx.get(s.link_name())
         {
             return (idx, r.target_offset.wrapping_sub(r.target_anchor) as i64);
@@ -3645,12 +3900,13 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// A function-pointer initializer's target: a cross-TU function
-    /// (placeholder `ent_pc` past `text.len()`) or a weak definition resolves
-    /// by name with a zero addend, a function of the unit by its native offset.
+    /// (placeholder `ent_pc` past `text.len()`) or one `named_fn_by_pc` holds
+    /// resolves by name with a zero addend, a function of the unit by its
+    /// native offset.
     fn code_reloc_ref(&self, ent_pc: usize) -> Result<(u64, i64), C5Error> {
         let names = &self.names;
         let by_name =
-            (names.extern_fn_by_pc.get(&ent_pc)).or_else(|| names.weak_fn_by_pc.get(&ent_pc));
+            (names.extern_fn_by_pc.get(&ent_pc)).or_else(|| names.named_fn_by_pc.get(&ent_pc));
         if let Some(&name) = by_name {
             return Ok(self.extern_fn_ref(name));
         }
@@ -3856,6 +4112,12 @@ impl<'a> RelocWriter<'a> {
         }
         syms.first_global -= (syms.symbols.len() - kept.len()) as u32;
         syms.symbols = kept;
+        Self::renumber_relocation_symbols(relocs, carve, &remap);
+        Ok(())
+    }
+
+    /// Point every relocation at the symbol `remap` moves its own to.
+    fn renumber_relocation_symbols(relocs: &mut RelocTables, carve: &mut CarvePlan, remap: &[u64]) {
         let rewrite = |table: &mut [u8]| {
             for rec in table.as_chunks_mut::<ELF64_RELA_SIZE>().0.iter_mut() {
                 let info = u64::from_le_bytes(rec[8..16].try_into().unwrap());
@@ -3880,7 +4142,66 @@ impl<'a> RelocWriter<'a> {
                 r.sym = remap[r.sym as usize];
             }
         }
-        Ok(())
+    }
+
+    /// Each group's signature: the unit's symbol of the group's name, or,
+    /// when the unit has none, a local one at the start of the group
+    /// section, as GNU as defines it.
+    fn bind_group_signatures(&mut self) {
+        if self.layout.groups.is_empty() {
+            return;
+        }
+        let (syms, names) = (&mut self.syms, &mut self.names);
+        let name_at = |off: u32| -> &[u8] {
+            let tail = names.strtab.get(off as usize..).unwrap_or_default();
+            &tail[..tail.iter().position(|&b| b == 0).unwrap_or(tail.len())]
+        };
+        let mut sym_of: BTreeMap<&[u8], u32> = BTreeMap::new();
+        for (i, s) in syms.symbols.iter().enumerate() {
+            if s.st_name != 0 && !matches!(s.st_info & 0xf, STT_SECTION | STT_FILE) {
+                sym_of.entry(name_at(s.st_name)).or_insert(i as u32);
+            }
+        }
+        let found: Vec<Option<u32>> = (self.layout.groups.iter())
+            .map(|g| sym_of.get(g.name.as_bytes()).copied())
+            .collect();
+        let added = found.iter().filter(|f| f.is_none()).count() as u32;
+        let first_global = syms.first_global;
+        let mut locals: Vec<Elf64Sym> = Vec::new();
+        for (gi, (g, f)) in self.layout.groups.iter_mut().zip(found).enumerate() {
+            g.sym = match f {
+                Some(i) if i >= first_global => i + added,
+                Some(i) => i,
+                None => {
+                    let st_name = names.strtab.len() as u32;
+                    names.strtab.extend_from_slice(g.name.as_bytes());
+                    names.strtab.push(0);
+                    locals.push(Elf64Sym {
+                        st_name,
+                        st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+                        st_shndx: (self.base_sections + gi) as u16,
+                        ..Default::default()
+                    });
+                    first_global + locals.len() as u32 - 1
+                }
+            };
+        }
+        if added == 0 {
+            return;
+        }
+        let remap: Vec<u64> = (0..syms.symbols.len() as u64)
+            .map(|i| {
+                if i >= first_global as u64 {
+                    i + added as u64
+                } else {
+                    i
+                }
+            })
+            .collect();
+        let at = first_global as usize;
+        syms.symbols.splice(at..at, locals);
+        syms.first_global += added;
+        Self::renumber_relocation_symbols(&mut self.relocs, &mut self.layout.carve, &remap);
     }
 
     /// Every relocation table of the fixed set is final here.
@@ -3890,9 +4211,22 @@ impl<'a> RelocWriter<'a> {
         // Built ahead of the section count: an empty body drops the
         // section, which the note parser reads as it does a foreign object
         // carrying none.
+        let export_names: Vec<&str> = (program.exports.iter())
+            .map(|e| e.name.as_str())
+            .chain(program.exported_objects.iter().map(String::as_str))
+            .collect();
+        // The note also names the interposable definitions code addresses,
+        // so a link preempting one rewrites an aarch64 page pair to a slot load.
+        let mut noted_names = self.names.user_extern_data_names.clone();
+        for r in &build.user_extern_data_refs {
+            let s = r.symbol_name.as_str();
+            if r.direct_pcrel.is_none() && self.unit_defines(s) && !noted_names.contains(&s) {
+                noted_names.push(s);
+            }
+        }
         let note = build_badc_note(
             &build.imports,
-            &program.exports,
+            &export_names,
             &build.tls_index_fixups,
             &build.macho_tlv_descriptors,
             &build.macho_tlv_fixups,
@@ -3900,7 +4234,7 @@ impl<'a> RelocWriter<'a> {
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
             &self.syms.early_returns,
-            &self.names.user_extern_data_names,
+            &noted_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
         let mut shndx = ShndxMap {
@@ -3952,6 +4286,7 @@ impl<'a> RelocWriter<'a> {
             .count();
         let out = &mut self.out;
         out.count = self.base_sections - shndx.dropped_sections as usize
+            + self.layout.groups.len()
             + self.layout.carve.table.entries.len()
             + named_rela_count
             + 2 * self.relocs.tail_sections.len()
@@ -3998,6 +4333,8 @@ impl<'a> RelocWriter<'a> {
         if !self.relocs.tdata.is_empty() {
             names.push(format!("{rp}.tdata"));
         }
+        out.group_names_start = names.len();
+        names.extend(self.layout.groups.iter().map(|_| ".group".to_string()));
         let entries = &self.layout.carve.table.entries;
         out.named_names_start = names.len();
         names.extend(entries.iter().map(|e| e.name.clone()));
@@ -4045,8 +4382,8 @@ impl<'a> RelocWriter<'a> {
             if r.direct_pcrel.is_some() {
                 continue;
             }
-            match self.extern_addr_form(r.symbol_name.as_str()) {
-                ExternAddrForm::Got => got_sites.push(r.instr_offset),
+            match self.ref_form(r) {
+                ExternAddrForm::Got | ExternAddrForm::ImportSlot => got_sites.push(r.instr_offset),
                 ExternAddrForm::Abs32 => abs_sites.push(r.instr_offset),
                 ExternAddrForm::Direct => {}
             }
@@ -4163,7 +4500,7 @@ impl<'a> RelocWriter<'a> {
         for (&(e, base), s) in layout.asm_placements.iter().zip(build.asm_sections.iter()) {
             append_at(&mut carve.table.entries[e], base, &s.bytes);
         }
-        if let Some((e, base, body)) = &layout.gnu_property_note {
+        for (e, base, body) in &layout.writer_bodies {
             append_at(&mut carve.table.entries[*e], *base, body);
         }
         // The table slots stay zero; the entry's relocations carry the
@@ -4362,8 +4699,9 @@ impl<'a> RelocWriter<'a> {
         }
     }
 
-    /// The named sections at the indices planned right after the fixed set,
-    /// then their `.rela` companions for the entries carrying relocations.
+    /// The `.group` sections right after the fixed set, the named sections,
+    /// then their `.rela` companions for the entries carrying relocations;
+    /// a member's `.rela` belongs to the member's group.
     fn emit_named_sections(&mut self) -> Result<(), C5Error> {
         let class = self.class;
         for e in self.layout.carve.table.entries.iter_mut() {
@@ -4390,6 +4728,30 @@ impl<'a> RelocWriter<'a> {
                 _ => None,
             }
         };
+        let rela_base = carve.shndx.first().map_or(0, |&s| s as u32) + carve.shndx.len() as u32;
+        for (gi, g) in self.layout.groups.iter().enumerate() {
+            let flags = if g.comdat { GRP_COMDAT } else { 0 };
+            let mut body: Vec<u8> = flags.to_le_bytes().to_vec();
+            for &k in &g.members {
+                body.extend_from_slice(&(carve.shndx[k] as u32).to_le_bytes());
+                if !carve.table.entries[k].relas.is_empty() {
+                    let rela = rela_base + out.named_rela_pos[k] as u32;
+                    body.extend_from_slice(&rela.to_le_bytes());
+                }
+            }
+            out.place(
+                Elf64Shdr {
+                    sh_name: out.shstrtab_offs[out.group_names_start + gi],
+                    sh_type: SHT_GROUP,
+                    sh_link: out.shndx.map(SHIDX_SYMTAB) as u32,
+                    sh_info: g.sym,
+                    sh_addralign: 4,
+                    sh_entsize: 4,
+                    ..Default::default()
+                },
+                &body,
+            );
+        }
         for (k, e) in carve.table.entries.iter().enumerate() {
             debug_assert_eq!(out.sh.len(), carve.shndx[k] as usize);
             let sh_link = match e.link.as_deref() {
@@ -4426,6 +4788,9 @@ impl<'a> RelocWriter<'a> {
             }
             let name = out.shstrtab_offs[out.named_rela_names_start + out.named_rela_pos[k]];
             out.place_rela(class, name, &table, carve.shndx[k] as u32);
+            if e.group.is_some() {
+                out.sh.last_mut().expect("placed").sh_flags |= SHF_GROUP;
+            }
         }
         Ok(())
     }
@@ -4501,6 +4866,15 @@ impl<'a> RelocWriter<'a> {
         e_ident[4] = class.ei_class();
         e_ident[5] = ELF_DATA_LSB;
         e_ident[6] = ELF_VERSION_CURRENT;
+        // gas marks an object holding a GNU extension binding.
+        if self
+            .syms
+            .symbols
+            .iter()
+            .any(|s| s.st_info >> 4 == STB_GNU_UNIQUE)
+        {
+            e_ident[7] = ELFOSABI_GNU;
+        }
         let ehdr = Elf64Ehdr {
             e_ident,
             e_type: ET_REL,
@@ -4593,7 +4967,7 @@ fn st_type_of(t: crate::c5::asm::AsmSymType) -> u8 {
     use crate::c5::asm::AsmSymType;
     match t {
         AsmSymType::Func => STT_FUNC,
-        AsmSymType::Object => STT_OBJECT,
+        AsmSymType::Object | AsmSymType::GnuUniqueObject => STT_OBJECT,
         AsmSymType::NoType => STT_NOTYPE,
     }
 }
@@ -4654,7 +5028,7 @@ fn push_note_record(out: &mut Vec<u8>, ntype: u32, desc: &[u8]) {
 #[allow(clippy::too_many_arguments)]
 fn build_badc_note(
     imports: &super::ResolvedImports,
-    exports: &[ExportedFunction],
+    exports: &[&str],
     tls_index_fixups: &[super::TlsIndexFixup],
     macho_tlv_descriptors: &[super::MachoTlvDescriptor],
     macho_tlv_fixups: &[super::MachoTlvFixup],
@@ -4701,7 +5075,7 @@ fn build_badc_note(
     if !exports.is_empty() {
         let mut ex_desc: Vec<u8> = Vec::new();
         for e in exports {
-            ex_desc.extend_from_slice(e.name.as_bytes());
+            ex_desc.extend_from_slice(e.as_bytes());
             ex_desc.push(0);
         }
         push_note_record(&mut out, NT_BADC_EXPORTS, &ex_desc);
@@ -4758,13 +5132,15 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_MACHO_TLV_DESC_SYM, &desc);
     }
 
-    // An initial-exec site is stated by its relocations alone.
+    // An initial-exec or descriptor site is stated by its relocations alone.
     let mut desc: Vec<u8> = Vec::new();
     for f in elf_tpoff_fixups {
         let (kind, payload) = match &f.target {
             super::ElfTpoffTarget::Local(off) => (0u8, off.to_le_bytes().to_vec()),
             super::ElfTpoffTarget::Extern(sym_name) => (1, [sym_name.as_bytes(), &[0]].concat()),
-            super::ElfTpoffTarget::InitialExec(_) => continue,
+            super::ElfTpoffTarget::InitialExec(_)
+            | super::ElfTpoffTarget::Descriptor(_)
+            | super::ElfTpoffTarget::ModuleDescriptor(_) => continue,
         };
         desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
         desc.push(kind);
@@ -4883,7 +5259,7 @@ fn dwarf_reloc_to_elf_rela(
 fn a64_insn_reloc_type(kind: crate::c5::asm::AsmRelocKind) -> Option<u32> {
     use crate::c5::asm::AsmRelocKind as RK;
     Some(match kind {
-        RK::Data | RK::JumpRel => return None,
+        RK::Data | RK::JumpRel | RK::Op { .. } => return None,
         RK::A64Branch26 { link: true } => R_AARCH64_CALL26,
         RK::A64Branch26 { link: false } => R_AARCH64_JUMP26,
         RK::A64Condbr19 => R_AARCH64_CONDBR19,
@@ -4991,6 +5367,9 @@ fn emit_page_load_relocs(out: &mut Vec<u8>, at: u64, sym_idx: u64, addend: i64, 
 /// object; chosen per symbol by [`RelocWriter::extern_addr_form`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ExternAddrForm {
+    /// A load from the PE import-address slot the symbol names; text
+    /// rewritten as for [`Self::Got`], relocs from [`emit_import_slot_relocs`].
+    ImportSlot,
     /// The codegen's direct page-relative / RIP-relative pair, kept as-is;
     /// relocs from [`emit_addr_fixup_relocs`].
     Direct,
@@ -5032,6 +5411,34 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
             };
             write_struct(out, &rela);
         }
+    }
+}
+
+/// The relocs of a load from an import-address slot: `R_X86_64_PC32` at the
+/// `mov`'s disp32, `R_AARCH64_ADR_PREL_PG_HI21` and
+/// `R_AARCH64_LDST64_ABS_LO12_NC` at the `adrp` + `ldr` pair.
+fn emit_import_slot_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
+    let (rtype, at, addend) = match machine {
+        Machine::Aarch64 => (R_AARCH64_ADR_PREL_PG_HI21, instr_offset, 0),
+        Machine::X86_64 => (R_X86_64_PC32, instr_offset + 3, -4),
+    };
+    write_struct(
+        out,
+        &Elf64Rela {
+            r_offset: at,
+            r_info: (sym_idx << 32) | rtype as u64,
+            r_addend: addend,
+        },
+    );
+    if machine == Machine::Aarch64 {
+        write_struct(
+            out,
+            &Elf64Rela {
+                r_offset: instr_offset + 4,
+                r_info: (sym_idx << 32) | R_AARCH64_LDST64_ABS_LO12_NC as u64,
+                r_addend: 0,
+            },
+        );
     }
 }
 

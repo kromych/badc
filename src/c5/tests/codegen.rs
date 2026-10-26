@@ -102,15 +102,15 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
     // around, so it reads as an ordinary error; the `internal compiler
     // error` marker stays reserved for a broken invariant.
     let program = super::compile_str(
-        "_Atomic __int128 g;\n\
-         int main(void){ __atomic_store_n(&g, (__int128)1, __ATOMIC_SEQ_CST); return 0; }",
+        "struct T { char c[3]; } g, r;\n\
+         int main(void){ __atomic_load(&g, &r, __ATOMIC_SEQ_CST); return 0; }",
     );
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxAarch64,
         NativeOptions::default(),
     )
-    .expect_err("a 16-byte atomic object has no lowering");
+    .expect_err("a 3-byte atomic object has no lowering");
     let msg = format!("{err}");
     assert!(
         !msg.contains("internal compiler error"),
@@ -118,7 +118,7 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
     );
     assert!(msg.starts_with("error: "), "normal error prefix: {msg}");
     assert!(
-        msg.contains("paired compare-exchange"),
+        msg.contains("1/2/4/8-byte scalar object"),
         "names the missing lowering: {msg}"
     );
     assert!(
@@ -1102,22 +1102,22 @@ fn pe_switch_tables_ride_rdata_not_text() {
 /// labels).
 ///
 /// Cross-target structural check: a tiny program that calls
-/// `printf` emits a binary whose bytes contain the import name
+/// `puts` emits a binary whose bytes contain the import name
 /// at least twice -- once in the dynamic-import table and once
 /// in the static symtab (PE COFF symtab / ELF `.symtab` /
 /// Mach-O `__LINKEDIT` symbol entries).
 #[test]
 fn plt_trampoline_local_names_appear_in_every_target() {
     use crate::{NativeOptions, Target};
-    // Call `printf` so the resolver pulls it in as an import on
+    // Call `puts` so the resolver pulls it in as an import on
     // every target (the test prelude `#include <stdio.h>` is
     // already wired up via `compile_str`). With the import in
     // hand, the assertions below check that the binary's bytes
     // contain the import name at least twice -- once in the
     // dynamic-import table and once in the static (PLT-trampoline)
     // symbol table the linker emits per target.
-    let program = super::compile_str("int main() { printf(\"x\"); return 0; }");
-    let needle = b"printf";
+    let program = super::compile_str("int main() { puts(\"x\"); return 0; }");
+    let needle = b"puts";
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -1134,7 +1134,7 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         let occurrences = bytes.windows(needle.len()).filter(|w| *w == needle).count();
         assert!(
             occurrences >= 2,
-            "{target:?}: expected `printf` byte sequence at least twice (dynamic \
+            "{target:?}: expected `puts` byte sequence at least twice (dynamic \
              import + local PLT-trampoline symbol), found {occurrences}"
         );
     }
@@ -1248,6 +1248,78 @@ fn windows_headers_leave_posix_fallbacks_to_the_program() {
     );
 }
 
+/// The POSIX functions mingw-w64's headers do not declare are undeclared on
+/// the Windows targets, so a program's own function of the name compiles
+/// whatever its type; the POSIX headers that declare the rest are not found
+/// there. The same unit is a conflicting redeclaration where the headers
+/// declare POSIX's.
+#[test]
+fn windows_headers_leave_undeclared_posix_names_to_the_program() {
+    use crate::{Compiler, Target};
+    const MINGW: &str = "#include <unistd.h>\n#include <stdlib.h>\n#include <signal.h>\n\
+        #include <sys/stat.h>\n";
+    const POSIX: &[&str] = &[
+        "termios.h",
+        "sys/mman.h",
+        "pwd.h",
+        "grp.h",
+        "poll.h",
+        "sys/wait.h",
+        "sys/socket.h",
+        "netdb.h",
+    ];
+    const NAMES: &[&str] = &[
+        "fork",
+        "pipe",
+        "getuid",
+        "fsync",
+        "lstat",
+        "kill",
+        "random",
+        "tcgetattr",
+        "mmap",
+        "getpwuid",
+        "getgrgid",
+        "poll",
+        "waitpid",
+        "socketpair",
+        "hstrerror",
+    ];
+    let mut body = alloc::string::String::new();
+    for n in NAMES {
+        body += &alloc::format!("static void {n}(void) {{}}\n");
+    }
+    body += "int main(void) {\n";
+    for n in NAMES {
+        body += &alloc::format!("    {n}();\n");
+    }
+    body += "    return 0;\n}\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(e) = Compiler::with_target(alloc::format!("{MINGW}{body}"), target).compile() {
+            panic!("{target:?}: {e}");
+        }
+        for h in POSIX {
+            let src = alloc::format!("#include <{h}>\n");
+            let err = Compiler::with_target(src, target).compile().expect_err(h);
+            assert!(
+                alloc::format!("{err}").contains("[B1010]"),
+                "{target:?}: {err}"
+            );
+        }
+    }
+    let posix: alloc::string::String = POSIX
+        .iter()
+        .map(|h| alloc::format!("#include <{h}>\n"))
+        .collect();
+    let err = Compiler::with_target(alloc::format!("{MINGW}{posix}{body}"), Target::LinuxX64)
+        .compile()
+        .expect_err("POSIX <unistd.h> declares fork");
+    assert!(
+        alloc::format!("{err}").contains("conflicting types for `fork`"),
+        "{err}"
+    );
+}
+
 /// Every function the Windows `<pthread.h>` and `<sched.h>` declare has a
 /// definition the link finds, in the C-library sources it offers like
 /// archive members. The PE fixtures run them on a Windows host; this links
@@ -1288,6 +1360,1105 @@ fn windows_pthread_declarations_link() {
             panic!("{target:?}: {e}");
         }
     }
+}
+
+/// Links a unit that takes the address of each `(name, ..)` after `headers`
+/// for `target` and checks that each is imported as `symbol` from `dll`.
+fn assert_windows_imports(target: crate::Target, headers: &str, imports: &[(&str, &str, &str)]) {
+    let mut src =
+        alloc::format!("{headers}typedef void (*fn)(void);\nstatic const fn used[] = {{\n");
+    for (name, ..) in imports {
+        src += &alloc::format!("    (fn){name},\n");
+    }
+    src += "};\nint main(void) { return used[0] == 0; }\n";
+    let symbols: alloc::vec::Vec<_> = imports.iter().map(|&(_, s, d)| (s, d)).collect();
+    assert_windows_unit_imports(target, &src, &symbols);
+}
+
+/// Links `src` for `target`, which compiles with no diagnostic and no
+/// auto-included header, and checks that each `(symbol, dll)` is imported.
+fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&str, &str)]) {
+    use crate::{Compiler, NativeOptions};
+    let program = Compiler::with_target(src.to_string(), target)
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    assert!(
+        program.warnings.is_empty() && program.notes.is_empty(),
+        "{target:?}: {:?} {:?}",
+        program.warnings,
+        program.notes
+    );
+    let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    for (symbol, dll) in imports {
+        assert_eq!(
+            pe_import_dll_of(&image, symbol).as_deref(),
+            Some(*dll),
+            "{target:?}: {symbol}"
+        );
+    }
+}
+
+/// The user32, gdi32, opengl32 and advapi32 functions `<windows.h>`
+/// declares are imported from the DLL whose import library defines them in
+/// mingw-w64, with no binding of the program's own.
+#[test]
+fn windows_h_imports_its_win32_functions_from_their_dlls() {
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(
+            target,
+            "#include <windows.h>\n",
+            &[
+                ("ShowWindow", "ShowWindow", "user32.dll"),
+                ("CreateWindowExW", "CreateWindowExW", "user32.dll"),
+                ("GetUpdateRect", "GetUpdateRect", "user32.dll"),
+                ("GetUpdateRgn", "GetUpdateRgn", "user32.dll"),
+                ("GetMessageW", "GetMessageW", "user32.dll"),
+                ("PeekMessageW", "PeekMessageW", "user32.dll"),
+                ("DispatchMessageW", "DispatchMessageW", "user32.dll"),
+                ("PostQuitMessage", "PostQuitMessage", "user32.dll"),
+                ("SetCapture", "SetCapture", "user32.dll"),
+                ("ReleaseCapture", "ReleaseCapture", "user32.dll"),
+                ("SetRect", "SetRect", "user32.dll"),
+                (
+                    "IsClipboardFormatAvailable",
+                    "IsClipboardFormatAvailable",
+                    "user32.dll",
+                ),
+                ("UnregisterClassW", "UnregisterClassW", "user32.dll"),
+                ("BitBlt", "BitBlt", "gdi32.dll"),
+                ("SwapBuffers", "SwapBuffers", "gdi32.dll"),
+                ("wglMakeCurrent", "wglMakeCurrent", "opengl32.dll"),
+                ("RegGetValueW", "RegGetValueW", "advapi32.dll"),
+            ],
+        );
+    }
+}
+
+/// The event-log, `RegDeleteTree` and `GetOEMCP` calls `<windows.h>`
+/// declares, and the CRT's `_wcsnicmp` and `_wopen` / `_open`, which read
+/// the mode only with `_O_CREAT`, compile without a diagnostic in the forms
+/// mingw-w64 declares and import the entry points their DLLs export.
+#[test]
+fn windows_event_log_registry_tree_and_crt_wide_calls_compile_silently() {
+    const SRC: &str = "#include <windows.h>\n#include <wchar.h>\n#include <io.h>\n\
+        #include <fcntl.h>\n\
+        _Static_assert(EVENTLOG_SUCCESS == 0 && EVENTLOG_ERROR_TYPE == 1 &&\n\
+            EVENTLOG_WARNING_TYPE == 2 && EVENTLOG_INFORMATION_TYPE == 4 &&\n\
+            EVENTLOG_AUDIT_SUCCESS == 8 && EVENTLOG_AUDIT_FAILURE == 0x10, \"\");\n\
+        int main(void)\n{\n\
+            HANDLE ev = RegisterEventSourceW(NULL, L\"probe\");\n\
+            LPCWSTR msg = L\"probe\";\n\
+            if (ev) {\n\
+                ReportEventW(ev, EVENTLOG_INFORMATION_TYPE, 0, 1, NULL, 1, 0, &msg, NULL);\n\
+                DeregisterEventSource(ev);\n\
+            }\n\
+            int fd = _wopen(L\"NUL\", _O_RDONLY) + _open(\"NUL\", _O_RDONLY);\n\
+            return (int)GetOEMCP() + (int)RegDeleteTreeW(HKEY_CURRENT_USER, L\"absent\")\n\
+                   + _wcsnicmp(L\"ABC\", L\"abd\", 2) + fd * 0;\n\
+        }\n";
+    const A: &str = "advapi32.dll";
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("RegisterEventSourceW", A),
+                ("ReportEventW", A),
+                ("DeregisterEventSource", A),
+                ("RegDeleteTreeW", A),
+                ("GetOEMCP", "kernel32.dll"),
+                ("_wopen", M),
+                ("_open", M),
+                ("_wcsnicmp", M),
+            ],
+        );
+    }
+}
+
+/// A generic Win32 name selects the W form under `UNICODE` and the A form
+/// otherwise, as mingw-w64's `__MINGW_NAME_AW` / `__MINGW_TYPEDEF_AW` do:
+/// each function imports its suffixed entry point, each type is its
+/// suffixed struct, and `TEXT` / `MAKEINTRESOURCE` follow. `<winsock2.h>`
+/// and `<rpc.h>` map their names the same way.
+#[test]
+fn windows_generic_names_follow_unicode() {
+    const K: &str = "kernel32.dll";
+    const U: &str = "user32.dll";
+    const A: &str = "advapi32.dll";
+    const V: &str = "version.dll";
+    const R: &str = "rpcrt4.dll";
+    const S: &str = "ws2_32.dll";
+    let functions = [
+        ("CompareString", K),
+        ("CreateDirectory", K),
+        ("CreateEvent", K),
+        ("CreateFile", K),
+        ("CreateFileTransacted", K),
+        ("CreateMutex", K),
+        ("CreateProcess", K),
+        ("CreateSemaphore", K),
+        ("DeleteFile", K),
+        ("ExpandEnvironmentStrings", K),
+        ("FillConsoleOutputCharacter", K),
+        ("FindFirstFile", K),
+        ("FindNextFile", K),
+        ("FoldString", K),
+        ("FormatMessage", K),
+        ("GetConsoleTitle", K),
+        ("GetCurrentDirectory", K),
+        ("GetDiskFreeSpace", K),
+        ("GetEnvironmentVariable", K),
+        ("GetFileAttributes", K),
+        ("GetFullPathName", K),
+        ("GetModuleFileName", K),
+        ("GetModuleHandle", K),
+        ("GetStringTypeEx", K),
+        ("GetSystemDirectory", K),
+        ("GetTempFileName", K),
+        ("GetTempPath", K),
+        ("GetVersionEx", K),
+        ("GetWindowsDirectory", K),
+        ("LoadLibrary", K),
+        ("LoadLibraryEx", K),
+        ("MoveFileEx", K),
+        ("OpenEvent", K),
+        ("OutputDebugString", K),
+        ("PeekConsoleInput", K),
+        ("ReadConsole", K),
+        ("ReadConsoleInput", K),
+        ("RemoveDirectory", K),
+        ("ScrollConsoleScreenBuffer", K),
+        ("SearchPath", K),
+        ("SetConsoleTitle", K),
+        ("SetCurrentDirectory", K),
+        ("SetFileAttributes", K),
+        ("VerifyVersionInfo", K),
+        ("WriteConsole", K),
+        ("WriteConsoleInput", K),
+        ("lstrcpy", K),
+        ("CreateWindowEx", U),
+        ("DefWindowProc", U),
+        ("EnumDisplayDevices", U),
+        ("GetMonitorInfo", U),
+        ("GetRawInputDeviceInfo", U),
+        ("GetWindowLong", U),
+        ("GetWindowLongPtr", U),
+        ("LoadCursor", U),
+        ("LoadIcon", U),
+        ("MapVirtualKey", U),
+        ("PostMessage", U),
+        ("RegisterClass", U),
+        ("SendMessage", U),
+        ("SetWindowLong", U),
+        ("SetWindowLongPtr", U),
+        ("SetWindowText", U),
+        ("CryptAcquireContext", A),
+        ("LookupPrivilegeValue", A),
+        ("RegDeleteTree", A),
+        ("RegisterEventSource", A),
+        ("ReportEvent", A),
+        ("CreateHardLink", K),
+        ("CreateSymbolicLink", K),
+        ("GetComputerNameEx", K),
+        ("GetDiskFreeSpaceEx", K),
+        ("GetDriveType", K),
+        ("GetFileAttributesEx", K),
+        ("GetFinalPathNameByHandle", K),
+        ("GetLongPathName", K),
+        ("GetNamedPipeHandleState", K),
+        ("NeedCurrentDirectoryForExePath", K),
+        ("SetEnvironmentVariable", K),
+        ("ChangeDisplaySettingsEx", U),
+        ("CharLower", U),
+        ("CharLowerBuff", U),
+        ("CharUpper", U),
+        ("EnumDisplaySettings", U),
+        ("GetKeyNameText", U),
+        ("GetProp", U),
+        ("LoadImage", U),
+        ("RemoveProp", U),
+        ("SetClassLongPtr", U),
+        ("SetProp", U),
+        ("ConvertStringSecurityDescriptorToSecurityDescriptor", A),
+        ("GetUserName", A),
+        ("RegConnectRegistry", A),
+        ("RegCreateKey", A),
+        ("RegCreateKeyEx", A),
+        ("RegDeleteKey", A),
+        ("RegDeleteKeyEx", A),
+        ("RegDeleteValue", A),
+        ("RegEnumKeyEx", A),
+        ("RegEnumValue", A),
+        ("RegGetValue", A),
+        ("RegLoadKey", A),
+        ("RegOpenKeyEx", A),
+        ("RegQueryInfoKey", A),
+        ("RegQueryValueEx", A),
+        ("RegSaveKey", A),
+        ("RegSetValueEx", A),
+        ("GetFileVersionInfo", V),
+        ("GetFileVersionInfoSize", V),
+        ("VerQueryValue", V),
+        ("RpcStringFree", R),
+        ("UuidFromString", R),
+        ("UuidToString", R),
+        ("WSADuplicateSocket", S),
+        ("WSASocket", S),
+        ("WSAStringToAddress", S),
+    ];
+    let types = [
+        "DEVMODE",
+        "DISPLAY_DEVICE",
+        "MONITORINFOEX",
+        "OSVERSIONINFO",
+        "OSVERSIONINFOEX",
+        "STARTUPINFO",
+        "STARTUPINFOEX",
+        "WIN32_FIND_DATA",
+        "WNDCLASS",
+        "WSAPROTOCOL_INFO",
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for (unicode, s, ch) in [("", "A", "CHAR"), ("#define UNICODE\n", "W", "WCHAR")] {
+            let mut src = alloc::format!(
+                "{unicode}#include <winsock2.h>\n#include <windows.h>\n#include <wincrypt.h>\n\
+                 #include <rpc.h>\n\
+                 _Static_assert(sizeof(TEXT(\"ab\")) == 3 * sizeof({ch}), \"\");\n\
+                 _Static_assert(sizeof(*MAKEINTRESOURCE(1)) == sizeof({ch}), \"\");\n\
+                 _Static_assert(sizeof(*IDC_ARROW) == sizeof({ch}), \"\");\n"
+            );
+            for t in types {
+                src += &alloc::format!("{t}{s} *{t}_probe = ({t} *)0;\n");
+            }
+            src += "typedef void (*fn)(void);\nstatic const fn used[] = {\n";
+            for (name, _) in &functions {
+                src += &alloc::format!("    (fn){name},\n");
+            }
+            src += "};\nint main(void) { return used[0] == 0; }\n";
+            let symbols: alloc::vec::Vec<String> = functions
+                .iter()
+                .map(|(n, _)| alloc::format!("{n}{s}"))
+                .collect();
+            let imports: alloc::vec::Vec<_> = (symbols.iter().zip(&functions))
+                .map(|(sym, (_, dll))| (sym.as_str(), *dll))
+                .collect();
+            assert_windows_unit_imports(target, &src, &imports);
+        }
+    }
+}
+
+/// `<share.h>`'s sharing modes, the sharing opens `_sopen_s` / `_fsopen`,
+/// `freopen_s` and the checked `mbstowcs_s` / `wcstombs_s` are declared in
+/// the headers mingw-w64 declares them in, with its types and values, and
+/// import msvcrt.dll's entry points; the generic `FindFirstFile` /
+/// `WIN32_FIND_DATA` and `_TEXT` compile beside them.
+#[test]
+fn windows_sharing_opens_and_checked_conversions_import_msvcrt() {
+    const SRC: &str = "#include <windows.h>\n#include <tchar.h>\n#include <share.h>\n\
+        #include <stdio.h>\n#include <stdlib.h>\n#include <io.h>\n\
+        _Static_assert(_SH_COMPAT == 0 && _SH_DENYRW == 0x10 && _SH_DENYWR == 0x20 &&\n\
+            _SH_DENYRD == 0x30 && _SH_DENYNO == 0x40 && _SH_SECURE == 0x80 &&\n\
+            SH_DENYNO == _SH_DENYNO, \"\");\n\
+        int main(void)\n{\n\
+            WIN32_FIND_DATA fd;\n\
+            HANDLE h = FindFirstFile(_TEXT(\"*\"), &fd);\n\
+            wchar_t w[8];\n\
+            char c[8];\n\
+            size_t n;\n\
+            int fh;\n\
+            FILE *f, *g;\n\
+            if (h != INVALID_HANDLE_VALUE)\n\
+                FindClose(h);\n\
+            mbstowcs_s(&n, w, 8, \"abc\", 3);\n\
+            wcstombs_s(&n, c, 8, w, 3);\n\
+            _sopen_s(&fh, \"nul\", 0, _SH_DENYNO, 0);\n\
+            f = _fsopen(\"nul\", \"r\", _SH_DENYNO);\n\
+            return f && freopen_s(&g, \"nul\", \"r\", f) ? 0 : 1;\n\
+        }\n";
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("FindFirstFileA", "kernel32.dll"),
+                ("mbstowcs_s", M),
+                ("wcstombs_s", M),
+                ("_sopen_s", M),
+                ("_fsopen", M),
+                ("freopen_s", M),
+            ],
+        );
+    }
+}
+
+/// `<stdlib.h>`'s `__clear_cache` reaches kernel32's FlushInstructionCache
+/// through a reserved name, so a unit's own declaration of the Win32 name
+/// with the SDK's types, before or after the header, and `<windows.h>`'s
+/// agree; `<time.h>` shares `struct timeval` and its timer macros with
+/// `<winsock2.h>` and with a unit that defines it under `_TIMEVAL_DEFINED`,
+/// as mingw-w64's headers do.
+#[test]
+fn windows_crt_headers_leave_win32_names_to_their_headers() {
+    const SRC: &str = "int FlushInstructionCache(void *hProcess, const void *lpBaseAddress,\n\
+        unsigned long long dwSize);\n\
+        #define _TIMEVAL_DEFINED\n\
+        struct timeval { long tv_sec; long tv_usec; };\n\
+        #include <stdlib.h>\n#include <time.h>\n#include <winsock2.h>\n#include <windows.h>\n\
+        int main(void)\n{\n\
+            char code[16] = {0};\n\
+            struct timeval t = {1, 2};\n\
+            __clear_cache(code, code + sizeof code);\n\
+            return FlushInstructionCache(GetCurrentProcess(), code, sizeof code) &&\n\
+                   t.tv_usec == 2 ? 0 : 1;\n\
+        }\n";
+    const TIMER: &str = "#include <time.h>\n#include <winsock2.h>\n\
+        int main(void)\n{\n\
+            struct timeval a = {1, 2}, b = {1, 3};\n\
+            timerclear(&a);\n\
+            return !timerisset(&a) && timercmp(&a, &b, <) ? 0 : 1;\n\
+        }\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("FlushInstructionCache", "kernel32.dll"),
+                ("GetCurrentProcess", "kernel32.dll"),
+            ],
+        );
+        assert_windows_unit_imports(target, TIMER, &[]);
+    }
+}
+
+/// `<windows.h>` includes `<wingdi.h>`, mingw-w64's gdi32 surface: the
+/// drawing, text, region and bitmap calls import gdi32.dll's entry points,
+/// AlphaBlend / GradientFill / TransparentBlt msimg32.dll's, and the
+/// structures and constants they take are declared with them; under
+/// `NOGDI` none of it is.
+#[test]
+fn windows_h_includes_wingdi_h_with_its_dlls() {
+    const G: &str = "gdi32.dll";
+    const I: &str = "msimg32.dll";
+    let headers = "#include <windows.h>\n#include <wingdi.h>\n\
+        _Static_assert(sizeof(LOGPEN) == 16 && sizeof(LOGBRUSH) == 16 &&\n\
+            sizeof(TEXTMETRICW) == 60 && sizeof(LOGFONTA) == 60 && sizeof(TRIVERTEX) == 16 &&\n\
+            sizeof(GRADIENT_RECT) == 8 && sizeof(BLENDFUNCTION) == 4 &&\n\
+            sizeof(BITMAPFILEHEADER) == 14 && sizeof(DEVMODEW) == 220, \"\");\n\
+        _Static_assert(PS_SOLID == 0 && DC_PEN == 19 && DC_BRUSH == 18 && TRANSPARENT == 1 &&\n\
+            ETO_CLIPPED == 4 && AD_COUNTERCLOCKWISE == 1 && GRADIENT_FILL_RECT_H == 0 &&\n\
+            AC_SRC_OVER == 0 && AC_SRC_ALPHA == 1, \"\");\n";
+    let imports = [
+        ("CreatePen", G),
+        ("ExtCreatePen", G),
+        ("GetStockObject", G),
+        ("SetDCPenColor", G),
+        ("SetDCBrushColor", G),
+        ("MoveToEx", G),
+        ("LineTo", G),
+        ("Rectangle", G),
+        ("RoundRect", G),
+        ("Ellipse", G),
+        ("Pie", G),
+        ("SetArcDirection", G),
+        ("Polygon", G),
+        ("Polyline", G),
+        ("PolyBezier", G),
+        ("IntersectClipRect", G),
+        ("SelectClipRgn", G),
+        ("SetBkMode", G),
+        ("SetBkColor", G),
+        ("SetTextColor", G),
+        ("ExtTextOutW", G),
+        ("GetTextMetricsW", G),
+        ("CreateFontA", G),
+        ("GetObjectA", G),
+        ("CreateCompatibleBitmap", G),
+        ("StretchBlt", G),
+        ("SetDIBits", G),
+        ("GdiGradientFill", G),
+        ("BitBlt", G),
+        ("CreateDIBSection", G),
+        ("AlphaBlend", I),
+        ("GradientFill", I),
+        ("TransparentBlt", I),
+    ];
+    let imports: alloc::vec::Vec<_> = imports.iter().map(|&(n, d)| (n, n, d)).collect();
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(target, headers, &imports);
+        let nogdi = "#define NOGDI\n#include <windows.h>\n\
+            #ifdef PS_SOLID\n#error wingdi.h under NOGDI\n#endif\n\
+            int main(void) { return GetCurrentProcessId() == 0; }\n";
+        assert_windows_unit_imports(target, nogdi, &[("GetCurrentProcessId", "kernel32.dll")]);
+    }
+}
+
+/// `<stringapiset.h>` included alone declares the string comparison,
+/// folding, classification and conversion calls mingw-w64's declares, and
+/// the A forms its `<winnls.h>` adds, each imported from kernel32.dll; the
+/// generic names follow `UNICODE`.
+#[test]
+fn windows_stringapiset_h_imports_its_functions_from_kernel32() {
+    const K: &str = "kernel32.dll";
+    let names = [
+        "CompareStringA",
+        "CompareStringW",
+        "CompareStringEx",
+        "CompareStringOrdinal",
+        "FoldStringA",
+        "FoldStringW",
+        "GetStringTypeA",
+        "GetStringTypeW",
+        "GetStringTypeExA",
+        "GetStringTypeExW",
+        "MultiByteToWideChar",
+        "WideCharToMultiByte",
+    ];
+    let imports: alloc::vec::Vec<_> = names.iter().map(|n| (*n, *n, K)).collect();
+    let generic = [
+        ("CompareString", "CompareString"),
+        ("FoldString", "FoldString"),
+        ("GetStringTypeEx", "GetStringTypeEx"),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(target, "#include <stringapiset.h>\n", &imports);
+        for (unicode, suffix) in [("", "A"), ("#define UNICODE\n", "W")] {
+            let headers = alloc::format!("{unicode}#include <stringapiset.h>\n");
+            let symbols: alloc::vec::Vec<String> = generic
+                .iter()
+                .map(|(_, s)| alloc::format!("{s}{suffix}"))
+                .collect();
+            let imports: alloc::vec::Vec<_> = (generic.iter().zip(&symbols))
+                .map(|((n, _), s)| (*n, s.as_str(), K))
+                .collect();
+            assert_windows_imports(target, &headers, &imports);
+        }
+    }
+}
+
+/// `<tchar.h>` maps the generic-text names to the wide C runtime functions
+/// under `_UNICODE`, to the `<mbstring.h>` ones under `_MBCS` (through
+/// definitions, or macros under `_MB_MAP_DIRECT`) and to the single-byte ones
+/// otherwise, as mingw-w64's does, and `_T` / `_TEXT` build a literal of the
+/// matching width. `TCHAR` follows `UNICODE`, which `<windows.h>` reads first.
+#[test]
+fn windows_tchar_maps_generic_text_names_by_unicode() {
+    const M: &str = "msvcrt.dll";
+    let narrow = "#include <windows.h>\n#include <tchar.h>\n\
+        _Static_assert(sizeof(_TEXT(\"ab\")) == 3 && sizeof(_T('a')) == sizeof(int), \"\");\n\
+        _Static_assert(sizeof(_TCHAR) == 1 && sizeof(TCHAR) == 1, \"\");\n";
+    let wide = "#define _UNICODE\n#include <windows.h>\n#include <tchar.h>\n\
+        _Static_assert(sizeof(_TEXT(\"ab\")) == 6 && sizeof(_T('a')) == sizeof(wchar_t), \"\");\n\
+        _Static_assert(sizeof(_TCHAR) == 2 && sizeof(TCHAR) == 1, \"\");\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(
+            target,
+            narrow,
+            &[
+                ("_tcsncmp", "strncmp", M),
+                ("_tcsnccmp", "strncmp", M),
+                ("_tcsncpy", "strncpy", M),
+                ("_tcslen", "strlen", M),
+                ("__strncnt", "__strncnt", M),
+            ],
+        );
+        assert_windows_imports(
+            target,
+            wide,
+            &[
+                ("_tcsncmp", "wcsncmp", M),
+                ("_tcsnccmp", "wcsncmp", M),
+                ("_tcsncpy", "wcsncpy", M),
+                ("_tcslen", "wcslen", M),
+                ("__wcsncnt", "__wcsncnt", M),
+                ("_ftprintf", "__stdio_common_vswprintf", "ucrtbase.dll"),
+                ("_fgettc", "fgetwc", M),
+                ("_tcsspn", "wcsspn", M),
+                ("_tcstoll", "_wcstoi64", M),
+            ],
+        );
+        for map in ["", "#define _MB_MAP_DIRECT\n"] {
+            let mbcs = alloc::format!(
+                "#define _MBCS\n{map}#include <windows.h>\n#include <ctype.h>\n#include <tchar.h>\n\
+                 _Static_assert(sizeof(_TXCHAR) == 1 && (_TINT)-1 > 0, \"\");\n"
+            );
+            assert_windows_imports(
+                target,
+                &mbcs,
+                &[
+                    ("_tcsncmp", "_mbsnbcmp", M),
+                    ("_tcsnccmp", "_mbsncmp", M),
+                    ("_tcsncpy", "_mbsnbcpy", M),
+                    ("_tcsinc", "_mbsinc", M),
+                    ("_tcsclen", "_mbslen", M),
+                    ("_tcscnlen", "_mbsnlen", M),
+                    ("_tcslen", "strlen", M),
+                    ("_istalpha", "_ismbcalpha", M),
+                    ("_istleadbyte", "isleadbyte", M),
+                ],
+            );
+        }
+    }
+}
+
+/// `<tchar.h>`'s bounds-checked generic-text names, as mingw-w64's
+/// `sec_api/tchar_s.h` maps them, each resolve for both Windows targets under
+/// `_UNICODE`, `_MBCS` (with and without `_MB_MAP_DIRECT`) and neither, and
+/// import msvcrt.dll's entry point; the names over function-like macros are
+/// called.
+#[test]
+fn windows_tchar_bounds_checked_names_reach_msvcrt() {
+    const M: &str = "msvcrt.dll";
+    const NARROW: &[&str] = &[
+        "_tprintf_s",
+        "_tprintf_s_l",
+        "_tcprintf_s",
+        "_tcprintf_s_l",
+        "_vtcprintf_s",
+        "_vtcprintf_s_l",
+        "_ftprintf_s",
+        "_ftprintf_s_l",
+        "_stprintf_s",
+        "_stprintf_s_l",
+        "_sntprintf_s",
+        "_sntprintf_s_l",
+        "_vtprintf_s",
+        "_vtprintf_s_l",
+        "_vftprintf_s",
+        "_vftprintf_s_l",
+        "_vstprintf_s",
+        "_vstprintf_s_l",
+        "_vsntprintf_s",
+        "_vsntprintf_s_l",
+        "_tscanf_s",
+        "_tscanf_s_l",
+        "_tcscanf_s",
+        "_tcscanf_s_l",
+        "_ftscanf_s",
+        "_ftscanf_s_l",
+        "_stscanf_s",
+        "_stscanf_s_l",
+        "_sntscanf_s",
+        "_sntscanf_s_l",
+        "_cgetts_s",
+        "_itot_s",
+        "_ltot_s",
+        "_ultot_s",
+        "_i64tot_s",
+        "_ui64tot_s",
+        "_tcscat_s",
+        "_tcscpy_s",
+        "_tcserror_s",
+        "__tcserror_s",
+        "_tasctime_s",
+        "_tctime_s",
+        "_tctime32_s",
+        "_tctime64_s",
+        "_tstrdate_s",
+        "_tstrtime_s",
+        "_tgetenv_s",
+        "_tmakepath_s",
+        "_tputenv_s",
+        "_tsearchenv_s",
+        "_tsplitpath_s",
+        "_tfopen_s",
+        "_tfreopen_s",
+        "_ttmpnam_s",
+        "_tmktemp_s",
+        "_taccess_s",
+        "_tsopen_s",
+    ];
+    const STRINGS: &[&str] = &[
+        "_tcsncat_s",
+        "_tcsncpy_s",
+        "_tcstok_s",
+        "_tcsset_s",
+        "_tcsnccat_s",
+        "_tcsnccpy_s",
+        "_tcsncset_s",
+        "_tcslwr_s",
+        "_tcslwr_s_l",
+        "_tcsupr_s",
+        "_tcsupr_s_l",
+    ];
+    const MBCS_LOCALE: &[&str] = &[
+        "_tcsncat_s_l",
+        "_tcsncpy_s_l",
+        "_tcstok_s_l",
+        "_tcsset_s_l",
+        "_tcsnccat_s_l",
+        "_tcsnccpy_s_l",
+        "_tcsncset_s_l",
+    ];
+    const MBCS_DIRECT: &[&str] = &["_tcsnset_s", "_tcsnset_s_l", "_tccpy_s", "_tccpy_s_l"];
+    const NSET: &[&str] = &["_tcsnset_s"];
+    // Over the function-like _str*_s_l / _wcs*_s_l macros of tchar_s.h; the
+    // wide set has the _wcstok_s_l one besides.
+    const CALLS: &str = "static void calls(_TCHAR *b, _TCHAR **c)\n{\n\
+        (void)c;\n(void)_tcsnset_s_l(b, 4, 'x', 1, 0);\n(void)_tcsset_s_l(b, 4, 'x', 0);\n\
+        (void)_tcsncset_s_l(b, 4, 'x', 1, 0);\n";
+    const WIDE_CALLS: &str = "(void)_tcstok_s_l(b, b, c, 0);\n";
+    let headers = "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+        #include <wchar.h>\n#include <time.h>\n#include <io.h>\n#include <conio.h>\n\
+        #include <tchar.h>\n";
+    // The defines, the name lists, whether the calls apply, the imports.
+    type Config<'a> = (&'a str, &'a [&'a [&'a str]], bool, &'a [(&'a str, &'a str)]);
+    let configs: [Config; 4] = [
+        (
+            "",
+            &[NARROW, STRINGS, NSET],
+            true,
+            &[
+                ("strcpy_s", M),
+                ("strncpy_s", M),
+                ("sprintf_s", M),
+                ("_splitpath_s", M),
+                ("_ctime64_s", M),
+                ("_strnset_s", M),
+            ],
+        ),
+        (
+            "#define _MBCS\n",
+            &[NARROW, STRINGS, MBCS_LOCALE],
+            false,
+            &[("_mbsnbcpy_s", M), ("_mbstok_s_l", M), ("_mbslwr_s", M)],
+        ),
+        (
+            "#define _MBCS\n#define _MB_MAP_DIRECT\n",
+            &[NARROW, STRINGS, MBCS_LOCALE, MBCS_DIRECT],
+            false,
+            &[("_mbsnbcpy_s", M), ("_mbsnbset_s", M), ("_mbccpy_s", M)],
+        ),
+        (
+            "#define _UNICODE\n",
+            &[NARROW, STRINGS, NSET],
+            true,
+            &[
+                ("wcscpy_s", M),
+                ("swprintf_s", M),
+                ("_wsplitpath_s", M),
+                ("_wctime64_s", M),
+                ("_wcsnset_s", M),
+                ("_itow_s", M),
+            ],
+        ),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for (config, lists, calls, imports) in &configs {
+            let mut src = alloc::format!("{config}{headers}typedef void (*fn)(void);\n");
+            if *calls {
+                src += CALLS;
+                if config.contains("_UNICODE") {
+                    src += WIDE_CALLS;
+                }
+                src += "}\n";
+            }
+            src += "static const fn used[] = {\n";
+            for name in lists.iter().flat_map(|l| l.iter()) {
+                src += &alloc::format!("    (fn){name},\n");
+            }
+            if *calls {
+                src += "    (fn)calls,\n";
+            }
+            src += "};\nint main(void) { return used[0] == 0; }\n";
+            assert_windows_unit_imports(target, &src, imports);
+        }
+    }
+}
+
+/// C99 logb, lgamma, remquo and nexttoward in their three precisions import
+/// ucrtbase.dll's entry points (`long double` is `double` on Windows), and
+/// asctime msvcrt.dll's; asctime_r links from the C-library sources.
+#[test]
+fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
+    const M: &str = "msvcrt.dll";
+    const U: &str = "ucrtbase.dll";
+    let imports = [
+        ("logb", "logb", U),
+        ("logbf", "logbf", U),
+        ("logbl", "logb", U),
+        ("lgamma", "lgamma", U),
+        ("lgammaf", "lgammaf", U),
+        ("lgammal", "lgamma", U),
+        ("remquo", "remquo", U),
+        ("remquof", "remquof", U),
+        ("remquol", "remquo", U),
+        ("nexttoward", "nexttoward", U),
+        ("nexttowardf", "nexttowardf", U),
+        ("nexttowardl", "nexttoward", U),
+        ("asctime", "asctime", M),
+        ("asctime_r", "asctime", M),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let headers = "#define _POSIX_C_SOURCE 200809L\n#include <math.h>\n#include <time.h>\n";
+        assert_windows_imports(target, headers, &imports);
+    }
+}
+
+/// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
+/// and `<wctype.h>` declare under their POSIX and C99 names import an entry
+/// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
+/// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
+/// not export reach the ones it does through the header's and the C-library
+/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
+/// does.
+#[test]
+fn windows_crt_names_import_the_entry_points_their_dlls_export() {
+    use crate::Target;
+    const M: &str = "msvcrt.dll";
+    const U: &str = "ucrtbase.dll";
+    const HEADERS: &str = "#include <io.h>\n#include <process.h>\n#include <wchar.h>\n\
+        #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n#include <stdlib.h>\n";
+    let common = [
+        ("chmod", "_chmod", M),
+        ("mktemp", "_mktemp", M),
+        ("execl", "_execl", M),
+        ("execle", "_execle", M),
+        ("execlp", "_execlp", M),
+        ("execv", "_execv", M),
+        ("execve", "_execve", M),
+        ("execvp", "_execvp", M),
+        ("btowc", "btowc", M),
+        ("wctob", "wctob", M),
+        ("mbrtowc", "mbrtowc", M),
+        ("wcrtomb", "wcrtomb", M),
+        ("iswctype", "iswctype", M),
+        ("iswblank", "iswblank", U),
+        ("wctype", "wctype", U),
+        ("wctrans", "wctrans", U),
+        ("towctrans", "towctrans", U),
+        ("fwprintf", "__stdio_common_vswprintf", U),
+        ("vfwprintf", "__stdio_common_vswprintf", U),
+        ("vwprintf", "__stdio_common_vswprintf", U),
+        ("fgetws", "fgetws", M),
+        ("fputws", "fputws", M),
+        ("wcsncat", "wcsncat", M),
+        ("wcscspn", "wcscspn", M),
+        ("wcspbrk", "wcspbrk", M),
+        ("wcsspn", "wcsspn", M),
+        ("wcsstr", "wcsstr", M),
+        ("mbrlen", "mbrlen", M),
+        ("wcstoll", "_wcstoi64", M),
+        ("wcstoull", "_wcstoui64", M),
+        ("swprintf", "__stdio_common_vswprintf", U),
+        ("vswprintf", "__stdio_common_vswprintf", U),
+        ("wcstod", "_wcstod_l", U),
+        ("wcstof", "_wcstof_l", U),
+        ("wcstold", "_wcstod_l", U),
+        ("strtod", "_strtod_l", U),
+        ("strtof", "_strtof_l", U),
+        ("strtold", "_strtod_l", U),
+        ("atof", "_strtod_l", U),
+    ];
+    for (target, own) in [
+        (
+            Target::WindowsX64,
+            [("_getws", "_getws", M), ("setjmp", "_setjmp", M)],
+        ),
+        (
+            Target::WindowsAarch64,
+            [("_getws", "_getws", U), ("setjmp", "_setjmpex", M)],
+        ),
+    ] {
+        let imports: alloc::vec::Vec<_> = common.iter().chain(own.iter()).copied().collect();
+        assert_windows_imports(target, HEADERS, &imports);
+        assert_windows_imports(
+            target,
+            "#include <unistd.h>\n",
+            &[("execv", "_execv", M), ("execvp", "_execvp", M)],
+        );
+    }
+}
+
+/// A stream scanner on Windows holds the stream's lock across its call
+/// through msvcrt.dll's `_lock` / `_unlock` for its static streams and
+/// kernel32's critical-section calls for the rest, msvcrt exporting no
+/// `_lock_file`.
+#[test]
+fn windows_stream_scanners_take_the_stream_lock() {
+    use crate::Target;
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            "#include <stdio.h>\n\
+             int main(void) { int x; return fscanf(stdin, \"%d\", &x); }\n",
+            &[
+                ("_lock", "msvcrt.dll"),
+                ("_unlock", "msvcrt.dll"),
+                ("EnterCriticalSection", "kernel32.dll"),
+                ("LeaveCriticalSection", "kernel32.dll"),
+            ],
+        );
+    }
+}
+
+/// The twelve C99 scanners are libc/lib/scanf_ext.c's on Windows: an image
+/// taking each one's address imports no C-library scanner, and converts
+/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`.
+#[test]
+fn windows_scanners_import_no_crt_scanner() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <wchar.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {(fn)scanf, (fn)fscanf, (fn)sscanf, (fn)vscanf, (fn)vfscanf,\n\
+          (fn)vsscanf, (fn)wscanf, (fn)fwscanf, (fn)swscanf, (fn)vwscanf, (fn)vfwscanf,\n\
+          (fn)vswscanf};\n\
+        int main(void) { return used[0] == 0; }\n";
+    const CRT_SCANNERS: [&str; 9] = [
+        "scanf",
+        "fscanf",
+        "sscanf",
+        "wscanf",
+        "fwscanf",
+        "swscanf",
+        "__stdio_common_vsscanf",
+        "__stdio_common_vfscanf",
+        "__stdio_common_vswscanf",
+    ];
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for symbol in CRT_SCANNERS {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol),
+                None,
+                "{target:?}: {symbol}"
+            );
+        }
+        for symbol in ["_strtod_l", "_strtof_l"] {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol).as_deref(),
+                Some("ucrtbase.dll"),
+                "{target:?}: {symbol}"
+            );
+        }
+    }
+}
+
+/// The external functions and objects the startup runtime, the compiler
+/// runtime and the C-library sources the link offers define for `target`.
+fn link_definitions(target: crate::Target) -> alloc::collections::BTreeSet<String> {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler};
+    let crt = alloc::vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    let mut defined = alloc::collections::BTreeSet::new();
+    let sources = crate::embedded_runtime().iter();
+    for (name, body) in sources
+        .chain(crate::embedded_compiler_rt())
+        .chain(crate::embedded_libc())
+    {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(crt.clone());
+        let program = Compiler::with_options(body.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?} {name}: {e}"));
+        for s in &program.symbols {
+            let entity = s.is_fun_entity() || s.class == Token::Glo as i64;
+            if entity && s.defined_here && s.linkage == Linkage::External {
+                defined.insert(s.link_name().to_string());
+            }
+        }
+    }
+    defined
+}
+
+/// Asserts that every function and object a bundled header declares for
+/// `target` resolves at link: it is bound to a library, defined by the
+/// header, an intrinsic, in the target's C library export set, or defined by
+/// the startup runtime or a C-library source the link offers like an archive
+/// member, which a unit naming all of those then links against.
+/// `own_library` names what a program's own `-l` library supplies. Each
+/// header served on `target` is compiled alone with the feature macros that
+/// widen its surface; one that stops at an `#error` serves another
+/// configuration.
+fn assert_header_declarations_resolve(target: crate::Target, own_library: &[&str]) {
+    use crate::c5::preprocessor::Preprocessor;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler, NativeOptions, TargetCLibrary};
+    const MACROS: &str = "#define _GNU_SOURCE 1\n#define _POSIX_C_SOURCE 200809L\n";
+    let defined = link_definitions(target);
+    let mut library = TargetCLibrary::new(target);
+    let mut unresolved = alloc::vec::Vec::new();
+    let mut from_sources = alloc::collections::BTreeMap::new();
+    for (header, targets, _) in crate::embedded_headers() {
+        if !targets.contains(target) {
+            continue;
+        }
+        let src = alloc::format!("{MACROS}#include <{header}>\n");
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = match Compiler::with_options(src.clone(), target, opts).compile() {
+            Ok(program) => program,
+            Err(e) => {
+                let text = alloc::format!("{e}");
+                assert!(
+                    text.contains("[error-directive]"),
+                    "{target:?} <{header}>: {text}"
+                );
+                continue;
+            }
+        };
+        let mut pp = Preprocessor::new(target.id_str(), target, "0");
+        pp.process(&src).expect("the unit compiled");
+        let bound = |name: &str| {
+            (pp.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == name))
+        };
+        for s in &program.symbols {
+            let object = s.class == Token::Glo as i64 && s.declares_no_storage();
+            let function = s.is_fun_entity() && !s.defined_here;
+            let name = s.link_name();
+            if !(object || function) || s.linkage != Linkage::External || bound(name) {
+                continue;
+            }
+            let ms_intrinsic = crate::c5::preprocessor::builtins::is_ms_intrinsic(name, target);
+            if pp.intrinsics.contains_key(name) || ms_intrinsic || library.admit(name) {
+                continue;
+            }
+            if own_library.contains(&name) {
+                continue;
+            }
+            if defined.contains(name) {
+                from_sources.insert(name.to_string(), object);
+            } else {
+                unresolved.push(alloc::format!("<{header}> {name}"));
+            }
+        }
+    }
+    unresolved.sort();
+    unresolved.dedup();
+    assert!(
+        unresolved.is_empty(),
+        "{target:?}: declared with no definition:\n  {}",
+        unresolved.join("\n  ")
+    );
+    let mut unit = alloc::string::String::new();
+    for (name, object) in &from_sources {
+        unit += &if *object {
+            alloc::format!("extern char {name};\n")
+        } else {
+            alloc::format!("void {name}(void);\n")
+        };
+    }
+    unit += "static void *const used[] = {\n";
+    for name in from_sources.keys() {
+        unit += &alloc::format!("    (void *)&{name},\n");
+    }
+    unit += "};\nint main(void) { return used[0] == 0; }\n";
+    let program = crate::c5::tests::compile_str_bare_for(&unit, target);
+    if let Err(e) = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+    {
+        panic!("{target:?}: {e}");
+    }
+}
+
+/// Every declaration a bundled header makes for a Windows target resolves at
+/// link. A name mingw-w64 does not declare is left undeclared instead
+/// (`native-compilation.md` states the rule).
+#[test]
+fn windows_header_declarations_resolve_at_link() {
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_header_declarations_resolve(target, &[]);
+    }
+}
+
+/// Every declaration a bundled header makes for macOS and the Linux targets
+/// resolves at link. A name the platform's C library does not provide is
+/// left undeclared there. The gettext functions and crypt are what a
+/// program's own libintl and libcrypt supply.
+#[test]
+fn posix_header_declarations_resolve_at_link() {
+    const OWN: &[&str] = &[
+        "bind_textdomain_codeset",
+        "bindtextdomain",
+        "crypt",
+        "dcgettext",
+        "dcngettext",
+        "dgettext",
+        "dngettext",
+        "gettext",
+        "ngettext",
+        "textdomain",
+    ];
+    for target in [
+        crate::Target::MacOSAarch64,
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+    ] {
+        assert_header_declarations_resolve(target, OWN);
+    }
+}
+
+/// On a Windows host, every binding the bundled headers state for the host's
+/// target names an export of its DLL, so an image importing it loads.
+#[cfg(windows)]
+#[test]
+fn windows_bindings_name_exports_of_their_dlls() {
+    use crate::c5::host::Host;
+    let target = if cfg!(target_arch = "aarch64") {
+        crate::Target::WindowsAarch64
+    } else {
+        crate::Target::WindowsX64
+    };
+    let mut host = crate::StdHost::default();
+    let mut missing = alloc::vec::Vec::new();
+    for (dll, symbol) in crate::c5::linker::library_bindings(target) {
+        let handle = host.dlopen(Some(&dll), 0);
+        if handle == 0 || host.dlsym(handle, &symbol) == 0 {
+            missing.push(alloc::format!("{dll} {symbol}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "{target:?}: not exported:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
+/// On a macOS or Linux host, every binding the bundled headers state for the
+/// host's target names an export of its library, so an image importing it
+/// loads. A Mach-O symbol carries the leading underscore `dlsym` does not
+/// take.
+#[cfg(all(
+    unix,
+    any(target_os = "macos", target_os = "linux"),
+    any(target_arch = "aarch64", target_arch = "x86_64")
+))]
+#[test]
+fn posix_bindings_name_exports_of_their_libraries() {
+    use crate::c5::host::Host;
+    const RTLD_LAZY: i64 = 1;
+    let target = if cfg!(target_os = "macos") {
+        crate::Target::MacOSAarch64
+    } else if cfg!(target_arch = "aarch64") {
+        crate::Target::LinuxAarch64
+    } else {
+        crate::Target::LinuxX64
+    };
+    let mut host = crate::StdHost::default();
+    let mut missing = alloc::vec::Vec::new();
+    for (library, symbol) in crate::c5::linker::library_bindings(target) {
+        let name = if cfg!(target_os = "macos") {
+            symbol.strip_prefix('_').unwrap_or(&symbol)
+        } else {
+            &symbol
+        };
+        let handle = host.dlopen(Some(&library), RTLD_LAZY);
+        if handle == 0 || host.dlsym(handle, name) == 0 {
+            missing.push(alloc::format!("{library} {symbol}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "{target:?}: not exported:\n  {}",
+        missing.join("\n  ")
+    );
 }
 
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
@@ -1379,11 +2550,11 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
     );
 }
 
-/// PE has no COPY-relocation semantics: a symbol both bound as a data
-/// import and defined in the image would resolve to the local slot and
-/// silently drop the binding, so the link must reject the collision.
-/// (On ELF the same dual is the design: the local definition is the
-/// COPY destination.)
+/// PE has no COPY-relocation semantics: a zero-filled definition of a
+/// name bound as a data import would resolve the references to the local
+/// slot and silently drop the binding, so the link rejects the collision
+/// as a diagnostic. (On ELF the same dual is the design: the local
+/// definition is the COPY destination.)
 #[test]
 fn data_binding_with_local_definition_is_a_link_error_on_windows_x64() {
     use crate::{CompileOptions, Compiler, NativeOptions, Target};
@@ -1402,7 +2573,7 @@ fn data_binding_with_local_definition_is_a_link_error_on_windows_x64() {
         super::link_executable_with_runtime(&program, Target::WindowsX64, NativeOptions::default())
             .expect_err("a data binding shadowed by a local definition must fail the link");
     assert!(
-        err.contains("bound as a data import"),
+        err.contains("bound as a data import") && !err.contains("internal compiler error"),
         "diagnostic must name the collision; got: {err}"
     );
 }
@@ -1555,80 +2726,60 @@ fn data_import_routes_to_declaring_dylib_on_windows_x64() {
     );
 }
 
-/// C99 7.19.6.5p3 / 7.19.6.12p3: snprintf / vsnprintf return the
-/// untruncated length and NUL-terminate a nonempty buffer; msvcrt's
-/// `_snprintf` / `_vsnprintf` return -1 and omit the NUL. The standard
-/// spellings therefore carry no msvcrt binding on Windows: they resolve
-/// against the runtime's conforming definitions, which wrap
-/// `_vsnprintf` + `_vscprintf`.
+/// The C99 printf family is libc/lib/printf_ext.c's on Windows: an image
+/// taking each one's address imports none of msvcrt's formatters, and
+/// formats through ucrtbase.dll's `__stdio_common_vsprintf` and
+/// `__stdio_common_vswprintf`.
 #[test]
-fn windows_snprintf_resolves_to_the_runtime_definition() {
-    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+fn windows_printf_family_formats_through_ucrtbase() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <stdio.h>\n#include <wchar.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {(fn)printf, (fn)fprintf, (fn)sprintf, (fn)snprintf,\n\
+          (fn)vprintf, (fn)vfprintf, (fn)vsprintf, (fn)vsnprintf, (fn)wprintf, (fn)fwprintf,\n\
+          (fn)swprintf, (fn)vwprintf, (fn)vfwprintf, (fn)vswprintf};\n\
+        int main(void) { return used[0] == 0; }\n";
+    const MSVCRT_FORMATTERS: [&str; 14] = [
+        "printf",
+        "fprintf",
+        "sprintf",
+        "vprintf",
+        "vfprintf",
+        "vsprintf",
+        "_vsnprintf",
+        "_vscprintf",
+        "wprintf",
+        "fwprintf",
+        "vwprintf",
+        "vfwprintf",
+        "_vsnwprintf",
+        "_vscwprintf",
+    ];
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
-        let program = Compiler::with_options(
-            "#include <stdio.h>\n\
-             int main(void){char b[4]; return snprintf(b, 4, \"%d\", 123456);}\n"
-                .to_string(),
-            target,
-            CompileOptions::default().with_no_entry_point(true),
-        )
-        .compile()
-        .expect("compile snprintf TU");
-        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
-            .expect("link Windows executable");
-        for imported in ["_vscprintf", "_vsnprintf"] {
-            assert_eq!(
-                pe_import_dll_of(&image, imported).as_deref(),
-                Some("msvcrt.dll"),
-                "{target:?}: the runtime definition must import `{imported}`"
-            );
-        }
-        for absent in ["_snprintf", "snprintf", "vsnprintf"] {
-            assert!(
-                pe_iat_slot_rva(&image, absent).is_none(),
-                "{target:?}: `{absent}` must not appear in the import table"
-            );
-        }
-    }
-}
-
-/// A shared library compiles the runtime with `__BADC_C5_CRT__` but
-/// without the startup gate; the CRT section alone must still define
-/// the C99 snprintf / vsnprintf so a DLL's calls resolve locally.
-#[test]
-fn windows_runtime_crt_section_defines_snprintf_without_start_gate() {
-    use crate::{
-        CompileOptions, Compiler, NativeOptions, OutputKind, Target, embedded_runtime,
-        link_native_objects, parse_native_elf,
-    };
-    let target = Target::WindowsX64;
-    let reloc = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..Default::default()
-    };
-    let mut objs = Vec::new();
-    for (name, body) in embedded_runtime() {
-        let copts = CompileOptions::default()
-            .with_no_entry_point(true)
-            .with_defines(vec![("__BADC_C5_CRT__".to_string(), "1".to_string())]);
-        let rt = Compiler::with_options(body.to_string(), target, copts)
+        let program = Compiler::with_target(SRC.to_string(), target)
             .compile()
-            .unwrap_or_else(|e| panic!("compile runtime {name}: {e}"));
-        let bytes = crate::emit_native_with_options(&rt, target, reloc.clone())
-            .unwrap_or_else(|e| panic!("emit runtime {name}: {e}"));
-        objs.push(parse_native_elf(&bytes).expect("parse runtime object"));
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        for symbol in MSVCRT_FORMATTERS {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol),
+                None,
+                "{target:?}: {symbol}"
+            );
+        }
+        for symbol in [
+            "__stdio_common_vsprintf",
+            "__stdio_common_vswprintf",
+            "_set_printf_count_output",
+        ] {
+            assert_eq!(
+                pe_import_dll_of(&image, symbol).as_deref(),
+                Some("ucrtbase.dll"),
+                "{target:?}: {symbol}"
+            );
+        }
     }
-    let merged = link_native_objects(&objs).expect("link CRT-only runtime");
-    for def in ["snprintf", "vsnprintf"] {
-        assert!(
-            merged.defined.contains_key(def),
-            "the CRT section must define `{def}`"
-        );
-    }
-    assert!(
-        !merged.defined.contains_key("__c5_entry"),
-        "the startup section must stay gated out"
-    );
 }
 
 /// Return the `(VirtualAddress, raw bytes)` of the PE `.text`
@@ -2778,16 +3929,12 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
-/// No atomic form on a 16-byte object lowers: the paired
-/// compare-exchange (x86-64 `cmpxchg16b`, aarch64 `casp` / `ldxp`-`stxp`)
-/// is not emitted, and two 8-byte accesses would tear. Every form must
-/// be rejected with that diagnostic rather than lowered through the
-/// zero-width access `type_size_bytes` yields for the struct-backed
-/// __int128. `__atomic_is_lock_free` reports the same limit, so a
-/// caller can test for it (`atomic_lock_free_widths.c`).
-/// TODO: lower 16-byte objects via the paired compare-exchange.
+/// Every atomic form on a 16-byte object lowers through the paired
+/// compare-exchange: `LOCK CMPXCHG16B` on x86-64 and `CASP` on aarch64,
+/// never two 8-byte accesses, which would tear. The runtime behavior is
+/// `atomic_int128_operations.c`.
 #[test]
-fn atomic128_is_rejected_not_miscompiled() {
+fn atomic128_lowers_to_the_paired_compare_exchange() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let bodies = [
         "return __atomic_compare_exchange_n(p, e, n, 0, 5, 5);",
@@ -2803,11 +3950,24 @@ fn atomic128_is_rejected_not_miscompiled() {
              int main(){{ return 0; }}"
         );
         let program = super::compile_str_bare(&src);
-        let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-            .unwrap_err();
+        let x64 = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+            .expect("x86-64");
+        // `F0 REX.W 0F C7` with the /1 operand.
         assert!(
-            err.to_string().contains("16-byte atomic object"),
-            "expected the wide-atomic rejection for `{body}`, got: {err}",
+            x64.windows(5).any(|w| w[0] == 0xF0
+                && w[1] & 0xF8 == 0x48
+                && w[2..4] == [0x0F, 0xC7]
+                && (w[4] >> 3) & 7 == 1),
+            "`{body}`: no CMPXCHG16B"
+        );
+        let a64 =
+            emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+                .expect("aarch64");
+        assert!(
+            a64.chunks(4).any(
+                |w| u32::from_le_bytes(w.try_into().unwrap_or([0; 4])) & 0xFFA0_7C00 == 0x4820_7C00
+            ),
+            "`{body}`: no CASP"
         );
     }
 }
@@ -8561,7 +9721,7 @@ fn escape_analysis_reads_identifier_runs_not_whole_templates() {
 /// A unit that uses a library builtin and has the library name declared
 /// compiles in one front-end pass with nothing recovered.
 #[test]
-fn builtin_thunks_need_no_auto_include_retry() {
+fn library_builtins_need_no_auto_include_retry() {
     use crate::{CompileOptions, Compiler, Target};
     let src = "
         int memcmp(const void *a, const void *b, unsigned long n);
@@ -8574,7 +9734,7 @@ fn builtin_thunks_need_no_auto_include_retry() {
     ";
     let prog = Compiler::with_options(src.into(), Target::LinuxX64, CompileOptions::default())
         .compile()
-        .expect("the thunks resolve without a retry");
+        .expect("the builtins resolve without a retry");
     assert!(
         prog.auto_includes.is_empty(),
         "no retry should be needed, got {:?}",
@@ -8585,7 +9745,7 @@ fn builtin_thunks_need_no_auto_include_retry() {
 /// The absolute-value builtins fold in a constant expression alongside
 /// the other library builtins.
 #[test]
-fn absolute_value_builtins_fold_alongside_the_thunks() {
+fn absolute_value_builtins_fold_alongside_the_library_builtins() {
     use crate::{CompileOptions, Compiler, Target};
     let src = "
         int memcmp(const void *a, const void *b, unsigned long n);
@@ -8601,12 +9761,11 @@ fn absolute_value_builtins_fold_alongside_the_thunks() {
 }
 
 /// A driver `-include` file may hold a translation unit's body rather than
-/// declarations, so the `__builtin_*` thunk header has to precede the whole
-/// forced-include list, not follow it. gcc and clang make the builtins visible
-/// before any input is read.
+/// declarations; the builtins are visible to it as to the main source, as
+/// gcc and clang make them visible before any input is read.
 #[test]
 #[cfg(feature = "full")]
-fn builtin_thunks_precede_the_forced_include_list() {
+fn builtins_are_visible_to_a_forced_include_body() {
     use crate::{CompileOptions, Compiler, Target};
     let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("scratch dir");
@@ -8632,7 +9791,7 @@ fn builtin_thunks_precede_the_forced_include_list() {
     .compile();
     std::fs::remove_file(&body).ok();
     std::fs::remove_dir(&dir).ok();
-    prog.expect("the thunk header is visible to a forced-include body");
+    prog.expect("the builtins are visible to a forced-include body");
 }
 
 #[test]
@@ -8679,7 +9838,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
         .auto_includes
         .iter()
         .map(|n| {
-            crate::c5::headers::header_declaring(n)
+            crate::c5::headers::header_declaring(n, target)
                 .expect("the recovered name names a header")
                 .to_string()
         })

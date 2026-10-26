@@ -70,6 +70,12 @@ pub(crate) enum AsmSectionValue {
         /// assembled, which makes the field PC-relative as GNU as makes it.
         minus: Option<alloc::string::String>,
     },
+    /// `sym@OP + addend`: a field the gas relocation operator relocates.
+    RelocOp {
+        name: alloc::string::String,
+        addend: i64,
+        op: AsmRelocOp,
+    },
 }
 
 /// One item of an in-template section block, in source order.
@@ -181,6 +187,12 @@ pub(crate) enum AsmSectionItem {
         bytes: alloc::vec::Vec<u8>,
         relocs: alloc::vec::Vec<AsmSectionReloc>,
         short: Option<AsmShortBranch>,
+    },
+    /// `.comm name, size, align`: a common symbol, which the link allocates.
+    Common {
+        name: alloc::string::String,
+        size: u64,
+        align: u64,
     },
     /// `.weak name`: weak symbol binding. The materializer marks a label
     /// defined in this statement's sections; a name defined elsewhere in the
@@ -300,11 +312,21 @@ pub(crate) struct AsmSectionBlock {
     pub entsize: u32,
     /// The section the `o` flag orders this one after.
     pub link: Option<alloc::string::String>,
+    /// The section group the `G` flag names.
+    pub group: Option<AsmSectionGroup>,
     /// `.subsection` number. Subsections share the section's identity and
     /// space; layout orders a section's blocks by this number, so
     /// subsection 1 lands after every subsection-0 block.
     pub subsection: u32,
     pub items: alloc::vec::Vec<AsmSectionItem>,
+}
+
+/// A `G` section's group: its signature name, and whether the `comdat`
+/// linkage makes it a `GRP_COMDAT` group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmSectionGroup {
+    pub name: alloc::string::String,
+    pub comdat: bool,
 }
 
 impl AsmSectionBlock {
@@ -316,6 +338,7 @@ impl AsmSectionBlock {
             sh_type: self.sh_type.clone(),
             entsize: self.entsize,
             link: self.link.clone(),
+            group: self.group.clone(),
             subsection: 0,
             items: alloc::vec::Vec::new(),
         }
@@ -368,6 +391,56 @@ pub(crate) enum AsmRelocKind {
     /// `.reloc`: the ELF relocation type is named in the source, and the
     /// section deposits no field for it.
     Explicit(u32),
+    /// A field a gas relocation operator names (`sym@GOTPCREL`); the object
+    /// writer picks the type for the psABI and the field's width.
+    Op { op: AsmRelocOp, relax: AsmGotRelax },
+}
+
+/// A gas x86 relocation operator written on a symbol (`sym@PLT`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AsmRelocOp {
+    Plt,
+    Got,
+    GotPcRel,
+    GotOff,
+    TpOff,
+    GotTpOff,
+    TlsGd,
+    TlsLd,
+    DtpOff,
+}
+
+/// Whether a GOT field's instruction is one the psABI lets the link relax
+/// (`R_X86_64_[REX_]GOTPCRELX`, `R_386_GOT32X`), and whether it has a REX.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum AsmGotRelax {
+    #[default]
+    No,
+    Relaxable,
+    RelaxableRex,
+}
+
+/// `sym@OP...`: the expression without its relocation operator, and the
+/// operator, which gas reads in either case.
+pub(crate) fn split_reloc_op(expr: &str) -> Option<(alloc::string::String, AsmRelocOp)> {
+    let at = expr.find('@')?;
+    let after = &expr[at + 1..];
+    let end = after
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(after.len());
+    let op = match after[..end].to_ascii_uppercase().as_str() {
+        "PLT" => AsmRelocOp::Plt,
+        "GOT" => AsmRelocOp::Got,
+        "GOTPCREL" => AsmRelocOp::GotPcRel,
+        "GOTOFF" => AsmRelocOp::GotOff,
+        "TPOFF" => AsmRelocOp::TpOff,
+        "GOTTPOFF" => AsmRelocOp::GotTpOff,
+        "TLSGD" => AsmRelocOp::TlsGd,
+        "TLSLD" => AsmRelocOp::TlsLd,
+        "DTPOFF" => AsmRelocOp::DtpOff,
+        _ => return None,
+    };
+    Some((alloc::format!("{}{}", &expr[..at], &after[end..]), op))
 }
 
 impl AsmRelocKind {
@@ -488,7 +561,7 @@ pub(crate) enum LabelLoc {
 pub(crate) enum AsmSpace {
     Text,
     Deferred(u32),
-    /// A named section, by its `(name, flags, sh_type)` key.
+    /// A named section, by its `(name, flags, sh_type, group)` key.
     Section(alloc::string::String),
     /// A run of parse-time fixed-size items, numbered by [`AsmParseFold`].
     /// Two labels of one run are a constant apart in every layout.
@@ -573,7 +646,8 @@ pub(crate) fn patch_asm_insn_field(
         | AsmRelocKind::A64AddLo12
         | AsmRelocKind::A64LdstLo12(_)
         | AsmRelocKind::A64MovwAbs { .. }
-        | AsmRelocKind::Explicit(_) => Ok(false),
+        | AsmRelocKind::Explicit(_)
+        | AsmRelocKind::Op { .. } => Ok(false),
     }
 }
 
@@ -623,16 +697,17 @@ pub(crate) fn store_asm_insn_const(
 
 /// A materialized named section: bytes plus relocations, accumulated
 /// across the unit's inline-asm statements. The object writers append
-/// one output section per distinct `(name, flags, sh_type)`.
+/// one output section per distinct `(name, group)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmSection {
     pub name: alloc::string::String,
     pub flags: alloc::string::String,
     pub sh_type: Option<alloc::string::String>,
-    /// The `M` flag's entry size and the `o` flag's ordering section, as
-    /// the directive gave them.
+    /// The `M` flag's entry size, the `o` flag's ordering section and the
+    /// `G` flag's group, as the directive gave them.
     pub entsize: u32,
     pub link: Option<alloc::string::String>,
+    pub group: Option<AsmSectionGroup>,
     pub bytes: alloc::vec::Vec<u8>,
     pub relocs: alloc::vec::Vec<AsmSectionReloc>,
     /// Labels defined in the section; each becomes a symbol whose section
@@ -665,6 +740,8 @@ pub(crate) enum AsmSymType {
     NoType,
     Func,
     Object,
+    /// `@gnu_unique_object`: `STT_OBJECT` bound `STB_GNU_UNIQUE`.
+    GnuUniqueObject,
 }
 
 /// Binding a symbol directive requests; `Default` leaves the symbol's own.
@@ -701,6 +778,8 @@ pub(crate) struct AsmSymDecl {
     pub size: Option<u64>,
     /// Assigned value, when a `.set` family directive named it.
     pub value: Option<AsmSymValue>,
+    /// `.comm name, size, align`: a common symbol of `(size, align)`.
+    pub common: Option<(u64, u64)>,
 }
 
 /// A label defined inside a named section.
@@ -740,11 +819,17 @@ pub(crate) struct AsmSectionsSnapshot {
     pub(crate) per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool, Option<MapClass>)>,
 }
 
-/// The `(name, flags, sh_type)` identity key of a section block, as the
-/// measurement map and the expression spaces use it. Subsections share the
-/// key: they are ordered blocks of one section.
+/// The `(name, flags, sh_type, group)` identity key of a section block, as
+/// the measurement map and the expression spaces use it. Subsections share
+/// the key: they are ordered blocks of one section.
 pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
-    alloc::format!("{}\u{0}{}\u{0}{:?}", b.name, b.flags, b.sh_type)
+    alloc::format!(
+        "{}\u{0}{}\u{0}{:?}\u{0}{:?}",
+        b.name,
+        b.flags,
+        b.sh_type,
+        b.group
+    )
 }
 
 /// Identity of the AArch64 literal pool a block's `ldr Rt, =value` loads
@@ -756,7 +841,13 @@ pub(crate) fn literal_pool_key(b: &AsmSectionBlock) -> alloc::string::String {
 
 /// The same identity key for a section already in the sink.
 pub(crate) fn section_key_of(s: &AsmSection) -> alloc::string::String {
-    alloc::format!("{}\u{0}{}\u{0}{:?}", s.name, s.flags, s.sh_type)
+    alloc::format!(
+        "{}\u{0}{}\u{0}{:?}\u{0}{:?}",
+        s.name,
+        s.flags,
+        s.sh_type,
+        s.group
+    )
 }
 
 /// Block processing order: stable by subsection number, so a section's

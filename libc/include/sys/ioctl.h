@@ -57,11 +57,13 @@ struct winsize {
 #define TIOCGWINSZ 0x5413
 #endif
 
+#ifndef _WIN32
 // POSIX (XSH) and both target libcs declare ioctl variadic; Darwin's
 // wrapper reads the argument via va_arg, so a fixed-arity prototype
 // passes it where the callee does not look (Darwin arm64 takes
 // variadic arguments from the stack).
 int ioctl(int fd, unsigned long request, ...);
+#endif
 
 // ioctl request codes referenced by terminal/file modules. Per-target codes.
 #ifndef FIOASYNC

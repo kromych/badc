@@ -133,13 +133,13 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	-<rip>, %rax      # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x20(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x18(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x8(%rbp)
                	movabsq	$0x5a5a5a5a5a5a5afb, %rdi # imm = 0x5A5A5A5A5A5A5AFB
                	movabsq	$-0x5a5a5a5a5a5a012c, %rsi # imm = 0xA5A5A5A5A5A5FED4

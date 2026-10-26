@@ -17,6 +17,8 @@ pub const DWARF_VERSION: u16 = 4;
 pub const DWARF_FORMAT_BITS: u8 = 32;
 
 #[cfg(feature = "native-emit")]
+pub(crate) mod arm64_unwind;
+#[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
@@ -66,10 +68,10 @@ use crate::c5::codegen::asm_fold::{AsmLabelPlacement, bind_label_calls, fold_asm
 pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
-    Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
+    A64Unwind, Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
-    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports,
-    Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
+    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
+    ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -204,12 +206,7 @@ fn resolve_single_image_asm_sym_fixups(
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
         return Ok(());
     }
-    let weak_names: alloc::collections::BTreeSet<&str> = program
-        .symbols
-        .iter()
-        .filter(|s| s.is_weak && s.is_link_entity())
-        .map(|s| s.link_name())
-        .collect();
+    let weak_names = program.weak_link_names();
     let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     enum Loc {
         Def(UnitDef),
@@ -274,15 +271,12 @@ fn resolve_single_image_asm_sym_fixups(
             (Some(part), Loc::Def(def)) => def.bind(build, r.instr_offset, part, r.addend),
             // The GOT's address is the writer's to decide, so the site
             // takes the same record the link path parks for it.
-            (Some(part), Loc::GotBase) => {
-                build
-                    .got_base_fixups
-                    .push(crate::c5::codegen::GotBaseFixup {
-                        instr_offset: r.instr_offset,
-                        got_offset: r.addend,
-                        part,
-                    })
-            }
+            (Some(part), Loc::GotBase) => build.base_fixups.push(crate::c5::codegen::BaseFixup {
+                instr_offset: r.instr_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: r.addend,
+                part,
+            }),
             // An undefined weak name resolves to address 0, as the linkers
             // resolve it: the `adrp` becomes `movz rd, #0`, the `add` keeps
             // the zero base, and a load/store keeps its zero immediate over
@@ -338,12 +332,7 @@ fn resolve_single_tu_extern_refs(
     {
         return Ok(());
     }
-    let weak_names: alloc::collections::BTreeSet<&str> = program
-        .symbols
-        .iter()
-        .filter(|s| s.is_weak && s.is_link_entity())
-        .map(|s| s.link_name())
-        .collect();
+    let weak_names = program.weak_link_names();
     let data_bindings: alloc::collections::BTreeSet<String> = build
         .imports
         .data_bindings
@@ -395,26 +384,18 @@ fn resolve_single_tu_extern_refs(
         if r.symbol_name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL
             && let Some(addend) = r.direct_pcrel
         {
-            build
-                .got_base_fixups
-                .push(crate::c5::codegen::GotBaseFixup {
-                    instr_offset: r.instr_offset,
-                    got_offset: addend + 4,
-                    part: AddrPart::Whole,
-                });
+            build.base_fixups.push(crate::c5::codegen::BaseFixup {
+                instr_offset: r.instr_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: addend + 4,
+                part: AddrPart::Whole,
+            });
             continue;
         }
         if !weak_names.contains(r.symbol_name.as_str()) {
             return Err(undefined(&r.symbol_name));
         }
-        let ok = match machine {
-            Machine::X86_64 => weak_undef::x86_64_lea_to_zero(&mut build.text, r.instr_offset),
-            Machine::Aarch64 => {
-                weak_undef::aarch64_adrp_to_zero(&mut build.text, r.instr_offset)
-                    && weak_undef::aarch64_add_lo12_to_zero(&mut build.text, r.instr_offset + 4)
-            }
-        };
-        if !ok {
+        if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
             return Err(unsupported(&r.symbol_name));
         }
     }
@@ -425,13 +406,7 @@ fn resolve_single_tu_extern_refs(
         if !weak_names.contains(site.symbol_name.as_str()) {
             return Err(undefined(&site.symbol_name));
         }
-        let ok = match machine {
-            Machine::X86_64 => weak_undef::x86_64_branch_to_nop(&mut build.text, site.instr_offset),
-            Machine::Aarch64 => {
-                weak_undef::aarch64_branch_to_nop(&mut build.text, site.instr_offset)
-            }
-        };
-        if !ok {
+        if !weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset) {
             return Err(unsupported(&site.symbol_name));
         }
     }
@@ -580,11 +555,12 @@ fn compact_and_lower(
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
+    program.interposable_refs = options.output_kind == OutputKind::Relocatable
+        && options.pic
+        && !options.pie
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    if program.data.is_empty()
-        || program.finished_functions.is_empty()
-        || shadow::data_dce_disabled()
-    {
+    if program.data.is_empty() {
         let mut build = crate::c5::codegen::lower_for_with_prebuilt(
             &program,
             target,
@@ -594,6 +570,22 @@ fn compact_and_lower(
         )?;
         crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((program, 0, build));
+    }
+    // With no function to probe, or the prune turned off, every object
+    // stays and only the placement into regions and zero-fill applies.
+    if program.finished_functions.is_empty() || shadow::data_dce_disabled() {
+        let sets = shadow::LiveSets::everything(&program);
+        let (laid, bss_size, _map) =
+            shadow::apply_data_liveness(program, &sets, &sets.func_pcs, segregate, None);
+        let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+            &laid,
+            target,
+            options,
+            None,
+            LowerMode::Full,
+        )?;
+        crate::c5::codegen::emit_ssa_dump(&mut build);
+        return Ok((laid, bss_size, build));
     }
     let probe = crate::c5::codegen::lower_for_with_prebuilt(
         &program,
@@ -780,10 +772,13 @@ pub(crate) mod test_support {
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
+            fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             exports: Vec::new(),
+            exported_objects: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
             source_files: Vec::new(),
@@ -793,6 +788,7 @@ pub(crate) mod test_support {
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,
+            default_libs: Vec::new(),
             auto_includes: Vec::new(),
             data_align: 8,
             image_align_error: None,
@@ -820,8 +816,8 @@ pub(crate) mod test_support {
             tls_data_import_binds: Vec::new(),
             canonical_imports: Vec::new(),
             preemptible_imports: Vec::new(),
-            got_base_fixups: Vec::new(),
-            got_rel_fields: Vec::new(),
+            base_fixups: Vec::new(),
+            image_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),
             text_align: 16,
             data_liveness: None,
@@ -870,6 +866,7 @@ pub(crate) mod test_support {
             param_frame_offsets: BTreeMap::new(),
             region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),
+            a64_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),
@@ -880,6 +877,11 @@ pub(crate) mod test_support {
             tls_init_size: 0,
             tls_align: 8,
             tls_index_fixups: Vec::new(),
+            tls_index_slot: None,
+            pe_unwind: Vec::new(),
+            tls_got: Vec::new(),
+            tls_got_fields: Vec::new(),
+            static_tls: false,
             elf_tpoff_fixups: Vec::new(),
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
@@ -888,8 +890,11 @@ pub(crate) mod test_support {
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
+            image_base_slots: Vec::new(),
+            tls_image_base_slots: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
+            protected_exports: Default::default(),
             image_symbols: Vec::new(),
             output_kind: OutputKind::Relocatable,
             shared_lib_name: None,

@@ -10,6 +10,7 @@
 #pragma once
 
 #ifdef _WIN32
+#define _WINDOWS_
 
 // `NULL` and `size_t` (C99 7.17) -- included so consumers
 // that only pull in `<windows.h>` get them too.
@@ -34,19 +35,20 @@
 // the call regardless of inline / dllimport tagging -- so they
 // expand to nothing. `__declspec(...)` swallows its argument
 // list; `__forceinline` / `__inline` collapse to nothing.
-// Win32 TCHAR-aware string macros. Real headers expand these to
-// `L"..."` under `UNICODE`; we treat them as no-ops because c5's
-// runtime always reaches for the ANSI-flavoured calls. The
-// matching `LoadLibrary` / `GetModuleHandle` / etc. macros pick
-// the `A` suffix variant.
-#define _T(x) x
-#define __TEXT(x) x
-#define TEXT(x) x
-// Generic-text character type. c5 reaches for the ANSI-flavoured calls, so
-// TCHAR is `char` unless the program opts into UNICODE.
-#define LoadLibrary LoadLibraryA
-#define GetModuleHandle GetModuleHandleA
-#define GetSystemDirectory GetSystemDirectoryA
+// UNICODE selects the W form of each generic Win32 name and a wide TEXT
+// literal, as mingw-w64's winnt.h and _mingw_unicode.h do; the generic
+// names are defined at the end of this header. `_T` / `_TEXT` are
+// <tchar.h>'s, keyed on _UNICODE.
+#ifdef UNICODE
+#define __TEXT(quote) L##quote
+#define __MINGW_NAME_AW(func) func##W
+#define __MINGW_TYPEDEF_AW(type) typedef type##W type;
+#else
+#define __TEXT(quote) quote
+#define __MINGW_NAME_AW(func) func##A
+#define __MINGW_TYPEDEF_AW(type) typedef type##A type;
+#endif
+#define TEXT(quote) __TEXT(quote)
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
@@ -56,6 +58,7 @@
 #define NEAR
 #define VOID void
 #define CONST const
+#define UNALIGNED
 #define IN
 #define OUT
 #define OPTIONAL
@@ -103,12 +106,22 @@ typedef CHAR              *PCHAR, *LPCH, *PCH;
 typedef const CHAR        *LPCCH, *PCCH;
 typedef CHAR              *NPSTR, *LPSTR, *PSTR;
 typedef const CHAR        *LPCSTR, *PCSTR;
+// TCHAR follows UNICODE here and _UNICODE in <tchar.h>; whichever header
+// comes first defines it, as in mingw-w64's winnt.h.
 #ifdef UNICODE
+#ifndef _TCHAR_DEFINED
+#define _TCHAR_DEFINED
 typedef WCHAR              TCHAR, *PTCHAR;
+typedef WCHAR              TBYTE, *PTBYTE;
+#endif
 typedef LPWSTR             PTSTR, LPTSTR;
 typedef LPCWSTR            PCTSTR, LPCTSTR;
 #else
+#ifndef _TCHAR_DEFINED
+#define _TCHAR_DEFINED
 typedef char               TCHAR, *PTCHAR;
+typedef unsigned char      TBYTE, *PTBYTE;
+#endif
 typedef LPSTR              PTSTR, LPTSTR;
 typedef LPCSTR             PCTSTR, LPCTSTR;
 #endif
@@ -306,11 +319,6 @@ typedef enum {
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
-// SearchPathA is the canonical kernel32 entry; the unsuffixed
-// `SearchPath` spelling lets source compiled against `<windows.h>`
-// pick up the same binding through the `#define SearchPath
-// SearchPathA` alias below.
-#pragma binding(kernel32::SearchPath,              "SearchPathA")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
@@ -360,6 +368,7 @@ typedef enum {
 #pragma binding(kernel32::SleepConditionVariableCS,    "SleepConditionVariableCS")
 #pragma binding(kernel32::WakeConditionVariable,       "WakeConditionVariable")
 #pragma binding(kernel32::WakeAllConditionVariable,    "WakeAllConditionVariable")
+#pragma binding(kernel32::CreateSemaphoreA,            "CreateSemaphoreA")
 #pragma binding(kernel32::CreateSemaphoreW,            "CreateSemaphoreW")
 #pragma binding(kernel32::ReleaseSemaphore,            "ReleaseSemaphore")
 #pragma binding(kernel32::GetCurrentThread,            "GetCurrentThread")
@@ -377,36 +386,64 @@ typedef enum {
 #pragma binding(bcrypt::BCryptGenRandom,               "BCryptGenRandom")
 #pragma dylib(advapi32, "advapi32.dll")
 #pragma binding(advapi32::GetUserNameW,                "GetUserNameW")
+#pragma binding(advapi32::GetUserNameA,                "GetUserNameA")
 #pragma binding(advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW, "ConvertStringSecurityDescriptorToSecurityDescriptorW")
+#pragma binding(advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorA, "ConvertStringSecurityDescriptorToSecurityDescriptorA")
 // advapi32 registry API (winreg.h). The reflection-key entry points
 // (RegEnable/Disable/QueryReflectionKey) are absent: callers resolve
 // them at runtime through GetProcAddress, so no binding is needed.
 #pragma binding(advapi32::RegCloseKey,                 "RegCloseKey")
 #pragma binding(advapi32::RegConnectRegistryW,         "RegConnectRegistryW")
+#pragma binding(advapi32::RegConnectRegistryA,         "RegConnectRegistryA")
 #pragma binding(advapi32::RegCreateKeyW,               "RegCreateKeyW")
+#pragma binding(advapi32::RegCreateKeyA,               "RegCreateKeyA")
 #pragma binding(advapi32::RegCreateKeyExW,             "RegCreateKeyExW")
+#pragma binding(advapi32::RegCreateKeyExA,             "RegCreateKeyExA")
 #pragma binding(advapi32::RegDeleteKeyW,               "RegDeleteKeyW")
+#pragma binding(advapi32::RegDeleteKeyA,               "RegDeleteKeyA")
 #pragma binding(advapi32::RegDeleteKeyExW,             "RegDeleteKeyExW")
+#pragma binding(advapi32::RegDeleteKeyExA,             "RegDeleteKeyExA")
 #pragma binding(advapi32::RegDeleteValueW,             "RegDeleteValueW")
+#pragma binding(advapi32::RegDeleteValueA,             "RegDeleteValueA")
+#pragma binding(advapi32::RegDeleteTreeA,              "RegDeleteTreeA")
+#pragma binding(advapi32::RegDeleteTreeW,              "RegDeleteTreeW")
+#pragma binding(advapi32::RegisterEventSourceA,        "RegisterEventSourceA")
+#pragma binding(advapi32::RegisterEventSourceW,        "RegisterEventSourceW")
+#pragma binding(advapi32::DeregisterEventSource,       "DeregisterEventSource")
+#pragma binding(advapi32::ReportEventA,                "ReportEventA")
+#pragma binding(advapi32::ReportEventW,                "ReportEventW")
 #pragma binding(advapi32::RegEnumKeyExW,               "RegEnumKeyExW")
+#pragma binding(advapi32::RegEnumKeyExA,               "RegEnumKeyExA")
 #pragma binding(advapi32::RegEnumValueW,               "RegEnumValueW")
+#pragma binding(advapi32::RegEnumValueA,               "RegEnumValueA")
 #pragma binding(advapi32::RegFlushKey,                 "RegFlushKey")
 #pragma binding(advapi32::RegLoadKeyW,                 "RegLoadKeyW")
+#pragma binding(advapi32::RegLoadKeyA,                 "RegLoadKeyA")
 #pragma binding(advapi32::RegOpenKeyExW,               "RegOpenKeyExW")
+#pragma binding(advapi32::RegOpenKeyExA,               "RegOpenKeyExA")
 #pragma binding(advapi32::RegQueryInfoKeyW,            "RegQueryInfoKeyW")
+#pragma binding(advapi32::RegQueryInfoKeyA,            "RegQueryInfoKeyA")
 #pragma binding(advapi32::RegQueryValueExW,            "RegQueryValueExW")
+#pragma binding(advapi32::RegQueryValueExA,            "RegQueryValueExA")
 #pragma binding(advapi32::RegSaveKeyW,                 "RegSaveKeyW")
+#pragma binding(advapi32::RegSaveKeyA,                 "RegSaveKeyA")
 #pragma binding(advapi32::RegSetValueExW,              "RegSetValueExW")
+#pragma binding(advapi32::RegSetValueExA,              "RegSetValueExA")
 #pragma dylib(pathcch, "api-ms-win-core-path-l1-1-0.dll")
 #pragma binding(pathcch::PathCchSkipRoot,              "PathCchSkipRoot")
 #pragma binding(pathcch::PathCchCombineEx,             "PathCchCombineEx")
 #pragma dylib(version, "version.dll")
 #pragma binding(version::GetFileVersionInfoSizeW,      "GetFileVersionInfoSizeW")
+#pragma binding(version::GetFileVersionInfoSizeA,      "GetFileVersionInfoSizeA")
 #pragma binding(version::GetFileVersionInfoW,          "GetFileVersionInfoW")
+#pragma binding(version::GetFileVersionInfoA,          "GetFileVersionInfoA")
 #pragma binding(version::VerQueryValueW,               "VerQueryValueW")
+#pragma binding(version::VerQueryValueA,               "VerQueryValueA")
 #pragma binding(kernel32::GetACP,                      "GetACP")
+#pragma binding(kernel32::GetOEMCP,                    "GetOEMCP")
 #pragma binding(kernel32::GetLocaleInfoA,              "GetLocaleInfoA")
 #pragma binding(kernel32::GetFinalPathNameByHandleW,   "GetFinalPathNameByHandleW")
+#pragma binding(kernel32::GetFinalPathNameByHandleA,   "GetFinalPathNameByHandleA")
 #pragma binding(kernel32::CreateWaitableTimerExW,      "CreateWaitableTimerExW")
 #pragma binding(kernel32::ConnectNamedPipe,            "ConnectNamedPipe")
 #pragma binding(kernel32::GetCurrentThreadStackLimits, "GetCurrentThreadStackLimits")
@@ -419,16 +456,22 @@ typedef enum {
 #pragma binding(kernel32::GetHandleInformation,        "GetHandleInformation")
 #pragma binding(kernel32::SetHandleInformation,        "SetHandleInformation")
 #pragma binding(kernel32::GetNamedPipeHandleStateW,    "GetNamedPipeHandleStateW")
+#pragma binding(kernel32::GetNamedPipeHandleStateA,    "GetNamedPipeHandleStateA")
 #pragma binding(kernel32::SetNamedPipeHandleState,     "SetNamedPipeHandleState")
 #pragma binding(kernel32::CreatePipe,                  "CreatePipe")
 #pragma binding(kernel32::DeviceIoControl,             "DeviceIoControl")
 #pragma binding(kernel32::CreateHardLinkW,             "CreateHardLinkW")
+#pragma binding(kernel32::CreateHardLinkA,             "CreateHardLinkA")
 #pragma binding(kernel32::CreateSymbolicLinkW,         "CreateSymbolicLinkW")
+#pragma binding(kernel32::CreateSymbolicLinkA,         "CreateSymbolicLinkA")
 #pragma binding(kernel32::MoveFileExW,                 "MoveFileExW")
 #pragma binding(kernel32::MoveFileExA,                 "MoveFileExA")
 #pragma binding(kernel32::SetEnvironmentVariableW,     "SetEnvironmentVariableW")
+#pragma binding(kernel32::SetEnvironmentVariableA,     "SetEnvironmentVariableA")
 #pragma binding(kernel32::GetDriveTypeW,               "GetDriveTypeW")
+#pragma binding(kernel32::GetDriveTypeA,               "GetDriveTypeA")
 #pragma binding(kernel32::GetDiskFreeSpaceExW,         "GetDiskFreeSpaceExW")
+#pragma binding(kernel32::GetDiskFreeSpaceExA,         "GetDiskFreeSpaceExA")
 #pragma binding(kernel32::GetLogicalDriveStringsW,     "GetLogicalDriveStringsW")
 #pragma binding(kernel32::GetVolumePathNameW,          "GetVolumePathNameW")
 #pragma binding(kernel32::GetVolumePathNamesForVolumeNameW, "GetVolumePathNamesForVolumeNameW")
@@ -456,17 +499,20 @@ typedef enum {
 #pragma binding(kernel32::GetVersion,                  "GetVersion")
 #pragma binding(kernel32::GetTickCount64,              "GetTickCount64")
 #pragma binding(kernel32::GetLongPathNameW,            "GetLongPathNameW")
+#pragma binding(kernel32::GetLongPathNameA,            "GetLongPathNameA")
 #pragma binding(kernel32::GetShortPathNameW,           "GetShortPathNameW")
 #pragma binding(kernel32::OpenFileMappingW,            "OpenFileMappingW")
 #pragma binding(kernel32::VirtualQuery,                "VirtualQuery")
 #pragma binding(kernel32::CopyFile2,                   "CopyFile2")
 #pragma binding(kernel32::NeedCurrentDirectoryForExePathW, "NeedCurrentDirectoryForExePathW")
+#pragma binding(kernel32::NeedCurrentDirectoryForExePathA, "NeedCurrentDirectoryForExePathA")
 #pragma binding(kernel32::LCMapStringEx,               "LCMapStringEx")
 #pragma binding(kernel32::InitializeProcThreadAttributeList, "InitializeProcThreadAttributeList")
 #pragma binding(kernel32::UpdateProcThreadAttribute,   "UpdateProcThreadAttribute")
 #pragma binding(kernel32::DeleteProcThreadAttributeList, "DeleteProcThreadAttributeList")
 // Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
 #pragma binding(advapi32::OpenProcessToken,            "OpenProcessToken")
+#pragma binding(advapi32::LookupPrivilegeValueA,       "LookupPrivilegeValueA")
 #pragma binding(advapi32::LookupPrivilegeValueW,       "LookupPrivilegeValueW")
 #pragma binding(advapi32::AdjustTokenPrivileges,       "AdjustTokenPrivileges")
 
@@ -742,6 +788,10 @@ typedef struct _STARTUPINFOEXW {
     LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
 } STARTUPINFOEXW;
 typedef struct _STARTUPINFOEXW *LPSTARTUPINFOEXW;
+typedef struct _STARTUPINFOEXA {
+    STARTUPINFOA                 StartupInfo;
+    LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
+} STARTUPINFOEXA, *LPSTARTUPINFOEXA;
 
 typedef struct _PROCESS_INFORMATION {
     HANDLE hProcess;
@@ -813,6 +863,21 @@ typedef struct _OSVERSIONINFOEXW {
 } OSVERSIONINFOEXW;
 typedef struct _OSVERSIONINFOEXW *LPOSVERSIONINFOEXW;
 typedef struct _OSVERSIONINFOEXW *POSVERSIONINFOEXW;
+typedef struct _OSVERSIONINFOEXA {
+    DWORD          dwOSVersionInfoSize;
+    DWORD          dwMajorVersion;
+    DWORD          dwMinorVersion;
+    DWORD          dwBuildNumber;
+    DWORD          dwPlatformId;
+    CHAR           szCSDVersion[128];
+    WORD           wServicePackMajor;
+    WORD           wServicePackMinor;
+    WORD           wSuiteMask;
+    unsigned char  wProductType;
+    unsigned char  wReserved;
+} OSVERSIONINFOEXA;
+typedef struct _OSVERSIONINFOEXA *LPOSVERSIONINFOEXA;
+typedef struct _OSVERSIONINFOEXA *POSVERSIONINFOEXA;
 
 // OSVERSIONINFOA / OSVERSIONINFOW -- a program reads `dwPlatformId`
 // out of the struct after a `GetVersionEx*` call. The other fields
@@ -845,15 +910,6 @@ struct _OSVERSIONINFOW {
 typedef struct _OSVERSIONINFOW OSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *LPOSVERSIONINFOW;
 typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
-
-// Generic OSVERSIONINFO* names resolve to the W variant (winbase.h
-// under UNICODE), matching the rest of this header's A/W convention.
-typedef OSVERSIONINFOW OSVERSIONINFO;
-typedef OSVERSIONINFOW *LPOSVERSIONINFO;
-typedef OSVERSIONINFOW *POSVERSIONINFO;
-typedef OSVERSIONINFOEXW OSVERSIONINFOEX;
-typedef OSVERSIONINFOEXW *LPOSVERSIONINFOEX;
-typedef OSVERSIONINFOEXW *POSVERSIONINFOEX;
 
 #define VER_PLATFORM_WIN32s         0
 #define VER_PLATFORM_WIN32_WINDOWS  1
@@ -1051,7 +1107,6 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define VOLUME_NAME_NONE               0x4
 #define FILE_NAME_NORMALIZED           0x0
 #define FILE_NAME_OPENED               0x8
-#define CreateEvent CreateEventA
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #define CT_CTYPE1          1
 #define CT_CTYPE2          2
@@ -1223,11 +1278,13 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define C3_ALPHA         0x8000
 #define C3_NOTAPPLICABLE 0x0000
 #define MAKELANGID(p, s) ((((WORD)(s)) << 10) | (WORD)(p))
+#ifndef NOMINMAX
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 #ifndef max
 #define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 #endif
 #define ERROR_INVALID_FUNCTION         1
 #define ERROR_TOO_MANY_OPEN_FILES      4
@@ -1460,10 +1517,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define COPYFILE2_PROGRESS_QUIET           3
 #define COPYFILE2_PROGRESS_PAUSE           4
 
-// UNICODE name mapping for the privilege-lookup call and its name string
-// (winbase.h / winnt.h). Source uses the bare spelling under UNICODE.
-#define LookupPrivilegeValue LookupPrivilegeValueW
-#define SE_RESTORE_NAME L"SeRestorePrivilege"
+#define SE_RESTORE_NAME TEXT("SeRestorePrivilege")
 
 // Exception status codes (winnt.h) and their exception-record aliases
 // (minwinbase.h).
@@ -2051,7 +2105,8 @@ VOID WakeConditionVariable(PCONDITION_VARIABLE ConditionVariable);
 VOID WakeAllConditionVariable(PCONDITION_VARIABLE ConditionVariable);
 HANDLE CreateSemaphoreW(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount,
                         LONG lMaximumCount, LPCWSTR lpName);
-#define CreateSemaphore CreateSemaphoreW
+HANDLE CreateSemaphoreA(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount,
+                        LONG lMaximumCount, LPCSTR lpName);
 BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPreviousCount);
 HANDLE GetCurrentThread(VOID);
 BOOL GetProcessTimes(HANDLE hProcess, LPFILETIME lpCreationTime, LPFILETIME lpExitTime,
@@ -2080,13 +2135,86 @@ BOOL GetThreadTimes(HANDLE hThread, LPFILETIME lpCreationTime, LPFILETIME lpExit
 HANDLE OpenThread(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwThreadId);
 int CompareStringOrdinal(LPCWCH lpString1, int cchCount1, LPCWCH lpString2,
                          int cchCount2, BOOL bIgnoreCase);
+
+// String comparison, folding and classification (stringapiset.h, and the A
+// forms winnls.h adds), from kernel32.dll.
+#pragma binding(kernel32::CompareStringA,   "CompareStringA")
+#pragma binding(kernel32::CompareStringW,   "CompareStringW")
+#pragma binding(kernel32::CompareStringEx,  "CompareStringEx")
+#pragma binding(kernel32::FoldStringA,      "FoldStringA")
+#pragma binding(kernel32::FoldStringW,      "FoldStringW")
+#pragma binding(kernel32::GetStringTypeA,   "GetStringTypeA")
+#pragma binding(kernel32::GetStringTypeExA, "GetStringTypeExA")
+#pragma binding(kernel32::GetStringTypeExW, "GetStringTypeExW")
+typedef const CHAR  *PCNZCH;
+typedef const WCHAR *PCNZWCH;
+int CompareStringA(LCID Locale, DWORD dwCmpFlags, PCNZCH lpString1, int cchCount1,
+                   PCNZCH lpString2, int cchCount2);
+int CompareStringW(LCID Locale, DWORD dwCmpFlags, PCNZWCH lpString1, int cchCount1,
+                   PCNZWCH lpString2, int cchCount2);
+int CompareStringEx(LPCWSTR lpLocaleName, DWORD dwCmpFlags, LPCWCH lpString1, int cchCount1,
+                    LPCWCH lpString2, int cchCount2, LPNLSVERSIONINFO lpVersionInformation,
+                    LPVOID lpReserved, LPARAM lParam);
+int FoldStringA(DWORD dwMapFlags, LPCSTR lpSrcStr, int cchSrc, LPSTR lpDestStr, int cchDest);
+int FoldStringW(DWORD dwMapFlags, LPCWCH lpSrcStr, int cchSrc, LPWSTR lpDestStr, int cchDest);
+BOOL GetStringTypeA(LCID Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc,
+                    LPWORD lpCharType);
+BOOL GetStringTypeExA(LCID Locale, DWORD dwInfoType, LPCSTR lpSrcStr, int cchSrc,
+                      LPWORD lpCharType);
+BOOL GetStringTypeExW(LCID Locale, DWORD dwInfoType, LPCWCH lpSrcStr, int cchSrc,
+                      LPWORD lpCharType);
+#define NORM_IGNORECASE            0x00000001
+#define NORM_IGNORENONSPACE        0x00000002
+#define NORM_IGNORESYMBOLS         0x00000004
+#define LINGUISTIC_IGNORECASE      0x00000010
+#define LINGUISTIC_IGNOREDIACRITIC 0x00000020
+#define NORM_IGNOREKANATYPE        0x00010000
+#define NORM_IGNOREWIDTH           0x00020000
+#define NORM_LINGUISTIC_CASING     0x08000000
+#define SORT_DIGITSASNUMBERS       0x00000008
+#define SORT_STRINGSORT            0x00001000
+#define MAP_FOLDCZONE              0x00000010
+#define MAP_PRECOMPOSED            0x00000020
+#define MAP_COMPOSITE              0x00000040
+#define MAP_FOLDDIGITS             0x00000080
+#define MAP_EXPAND_LIGATURES       0x00002000
+#define C1_UPPER   0x0001
+#define C1_LOWER   0x0002
+#define C1_DIGIT   0x0004
+#define C1_SPACE   0x0008
+#define C1_PUNCT   0x0010
+#define C1_CNTRL   0x0020
+#define C1_BLANK   0x0040
+#define C1_XDIGIT  0x0080
+#define C1_ALPHA   0x0100
+#define C1_DEFINED 0x0200
+#define C2_LEFTTORIGHT      0x0001
+#define C2_RIGHTTOLEFT      0x0002
+#define C2_EUROPENUMBER     0x0003
+#define C2_EUROPESEPARATOR  0x0004
+#define C2_EUROPETERMINATOR 0x0005
+#define C2_ARABICNUMBER     0x0006
+#define C2_COMMONSEPARATOR  0x0007
+#define C2_BLOCKSEPARATOR   0x0008
+#define C2_SEGMENTSEPARATOR 0x0009
+#define C2_WHITESPACE       0x000a
+#define C2_OTHERNEUTRAL     0x000b
+#define C2_NOTAPPLICABLE    0x0000
+#define LANG_INVARIANT  0x7f
+#define SUBLANG_NEUTRAL 0x00
+#define SORT_DEFAULT    0x0
+#define MAKELCID(lgid, srtid) ((DWORD)((((DWORD)((WORD)(srtid))) << 16) | ((DWORD)((WORD)(lgid)))))
+#define LOCALE_INVARIANT (MAKELCID(MAKELANGID(LANG_INVARIANT, SUBLANG_NEUTRAL), SORT_DEFAULT))
 BOOL GetOverlappedResult(HANDLE hFile, LPOVERLAPPED lpOverlapped,
                          LPDWORD lpNumberOfBytesTransferred, BOOL bWait);
 NTSTATUS BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer,
                          ULONG dwFlags);
 UINT GetACP(VOID);
+UINT GetOEMCP(VOID);
 int GetLocaleInfoA(LCID Locale, LCTYPE LCType, LPSTR lpLCData, int cchData);
 DWORD GetFinalPathNameByHandleW(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath,
+                                DWORD dwFlags);
+DWORD GetFinalPathNameByHandleA(HANDLE hFile, LPSTR lpszFilePath, DWORD cchFilePath,
                                 DWORD dwFlags);
 HANDLE CreateWaitableTimerExW(LPSECURITY_ATTRIBUTES lpTimerAttributes,
                               LPCWSTR lpTimerName, DWORD dwFlags, DWORD dwDesiredAccess);
@@ -2109,6 +2237,10 @@ BOOL GetNamedPipeHandleStateW(HANDLE hNamedPipe, LPDWORD lpState,
                               LPDWORD lpCurInstances, LPDWORD lpMaxCollectionCount,
                               LPDWORD lpCollectDataTimeout, LPWSTR lpUserName,
                               DWORD nMaxUserNameSize);
+BOOL GetNamedPipeHandleStateA(HANDLE hNamedPipe, LPDWORD lpState,
+                              LPDWORD lpCurInstances, LPDWORD lpMaxCollectionCount,
+                              LPDWORD lpCollectDataTimeout, LPSTR lpUserName,
+                              DWORD nMaxUserNameSize);
 BOOL SetNamedPipeHandleState(HANDLE hNamedPipe, LPDWORD lpMode,
                              LPDWORD lpMaxCollectionCount, LPDWORD lpCollectDataTimeout);
 BOOL CreatePipe(PHANDLE hReadPipe, PHANDLE hWritePipe,
@@ -2118,14 +2250,23 @@ BOOL DeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffer,
                      LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped);
 BOOL CreateHardLinkW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName,
                      LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+BOOL CreateHardLinkA(LPCSTR lpFileName, LPCSTR lpExistingFileName,
+                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
 BOOLEAN CreateSymbolicLinkW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName,
+                            DWORD dwFlags);
+BOOLEAN CreateSymbolicLinkA(LPCSTR lpSymlinkFileName, LPCSTR lpTargetFileName,
                             DWORD dwFlags);
 BOOL MoveFileExW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags);
 BOOL MoveFileExA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, DWORD dwFlags);
-#define MoveFileEx MoveFileExA
 BOOL SetEnvironmentVariableW(LPCWSTR lpName, LPCWSTR lpValue);
+BOOL SetEnvironmentVariableA(LPCSTR lpName, LPCSTR lpValue);
 UINT GetDriveTypeW(LPCWSTR lpRootPathName);
+UINT GetDriveTypeA(LPCSTR lpRootPathName);
 BOOL GetDiskFreeSpaceExW(LPCWSTR lpDirectoryName,
+                         PULARGE_INTEGER lpFreeBytesAvailableToCaller,
+                         PULARGE_INTEGER lpTotalNumberOfBytes,
+                         PULARGE_INTEGER lpTotalNumberOfFreeBytes);
+BOOL GetDiskFreeSpaceExA(LPCSTR lpDirectoryName,
                          PULARGE_INTEGER lpFreeBytesAvailableToCaller,
                          PULARGE_INTEGER lpTotalNumberOfBytes,
                          PULARGE_INTEGER lpTotalNumberOfFreeBytes);
@@ -2156,7 +2297,12 @@ DWORD PssQuerySnapshot(HPSS SnapshotHandle,
                        PSS_QUERY_INFORMATION_CLASS InformationClass, void *Buffer,
                        DWORD BufferLength);
 BOOL GetUserNameW(LPWSTR lpBuffer, LPDWORD pcbBuffer);
+BOOL GetUserNameA(LPSTR lpBuffer, LPDWORD pcbBuffer);
 BOOL ConvertStringSecurityDescriptorToSecurityDescriptorW(LPCWSTR StringSecurityDescriptor,
+                                                          DWORD StringSDRevision,
+                                                          PSECURITY_DESCRIPTOR *SecurityDescriptor,
+                                                          PULONG SecurityDescriptorSize);
+BOOL ConvertStringSecurityDescriptorToSecurityDescriptorA(LPCSTR StringSecurityDescriptor,
                                                           DWORD StringSDRevision,
                                                           PSECURITY_DESCRIPTOR *SecurityDescriptor,
                                                           PULONG SecurityDescriptorSize);
@@ -2164,31 +2310,80 @@ HRESULT PathCchSkipRoot(PCWSTR pszPath, PCWSTR *ppszRootEnd);
 HRESULT PathCchCombineEx(PWSTR pszPathOut, size_t cchPathOut, PCWSTR pszPathIn,
                          PCWSTR pszMore, ULONG dwFlags);
 DWORD GetFileVersionInfoSizeW(LPCWSTR lptstrFilename, LPDWORD lpdwHandle);
+DWORD GetFileVersionInfoSizeA(LPCSTR lptstrFilename, LPDWORD lpdwHandle);
 BOOL GetFileVersionInfoW(LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen,
                          LPVOID lpData);
+BOOL GetFileVersionInfoA(LPCSTR lptstrFilename, DWORD dwHandle, DWORD dwLen,
+                         LPVOID lpData);
 BOOL VerQueryValueW(LPCVOID pBlock, LPCWSTR lpSubBlock, LPVOID *lplpBuffer, PUINT puLen);
+BOOL VerQueryValueA(LPCVOID pBlock, LPCSTR lpSubBlock, LPVOID *lplpBuffer, PUINT puLen);
 
 // advapi32 registry API (winreg.h). Each returns a LONG status
 // (ERROR_SUCCESS on success); signatures track the Win32 wide forms.
 LSTATUS RegCloseKey(HKEY hKey);
 LSTATUS RegConnectRegistryW(LPCWSTR lpMachineName, HKEY hKey, PHKEY phkResult);
+LSTATUS RegConnectRegistryA(LPCSTR lpMachineName, HKEY hKey, PHKEY phkResult);
 LSTATUS RegCreateKeyW(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult);
+LSTATUS RegCreateKeyA(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult);
 LSTATUS RegCreateKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass,
                         DWORD dwOptions, REGSAM samDesired,
                         const LPSECURITY_ATTRIBUTES lpSecurityAttributes,
                         PHKEY phkResult, LPDWORD lpdwDisposition);
+LSTATUS RegCreateKeyExA(HKEY hKey, LPCSTR lpSubKey, DWORD Reserved, LPSTR lpClass,
+                        DWORD dwOptions, REGSAM samDesired,
+                        const LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                        PHKEY phkResult, LPDWORD lpdwDisposition);
 LSTATUS RegDeleteKeyW(HKEY hKey, LPCWSTR lpSubKey);
+LSTATUS RegDeleteKeyA(HKEY hKey, LPCSTR lpSubKey);
 LSTATUS RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
+LSTATUS RegDeleteKeyExA(HKEY hKey, LPCSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
 LSTATUS RegDeleteValueW(HKEY hKey, LPCWSTR lpValueName);
+LSTATUS RegDeleteValueA(HKEY hKey, LPCSTR lpValueName);
+LSTATUS RegDeleteTreeA(HKEY hKey, LPCSTR lpSubKey);
+LSTATUS RegDeleteTreeW(HKEY hKey, LPCWSTR lpSubKey);
+// Event-log sources (winbase.h) and the event types they report (winnt.h).
+HANDLE RegisterEventSourceA(LPCSTR lpUNCServerName, LPCSTR lpSourceName);
+HANDLE RegisterEventSourceW(LPCWSTR lpUNCServerName, LPCWSTR lpSourceName);
+BOOL DeregisterEventSource(HANDLE hEventLog);
+BOOL ReportEventA(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
+                  PSID lpUserSid, WORD wNumStrings, DWORD dwDataSize, LPCSTR *lpStrings,
+                  LPVOID lpRawData);
+BOOL ReportEventW(HANDLE hEventLog, WORD wType, WORD wCategory, DWORD dwEventID,
+                  PSID lpUserSid, WORD wNumStrings, DWORD dwDataSize, LPCWSTR *lpStrings,
+                  LPVOID lpRawData);
+#define EVENTLOG_SEQUENTIAL_READ       0x0001
+#define EVENTLOG_SEEK_READ             0x0002
+#define EVENTLOG_FORWARDS_READ         0x0004
+#define EVENTLOG_BACKWARDS_READ        0x0008
+#define EVENTLOG_SUCCESS               0x0000
+#define EVENTLOG_ERROR_TYPE            0x0001
+#define EVENTLOG_WARNING_TYPE          0x0002
+#define EVENTLOG_INFORMATION_TYPE      0x0004
+#define EVENTLOG_AUDIT_SUCCESS         0x0008
+#define EVENTLOG_AUDIT_FAILURE         0x0010
+#define EVENTLOG_START_PAIRED_EVENT    0x0001
+#define EVENTLOG_END_PAIRED_EVENT      0x0002
+#define EVENTLOG_END_ALL_PAIRED_EVENTS 0x0004
+#define EVENTLOG_PAIRED_EVENT_ACTIVE   0x0008
+#define EVENTLOG_PAIRED_EVENT_INACTIVE 0x0010
 LSTATUS RegEnumKeyExW(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
                       LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
+                      PFILETIME lpftLastWriteTime);
+LSTATUS RegEnumKeyExA(HKEY hKey, DWORD dwIndex, LPSTR lpName, LPDWORD lpcchName,
+                      LPDWORD lpReserved, LPSTR lpClass, LPDWORD lpcchClass,
                       PFILETIME lpftLastWriteTime);
 LSTATUS RegEnumValueW(HKEY hKey, DWORD dwIndex, LPWSTR lpValueName,
                       LPDWORD lpcchValueName, LPDWORD lpReserved, LPDWORD lpType,
                       LPBYTE lpData, LPDWORD lpcbData);
+LSTATUS RegEnumValueA(HKEY hKey, DWORD dwIndex, LPSTR lpValueName,
+                      LPDWORD lpcchValueName, LPDWORD lpReserved, LPDWORD lpType,
+                      LPBYTE lpData, LPDWORD lpcbData);
 LSTATUS RegFlushKey(HKEY hKey);
 LSTATUS RegLoadKeyW(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpFile);
+LSTATUS RegLoadKeyA(HKEY hKey, LPCSTR lpSubKey, LPCSTR lpFile);
 LSTATUS RegOpenKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired,
+                      PHKEY phkResult);
+LSTATUS RegOpenKeyExA(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired,
                       PHKEY phkResult);
 LSTATUS RegQueryInfoKeyW(HKEY hKey, LPWSTR lpClass, LPDWORD lpcchClass,
                          LPDWORD lpReserved, LPDWORD lpcSubKeys,
@@ -2196,11 +2391,23 @@ LSTATUS RegQueryInfoKeyW(HKEY hKey, LPWSTR lpClass, LPDWORD lpcchClass,
                          LPDWORD lpcValues, LPDWORD lpcbMaxValueNameLen,
                          LPDWORD lpcbMaxValueLen, LPDWORD lpcbSecurityDescriptor,
                          PFILETIME lpftLastWriteTime);
+LSTATUS RegQueryInfoKeyA(HKEY hKey, LPSTR lpClass, LPDWORD lpcchClass,
+                         LPDWORD lpReserved, LPDWORD lpcSubKeys,
+                         LPDWORD lpcbMaxSubKeyLen, LPDWORD lpcbMaxClassLen,
+                         LPDWORD lpcValues, LPDWORD lpcbMaxValueNameLen,
+                         LPDWORD lpcbMaxValueLen, LPDWORD lpcbSecurityDescriptor,
+                         PFILETIME lpftLastWriteTime);
 LSTATUS RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
+                         LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+LSTATUS RegQueryValueExA(HKEY hKey, LPCSTR lpValueName, LPDWORD lpReserved,
                          LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
 LSTATUS RegSaveKeyW(HKEY hKey, LPCWSTR lpFile,
                     const LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+LSTATUS RegSaveKeyA(HKEY hKey, LPCSTR lpFile,
+                    const LPSECURITY_ATTRIBUTES lpSecurityAttributes);
 LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType,
+                       const BYTE *lpData, DWORD cbData);
+LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwType,
                        const BYTE *lpData, DWORD cbData);
 
 // kernel32 surface a static table of function pointers may take the
@@ -2218,7 +2425,9 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 // CharLowerW / CharUpperW are user32.dll exports (winuser.h).
 #pragma dylib(user32, "user32.dll")
 #pragma binding(user32::CharLowerW,                "CharLowerW")
+#pragma binding(user32::CharLowerA,                "CharLowerA")
 #pragma binding(user32::CharUpperW,                "CharUpperW")
+#pragma binding(user32::CharUpperA,                "CharUpperA")
 #pragma binding(kernel32::CreateFileA,             "CreateFileA")
 #pragma binding(kernel32::CreateFileTransactedA,   "CreateFileTransactedA")
 #pragma binding(kernel32::CreateFileTransactedW,   "CreateFileTransactedW")
@@ -2241,6 +2450,7 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetDiskFreeSpaceW,       "GetDiskFreeSpaceW")
 #pragma binding(kernel32::GetFileAttributesA,      "GetFileAttributesA")
 #pragma binding(kernel32::GetFileAttributesExW,    "GetFileAttributesExW")
+#pragma binding(kernel32::GetFileAttributesExA,    "GetFileAttributesExA")
 #pragma binding(kernel32::GetFileAttributesW,      "GetFileAttributesW")
 #pragma binding(kernel32::GetFileSize,             "GetFileSize")
 #pragma binding(kernel32::GetFullPathNameA,        "GetFullPathNameA")
@@ -2253,9 +2463,11 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetTickCount,            "GetTickCount")
 #pragma binding(kernel32::GetVersionExA,           "GetVersionExA")
 #pragma binding(kernel32::GetVersionExW,           "GetVersionExW")
+#pragma binding(kernel32::VerifyVersionInfoA,      "VerifyVersionInfoA")
 #pragma binding(kernel32::VerifyVersionInfoW,      "VerifyVersionInfoW")
 #pragma binding(kernel32::VerSetConditionMask,     "VerSetConditionMask")
 #pragma binding(kernel32::GetComputerNameExW,      "GetComputerNameExW")
+#pragma binding(kernel32::GetComputerNameExA,      "GetComputerNameExA")
 #pragma binding(kernel32::HeapAlloc,               "HeapAlloc")
 #pragma binding(kernel32::HeapCompact,             "HeapCompact")
 #pragma binding(kernel32::HeapCreate,              "HeapCreate")
@@ -2305,6 +2517,7 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetTempFileNameA,        "GetTempFileNameA")
 #pragma binding(kernel32::GetTempFileNameW,        "GetTempFileNameW")
 #pragma binding(kernel32::GetCurrentProcess,       "GetCurrentProcess")
+#pragma binding(kernel32::FlushInstructionCache,   "FlushInstructionCache")
 #pragma binding(kernel32::DuplicateHandle,         "DuplicateHandle")
 #pragma binding(kernel32::SetFilePointerEx,        "SetFilePointerEx")
 #pragma binding(kernel32::GetFileSizeEx,           "GetFileSizeEx")
@@ -2410,7 +2623,9 @@ VOID GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(VOID);
 FARPROC GetProcAddressA(HMODULE hModule, LPCSTR lpProcName);
 LPWSTR CharLowerW(LPWSTR lpsz);
+LPSTR CharLowerA(LPSTR lpsz);
 LPWSTR CharUpperW(LPWSTR lpsz);
+LPSTR CharUpperA(LPSTR lpsz);
 HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
                    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
                    DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
@@ -2462,6 +2677,8 @@ BOOL GetDiskFreeSpaceW(LPCWSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
 DWORD GetFileAttributesA(LPCSTR lpFileName);
 BOOL GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId,
                           LPVOID lpFileInformation);
+BOOL GetFileAttributesExA(LPCSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId,
+                          LPVOID lpFileInformation);
 DWORD GetFileAttributesW(LPCWSTR lpFileName);
 DWORD GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh);
 DWORD GetFullPathNameA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer,
@@ -2476,12 +2693,13 @@ DWORD GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
 DWORD GetTickCount(VOID);
 BOOL GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
 BOOL GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
-#define GetVersionEx GetVersionExW
+BOOL VerifyVersionInfoA(LPOSVERSIONINFOEXA lpVersionInformation, DWORD dwTypeMask,
+                        DWORDLONG dwlConditionMask);
 BOOL VerifyVersionInfoW(LPOSVERSIONINFOEXW lpVersionInformation, DWORD dwTypeMask,
                         DWORDLONG dwlConditionMask);
 ULONGLONG VerSetConditionMask(ULONGLONG ConditionMask, ULONG TypeMask, UCHAR Condition);
-#define VerifyVersionInfo VerifyVersionInfoW
 BOOL GetComputerNameExW(COMPUTER_NAME_FORMAT NameType, LPWSTR lpBuffer, LPDWORD nSize);
+BOOL GetComputerNameExA(COMPUTER_NAME_FORMAT NameType, LPSTR lpBuffer, LPDWORD nSize);
 LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
 SIZE_T HeapCompact(HANDLE hHeap, DWORD dwFlags);
 HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
@@ -2548,6 +2766,7 @@ UINT GetTempFileNameA(LPCSTR lpPathName, LPCSTR lpPrefixString, UINT uUnique,
 UINT GetTempFileNameW(LPCWSTR lpPathName, LPCWSTR lpPrefixString, UINT uUnique,
                       LPWSTR lpTempFileName);
 HANDLE GetCurrentProcess(VOID);
+BOOL FlushInstructionCache(HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T dwSize);
 BOOL DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
                      HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
                      DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwOptions);
@@ -2616,8 +2835,6 @@ DWORD ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
 DWORD ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 DWORD SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                   DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
-DWORD SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
-                 DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
 DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize);
 DWORD SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                   DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart);
@@ -2733,6 +2950,7 @@ DWORD ResumeThread(HANDLE hThread);
 BOOL TerminateThread(HANDLE hThread, DWORD dwExitCode);
 DWORD GetVersion(VOID);
 DWORD GetLongPathNameW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer);
+DWORD GetLongPathNameA(LPCSTR lpszShortPath, LPSTR lpszLongPath, DWORD cchBuffer);
 DWORD GetShortPathNameW(LPCWSTR lpszLongPath, LPWSTR lpszShortPath, DWORD cchBuffer);
 HANDLE OpenFileMappingW(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCWSTR lpName);
 SIZE_T VirtualQuery(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer,
@@ -2740,6 +2958,7 @@ SIZE_T VirtualQuery(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer,
 HRESULT CopyFile2(PCWSTR pwszExistingFileName, PCWSTR pwszNewFileName,
                   COPYFILE2_EXTENDED_PARAMETERS *pExtendedParameters);
 BOOL NeedCurrentDirectoryForExePathW(LPCWSTR ExeName);
+BOOL NeedCurrentDirectoryForExePathA(LPCSTR ExeName);
 int LCMapStringEx(LPCWSTR lpLocaleName, DWORD dwMapFlags, LPCWSTR lpSrcStr, int cchSrc,
                   LPWSTR lpDestStr, int cchDest, LPNLSVERSIONINFO lpVersionInformation,
                   LPVOID lpReserved, LPARAM sortHandle);
@@ -2754,6 +2973,7 @@ VOID DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList)
 
 // Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
 BOOL OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
+BOOL LookupPrivilegeValueA(LPCSTR lpSystemName, LPCSTR lpName, PLUID lpLuid);
 BOOL LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
 BOOL AdjustTokenPrivileges(HANDLE TokenHandle, BOOL DisableAllPrivileges,
                            PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
@@ -3253,9 +3473,9 @@ typedef struct _IMAGE_RESOURCE_DATA_ENTRY {
 // Word extraction from message parameters (minwindef.h).
 #define LOWORD(l) ((WORD)((DWORD_PTR)(l) & 0xffff))
 #define HIWORD(l) ((WORD)(((DWORD_PTR)(l) >> 16) & 0xffff))
-#define RGB(r, g, b) \
-    ((COLORREF)(((BYTE)(r)) | (((WORD)((BYTE)(g))) << 8) | (((DWORD)(BYTE)(b)) << 16)))
 #define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
+#define MAKEINTRESOURCEW(i) ((LPWSTR)((ULONG_PTR)((WORD)(i))))
+#define MAKEINTRESOURCE __MINGW_NAME_AW(MAKEINTRESOURCE)
 
 struct tagPOINT { LONG x; LONG y; };
 typedef struct tagPOINT POINT;
@@ -3266,7 +3486,32 @@ struct tagRECT { LONG left; LONG top; LONG right; LONG bottom; };
 typedef struct tagRECT RECT;
 typedef struct tagRECT *LPRECT;
 typedef struct tagRECT *PRECT;
+typedef struct tagRECT *NPRECT;
 typedef const RECT *LPCRECT;
+typedef struct tagPOINT *NPPOINT;
+
+// The other windef.h geometry types.
+typedef struct _RECTL {
+    LONG left;
+    LONG top;
+    LONG right;
+    LONG bottom;
+} RECTL, *PRECTL, *LPRECTL;
+typedef const RECTL *LPCRECTL;
+typedef struct _POINTL {
+    LONG x;
+    LONG y;
+} POINTL, *PPOINTL;
+typedef struct tagSIZE {
+    LONG cx;
+    LONG cy;
+} SIZE, *PSIZE, *LPSIZE;
+typedef SIZE SIZEL;
+typedef SIZE *PSIZEL, *LPSIZEL;
+typedef struct tagPOINTS {
+    SHORT x;
+    SHORT y;
+} POINTS, *PPOINTS, *LPPOINTS;
 
 struct tagMSG {
     HWND   hwnd;
@@ -3279,6 +3524,10 @@ struct tagMSG {
 typedef struct tagMSG MSG;
 typedef struct tagMSG *LPMSG;
 typedef struct tagMSG *PMSG;
+
+#ifndef NOGDI
+#include <wingdi.h>
+#endif
 
 // WndProc and enumeration callback shapes.
 typedef LRESULT (*WNDPROC)(HWND, UINT, WPARAM, LPARAM);
@@ -3314,38 +3563,6 @@ struct tagWNDCLASSW {
 typedef struct tagWNDCLASSW WNDCLASSW;
 typedef struct tagWNDCLASSW *LPWNDCLASSW;
 
-// Pixel format descriptor (wingdi.h) -- 40 bytes, all fields BYTE/WORD/DWORD.
-struct tagPIXELFORMATDESCRIPTOR {
-    WORD  nSize;
-    WORD  nVersion;
-    DWORD dwFlags;
-    BYTE  iPixelType;
-    BYTE  cColorBits;
-    BYTE  cRedBits;
-    BYTE  cRedShift;
-    BYTE  cGreenBits;
-    BYTE  cGreenShift;
-    BYTE  cBlueBits;
-    BYTE  cBlueShift;
-    BYTE  cAlphaBits;
-    BYTE  cAlphaShift;
-    BYTE  cAccumBits;
-    BYTE  cAccumRedBits;
-    BYTE  cAccumGreenBits;
-    BYTE  cAccumBlueBits;
-    BYTE  cAccumAlphaBits;
-    BYTE  cDepthBits;
-    BYTE  cStencilBits;
-    BYTE  cAuxBuffers;
-    BYTE  iLayerType;
-    BYTE  bReserved;
-    DWORD dwLayerMask;
-    DWORD dwVisibleMask;
-    DWORD dwDamageMask;
-};
-typedef struct tagPIXELFORMATDESCRIPTOR PIXELFORMATDESCRIPTOR;
-typedef struct tagPIXELFORMATDESCRIPTOR *LPPIXELFORMATDESCRIPTOR;
-
 struct tagMINMAXINFO {
     POINT ptReserved;
     POINT ptMaxSize;
@@ -3377,7 +3594,9 @@ struct tagMONITORINFO {
 typedef struct tagMONITORINFO MONITORINFO;
 typedef struct tagMONITORINFO *LPMONITORINFO;
 
+#ifndef CCHDEVICENAME
 #define CCHDEVICENAME 32
+#endif
 typedef struct tagMONITORINFOEXW {
     DWORD cbSize;
     RECT  rcMonitor;
@@ -3392,18 +3611,6 @@ typedef struct tagMONITORINFOEXA {
     DWORD dwFlags;
     char  szDevice[CCHDEVICENAME];
 } MONITORINFOEXA, *LPMONITORINFOEXA;
-#define MONITORINFOEX MONITORINFOEXW
-
-struct _DISPLAY_DEVICEA {
-    DWORD cb;
-    CHAR  DeviceName[32];
-    CHAR  DeviceString[128];
-    DWORD StateFlags;
-    CHAR  DeviceID[128];
-    CHAR  DeviceKey[128];
-};
-typedef struct _DISPLAY_DEVICEA DISPLAY_DEVICEA;
-typedef struct _DISPLAY_DEVICEA *PDISPLAY_DEVICEA;
 
 // Raw input (winuser.h).
 struct tagRAWINPUTHEADER {
@@ -3524,72 +3731,10 @@ struct _ICONINFO {
 typedef struct _ICONINFO ICONINFO;
 typedef struct _ICONINFO *PICONINFO;
 
-// DIB / icon bitmap structures (wingdi.h).
-typedef struct tagRGBQUAD {
-    BYTE rgbBlue;
-    BYTE rgbGreen;
-    BYTE rgbRed;
-    BYTE rgbReserved;
-} RGBQUAD;
-typedef struct tagBITMAPINFOHEADER {
-    DWORD biSize;
-    LONG  biWidth;
-    LONG  biHeight;
-    WORD  biPlanes;
-    WORD  biBitCount;
-    DWORD biCompression;
-    DWORD biSizeImage;
-    LONG  biXPelsPerMeter;
-    LONG  biYPelsPerMeter;
-    DWORD biClrUsed;
-    DWORD biClrImportant;
-} BITMAPINFOHEADER;
-typedef struct tagBITMAPINFO {
-    BITMAPINFOHEADER bmiHeader;
-    RGBQUAD          bmiColors[1];
-} BITMAPINFO;
-// 14-byte on-disk BMP file header; bfSize/bfOffBits are unaligned, so it is
-// packed to match the file format the OS clipboard produces.
-#pragma pack(push, 1)
-typedef struct tagBITMAPFILEHEADER {
-    WORD  bfType;
-    DWORD bfSize;
-    WORD  bfReserved1;
-    WORD  bfReserved2;
-    DWORD bfOffBits;
-} BITMAPFILEHEADER;
-#pragma pack(pop)
-typedef struct tagCIEXYZ { LONG ciexyzX; LONG ciexyzY; LONG ciexyzZ; } CIEXYZ;
-typedef struct tagCIEXYZTRIPLE { CIEXYZ ciexyzRed; CIEXYZ ciexyzGreen; CIEXYZ ciexyzBlue; } CIEXYZTRIPLE;
-typedef struct {
-    DWORD        bV5Size;
-    LONG         bV5Width;
-    LONG         bV5Height;
-    WORD         bV5Planes;
-    WORD         bV5BitCount;
-    DWORD        bV5Compression;
-    DWORD        bV5SizeImage;
-    LONG         bV5XPelsPerMeter;
-    LONG         bV5YPelsPerMeter;
-    DWORD        bV5ClrUsed;
-    DWORD        bV5ClrImportant;
-    DWORD        bV5RedMask;
-    DWORD        bV5GreenMask;
-    DWORD        bV5BlueMask;
-    DWORD        bV5AlphaMask;
-    DWORD        bV5CSType;
-    CIEXYZTRIPLE bV5Endpoints;
-    DWORD        bV5GammaRed;
-    DWORD        bV5GammaGreen;
-    DWORD        bV5GammaBlue;
-    DWORD        bV5Intent;
-    DWORD        bV5ProfileData;
-    DWORD        bV5ProfileSize;
-    DWORD        bV5Reserved;
-} BITMAPV5HEADER;
 
 // Window messages (winuser.h).
 #define WM_NULL         0x0000
+#define WM_DESTROY      0x0002
 #define WM_MOVE         0x0003
 #define WM_SIZE         0x0005
 #define WM_ACTIVATE     0x0006
@@ -3599,6 +3744,24 @@ typedef struct {
 #define WM_GETMINMAXINFO 0x0024
 #define WM_DEVICECHANGE 0x0219
 #define WM_INPUT        0x00FF
+
+// The CreateWindow position and size that picks the default (winuser.h).
+#define CW_USEDEFAULT ((int)0x80000000)
+
+// Window class styles (winuser.h).
+#define CS_VREDRAW         0x0001
+#define CS_HREDRAW         0x0002
+#define CS_DBLCLKS         0x0008
+#define CS_OWNDC           0x0020
+#define CS_CLASSDC         0x0040
+#define CS_PARENTDC        0x0080
+#define CS_NOCLOSE         0x0200
+#define CS_SAVEBITS        0x0800
+#define CS_BYTEALIGNCLIENT 0x1000
+#define CS_BYTEALIGNWINDOW 0x2000
+#define CS_GLOBALCLASS     0x4000
+#define CS_IME             0x00010000
+#define CS_DROPSHADOW      0x00020000
 
 // Window messages, styles, virtual keys and metrics RGFW's win32 backend
 // reads. Canonical Win32 values; guarded so this augments the surface above.
@@ -3708,9 +3871,6 @@ typedef struct {
 #ifndef KF_EXTENDED
 #define KF_EXTENDED 0x0100
 #endif
-#ifndef PFD_STEREO
-#define PFD_STEREO 0x00000002
-#endif
 #ifndef HTCLIENT
 #define HTCLIENT 1
 #endif
@@ -3734,19 +3894,9 @@ typedef struct {
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 #define GET_XBUTTON_WPARAM(wp) (HIWORD(wp))
 #endif
-#ifndef BI_RGB
-#define BI_RGB 0
-#endif
-#ifndef HORZSIZE
-#define HORZSIZE 4
-#define VERTSIZE 6
-#endif
 #ifndef ICON_SMALL
 #define ICON_SMALL 0
 #define ICON_BIG 1
-#endif
-#ifndef SRCCOPY
-#define SRCCOPY 0x00CC0020
 #endif
 #ifndef WMSZ_LEFT
 #define WMSZ_LEFT 1
@@ -3768,16 +3918,13 @@ typedef struct {
 #define LR_SHARED 0x00008000
 #endif
 #ifndef IDI_APPLICATION
-#define IDI_APPLICATION ((LPCSTR)(ULONG_PTR)32512)
+#define IDI_APPLICATION MAKEINTRESOURCE(32512)
 #endif
 #ifndef MONITORINFOF_PRIMARY
 #define MONITORINFOF_PRIMARY 0x00000001
 #endif
 #ifndef ENUM_CURRENT_SETTINGS
 #define ENUM_CURRENT_SETTINGS ((DWORD)-1)
-#endif
-#ifndef DISPLAY_DEVICE_ACTIVE
-#define DISPLAY_DEVICE_ACTIVE 0x00000001
 #endif
 #ifndef DISP_CHANGE_SUCCESSFUL
 #define DISP_CHANGE_SUCCESSFUL 0
@@ -3787,18 +3934,6 @@ typedef struct {
 #endif
 #ifndef CDS_TEST
 #define CDS_TEST 0x00000002
-#endif
-#ifndef DM_BITSPERPEL
-#define DM_BITSPERPEL 0x00040000
-#endif
-#ifndef DM_PELSWIDTH
-#define DM_PELSWIDTH 0x00080000
-#endif
-#ifndef DM_PELSHEIGHT
-#define DM_PELSHEIGHT 0x00100000
-#endif
-#ifndef DM_DISPLAYFREQUENCY
-#define DM_DISPLAYFREQUENCY 0x00400000
 #endif
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -3814,6 +3949,11 @@ typedef struct {
 #endif
 
 // Virtual-key codes (winuser.h).
+#define VK_BACK      0x08
+#define VK_TAB       0x09
+#define VK_ESCAPE    0x1B
+#define VK_DELETE    0x2E
+#define VK_SEPARATOR 0x6C
 #ifndef VK_RETURN
 #define VK_RETURN 0x0D
 #endif
@@ -3926,6 +4066,7 @@ typedef struct {
 #define WM_MOUSEMOVE    0x0200
 #define WM_LBUTTONDOWN  0x0201
 #define WM_LBUTTONUP    0x0202
+#define WM_LBUTTONDBLCLK 0x0203
 #define WM_RBUTTONDOWN  0x0204
 #define WM_RBUTTONUP    0x0205
 #define WM_MBUTTONDOWN  0x0207
@@ -3952,13 +4093,6 @@ typedef struct {
 #define WS_EX_LAYERED      0x00080000
 
 // Pixel format flags / types (wingdi.h).
-#define PFD_DOUBLEBUFFER        0x00000001
-#define PFD_DRAW_TO_WINDOW      0x00000004
-#define PFD_SUPPORT_OPENGL      0x00000020
-#define PFD_GENERIC_FORMAT      0x00000040
-#define PFD_GENERIC_ACCELERATED 0x00001000
-#define PFD_TYPE_RGBA           0
-#define PFD_MAIN_PLANE          0
 
 #define PM_REMOVE       0x0001
 #define SW_HIDE         0
@@ -3974,6 +4108,130 @@ typedef struct {
 #define VK_SHIFT        0x10
 #define VK_CAPITAL      0x14
 #define VK_NUMLOCK      0x90
+#define VK_LBUTTON                         0x01
+#define VK_RBUTTON                         0x02
+#define VK_CANCEL                          0x03
+#define VK_MBUTTON                         0x04
+#define VK_XBUTTON1                        0x05
+#define VK_XBUTTON2                        0x06
+#define VK_CLEAR                           0x0C
+#define VK_MENU                            0x12
+#define VK_KANA                            0x15
+#define VK_HANGEUL                         0x15
+#define VK_HANGUL                          0x15
+#define VK_IME_ON                          0x16
+#define VK_JUNJA                           0x17
+#define VK_FINAL                           0x18
+#define VK_HANJA                           0x19
+#define VK_KANJI                           0x19
+#define VK_IME_OFF                         0x1A
+#define VK_CONVERT                         0x1C
+#define VK_NONCONVERT                      0x1D
+#define VK_ACCEPT                          0x1E
+#define VK_MODECHANGE                      0x1F
+#define VK_SPACE                           0x20
+#define VK_SELECT                          0x29
+#define VK_PRINT                           0x2A
+#define VK_EXECUTE                         0x2B
+#define VK_HELP                            0x2F
+#define VK_SLEEP                           0x5F
+#define VK_NAVIGATION_VIEW                 0x88
+#define VK_NAVIGATION_MENU                 0x89
+#define VK_NAVIGATION_UP                   0x8A
+#define VK_NAVIGATION_DOWN                 0x8B
+#define VK_NAVIGATION_LEFT                 0x8C
+#define VK_NAVIGATION_RIGHT                0x8D
+#define VK_NAVIGATION_ACCEPT               0x8E
+#define VK_NAVIGATION_CANCEL               0x8F
+#define VK_OEM_NEC_EQUAL                   0x92
+#define VK_OEM_FJ_JISHO                    0x92
+#define VK_OEM_FJ_MASSHOU                  0x93
+#define VK_OEM_FJ_TOUROKU                  0x94
+#define VK_OEM_FJ_LOYA                     0x95
+#define VK_OEM_FJ_ROYA                     0x96
+#define VK_BROWSER_BACK                    0xA6
+#define VK_BROWSER_FORWARD                 0xA7
+#define VK_BROWSER_REFRESH                 0xA8
+#define VK_BROWSER_STOP                    0xA9
+#define VK_BROWSER_SEARCH                  0xAA
+#define VK_BROWSER_FAVORITES               0xAB
+#define VK_BROWSER_HOME                    0xAC
+#define VK_VOLUME_MUTE                     0xAD
+#define VK_VOLUME_DOWN                     0xAE
+#define VK_VOLUME_UP                       0xAF
+#define VK_MEDIA_NEXT_TRACK                0xB0
+#define VK_MEDIA_PREV_TRACK                0xB1
+#define VK_MEDIA_STOP                      0xB2
+#define VK_MEDIA_PLAY_PAUSE                0xB3
+#define VK_LAUNCH_MAIL                     0xB4
+#define VK_LAUNCH_MEDIA_SELECT             0xB5
+#define VK_LAUNCH_APP1                     0xB6
+#define VK_LAUNCH_APP2                     0xB7
+#define VK_OEM_1                           0xBA
+#define VK_OEM_PLUS                        0xBB
+#define VK_OEM_COMMA                       0xBC
+#define VK_OEM_MINUS                       0xBD
+#define VK_OEM_PERIOD                      0xBE
+#define VK_OEM_2                           0xBF
+#define VK_OEM_3                           0xC0
+#define VK_GAMEPAD_A                       0xC3
+#define VK_GAMEPAD_B                       0xC4
+#define VK_GAMEPAD_X                       0xC5
+#define VK_GAMEPAD_Y                       0xC6
+#define VK_GAMEPAD_RIGHT_SHOULDER          0xC7
+#define VK_GAMEPAD_LEFT_SHOULDER           0xC8
+#define VK_GAMEPAD_LEFT_TRIGGER            0xC9
+#define VK_GAMEPAD_RIGHT_TRIGGER           0xCA
+#define VK_GAMEPAD_DPAD_UP                 0xCB
+#define VK_GAMEPAD_DPAD_DOWN               0xCC
+#define VK_GAMEPAD_DPAD_LEFT               0xCD
+#define VK_GAMEPAD_DPAD_RIGHT              0xCE
+#define VK_GAMEPAD_MENU                    0xCF
+#define VK_GAMEPAD_VIEW                    0xD0
+#define VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON  0xD1
+#define VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON 0xD2
+#define VK_GAMEPAD_LEFT_THUMBSTICK_UP      0xD3
+#define VK_GAMEPAD_LEFT_THUMBSTICK_DOWN    0xD4
+#define VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT   0xD5
+#define VK_GAMEPAD_LEFT_THUMBSTICK_LEFT    0xD6
+#define VK_GAMEPAD_RIGHT_THUMBSTICK_UP     0xD7
+#define VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN   0xD8
+#define VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT  0xD9
+#define VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT   0xDA
+#define VK_OEM_4                           0xDB
+#define VK_OEM_5                           0xDC
+#define VK_OEM_6                           0xDD
+#define VK_OEM_7                           0xDE
+#define VK_OEM_8                           0xDF
+#define VK_OEM_AX                          0xE1
+#define VK_OEM_102                         0xE2
+#define VK_ICO_HELP                        0xE3
+#define VK_ICO_00                          0xE4
+#define VK_PROCESSKEY                      0xE5
+#define VK_ICO_CLEAR                       0xE6
+#define VK_PACKET                          0xE7
+#define VK_OEM_RESET                       0xE9
+#define VK_OEM_JUMP                        0xEA
+#define VK_OEM_PA1                         0xEB
+#define VK_OEM_PA2                         0xEC
+#define VK_OEM_PA3                         0xED
+#define VK_OEM_WSCTRL                      0xEE
+#define VK_OEM_CUSEL                       0xEF
+#define VK_OEM_ATTN                        0xF0
+#define VK_OEM_FINISH                      0xF1
+#define VK_OEM_COPY                        0xF2
+#define VK_OEM_AUTO                        0xF3
+#define VK_OEM_ENLW                        0xF4
+#define VK_OEM_BACKTAB                     0xF5
+#define VK_ATTN                            0xF6
+#define VK_CRSEL                           0xF7
+#define VK_EXSEL                           0xF8
+#define VK_EREOF                           0xF9
+#define VK_PLAY                            0xFA
+#define VK_ZOOM                            0xFB
+#define VK_NONAME                          0xFC
+#define VK_PA1                             0xFD
+#define VK_OEM_CLEAR                       0xFE
 #define MAPVK_VK_TO_CHAR 2
 #define SM_CXSCREEN     0
 #define SM_CYSCREEN     1
@@ -3982,7 +4240,7 @@ typedef struct {
 #define RIM_TYPEMOUSE   0
 #define MONITOR_DEFAULTTOPRIMARY 0x00000001
 #define WHEEL_DELTA     120
-#define IDC_ARROW       MAKEINTRESOURCEA(32512)
+#define IDC_ARROW       MAKEINTRESOURCE(32512)
 #define OCR_NORMAL      32512
 #define OCR_IBEAM       32513
 #define OCR_CROSS       32515
@@ -4001,17 +4259,11 @@ typedef struct {
 #define CF_DIB          8
 #define GMEM_MOVEABLE   0x0002
 #define LWA_ALPHA       0x00000002
-#define BI_BITFIELDS    3
-#define DIB_RGB_COLORS  0
-#define LOGPIXELSX      88
-#define LOGPIXELSY      90
 #define SWP_NOSIZE      0x0001
 #define SWP_NOMOVE      0x0002
 #define SWP_NOZORDER    0x0004
 #define SWP_FRAMECHANGED 0x0020
 #define SWP_SHOWWINDOW  0x0040
-#define HORZRES         8
-#define VERTRES         10
 #define HWND_TOP        ((HWND)0)
 
 // kernel32 movable-memory allocation (used for clipboard transfers).
@@ -4027,12 +4279,126 @@ BOOL GlobalUnlock(HGLOBAL hMem);
 SIZE_T GlobalSize(HGLOBAL hMem);
 
 // user32.dll window, message, input, monitor, and clipboard entry points.
+#pragma binding(user32::AdjustWindowRectEx,         "AdjustWindowRectEx")
+#pragma binding(user32::BeginPaint,                 "BeginPaint")
+#pragma binding(user32::BringWindowToTop,           "BringWindowToTop")
+#pragma binding(user32::ChangeDisplaySettingsExW,   "ChangeDisplaySettingsExW")
+#pragma binding(user32::ChangeDisplaySettingsExA,   "ChangeDisplaySettingsExA")
+#pragma binding(user32::CharLowerBuffA,             "CharLowerBuffA")
+#pragma binding(user32::CharLowerBuffW,             "CharLowerBuffW")
+#pragma binding(user32::ClientToScreen,             "ClientToScreen")
+#pragma binding(user32::ClipCursor,                 "ClipCursor")
+#pragma binding(user32::CloseClipboard,             "CloseClipboard")
+#pragma binding(user32::CreateIconIndirect,         "CreateIconIndirect")
+#pragma binding(user32::CreateWindowExA,            "CreateWindowExA")
+#pragma binding(user32::CreateWindowExW,            "CreateWindowExW")
+#pragma binding(user32::DefWindowProcA,             "DefWindowProcA")
+#pragma binding(user32::DefWindowProcW,             "DefWindowProcW")
+#pragma binding(user32::DestroyCursor,              "DestroyCursor")
+#pragma binding(user32::DestroyIcon,                "DestroyIcon")
+#pragma binding(user32::DestroyWindow,              "DestroyWindow")
+#pragma binding(user32::DispatchMessageA,           "DispatchMessageA")
+#pragma binding(user32::DispatchMessageW,           "DispatchMessageW")
+#pragma binding(user32::GetMessageA,                "GetMessageA")
+#pragma binding(user32::GetMessageW,                "GetMessageW")
+#pragma binding(user32::IsClipboardFormatAvailable, "IsClipboardFormatAvailable")
+#pragma binding(user32::PeekMessageW,               "PeekMessageW")
+#pragma binding(user32::PostQuitMessage,            "PostQuitMessage")
+#pragma binding(user32::ReleaseCapture,             "ReleaseCapture")
+#pragma binding(user32::SetCapture,                 "SetCapture")
+#pragma binding(user32::SetRect,                    "SetRect")
+#pragma binding(user32::UnregisterClassA,           "UnregisterClassA")
+#pragma binding(user32::UnregisterClassW,           "UnregisterClassW")
+#pragma binding(user32::EmptyClipboard,             "EmptyClipboard")
+#pragma binding(user32::EndPaint,                   "EndPaint")
+#pragma binding(user32::EnumDisplayDevicesA,        "EnumDisplayDevicesA")
+#pragma binding(user32::EnumDisplayDevicesW,        "EnumDisplayDevicesW")
+#pragma binding(user32::EnumDisplayMonitors,        "EnumDisplayMonitors")
+#pragma binding(user32::EnumDisplaySettingsW,       "EnumDisplaySettingsW")
+#pragma binding(user32::EnumDisplaySettingsA,       "EnumDisplaySettingsA")
+#pragma binding(user32::FlashWindowEx,              "FlashWindowEx")
+#pragma binding(user32::GetClientRect,              "GetClientRect")
+#pragma binding(user32::GetClipboardData,           "GetClipboardData")
+#pragma binding(user32::GetCursorPos,               "GetCursorPos")
+#pragma binding(user32::GetDC,                      "GetDC")
+#pragma binding(user32::GetForegroundWindow,        "GetForegroundWindow")
+#pragma binding(user32::GetKeyNameTextA,            "GetKeyNameTextA")
+#pragma binding(user32::GetKeyNameTextW,            "GetKeyNameTextW")
+#pragma binding(user32::GetKeyState,                "GetKeyState")
+#pragma binding(user32::GetKeyboardLayout,          "GetKeyboardLayout")
+#pragma binding(user32::GetKeyboardState,           "GetKeyboardState")
+#pragma binding(user32::GetLayeredWindowAttributes, "GetLayeredWindowAttributes")
+#pragma binding(user32::GetMonitorInfoA,            "GetMonitorInfoA")
+#pragma binding(user32::GetMonitorInfoW,            "GetMonitorInfoW")
+#pragma binding(user32::GetPropW,                   "GetPropW")
+#pragma binding(user32::GetPropA,                   "GetPropA")
+#pragma binding(user32::GetRawInputData,            "GetRawInputData")
+#pragma binding(user32::GetRawInputDeviceInfoA,     "GetRawInputDeviceInfoA")
+#pragma binding(user32::GetRawInputDeviceInfoW,     "GetRawInputDeviceInfoW")
+#pragma binding(user32::GetRawInputDeviceList,      "GetRawInputDeviceList")
+#pragma binding(user32::GetSystemMetrics,           "GetSystemMetrics")
+#pragma binding(user32::GetUpdateRect,              "GetUpdateRect")
+#pragma binding(user32::GetUpdateRgn,               "GetUpdateRgn")
+#pragma binding(user32::GetWindowLongA,             "GetWindowLongA")
+#pragma binding(user32::GetWindowLongPtrA,          "GetWindowLongPtrA")
+#pragma binding(user32::GetWindowLongPtrW,          "GetWindowLongPtrW")
+#pragma binding(user32::GetWindowLongW,             "GetWindowLongW")
+#pragma binding(user32::GetWindowPlacement,         "GetWindowPlacement")
+#pragma binding(user32::GetWindowRect,              "GetWindowRect")
+#pragma binding(user32::IsWindow,                   "IsWindow")
+#pragma binding(user32::IsWindowVisible,            "IsWindowVisible")
+#pragma binding(user32::IsZoomed,                   "IsZoomed")
+#pragma binding(user32::KillTimer,                  "KillTimer")
+#pragma binding(user32::LoadCursorA,                "LoadCursorA")
+#pragma binding(user32::LoadCursorW,                "LoadCursorW")
+#pragma binding(user32::LoadIconA,                  "LoadIconA")
+#pragma binding(user32::LoadIconW,                  "LoadIconW")
+#pragma binding(user32::LoadImageA,                 "LoadImageA")
+#pragma binding(user32::LoadImageW,                 "LoadImageW")
+#pragma binding(user32::MapVirtualKeyA,             "MapVirtualKeyA")
+#pragma binding(user32::MapVirtualKeyW,             "MapVirtualKeyW")
+#pragma binding(user32::MonitorFromPoint,           "MonitorFromPoint")
+#pragma binding(user32::MonitorFromWindow,          "MonitorFromWindow")
+#pragma binding(user32::MoveWindow,                 "MoveWindow")
+#pragma binding(user32::MsgWaitForMultipleObjects,  "MsgWaitForMultipleObjects")
+#pragma binding(user32::OpenClipboard,              "OpenClipboard")
+#pragma binding(user32::PeekMessageA,               "PeekMessageA")
+#pragma binding(user32::PostMessageA,               "PostMessageA")
+#pragma binding(user32::PostMessageW,               "PostMessageW")
+#pragma binding(user32::RegisterClassA,             "RegisterClassA")
+#pragma binding(user32::RegisterClassW,             "RegisterClassW")
+#pragma binding(user32::RegisterRawInputDevices,    "RegisterRawInputDevices")
+#pragma binding(user32::ReleaseDC,                  "ReleaseDC")
+#pragma binding(user32::RemovePropW,                "RemovePropW")
+#pragma binding(user32::RemovePropA,                "RemovePropA")
+#pragma binding(user32::ScreenToClient,             "ScreenToClient")
+#pragma binding(user32::SendMessageA,               "SendMessageA")
+#pragma binding(user32::SendMessageW,               "SendMessageW")
+#pragma binding(user32::SetClassLongPtrA,           "SetClassLongPtrA")
+#pragma binding(user32::SetClassLongPtrW,           "SetClassLongPtrW")
+#pragma binding(user32::SetClipboardData,           "SetClipboardData")
+#pragma binding(user32::SetCursor,                  "SetCursor")
+#pragma binding(user32::SetCursorPos,               "SetCursorPos")
+#pragma binding(user32::SetFocus,                   "SetFocus")
+#pragma binding(user32::SetForegroundWindow,        "SetForegroundWindow")
+#pragma binding(user32::SetLayeredWindowAttributes, "SetLayeredWindowAttributes")
+#pragma binding(user32::SetProcessDPIAware,         "SetProcessDPIAware")
+#pragma binding(user32::SetPropW,                   "SetPropW")
+#pragma binding(user32::SetPropA,                   "SetPropA")
+#pragma binding(user32::SetTimer,                   "SetTimer")
+#pragma binding(user32::SetWindowLongA,             "SetWindowLongA")
+#pragma binding(user32::SetWindowLongPtrA,          "SetWindowLongPtrA")
+#pragma binding(user32::SetWindowLongPtrW,          "SetWindowLongPtrW")
+#pragma binding(user32::SetWindowLongW,             "SetWindowLongW")
+#pragma binding(user32::SetWindowPos,               "SetWindowPos")
+#pragma binding(user32::SetWindowTextA,             "SetWindowTextA")
+#pragma binding(user32::SetWindowTextW,             "SetWindowTextW")
+#pragma binding(user32::ShowWindow,                 "ShowWindow")
+#pragma binding(user32::ToAscii,                    "ToAscii")
+#pragma binding(user32::ToUnicodeEx,                "ToUnicodeEx")
+#pragma binding(user32::TranslateMessage,           "TranslateMessage")
 #define CreateWindowA(cls, name, style, x, y, w, h, parent, menu, inst, param) \
     CreateWindowExA(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
-#define LoadCursor    LoadCursorA
-#define MapVirtualKey MapVirtualKeyA
-#define GetWindowLong GetWindowLongA
-#define SetWindowLong SetWindowLongA
 HWND CreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
                      DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
@@ -4046,90 +4412,25 @@ HWND CreateWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 ATOM RegisterClassW(const WNDCLASSW *lpWndClass);
 LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-#ifndef SendMessage
-#define SendMessage SendMessageW
-#endif
-#ifndef PostMessage
-#define PostMessage PostMessageW
-#endif
-#ifndef GetWindowLongPtr
-#define GetWindowLongPtr GetWindowLongPtrW
-#endif
-#ifndef LoadIcon
-#define LoadIcon LoadIconA
-#endif
 HANDLE GetPropW(HWND hWnd, LPCWSTR lpString);
+HANDLE GetPropA(HWND hWnd, LPCSTR lpString);
 BOOL SetPropW(HWND hWnd, LPCWSTR lpString, HANDLE hData);
+BOOL SetPropA(HWND hWnd, LPCSTR lpString, HANDLE hData);
 HANDLE RemovePropW(HWND hWnd, LPCWSTR lpString);
+HANDLE RemovePropA(HWND hWnd, LPCSTR lpString);
 
 // Registry read used for the Windows dark-mode query.
-#define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
+#pragma binding(advapi32::RegGetValueW, "RegGetValueW")
+#pragma binding(advapi32::RegGetValueA, "RegGetValueA")
 #define RRF_RT_REG_DWORD 0x00000010
 LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags,
                      LPDWORD pdwType, PVOID pvData, LPDWORD pcbData);
+LSTATUS RegGetValueA(HKEY hkey, LPCSTR lpSubKey, LPCSTR lpValue, DWORD dwFlags,
+                     LPDWORD pdwType, PVOID pvData, LPDWORD pcbData);
 
-// Display / paint / timer surface RGFW's win32 backend reads.
+// The display, paint and timer surface.
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
 
-typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
-
-typedef struct _devicemodeW {
-    WCHAR dmDeviceName[32];
-    WORD  dmSpecVersion;
-    WORD  dmDriverVersion;
-    WORD  dmSize;
-    WORD  dmDriverExtra;
-    DWORD dmFields;
-    union {
-        struct {
-            short dmOrientation;
-            short dmPaperSize;
-            short dmPaperLength;
-            short dmPaperWidth;
-            short dmScale;
-            short dmCopies;
-            short dmDefaultSource;
-            short dmPrintQuality;
-        };
-        struct {
-            POINTL dmPosition;
-            DWORD  dmDisplayOrientation;
-            DWORD  dmDisplayFixedOutput;
-        };
-    };
-    short dmColor;
-    short dmDuplex;
-    short dmYResolution;
-    short dmTTOption;
-    short dmCollate;
-    WCHAR dmFormName[32];
-    WORD  dmLogPixels;
-    DWORD dmBitsPerPel;
-    DWORD dmPelsWidth;
-    DWORD dmPelsHeight;
-    union {
-        DWORD dmDisplayFlags;
-        DWORD dmNup;
-    };
-    DWORD dmDisplayFrequency;
-    DWORD dmICMMethod;
-    DWORD dmICMIntent;
-    DWORD dmMediaType;
-    DWORD dmDitherType;
-    DWORD dmReserved1;
-    DWORD dmReserved2;
-    DWORD dmPanningWidth;
-    DWORD dmPanningHeight;
-} DEVMODEW, *PDEVMODEW, *LPDEVMODEW;
-
-typedef struct _DISPLAY_DEVICEW {
-    DWORD cb;
-    WCHAR DeviceName[32];
-    WCHAR DeviceString[128];
-    DWORD StateFlags;
-    WCHAR DeviceID[128];
-    WCHAR DeviceKey[128];
-} DISPLAY_DEVICEW, *PDISPLAY_DEVICEW;
 
 typedef struct tagPAINTSTRUCT {
     HDC  hdc;
@@ -4153,19 +4454,30 @@ HKL GetKeyboardLayout(DWORD idThread);
 UINT MapVirtualKeyW(UINT uCode, UINT uMapType);
 int ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState, LPWSTR pwszBuff,
                 int cchBuff, UINT wFlags, HKL dwhkl);
+// The display-mode calls take <wingdi.h>'s structures, as in winuser.h.
+#ifndef NOGDI
 LONG ChangeDisplaySettingsExW(LPCWSTR lpszDeviceName, DEVMODEW *lpDevMode, HWND hwnd,
+                              DWORD dwflags, LPVOID lParam);
+LONG ChangeDisplaySettingsExA(LPCSTR lpszDeviceName, DEVMODEA *lpDevMode, HWND hwnd,
                               DWORD dwflags, LPVOID lParam);
 BOOL EnumDisplayDevicesW(LPCWSTR lpDevice, DWORD iDevNum,
                          PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
 BOOL EnumDisplaySettingsW(LPCWSTR lpszDeviceName, DWORD iModeNum, DEVMODEW *lpDevMode);
+BOOL EnumDisplaySettingsA(LPCSTR lpszDeviceName, DWORD iModeNum, DEVMODEA *lpDevMode);
+#endif
 BOOL FlashWindowEx(PFLASHWINFO pfwi);
 BOOL GetMonitorInfoW(HMONITOR hMonitor, LPMONITORINFO lpmi);
 BOOL IsZoomed(HWND hWnd);
 HICON LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
+HICON LoadIconW(HINSTANCE hInstance, LPCWSTR lpIconName);
 HANDLE LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy, UINT fuLoad);
+HANDLE LoadImageW(HINSTANCE hInst, LPCWSTR name, UINT type, int cx, int cy, UINT fuLoad);
+LONG_PTR GetWindowLongPtrA(HWND hWnd, int nIndex);
 LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
+LONG_PTR SetWindowLongPtrA(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 BOOL SetWindowTextW(HWND hWnd, LPCWSTR lpString);
+LRESULT SendMessageA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 LRESULT SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 HWND SetFocus(HWND hWnd);
 BOOL SetForegroundWindow(HWND hWnd);
@@ -4173,30 +4485,42 @@ UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerF
 BOOL KillTimer(HWND hWnd, UINT_PTR uIDEvent);
 HDC BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
 BOOL EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
+BOOL GetUpdateRect(HWND hWnd, LPRECT lpRect, BOOL bErase);
+int GetUpdateRgn(HWND hWnd, HRGN hRgn, BOOL bErase);
 BOOL BringWindowToTop(HWND hWnd);
 BOOL AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
 BOOL MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
-BOOL BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop);
-HDC CreateDCW(LPCWSTR pwszDriver, LPCWSTR pwszDevice, LPCWSTR pszPort,
-              const DEVMODEW *pdm);
-BOOL GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
-BOOL SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
 BOOL ShowWindow(HWND hWnd, int nCmdShow);
 HDC GetDC(HWND hWnd);
 int ReleaseDC(HWND hWnd, HDC hDC);
 BOOL GetWindowRect(HWND hWnd, LPRECT lpRect);
 BOOL GetClientRect(HWND hWnd, LPRECT lpRect);
 BOOL DestroyWindow(HWND hWnd);
+BOOL GetMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
+BOOL GetMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
+BOOL PeekMessageW(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax,
+                  UINT wRemoveMsg);
+LRESULT DispatchMessageW(const MSG *lpMsg);
+VOID PostQuitMessage(int nExitCode);
+HWND SetCapture(HWND hWnd);
+BOOL ReleaseCapture(VOID);
+BOOL SetRect(LPRECT lprc, int xLeft, int yTop, int xRight, int yBottom);
+BOOL IsClipboardFormatAvailable(UINT format);
+BOOL UnregisterClassA(LPCSTR lpClassName, HINSTANCE hInstance);
+BOOL UnregisterClassW(LPCWSTR lpClassName, HINSTANCE hInstance);
 BOOL PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax,
                   UINT wRemoveMsg);
 BOOL TranslateMessage(const MSG *lpMsg);
 LRESULT DispatchMessageA(const MSG *lpMsg);
+BOOL PostMessageA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 BOOL PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 DWORD MsgWaitForMultipleObjects(DWORD nCount, const HANDLE *pHandles, BOOL fWaitAll,
                                 DWORD dwMilliseconds, DWORD dwWakeMask);
 HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName);
+HCURSOR LoadCursorW(HINSTANCE hInstance, LPCWSTR lpCursorName);
 SHORT GetKeyState(int nVirtKey);
 int GetKeyNameTextA(LONG lParam, LPSTR lpString, int cchSize);
+int GetKeyNameTextW(LONG lParam, LPWSTR lpString, int cchSize);
 UINT MapVirtualKeyA(UINT uCode, UINT uMapType);
 int ToAscii(UINT uVirtKey, UINT uScanCode, const BYTE *lpKeyState, LPWORD lpChar,
             UINT uFlags);
@@ -4213,6 +4537,7 @@ BOOL IsWindow(HWND hWnd);
 BOOL IsWindowVisible(HWND hWnd);
 BOOL GetWindowPlacement(HWND hWnd, WINDOWPLACEMENT *lpwndpl);
 ULONG_PTR SetClassLongPtrA(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+ULONG_PTR SetClassLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 HCURSOR SetCursor(HCURSOR hCursor);
 BOOL DestroyCursor(HCURSOR hCursor);
 BOOL DestroyIcon(HICON hIcon);
@@ -4231,8 +4556,10 @@ HMONITOR MonitorFromPoint(POINT pt, DWORD dwFlags);
 HMONITOR MonitorFromWindow(HWND hwnd, DWORD dwFlags);
 BOOL EnumDisplayMonitors(HDC hdc, LPCRECT lprcClip, MONITORENUMPROC lpfnEnum,
                          LPARAM dwData);
+#ifndef NOGDI
 BOOL EnumDisplayDevicesA(LPCSTR lpDevice, DWORD iDevNum,
                          PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
+#endif
 BOOL GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
 BOOL SetProcessDPIAware(VOID);
 HWND GetForegroundWindow(VOID);
@@ -4242,31 +4569,143 @@ HANDLE GetClipboardData(UINT uFormat);
 BOOL EmptyClipboard(VOID);
 HANDLE SetClipboardData(UINT uFormat, HANDLE hMem);
 DWORD CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
+DWORD CharLowerBuffW(LPWSTR lpsz, DWORD cchLength);
 
-// gdi32.dll pixel format, DIB, and bitblt entry points.
-int ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
-BOOL SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
-int DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes,
-                        LPPIXELFORMATDESCRIPTOR ppfd);
-BOOL SwapBuffers(HDC hdc);
-int GetDeviceCaps(HDC hdc, int index);
-HBITMAP CreateBitmap(int nWidth, int nHeight, UINT nPlanes, UINT nBitCount,
-                     const VOID *lpBits);
-HBITMAP CreateDIBSection(HDC hdc, const BITMAPINFO *pbmi, UINT usage, VOID **ppvBits,
-                         HANDLE hSection, DWORD offset);
-HDC CreateCompatibleDC(HDC hdc);
-BOOL DeleteDC(HDC hdc);
-BOOL DeleteObject(HGDIOBJ ho);
-HGDIOBJ SelectObject(HDC hdc, HGDIOBJ h);
 HICON CreateIconIndirect(PICONINFO piconinfo);
 
-// opengl32.dll WGL context entry points.
-HGLRC wglCreateContext(HDC hdc);
-BOOL wglDeleteContext(HGLRC hglrc);
-BOOL wglMakeCurrent(HDC hdc, HGLRC hglrc);
-PROC wglGetProcAddress(LPCSTR lpszProc);
-HDC wglGetCurrentDC(VOID);
-HGLRC wglGetCurrentContext(VOID);
-BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
+
+
+// The generic names of the A / W pairs above, as mingw-w64's headers map them.
+#define ChangeDisplaySettingsEx __MINGW_NAME_AW(ChangeDisplaySettingsEx)
+#define CharLower __MINGW_NAME_AW(CharLower)
+#define CharLowerBuff __MINGW_NAME_AW(CharLowerBuff)
+#define CharUpper __MINGW_NAME_AW(CharUpper)
+#define CompareString __MINGW_NAME_AW(CompareString)
+#define ConvertStringSecurityDescriptorToSecurityDescriptor __MINGW_NAME_AW(ConvertStringSecurityDescriptorToSecurityDescriptor)
+#define CreateDirectory __MINGW_NAME_AW(CreateDirectory)
+#define CreateEvent __MINGW_NAME_AW(CreateEvent)
+#define CreateFile __MINGW_NAME_AW(CreateFile)
+#define CreateFileTransacted __MINGW_NAME_AW(CreateFileTransacted)
+#define CreateHardLink __MINGW_NAME_AW(CreateHardLink)
+#define CreateMutex __MINGW_NAME_AW(CreateMutex)
+#define CreateProcess __MINGW_NAME_AW(CreateProcess)
+#define CreateSemaphore __MINGW_NAME_AW(CreateSemaphore)
+#define CreateSymbolicLink __MINGW_NAME_AW(CreateSymbolicLink)
+#define CreateWindow __MINGW_NAME_AW(CreateWindow)
+#define CreateWindowEx __MINGW_NAME_AW(CreateWindowEx)
+#define DefWindowProc __MINGW_NAME_AW(DefWindowProc)
+#define DispatchMessage __MINGW_NAME_AW(DispatchMessage)
+#define DeleteFile __MINGW_NAME_AW(DeleteFile)
+#define EnumDisplayDevices __MINGW_NAME_AW(EnumDisplayDevices)
+#define EnumDisplaySettings __MINGW_NAME_AW(EnumDisplaySettings)
+#define ExpandEnvironmentStrings __MINGW_NAME_AW(ExpandEnvironmentStrings)
+#define FillConsoleOutputCharacter __MINGW_NAME_AW(FillConsoleOutputCharacter)
+#define FindFirstFile __MINGW_NAME_AW(FindFirstFile)
+#define FindNextFile __MINGW_NAME_AW(FindNextFile)
+#define FoldString __MINGW_NAME_AW(FoldString)
+#define FormatMessage __MINGW_NAME_AW(FormatMessage)
+#define GetComputerNameEx __MINGW_NAME_AW(GetComputerNameEx)
+#define GetConsoleTitle __MINGW_NAME_AW(GetConsoleTitle)
+#define GetCurrentDirectory __MINGW_NAME_AW(GetCurrentDirectory)
+#define GetDiskFreeSpace __MINGW_NAME_AW(GetDiskFreeSpace)
+#define GetDiskFreeSpaceEx __MINGW_NAME_AW(GetDiskFreeSpaceEx)
+#define GetDriveType __MINGW_NAME_AW(GetDriveType)
+#define GetEnvironmentVariable __MINGW_NAME_AW(GetEnvironmentVariable)
+#define GetFileAttributes __MINGW_NAME_AW(GetFileAttributes)
+#define GetFileAttributesEx __MINGW_NAME_AW(GetFileAttributesEx)
+#define GetFileVersionInfo __MINGW_NAME_AW(GetFileVersionInfo)
+#define GetFileVersionInfoSize __MINGW_NAME_AW(GetFileVersionInfoSize)
+#define GetFinalPathNameByHandle __MINGW_NAME_AW(GetFinalPathNameByHandle)
+#define GetFullPathName __MINGW_NAME_AW(GetFullPathName)
+#define GetKeyNameText __MINGW_NAME_AW(GetKeyNameText)
+#define GetLongPathName __MINGW_NAME_AW(GetLongPathName)
+#define GetModuleFileName __MINGW_NAME_AW(GetModuleFileName)
+#define GetMessage __MINGW_NAME_AW(GetMessage)
+#define GetModuleHandle __MINGW_NAME_AW(GetModuleHandle)
+#define GetMonitorInfo __MINGW_NAME_AW(GetMonitorInfo)
+#define GetNamedPipeHandleState __MINGW_NAME_AW(GetNamedPipeHandleState)
+#define GetProp __MINGW_NAME_AW(GetProp)
+#define GetRawInputDeviceInfo __MINGW_NAME_AW(GetRawInputDeviceInfo)
+#define GetStringTypeEx __MINGW_NAME_AW(GetStringTypeEx)
+#define GetSystemDirectory __MINGW_NAME_AW(GetSystemDirectory)
+#define GetTempFileName __MINGW_NAME_AW(GetTempFileName)
+#define GetTempPath __MINGW_NAME_AW(GetTempPath)
+#define GetUserName __MINGW_NAME_AW(GetUserName)
+#define GetVersionEx __MINGW_NAME_AW(GetVersionEx)
+#define GetWindowLong __MINGW_NAME_AW(GetWindowLong)
+#define GetWindowLongPtr __MINGW_NAME_AW(GetWindowLongPtr)
+#define GetWindowsDirectory __MINGW_NAME_AW(GetWindowsDirectory)
+#define LoadCursor __MINGW_NAME_AW(LoadCursor)
+#define LoadIcon __MINGW_NAME_AW(LoadIcon)
+#define LoadImage __MINGW_NAME_AW(LoadImage)
+#define LoadLibrary __MINGW_NAME_AW(LoadLibrary)
+#define LoadLibraryEx __MINGW_NAME_AW(LoadLibraryEx)
+#define LookupPrivilegeValue __MINGW_NAME_AW(LookupPrivilegeValue)
+#define MapVirtualKey __MINGW_NAME_AW(MapVirtualKey)
+#define MoveFileEx __MINGW_NAME_AW(MoveFileEx)
+#define NeedCurrentDirectoryForExePath __MINGW_NAME_AW(NeedCurrentDirectoryForExePath)
+#define OpenEvent __MINGW_NAME_AW(OpenEvent)
+#define OutputDebugString __MINGW_NAME_AW(OutputDebugString)
+#define PeekMessage __MINGW_NAME_AW(PeekMessage)
+#define PeekConsoleInput __MINGW_NAME_AW(PeekConsoleInput)
+#define PostMessage __MINGW_NAME_AW(PostMessage)
+#define ReadConsole __MINGW_NAME_AW(ReadConsole)
+#define ReadConsoleInput __MINGW_NAME_AW(ReadConsoleInput)
+#define RegConnectRegistry __MINGW_NAME_AW(RegConnectRegistry)
+#define RegCreateKey __MINGW_NAME_AW(RegCreateKey)
+#define RegCreateKeyEx __MINGW_NAME_AW(RegCreateKeyEx)
+#define RegDeleteKey __MINGW_NAME_AW(RegDeleteKey)
+#define RegDeleteKeyEx __MINGW_NAME_AW(RegDeleteKeyEx)
+#define RegDeleteTree __MINGW_NAME_AW(RegDeleteTree)
+#define RegDeleteValue __MINGW_NAME_AW(RegDeleteValue)
+#define RegEnumKeyEx __MINGW_NAME_AW(RegEnumKeyEx)
+#define RegEnumValue __MINGW_NAME_AW(RegEnumValue)
+#define RegGetValue __MINGW_NAME_AW(RegGetValue)
+#define RegLoadKey __MINGW_NAME_AW(RegLoadKey)
+#define RegOpenKeyEx __MINGW_NAME_AW(RegOpenKeyEx)
+#define RegQueryInfoKey __MINGW_NAME_AW(RegQueryInfoKey)
+#define RegQueryValueEx __MINGW_NAME_AW(RegQueryValueEx)
+#define RegSaveKey __MINGW_NAME_AW(RegSaveKey)
+#define RegSetValueEx __MINGW_NAME_AW(RegSetValueEx)
+#define RegisterClass __MINGW_NAME_AW(RegisterClass)
+#define RegisterEventSource __MINGW_NAME_AW(RegisterEventSource)
+#define RemoveDirectory __MINGW_NAME_AW(RemoveDirectory)
+#define RemoveProp __MINGW_NAME_AW(RemoveProp)
+#define ReportEvent __MINGW_NAME_AW(ReportEvent)
+#define ScrollConsoleScreenBuffer __MINGW_NAME_AW(ScrollConsoleScreenBuffer)
+#define SearchPath __MINGW_NAME_AW(SearchPath)
+#define SendMessage __MINGW_NAME_AW(SendMessage)
+#define SetClassLongPtr __MINGW_NAME_AW(SetClassLongPtr)
+#define SetConsoleTitle __MINGW_NAME_AW(SetConsoleTitle)
+#define SetCurrentDirectory __MINGW_NAME_AW(SetCurrentDirectory)
+#define SetEnvironmentVariable __MINGW_NAME_AW(SetEnvironmentVariable)
+#define SetFileAttributes __MINGW_NAME_AW(SetFileAttributes)
+#define SetProp __MINGW_NAME_AW(SetProp)
+#define SetWindowLong __MINGW_NAME_AW(SetWindowLong)
+#define SetWindowLongPtr __MINGW_NAME_AW(SetWindowLongPtr)
+#define SetWindowText __MINGW_NAME_AW(SetWindowText)
+#define UnregisterClass __MINGW_NAME_AW(UnregisterClass)
+#define VerQueryValue __MINGW_NAME_AW(VerQueryValue)
+#define VerifyVersionInfo __MINGW_NAME_AW(VerifyVersionInfo)
+#define WriteConsole __MINGW_NAME_AW(WriteConsole)
+#define WriteConsoleInput __MINGW_NAME_AW(WriteConsoleInput)
+#define lstrcpy __MINGW_NAME_AW(lstrcpy)
+__MINGW_TYPEDEF_AW(MONITORINFOEX)
+__MINGW_TYPEDEF_AW(LPMONITORINFOEX)
+__MINGW_TYPEDEF_AW(OSVERSIONINFO)
+__MINGW_TYPEDEF_AW(POSVERSIONINFO)
+__MINGW_TYPEDEF_AW(LPOSVERSIONINFO)
+__MINGW_TYPEDEF_AW(OSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(POSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(LPOSVERSIONINFOEX)
+__MINGW_TYPEDEF_AW(STARTUPINFO)
+__MINGW_TYPEDEF_AW(LPSTARTUPINFO)
+__MINGW_TYPEDEF_AW(STARTUPINFOEX)
+__MINGW_TYPEDEF_AW(LPSTARTUPINFOEX)
+__MINGW_TYPEDEF_AW(WIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(PWIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(LPWIN32_FIND_DATA)
+__MINGW_TYPEDEF_AW(WNDCLASS)
+__MINGW_TYPEDEF_AW(LPWNDCLASS)
 
 #endif

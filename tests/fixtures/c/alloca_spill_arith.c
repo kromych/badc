@@ -7,7 +7,11 @@
    (C99 6.7.3p6), so the buffer holds values no fold answers and the
    arithmetic below stays live. Exercised at -O0 and -O and under
    BADC_MAX_GPR=2 BADC_MAX_FPR=2. Returns 42. */
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 static volatile unsigned char seed[7] = {1, 2, 3, 4, 5, 6, 7};
 

@@ -160,10 +160,12 @@ def ensure_config(target: str) -> None:
     `./configure`, so no POSIX shell and no host cc are needed (native Windows
     included). `./configure`'s job is capability detection, but badc's profile
     is fixed, so the answer is a committed constant. Two forms cover the five
-    targets: the POSIX form (macOS / Linux) and the Windows form, which is the
-    POSIX form minus the five POSIX-only libc entries badc's msvcrt binding
-    does not provide (fseeko, ftruncate, getpagesize, mmap, realpath); NASM
-    falls back to its portable paths for those. Both forms also disable
+    targets: the POSIX form (macOS / Linux, each naming the byte-order header
+    its C library ships) and the Windows form, which is the POSIX form minus
+    the headers mingw-w64 does not ship (the byte-order ones, <sys/mman.h>,
+    <sys/resource.h>) and the five POSIX-only libc entries badc's msvcrt
+    binding does not provide (fseeko, ftruncate, getpagesize, mmap,
+    realpath); NASM falls back to its portable paths for those. Both forms also disable
     `HAVE_FUNC_ATTRIBUTE_ERROR`: badc accepts but ignores attribute(error), so
     NASM's `-O` compile-time-assert tripwire would otherwise leave a dead call
     to an undefined symbol."""

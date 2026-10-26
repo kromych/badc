@@ -118,17 +118,25 @@ impl Compiler {
     /// union places every member at offset 0 and takes the maximum size.
     ///
     /// On entry `tk` is `{`; on exit it is the token after the closing `}`.
+    ///
+    /// Returns the entry the body filled and, for a C23 redefinition of a
+    /// tag the scope already defined, that definition, which
+    /// [`Self::settle_tag_redefinition`] compares once the attributes after
+    /// the body applied.
     pub(super) fn parse_aggregate_body(
         &mut self,
         name: &str,
         is_union: bool,
         packed: bool,
-    ) -> Result<usize, C5Error> {
+    ) -> Result<(usize, Option<usize>), C5Error> {
         // The attributes preceding the tag (`__declspec(align(16)) struct S
-        // { ... } s;`) belong to the enclosing declaration; each member
-        // declaration starts from its own.
+        // { ... } s;`) and the type carriers belong to the enclosing
+        // declaration; each member declaration starts from its own, so a
+        // `const` in a member's parameter list leaves `s` unqualified.
         let decl_attrs = core::mem::take(&mut self.pending.attrs);
+        let carriers = self.pending.take_decl_type_carriers();
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
+        self.pending.restore_decl_type_carriers(carriers);
         self.pending.attrs = decl_attrs;
         r
     }
@@ -164,14 +172,10 @@ impl Compiler {
         name: &str,
         is_union: bool,
         packed: bool,
-    ) -> Result<usize, C5Error> {
-        let struct_id = self.register_aggregate_tag(name, is_union)?;
+    ) -> Result<(usize, Option<usize>), C5Error> {
+        let (struct_id, prior) = self.register_aggregate_tag(name, is_union)?;
         self.next()?; // consume `{`
 
-        // Save the outer typedef-array carrier so a `typedef struct { fe X;
-        // ... } ge;` body ending in an array-typedef field does not leak that
-        // dimension into the outer declarator binding of `ge`.
-        let (saved_size, saved_dims, saved_zero_len) = self.pending.take_base_array();
         let mut layout = AggregateLayout::default();
 
         while self.lex.tk != '}' {
@@ -207,10 +211,63 @@ impl Compiler {
             self.next()?;
         }
         self.next()?; // consume `}`
-        self.pending
-            .set_base_array(saved_size, saved_dims, saved_zero_len);
         self.finish_aggregate_layout(struct_id, &layout, packed);
-        Ok(struct_id)
+        Ok((struct_id, prior))
+    }
+
+    /// The type a body read into `id` defines: `id`, or for a redefinition
+    /// of `prior` that definition when the two are compatible.
+    pub(super) fn settle_tag_redefinition(
+        &self,
+        id: usize,
+        prior: Option<usize>,
+    ) -> Result<usize, C5Error> {
+        let Some(prior) = prior else {
+            return Ok(id);
+        };
+        if !self.aggregates_compatible(prior, id) {
+            let p = &self.structs[prior];
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!(
+                    "{} `{}` redefined with different members",
+                    p.keyword(),
+                    p.name
+                ),
+            ));
+        }
+        Ok(prior)
+    }
+
+    /// C23 6.2.7p1: two structure or union definitions are compatible when
+    /// their members correspond one to one, in order, with the same names,
+    /// compatible types and bit-field widths. As in gcc, a member of an
+    /// untagged type each definition spells anew has two distinct types;
+    /// an anonymous member's members compare as members. The layouts,
+    /// which follow from that and from the attributes, must also agree.
+    fn aggregates_compatible(&self, a: usize, b: usize) -> bool {
+        let (x, y) = (&self.structs[a], &self.structs[b]);
+        let same_shape = x.name == y.name
+            && (x.is_union, x.is_vector, x.is_array) == (y.is_union, y.is_vector, y.is_array)
+            && (x.size, x.align, x.fields.len()) == (y.size, y.align, y.fields.len());
+        same_shape
+            && x.fields.iter().zip(&y.fields).all(|(f, g)| {
+                (
+                    &f.name,
+                    f.ty,
+                    f.offset,
+                    f.bit_offset,
+                    f.bit_width,
+                    f.array_size,
+                ) == (
+                    &g.name,
+                    g.ty,
+                    g.offset,
+                    g.bit_offset,
+                    g.bit_width,
+                    g.array_size,
+                ) && f.array_dims == g.array_dims
+            })
     }
 
     /// The comma-separated declarators sharing one type prefix. Each is
@@ -400,10 +457,17 @@ impl Compiler {
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
             let field_name = self.symbols[id_idx].name.clone();
-            if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
+            if is_aggregate_value && self.incomplete_aggregate_tag(field_ty).is_some() {
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
                     format!("field `{field_name}` has incomplete type"),
+                ));
+            }
+            // C99 6.7.2.1p8: no member has a variably modified type.
+            if self.vla_value_slot(field_ty).is_some() {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("field `{field_name}` has a variably modified type"),
                 ));
             }
 
@@ -436,7 +500,9 @@ impl Compiler {
                 self.symbols[idx] = *saved;
             }
             let field_spelling = self.decl_spelling(base_spelling);
-            let enum_tag = incomplete_enum_tag.filter(|_| super::types::is_pointer_ty(field_ty));
+            let enum_tag = incomplete_enum_tag.filter(|&t| {
+                super::types::is_pointer_ty(field_ty) || self.is_ms_forward_enum(t as usize)
+            });
             self.structs[struct_id].fields.push(StructField {
                 name: field_name,
                 offset: field_offset,
@@ -786,7 +852,16 @@ impl Compiler {
     /// self-referential pointer member finds the aggregate mid-definition.
     /// C99 6.2.1: only a tag in the same scope makes this a redefinition; one
     /// in an outer scope is shadowed by the declaration here.
-    fn register_aggregate_tag(&mut self, name: &str, is_union: bool) -> Result<usize, C5Error> {
+    ///
+    /// From C23 a definition of a tag the scope already defined is taken
+    /// when the two are compatible (C23 6.7.2.3, as gcc 15 and clang 22
+    /// take it under `-std=c23` and not before): the body is read into an
+    /// entry no tag names, returned with the prior definition to compare.
+    fn register_aggregate_tag(
+        &mut self,
+        name: &str,
+        is_union: bool,
+    ) -> Result<(usize, Option<usize>), C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
@@ -797,6 +872,11 @@ impl Compiler {
             Some(id) => {
                 self.check_tag_kind(id, keyword)?;
                 if !self.structs[id].fields.is_empty() {
+                    if self.std.c23_keywords() {
+                        self.structs
+                            .push(super::StructDef::incomplete_tag(name, is_union, false));
+                        return Ok((self.structs.len() - 1, Some(id)));
+                    }
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
                         format!("{keyword} `{name}` already defined"),
@@ -806,7 +886,7 @@ impl Compiler {
             }
             None => self.declare_tag(name, is_union, false),
         };
-        Ok(struct_id)
+        Ok((struct_id, None))
     }
 
     /// The type prefix of one member group: the specifiers, the type they
@@ -924,6 +1004,14 @@ impl Compiler {
             // A member takes what a variable declared through the alias does.
             let (ty, tag) = self.typedef_name_base_type()?;
             incomplete_enum_tag = tag;
+            // A structure or union typedef with no declarator promotes its
+            // members as the tagged form does (`-fms-extensions`).
+            if is_struct_value_ty(ty)
+                && self.pending.typedef_base_array_size == 0
+                && !self.structs[struct_id_of(ty)].is_vector
+            {
+                anon_aggregate_inner_id = Some(struct_id_of(ty));
+            }
             ty
         } else if mods.saw_int_mod {
             mods.int_base()
@@ -1012,10 +1100,11 @@ impl Compiler {
             );
         };
         let inner_id = if self.lex.tk == '{' {
-            let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
+            let (id, prior) =
+                self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
             self.structs[id].is_anonymous = inner_anonymous;
             self.apply_post_body_attributes(id)?;
-            id
+            self.settle_tag_redefinition(id, prior)?
         } else {
             self.find_or_forward_declare_struct(&inner_name, nested_is_union, false)?
         };
@@ -1219,6 +1308,9 @@ impl Compiler {
             self.repack_struct(struct_id, Packing::Attribute);
         }
         let transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
+        if core::mem::take(&mut self.pending.attrs.designated_init) {
+            self.mark_designated_init(struct_id)?;
+        }
         let req = self.take_member_align()?;
         if req > 0 {
             let align = self.structs[struct_id].align.max(req as usize);
@@ -1237,6 +1329,18 @@ impl Compiler {
         if self.target.ms_layout() && s.is_complete && s.size == 0 {
             s.size = if s.explicit_align >= 4 { s.align } else { 4 };
         }
+        Ok(())
+    }
+
+    /// GNU `designated_init`, which gcc takes on a struct type only.
+    pub(super) fn mark_designated_init(&mut self, struct_id: usize) -> Result<(), C5Error> {
+        if self.structs[struct_id].is_union {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`designated_init` applies to a struct type only",
+            ));
+        }
+        self.structs[struct_id].designated_init = true;
         Ok(())
     }
 

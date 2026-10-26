@@ -8,16 +8,14 @@
 //! native ELF ET_REL alongside the user's translation units.
 //!
 //! Single registry [`EMBEDDED_RUNTIME`]. Its one source
-//! (`runtime.c`) gates its sections on driver-defined macros:
-//! `__BADC_C5_CRT__` (the image may import the user-mode C library --
-//! hosted executables and shared libraries) selects the Windows C99
-//! snprintf / vsnprintf definitions, and `__BADC_C5_START__` (an
-//! entry stub is emitted -- hosted executables only) selects the
-//! `environ` / `tzname` data and the `__c5_exit` / `__c5_entry`
-//! startup. Passthrough-entry subsystems (native / EFI) and
-//! freestanding images leave both undefined, so the source compiles
-//! to nothing for them: no user-mode CRT import, and no `environ`
-//! definition (a library inherits it from the host process).
+//! (`runtime.c`) gates its sections on the driver-defined
+//! `__BADC_C5_START__` (an entry stub is emitted -- hosted executables
+//! only), which selects the `environ` / `tzname` data and the
+//! `__c5_exit` / `__c5_entry` startup. Passthrough-entry subsystems
+//! (native / EFI), freestanding images and shared libraries leave it
+//! undefined, so the source compiles to nothing for them: no user-mode
+//! CRT import, and no `environ` definition (a library inherits it from
+//! the host process).
 
 /// Runtime sources compiled + linked alongside the user's
 /// translation units on the native-link path.
@@ -59,13 +57,38 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
 pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
     ("dirent_ext.c", include_str!("../../libc/lib/dirent_ext.c")),
     ("dlfcn_ext.c", include_str!("../../libc/lib/dlfcn_ext.c")),
+    ("fenv_ext.c", include_str!("../../libc/lib/fenv_ext.c")),
+    ("ftw_ext.c", include_str!("../../libc/lib/ftw_ext.c")),
+    ("getopt_ext.c", include_str!("../../libc/lib/getopt_ext.c")),
+    ("libgen_ext.c", include_str!("../../libc/lib/libgen_ext.c")),
+    (
+        "mbctype_ext.c",
+        include_str!("../../libc/lib/mbctype_ext.c"),
+    ),
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
+    ("search_ext.c", include_str!("../../libc/lib/search_ext.c")),
+    ("printf_ext.c", include_str!("../../libc/lib/printf_ext.c")),
     (
         "pthread_ext.c",
         include_str!("../../libc/lib/pthread_ext.c"),
     ),
+    ("scanf_ext.c", include_str!("../../libc/lib/scanf_ext.c")),
+    (
+        "semaphore_ext.c",
+        include_str!("../../libc/lib/semaphore_ext.c"),
+    ),
     ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),
+    ("stdlib_ext.c", include_str!("../../libc/lib/stdlib_ext.c")),
+    (
+        "stream_lock.c",
+        include_str!("../../libc/lib/stream_lock.c"),
+    ),
     ("string_ext.c", include_str!("../../libc/lib/string_ext.c")),
+    ("strtod_ext.c", include_str!("../../libc/lib/strtod_ext.c")),
     ("time_ext.c", include_str!("../../libc/lib/time_ext.c")),
+    (
+        "ucrt_locale.c",
+        include_str!("../../libc/lib/ucrt_locale.c"),
+    ),
     ("unistd_ext.c", include_str!("../../libc/lib/unistd_ext.c")),
 ];

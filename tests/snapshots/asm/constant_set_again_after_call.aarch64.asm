@@ -40,7 +40,8 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	fmov	d8, d0
                	fmov	d9, d1
-               	fmov	d0, d8
+               	fmov	d0, #2.00000000
+               	fmul	d0, d8, d0
                	bl	<addr>
                	fmov	d10, d0
                	fmov	d0, d9
@@ -204,7 +205,7 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	scvtf	d1, x0
                	bl	<addr>
-               	cmp	x0, #0xa
+               	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
@@ -303,7 +304,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
-               	cmp	x0, #0x74
+               	cmp	x0, #0x77
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10

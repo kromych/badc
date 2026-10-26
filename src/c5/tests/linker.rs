@@ -4544,6 +4544,9 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
+            references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged =
             link_native_objects_with_shared_libs(core::slice::from_ref(&reader), false, &[lib])
@@ -4959,6 +4962,30 @@ fn pragma_export_round_trips_into_shared_library() {
     );
 }
 
+/// C99 5.1.2.2.3: a return from `main` calls `exit`. The single ELF
+/// image's `_start` reaches libc's when the unit binds the C library,
+/// though it declares no `exit`; an image that binds nothing keeps no
+/// libc dependency and ends in `exit_group`.
+#[test]
+fn single_elf_image_returns_from_main_through_libc_exit() {
+    use crate::c5::linker::object::read_dynamic_symbol_names;
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let names = |src: &str| {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .expect("compile");
+            let image =
+                emit_native_with_options(&program, target, NativeOptions::default()).expect("emit");
+            read_dynamic_symbol_names(&image).expect("parse .dynsym")
+        };
+        let libc = names("#include <stdio.h>\nint main(void) { puts(\"x\"); return 0; }\n");
+        assert!(libc.iter().any(|n| n == "exit"), "{target:?}: {libc:?}");
+        let bare = names("int main(void) { return 0; }\n");
+        assert!(bare.is_empty(), "{target:?}: {bare:?}");
+    }
+}
+
 #[test]
 fn export_all_executable_exposes_dynamic_symbols() {
     // The same exports go into an executable's `.dynsym` (the
@@ -5293,8 +5320,9 @@ fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
 /// The bounds a link defines take GNU ld's visibility: the init and fini
 /// array bounds hidden, as its default script provides them, a section's
 /// `__start_` and `__stop_` protected, `-z start-stop-visibility`'s default.
-/// An image exporting every definition publishes none of them, and a shared
-/// library's references to them bind to its own.
+/// An image exporting every definition publishes the protected ones, as
+/// GNU ld under `-rdynamic` does, and a shared library's references to them
+/// bind to its own.
 #[cfg(feature = "native-emit")]
 #[test]
 fn link_defined_bounds_are_hidden_or_protected() {
@@ -5368,12 +5396,109 @@ fn link_defined_bounds_are_hidden_or_protected() {
                 ("__start_mytab", (1, 3)),
                 ("__stop_mytab", (1, 3)),
             ] {
-                assert!(!names.iter().any(|n| n == bound), "{what}: {names:?}");
+                let exported = names.iter().any(|n| n == bound);
+                assert_eq!(exported, row.1 == 3, "{what}: {bound} {names:?}");
                 let sym = (merged.symbols.iter()).find(|s| s.name == bound);
                 let sym = sym.expect(bound);
                 assert_eq!((sym.info >> 4, sym.other & 3), row, "{what}: {bound}");
             }
         }
+    }
+}
+
+/// A dllimport reference reads the import-address slot `__imp_X`, as MSVC,
+/// mingw-w64 gcc and clang emit it: a call goes through the loaded address,
+/// and a static initializer names the thunk. The PE link keeps the slot at
+/// those sites, and resolves the slot of a name it defines to the definition,
+/// with a warning.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_dllimport_reference_reads_the_import_address_slot() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{emit_plt_for, link_native_objects, parse_native_elf};
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST64_ABS_LO12_NC, R_X86_64_PC32,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |src: &str, target: Target| {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let user = unit(
+            "#include <stdio.h>\n\
+             __declspec(dllimport) int puts(const char *);\n\
+             __declspec(dllimport) int f(int);\n\
+             __declspec(dllimport) extern int obj;\n\
+             int (*fp)(int) = f;\n\
+             int main(void) { return f(obj) + puts(\"\") + (fp == f); }\n",
+            target,
+        );
+        let text_refs = |name: &str| -> Vec<u32> {
+            (user.text_relocs.iter())
+                .filter(|r| user.symbols[r.sym_idx].name == name)
+                .map(|r| r.rtype)
+                .collect()
+        };
+        let slot_read: &[u32] = match target {
+            Target::WindowsX64 => &[R_X86_64_PC32],
+            _ => &[R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST64_ABS_LO12_NC],
+        };
+        for name in ["__imp_f", "__imp_obj", "__imp_puts"] {
+            let refs = text_refs(name);
+            assert!(
+                !refs.is_empty() && refs.iter().all(|t| slot_read.contains(t)),
+                "{target:?} {name}: {refs:?}"
+            );
+        }
+        for name in ["f", "obj", "puts"] {
+            assert!(text_refs(name).is_empty(), "{target:?} {name}");
+        }
+        assert!(
+            (user.data_relocs.iter()).any(|r| user.symbols[r.sym_idx].name == "f"),
+            "{target:?}: the initializer names the thunk"
+        );
+        let defs = unit("int obj = 5;\nint f(int x) { return x + 1; }\n", target);
+        let mut merged = link_native_objects(&[user.clone(), defs]).expect("link");
+        let warned = |name: &str| {
+            (merged.warnings.iter()).any(|(c, t)| {
+                *c == crate::c5::diag::Code::LOCAL_IMPORT && t.contains(&format!("`__imp_{name}`"))
+            })
+        };
+        assert!(
+            warned("f") && warned("obj") && !warned("puts"),
+            "{target:?}: {:?}",
+            merged.warnings
+        );
+        assert!(
+            !merged.imports.iter().any(|n| n == "f" || n == "obj"),
+            "{target:?}: {:?}",
+            merged.imports
+        );
+        let puts = merged
+            .imports
+            .iter()
+            .position(|n| n == "puts")
+            .expect("import");
+        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+        let reads: Vec<_> = (merged.pending_imports.iter())
+            .filter(|r| r.import_index == puts)
+            .collect();
+        assert!(
+            !stubs.iter().any(|t| t.import_index == puts)
+                && !reads.is_empty()
+                && (reads.iter())
+                    .all(|r| r.slot_load && merged.slot_reads.contains(&r.text_offset)),
+            "{target:?}: the slot reads of `puts` keep its slot"
+        );
     }
 }
 
@@ -5508,6 +5633,9 @@ fn an_import_only_addressed_keeps_its_function_type() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            export_ordinals: Default::default(),
+            references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib]).expect("link");
         for exec_form in [ExecForm::Pie, ExecForm::Placed] {
@@ -5947,15 +6075,10 @@ fn thread_local_address_initializer_survives_the_object_round_trip() {
 }
 
 #[test]
-fn thread_local_in_elf_shared_library_is_a_link_error() {
-    // The emitted `_Thread_local` sequences use the local-exec TLS
-    // model, whose TP-relative offsets are valid only in the
-    // executable's static TLS block; baked into ET_DYN they address
-    // another module's TLS. The writer must reject the combination
-    // until the general-dynamic model is implemented.
-    use crate::c5::linker::{
-        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
-    };
+fn a_local_exec_thread_local_access_is_refused_in_a_shared_object() {
+    // An offset from the thread pointer holds only in the executable's
+    // static block; GNU ld refuses it in a shared object and advises -fPIC.
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_elf};
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
         "_Thread_local int counter = 7;\n\
@@ -5972,27 +6095,108 @@ fn thread_local_in_elf_shared_library_is_a_link_error() {
     };
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-    let mut merged = link_native_objects(&[obj]).expect("link");
-    assert!(
-        !merged.tls_data.is_empty(),
-        "the merged unit must carry TLS data"
-    );
-    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
-    let err = write_native_image_from_merged(
-        &merged,
-        &plt,
-        "",
-        None,
-        OutputKind::SharedLibrary,
-        Target::LinuxX64,
-        None,
-    )
-    .expect_err("a _Thread_local shared library must be rejected");
+    let link = LinkOptions {
+        shared: true,
+        allow_undefined: true,
+        ..Default::default()
+    };
+    let err = link_native_objects_with(&[obj], &[], &link).expect_err("a shared object");
     assert!(
         err.to_string()
-            .contains("_Thread_local data is not supported in ELF shared-library output"),
+            .contains("cannot be used when making a shared object; recompile with -fPIC"),
         "unexpected diagnostic: {err}"
     );
+}
+
+/// `-fPIC` code reaches its own thread-locals through the module's TLS
+/// descriptor and another unit's through the variable's, as gcc's descriptor
+/// dialect does; a shared link gives each descriptor a GOT entry.
+#[test]
+fn pic_thread_locals_take_descriptors_and_a_shared_link_their_got_entries() {
+    use crate::c5::codegen::{TlsGotEntry, TlsGotKind, TlsGotTarget};
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_elf};
+    use crate::c5::object::elf_reloc_types as rt;
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let cases = [
+        (
+            Target::LinuxX64,
+            &[rt::R_X86_64_GOTPC32_TLSDESC, rt::R_X86_64_TLSDESC_CALL][..],
+            &[rt::R_X86_64_DTPOFF32][..],
+        ),
+        (
+            Target::LinuxAarch64,
+            &[
+                rt::R_AARCH64_TLSDESC_ADR_PAGE21,
+                rt::R_AARCH64_TLSDESC_LD64_LO12,
+                rt::R_AARCH64_TLSDESC_ADD_LO12,
+                rt::R_AARCH64_TLSDESC_CALL,
+            ][..],
+            &[
+                rt::R_AARCH64_TLSLD_ADD_DTPREL_HI12,
+                rt::R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC,
+            ][..],
+        ),
+    ];
+    for (target, desc, dtp) in cases {
+        let program = Compiler::with_options(
+            "_Thread_local int own = 7;\nextern _Thread_local int other;\n\
+             int sum(void) { return own + other; }\n"
+                .to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let named = |rtype: u32| -> Vec<&str> {
+            (obj.text_relocs.iter())
+                .filter(|r| r.rtype == rtype)
+                .map(|r| obj.symbols[r.sym_idx].name.as_str())
+                .collect()
+        };
+        for &rtype in desc {
+            let mut names = named(rtype);
+            names.sort_unstable();
+            assert_eq!(names, ["_TLS_MODULE_BASE_", "other"], "{target:?} {rtype}");
+        }
+        for &rtype in dtp {
+            assert_eq!(named(rtype).len(), 1, "{target:?} {rtype}");
+        }
+        assert!(
+            obj.elf_tpoff_fixups.is_empty(),
+            "{target:?}: no local-exec site"
+        );
+        let link = LinkOptions {
+            shared: true,
+            allow_undefined: true,
+            ..Default::default()
+        };
+        let merged = link_native_objects_with(&[obj], &[], &link).expect("link");
+        assert!(merged.tls_defined.contains_key("own"), "{target:?}");
+        let other = merged
+            .imports
+            .iter()
+            .position(|i| i == "other")
+            .expect("an import");
+        let want =
+            [TlsGotTarget::Local(0), TlsGotTarget::Import(other)].map(|target| TlsGotEntry {
+                kind: TlsGotKind::Descriptor,
+                target,
+            });
+        assert_eq!(merged.tls_got.len(), 2, "{target:?}: {:?}", merged.tls_got);
+        assert!(
+            want.iter().all(|e| merged.tls_got.contains(e)),
+            "{target:?}: {:?}",
+            merged.tls_got
+        );
+        assert!(!merged.static_tls, "{target:?}");
+    }
 }
 
 #[test]
@@ -6548,7 +6752,9 @@ fn inline_linkage_follows_c99_6_7_4p7() {
     const STB_GLOBAL: u8 = 1;
 
     fn binding_of(src: &str, name: &str) -> u8 {
-        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let program = Compiler::with_options(src.to_string(), Target::LinuxX64, Default::default())
+            .compile()
+            .expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
@@ -7069,6 +7275,9 @@ fn minimal_native_object(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
+        default_libs: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -7078,6 +7287,7 @@ fn minimal_native_object(
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -7259,6 +7469,9 @@ fn weak_undef_binds_against_a_shared_library_export() {
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
+        export_ordinals: Default::default(),
+        references: Default::default(),
+        protected_exports: Default::default(),
     };
     let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
         .expect("weak ref against a shared library links");
@@ -7377,6 +7590,9 @@ fn aarch64_data_ref_object_ex(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
+        default_libs: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -7416,6 +7632,7 @@ fn aarch64_data_ref_object_ex(
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -7638,6 +7855,9 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
+        default_libs: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),
@@ -7661,6 +7881,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -8126,10 +8347,13 @@ fn elf_section_offsets_respect_their_claimed_alignment() {
         emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::new(alloc::format!(
-        "{TEST_PRELUDE}\
-         int main(void) {{ printf(\"x\"); return 0; }}\n"
-    ))
+    let program = Compiler::with_target(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             int main(void) {{ printf(\"x\"); return 0; }}\n"
+        ),
+        Target::LinuxAarch64,
+    )
     .compile()
     .expect("compile");
     let opts = NativeOptions {
@@ -8470,9 +8694,9 @@ fn windows_x64_tz_globals_bind_to_msvcrt_data_exports() {
 
 #[test]
 fn dead_libc_bindings_fail_at_build_not_at_load() {
-    // libSystem exports none of these (dlsym-verified); the header must
-    // leave them unbound so a use fails the build loudly instead of
-    // producing an image that aborts at load with a dyld error.
+    // libSystem exports none of these (dlsym-verified) and the SDK
+    // declares none; the header leaves them undeclared, so a use fails the
+    // build loudly instead of producing an image that aborts at load.
     let cases = [
         (
             "#include <time.h>\nint main(void) { struct timespec t; t.tv_sec = 0; t.tv_nsec = 0; return clock_nanosleep(0, 0, &t, 0); }\n",
@@ -8500,20 +8724,20 @@ fn dead_libc_bindings_fail_at_build_not_at_load() {
             CompileOptions::default().with_no_entry_point(true),
         )
         .compile()
-        .expect("compile");
+        .map_err(|e| format!("{e}"))?;
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()
         };
         let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
-        link_native_objects(&[parse_native_elf(&bytes).expect("parse")])
+        link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).map_err(|e| format!("{e}"))
     };
     for (src, name) in cases {
         let err = link_one(src)
             .err()
-            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not link"));
+            .unwrap_or_else(|| panic!("{name}: use of an unexported symbol must not build"));
         assert!(
-            format!("{err}").contains(name),
+            err.contains(name),
             "{name}: diagnostic must name the symbol: {err}"
         );
     }
@@ -11859,6 +12083,256 @@ fn text_absolute_field_self_links_into_a_pe_image() {
     }
 }
 
+/// Two units each defining a COMDAT (`SELECT_ANY`) object: the link keeps the
+/// first's, and both units' references, to the discarded copy too, reach it.
+#[test]
+fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::link::MergedTarget;
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_coff};
+    let (addr64, external, stat) = (1u16, 2u8, 3u8);
+    let unit = |value: u8| {
+        let mut def = sym(".data", 0, 1, stat);
+        def.aux.push(section_aux(4, 0, 2));
+        let mut slot = sec(".data", 0xC040_0040, &[0; 8]);
+        slot.relocs = alloc::vec![(0, 2, addr64)];
+        let bytes = object(
+            0x8664,
+            &[sec(".data", 0xC040_1040, &[value, 0, 0, 0]), slot],
+            &[def, sym("shared", 0, 1, external)],
+        );
+        parse_native_coff(&bytes, None).expect("parse the COFF object")
+    };
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let merged = link_native_objects_with(&[unit(1), unit(2)], &[], &opts).expect("link");
+    let shared = merged.defined.get("shared").expect("shared").value as i64;
+    assert_eq!(merged.data[shared as usize], 1, "the first unit's copy");
+    let targets: alloc::vec::Vec<i64> = (merged.data_abs_relocs.iter())
+        .map(|r| match r.target {
+            MergedTarget::Data(o) => o,
+            MergedTarget::Text(_) => panic!("a data target"),
+        })
+        .collect();
+    assert_eq!(targets, [shared, shared]);
+}
+
+/// A COFF input's `.pdata` entry joins the image's exception directory as
+/// it is -- its function's extent and its `.xdata` record, at their RVAs --
+/// and no entry of the writer's covers that function; a function the input
+/// describes no unwind data for takes one of the writer's.
+#[test]
+fn a_coff_inputs_unwind_entries_join_the_exception_directory() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::{
+        LinkOptions, link_native_objects_with, parse_native_coff, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    let (addr32nb, external, stat) = (3u16, 2u8, 3u8);
+    // `f`: a marker and a `ret`, 16 bytes; `g` after it, with no entry.
+    let mut code = b"UnWiNdMk".to_vec();
+    code.extend_from_slice(&[0x90; 7]);
+    code.push(0xC3);
+    code.extend_from_slice(&[0x55, 0x48, 0x89, 0xE5, 0x5D, 0xC3]);
+    let mut xdata = b"XdAtAmRk".to_vec();
+    xdata.extend_from_slice(&[0x01, 0x04, 0x01, 0x00, 0x04, 0x42, 0, 0]);
+    let mut text_def = sym(".text", 0, 1, stat);
+    text_def.aux.push(section_aux(code.len() as u32, 0, 0));
+    let mut xdata_def = sym(".xdata", 0, 2, stat);
+    xdata_def.aux.push(section_aux(xdata.len() as u32, 0, 0));
+    let mut pdata = sec(
+        ".pdata",
+        0x4030_0040,
+        &[0, 0, 0, 0, 16, 0, 0, 0, 8, 0, 0, 0],
+    );
+    // Symbols: 0 `.text` (+aux), 2 `.xdata` (+aux), 4 `f`, 5 `g`.
+    pdata.relocs = alloc::vec![(0, 0, addr32nb), (4, 0, addr32nb), (8, 2, addr32nb)];
+    let coff = object(
+        0x8664,
+        &[
+            sec(".text", 0x6050_0020, &code),
+            sec(".xdata", 0x4030_0040, &xdata),
+            pdata,
+        ],
+        &[
+            text_def,
+            xdata_def,
+            sym("f", 0, 1, external),
+            sym("g", 16, 1, external),
+        ],
+    );
+    let obj = parse_native_coff(&coff, None).expect("parse the COFF object");
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
+    let plt = crate::emit_plt_for(&mut merged, Target::WindowsX64, false).expect("plt");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("unwind.dll"),
+    )
+    .expect("write the PE image");
+    let pe = PeImage::parse(&image);
+    let (text_rva, text) = pe.section(".text");
+    let f = text_rva
+        + text
+            .windows(8)
+            .position(|w| w == b"UnWiNdMk")
+            .expect("code") as u32;
+    let (rdata_rva, rdata) = pe.section(".rdata");
+    let info = rdata_rva
+        + rdata
+            .windows(8)
+            .position(|w| w == b"XdAtAmRk")
+            .expect("xdata") as u32
+        + 8;
+    let (_, pdata) = pe.section(".pdata");
+    let entries: alloc::vec::Vec<[u32; 3]> = (pdata.as_chunks::<12>().0.iter())
+        .map(|e| {
+            core::array::from_fn(|k| u32::from_le_bytes(e[4 * k..4 * k + 4].try_into().unwrap()))
+        })
+        .take_while(|e| (text_rva..text_rva + text.len() as u32).contains(&e[0]) && e[1] > e[0])
+        .collect();
+    assert!(
+        entries.contains(&[f, f + 16, info]),
+        "the input's entry: {entries:x?}"
+    );
+    assert!(
+        !entries
+            .iter()
+            .any(|e| e[0] < f + 16 && e[1] > f && e[0] != f),
+        "no other entry covers `f`: {entries:x?}"
+    );
+    assert!(
+        entries.iter().any(|e| e[0] == f + 16),
+        "`g` takes the writer's: {entries:x?}"
+    );
+}
+
+/// An x86-64 COFF object's image-relative addresses (`ADDR32NB`) in code,
+/// in a jump table inside its code and in read-only data, and its
+/// RIP-relative reference to `__ImageBase`, take their RVAs in the PE
+/// image the link writes, the way MSVC's jump tables read them; none takes
+/// a base relocation, since a distance from the image base survives a
+/// slide.
+#[test]
+fn coff_image_relative_addresses_take_their_rvas() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::{
+        LinkOptions, link_native_objects_with, parse_native_coff, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    const TEXT: u32 = 0x6050_0020;
+    const RDATA: u32 = 0x4040_0040;
+    const DATA: u32 = 0xC040_0040;
+    let (addr32nb, rel32, external, stat) = (3u16, 4u16, 2u8, 3u8);
+    // marker, `lea rdx, [rip + __ImageBase]`, `mov ecx, [rdx + rax*4 + table]`,
+    // `ret`, then the two-entry table.
+    let mut code = b"CoFfMaRk".to_vec();
+    code.extend_from_slice(&[0x48, 0x8D, 0x15, 0, 0, 0, 0]);
+    code.extend_from_slice(&[0x8B, 0x8C, 0x82, 0, 0, 0, 0, 0xC3]);
+    code.extend_from_slice(&[0; 8]);
+    let mut rdata = b"RoMaRkXx".to_vec();
+    rdata.extend_from_slice(&[0; 8]);
+    rdata.extend_from_slice(&0x10u32.to_le_bytes());
+    let mut text_def = sym(".text", 0, 1, stat);
+    text_def.aux.push(section_aux(code.len() as u32, 0, 0));
+    let mut text = sec(".text", TEXT, &code);
+    // Symbols: 0 `.text` (+aux), 2 `f`, 3 `__ImageBase`, 4 `obj`.
+    text.relocs = alloc::vec![
+        (11, 3, rel32),
+        (18, 0, addr32nb),
+        (23, 0, addr32nb),
+        (27, 0, addr32nb)
+    ];
+    text.content[18..22].copy_from_slice(&23u32.to_le_bytes());
+    text.content[23..27].copy_from_slice(&8u32.to_le_bytes());
+    text.content[27..31].copy_from_slice(&15u32.to_le_bytes());
+    let mut ro = sec(".rdata", RDATA, &rdata);
+    ro.relocs = alloc::vec![(8, 2, addr32nb), (12, 4, addr32nb), (16, 3, addr32nb)];
+    let coff = object(
+        0x8664,
+        &[text, ro, sec(".data", DATA, &[7, 0, 0, 0])],
+        &[
+            text_def,
+            sym("f", 15, 1, external),
+            sym("__ImageBase", 0, 0, external),
+            sym("obj", 0, 3, external),
+        ],
+    );
+    let obj = parse_native_coff(&coff, None).expect("parse the COFF object");
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
+    let plt = crate::emit_plt_for(&mut merged, Target::WindowsX64, false).expect("plt");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("coff.dll"),
+    )
+    .expect("write the PE image");
+    let pe = PeImage::parse(&image);
+    let (text_rva, text) = pe.section(".text");
+    let at = text
+        .windows(8)
+        .position(|w| w == b"CoFfMaRk")
+        .expect("code");
+    let rva_of = |off: usize| text_rva + (at + off) as u32;
+    let word = |i: usize| u32::from_le_bytes(text[at + i..at + i + 4].try_into().unwrap());
+    assert_eq!(
+        rva_of(15) as i64 + word(11) as i32 as i64,
+        0,
+        "`lea` reaches the image base"
+    );
+    assert_eq!(word(18), rva_of(23), "the table's RVA in the `mov`");
+    assert_eq!(
+        [word(23), word(27)],
+        [rva_of(8), rva_of(15)],
+        "each entry's RVA"
+    );
+    let (rdata_rva, rdata) = pe.section(".rdata");
+    let (data_rva, _) = pe.section(".data");
+    let obj_off = merged.defined.get("obj").expect("obj").value - merged.data_relro_len as u64;
+    let r = rdata
+        .windows(8)
+        .position(|w| w == b"RoMaRkXx")
+        .expect("table")
+        + 8;
+    let entries: alloc::vec::Vec<u32> = (0..3)
+        .map(|k| u32::from_le_bytes(rdata[r + 4 * k..r + 4 * k + 4].try_into().unwrap()))
+        .collect();
+    assert_eq!(entries, [rva_of(15), data_rva + obj_off as u32, 0x10]);
+    let in_text = |rva: u32| (text_rva..text_rva + text.len() as u32).contains(&rva);
+    let in_rdata = |rva: u32| (rdata_rva..rdata_rva + rdata.len() as u32).contains(&rva);
+    assert!(
+        !pe.base_relocs
+            .iter()
+            .any(|&(rva, _)| (in_text(rva) && rva >= rva_of(0)) || in_rdata(rva)),
+        "an image-relative field takes no base relocation: {:?}",
+        pe.base_relocs
+    );
+}
+
 #[test]
 fn narrow_text_absolute_field_reports_truncation() {
     // The same field at four bytes: the image base puts every address
@@ -13904,6 +14378,113 @@ fn weak_extern_data_ref_is_got_pair_aarch64() {
     assert!(relocs.iter().any(|r| r.rtype == 312));
 }
 
+/// A position-independent aarch64 ELF object reaches a name that may bind
+/// elsewhere through its GOT slot, the AAELF64 pair gcc -fPIC emits and GNU
+/// ld requires in a shared object; a position-dependent one, and a Mach-O
+/// target's, keep the page pair badc's link reads from its note.
+#[test]
+fn a_pic_aarch64_elf_object_reaches_external_data_through_the_got() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+        R_AARCH64_LD64_GOT_LO12_NC,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src =
+        "extern int ext;\nint get_ext(void) { return ext; }\nint *addr(void) { return &ext; }\n";
+    let forms = |target: Target, pic_link: bool| -> alloc::collections::BTreeSet<u32> {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic_link,
+            ..Default::default()
+        };
+        let obj =
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse");
+        (obj.text_relocs.iter())
+            .filter(|r| obj.symbols[r.sym_idx].name == "ext")
+            .map(|r| r.rtype)
+            .collect()
+    };
+    let got = [R_AARCH64_ADR_GOT_PAGE, R_AARCH64_LD64_GOT_LO12_NC].into();
+    let pair = [R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_ADD_ABS_LO12_NC].into();
+    assert_eq!(forms(Target::LinuxAarch64, true), got);
+    assert_eq!(forms(Target::LinuxAarch64, false), pair);
+    assert_eq!(forms(Target::MacOSAarch64, true), pair);
+}
+
+#[test]
+fn a_pie_elf_object_binds_its_own_definitions_directly() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_GOT_PAGE, R_AARCH64_TLSDESC_ADR_PAGE21, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+        R_AARCH64_TLSLE_ADD_TPREL_HI12, R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTTPOFF,
+        R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "int g = 1;\nextern int ext;\n__thread int tl;\nextern __thread int etl;\n\
+               int get(void) { return g + ext; }\nint get_t(void) { return tl + etl; }\n";
+    let relocs = |target: Target, pie: bool| -> alloc::vec::Vec<(alloc::string::String, u32)> {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic: true,
+            pie,
+            ..Default::default()
+        };
+        let obj =
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse");
+        (obj.text_relocs.iter())
+            .map(|r| (obj.symbols[r.sym_idx].name.clone(), r.rtype))
+            .collect()
+    };
+    for (target, got, desc, ie, le) in [
+        (
+            Target::LinuxX64,
+            R_X86_64_REX_GOTPCRELX,
+            R_X86_64_GOTPC32_TLSDESC,
+            R_X86_64_GOTTPOFF,
+            R_X86_64_TPOFF32,
+        ),
+        (
+            Target::LinuxAarch64,
+            R_AARCH64_ADR_GOT_PAGE,
+            R_AARCH64_TLSDESC_ADR_PAGE21,
+            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+            R_AARCH64_TLSLE_ADD_TPREL_HI12,
+        ),
+    ] {
+        let has = |rs: &[(alloc::string::String, u32)], name: &str, rtype: u32| {
+            rs.iter().any(|(n, t)| n == name && *t == rtype)
+        };
+        let pic = relocs(target, false);
+        assert!(has(&pic, "g", got), "{target:?} -fPIC: {pic:?}");
+        assert!(has(&pic, "etl", desc), "{target:?} -fPIC: {pic:?}");
+        let pie = relocs(target, true);
+        assert!(!has(&pie, "g", got), "{target:?} -fPIE: {pie:?}");
+        assert!(has(&pie, "ext", got), "{target:?} -fPIE: {pie:?}");
+        assert!(has(&pie, "etl", ie), "{target:?} -fPIE: {pie:?}");
+        assert!(
+            pie.iter().any(|(_, t)| *t == le),
+            "{target:?} -fPIE: {pie:?}"
+        );
+        assert!(
+            !pie.iter().any(|(_, t)| *t == desc),
+            "{target:?} -fPIE: {pie:?}"
+        );
+    }
+}
+
 #[test]
 fn import_address_keeps_got_pair_aarch64() {
     // Address-taking a dylib-routed import stays GOT-indirect: the
@@ -14048,6 +14629,9 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            export_ordinals: Default::default(),
+            references: Default::default(),
+            protected_exports: Default::default(),
         };
         let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
             .expect("link resolves the function against the shared library");

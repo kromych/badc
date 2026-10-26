@@ -1,6 +1,6 @@
 use super::args::Cli;
-use super::compile::{CompileCfg, compile_object_tu, compile_units, worker_count};
-use super::diag::eprint_diagnostic;
+use super::compile::{CompileCfg, compile_object_tu, compile_units, translate_tu, worker_count};
+use super::diag::{TuLog, eprint_diagnostic};
 use super::inputs::{Inputs, StdinSource, native_defined_globals, unreadable_object_reason};
 use super::output::write_output;
 
@@ -96,13 +96,40 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     }
 }
 
-/// `--ar` mode: bundle each `.c` input (compiled to native
-/// ELF64 ET_REL) plus any passed-in `.o` into a single
+/// `-fsyntax-only`: each source through the preprocessor and the front end,
+/// or through the assembler, as gcc runs it, with their diagnostics; no
+/// output is written and the status is the units'.
+pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
+    let sources = &inputs.sources;
+    if sources.is_empty() {
+        eprint_diagnostic("badc: error: -fsyntax-only requires at least one source input");
+        std::process::exit(1);
+    }
+    let stdin_src = stdin.for_sources(sources);
+    let reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, pic_link_default(cli), &cli.front.diag);
+    let cfg = CompileCfg::new(cli, reloc_opts, sources, stdin_src.as_deref());
+    let workers = worker_count(cli.jobs, sources.len());
+    compile_units(sources, workers, |_, src| {
+        // An assembler unit is checked by assembling it, which happens as
+        // its object is encoded.
+        if super::options::SourceKind::of(src).is_asm() {
+            let (log, res) = compile_object_tu(src, &cfg);
+            return (log, res.map(drop));
+        }
+        let mut log = TuLog::default();
+        let res = translate_tu(src, &[], &cfg, &mut log).map(drop);
+        (log, res)
+    });
+}
+
+/// `--ar` mode: bundle each `.c` input (compiled to a native
+/// relocatable object) plus any passed-in `.o` into a single
 /// SysV `ar` archive named by `-o`. Member bytes are the
 /// exact same blob `-c` would have written to disk; the
-/// SysV symbol index lists every `STB_GLOBAL`-defined name
-/// so the linker's archive pull-in can resolve undefined
-/// references without re-parsing each member.
+/// symbol index lists the names [`native_defined_globals`]
+/// gives for each member.
 pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,
@@ -148,7 +175,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let compiled = compile_units(sources, workers, |_, src| {
         let (mut log, res) = compile_object_tu(src, &cfg);
         match res {
-            Ok(bytes) => match native_defined_globals(&bytes, src) {
+            Ok(bytes) => match native_defined_globals(&bytes, src, cli.target) {
                 Ok(defined) => (log, Ok((bytes, defined))),
                 Err(e) => {
                     log.diag(cfg.stderr_is_tty, e);
@@ -181,14 +208,14 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 std::process::exit(1);
             }
         };
-        if !badc::is_elf_object(&bytes) {
+        if !badc::is_native_object(&bytes) {
             eprint_diagnostic(format!(
                 "badc: error: `{obj_path}`: {}",
                 unreadable_object_reason(&bytes, cli.target)
             ));
             std::process::exit(1);
         }
-        let defined = match native_defined_globals(&bytes, obj_path) {
+        let defined = match native_defined_globals(&bytes, obj_path, cli.target) {
             Ok(d) => d,
             Err(e) => {
                 eprint_diagnostic(e);

@@ -82,6 +82,21 @@ impl Compiler {
     pub(super) fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
         let mut is_unsigned = self.lex.int_suffix_unsigned;
+        // A Microsoft sized suffix names the type outright; `i8` is plain
+        // `char`, as clang types it.
+        let sized = match self.lex.int_suffix_width {
+            8 if !is_unsigned => {
+                return super::types::plain_char_ty(self.lex.char_signed);
+            }
+            8 => Some(Ty::Char as i64),
+            16 => Some(Ty::Short as i64),
+            32 => Some(Ty::Int as i64),
+            64 => Some(Ty::LongLong as i64),
+            _ => None,
+        };
+        if let Some(ty) = sized {
+            return if is_unsigned { ty | UNSIGNED_BIT } else { ty };
+        }
         // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
         // an unsigned type at a rank when no signed type at that rank
         // fits; a decimal constant with no `u` suffix never does.
@@ -566,7 +581,7 @@ impl Compiler {
         let ty = super::types::void_ptr_ty();
         let size = match self.expr_const_int(args[2]) {
             Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
-            _ => return self.emit_mem_transfer_libcall(op, &args, ty),
+            _ => return self.emit_builtin_libcall(mem_transfer_lib_name(op), &args, ty),
         };
         self.mark_emit_other();
         let pos = self.ast_src_pos();
@@ -660,20 +675,20 @@ impl Compiler {
         slot
     }
 
-    /// Build the call a declined memory-transfer expansion falls back
-    /// to: the library function of the same name, with the arguments
-    /// already parsed. An undeclared library name reports the same
-    /// "unknown function" the ordinary call path does, so the
-    /// auto-include retry brings its header in (C99 7.1.4p2).
-    fn emit_mem_transfer_libcall(
+    /// Build the call a builtin falls back to where it declines to expand:
+    /// the library function `name`, with the arguments already parsed. An
+    /// undeclared library name reports the same "unknown function" the
+    /// ordinary call path does, so the auto-include retry brings its header
+    /// in (C99 7.1.4p2).
+    pub(super) fn emit_builtin_libcall(
         &mut self,
-        op: super::super::ast::MemTransferOp,
+        name: &str,
         args: &[super::super::ast::ExprId],
         ty: i64,
     ) -> Result<(), C5Error> {
-        let name = mem_transfer_lib_name(op);
         let callable = self.callable_symbol(name);
-        let retry_unavailable = self.nostdinc || self.library_name_is_opaque(name);
+        let retry_unavailable =
+            self.nostdinc || self.preprocessed || self.library_name_is_opaque(name);
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
@@ -804,12 +819,13 @@ impl Compiler {
 
         // `__atomic_is_lock_free(size, ptr)` / `__atomic_always_lock_free`
         // (C11 7.17.5): a compile-time predicate, true for the widths that
-        // lower to a lock-free instruction. A size that is not a constant,
-        // or one with no such form, reports false -- the caller then takes
-        // its locked path, which is correct for every width.
+        // lower to a lock-free instruction, 16 through the paired
+        // compare-exchange as clang reports it. A size that is not a
+        // constant, or one with no such form, reports false -- the caller
+        // then takes its locked path, which is correct for every width.
         if matches!(name, "__atomic_is_lock_free" | "__atomic_always_lock_free") {
             let size = args.first().and_then(|a| self.expr_const_int(*a));
-            let val = matches!(size, Some(1 | 2 | 4 | 8)) as i64;
+            let val = matches!(size, Some(1 | 2 | 4 | 8 | 16)) as i64;
             let pos = self.ast_src_pos();
             let id = self.ast.push_expr(Expr::IntLit { val, ty: int_ty }, pos);
             self.ty = int_ty;
@@ -1622,7 +1638,15 @@ impl Compiler {
                 self.parse_gcc_atomic_builtin(&name, id_idx)
             }
             Some(BuiltinCall::Atomic(kind)) => self.parse_atomic_builtin(kind, id_idx),
+            Some(BuiltinCall::Value(kind)) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_value_builtin(kind, &name)
+            }
             Some(BuiltinCall::Intrinsic(id)) => self.parse_intrinsic_call(id_idx, id),
+            Some(BuiltinCall::Ms) => {
+                let name = self.symbols[id_idx].name.clone();
+                self.parse_ms_intrinsic(&name)
+            }
             None => self.parse_direct_call(id_idx),
         }
     }
@@ -1668,10 +1692,16 @@ impl Compiler {
 
     /// The builtin a call on `id_idx` lowers to, or `None` for a call to
     /// a declared function. A name bound to a real function is not a
-    /// builtin, except that a registered intrinsic is lowered whatever
-    /// the name is bound to.
+    /// builtin, except that a registered intrinsic or a value builtin is
+    /// lowered whatever the name is bound to.
     fn builtin_call(&self, id_idx: usize) -> Option<BuiltinCall> {
         let name = self.symbols[id_idx].name.as_str();
+        if let Some(kind) = super::value_builtin::ValueBuiltin::of(name) {
+            return Some(BuiltinCall::Value(kind));
+        }
+        if super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target) {
+            return Some(BuiltinCall::Ms);
+        }
         let class = self.symbols[id_idx].class;
         let intrinsic_id = self.pp_intrinsics.get(name).copied();
         let not_real_fn = class != Token::Fun as i64 && class != Token::Sys as i64;
@@ -2285,6 +2315,7 @@ impl Compiler {
             returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
             count_known: s.prototyped() || old_style_def,
             count_is_constraint: s.prototyped() && !is_sys_call,
+            prototyped: s.prototyped(),
         };
         // A callee left at the implicit `int` (a `#pragma binding` with no
         // prototype, or a C89 implicit declaration) truncates a wider return
@@ -2484,7 +2515,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         let want = callee.params[nargs as usize];
         let arg_ty = self.ty;
-        let zero = self.last_emit_is_zero();
+        let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
@@ -2528,8 +2559,8 @@ impl Compiler {
             }
             self.report_mismatch(&m, arg_line, text)?;
         }
-        if tu_member.is_none() && !callee.is_sys_call {
-            self.check_constant_conversion_of(self.ast_acc, want, 0, arg_line);
+        if tu_member.is_none() && !callee.is_sys_call && callee.prototyped {
+            self.check_value_conversion_of(self.ast_acc, want, 0, arg_line);
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
@@ -2617,10 +2648,13 @@ impl Compiler {
 
     fn parse_enum_constant(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let val = self.symbols[id_idx].val;
-        // The registration typed the constant: `int`, or wider / unsigned for
-        // an enumerator outside `int`'s range (GCC extension).
+        // The registration typed the constant: `int`, or the enumerated type
+        // of an enumeration with a value outside `int` (C23 6.7.2.2).
         let ty = self.symbols[id_idx].type_;
         self.emit_int_constant(val, ty);
+        if let Some(e) = self.enumeration_of_constant(id_idx) {
+            self.set_expr_enum(self.ast_acc, Some(e));
+        }
         Ok(())
     }
 
@@ -2872,12 +2906,17 @@ impl Compiler {
     }
 
     fn parse_cast_or_compound_literal(&mut self) -> Result<(), C5Error> {
+        let unprototyped = self.unprototyped_lists.len();
         let type_name = self.parse_type_name()?;
         self.note_cast_type_name(type_name.base);
         if self.lex.tk == ')' {
             self.next()?;
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad cast"));
+        }
+        // gcc's -Wstrict-prototypes passes over a cast's type name.
+        if self.lex.tk != '{' {
+            self.unprototyped_lists.truncate(unprototyped);
         }
         if self.lex.tk == '{' && type_name.vla.is_some() {
             // C99 6.5.2.5p1: no variable-length array type; a type derived
@@ -2933,11 +2972,17 @@ impl Compiler {
         // C99 6.5.4p5: a cast to a qualified type is one to its
         // unqualified version.
         let t = strip_object_const(type_name.ty);
+        let line = self.lex.line;
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
             self.reject_incomplete_value(self.ty)?;
             self.check_cast(t, self.ty)?;
+        }
+        if let Some(to) = type_name.fn_ty.as_ref().filter(|f| f.ptr_depth == 1)
+            && let Some(from) = self.value_fn_type(self.ast_acc).filter(|f| f.1 == 1)
+        {
+            self.check_function_cast((t, &to.f), (self.ty, &from.0), line);
         }
         if let Some(member) = self.union_cast_member(t, self.ty) {
             return self.union_cast_literal(t, member);
@@ -3203,10 +3248,8 @@ impl Compiler {
             // was materialized without a trailing load, so the walker's lvalue
             // path yields its slot address.
             self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
-        } else if is_pointer_ty(pre_addr_ty) {
-            // A pointer value with no shape on record and no load to drop.
-            self.retag_expr_fn_depth(|d| d + 1);
         } else {
+            // C99 6.5.3.2p1: no lvalue, no function designator, no array.
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad address-of"));
         }
         // `&` adds one level toward a tracked function pointer; -1
@@ -3332,6 +3375,9 @@ impl Compiler {
         self.require_unary_operand("+", Category::Arithmetic)?;
         if !is_floating_scalar(self.ty) {
             self.ty = integer_promote(self.ty);
+            if self.ast_acc.and_then(|id| self.expr_enum(id)).is_some() {
+                self.set_expr_enum(self.ast_acc, None);
+            }
         }
         Ok(())
     }
@@ -3611,6 +3657,7 @@ impl Compiler {
             returns_struct: false,
             count_known: f.params.prototyped,
             count_is_constraint: f.params.prototyped,
+            prototyped: f.params.prototyped,
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -3739,7 +3786,7 @@ impl Compiler {
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
             let bits = u32::from(desc.bit_width);
-            self.check_constant_conversion_of(self.ast_acc, desc.ty, bits, line);
+            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, line);
             if let Some(rhs) = self.ast_acc {
                 self.ty = Ty::Int as i64;
                 let res_ty = self.ty;
@@ -3757,7 +3804,7 @@ impl Compiler {
                 self.symbols[idx].binding.was_written = true;
             }
             self.expr(Token::Assign as i64)?;
-            let rhs_is_zero = self.last_emit_is_zero();
+            let rhs_is_zero = self.value_is_null_pointer_constant();
             let rhs_is_untyped = self.last_emit_was_indirect_call();
             let rhs_fn = self.value_fn_type(self.ast_acc);
             let what = ("assignment", "lhs", "rhs");
@@ -3779,7 +3826,7 @@ impl Compiler {
                 }
                 self.report_mismatch(&m, line, text)?;
             }
-            self.check_constant_conversion_of(self.ast_acc, lhs_ty, 0, line);
+            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, line);
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;
             self.ast_assign();
@@ -4085,6 +4132,11 @@ impl Compiler {
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
+        // The GNU form's first arm is the promoted condition.
+        let arm_enum = |a: Option<super::super::ast::ExprId>| a.and_then(|a| self.expr_enum(a));
+        let result_enum =
+            super::enum_conversion::common_enum(arm_enum(then_ast), arm_enum(else_ast))
+                .filter(|_| !elvis);
         // C99 6.5.15p6: pointers to compatible function types compose; a
         // prototype, where either arm has one, is the result's (6.2.7p3).
         let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
@@ -4129,6 +4181,9 @@ impl Compiler {
                 pos,
             );
             self.ast_acc = Some(id);
+            if result_enum.is_some() {
+                self.set_expr_enum(Some(id), result_enum);
+            }
             // A designator arm decays (C99 6.3.2.1p4).
             if let Some((f, depth)) = result_fn {
                 self.set_expr_fn(id, f, depth.max(1));
@@ -5198,7 +5253,7 @@ impl Compiler {
                 // The stored value was parsed inside `emit_bitfield_access` and
                 // kept in `pending.bf_assign_rhs`.
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
-                    self.check_constant_conversion_of(Some(rhs), field.ty, field.bit_width, line);
+                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, line);
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
                 }
@@ -5353,8 +5408,9 @@ impl Compiler {
     /// C11 6.5.1.1 `_Generic(controlling-expr, T1: e1, ..., default: eN)`.
     /// The controlling expression is parsed for its type only and its
     /// emitted state rewound; the association list is scanned by bracket
-    /// depth, and only the selected expression is parsed live, through a
-    /// lexer snapshot taken at its start.
+    /// depth to select, each other expression is then parsed unevaluated,
+    /// and the selected one is parsed live, through a lexer snapshot taken
+    /// at its start.
     pub(super) fn parse_generic_selection(&mut self) -> Result<(), C5Error> {
         let after = self.generic_select_to_winner()?;
         self.expr_or_void(Token::Assign as i64)?;
@@ -5429,6 +5485,8 @@ impl Compiler {
         // The names each association mentions, and whether it is the type
         // match (`Some(true)`) or the `default` (`Some(false)`).
         let mut mentions: Vec<(Option<bool>, Vec<usize>)> = Vec::new();
+        // Each association's expression, from its `:`.
+        let mut exprs = Vec::new();
         loop {
             let mut role = None;
             if self.lex.tk == Token::Default {
@@ -5437,6 +5495,7 @@ impl Compiler {
                     default_assoc = Some(self.lex.snapshot());
                     role = Some(false);
                 }
+                exprs.push(self.lex.snapshot());
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
                 // An array type never matches: the controlling expression's
@@ -5461,6 +5520,7 @@ impl Compiler {
                     winner = Some(self.lex.snapshot());
                     role = Some(true);
                 }
+                exprs.push(self.lex.snapshot());
                 self.consume(b':', "`:` expected after generic association type")?;
             }
             let names = self.skip_generic_assoc_expr()?;
@@ -5474,9 +5534,13 @@ impl Compiler {
         self.consume(b')', "`)` expected to close `_Generic`")?;
         let after = self.lex.snapshot();
         let chosen = Some(winner.is_some());
-        for (_, names) in mentions.into_iter().filter(|(role, _)| *role != chosen) {
-            for idx in names {
-                self.mark_unevaluated_use(idx);
+        let mut unselected = Vec::new();
+        for ((role, names), at) in mentions.into_iter().zip(exprs) {
+            if role != chosen {
+                names
+                    .into_iter()
+                    .for_each(|idx| self.mark_unevaluated_use(idx));
+                unselected.push(at);
             }
         }
 
@@ -5486,12 +5550,42 @@ impl Compiler {
                 "no `_Generic` association matches the controlling type",
             ));
         };
+        // The other expressions are expressions of the unit all the same,
+        // unevaluated (6.5.1.1p3): they are parsed for their diagnostics.
+        for at in unselected {
+            self.rewind_speculation(at, data_start);
+            self.next()?;
+            self.discard_unevaluated_expr()?;
+            if self.lex.tk != ',' && self.lex.tk != ')' {
+                return Err(self.generic_association_error());
+            }
+        }
         // Drop the data the scan appended, then position at the selected
         // association's `:`; the following `next` re-lexes its first
         // token, appending any string data at `data_start`.
         self.rewind_speculation(chosen, data_start);
         self.next()?; // the `:` -> the expression's first token
         Ok(after)
+    }
+
+    /// Parse one assignment-expression unevaluated and drop the code,
+    /// relocations and AST it emitted; the lexer stays past it. The value
+    /// is the integer constant the expression is, if it is one.
+    pub(super) fn discard_unevaluated_expr(&mut self) -> Result<Option<i64>, C5Error> {
+        let saved_text_len = self.next_ent_pc;
+        let saved_reloc = self.code_reloc_sym_idx.len();
+        let saved_ast_acc = self.ast_acc;
+        let saved_vstack = self.ast_vstack.len();
+        let saved_ty = self.ty;
+        let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
+        let constant = self.ast_acc.and_then(|e| self.expr_const_int(e));
+        self.ty = saved_ty;
+        self.next_ent_pc = saved_text_len;
+        self.clear_recent_emits();
+        self.code_reloc_sym_idx.truncate(saved_reloc);
+        self.ast_acc = saved_ast_acc;
+        self.ast_vstack.truncate(saved_vstack);
+        result.map(|_| constant)
     }
 
     /// Parse one assignment-expression for its type only. The lexer
@@ -5736,7 +5830,9 @@ impl Compiler {
         let outer = core::mem::take(&mut self.pending.attrs);
         let r = self.parse_type_name_inner();
         self.pending.attrs = outer;
-        r
+        let t = r?;
+        self.check_ptr32_placement(t.ty)?;
+        Ok(t)
     }
 
     fn parse_type_name_inner(&mut self) -> Result<TypeName, C5Error> {
@@ -5775,6 +5871,7 @@ impl Compiler {
             } + dims.len(),
             f: base_fn.unwrap_or_default(),
         });
+        let vla_value = dims.is_empty() && self.vla_value_slot(base).is_some();
         let mut t = DerivedType {
             ty: base,
             own_bounds: dims.len(),
@@ -5784,16 +5881,16 @@ impl Compiler {
             fn_ptr_indirection,
             ptr_levels: 0,
             vla: None,
-            vla_value: false,
+            vla_value,
         };
         // The leading pointers are the declarator's last derivations, so
         // they apply to the base type first (C99 6.7.5.1).
         while self.lex.tk == Token::MulOp {
             self.next()?;
             self.derive_pointer(&mut t);
+            let mut uptr = false;
             while self.lex.tk == Token::TypeQual {
-                t.ty = apply_qual_bits(t.ty, self.lex_qualifier_bits());
-                self.next()?;
+                t.ty = self.apply_pointer_qualifier(t.ty, &mut uptr)?;
             }
         }
         if self.lex.tk == '(' {
@@ -6023,6 +6120,26 @@ impl Compiler {
         } else {
             self.array_agg_type(t.ty, &t.dims)
         };
+        let (ty, bound) = self.vla_bound_type(elem, dim);
+        t.ty = ty;
+        t.dims.clear();
+        t.own_bounds = 0;
+        t.vla_value = true;
+        t.vla = Some(bound);
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+        Ok(())
+    }
+
+    /// The variable-length array type of `dim` elements of `elem`, and the
+    /// store of its byte count into the frame slot the type reads, which
+    /// runs where the declaration or type name is evaluated (C99 6.7.5.2p4).
+    pub(super) fn vla_bound_type(
+        &mut self,
+        elem: i64,
+        dim: super::super::ast::ExprId,
+    ) -> (i64, VmBound) {
         let elem_size = self.size_of_type(elem) as i64;
         let slot = self.reserve_slots(1);
         let size_t = self.size_t_ty();
@@ -6060,15 +6177,8 @@ impl Compiler {
             },
             pos,
         );
-        t.ty = self.vla_array_type(elem, slot);
-        t.dims.clear();
-        t.own_bounds = 0;
-        t.vla_value = true;
-        t.vla = Some(VmBound { slot, store });
-        if let Some(f) = t.fn_ty.as_mut() {
-            f.ptr_depth += 1;
-        }
-        Ok(())
+        self.vla_type_sizes.insert(slot, size);
+        (self.vla_array_type(elem, slot), VmBound { slot, store })
     }
 
     /// A function returning the type `t` holds, on convention `conv`, which
@@ -6119,7 +6229,6 @@ impl Compiler {
     /// the terminating top-level `,` or `)`, tracking bracket depth so
     /// commas and parens inside the expression do not end the scan, and
     /// return the declared names it mentions, member names aside.
-    /// TODO: parse an unselected association's expression for syntax.
     fn skip_generic_assoc_expr(&mut self) -> Result<Vec<usize>, C5Error> {
         let mut depth = 0i32;
         let mut conditionals = 0i32;
@@ -6404,7 +6513,10 @@ enum BuiltinCall {
     Overflow,
     GccAtomic,
     Atomic(super::super::ast::AtomicKind),
+    Value(super::value_builtin::ValueBuiltin),
     Intrinsic(i64),
+    /// One of the MSVC intrinsics the PE targets lower at the call site.
+    Ms,
 }
 
 /// What the intrinsic-operand parse hands the node build: the operands,
@@ -6446,6 +6558,8 @@ struct DirectCallee {
     /// the unit declared. An old-style definition binds no constraint, and a
     /// libc binding's prototype approximates the platform's; those warn.
     count_is_constraint: bool,
+    /// Arguments convert as if by assignment (C99 6.5.2.2p7).
+    prototyped: bool,
 }
 
 impl DirectCallee {

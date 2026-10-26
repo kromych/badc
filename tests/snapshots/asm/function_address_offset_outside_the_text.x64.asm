@@ -30,14 +30,14 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	-<rip>, %rax        # <addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	-<rip>, %rax # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	movq	%rax, %rdx
                	subq	%rcx, %rdx
                	cmpq	$0x186a0, %rdx          # imm = 0x186A0
                	jne	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	movq	%rax, %rdx
                	subq	%rcx, %rdx
@@ -45,12 +45,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x10000000, %rcx       # imm = 0x10000000
                	jne	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
                	subq	%rax, %rcx
                	movabsq	$0x100000000000, %r11   # imm = 0x100000000000

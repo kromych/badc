@@ -166,8 +166,6 @@
 #pragma binding(kernel32::CreateFileTransactedW, "CreateFileTransactedW")
 #pragma binding(kernel32::ExitProcess,        "ExitProcess")
 
-#pragma binding(msvcrt::printf,   "printf")
-#pragma binding(msvcrt::wprintf,  "wprintf")
 #pragma binding(msvcrt::puts,     "puts")
 #pragma binding(msvcrt::strlen,   "strlen")
 #pragma binding(msvcrt::wcslen,   "wcslen")

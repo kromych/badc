@@ -183,6 +183,8 @@ pub(crate) struct Preprocessor {
     /// Membership half of `exports`, which keeps its declaration order
     /// because the export tables are written in it.
     export_names: BTreeSet<String>,
+    /// `#pragma weak name` and `#pragma weak name = target`, in source order.
+    pub weak_pragmas: Vec<(String, Option<String>)>,
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
@@ -272,6 +274,8 @@ pub(crate) struct Preprocessor {
     /// macro-expanded, as GNU cpp does for assembler input; in C such
     /// a line is diagnosed and dropped.
     asm_source: bool,
+    /// The edition `-std=` selects; see [`Self::set_std`].
+    std: crate::c5::CStd,
     /// `#pragma entrypoint(<id>)`: a non-`main` entry such as `WinMain`
     /// or a custom `_start`. `None` keeps `main`. Read by the compile
     /// pass for `entry_pc` and by the PE writer for
@@ -281,6 +285,8 @@ pub(crate) struct Preprocessor {
     /// optional header's Subsystem field. `None` keeps `console`;
     /// non-PE targets ignore it.
     pub subsystem: Option<Subsystem>,
+    /// `#pragma comment(lib, "<name>")`: the unit's default libraries.
+    pub default_libs: Vec<String>,
     /// The `__COUNTER__` predefine's per-unit counter: each expansion
     /// yields the current value and post-increments. A `Cell` because
     /// the substitution path takes `&self`.
@@ -290,6 +296,9 @@ pub(crate) struct Preprocessor {
     /// returns a `String`, so the error is parked here and drained by the
     /// Result-returning caller (`process_named`, `eval_condition`).
     pending_error: RefCell<Option<C5Error>>,
+    /// Warnings a substitution pass raised, with the buffer and line they
+    /// point at, emitted once the line's output position is known.
+    pending_warnings: RefCell<Vec<(Code, String, usize, String)>>,
     /// Lexed-body cache for the expansion engine, keyed by macro
     /// name and validated against the current body text, so a
     /// redefinition never serves stale tokens.
@@ -743,6 +752,7 @@ fn install_data_model(
     // `<stddef.h>` typedef that keys on `__WCHAR_TYPE__` cannot disagree.
     let wchar = target.wchar_type(short_wchar);
     macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar.bytes.to_string());
+    macros.insert("__WCHAR_WIDTH__".to_string(), (8 * wchar.bytes).to_string());
     macros.insert(
         "__WCHAR_TYPE__".to_string(),
         wchar.spelling(ilp32).to_string(),
@@ -838,6 +848,45 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     let (max, umax) = limits(intptr);
     macros.insert("__PTRDIFF_MAX__".to_string(), max);
     macros.insert("__SIZE_MAX__".to_string(), umax);
+    // `wint_t`: the bundled <wchar.h>'s `int`, and on Windows the C runtime's
+    // `unsigned short`, which gcc for x86_64-w64-mingw32 predefines too.
+    let (wint, wint_size) = if target.is_windows() {
+        ("unsigned short", "2")
+    } else {
+        ("int", "4")
+    };
+    macros.insert("__WINT_TYPE__".to_string(), wint.to_string());
+    macros.insert("__SIZEOF_WINT_T__".to_string(), wint_size.to_string());
+    // gcc's `__<T>_WIDTH__`, each the width of the type predefined for `T`.
+    let bits = |ty: &str| match ty {
+        "short" => 16,
+        "int" => 32,
+        "long" if !lp64 => 32,
+        _ => 64,
+    };
+    for (name, width) in [
+        ("SCHAR", 8),
+        ("SHRT", 16),
+        ("INT", 32),
+        ("LONG", bits("long")),
+        ("LONG_LONG", 64),
+        ("INTMAX", bits(intmax)),
+        ("INTPTR", bits(intptr)),
+        ("PTRDIFF", bits(intptr)),
+        ("SIZE", bits(intptr)),
+        ("INT_LEAST8", 8),
+        ("INT_LEAST16", 16),
+        ("INT_LEAST32", 32),
+        ("INT_LEAST64", 64),
+        ("INT_FAST8", 8),
+        ("INT_FAST16", bits(fast16)),
+        ("INT_FAST32", bits(fast32)),
+        ("INT_FAST64", 64),
+        ("SIG_ATOMIC", 32),
+        ("WINT", if target.is_windows() { 16 } else { 32 }),
+    ] {
+        macros.insert(format!("__{name}_WIDTH__"), width.to_string());
+    }
 }
 
 /// The targets one predefine row covers.
@@ -851,6 +900,9 @@ enum PredefOn {
     Windows,
     /// Targets whose objects are ELF, whichever the OS.
     Elf,
+    /// Targets whose code is position-independent whatever the flags:
+    /// the Mach-O and PE ones.
+    AlwaysPic,
     /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
     /// choice to the implementation; gcc and clang report it here.
     UnsignedChar,
@@ -869,6 +921,7 @@ impl PredefOn {
             PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
             PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
             PredefOn::Elf => target.binary_format() == BinaryFormat::Elf,
+            PredefOn::AlwaysPic => target.binary_format() != BinaryFormat::Elf,
             PredefOn::UnsignedChar => !target.plain_char_signed(),
         }
     }
@@ -887,9 +940,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
         PredefOn::Every,
         &[
             // C99 6.10.8. `__STDC_HOSTED__` holds because every target
-            // binds the host libc. `__STDC_VERSION__` reports C11: the
-            // surface is C99 plus the C11 features real code gates on
-            // this macro. `__DATE__` / `__TIME__` come from
+            // binds the host libc. `__STDC_VERSION__` reports C11 unless
+            // `-std=` selects another edition (`set_std`): the surface is
+            // C99 plus the C11 features real code gates on this macro. `__DATE__` / `__TIME__` come from
             // [`install_translation_time`].
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
@@ -935,9 +988,6 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__SIZEOF_LONG_LONG__", "8"),
             ("__SIZEOF_FLOAT__", "4"),
             ("__SIZEOF_DOUBLE__", "8"),
-            // `wint_t` is the bundled <wchar.h>'s `int` everywhere.
-            ("__WINT_TYPE__", "int"),
-            ("__SIZEOF_WINT_T__", "4"),
             // C11 6.4.4.4p2-p4 / 7.28: `char16_t` is `uint_least16_t`
             // and `char32_t` is `uint_least32_t`, the types `u'c'` and
             // `U'c'` take. Neither tracks `wchar_t`.
@@ -972,6 +1022,9 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     // ELF-only directives and attributes on it (`.type`, `.size`,
     // `.symver`, `.hidden`, `@progbits` section types, visibility).
     (PredefOn::Elf, &[("__ELF__", "1")]),
+    // clang's values there, with or without `-fPIC`; on ELF the driver
+    // derives them from the PIC flags.
+    (PredefOn::AlwaysPic, &[("__pic__", "2"), ("__PIC__", "2")]),
     (
         PredefOn::MacOS,
         &[
@@ -1113,15 +1166,24 @@ fn default_translation_time() -> i64 {
 /// Clang bounds hint badc does not implement; empty is the fallback the
 /// kernel UAPI headers take when the compiler lacks it, and
 /// `__has_attribute(counted_by)` reports 0 to match.
-/// `__builtin_expect(exp, c)` is a GCC builtin needing no header, its
-/// value the first operand; it is here so a unit that never triggers
-/// the `<_builtins.h>` auto-include still compiles.
 static PREDEFINED_FN_MACROS: &[(&str, &[&str], &str)] = &[
     ("__counted_by", &["m"], ""),
     ("__counted_by_le", &["m"], ""),
     ("__counted_by_be", &["m"], ""),
-    ("__builtin_expect", &["exp", "c"], "(exp)"),
 ];
+
+/// Whether `old` is still the fallback [`PREDEFINED_FN_MACROS`] gives `name`.
+fn is_fallback_predefine(name: &str, old: &FnMacro) -> bool {
+    PREDEFINED_FN_MACROS.iter().any(|&(n, params, body)| {
+        n == name
+            && old.body == body
+            && old
+                .params
+                .iter()
+                .map(String::as_str)
+                .eq(params.iter().copied())
+    })
+}
 
 impl Preprocessor {
     /// Build a preprocessor with the standard predefines installed:
@@ -1180,6 +1242,7 @@ impl Preprocessor {
             dylibs: Vec::new(),
             dylib_index: HashMap::new(),
             exports: Vec::new(),
+            weak_pragmas: Vec::new(),
             export_names: BTreeSet::new(),
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),
@@ -1200,10 +1263,13 @@ impl Preprocessor {
             keep_pragmas: false,
             preprocessed: false,
             asm_source: false,
+            std: crate::c5::CStd::default(),
             entrypoint: None,
             subsystem: None,
+            default_libs: Vec::new(),
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
+            pending_warnings: RefCell::new(Vec::new()),
             body_toks: RefCell::new(hashbrown::HashMap::new()),
             hs_names: RefCell::new(hashbrown::HashMap::new()),
             exp_scratch: RefCell::new(expand::ExpScratch::default()),
@@ -1285,9 +1351,9 @@ impl Preprocessor {
             ),
         );
         // The `__sync_*` builtins lower for these widths, so the
-        // capability macros a lock-free path tests are honest. 16 stays
-        // undefined: a 16-byte compare-exchange has no lowering.
-        for w in [1u32, 2, 4, 8] {
+        // capability macros a lock-free path tests are honest; 16 through
+        // the paired compare-exchange, as gcc and clang define it there.
+        for w in [1u32, 2, 4, 8, 16] {
             self.macros.insert(
                 alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
                 "1".to_string(),
@@ -1360,6 +1426,39 @@ impl Preprocessor {
     /// Mark the input as assembler-with-cpp (a `.S` unit).
     pub fn set_asm_source(&mut self, on: bool) {
         self.asm_source = on;
+    }
+
+    /// Compile to the edition `std` of the C standard: `__STDC_VERSION__`
+    /// takes its value, undefined for C90 (C99 6.10.8), and C23 reads the
+    /// keywords `true` and `false` in `#if` as 1 and 0 (C23 6.10.2).
+    pub fn set_std(&mut self, std: crate::c5::CStd) {
+        self.std = std;
+        match std.0 {
+            Some(v) => self.define("__STDC_VERSION__", &format!("{v}L")),
+            None => self.undef("__STDC_VERSION__"),
+        }
+    }
+
+    pub(super) fn c23_keywords(&self) -> bool {
+        self.std.c23_keywords()
+    }
+
+    /// Whether `$` forms identifiers in this unit: in C, not in
+    /// assembler-with-cpp.
+    pub(super) fn dollar(&self) -> Dollar {
+        if self.asm_source {
+            Dollar::Punct
+        } else {
+            Dollar::Ident
+        }
+    }
+
+    /// What follows the `#`, or its digraph `%:`, that opens a directive
+    /// line (C99 6.10p2); `None` for a text line.
+    fn directive_text<'l>(&self, line: &'l str) -> Option<&'l str> {
+        let line = line.trim_start();
+        line.strip_prefix('#')
+            .or_else(|| line.strip_prefix("%:").filter(|_| !self.asm_source))
     }
 
     /// Override the filename label used for the top-level translation
@@ -1436,17 +1535,39 @@ impl Preprocessor {
         self.force_includes.push(name.to_string());
     }
 
-    /// Predefine an object-like macro from the build driver --
-    /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
-    /// `-D NAME` (no `=`) reaches here with body `"1"` per cpp's
-    /// convention; `-D NAME=` (with `=`, empty value) reaches here
-    /// with an empty body and must stay empty, matching the `#define
-    /// NAME` directive -- e.g. `-DPRIVATE=` expands to nothing,
-    /// not `1`. Late definitions in source still win, so a `-D X=0`
-    /// followed by `#define X 1` in source ends up with `X = 1`.
+    /// Predefine a macro from the build driver -- the CLI's `-D NAME` /
+    /// `-D NAME=VALUE` plumbs through here, `-D NAME` with body `"1"` and
+    /// `-D NAME=` with an empty one. As gcc and clang read the option, the
+    /// pair is the operand `NAME BODY` of a `#define`, so `-D 'F(x)=x+1'`
+    /// defines a function-like macro; an operand the directive rejects is
+    /// an error of the pass. Late definitions in source still win.
     pub fn define(&mut self, name: &str, body: &str) {
-        self.macros
-            .insert(ident::key(name).into_owned(), body.to_string());
+        let operand = format!("{name} {body}");
+        let dollar = self.dollar();
+        let error = match directive::define_operand(&operand, dollar) {
+            Directive::DefineFn(name, params, body) => directive::macro_name_error(name, dollar)
+                .or_else(|| directive::macro_params_error(&params, dollar))
+                .or_else(|| {
+                    self.apply_define_fn(name, &params, body);
+                    None
+                }),
+            Directive::Define(name, body) => {
+                directive::macro_name_error(name, dollar).or_else(|| {
+                    self.apply_define(name, body);
+                    None
+                })
+            }
+            Directive::DefineUnclosed(name, params) => Some(
+                directive::macro_name_error(name, dollar)
+                    .unwrap_or_else(|| directive::unclosed_params_error(&params, dollar)),
+            ),
+            _ => None,
+        };
+        if let Some(text) = error {
+            let loc = Some(Loc::new("<command-line>", 1));
+            self.sink
+                .emit(Code::MACRO, loc, format!("`-D {name}`: {text}"));
+        }
     }
 
     /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes
@@ -1459,6 +1580,39 @@ impl Preprocessor {
         let name = ident::key(name);
         self.macros.remove(&*name);
         self.fn_macros.remove(&*name);
+    }
+
+    /// A `#define` line per macro defined now, sorted, as gcc's `-dM` prints
+    /// them; like gcc's, without the names the expansion site supplies.
+    pub fn macro_definitions(&self) -> Vec<String> {
+        const DYNAMIC: [&str; 8] = [
+            "__FILE__",
+            "__LINE__",
+            "__COUNTER__",
+            "__DATE__",
+            "__TIME__",
+            "__TIMESTAMP__",
+            "__INCLUDE_LEVEL__",
+            "__BASE_FILE__",
+        ];
+        let object = (self.macros.iter()).map(|(n, b)| (n.clone(), format!("#define {n} {b}")));
+        let function = self.fn_macros.iter().map(|(n, m)| {
+            let mut params = m.params.join(",");
+            if m.is_variadic {
+                let rest = m.va_name.as_deref().unwrap_or_default();
+                if !params.is_empty() {
+                    params.push(',');
+                }
+                params = format!("{params}{rest}...");
+            }
+            (n.clone(), format!("#define {n}({params}) {}", m.body))
+        });
+        let mut lines: Vec<(String, String)> = object
+            .chain(function)
+            .filter(|(n, _)| !DYNAMIC.contains(&n.as_str()))
+            .collect();
+        lines.sort();
+        lines.into_iter().map(|(_, l)| l).collect()
     }
 
     /// Run the preprocessor over `source` and return the substituted
@@ -1474,6 +1628,16 @@ impl Preprocessor {
             .map_err(|e| self.failed(e))?;
         self.process_source(source, &mut out)
             .map_err(|e| self.failed(e))?;
+        self.fail_on_errors()?;
+        Ok(out)
+    }
+
+    /// [`Self::process`] over a unit that is no program's source, one
+    /// reading what a header declares, which the source-pass count omits.
+    pub(crate) fn process_probe(&mut self, unit: &str) -> Result<String, C5Error> {
+        let mut out = String::with_capacity(unit.len());
+        let label = self.source_label.clone();
+        (self.process_named(unit, &label, &mut out)).map_err(|e| self.failed(e))?;
         self.fail_on_errors()?;
         Ok(out)
     }
@@ -1769,23 +1933,34 @@ impl Preprocessor {
         let next_active = match directive {
             Directive::Define(name, body) => {
                 if active {
-                    if let Some(text) = directive::macro_name_error(name) {
+                    if let Some(text) = directive::macro_name_error(name, self.dollar()) {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
+                    self.check_macro_redefinition(name, None, body, site);
                     self.apply_define(name, body);
                 }
                 active
             }
             Directive::DefineFn(name, params, body) => {
                 if active {
-                    let error = directive::macro_name_error(name)
-                        .or_else(|| directive::macro_params_error(params));
+                    let error = directive::macro_name_error(name, self.dollar())
+                        .or_else(|| directive::macro_params_error(params, self.dollar()));
                     if let Some(text) = error {
                         return Err(C5Error::at(Code::MACRO, filename, diag, text));
                     }
                     self.check_paste_placement(name, body, filename, diag);
+                    self.check_macro_redefinition(name, Some(params), body, site);
                     self.apply_define_fn(name, params, body);
+                }
+                active
+            }
+            Directive::DefineUnclosed(name, params) => {
+                if active {
+                    let dollar = self.dollar();
+                    let text = directive::macro_name_error(name, dollar)
+                        .unwrap_or_else(|| directive::unclosed_params_error(params, dollar));
+                    return Err(C5Error::at(Code::MACRO, filename, diag, text));
                 }
                 active
             }
@@ -1840,6 +2015,13 @@ impl Preprocessor {
         Ok(Some(next_active))
     }
 
+    /// The macros the processed source left defined, of either kind.
+    pub(crate) fn macro_names(&self) -> impl Iterator<Item = &str> {
+        (self.macros.keys())
+            .chain(self.fn_macros.keys())
+            .map(String::as_str)
+    }
+
     /// C99 6.10.1 `defined`: any macro of either kind, plus the
     /// `__has_*` operator names the preprocessor implements and the
     /// predefines expanded from context. The context-expanded ones
@@ -1862,6 +2044,13 @@ impl Preprocessor {
     fn apply_define_fn(&mut self, name: &str, params: &[&str], body: &str) {
         let name = ident::key(name).into_owned();
         self.obs_note(&name);
+        let f = self.fn_macro(params, body);
+        self.macros.remove(&name);
+        self.fn_macros.insert(name, f);
+    }
+
+    /// The function-like macro `params` and `body` define.
+    fn fn_macro(&self, params: &[&str], body: &str) -> FnMacro {
         let mut is_variadic = false;
         let mut va_name = None;
         let mut params = params;
@@ -1871,23 +2060,54 @@ impl Preprocessor {
                 params = &params[..params.len() - 1];
             } else if let Some(prefix) = last.strip_suffix("...") {
                 let prefix = prefix.trim();
-                if ident::is_ident(prefix) {
+                if ident::is_ident(prefix, self.dollar()) {
                     is_variadic = true;
                     va_name = Some(ident::key(prefix).into_owned());
                     params = &params[..params.len() - 1];
                 }
             }
         }
-        self.macros.remove(&name);
-        self.fn_macros.insert(
-            name,
-            FnMacro {
-                params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
-                body: body.to_string(),
-                is_variadic,
-                va_name,
-            },
-        );
+        FnMacro {
+            params: params.iter().map(|s| ident::key(s).into_owned()).collect(),
+            body: body.to_string(),
+            is_variadic,
+            va_name,
+        }
+    }
+
+    /// C99 6.10.3p2: a macro may be redefined only as the same kind with
+    /// the same parameters and an identical replacement list, white-space
+    /// separation aside (6.10.3p1). gcc and clang warn on any other
+    /// redefinition outside a system header; the new definition wins. A
+    /// fallback of [`PREDEFINED_FN_MACROS`] is no macro of theirs, so a
+    /// definition replaces it silently.
+    fn check_macro_redefinition(
+        &mut self,
+        name: &str,
+        params: Option<&[&str]>,
+        body: &str,
+        site: Site<'_>,
+    ) {
+        if self.include_stack.last().is_some_and(|f| !f.user()) {
+            return;
+        }
+        let key = ident::key(name);
+        let dollar = self.dollar();
+        let same = match (self.macros.get(&*key), self.fn_macros.get(&*key), params) {
+            (None, None, _) => true,
+            (_, Some(old), _) if is_fallback_predefine(name, old) => true,
+            (Some(old), _, None) => expand::replacement_lists_identical(old, body, dollar),
+            (_, Some(old), Some(params)) => {
+                let new = self.fn_macro(params, body);
+                (&old.params, old.is_variadic, &old.va_name)
+                    == (&new.params, new.is_variadic, &new.va_name)
+                    && expand::replacement_lists_identical(&old.body, body, dollar)
+            }
+            _ => false,
+        };
+        if !same {
+            self.warn(MACRO_REDEFINED, site, format!("`{name}` redefined"));
+        }
     }
 
     /// Remove a macro definition of either kind.
@@ -1904,6 +2124,24 @@ impl Preprocessor {
         let mut slot = self.pending_error.borrow_mut();
         if slot.is_none() {
             *slot = Some(err);
+        }
+    }
+
+    fn park_warning(&self, code: Code, file: &str, line: usize, text: String) {
+        self.pending_warnings
+            .borrow_mut()
+            .push((code, file.to_string(), line, text));
+    }
+
+    /// Emit the parked warnings at output position `offset`.
+    fn emit_parked_warnings(&mut self, offset: u32) {
+        for (code, file, line, text) in self.pending_warnings.take() {
+            let site = Site {
+                file: &file,
+                line,
+                offset,
+            };
+            self.warn(code, site, text);
         }
     }
 
@@ -1925,6 +2163,9 @@ pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
 pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
 pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
 pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
+pub(crate) const DATE_TIME: Code = Code::new(1008);
+pub(crate) const UNDEF: Code = Code::new(1009);
+pub(crate) const MACRO_REDEFINED: Code = Code::new(1015);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the
@@ -2025,7 +2266,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 }
                 continue;
             }
-            let hash = line.trim_start().strip_prefix('#').map(|rest| {
+            let hash = self.pp.directive_text(line).map(|rest| {
                 let spelling = rest.trim_start();
                 (spelling, parse_directive(spelling, self.pp.asm_source))
             });
@@ -2037,14 +2278,17 @@ impl<'p, 's> LinePass<'p, 's> {
             let depth = self.cond.len();
             match hash {
                 Some((spelling, parsed)) if !asm_text => {
-                    self.guard.line(line, Some(&parsed), depth);
+                    self.guard
+                        .line(line, Some(&parsed), depth, self.pp.dollar());
                     self.directive(&parsed, spelling, line_no)?;
                 }
                 _ => {
-                    self.guard.line(line, None, depth);
+                    self.guard.line(line, None, depth, self.pp.dollar());
                     self.content(line)?;
                 }
             }
+            let end = self.out.len() as u32;
+            self.pp.emit_parked_warnings(end);
             if closing {
                 let end = self.out.len() as u32;
                 self.pp.sink.control_mut().close_suppress(end);
@@ -2096,7 +2340,7 @@ impl<'p, 's> LinePass<'p, 's> {
     /// unit, `#define` / `#undef` as a blank, and any other directive an
     /// error.
     fn preprocessed_line(&mut self, line: &str, line_no: usize) -> Result<(), C5Error> {
-        let Some(spelling) = line.trim_start().strip_prefix('#').map(str::trim_start) else {
+        let Some(spelling) = self.pp.directive_text(line).map(str::trim_start) else {
             self.out.push_str(line);
             self.blank();
             self.idx += 1;
@@ -2107,7 +2351,10 @@ impl<'p, 's> LinePass<'p, 's> {
             Directive::Line { .. } | Directive::Pragma(_) => {
                 self.directive(&parsed, spelling, line_no)
             }
-            Directive::Define(..) | Directive::DefineFn(..) | Directive::Undef(_) => {
+            Directive::Define(..)
+            | Directive::DefineFn(..)
+            | Directive::DefineUnclosed(..)
+            | Directive::Undef(_) => {
                 self.blank();
                 self.idx += 1;
                 Ok(())
@@ -2190,6 +2437,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 // every one of these.
                 Directive::Define(..)
                 | Directive::DefineFn(..)
+                | Directive::DefineUnclosed(..)
                 | Directive::Undef(..)
                 | Directive::Ifdef(..)
                 | Directive::Ifndef(..)
@@ -2219,13 +2467,17 @@ impl<'p, 's> LinePass<'p, 's> {
                 let filename = self.filename.to_string();
                 self.pp.pragma_once_files.insert(filename);
             }
-            // `#pragma pack(...)` and `#pragma GCC visibility ...` bind
-            // to their source position: a struct after `pack(1)` packs
-            // at 1, one after the next `pack()` does not. Batching them
-            // through the preprocessor's accumulators would lose that
-            // order, so the line passes through and the lexer folds it
-            // into its `pack_stack` / `visibility_stack` in place.
-            PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
+            // `#pragma pack(...)`, `#pragma GCC visibility ...` and
+            // `#pragma STDC FP_CONTRACT` bind to their source position: a
+            // struct after `pack(1)` packs at 1, one after the next
+            // `pack()` does not. Batching them through the preprocessor's
+            // accumulators would lose that order, so the line passes
+            // through and the lexer folds it into its state in place.
+            PragmaDirective::Other
+                if pragma_is_pack(args)
+                    || pragma_is_visibility(args, self.pp.dollar())
+                    || pragma_is_fp_contract(args, self.pp.dollar()) =>
+            {
                 self.pass_through(spelling);
                 return Ok(Emitted::Yes);
             }
@@ -2387,15 +2639,48 @@ impl<'p, 's> LinePass<'p, 's> {
             self.idx += 1;
             return Ok(());
         }
-        let (buffer, consumed) = self.join_invocation(line)?;
-        // `__LINE__` reflects the presumed line, which a `#line` can
-        // retarget (C99 6.10.4); absent one it is the physical line.
-        let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
-        let site = self.site(self.presumed);
-        let processed = self
-            .pp
-            .apply_pragma_operators(&substituted, site, &self.current_file)?;
-        self.out.push_str(&processed);
+        let (mut buffer, mut consumed) = self.join_invocation(line)?;
+        loop {
+            // A rescan that ends at a function-like macro name takes the
+            // `(` of a later line (C99 6.10.3.4p1): the joined text is
+            // expanded again, from the state the first expansion found.
+            let counter = self.pp.counter.get();
+            let had_error = self.pp.pending_error.borrow().is_some();
+            // `__LINE__` reflects the presumed line, which a `#line` can
+            // retarget (C99 6.10.4); absent one it is the physical line.
+            let (substituted, tail) =
+                self.pp
+                    .substitute_line(&buffer, self.filename, self.presumed);
+            let more = match tail {
+                Tail::FnName => self
+                    .paren_line(consumed)
+                    .map(|_| JoinScan::awaiting_paren()),
+                Tail::OpenArgs => {
+                    (self.idx + consumed < self.lines.len()).then(JoinScan::open_args)
+                }
+                Tail::Complete => None,
+            };
+            if let Some(join) = more {
+                drop(substituted);
+                self.pp.counter.set(counter);
+                if !had_error {
+                    self.pp.pending_error.borrow_mut().take();
+                }
+                self.join_lines(&mut buffer, &mut consumed, join)?;
+                continue;
+            }
+            let site = self.site(self.presumed);
+            let processed =
+                self.pp
+                    .apply_pragma_operators(&substituted, site, &self.current_file)?;
+            // A `#` an expansion puts first is text, not a directive; the
+            // space keeps it so in the output, as GNU cpp writes it.
+            if processed.starts_with('#') && !self.pp.asm_source {
+                self.out.push(' ');
+            }
+            self.out.push_str(&processed);
+            break;
+        }
         // One newline for the line itself, one per joined continuation,
         // so source line numbering survives the join.
         for _ in 0..consumed {
@@ -2420,23 +2705,55 @@ impl<'p, 's> LinePass<'p, 's> {
     fn join_invocation(&mut self, first: &str) -> Result<(String, usize), C5Error> {
         let mut buffer = String::from(first);
         let mut consumed = 1usize;
-        // The scan advances over appended bytes only; re-scanning the
-        // grown buffer per joined line is quadratic in the invocation.
         let mut join = JoinScan::new();
         join.feed(&buffer, self.pp);
-        while self.idx + consumed < self.lines.len()
-            && (join.unclosed()
-                // A function-like macro name at the end of a line with
-                // its `(` on the next is still an invocation (C99
-                // 6.10.3: white space, newlines included, may separate
-                // the name from its `(`).
-                || (join.pending_head()
-                    && self.lines[self.idx + consumed].trim_start().starts_with('(')))
-        {
-            let cont = self.lines[self.idx + consumed];
-            consumed += 1;
-            let dline = self.presumed + consumed - 1;
-            if let Some(rest) = cont.trim_start().strip_prefix('#') {
+        self.join_lines(&mut buffer, &mut consumed, join)?;
+        Ok((buffer, consumed))
+    }
+
+    /// The count of lines past `self.idx`, from `consumed` on and past
+    /// blank ones, at which a line opening with `(` stands.
+    fn paren_line(&self, consumed: usize) -> Option<usize> {
+        let mut k = consumed;
+        while self.idx + k < self.lines.len() && self.lines[self.idx + k].trim().is_empty() {
+            k += 1;
+        }
+        let line = self.lines.get(self.idx + k)?;
+        line.trim_start().starts_with('(').then_some(k)
+    }
+
+    /// Join to `buffer`, which holds the first `consumed` lines, the
+    /// lines an invocation it opens spans, as `join` scans it.
+    fn join_lines(
+        &mut self,
+        buffer: &mut String,
+        consumed: &mut usize,
+        mut join: JoinScan,
+    ) -> Result<(), C5Error> {
+        // The scan advances over appended bytes only; re-scanning the
+        // grown buffer per joined line is quadratic in the invocation.
+        while self.idx + *consumed < self.lines.len() {
+            if !join.unclosed() {
+                // A function-like macro name at the end of a line with its
+                // `(` on a later one is still an invocation (C99 6.10.3:
+                // white space, newlines included, may separate them).
+                let Some(k) = join
+                    .pending_head()
+                    .then(|| self.paren_line(*consumed))
+                    .flatten()
+                else {
+                    break;
+                };
+                for blank in *consumed..k {
+                    buffer.push('\n');
+                    buffer.push_str(self.lines[self.idx + blank]);
+                }
+                *consumed = k;
+            }
+            let cont = self.lines[self.idx + *consumed];
+            *consumed += 1;
+            let dline = self.presumed + *consumed - 1;
+            if let Some(rest) = self.pp.directive_text(cont) {
                 let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
                 // TODO: `#include`, `#line` and `#pragma` inside an
                 // argument list are consumed without effect; their
@@ -2459,7 +2776,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 join.feed(&buffer[appended..], self.pp);
             }
         }
-        Ok((buffer, consumed))
+        Ok(())
     }
 }
 
@@ -2474,13 +2791,16 @@ mod text;
 #[cfg(test)]
 mod tests;
 
-use crate::c5::ident;
+use crate::c5::ident::{self, Dollar};
 use builtins::is_operator_name;
 use directive::{
     CondFrame, Directive, IncludeGuardScan, apply_elif, apply_else, apply_endif, elif_eligible,
     format_line_marker, header_name, parse_directive,
 };
-use expand::JoinScan;
+use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
-use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
+use pragma::{
+    PragmaDirective, parse_pragma_directive, pragma_is_fp_contract, pragma_is_pack,
+    pragma_is_visibility,
+};
 use text::unfold_and_strip;

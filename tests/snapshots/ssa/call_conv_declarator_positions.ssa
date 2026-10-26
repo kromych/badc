@@ -138,7 +138,7 @@ fn ent_pc=5 n_params=4 variadic=false locals=0
     v11  Imm(0)                                           -> x0
     v12  Imm(10)                                          -> x0
     v13  Imm(4621819117588971520)                         -> x0
-    v14  Binop { op=fmul, lhs=v3, rhs=v13 }               -> d2
+    v14  Binop { op=fmul.c, lhs=v3, rhs=v13 }             -> d2
     v15  Fma { a=v3, b=v13, c=v10, neg_product=false, neg_addend=false } -> d0
     v16  Imm(0)                                           -> x0
     v17  BinopI { op=mul, lhs=v5, rhs_imm=100 }           -> x0
@@ -148,7 +148,7 @@ fn ent_pc=5 n_params=4 variadic=false locals=0
     v21  Imm(0)                                           -> x0
     v22  Imm(1000)                                        -> x0
     v23  Imm(4652007308841189376)                         -> x0
-    v24  Binop { op=fmul, lhs=v7, rhs=v23 }               -> d1
+    v24  Binop { op=fmul.c, lhs=v7, rhs=v23 }             -> d1
     v25  Fma { a=v7, b=v23, c=v20, neg_product=false, neg_addend=false } -> d0
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=6 ---
@@ -170,7 +170,7 @@ fn ent_pc=6 n_params=4 variadic=false locals=0
     v11  Imm(0)                                           -> x0
     v12  Imm(10)                                          -> x0
     v13  Imm(4621819117588971520)                         -> x0
-    v14  Binop { op=fmul, lhs=v3, rhs=v13 }               -> d3
+    v14  Binop { op=fmul.c, lhs=v3, rhs=v13 }             -> d3
     v15  Fma { a=v3, b=v13, c=v10, neg_product=true, neg_addend=false } -> d0
     v16  Imm(0)                                           -> x0
     v17  BinopI { op=mul, lhs=v5, rhs_imm=100 }           -> x0
@@ -180,7 +180,7 @@ fn ent_pc=6 n_params=4 variadic=false locals=0
     v21  Imm(0)                                           -> x0
     v22  Imm(1000)                                        -> x0
     v23  Imm(4652007308841189376)                         -> x0
-    v24  Binop { op=fmul, lhs=v7, rhs=v23 }               -> d2
+    v24  Binop { op=fmul.c, lhs=v7, rhs=v23 }             -> d2
     v25  Fma { a=v7, b=v23, c=v20, neg_product=true, neg_addend=false } -> d0
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=7 ---

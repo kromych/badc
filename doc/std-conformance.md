@@ -168,10 +168,10 @@ by default.
 `__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined.
 `__DATE__` and `__TIME__` are the time of translation in UTC; the
 `SOURCE_DATE_EPOCH` environment variable fixes it, as under gcc and clang.
-`__STDC_VERSION__` is defined as `201112L` (C11): the implemented surface
-is C99 plus the C11 features real code gates on this macro
-(`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`, `_Generic`,
-anonymous members, `<stdatomic.h>`).
+Without `-std=`, `__STDC_VERSION__` is defined as `201112L` (C11): the
+implemented surface is C99 plus the C11 features real code gates on this
+macro (`_Static_assert`, `_Noreturn`, `_Atomic`, `_Thread_local`,
+`_Generic`, anonymous members, `<stdatomic.h>`).
 
 ### Unrecognized command-line options are fatal, severity 4
 
@@ -229,14 +229,16 @@ options whose effect badc's assembler already has -- `--fatal-warnings`,
 instruction set and admits every member of it, so a ceiling below that set
 selects nothing rather than rejecting the instructions above it.
 
-`-std=<dialect>` is accepted. badc compiles C99 with the GNU extensions
-always available, so the name selects only whether `__STRICT_ANSI__` is
-defined under `--gnu`: `gnu*` clears it and `c<digits>` / `iso9899:*` set
-it, as in gcc and clang. Without the flag `--gnu` reports strict
-conformance, so a header takes its standard-C path for the GNU features
-badc lacks. A name outside those three shapes is refused rather than read
-as strict ISO, so gcc's `-std=c2x` fails the invocation while `-std=c23`
-is taken.
+`-std=<dialect>` takes the names gcc 16 takes. The edition sets
+`__STDC_VERSION__` as gcc predefines it (`199901L` for `c99` / `gnu99`,
+`201710L` for `c17`, `202311L` for `c23` / `c2x`, none for C90), and from
+C23 on `bool`, `true` and `false` are keywords; without the flag badc
+compiles C11. The GNU extensions stay available under every edition, so
+the dialect selects only whether `__STRICT_ANSI__` is defined under
+`--gnu`: `gnu*` clears it and `c*` / `iso9899:*` set it, as in gcc and
+clang. Without the flag `--gnu` reports strict conformance, so a header
+takes its standard-C path for the GNU features badc lacks. A name gcc does
+not take is refused rather than read as strict ISO.
 
 ### ELF imports take their versions from a pinned manifest, severity 5
 
@@ -340,6 +342,10 @@ registers under either compiler.
   6.6 constant-expression grammar (float casts and arithmetic work in the
   condition).
 - `_Generic` selection (C11 6.5.1.1).
+- `bool`, `true` and `false` as keywords under `-std=c23` / `gnu23` (C23
+  6.4.1): `bool` is `_Bool` and `true` / `false` its constants, 1 and 0 in
+  `#if` as well; `<stdbool.h>` then defines only
+  `__bool_true_false_are_defined`.
 - `typeof` and `typeof_unqual` (C23 6.7.2.5), also under the GNU spellings
   `__typeof__` / `__typeof` and `__typeof_unqual__` / `__typeof_unqual`.
   `typeof_unqual` names the operand's type without the qualifiers on the
@@ -422,7 +428,17 @@ registers under either compiler.
   thread-specific data and creation attributes over kernel32; a destructor
   also runs when a thread CreateThread started exits, and none at process
   exit. Cancellation, `pthread_kill` and the scheduling setters of a running
-  thread are not declared there. `native-compilation.md` states the rule the
+  thread are not declared there. `<semaphore.h>` is winpthreads': unnamed
+  semaphores over kernel32, `sem_open` / `sem_close` / `sem_unlink` failing
+  with ENOSYS. libmingwex's `getopt` / `getopt_long` / `getopt_long_only`
+  and their state (`getopt` stops at the first operand, the long forms
+  permute), `basename` / `dirname` (with `\` and drive designators),
+  `ftw`, `mkstemp` / `mkdtemp`, `sleep` / `usleep`, `ftruncate` /
+  `truncate` and `feraiseexcept` are defined over msvcrt and kernel32; the
+  CRT's `chmod`, `mktemp` and exec family are bound under their POSIX
+  names, and `iswblank`, `wctype`, `wctrans` and `towctrans`, which
+  msvcrt.dll lacks, to ucrtbase.dll. The POSIX names mingw-w64 does not
+  declare are not declared. `native-compilation.md` states the rule the
   Windows headers follow.
 
 ### GCC
@@ -482,8 +498,11 @@ registers under either compiler.
   `__builtin_toascii` fold from their operand as gcc folds them. A few
   (`__builtin_strlen`, `strcmp`, `strncmp`, `memcmp`, `abs` and its wider
   forms) additionally constant-fold on literal operands. The hints with no
-  code-generation effect and the infinity / NaN constants stay macros in
-  the bundled `_builtins.h`, which every translation unit includes.
+  code-generation effect (`__builtin_expect`, `__builtin_prefetch`,
+  `__builtin_assume_aligned`) and the infinity / NaN constants are parsed
+  at the call site with gcc's signatures and operand checks, so they are
+  available in preprocessed input too; `__builtin_nan` folds a string
+  literal's payload as gcc does and calls `nan` for any other operand.
 - The `__sync_*` and `__atomic_*` families are recognized by prefix and
   lowered at the call site, so a spelling outside the C11 set above still
   compiles. The `__atomic_*` memory-order operand selects the load, store
@@ -553,12 +572,15 @@ registers under either compiler.
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),
   `transparent_union`, `no_instrument_function`, `uninitialized`,
   `patchable_function_entry`, and the MSVC `__declspec(thread)` /
-  `dllexport`. Other attributes -- `format`, `pure` / `const`,
+  `dllexport` / `dllimport` (on the PE targets a dllimport reference reads
+  the import-address slot `__imp_<name>`, as MSVC, mingw-w64 gcc and clang
+  emit it; elsewhere the attribute is ignored with a warning). Other attributes -- `format`, `pure` / `const`,
   `deprecated`, `fallthrough` and the rest -- are parsed and silently
   discarded; there is no "attribute ignored" diagnostic. Two asymmetries:
   `__has_attribute` answers 1 for a fixed list of GCC attribute names wider
   than the honored set
-  (and 0 for the honored `vector_size` / `dllexport`), and the C23
+  (and 0 for the honored `vector_size`, and for `dllexport` / `dllimport`
+  off the PE targets, as gcc answers), and the C23
   `[[...]]` syntax honors only the bare names plus `aligned`,
   `constructor` and `destructor`, so `[[gnu::section("x")]]` parses and is
   dropped while `__attribute__((section("x")))` takes effect.

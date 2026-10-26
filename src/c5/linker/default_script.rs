@@ -31,7 +31,10 @@ pub fn default_script(shared: bool) -> String {
   .gnu.version : {{ *(.gnu.version) }}
   .gnu.version_d : {{ *(.gnu.version_d) }}
   .gnu.version_r : {{ *(.gnu.version_r) }}
-  .rela.dyn : {{ *(.rela.dyn) *(.rela.*) }}
+  .rel.dyn : {{ *(.rel.dyn) }}
+  .rela.dyn : {{ *(.rela.dyn) }}
+  .rel.plt : {{ *(.rel.plt) }}
+  .rela.plt : {{ *(.rela.plt) }}
   .relr.dyn : {{ *(.relr.dyn) }}
   .init : {{ KEEP (*(SORT_NONE(.init))) }}
   .plt : {{ *(.plt) }}

@@ -37,9 +37,9 @@ Disassembly of section .text:
                	movb	%r10b, -0x6(%rbp)
                	movzbq	0x13(%rbp), %r10
                	movb	%r10b, -0x5(%rbp)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	%edi, (%rax)
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	%esi, (%rax)
                	leave
                	retq
@@ -87,11 +87,11 @@ Disassembly of section .text:
                	movb	%r11b, 0x3(%rsp)
                	callq	<addr>
                	addq	$0x10, %rsp
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	jne	<addr>

@@ -711,14 +711,24 @@ impl SectionInsn<'_> {
         if !is_call && !is_jmp && cc.is_none() {
             return Ok(None);
         }
-        // A bare-symbol target carries no operands.
+        // A bare-symbol target carries no operands; `@PLT` names the PLT
+        // slot a long-mode branch to a symbol takes anyway.
+        let mut plt = false;
         let target = if let Some(name) = insn.sym_exprs.first().filter(|_| insn.operands.is_empty())
         {
             if name.contains('%') {
                 let what = if cc.is_some() { "branch" } else { "call" };
                 return Err(self.err(&alloc::format!("{what} target embeds an operand")));
             }
-            Some(branch_section_target(name))
+            let name = match crate::c5::asm::split_reloc_op(name) {
+                Some((bare, crate::c5::asm::AsmRelocOp::Plt)) => {
+                    plt = true;
+                    bare
+                }
+                Some(_) => return Err(self.err("branches through a relocation other than `@PLT`")),
+                None => name.clone(),
+            };
+            Some(branch_section_target(&name))
         } else if let Some(&AsmOpnd::RefConst { idx, .. }) = insn.operands.first()
             && cc.is_none()
         {
@@ -733,7 +743,7 @@ impl SectionInsn<'_> {
         let Some(target) = target else {
             return Ok(None);
         };
-        let item = match cc {
+        let mut item = match cc {
             Some(cc) => self.rel_branch(
                 &[0x0F, 0x80 | (cc as u8)],
                 AsmRelocKind::JumpRel,
@@ -743,6 +753,14 @@ impl SectionInsn<'_> {
             None if is_call => self.rel_branch(&[0xE8], AsmRelocKind::Data, None, target),
             None => self.rel_branch(&[0xE9], AsmRelocKind::JumpRel, Some(0xEB), target),
         };
+        if let crate::c5::asm::AsmSectionItem::CodeBytes { relocs, short, .. } = &mut item
+            && plt
+        {
+            relocs.iter_mut().for_each(|r| r.branch = true);
+            if let Some(s) = short {
+                s.reloc.branch = true;
+            }
+        }
         Ok(Some(item))
     }
 
@@ -860,8 +878,20 @@ impl SectionInsn<'_> {
         self.insn
             .sym_exprs
             .get(i as usize)
-            .map(|e| crate::c5::asm::AsmSectionTarget::Expr(e.clone()))
+            .map(|e| {
+                let bare = crate::c5::asm::split_reloc_op(e).map_or_else(|| e.clone(), |b| b.0);
+                crate::c5::asm::AsmSectionTarget::Expr(bare)
+            })
             .ok_or_else(|| self.err("operand expression is missing"))
+    }
+
+    /// The relocation operator an operand expression carries, by the text
+    /// [`Self::expr_target`] made of it.
+    fn expr_op(&self, bare: &str) -> Option<crate::c5::asm::AsmRelocOp> {
+        (self.insn.sym_exprs.iter())
+            .filter_map(|e| crate::c5::asm::split_reloc_op(e))
+            .find(|(b, _)| b == bare)
+            .map(|(_, op)| op)
     }
 
     /// The value an operand expression already has at this point of the
@@ -870,6 +900,7 @@ impl SectionInsn<'_> {
         self.insn
             .sym_exprs
             .get(expr as usize)
+            .filter(|e| crate::c5::asm::split_reloc_op(e).is_none())
             .and_then(|e| (self.refs.fold)(e))
     }
 
@@ -1368,11 +1399,47 @@ impl SectionInsn<'_> {
             });
         }
         bytes.extend_from_slice(&body[sizes..]);
+        let relax = got_relax(&bytes);
+        for r in &mut relocs {
+            if let crate::c5::asm::AsmSectionTarget::Expr(t) = &r.target
+                && let Some(op) = self.expr_op(t)
+            {
+                r.kind = AsmRelocKind::Op { op, relax };
+            }
+        }
         Ok(AsmSectionItem::CodeBytes {
             bytes,
             relocs,
             short: None,
         })
+    }
+}
+
+/// gas's test for a relaxable GOT load: `mov` (8B), `test` (85), the binary
+/// operations' loads, and `call` / `jmp` through `FF /2`, `FF /4`.
+fn got_relax(bytes: &[u8]) -> crate::c5::asm::AsmGotRelax {
+    use crate::c5::asm::AsmGotRelax;
+    let is_prefix = |b: u8| {
+        matches!(
+            b,
+            0x66 | 0x67 | 0xF0 | 0xF2 | 0xF3 | 0x2E | 0x36 | 0x3E | 0x26 | 0x64 | 0x65
+        )
+    };
+    let mut i = bytes.iter().take_while(|&&b| is_prefix(b)).count();
+    let rex = bytes.get(i).is_some_and(|b| (0x40..=0x4F).contains(b));
+    i += usize::from(rex);
+    let (Some(&op), modrm) = (bytes.get(i), bytes.get(i + 1)) else {
+        return AsmGotRelax::No;
+    };
+    let relaxable = match op {
+        0x8B | 0x85 | 0x03 | 0x13 | 0x23 | 0x2B | 0x33 | 0x3B | 0x0B | 0x1B => true,
+        0xFF => modrm.is_some_and(|m| matches!((m >> 3) & 7, 2 | 4)),
+        _ => false,
+    };
+    match (relaxable, rex) {
+        (false, _) => AsmGotRelax::No,
+        (true, false) => AsmGotRelax::Relaxable,
+        (true, true) => AsmGotRelax::RelaxableRex,
     }
 }
 
@@ -2837,6 +2904,30 @@ impl AsmPass<'_> {
         // stream defines relaxes to the rel8 form unless a round lengthened
         // it; a target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
+            // A `call` to a local label is the rel32 near call, which has no
+            // shorter form (GNU as: any code-address operand takes a label).
+            if matches!(insn.mnemonic, Mnemonic::Table("call" | "callq")) {
+                code.push(0xE8);
+                code.extend_from_slice(&[0u8; 4]);
+                match self.weak_target_name(num) {
+                    Some(n) => out.cx.asm_sym_fixups.push(super::AsmSymFixup {
+                        instr_offset: code.len() - 4,
+                        kind: crate::c5::asm::AsmRelocKind::JumpRel,
+                        target: crate::c5::asm::AsmSectionTarget::Symbol(n),
+                        addend: -4,
+                    }),
+                    None => layout.label_fixups.push(LabelFixup {
+                        at: code.len() - 4,
+                        width: 4,
+                        end: code.len(),
+                        num,
+                        forward,
+                        ii,
+                    }),
+                }
+                layout.after_insn = true;
+                return Some(Ok(()));
+            }
             let cc = match Self::branch_cc(insn) {
                 Ok(cc) => cc,
                 Err(e) => return Some(Err(e)),
@@ -2917,6 +3008,10 @@ impl AsmPass<'_> {
             ) {
                 Ok(n) => n,
                 Err(e) => return Some(fail(e)),
+            };
+            let name = match crate::c5::asm::split_reloc_op(&name) {
+                Some((bare, crate::c5::asm::AsmRelocOp::Plt)) => bare,
+                _ => name,
             };
             // The code stream's branch channels name a symbol with no addend.
             // TODO carry an addend on the call site and the fixup.
@@ -3094,6 +3189,14 @@ impl AsmPass<'_> {
             // through the same relocation channel as a `%a` operand.
             AsmOpnd::SymRipRel { expr } => {
                 let size = self.mem_size_or_quad(insn);
+                // TODO: relocation operators in a function's asm statement.
+                if (insn.sym_exprs.get(expr as usize))
+                    .is_some_and(|e| crate::c5::asm::split_reloc_op(e).is_some())
+                {
+                    return fail(
+                        "inline asm: a relocation operator is only supported in file-scope asm",
+                    );
+                }
                 // The in-function channel names a symbol and an offset, so
                 // a displacement over a label difference has nowhere to
                 // resolve.
@@ -3519,6 +3622,7 @@ impl AsmPass<'_> {
                         instr_offset,
                         symbol_name: name,
                         direct_pcrel: Some(offset + disp - 4 - trailing),
+                        import_slot: false,
                     });
                 }
                 AsmRipSym::Local { data_offset } => {

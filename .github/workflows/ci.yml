@@ -530,7 +530,7 @@ jobs:
         shell: bash
         run: python demos/quickjs/smoke.py
       - name: lua smoke (multi-TU + upstream test suite)
-        # Vendored Lua 5.5.0 sources compile + multi-TU link
+        # Vendored Lua 5.5.1 sources compile + multi-TU link
         # through badc, and the curated 24-script `lua-tests`
         # subset (bitwise, closures, coroutines, math, pattern,
         # sort, string, table, utf8, vararg, plus the `T`-driven
@@ -883,6 +883,18 @@ jobs:
         # PSD is skipped via STBI_NO_PSD pending an aarch64
         # codegen-drift regression specific to that decoder.
         run: python demos/stb/smoke.py
+      - name: X11 development headers for the nuklear demos (linux only)
+        if: runner.os == 'Linux'
+        run: ./scripts/apt_resilient_install.sh libx11-dev libxext-dev
+      - name: nuklear smoke (header regen + per-source compile + demos + headless frames)
+        # Nuklear has no unit tests; this checks what its own CI checks with
+        # badc as the compiler (nuklear.h regenerated from src/, each src/*.c
+        # compiled alone, the X11 demo built), then drives the upstream demo
+        # windows for 90 frames through the rawfb software renderer and
+        # nk_convert, and requires every frame's digests to agree between
+        # badc -O0, badc -O and (but on Windows) the host's cc. 5 to 25 s
+        # per lane on the validation boxes.
+        run: python demos/nuklear/smoke.py
       - name: gui_hello build-only smoke
         # Three GUI demos -- Win32, X11, Cocoa via objc_msgSend --
         # cross-compiled to all five supported targets. Build-only
@@ -902,6 +914,19 @@ jobs:
         # NTSTATUSes. An AV / truncated output / unexpected
         # NTSTATUS would signal a c5 Windows-codegen regression.
         run: python demos/nt_loader/smoke.py
+      - name: simplevisor smoke
+        # Alex Ionescu's Intel VT-x hypervisor, built by badc into a
+        # native-subsystem .sys for windows-x64 (x64-only upstream) from
+        # every runner. The smoke asserts the PE is PE32+/AMD64,
+        # Subsystem NATIVE, has an entry point in .text and an
+        # ntoskrnl.exe import table; on the Windows runners it also
+        # checks every import resolves against the host's own
+        # ntoskrnl.exe. It never loads the driver -- a VMX fault would
+        # take the runner down. The user-mode logic harness (the
+        # GDT-descriptor and capability-MSR decode, intrinsics stubbed)
+        # runs under badc and, where a host cc is present, is diffed
+        # against that compiler to catch a bitfield/mask codegen defect.
+        run: python demos/simplevisor/smoke.py
 
   pressure:
     # Run the test suite and the functional demos with the register
@@ -1017,8 +1042,8 @@ jobs:
     # even if some lane failed: a failure on one OS should not block
     # visibility on another's perf delta. The Windows lanes measure badc
     # against MSVC's cl; the steps that need a POSIX host or clang (tcc,
-    # the throughput counters, the CPython and QuickJS comparisons) run on
-    # Linux only.
+    # ccc, the throughput counters, the CPython and QuickJS comparisons) run
+    # on Linux only.
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
@@ -1030,8 +1055,8 @@ jobs:
           - windows-11-arm
     runs-on: ${{ matrix.os }}
     # quickjs_bench builds the full engine once per leg the harness
-    # probes -- badc and badc -O, then clang and gcc at -O0, at -O2 and
-    # at -O2 -march=<the level badc assumes> -- the quickjs engine
+    # probes -- badc and badc -O, ccc, then clang and gcc at -O0, at -O2
+    # and at -O2 -march=<the level badc assumes> -- the quickjs engine
     # comparison four more and runs a microbench subset through each,
     # and the CPython comparison builds the interpreter four more times;
     # allow headroom over the lighter fixtures.
@@ -1099,8 +1124,6 @@ jobs:
         # taken within this run on this runner, so the runner class
         # cancels; `--check` fails on a committed ceiling. This is the
         # only step in the job that gates on a measured value.
-        # TODO(#1382): Windows, once badc compiles quickjs-libc.c there
-        # (its own setenv conflicts with the one <stdlib.h> declares).
         if: runner.os == 'Linux'
         run: |
           rc=0
@@ -1117,8 +1140,16 @@ jobs:
       - name: build tcc for the host
         if: runner.os == 'Linux'
         run: bash tests/perf/build_tcc.sh
+      - uses: dtolnay/rust-toolchain@stable
+        if: runner.os == 'Linux'
+      - name: build ccc for the host
+        # Claude's C Compiler, from its vendor-deps asset; the cargo build
+        # took 19 s on an 8-core aarch64 box and 57 s on a loaded 12-core
+        # x86_64 one, so it is not cached. It emits Linux ELF only.
+        if: runner.os == 'Linux'
+        run: python3 tests/perf/build_ccc.py
       - name: run perf harness + write to job summary
-        # The harness names its own legs: whichever of tcc, clang and gcc
+        # The harness names its own legs: whichever of tcc, ccc, clang and gcc
         # the runner carries, each at the levels it takes, and cl on
         # Windows. The heading states no compiler set, so a runner with a
         # different one needs no edit here. The step's status is the
@@ -1208,7 +1239,7 @@ jobs:
           python3 demos/quickjs/bench.py | tee perf-out/qjs_cmp.md
           cat perf-out/qjs_cmp.md >> "$GITHUB_STEP_SUMMARY"
 
-  # Build the Tcl 8.6.14 interpreter with badc and run the upstream
+  # Build the Tcl 8.6.18 interpreter with badc and run the upstream
   # test suite (tests/all.tcl). Isolated from the `test` job because the
   # 169-unit build plus the full suite exceeds that job's 10-minute
   # budget. POSIX only; Windows is excluded (the build runs configure +
@@ -1244,6 +1275,37 @@ jobs:
         run: chmod +x target/release/badc*
       - name: tcl smoke (build tclsh + run tests/all.tcl)
         run: python demos/tcl/smoke.py
+
+  # OpenSSL 4.1.0: Configure with a badc target, make, and OpenSSL's own
+  # suite (make test, every recipe) at -O0 and -O. The smoke takes 442 s on
+  # an 8-core aarch64 box and 517 s on a 12-core x86-64 one; a 4-vCPU runner
+  # runs the suite's recipes about half as wide.
+  openssl:
+    needs: build
+    name: openssl suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: openssl smoke (build + make test, -O0 and -O)
+        run: python demos/openssl/smoke.py
 
   # Cooperative-concurrency demos: each library's context switch leans
   # on constructs the fixtures cover only piecemeal -- the upstream asm
@@ -1411,7 +1473,7 @@ jobs:
   # reference binary, then every unit's compile line is replayed through
   # badc and badc's linker produces the multiplexer. The smoke runs it as
   # both halves of its own client/server pair. Linux only -- upstream
-  # 5.0.0 does not compile on macOS with any compiler.
+  # 5.0.2 does not compile on macOS with any compiler.
   screen:
     needs: build
     name: screen suite (${{ matrix.os }})
@@ -2013,12 +2075,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Measured on the pinned sweep release at defconfig: 4434 (aarch64)
-          # and 2921 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
+          # Measured on the pinned sweep release at defconfig: 4283 (aarch64)
+          # and 2942 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
           # reaching the marker. Each floor sits just under its count, so a
           # unit silently dropping out of the build fails the gate.
-          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4400 }
-          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2900 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4250 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2920 }
     runs-on: ${{ matrix.os }}
     # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
     # defconfig build 20 min (4177 units, 2153 CPU-s). Scaled by this runner's
@@ -2027,7 +2089,7 @@ jobs:
     # four-core runner that is 15-20 min. The boot phase is four boots plus a
     # displacement probe per distinct displacement: 25 s on aarch64 (eight
     # emulator starts), 50 s on x86_64 (five, one probe covering them all).
-    # The sweep release since bumped to 4434 / 2921 units, within these caps.
+    # The sweep release since moved to 4283 / 2942 units, within these caps.
     # Linking with badc costs a second or so of the build on either
     # architecture (table above), so the caps carry over unchanged.
     # The caps are hang backstops just above that, not slack; tighten them once

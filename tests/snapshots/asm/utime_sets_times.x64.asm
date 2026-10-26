@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -73,14 +73,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r9
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movl	$0x200, %esi            # imm = 0x200
                	leaq	<rip>, %rdx
                	movq	%rbx, %rcx
                	movq	%r12, %r8
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %ebx
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rbx, %rax

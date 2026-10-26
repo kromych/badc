@@ -39,7 +39,9 @@ typedef unsigned long nfds_t;
 // Winsock exposes WSAPoll with the same shape; not bound here.
 #endif
 
+#ifndef _WIN32
 int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+#endif
 
 #ifdef __linux__
 // ppoll: poll with a nanosecond timeout and an optional signal mask (Linux).

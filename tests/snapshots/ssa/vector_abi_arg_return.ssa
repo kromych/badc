@@ -1165,7 +1165,7 @@ fn ent_pc=5 n_params=4 variadic=false locals=0
     v12  FpCast { kind=IntToFp, value=v10 }               -> d0
     v13  Imm(0)                                           -> x0
     v14  Imm(0)                                           -> x0
-    v15  Binop { op=fmul, lhs=v1, rhs=v3 }                -> d2
+    v15  Binop { op=fmul.c, lhs=v1, rhs=v3 }              -> d2
     v16  Fma { a=v1, b=v3, c=v12, neg_product=false, neg_addend=false } -> d0
     v17  LifetimeEnd(-6)                                  -> -
     v18  LifetimeEnd(-5)                                  -> -
@@ -2754,7 +2754,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v1014 Binop { op=sub, lhs=v1012, rhs=v1013 }           -> x1
     v1015 Extend { value=v1014, kind=I32, nsw }            -> x2
     v1016 FpCast { kind=IntToFp, value=v1014 }             -> d0
-    v1017 Binop { op=fmul, lhs=v1007, rhs=v1011 }          -> d1
+    v1017 Binop { op=fmul.c, lhs=v1007, rhs=v1011 }        -> d1
     v1018 Imm(4613937818241073152)                         -> x1
     v1019 Fma { a=v1018, b=v1011, c=v1016, neg_product=false, neg_addend=false } -> d0
     v1020 Imm(4632515166703976448)                         -> x0

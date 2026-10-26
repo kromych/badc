@@ -95,6 +95,11 @@ impl IncludeFrame {
     pub(super) fn own(&self) -> bool {
         self.step.origin() == IncludeOrigin::Own
     }
+
+    /// The file came from a user directory, not a system header.
+    pub(super) fn user(&self) -> bool {
+        self.step.origin() == IncludeOrigin::User
+    }
 }
 
 /// Where a header search begins.
@@ -364,8 +369,13 @@ impl Preprocessor {
     /// The key is always `name`, so a header reached both directly and
     /// through another bundled header is one file to `#pragma once`;
     /// `path` still carries the root-relative file when one supplied
-    /// the body, since dependency output names files.
-    fn own_header(&self, name: &str) -> Option<Resolved> {
+    /// the body, since dependency output names files. A registry name
+    /// the target is not served resolves only for a bundled header
+    /// (`from_own`), as [`embedded_header`] states.
+    fn own_header(&self, name: &str, from_own: bool) -> Option<Resolved> {
+        if !from_own && crate::c5::headers::withheld(name, self.target) {
+            return None;
+        }
         #[cfg(feature = "std")]
         for root in self.own_header_roots.iter() {
             let candidate = join_include_path(root, name);
@@ -379,7 +389,7 @@ impl Preprocessor {
                 });
             }
         }
-        embedded_header(name).map(|b| Resolved {
+        embedded_header(name, self.target, from_own).map(|b| Resolved {
             body: b.to_string(),
             key: name.to_string(),
             path: None,
@@ -399,6 +409,7 @@ impl Preprocessor {
             _ => None,
         };
         let runs = |step: SearchStep| after.is_none_or(|a| step.resumes_after(a));
+        let from_own = self.include_stack.last().is_some_and(IncludeFrame::own);
         // A later directory naming the supplying one again (a duplicate
         // `-I` spelled differently, a symlink) would supply the same file.
         #[cfg(feature = "std")]
@@ -458,10 +469,9 @@ impl Preprocessor {
             //
             // Both run where the `-I` paths start, so a search resumed past
             // the own set cannot return to it.
-            let from_own = self.include_stack.last().is_some_and(IncludeFrame::own);
             if runs(SearchStep::Path(0))
                 && (crate::c5::headers::compiler_owned_header(name) || from_own)
-                && let Some(found) = self.own_header(name)
+                && let Some(found) = self.own_header(name, from_own)
             {
                 return Some(found);
             }
@@ -484,7 +494,7 @@ impl Preprocessor {
             return None;
         }
         if runs(SearchStep::Own)
-            && let Some(found) = self.own_header(name)
+            && let Some(found) = self.own_header(name, from_own)
         {
             return Some(found);
         }
@@ -506,8 +516,10 @@ impl Preprocessor {
             let lower = name.to_ascii_lowercase();
             return crate::c5::headers::embedded_headers()
                 .iter()
-                .find(|(n, _)| n.eq_ignore_ascii_case(&lower))
-                .map(|(n, body)| Resolved {
+                .find(|(n, ts, _)| {
+                    n.eq_ignore_ascii_case(&lower) && (from_own || ts.contains(self.target))
+                })
+                .map(|(n, _, body)| Resolved {
                     body: body.to_string(),
                     key: n.to_string(),
                     path: None,

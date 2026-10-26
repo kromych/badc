@@ -8,7 +8,7 @@ pub(super) fn emit_tls_addr(
     dst: Place,
     offset: i64,
     v: super::super::ir::ValueId,
-    target: Target,
+    (target, dynamic): (Target, bool),
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
     extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
@@ -19,6 +19,41 @@ pub(super) fn emit_tls_addr(
         return fail("TlsAddr: dst not int reg / spill");
     };
     match target {
+        Target::LinuxX64 if dynamic => {
+            // The TLS descriptor (gnu2) form: `rax` comes back as the offset
+            // from the thread pointer of the named variable or of the module's
+            // block, which `x@dtpoff` then advances to the variable.
+            //   lea rax, [rip + disp32]; call qword ptr [rax];
+            //   add rax, qword ptr fs:[0]
+            let start = code.len();
+            code.extend_from_slice(&[0x48, 0x8D, 0x05, 0, 0, 0, 0, 0xFF, 0x10]);
+            code.extend_from_slice(&[0x64, 0x48, 0x03, 0x04, 0x25, 0, 0, 0, 0]);
+            let target = match extern_tls_names.get(&v) {
+                Some(r) => {
+                    // mov rd, rax
+                    if rd.0 != 0 {
+                        code.extend_from_slice(&[0x48 | (rd.0 >> 3), 0x89, 0xC0 | (rd.0 & 7)]);
+                    }
+                    super::ElfTpoffTarget::Descriptor(r.name.clone())
+                }
+                None => {
+                    // lea rd, [rax + disp32]
+                    code.extend_from_slice(&[
+                        0x48 | ((rd.0 >> 3) << 2),
+                        0x8D,
+                        0x80 | ((rd.0 & 7) << 3),
+                    ]);
+                    code.extend_from_slice(&0i32.to_le_bytes());
+                    super::ElfTpoffTarget::ModuleDescriptor(offset as u64)
+                }
+            };
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: start,
+                target,
+            });
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         Target::LinuxX64 => {
             // mov rd, qword ptr fs:[0]
             //   FS prefix 64; REX.W=1, REX.R = (rd >= 8);

@@ -62,7 +62,9 @@
 #pragma binding(libc::setlogmask, "setlogmask")
 #endif
 
+#ifndef _WIN32
 void openlog(const char *ident, int option, int facility);
 void syslog(int priority, const char *format, ...);
 void closelog(void);
 int setlogmask(int mask);
+#endif

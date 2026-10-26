@@ -42,7 +42,7 @@ Disassembly of section .text:
                	subq	$0x58, %rsp
                	pushq	%rbx
                	leaq	-0x50(%rbp), %rdi
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	movq	%rax, -0x50(%rbp)
                	leaq	-0x40(%rbp), %rax
                	movq	$0x3, -0x30(%rbp)

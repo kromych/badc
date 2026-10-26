@@ -6,7 +6,7 @@ use super::diag::eprint_diagnostic;
 use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbols};
 use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
-use super::objects::{build_archive, compile_objects};
+use super::objects::{build_archive, check_syntax, compile_objects};
 use super::options::{Mode, SourceKind};
 use super::paths::{
     declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
@@ -32,6 +32,13 @@ pub(crate) fn run() {
             1
         };
         std::process::exit(badc::run_ld(&raw[skip..]));
+    }
+
+    // Archiver dispatch: as `ar` / `ranlib` (argv[0]) or `--ar <key>`.
+    let arg = |k: usize| raw.get(k).map(String::as_str);
+    if let Some(ranlib) = super::ar::persona(arg(0).unwrap_or(""), arg(1), arg(2)) {
+        let skip = if arg(1) == Some("--ar") { 2 } else { 1 };
+        std::process::exit(super::ar::run(ranlib, &raw[skip..]));
     }
 
     let mut cli = match parse_args(raw) {
@@ -307,6 +314,10 @@ fn dispatch(cli: Cli) {
         && d.kind == DepKind::Only
     {
         return dump_dependencies(&cli, &inputs, &stdin, d);
+    }
+    // `-E` takes precedence, as in gcc; any other output is not written.
+    if cli.syntax_only && cli.mode != Mode::DumpPp {
+        return check_syntax(&cli, &inputs, &stdin);
     }
     if matches!(cli.mode, Mode::Jit | Mode::Interp) {
         run_in_process(&cli, &inputs, &stdin);

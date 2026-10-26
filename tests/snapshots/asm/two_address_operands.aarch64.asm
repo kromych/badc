@@ -42,11 +42,13 @@ Disassembly of section .text:
                	ret
 
 <fsub_rev>:
-               	fmsub	d0, d0, d0, d1
+               	fmul	d0, d0, d0
+               	fsub	d0, d1, d0
                	ret
 
 <fsub_rev_f>:
-               	fmsub	s0, s0, s0, s1
+               	fmul	s0, s0, s0
+               	fsub	s0, s1, s0
                	ret
 
 <ones>:

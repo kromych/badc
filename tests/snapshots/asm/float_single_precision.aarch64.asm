@@ -60,9 +60,10 @@ Disassembly of section .text:
                	ldr	s0, [x16, #0x14]
                	fmul	s2, s0, s0
                	fmul	s2, s2, s0
+               	fmul	s0, s2, s0
                	adrp	x16, <page>
-               	ldr	s3, [x16, #0x18]
-               	fnmsub	s0, s2, s0, s3
+               	ldr	s2, [x16, #0x18]
+               	fsub	s0, s0, s2
                	fcmp	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0

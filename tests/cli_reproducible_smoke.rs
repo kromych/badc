@@ -246,6 +246,31 @@ fn sysroot_supplies_the_standard_directories() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// POSIX's <sys/shm.h> includes <sys/ipc.h> for struct ipc_perm, so the
+// pair a unit includes resolves to one library's headers: the root's
+// <sys/ipc.h>, which defines the structure as glibc's does, is not read
+// beside the bundled <sys/shm.h>.
+#[test]
+fn sysroot_ipc_header_does_not_pair_with_the_bundled_shm_header() {
+    let dir = tempdir("sysroot-ipc");
+    let root = dir.join("root");
+    write(
+        &root,
+        "usr/include/sys/ipc.h",
+        "struct ipc_perm { int __key; };\n",
+    );
+    let src = write(
+        &dir,
+        "s.c",
+        "#include <sys/ipc.h>\n#include <sys/shm.h>\n\
+         int main(void) { return sizeof(struct ipc_perm) == 48 ? 0 : 1; }\n",
+    );
+    let sysroot = format!("--sysroot={}", root.display());
+    image(&dir, "with", &src, &[&sysroot], &[]);
+    image(&dir, "without", &src, &[], &[]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 const DEMO_TBD: &str = "\
 --- !tapi-tbd
 tbd-version:     4

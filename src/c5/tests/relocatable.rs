@@ -444,6 +444,199 @@ fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
 }
 
 #[test]
+fn a_zero_length_object_ends_the_objects_of_its_own_section() {
+    // A GNU zero-length array is an object of size zero. It sits in the
+    // section its type and initializer give it, after the objects defined
+    // there before it, as gcc and clang place it -- not at the start of
+    // the next section's first object.
+    let src = "const long ro_a[2] = {1, 2};\n\
+               const long ro_z[0] = {};\n\
+               long rw_a[2] = {3, 4};\n\
+               long rw_z[0] = {};\n\
+               long bss_a[2];\n\
+               long *f(void) { return bss_a; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "z.o").expect("parse");
+        let sym = |n: &str| a.symbols.iter().find(|s| s.name == n).expect(n);
+        let section = |n: &str| match sym(n).sec {
+            EtSymRef::Section(i) => a.sections[i].name.as_str(),
+            _ => panic!("{n} is not defined in a section"),
+        };
+        assert_eq!(section("ro_z"), ".rodata", "{target:?}");
+        assert_eq!(sym("ro_z").value, sym("ro_a").value + 16, "{target:?}");
+        assert_eq!(section("rw_z"), ".bss", "{target:?}");
+        assert_ne!(sym("rw_z").value, sym("bss_a").value, "{target:?}");
+    }
+}
+
+#[test]
+fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
+    // Each object takes the section its constness, initializer and
+    // relocated slots give it whether or not the unit defines a function:
+    // a zero-filled one is `.bss`, the slot a copy relocation fills.
+    let objs = "const int k = 5;\nint x;\nlong y[4];\nint i = 3;\nint *const p = &x;\n";
+    let with_fn = alloc::format!("{objs}int f(void) {{ return 0; }}\n");
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let sections = |src: &str| {
+            let a = parse_et_rel(&compile_bytes(src, target), "o.o").expect("parse");
+            ["k", "x", "y", "i", "p"].map(|n| {
+                match a.symbols.iter().find(|s| s.name == n).expect(n).sec {
+                    EtSymRef::Section(i) => a.sections[i].name.clone(),
+                    _ => panic!("{n} is not defined in a section"),
+                }
+            })
+        };
+        let alone = sections(objs);
+        assert_eq!(
+            alone[..4],
+            [".rodata", ".bss", ".bss", ".data"],
+            "{target:?}"
+        );
+        assert_eq!(alone, sections(&with_fn), "{target:?}");
+    }
+}
+
+#[test]
+fn a_pic_unit_names_its_interposable_definitions() {
+    // System V gABI, symbol visibility: `-fPIC` code reaches the functions
+    // and objects of default visibility it defines through their symbols,
+    // as clang -fPIC does, so the link decides whether another component
+    // preempts them -- a call by PLT relocation, an address and a read
+    // through the GOT, an initializer against the symbol. A `static` and a
+    // hidden definition stay direct.
+    let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
+               static int s(void) { return 3; }\n\
+               __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
+               int use(void) { return f() + s() + h() + g + (pf == f); }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        pic: true,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_et_rel(&bytes, "p.o").expect("parse");
+    let name_of = |r: &EtReloc| obj.symbols[r.sym as usize].name.clone();
+    let section = |n: &str| obj.sections.iter().find(|s| s.name == n).expect(n);
+    let text: Vec<(String, u32)> = (section(".text").relocs.iter())
+        .map(|r| (name_of(r), r.rtype))
+        .collect();
+    // R_X86_64_PLT32 (4) and R_X86_64_REX_GOTPCRELX (42).
+    for want in [("f", 4), ("f", 42), ("g", 42)] {
+        assert!(
+            text.iter().any(|(n, t)| (n.as_str(), *t) == want),
+            "{want:?}: {text:?}"
+        );
+    }
+    assert!(!text.iter().any(|(n, _)| n == "s" || n == "h"), "{text:?}");
+    let data: Vec<String> = section(".data").relocs.iter().map(name_of).collect();
+    assert!(
+        data.contains(&"g".to_string()) && data.contains(&"f".to_string()),
+        "{data:?}"
+    );
+}
+
+#[test]
+fn a_block_scope_extern_thread_local_is_referenced_as_one() {
+    // C11 6.7.1p3: `_Thread_local` belongs to the object a block-scope
+    // `extern` declaration names, which another unit defines. Its access
+    // takes the thread-local relocations a file-scope declaration gives,
+    // against an undefined `STT_TLS` symbol -- not data relocations, nor
+    // a local-exec offset into this unit's empty block.
+    let src = "long get(void) { extern __thread long tv; return tv; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "a.o").expect("parse");
+        let tv = a.symbols.iter().position(|s| s.name == "tv").expect("tv");
+        assert_eq!(a.symbols[tv].kind, 6, "{target:?}: STT_TLS");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let types: Vec<u32> = (text.relocs.iter())
+            .filter(|r| r.sym as usize == tv)
+            .map(|r| r.rtype)
+            .collect();
+        // R_X86_64_GOTTPOFF; R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 and _LD64_GOTTPREL_LO12_NC.
+        let want: &[u32] = match target {
+            Target::LinuxX64 => &[22],
+            _ => &[541, 542],
+        };
+        assert_eq!(types, want, "{target:?}");
+    }
+}
+
+#[test]
+fn a_called_function_whose_address_is_taken_has_one_undefined_entry() {
+    // The call and the address-of reach one undefined symbol, as gcc and
+    // clang write it; the symbol table holds no second entry of the name.
+    let src = "int f(void);\nint g(void) { return f ? f() : 7; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "f.o").expect("parse");
+        let f: Vec<usize> = (0..a.symbols.len())
+            .filter(|&i| a.symbols[i].name == "f")
+            .collect();
+        assert_eq!(f.len(), 1, "{target:?}");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let refs = text
+            .relocs
+            .iter()
+            .filter(|r| r.sym as usize == f[0])
+            .count();
+        assert!(
+            refs >= 2,
+            "{target:?}: the call and the address use the entry"
+        );
+    }
+}
+
+#[test]
+fn pragma_weak_binds_a_declared_reference_weak() {
+    // `#pragma weak` binds a reference weak whether it stands before or
+    // after the declaration, a C-library function's included, as gcc and
+    // clang bind it.
+    let src = "#pragma weak atoi\n#include <stdlib.h>\n\
+               int f(void);\n#pragma weak f\nextern int o;\n#pragma weak o\n\
+               long g(void) { return atoi(\"1\") + (f ? f() : 0) + (&o ? o : 0); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "w.o").expect("parse");
+        for name in ["atoi", "f", "o"] {
+            let syms: Vec<&EtSym> = a.symbols.iter().filter(|s| s.name == name).collect();
+            assert_eq!(syms.len(), 1, "{target:?}: one entry for `{name}`");
+            assert_eq!(syms[0].binding, 2, "{target:?}: `{name}` is STB_WEAK");
+        }
+    }
+}
+
+#[test]
+fn an_always_inline_call_is_inlined_without_optimization() {
+    // gcc and clang inline an `always_inline` function at -O0: no call to
+    // it and no body of it remain.
+    let src = "static inline __attribute__((always_inline)) int h(int x) { return x + 1; }\n\
+               int k(int x) { return h(x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "k.o").expect("parse");
+        assert!(a.symbols.iter().all(|s| s.name != "h"), "{target:?}");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(text.relocs.is_empty(), "{target:?}: {:?}", text.relocs);
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

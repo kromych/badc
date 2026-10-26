@@ -2,15 +2,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 
 int main() {
     // Each pair of these is the same integer; the names just resolve
     // through the predefined symbol table.
+#ifndef _WIN32
     if (PROT_NONE  != 0) return 1;
     if (PROT_READ  != 1) return 2;
     if (PROT_WRITE != 2) return 3;
     if (PROT_EXEC  != 4) return 4;
+#endif
     if (O_RDONLY   != 0) return 5;
     if (O_WRONLY   != 1) return 6;
     if (O_RDWR     != 2) return 7;

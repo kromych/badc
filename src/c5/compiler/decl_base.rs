@@ -39,6 +39,7 @@ struct AttrFlags {
     thread_local: bool,
     noreturn: bool,
     dllexport: bool,
+    dllimport: bool,
     aligned: bool,
     constructor: bool,
     destructor: bool,
@@ -47,11 +48,13 @@ struct AttrFlags {
     gnu_inline: bool,
     naked: bool,
     weak: bool,
+    selectany: bool,
     used: bool,
     no_instrument_function: bool,
     no_stack_protector: bool,
     uninitialized: bool,
     transparent_union: bool,
+    designated_init: bool,
     ms_abi: bool,
     sysv_abi: bool,
 }
@@ -66,16 +69,19 @@ impl AttrFlags {
         self.thread_local |= other.thread_local;
         self.noreturn |= other.noreturn;
         self.dllexport |= other.dllexport;
+        self.dllimport |= other.dllimport;
         self.always_inline |= other.always_inline;
         self.noinline |= other.noinline;
         self.gnu_inline |= other.gnu_inline;
         self.naked |= other.naked;
         self.weak |= other.weak;
+        self.selectany |= other.selectany;
         self.used |= other.used;
         self.no_instrument_function |= other.no_instrument_function;
         self.no_stack_protector |= other.no_stack_protector;
         self.uninitialized |= other.uninitialized;
         self.transparent_union |= other.transparent_union;
+        self.designated_init |= other.designated_init;
         self.ms_abi |= other.ms_abi;
         self.sysv_abi |= other.sysv_abi;
     }
@@ -242,8 +248,11 @@ impl Compiler {
         self.next()?;
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
+        let leading_dllimport = self.pending.attrs.dllimport;
         let packed = self.skip_attribute_specifiers()?;
+        self.dllimport_on_type(leading_dllimport);
         let head_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
+        let head_designated = core::mem::take(&mut self.pending.attrs.designated_init);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -259,7 +268,7 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, format!("{kind} name or `{{` expected")));
         };
         let id = if self.lex.tk == '{' {
-            let id = self.parse_aggregate_body(&name, is_union, packed)?;
+            let (id, prior) = self.parse_aggregate_body(&name, is_union, packed)?;
             self.structs[id].is_anonymous = anonymous;
             // `struct name { ... } __attribute__((...))`: the attributes
             // follow the body and apply to the aggregate just laid out.
@@ -267,7 +276,10 @@ impl Compiler {
             if head_transparent {
                 self.mark_transparent_union(id);
             }
-            id
+            if head_designated {
+                self.mark_designated_init(id)?;
+            }
+            self.settle_tag_redefinition(id, prior)?
         } else {
             // A trailing attribute on a tag use without a body
             // (`struct name __attribute__((...))`); consume it.
@@ -294,10 +306,10 @@ impl Compiler {
             p.ty = types::add_ptr_level(p.ty);
             p.levels += 1;
             p.outer_const = false;
+            let mut uptr = false;
             while self.lex.tk == Token::TypeQual {
                 p.outer_const |= self.lex_is_const_qual();
-                p.ty = apply_qual_bits(p.ty, self.lex_qualifier_bits());
-                self.next()?;
+                p.ty = self.apply_pointer_qualifier(p.ty, &mut uptr)?;
             }
         }
         Ok(p)
@@ -996,6 +1008,8 @@ impl Compiler {
                 // MSVC `__declspec(dllexport)`: export the symbol, the
                 // equivalent of `#pragma export(name)`.
                 f.dllexport = true;
+            } else if n == "dllimport" || n == "__dllimport__" {
+                f.dllimport = true;
             } else if n == "aligned" || n == "__aligned__" || n == "align" {
                 // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
                 f.aligned = true;
@@ -1025,6 +1039,9 @@ impl Compiler {
                 // GNU `weak`: the defined (or declared) symbol binds
                 // STB_WEAK in the object's symbol table.
                 f.weak = true;
+            } else if n == "selectany" || n == "__selectany__" {
+                // MSVC and GCC: the link keeps any one unit's definition.
+                f.selectany = true;
             } else if n == "used" || n == "__used__" {
                 // GNU `used`: keep the definition in the object even when
                 // nothing in the unit references it.
@@ -1039,6 +1056,8 @@ impl Compiler {
                 // GNU `uninitialized`: the automatic object opts out of
                 // `-ftrivial-auto-var-init`.
                 f.uninitialized = true;
+            } else if n == "designated_init" || n == "__designated_init__" {
+                f.designated_init = true;
             } else if n == "transparent_union" || n == "__transparent_union__" {
                 // GNU `transparent_union`: parameters of the union type
                 // accept arguments of any member type.
@@ -1316,15 +1335,21 @@ impl Compiler {
                             self.next()?;
                         } else if is_visibility && self.lex.tk == '(' {
                             // GCC `visibility("hidden"|"internal"|"protected"
-                            // |"default")`: `hidden` and `internal` make the
-                            // symbol non-preemptible (STV_HIDDEN); the other
-                            // two keep the default preemptible addressing.
-                            // Stated either way, the attribute overrides an
-                            // enclosing `#pragma GCC visibility` extent.
+                            // |"default")`, overriding an enclosing
+                            // `#pragma GCC visibility` extent.
                             self.next()?; // `(`
                             let vis = self.parse_attribute_string_operand("visibility")?;
-                            self.pending.attrs.visibility =
-                                Some(vis == "hidden" || vis == "internal");
+                            let Some(vis) = crate::c5::program::SymVisibility::from_gcc_name(&vis)
+                            else {
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    format!(
+                                        "`visibility` operand `{vis}` is not one of \
+                                         default, hidden, protected or internal"
+                                    ),
+                                ));
+                            };
+                            self.pending.attrs.visibility = Some(vis);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1433,6 +1458,9 @@ impl Compiler {
         if attrs.dllexport {
             self.pending.attrs.dllexport = true;
         }
+        if attrs.dllimport {
+            self.pending.attrs.dllimport = true;
+        }
         if align > 0 {
             self.pending.attrs.align = self.pending.attrs.align.max(align);
         }
@@ -1444,6 +1472,9 @@ impl Compiler {
         }
         if attrs.transparent_union {
             self.pending.attrs.transparent_union = true;
+        }
+        if attrs.designated_init {
+            self.pending.attrs.designated_init = true;
         }
         if vector_size > 0 {
             self.pending.attrs.vector_size = vector_size;
@@ -1481,6 +1512,9 @@ impl Compiler {
         }
         if attrs.weak {
             self.pending.attrs.weak = true;
+        }
+        if attrs.selectany {
+            self.pending.attrs.selectany = true;
         }
         if attrs.used {
             self.pending.attrs.used = true;
@@ -1663,7 +1697,38 @@ impl Compiler {
             "const" | "__const" | "__const__" => CONST_BIT,
             "__seg_gs" => SEG_GS_BIT,
             "__seg_fs" => SEG_FS_BIT,
+            "__ptr32" => super::types::PTR32_SPACE,
             _ => 0,
+        }
+    }
+
+    /// The pointer qualifier at the cursor applied to `ty`, the token
+    /// consumed. `uptr` carries a `__uptr` the same pointer took: a 32-bit
+    /// pointer widens by sign extension here, so a zero-extended one is
+    /// refused. TODO: `__uptr` 32-bit pointers.
+    pub(super) fn apply_pointer_qualifier(
+        &mut self,
+        ty: i64,
+        uptr: &mut bool,
+    ) -> Result<i64, C5Error> {
+        *uptr |= self.symbols[self.lex.curr_id_idx].name == "__uptr";
+        let ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+        if *uptr && super::types::is_ptr32_ty(ty) {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "a zero-extended (`__uptr`) `__ptr32` pointer is not supported",
+            ));
+        }
+        self.next()?;
+        Ok(ty)
+    }
+
+    /// C: `__ptr32` follows the `*` of the pointer it narrows, as clang
+    /// requires for a windows-msvc triple.
+    pub(super) fn check_ptr32_placement(&self, ty: i64) -> Result<(), C5Error> {
+        match super::types::ptr32_misplaced(ty) {
+            Some(text) => Err(self.compile_err(Code::INVALID_DECLARATION, text)),
+            None => Ok(()),
         }
     }
 

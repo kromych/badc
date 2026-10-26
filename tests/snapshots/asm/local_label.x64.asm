@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <label_address>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax         # <addr>
+               	leaq	<rip>, %rax # <addr>
                	testq	%rdi, %rdi
                	je	<addr>
                	jmpq	*%rax

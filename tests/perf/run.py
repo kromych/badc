@@ -15,6 +15,8 @@ Legs probed (skipped when the compiler or the flag is absent):
 * badc               -- target/release/badc next to repo root.
 * badc -O            -- same with -O.
 * tcc                -- built by build_tcc.sh from demos/tinycc sources.
+* ccc -O2            -- Claude's C Compiler, built by build_ccc.py, on Linux
+  x86_64 and aarch64 (`ccc_legs` states why it is one leg).
 * clang -O0, gcc -O0 -- the reference compilers on PATH, off Windows.
 * clang -O2, gcc -O2 -- same.
 * <cc> -O2 -march=<level> -- the same pair pinned to the instruction-set
@@ -29,7 +31,8 @@ A leg is named by the flags that distinguish it, so two legs of one
 compiler are two rows. badc -O implies NDEBUG; the -O2 and /O2 legs pass
 -DNDEBUG explicitly to match. The unoptimized entries keep asserts live.
 
-Override the badc binary via $BADC; override the tcc binary via $TCC.
+Override the badc binary via $BADC, the tcc binary via $TCC and the ccc
+binary via $CCC.
 """
 
 from __future__ import annotations
@@ -47,6 +50,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import build_ccc
 
 PERF_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PERF_DIR.parent.parent
@@ -230,6 +235,32 @@ def reference_legs(name: str, argv: list[str], level: str,
     return legs
 
 
+def gcc_include_dir() -> str:
+    """The directory of the headers gcc installs with itself (stddef.h,
+    stdarg.h, stdatomic.h), as `gcc -print-file-name=include` names it;
+    empty without a gcc that has one."""
+    try:
+        r = subprocess.run(["gcc", "-print-file-name=include"],
+                           capture_output=True, text=True)
+    except OSError:
+        return ""
+    path = r.stdout.strip()
+    return path if r.returncode == 0 and Path(path).is_dir() else ""
+
+
+def ccc_legs(exe: Path, gcc_include: str) -> list[Compiler]:
+    """ccc's one leg. Every -O level runs the same pass pipeline; -O1 and up
+    only predefine `__OPTIMIZE__`, which selects glibc's inline definitions
+    of a few functions, and `-march` sets no x86-64 or AArch64 code
+    generation option, so there is neither an -O0 leg nor a baseline leg.
+    ccc ships no stddef.h or stdarg.h and looks for gcc's under a fixed list
+    of Debian paths, so the host gcc's directory is searched after ccc's own
+    headers and the C library's. It links with its own linker, which needs
+    libm named."""
+    return [Compiler("ccc -O2", [str(exe), "-O2", "-DNDEBUG",
+                                 "-idirafter", gcc_include], trailing=("-lm",))]
+
+
 def reference_programs(windows: bool) -> tuple[str, ...]:
     """The reference compilers probed on PATH. On Windows the reference is
     cl alone: a gcc there is MinGW's, with another C runtime than the one
@@ -335,6 +366,19 @@ def probe_compilers() -> list[Compiler]:
         found.append(Compiler("tcc", tcc_cmd, trailing=tcc_trailing))
     else:
         print(f"info: tcc not at {tcc}; skipping tcc rows", file=sys.stderr)
+
+    ccc_env = os.environ.get("CCC")
+    ccc = Path(ccc_env) if ccc_env else build_ccc.binary_path()
+    if ccc is not None and ccc.is_file():
+        gcc_include = gcc_include_dir()
+        if gcc_include:
+            found += ccc_legs(ccc, gcc_include)
+        else:
+            print("info: no gcc header directory for ccc; skipping its rows",
+                  file=sys.stderr)
+    elif ccc is not None:
+        print(f"info: ccc not at {ccc}; run build_ccc.py for its rows",
+              file=sys.stderr)
 
     # The FP fixtures and quickjs call libm (pow / fmod / ldexp); on
     # Linux libm is a separate archive that must be named at link
@@ -671,6 +715,27 @@ def self_test() -> int:
         # Windows measures against cl alone.
         assert reference_programs(True) == () and reference_programs(False) == REFERENCE_CC
         assert [c.name for c in msvc_legs(cl, "")] == ["cl /Od", "cl /O2"]
+
+        # ccc is one leg, at -O2 with NDEBUG, given gcc's header directory.
+        inc = "/usr/lib/gcc/aarch64-linux-gnu/13/include"
+        ccc = ccc_legs(d / "ccc-arm", inc)
+        assert [c.name for c in ccc] == ["ccc -O2"], [c.name for c in ccc]
+        assert ccc[0].flags == ["-O2", "-DNDEBUG", "-idirafter", inc, "-lm"], \
+            ccc[0].flags
+        assert ccc[0].level == "" and ccc[0].output_dash_o
+        # It takes the fixture's flags and none of badc's own.
+        argv = compile_argv(ccc[0], d / "sqlite.c", d / "sqlite")
+        assert "-DSQLITE_OMIT_SEH" in argv and "msvc_compat.h" not in argv, argv
+        # ccc chooses its target by its file name, so the binary keeps the
+        # name that targets the host, under the pin it was built from.
+        on_x64 = build_ccc.binary_path("x86_64", "linux")
+        assert on_x64 is not None and on_x64.name == "ccc", on_x64
+        assert on_x64.parent.parent.name == f"ccc-{build_ccc.UPSTREAM_SHA[:8]}", on_x64
+        assert build_ccc.binary_path("aarch64", "linux").name == "ccc-arm"
+        # It emits Linux ELF only.
+        assert build_ccc.binary_path("arm64", "darwin") is None
+        assert build_ccc.binary_path("AMD64", "win32") is None
+        assert build_ccc.binary_path("riscv64", "linux") is None
 
         # cl names the object as well as the executable, beside it; the
         # other legs take -o.

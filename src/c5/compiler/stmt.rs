@@ -71,6 +71,7 @@ pub(super) struct BlockShadow {
     class: i64,
     type_: i64,
     incomplete_enum_tag: Option<u32>,
+    enumeration: Option<u32>,
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
@@ -162,6 +163,7 @@ impl Compiler {
             class: s.class,
             type_: s.type_,
             incomplete_enum_tag: s.incomplete_enum_tag,
+            enumeration: s.enumeration,
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
@@ -192,6 +194,7 @@ impl Compiler {
         // its own. Its type records its own enum tag.
         self.symbols[idx].entity_record = None;
         self.symbols[idx].incomplete_enum_tag = None;
+        self.symbols[idx].enumeration = None;
         shadow
     }
 
@@ -214,6 +217,7 @@ impl Compiler {
         s.class = b.class;
         s.type_ = b.type_;
         s.incomplete_enum_tag = b.incomplete_enum_tag;
+        s.enumeration = b.enumeration;
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
@@ -369,6 +373,34 @@ impl Compiler {
         self.require_category(self.ty, category, Code::CONTROLLING_EXPRESSION, &what)
     }
 
+    /// Open the scope of a selection or iteration statement or of its
+    /// substatement, each a block (C99 6.8.4p3, 6.8.5p5).
+    fn open_statement_scope(&mut self) {
+        self.tag_scopes.push();
+        self.block_scopes.push(Vec::new());
+    }
+
+    fn close_statement_scope(&mut self) {
+        self.tag_scopes.pop();
+        for b in self
+            .block_scopes
+            .pop()
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+        {
+            self.restore_block_shadow(b);
+        }
+    }
+
+    /// A substatement, in its own scope.
+    fn scoped_stmt(&mut self) -> Result<(), C5Error> {
+        self.open_statement_scope();
+        self.stmt()?;
+        self.close_statement_scope();
+        Ok(())
+    }
+
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
         let for_pos = self.ast_src_pos();
         self.next()?;
@@ -388,6 +420,7 @@ impl Compiler {
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
         self.block_scopes.push(Vec::new());
+        self.tag_scopes.push();
         let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
@@ -481,7 +514,7 @@ impl Compiler {
 
         self.enter_loop();
         let body_before = self.ast_stmts_snapshot();
-        self.stmt()?;
+        self.scoped_stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
 
         self.close_loop_continues();
@@ -513,6 +546,7 @@ impl Compiler {
         // C99 6.8.5p5: the for statement is a block, whose end ends the
         // lifetimes of the objects its init clause declared.
         let for_init_symbols = self.block_scopes.pop().unwrap();
+        self.tag_scopes.pop();
         let slots = self.block_lifetime_slots(&for_init_symbols, &[], None);
         if !slots.is_empty() {
             let pos = self.ast_src_pos();
@@ -543,6 +577,7 @@ impl Compiler {
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
         self.next()?;
+        self.open_statement_scope();
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
@@ -565,12 +600,14 @@ impl Compiler {
         self.enter_switch_body();
 
         let body_before = self.ast_stmts_snapshot();
-        self.stmt()?;
+        self.scoped_stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
         self.leave_switch_body();
+        self.close_statement_scope();
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
+        self.check_fallthrough(body_s);
         let labels = self.switch_cases.pop();
         let has_default = self.switch_defaults.pop().unwrap_or(false);
         // gcc's -Wswitch-bool: a label the boolean value never takes, or a
@@ -725,8 +762,15 @@ impl Compiler {
     /// these alone: none an earlier item or the enclosing definition named.
     pub(super) fn parse_block_item_attributes(&mut self) -> Result<(), C5Error> {
         self.pending.attrs = super::DeclAttrs::default();
-        self.skip_attribute_specifiers()?;
+        if !self.at_fallthrough_statement() {
+            self.skip_attribute_specifiers()?;
+        }
         Ok(())
+    }
+
+    /// `__attribute__((fallthrough));`, which is a null statement.
+    fn at_fallthrough_statement(&self) -> bool {
+        self.lex.tk == Token::Attribute && self.lex.peek_fallthrough_statement()
     }
 
     /// Parse a `typedef` declaration at function/block scope (C99
@@ -760,9 +804,36 @@ impl Compiler {
                 self.pending.base_is_function_type,
             ) = base_fn.clone();
             let declarator_line = self.lex.line;
-            let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
+            // C99 6.7.7p3: a variably modified typedef's size expression is
+            // evaluated when the declaration is reached; the type keeps the
+            // byte count that evaluation stores.
+            let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
+            let declared = self.parse_declarator(lbt);
+            self.pending.vla_allowed = saved_vla;
+            let (id_idx, mut ty, mut td_array, mut td_zero_len) = declared?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
+            }
+            self.emit_vm_bound_stores(id_idx, false)?;
+            if td_array != 0 && self.vla_value_slot(ty).is_some() {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "a non-constant inner array dimension is not supported",
+                ));
+            }
+            if td_array == super::VLA_ARRAY_SIZE {
+                let dim = self.pending.vla_dim_expr.take().ok_or_else(|| {
+                    self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "variable-length array has no dimension",
+                    )
+                })?;
+                let (vla_ty, bound) = self.vla_bound_type(ty, dim);
+                let pos = self.ast_src_pos();
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
+                self.note_jump_barrier(id_idx, true);
+                (ty, td_array) = (vla_ty, 0);
             }
             if implicit_int {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
@@ -1103,6 +1174,9 @@ impl Compiler {
         &mut self,
         stmt_expr: bool,
     ) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
+        // C99 7.12.2: an `FP_CONTRACT` pragma inside the block holds to its
+        // end, where the state before the block is restored.
+        let fp_contract = self.lex.fp_contract;
         self.next()?;
         self.open_cleanup_scope(stmt_expr);
         // C99 6.2.1: a block introduces a new scope for struct,
@@ -1137,16 +1211,21 @@ impl Compiler {
             if self.lex.tk == '}' {
                 break;
             }
-            if self.lex.tk == Token::Typedef {
-                self.parse_block_typedef()?;
-            } else if self.lex.tk == Token::StaticAssert {
+            if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
-            } else if self.lex_is_block_decl_start() {
+            } else if self.lex.tk == Token::Typedef
+                || (self.lex_is_block_decl_start() && !self.at_fallthrough_statement())
+            {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl()?;
+                // A variably modified typedef stores its array's size.
+                if self.lex.tk == Token::Typedef {
+                    self.parse_block_typedef()?;
+                } else {
+                    self.parse_local_decl()?;
+                }
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }
@@ -1237,6 +1316,7 @@ impl Compiler {
         // Compound's items, which point at the canonical top-
         // level ids).
         let block_id = self.ast_wrap_block_items(&top_level_ids);
+        self.lex.fp_contract = fp_contract;
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for
@@ -3196,11 +3276,22 @@ impl Compiler {
         self.pending.fn_ptr_depth_is_array_elem = false;
         // GNU statement attributes: an attribute specifier at statement
         // position appertains to the statement that follows, and
-        // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`
-        // expands `fallthrough` to -- is a null statement. c5 acts on no
-        // statement attribute, so discard the tokens by paren balance
-        // (`skip_attribute_specifiers` writes `pending` state that belongs to
-        // a declaration) and continue with what follows.
+        // `__attribute__((fallthrough));` is a null statement, which
+        // -Wimplicit-fallthrough takes as the annotation. The others are
+        // discarded by paren balance (`skip_attribute_specifiers` writes
+        // `pending` state that belongs to a declaration).
+        if self.at_fallthrough_statement() {
+            while self.lex.tk != ';' {
+                self.next()?;
+            }
+            self.next()?;
+            let pos = self.ast_src_pos();
+            let mark = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::Compound(Vec::new()), pos);
+            self.fallthrough_marks.insert(mark);
+            return Ok(());
+        }
         while self.lex.tk == Token::Attribute {
             self.next()?; // the attribute keyword
             if self.lex.tk != '(' {
@@ -3263,30 +3354,33 @@ impl Compiler {
             // with the lexer.
             let if_pos = self.ast_src_pos();
             self.next()?;
+            self.open_statement_scope();
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("if", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
             let then_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
                 self.flush_pending_stores();
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
-                self.stmt()?;
+                self.scoped_stmt()?;
                 let id = self.ast_wrap_stmts_since(else_before);
                 Some(id)
             } else {
                 None
             };
+            self.close_statement_scope();
             if let Some(cond) = cond_id {
                 self.ast_emit_if(cond, then_s, else_s, if_pos);
             }
         } else if self.lex.tk == Token::While {
             let while_pos = self.ast_src_pos();
             self.next()?;
+            self.open_statement_scope();
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("while", Category::Scalar)?;
             let cond_id = self.ast_acc;
@@ -3295,8 +3389,9 @@ impl Compiler {
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
+            self.close_statement_scope();
             self.close_loop_continues();
 
             self.flush_pending_stores();
@@ -3307,10 +3402,11 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::Do {
             self.next()?;
+            self.open_statement_scope();
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
 
             let while_pos = self.ast_src_pos();
@@ -3330,6 +3426,7 @@ impl Compiler {
             self.flush_pending_stores();
 
             self.consume(b';', "semicolon expected after do-while")?;
+            self.close_statement_scope();
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
@@ -3574,7 +3671,7 @@ impl Compiler {
                     // the same incompatible pointer / integer cases the
                     // assignment path flags, before the conversion
                     // rewrites `self.ty`.
-                    let rhs_is_zero = self.last_emit_is_zero();
+                    let rhs_is_zero = self.value_is_null_pointer_constant();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
                     let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
                     let value_fn = self.value_fn_type(self.ast_acc);
@@ -3598,7 +3695,7 @@ impl Compiler {
                         }
                         self.report_mismatch(&m, line, text)?;
                     }
-                    self.check_constant_conversion_of(self.ast_acc, ret_ty, 0, line);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, line);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing

@@ -9,8 +9,9 @@
  * (BITMAPINFOHEADER, RGBQUAD, BI_* flags, clipboard/global heap prototypes)
  * guarded by these SDK include markers. <windows.h> already provides that
  * surface, so assert the markers to keep the vendored copy from redefining
- * it. The header is force-included before the vendored sources are reached. */
-#define _WINGDI_
+ * it. The header is force-included before the vendored sources are reached.
+ * _WINGDI_ is left to <wingdi.h>, which defines it and skips its body when
+ * it is already defined, as the SDK's and mingw-w64's do. */
 #define WINGDI_ALREADY_INCLUDED
 #define _WINUSER_
 #define WINUSER_ALREADY_INCLUDED

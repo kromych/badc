@@ -565,6 +565,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
                 | Inst::AtomicLoad { .. }
                 | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
@@ -897,6 +898,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
                 | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
                 | Inst::AtomicLoad { .. }
                 | Inst::AtomicStore { .. }
                 | Inst::AllocaInit(_) => {
@@ -955,6 +957,7 @@ mod tests {
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

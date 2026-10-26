@@ -7,30 +7,194 @@
 
 #pragma once
 
-/* Pull in the canonical `struct timeval` definition so the
-** `struct rusage` declaration below references the same type
-** that `<time.h>` and the bound libc functions agree on. */
 #include <time.h>
 /* POSIX-2017 mandates that `<unistd.h>` make `ssize_t`,
 ** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
 ** width-sensitive ones live in `<sys/types.h>` already. */
 #include <sys/types.h>
 // `stat` / `lstat` / `fstat` are declared by <sys/stat.h> (POSIX), and on
-// Windows `open` / `lseek` by <io.h>, as the CRT does.
+// Windows `open`, `lseek` and `chmod` by <io.h>, as the CRT does.
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <io.h>
 #endif
 
-// POSIX threads / semaphores option macros (POSIX.1 2.1.3). The
-// supported non-Windows targets bind a host libc that implements
-// pthreads and POSIX semaphores, so advertise both; code commonly
-// selects its threading backend on `_POSIX_THREADS`. Windows is not a
-// POSIX host and leaves them undefined.
-#ifndef __BADC_WINDOWS__
-#define _POSIX_THREADS              200809L
-#define _POSIX_SEMAPHORES           200809L
-#define _POSIX_THREAD_ATTR_STACKSIZE 200809L
+// POSIX.1-2008 <unistd.h> version and option macros (XBD 2.1.6): each C
+// library's values, as glibc 2.43's and the macOS SDK's headers define
+// them, for the options whose interfaces the bundled headers declare. -1
+// is an option the library does not support; one it supports whose
+// interfaces are not declared here is left undefined. The XSI conformance
+// macros follow each library too: glibc defines no _XOPEN_CRYPT, having
+// dropped encrypt and setkey.
+#if defined(__linux__)
+#define _POSIX_VERSION                     200809L
+#define _POSIX2_VERSION                    200809L
+#define _POSIX2_C_VERSION                  200809L
+#define _POSIX2_C_BIND                     200809L
+#define _POSIX2_C_DEV                      200809L
+#define _POSIX2_SW_DEV                     200809L
+#define _POSIX2_LOCALEDEF                  200809L
+#define _POSIX2_CHAR_TERM                  200809L
+#define _POSIX_ADVISORY_INFO               200809L
+#define _POSIX_ASYNCHRONOUS_IO             200809L
+#define _POSIX_ASYNC_IO                    1
+#define _POSIX_BARRIERS                    200809L
+#define _POSIX_CHOWN_RESTRICTED            0
+#define _POSIX_CLOCK_SELECTION             200809L
+#define _POSIX_CPUTIME                     0
+#define _POSIX_FSYNC                       200809L
+#define _POSIX_IPV6                        200809L
+#define _POSIX_JOB_CONTROL                 1
+#define _POSIX_MAPPED_FILES                200809L
+#define _POSIX_MEMLOCK                     200809L
+#define _POSIX_MEMLOCK_RANGE               200809L
+#define _POSIX_MEMORY_PROTECTION           200809L
+#define _POSIX_MESSAGE_PASSING             200809L
+#define _POSIX_MONOTONIC_CLOCK             0
+#define _POSIX_NO_TRUNC                    1
+#define _POSIX_PRIORITIZED_IO              200809L
+#define _POSIX_PRIORITY_SCHEDULING         200809L
+#define _POSIX_RAW_SOCKETS                 200809L
+#define _POSIX_READER_WRITER_LOCKS         200809L
+#define _POSIX_REALTIME_SIGNALS            200809L
+#define _POSIX_REENTRANT_FUNCTIONS         1
+#define _POSIX_REGEXP                      1
+#define _POSIX_SAVED_IDS                   1
+#define _POSIX_SEMAPHORES                  200809L
+#define _POSIX_SHARED_MEMORY_OBJECTS       200809L
+#define _POSIX_SHELL                       1
+#define _POSIX_SPAWN                       200809L
+#define _POSIX_SPIN_LOCKS                  200809L
+#define _POSIX_SPORADIC_SERVER             -1
+#define _POSIX_SYNCHRONIZED_IO             200809L
+#define _POSIX_THREADS                     200809L
+#define _POSIX_THREAD_ATTR_STACKADDR       200809L
+#define _POSIX_THREAD_ATTR_STACKSIZE       200809L
+#define _POSIX_THREAD_CPUTIME              0
+#define _POSIX_THREAD_PRIORITY_SCHEDULING  200809L
+#define _POSIX_THREAD_PRIO_INHERIT         200809L
+#define _POSIX_THREAD_PRIO_PROTECT         200809L
+#define _POSIX_THREAD_PROCESS_SHARED       200809L
+#define _POSIX_THREAD_ROBUST_PRIO_INHERIT  200809L
+#define _POSIX_THREAD_ROBUST_PRIO_PROTECT  -1
+#define _POSIX_THREAD_SAFE_FUNCTIONS       200809L
+#define _POSIX_THREAD_SPORADIC_SERVER      -1
+#define _POSIX_TIMEOUTS                    200809L
+#define _POSIX_TIMERS                      200809L
+#define _POSIX_TRACE                       -1
+#define _POSIX_TRACE_EVENT_FILTER          -1
+#define _POSIX_TRACE_INHERIT               -1
+#define _POSIX_TRACE_LOG                   -1
+#define _POSIX_TYPED_MEMORY_OBJECTS        -1
+#define _POSIX_V6_LP64_OFF64               1
+#define _POSIX_V6_LPBIG_OFFBIG             -1
+#define _POSIX_V7_LP64_OFF64               1
+#define _POSIX_V7_LPBIG_OFFBIG             -1
+#define _XOPEN_ENH_I18N                    1
+#define _XOPEN_LEGACY                      1
+#define _XOPEN_REALTIME                    1
+#define _XOPEN_REALTIME_THREADS            1
+#define _XOPEN_SHM                         1
+#define _XOPEN_UNIX                        1
+#define _XOPEN_VERSION                     700
+#define _XOPEN_XCU_VERSION                 4
+#define _XOPEN_XPG2                        1
+#define _XOPEN_XPG3                        1
+#define _XOPEN_XPG4                        1
+#ifdef __aarch64__
+#define _POSIX_V6_ILP32_OFF32              -1
+#define _POSIX_V6_ILP32_OFFBIG             -1
+#define _POSIX_V7_ILP32_OFF32              -1
+#define _POSIX_V7_ILP32_OFFBIG             -1
+#endif
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE 0
+#endif
+#elif defined(__APPLE__)
+#define _POSIX_VERSION                     200112L
+#define _POSIX2_VERSION                    200112L
+#define _POSIX2_C_BIND                     200112L
+#define _POSIX2_C_DEV                      200112L
+#define _POSIX2_CHAR_TERM                  200112L
+#define _POSIX2_FORT_DEV                   -1
+#define _POSIX2_FORT_RUN                   200112L
+#define _POSIX2_LOCALEDEF                  200112L
+#define _POSIX2_PBS                        -1
+#define _POSIX2_PBS_ACCOUNTING             -1
+#define _POSIX2_PBS_CHECKPOINT             -1
+#define _POSIX2_PBS_LOCATE                 -1
+#define _POSIX2_PBS_MESSAGE                -1
+#define _POSIX2_PBS_TRACK                  -1
+#define _POSIX2_SW_DEV                     200112L
+#define _POSIX2_UPE                        200112L
+#define _POSIX_ADVISORY_INFO               -1
+#define _POSIX_ASYNCHRONOUS_IO             -1
+#define _POSIX_BARRIERS                    -1
+#define _POSIX_CHOWN_RESTRICTED            200112L
+#define _POSIX_CLOCK_SELECTION             -1
+#define _POSIX_CPUTIME                     -1
+#define _POSIX_FSYNC                       200112L
+#define _POSIX_IPV6                        200112L
+#define _POSIX_JOB_CONTROL                 200112L
+#define _POSIX_MAPPED_FILES                200112L
+#define _POSIX_MEMLOCK                     -1
+#define _POSIX_MEMLOCK_RANGE               -1
+#define _POSIX_MEMORY_PROTECTION           200112L
+#define _POSIX_MESSAGE_PASSING             -1
+#define _POSIX_MONOTONIC_CLOCK             -1
+#define _POSIX_NO_TRUNC                    200112L
+#define _POSIX_PRIORITIZED_IO              -1
+#define _POSIX_PRIORITY_SCHEDULING         -1
+#define _POSIX_RAW_SOCKETS                 -1
+#define _POSIX_READER_WRITER_LOCKS         200112L
+#define _POSIX_REALTIME_SIGNALS            -1
+#define _POSIX_REGEXP                      200112L
+#define _POSIX_SAVED_IDS                   200112L
+#define _POSIX_SEMAPHORES                  -1
+#define _POSIX_SHARED_MEMORY_OBJECTS       -1
+#define _POSIX_SHELL                       200112L
+#define _POSIX_SPAWN                       200112L
+#define _POSIX_SPIN_LOCKS                  -1
+#define _POSIX_SPORADIC_SERVER             -1
+#define _POSIX_SYNCHRONIZED_IO             -1
+#define _POSIX_THREADS                     200112L
+#define _POSIX_THREAD_ATTR_STACKADDR       200112L
+#define _POSIX_THREAD_ATTR_STACKSIZE       200112L
+#define _POSIX_THREAD_CPUTIME              -1
+#define _POSIX_THREAD_PRIORITY_SCHEDULING  -1
+#define _POSIX_THREAD_PRIO_INHERIT         -1
+#define _POSIX_THREAD_PRIO_PROTECT         -1
+#define _POSIX_THREAD_PROCESS_SHARED       200112L
+#define _POSIX_THREAD_SAFE_FUNCTIONS       200112L
+#define _POSIX_THREAD_SPORADIC_SERVER      -1
+#define _POSIX_TIMEOUTS                    -1
+#define _POSIX_TIMERS                      -1
+#define _POSIX_TRACE                       -1
+#define _POSIX_TRACE_EVENT_FILTER          -1
+#define _POSIX_TRACE_INHERIT               -1
+#define _POSIX_TRACE_LOG                   -1
+#define _POSIX_TYPED_MEMORY_OBJECTS        -1
+#define _POSIX_V6_ILP32_OFF32              -1
+#define _POSIX_V6_ILP32_OFFBIG             -1
+#define _POSIX_V6_LP64_OFF64               1
+#define _POSIX_V6_LPBIG_OFFBIG             1
+#define _POSIX_V7_ILP32_OFF32              -1
+#define _POSIX_V7_ILP32_OFFBIG             -1
+#define _POSIX_V7_LP64_OFF64               1
+#define _POSIX_V7_LPBIG_OFFBIG             1
+#define _XOPEN_CRYPT                       1
+#define _XOPEN_ENH_I18N                    1
+#define _XOPEN_LEGACY                      -1
+#define _XOPEN_REALTIME                    -1
+#define _XOPEN_REALTIME_THREADS            -1
+#define _XOPEN_SHM                         1
+#define _XOPEN_STREAMS                     -1
+#define _XOPEN_UNIX                        1
+#define _XOPEN_VERSION                     600
+#define _XOPEN_XCU_VERSION                 4
+#ifndef _POSIX_VDISABLE
+#define _POSIX_VDISABLE 255
+#endif
 #endif
 
 #define STDIN_FILENO  0
@@ -69,9 +233,6 @@
 #pragma binding(libc::usleep,    "_usleep")
 #pragma binding(libc::isatty,    "_isatty")
 #pragma binding(libc::readlink,  "_readlink")
-#pragma binding(libc::mkdir,     "_mkdir")
-#pragma binding(libc::mknod,     "_mknod")
-#pragma binding(libc::mkfifo,    "_mkfifo")
 #pragma binding(libc::dup,       "_dup")
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
@@ -86,31 +247,17 @@
 #pragma binding(libc::setgid,    "_setgid")
 #pragma binding(libc::setuid,    "_setuid")
 #pragma binding(libc::_exit,     "__exit")
-#pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
-#pragma binding(libc::utimes,    "_utimes")
-#pragma binding(libc::futimes,   "_futimes")
-#pragma binding(libc::lutimes,   "_lutimes")
-#pragma binding(libc::umask,     "_umask")
-#pragma binding(libc::chmod,     "_chmod")
 #pragma binding(libc::chown,     "_chown")
 #pragma binding(libc::truncate,  "_truncate")
 #pragma binding(libc::link,      "_link")
 #pragma binding(libc::symlink,   "_symlink")
-#pragma binding(libc::fstatat,   "_fstatat")
-#pragma binding(libc::mkdirat,   "_mkdirat")
-#pragma binding(libc::mknodat,   "_mknodat")
-#pragma binding(libc::mkfifoat,  "_mkfifoat")
-#pragma binding(libc::fchmodat,  "_fchmodat")
 #pragma binding(libc::fchownat,  "_fchownat")
 #pragma binding(libc::unlinkat,  "_unlinkat")
 #pragma binding(libc::linkat,    "_linkat")
 #pragma binding(libc::symlinkat, "_symlinkat")
 #pragma binding(libc::readlinkat,"_readlinkat")
 #pragma binding(libc::faccessat, "_faccessat")
-#pragma binding(libc::renameat,  "_renameat")
-#pragma binding(libc::utimensat, "_utimensat")
-#pragma binding(libc::futimens,  "_futimens")
 #pragma binding(libc::ttyname,   "_ttyname")
 #pragma binding(libc::ttyname_r, "_ttyname_r")
 #pragma binding(libc::ctermid,   "_ctermid")
@@ -137,20 +284,16 @@
 #pragma binding(libc::getsid,    "_getsid")
 #pragma binding(libc::tcgetpgrp, "_tcgetpgrp")
 #pragma binding(libc::tcsetpgrp, "_tcsetpgrp")
-#pragma binding(libc::getpriority,"_getpriority")
-#pragma binding(libc::setpriority,"_setpriority")
 #pragma binding(libc::nice,      "_nice")
 #pragma binding(libc::fpathconf, "_fpathconf")
 #pragma binding(libc::lockf,     "_lockf")
 #pragma binding(libc::execv,     "_execv")
-// libSystem exports no fexecve; unbound so a use fails at link.
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
 #pragma binding(libc::getpagesize, "_getpagesize")
 #pragma binding(libc::getdtablesize, "_getdtablesize")
 #pragma binding(libc::crypt,     "_crypt")
 #pragma binding(libc::getentropy, "_getentropy")
-#pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
 #pragma binding(libc::getenv,    "_getenv")
 #pragma binding(libc::setenv,    "_setenv")
@@ -219,9 +362,6 @@ extern char **environ;
 #pragma binding(libc::usleep,    "usleep")
 #pragma binding(libc::isatty,    "isatty")
 #pragma binding(libc::readlink,  "readlink")
-#pragma binding(libc::mkdir,     "mkdir")
-#pragma binding(libc::mknod,     "mknod")
-#pragma binding(libc::mkfifo,    "mkfifo")
 #pragma binding(libc::dup,       "dup")
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::dup3,      "dup3")
@@ -244,35 +384,20 @@ extern char **environ;
 #pragma binding(libc::setgid,    "setgid")
 #pragma binding(libc::setuid,    "setuid")
 #pragma binding(libc::_exit,     "_exit")
-#pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
-#pragma binding(libc::utimes,    "utimes")
-#pragma binding(libc::futimes,   "futimes")
-#pragma binding(libc::lutimes,   "lutimes")
-#pragma binding(libc::umask,     "umask")
-#pragma binding(libc::chmod,     "chmod")
 #pragma binding(libc::chown,     "chown")
 #pragma binding(libc::truncate,  "truncate")
 #pragma binding(libc::link,      "link")
 #pragma binding(libc::symlink,   "symlink")
-#pragma binding(libc::fstatat,   "fstatat")
-#pragma binding(libc::mkdirat,   "mkdirat")
-#pragma binding(libc::mknodat,   "mknodat")
-#pragma binding(libc::mkfifoat,  "mkfifoat")
-#pragma binding(libc::fchmodat,  "fchmodat")
 #pragma binding(libc::fchownat,  "fchownat")
 #pragma binding(libc::unlinkat,  "unlinkat")
 #pragma binding(libc::linkat,    "linkat")
 #pragma binding(libc::symlinkat, "symlinkat")
 #pragma binding(libc::readlinkat,"readlinkat")
 #pragma binding(libc::faccessat, "faccessat")
-#pragma binding(libc::renameat,  "renameat")
-#pragma binding(libc::utimensat, "utimensat")
-#pragma binding(libc::futimens,  "futimens")
 #pragma binding(libc::ttyname,   "ttyname")
 #pragma binding(libc::ttyname_r, "ttyname_r")
 #pragma binding(libc::ctermid,   "ctermid")
-// glibc exports no ctermid_r; unbound so a use fails at link.
 #pragma binding(libc::getlogin,  "getlogin")
 #pragma binding(libc::getlogin_r,"getlogin_r")
 #pragma binding(libc::getgroups, "getgroups")
@@ -293,8 +418,6 @@ extern char **environ;
 #pragma binding(libc::getsid,    "getsid")
 #pragma binding(libc::tcgetpgrp, "tcgetpgrp")
 #pragma binding(libc::tcsetpgrp, "tcsetpgrp")
-#pragma binding(libc::getpriority,"getpriority")
-#pragma binding(libc::setpriority,"setpriority")
 #pragma binding(libc::nice,      "nice")
 #pragma binding(libc::fpathconf, "fpathconf")
 #pragma binding(libc::lockf,     "lockf")
@@ -306,7 +429,6 @@ extern char **environ;
 #pragma binding(libc::getpagesize, "getpagesize")
 #pragma binding(libc::getdtablesize, "getdtablesize")
 #pragma binding(libc::getentropy, "getentropy")
-#pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
 #pragma binding(libc::getenv,    "getenv")
 #pragma binding(libc::setenv,    "setenv")
@@ -354,6 +476,15 @@ extern char **environ;
 #endif
 #endif
 #pragma binding(msvcrt::umask,  "_umask")
+// mingw-w64's <unistd.h> declares the exec family by including <process.h>,
+// whose bare `P_WAIT`-style constants would rename a program's identifiers;
+// the declarations below bind as that header's do.
+#pragma binding(msvcrt::execl,  "_execl")
+#pragma binding(msvcrt::execle, "_execle")
+#pragma binding(msvcrt::execlp, "_execlp")
+#pragma binding(msvcrt::execv,  "_execv")
+#pragma binding(msvcrt::execve, "_execve")
+#pragma binding(msvcrt::execvp, "_execvp")
 #endif
 
 #ifndef _WIN32
@@ -365,10 +496,12 @@ int read(int fd, void *buf, unsigned int n);
 #else
 ssize_t read(int fd, void *buf, size_t n);
 #endif
+#ifndef _WIN32
 // POSIX: pread/pwrite take an off_t offset and size_t count; an `int`
 // offset truncates positions past 2GB. Matches the pread64/pwrite64
 // signatures below.
 ssize_t pread(int fd, void *buf, size_t n, off_t offset);
+#endif
 int close(int fd);
 #ifdef __linux__
 int close_range(unsigned int first, unsigned int last, int flags);
@@ -378,8 +511,8 @@ void closefrom(int lowfd);
 int write(int fd, const void *buf, unsigned int n);
 #else
 ssize_t write(int fd, const void *buf, size_t n);
-#endif
 ssize_t pwrite(int fd, const void *buf, size_t n, off_t offset);
+#endif
 #ifdef __linux__
 // Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
 // result are 64-bit; a program may reach for these names directly.
@@ -387,18 +520,20 @@ long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
 int access(const char *path, int mode);
+#ifndef _WIN32
 // Fill a buffer with random bytes (BSD / Linux). `size_t` is in
 // <stddef.h>, pulled in transitively.
 int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
 // 2GB. `long` is off_t on LP64 (the POSIX targets lseek is declared for).
-#ifndef _WIN32
 long lseek(int fd, long offset, int whence);
-#endif
 int fsync(int fd);
+#endif
 int ftruncate(int fd, off_t len);
+#ifndef _WIN32
 int fcntl(int fd, int cmd, ...);
+#endif
 int unlink(const char *path);
 int rmdir(const char *path);
 #ifdef _WIN32
@@ -407,40 +542,38 @@ char *getcwd(char *buf, int n);
 char *getcwd(char *buf, size_t n);
 #endif
 int chdir(const char *path);
+#ifndef _WIN32
 int chroot(char *path);
 uid_t getuid(void);
 uid_t geteuid(void);
 gid_t getgid(void);
 gid_t getegid(void);
 pid_t getppid(void);
+#endif
 pid_t getpid(void);
 #ifdef __linux__
 // Linux thread id of the calling thread (glibc >= 2.30).
 pid_t gettid(void);
 #endif
-#ifdef _WIN32
-// Winsock's type, as <winsock2.h> declares it.
-int gethostname(char *name, int namelen);
-#else
+#ifndef _WIN32
 int gethostname(char *name, unsigned long len);
-#endif
 int sethostname(const char *name, unsigned long len);
+#endif
 unsigned int sleep(unsigned int seconds);
+#ifndef _WIN32
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
 // remaining seconds (POSIX). Both counts are unsigned.
 unsigned int alarm(unsigned int seconds);
+#endif
 int usleep(useconds_t microseconds);
+#ifndef _WIN32
 // Suspend until a signal is delivered; always returns -1 with EINTR.
 int pause(void);
-int isatty(int fd);
-ssize_t readlink(const char *path, char *buf, size_t n);
-#ifndef _WIN32
-int mkdir(const char *path, mode_t mode);
 #endif
-// POSIX: create a filesystem node. The device argument is unused for
-// regular / FIFO nodes; callers pass 0.
-int mknod(const char *path, mode_t mode, dev_t dev);
-int mkfifo(const char *path, mode_t mode);
+int isatty(int fd);
+#ifndef _WIN32
+ssize_t readlink(const char *path, char *buf, size_t n);
+#endif
 int dup(int fd);
 int dup2(int oldfd, int newfd);
 #ifdef __linux__
@@ -460,9 +593,11 @@ int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 // the link on demand.
 long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
                      unsigned long len, unsigned int flags);
+#ifndef _WIN32
 int pipe(int *fds);
 pid_t fork(void);
 pid_t vfork(void);
+#endif
 int execvp(const char *file, char *const argv[]);
 int execve(const char *path, char *const argv[], char *const envp[]);
 // List-form exec (variadic argv terminated by a NULL char*; execle takes a
@@ -474,48 +609,43 @@ int execle(const char *path, const char *arg, ...);
 // glibc extension: execvp with an explicit environment.
 int execvpe(const char *file, char *const argv[], char *const envp[]);
 #endif
+#ifndef _WIN32
 // Detach into the background (BSD/glibc); nochdir/noclose suppress the
 // chdir("/") and stdio redirection.
 int daemon(int nochdir, int noclose);
 int setgid(gid_t gid);
 int setuid(uid_t uid);
+#endif
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
 _Noreturn void _exit(int status);
-int fchmod(int fd, mode_t mode);
-int fchown(int fd, uid_t uid, gid_t gid);
-int utimes(char *path, char *times);
-int futimes(int fd, char *times);
-int lutimes(char *path, char *times);
+#ifdef _WIN32
 mode_t umask(mode_t mode);
-int chmod(const char *path, mode_t mode);
+#else
+int fchown(int fd, uid_t uid, gid_t gid);
 int chown(const char *path, uid_t uid, gid_t gid);
+#endif
 int truncate(const char *path, off_t len);
+#ifndef _WIN32
 int link(const char *from, const char *to);
 int symlink(const char *from, const char *to);
-// The *at family (POSIX): operate relative to a directory descriptor
-// `dirfd` (or AT_FDCWD from <fcntl.h>). The stat / timespec buffers are
-// opaque to c5, matching the plain stat() convention above.
-int fstatat(int dirfd, char *path, char *buf, int flag);
-int mkdirat(int dirfd, const char *path, mode_t mode);
-int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev);
-int mkfifoat(int dirfd, const char *path, mode_t mode);
-int fchmodat(int dirfd, const char *path, mode_t mode, int flag);
-int fchownat(int dirfd, const char *path, uid_t uid, gid_t gid, int flag);
-int unlinkat(int dirfd, char *path, int flag);
-int linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, int flag);
-int symlinkat(char *target, int newdirfd, char *linkpath);
-int readlinkat(int dirfd, char *path, char *buf, int bufsiz);
-int faccessat(int dirfd, char *path, int mode, int flag);
-int renameat(int olddirfd, char *oldpath, int newdirfd, char *newpath);
-int utimensat(int dirfd, char *path, char *times, int flag);
-int futimens(int fd, char *times);
+// The *at family of <unistd.h> (POSIX): each path is relative to the
+// directory descriptor `fd`, or AT_FDCWD from <fcntl.h>. <sys/stat.h> and
+// <stdio.h> declare the rest.
+int fchownat(int fd, const char *path, uid_t owner, gid_t group, int flag);
+int unlinkat(int fd, const char *path, int flag);
+int linkat(int fd1, const char *path1, int fd2, const char *path2, int flag);
+int symlinkat(const char *path1, int fd, const char *path2);
+ssize_t readlinkat(int fd, const char *restrict path, char *restrict buf, size_t bufsize);
+int faccessat(int fd, const char *path, int amode, int flag);
 // Terminal and login identity (POSIX).
 char *ttyname(int fd);
 int ttyname_r(int fd, char *buf, unsigned long len);
 char *ctermid(char *s);
+#ifdef __APPLE__
 char *ctermid_r(char *s);
+#endif
 char *getlogin(void);
 int getlogin_r(char *buf, unsigned long len);
 // Supplementary group lists.
@@ -537,9 +667,9 @@ int setregid(gid_t rgid, gid_t egid);
 int lchown(const char *path, uid_t owner, gid_t group);
 int lchmod(const char *path, mode_t mode);
 #ifdef __APPLE__
-// BSD per-file flags (macOS).
-int chflags(char *path, unsigned long flags);
-int lchflags(char *path, unsigned long flags);
+// BSD per-file flags (macOS), with the SDK's <sys/stat.h> types.
+int chflags(const char *path, unsigned int flags);
+int lchflags(const char *path, unsigned int flags);
 #endif
 // Process groups, sessions, and controlling-terminal foreground (POSIX).
 int getpgid(int pid);
@@ -550,19 +680,21 @@ int setsid(void);
 int getsid(int pid);
 int tcgetpgrp(int fd);
 int tcsetpgrp(int fd, int pgrp);
-// Scheduling priority (POSIX getpriority/setpriority, BSD nice).
-int getpriority(int which, int who);
-int setpriority(int which, int who, int prio);
+// BSD/XSI nice; getpriority / setpriority are <sys/resource.h>'s.
 int nice(int inc);
 // Per-descriptor limits, advisory locks, and exec without a PATH search.
 long fpathconf(int fd, int name);
 int lockf(int fd, int cmd, long len);
+#endif
 int execv(const char *path, char *const argv[]);
+#ifdef __linux__
 int fexecve(int fd, char *const argv[], char *const envp[]);
+#endif
 #ifdef __linux__
 // Linux-only: flush a file's data without its metadata.
 int fdatasync(int fd);
 #endif
+#ifndef _WIN32
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
 long pathconf(char *path, int name);
 long sysconf(int name);
@@ -574,8 +706,8 @@ int getdtablesize(void);
 // libcrypt's, so the declaration is left unbound and the caller's -lcrypt
 // resolves it.
 char *crypt(char *key, char *salt);
-int getrusage(int who, char *usage);
 int flock(int fd, int operation);
+#endif
 char *getenv(const char *name);
 #ifdef __APPLE__
 // libSystem accessor for the per-process environ slot. Returns a
@@ -587,8 +719,8 @@ char ***_NSGetEnviron(void);
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 char *realpath(const char *path, char *resolved);
-#endif
 int fchdir(int fd);
+#endif
 int getopt(int argc, char *const argv[], const char *opts);
 // POSIX.1 requires <unistd.h> to declare the getopt parser state
 // alongside getopt itself; <getopt.h> adds the GNU long-option surface.
@@ -596,43 +728,15 @@ extern char *optarg;
 extern int optind;
 extern int opterr;
 extern int optopt;
+#ifndef _WIN32
 void sync(void);
 int confstr(int name, char *buf, int len);
+#endif
 
 #define LOCK_SH 1
 #define LOCK_EX 2
 #define LOCK_UN 8
 #define LOCK_NB 4
-
-// getrusage(2) selectors and the per-process resource shape.
-#define RUSAGE_SELF      0
-#define RUSAGE_CHILDREN -1
-#define RUSAGE_THREAD    1
-
-/* `struct timeval` is also defined in <time.h>; the two
-** definitions must stay in sync. The `struct rusage` shape
-** below references it by tag name so getrusage()'s `ru_utime`
-** / `ru_stime` typecheck as `struct timeval *` callers expect.
-** Earlier this header carried a private `struct __c5_timeval`
-** alias that broke that type-check. */
-struct rusage {
-    struct timeval ru_utime;
-    struct timeval ru_stime;
-    long ru_maxrss;
-    long ru_ixrss;
-    long ru_idrss;
-    long ru_isrss;
-    long ru_minflt;
-    long ru_majflt;
-    long ru_nswap;
-    long ru_inblock;
-    long ru_oublock;
-    long ru_msgsnd;
-    long ru_msgrcv;
-    long ru_nsignals;
-    long ru_nvcsw;
-    long ru_nivcsw;
-};
 
 #ifndef _WIN32
 // sysconf(3) selectors. Names match POSIX; the numeric value is the
@@ -982,3 +1086,23 @@ struct rusage {
 #define R_OK 4
 #define W_OK 2
 #define X_OK 1
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::gethostid, "_gethostid")
+#pragma binding(libc::swab, "_swab")
+#pragma binding(libc::encrypt, "_encrypt")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::gethostid, "gethostid")
+#pragma binding(libc::swab, "swab")
+#endif
+long gethostid(void);
+void swab(const void *restrict from, void *restrict to, ssize_t n);
+#ifdef __APPLE__
+// XSI DES encryption; libSystem's only, glibc having dropped it.
+void encrypt(char block[64], int edflag);
+#endif
+#endif

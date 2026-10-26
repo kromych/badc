@@ -22,10 +22,10 @@
 //! 6.7.4p6 permits it ("an alternative to an external definition, which
 //! a translator may use to implement any call to the function in the
 //! same translation unit"), and badc's code generation relies on it:
-//! the inliner runs only under `-O`, and `always_inline` is a warning
-//! rather than an error when the candidate filter declines it, so
-//! dropping the body would leave undefined the calls gcc resolves by
-//! inlining them unconditionally.
+//! `always_inline` is a warning rather than an error when the candidate
+//! filter declines it, and without `-O` the inliner takes `always_inline`
+//! calls alone, so dropping the body would leave undefined the calls gcc
+//! resolves by inlining them.
 //!
 //! That licence covers calls, not the address: `f` keeps external
 //! linkage, so C99 6.2.2p2 requires `&f` to denote one function across
@@ -374,15 +374,14 @@ fn a_definitions_gnu_inline_does_not_reach_a_declaration_in_its_body() {
 #[test]
 fn an_inline_only_body_is_still_available_to_the_inliner() {
     // The out-of-line copy is dropped once every call is absorbed, and
-    // an `always_inline` request is honored even though the definition
-    // provides no external definition. Without `-O` the inliner does not
-    // run, so the body stays and the call binds to it -- the cell that
-    // would leave a call undefined under gcc's linkage rule.
+    // an `always_inline` request is honored at every level even though
+    // the definition provides no external definition, as gcc and clang
+    // honor it.
     let src = "extern __attribute__((__gnu_inline__)) inline \
                __attribute__((always_inline)) int f(int x) { return x + 1; }\n\
                int g(int x) { return f(x); }\n";
     assert_eq!(probe(src, Model::C99, true), Sym::Absent);
-    assert_eq!(probe(src, Model::C99, false), Sym::Local);
+    assert_eq!(probe(src, Model::C99, false), Sym::Absent);
 }
 
 #[test]

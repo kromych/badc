@@ -273,6 +273,7 @@ pub(super) fn name_extern_data_ref(
             instr_offset: popped.instr_offset,
             symbol_name: name.clone(),
             direct_pcrel: None,
+            import_slot: false,
         });
     }
 }
@@ -420,6 +421,12 @@ pub(super) fn emit_inst(
         } => emit_atomic_cas(
             code, v, dst, *addr, *expected, *desired, *width, alloc, frame,
         ),
+        Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            ..
+        } => emit_atomic_cas16(code, v, dst, *addr, *expected, *desired, alloc, frame),
         Inst::AtomicLoad { addr, width, .. } => {
             emit_atomic_load(code, dst, *addr, *width, alloc, frame)
         }
@@ -482,7 +489,7 @@ pub(super) fn emit_inst(
             dst,
             *offset,
             v,
-            target,
+            (target, func.tls_dynamic),
             tls_index_fixups,
             elf_tpoff_fixups,
             extern_tls_names,

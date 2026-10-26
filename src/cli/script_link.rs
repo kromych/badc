@@ -20,10 +20,13 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     };
     let script_text = match std::fs::read_to_string(script) {
         Ok(t) => t,
-        Err(e) => fail(format!(
-            "error: cannot read script {}: {e}",
-            script.display()
-        )),
+        Err(e) => fail(format!("error: {}", badc::script_unreadable(script, &e))),
+    };
+    let missing = |path: &str, e: &std::io::Error| -> ! {
+        fail(format!(
+            "error: cannot find {path}: {}",
+            badc::os_error_text(e)
+        ))
     };
     let script = match badc::parse_linker_script(&script_text) {
         Ok(s) => s,
@@ -49,7 +52,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
             LinkInputCli::Object(path) => {
                 let bytes = match std::fs::read(path) {
                     Ok(b) => b,
-                    Err(e) => fail(format!("error: cannot read {path}: {e}")),
+                    Err(e) => missing(path, &e),
                 };
                 match badc::parse_lds_object(path, bytes) {
                     Ok(o) => slots.push(Slot::Ready(vec![o])),
@@ -59,7 +62,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
             LinkInputCli::Archive { path, whole } => {
                 let blob = match std::fs::read(path) {
                     Ok(b) => b,
-                    Err(e) => fail(format!("error: cannot read {path}: {e}")),
+                    Err(e) => missing(path, &e),
                 };
                 // Thin archive members resolve against the archive's
                 // directory.
@@ -188,6 +191,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         diag: cli.front.diag.clone(),
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         symbolic: cli.link.symbolic,
+        symbolic_functions: cli.link.symbolic_functions,
         warn_execstack: cli.link.warn_execstack,
         warn_rwx_segments: cli.link.warn_rwx_segments,
         output_name: (out.file_name())

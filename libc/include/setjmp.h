@@ -1,6 +1,7 @@
 // setjmp.h -- non-local jumps.
 //
-// C99 7.13 declares `jmp_buf`, `setjmp`, and `longjmp`. The header
+// C99 7.13 declares `jmp_buf`, `setjmp`, and `longjmp`; POSIX adds
+// `_setjmp` / `_longjmp` and `sigjmp_buf`, `sigsetjmp` / `siglongjmp`. The header
 // is a pure boundary: register-save / register-restore semantics
 // (C99 7.13.1.1 paragraph 3) live in the host libc, which c5 binds
 // to per-platform below. The buffer is sized to safely cover every
@@ -15,8 +16,17 @@ typedef long jmp_buf[64];
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::setjmp,   "_setjmp")
 #pragma binding(libc::longjmp,  "_longjmp")
+#pragma binding(libc::_setjmp,  "__setjmp")
+#pragma binding(libc::_longjmp, "__longjmp")
+#pragma binding(libc::sigsetjmp,  "_sigsetjmp")
+#pragma binding(libc::siglongjmp, "_siglongjmp")
+typedef long sigjmp_buf[65];
 int  setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
+int  _setjmp(jmp_buf env);
+_Noreturn void _longjmp(jmp_buf env, int val);
+int  sigsetjmp(sigjmp_buf env, int savemask);
+_Noreturn void siglongjmp(sigjmp_buf env, int val);
 #endif
 
 #ifdef __linux__
@@ -24,8 +34,18 @@ typedef long jmp_buf[64];
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::setjmp,   "setjmp")
 #pragma binding(libc::longjmp,  "longjmp")
+#pragma binding(libc::_setjmp,  "_setjmp")
+#pragma binding(libc::_longjmp, "_longjmp")
+#pragma binding(libc::__sigsetjmp, "__sigsetjmp")
+#pragma binding(libc::siglongjmp,  "siglongjmp")
+typedef jmp_buf sigjmp_buf;
 int  setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
+int  _setjmp(jmp_buf env);
+_Noreturn void _longjmp(jmp_buf env, int val);
+int  __sigsetjmp(sigjmp_buf env, int savemask);
+#define sigsetjmp(env, savemask) __sigsetjmp(env, savemask)
+_Noreturn void siglongjmp(sigjmp_buf env, int val);
 #endif
 
 #ifdef _WIN32
@@ -54,8 +74,9 @@ typedef long long jmp_buf[32];
 // addresses on AArch64 still crashes because msvcrt's longjmp
 // routes through SEH; the supported path is the function-like
 // macros below, which inline the CRT-free intrinsic at each
-// call site.
-#pragma binding(msvcrt::setjmp, "_setjmp")
+// call site. The arm64 msvcrt.dll exports `_setjmpex` and no
+// `_setjmp`.
+#pragma binding(msvcrt::setjmp, "_setjmpex")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int setjmp(long long *env);
 _Noreturn void longjmp(long long *env, int val);
@@ -67,7 +88,7 @@ _Noreturn void longjmp(long long *env, int val);
 #pragma intrinsic("__c5_aarch64_setjmp")
 #pragma intrinsic("__c5_aarch64_longjmp")
 int __c5_aarch64_setjmp(long long *env);
-void __c5_aarch64_longjmp(long long *env, int val);
+_Noreturn void __c5_aarch64_longjmp(long long *env, int val);
 #define setjmp(env)        __c5_aarch64_setjmp((long long *)(env))
 #define longjmp(env, val)  __c5_aarch64_longjmp((long long *)(env), (val))
 #else
@@ -90,7 +111,7 @@ typedef long long jmp_buf[34];
 #pragma binding(msvcrt::__c5_msvcrt_setjmp,  "_setjmp")
 #pragma binding(msvcrt::__c5_msvcrt_longjmp, "longjmp")
 int  __c5_msvcrt_setjmp(long long *env, void *frame);
-void __c5_msvcrt_longjmp(long long *env, int val);
+_Noreturn void __c5_msvcrt_longjmp(long long *env, int val);
 
 // C99 7.1.4 paragraph 1: a standard library function may also be
 // implemented as a macro, and the macro fires only when the

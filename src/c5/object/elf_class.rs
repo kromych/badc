@@ -251,6 +251,19 @@ impl From<Elf32Ehdr> for Elf64Ehdr {
     }
 }
 
+impl From<Elf32Sym> for Elf64Sym {
+    fn from(s: Elf32Sym) -> Elf64Sym {
+        Elf64Sym {
+            st_name: s.st_name,
+            st_info: s.st_info,
+            st_other: s.st_other,
+            st_shndx: s.st_shndx,
+            st_value: s.st_value as u64,
+            st_size: s.st_size as u64,
+        }
+    }
+}
+
 impl From<Elf32Shdr> for Elf64Shdr {
     fn from(s: Elf32Shdr) -> Elf64Shdr {
         Elf64Shdr {

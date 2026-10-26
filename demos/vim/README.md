@@ -1,13 +1,13 @@
 # vim demo
 
-Build [Vim](https://www.vim.org/) 9.1.0800 with badc and drive the editor
-under a pseudo-terminal. At 123 translation units and roughly half a
+Build [Vim](https://www.vim.org/) 9.2.1226 with badc and drive the editor
+under a pseudo-terminal. At 137 translation units and roughly half a
 million lines it is the largest hosted program in the demo set, and its
 terminal layer is terminfo plus termios -- no window library.
 
 The source tree is **not committed**: `setup.py` fetches the upstream
-GitHub archive of the `v9.1.0800` tag from the `kromych/badc`
-vendor-deps release (mirrored as `vim-9.1.0800-3bc15301.tar.gz`),
+GitHub archive of the `v9.2.1226` tag from the `kromych/badc`
+vendor-deps release (mirrored as `vim-9.2.1226-c23d0442.tar.gz`),
 verifies a sha256, and extracts it under `demos/vim/.cache/`. The tree is
 built as upstream ships it; no patches. While the release lacks the
 asset, `setup.py` exits with status 3 and the smoke reports a skip

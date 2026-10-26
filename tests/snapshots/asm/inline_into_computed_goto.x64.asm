@@ -31,11 +31,11 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x18(%rbp)
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x10(%rbp)
-               	leaq	<rip>, %rcx        # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movq	%rcx, -0x8(%rbp)
                	movl	$0x1, %ecx
                	movslq	(%rdi), %r8

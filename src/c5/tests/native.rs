@@ -1196,6 +1196,39 @@ fn asm_reaches_an_imported_object_through_its_slot() {
     }
 }
 
+/// A `#pragma binding(data ...)` object the unit does not define is the C
+/// library's: the image binds every reference to it, asm operands included,
+/// and a definition under the binding's name is the unit's own object.
+#[test]
+fn a_data_binding_reaches_the_library_object_or_the_units_definition() {
+    let imported = r#"
+        #pragma binding(data libc::my_env, "_environ")
+        extern char **my_env;
+        int main(void) {
+            char ***p;
+            __asm__("adrp %0, my_env\n\tadd %0, %0, :lo12:my_env" : "=r"(p));
+            return !(p == &my_env && *p == environ && environ[0] != 0);
+        }
+    "#;
+    let defined = r#"
+        #pragma binding(data libc::dup_env, "_environ")
+        char **dup_env = (char **)0x1234;
+        int main(void) { return dup_env != (char **)0x1234; }
+    "#;
+    for (src, stem) in [
+        (imported, "data-binding-import"),
+        (defined, "data-binding-def"),
+    ] {
+        for opts in [
+            NativeOptions::default(),
+            NativeOptions::new().with_optimize(),
+        ] {
+            let outcome = build_and_run_outcome_with_options(src, stem, opts);
+            assert!(outcome.matches(0), "{stem}: {outcome:?}");
+        }
+    }
+}
+
 /// A single-file image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

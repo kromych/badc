@@ -359,6 +359,11 @@ impl VaArgDesc {
 }
 
 impl Intrinsic {
+    /// The intrinsic `kind` does not return to its caller.
+    pub fn is_noreturn(kind: i64) -> bool {
+        kind == Intrinsic::Trap as i64 || kind == Intrinsic::LongjmpAArch64 as i64
+    }
+
     pub fn from_i64(v: i64) -> Option<Self> {
         match v {
             1 => Some(Intrinsic::Alloca),

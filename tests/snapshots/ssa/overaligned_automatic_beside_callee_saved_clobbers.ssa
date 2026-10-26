@@ -31,7 +31,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v3   LocalAddr(-15)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=10, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(10)                                          -> x2
@@ -40,7 +40,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v12  Imm(0)                                           -> x0
     v13  Imm(4)                                           -> x6
     v14  Imm(0)                                           -> x0
-    v15  CallExt { binding_idx=7, args=[v10, v13, v9], fp_arg_mask=0x0 } -> x0
+    v15  CallExt { binding_idx=10, args=[v10, v13, v9], fp_arg_mask=0x0 } -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  Imm(10)                                          -> x6
@@ -93,7 +93,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
     v11  Imm(0)                                           -> x0
     v12  Imm(6)                                           -> x6
     v13  Imm(0)                                           -> x0
-    v14  CallExt { binding_idx=7, args=[v9, v12, v1], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=10, args=[v9, v12, v1], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(10)                                          -> x6
@@ -172,7 +172,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v3   LocalAddr(-14)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=10, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> x13
@@ -180,7 +180,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=1
     v11  Imm(0)                                           -> x0
     v12  Imm(4)                                           -> x6
     v13  Imm(0)                                           -> x0
-    v14  CallExt { binding_idx=7, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=10, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(10)                                          -> x6
@@ -225,7 +225,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=1
     v3   LocalAddr(-14)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=10, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> [spill 0]
@@ -233,7 +233,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=1
     v11  Imm(0)                                           -> x0
     v12  Imm(4)                                           -> x6
     v13  Imm(0)                                           -> x0
-    v14  CallExt { binding_idx=7, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=10, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(10)                                          -> x6
@@ -278,7 +278,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=1
     v3   LocalAddr(-14)                                   -> x7
     v4   Imm(3)                                           -> x6
     v5   Imm(64)                                          -> x2
-    v6   CallExt { binding_idx=7, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
+    v6   CallExt { binding_idx=10, args=[v3, v4, v5], fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(10)                                          -> x2
     v9   Intrinsic { kind=Alloca, args=[v8] }             -> x3
@@ -286,7 +286,7 @@ fn ent_pc=9 n_params=1 variadic=false locals=1
     v11  Imm(0)                                           -> x0
     v12  Imm(4)                                           -> x6
     v13  Imm(0)                                           -> x0
-    v14  CallExt { binding_idx=7, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=10, args=[v9, v12, v8], fp_arg_mask=0x0 } -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     v17  Imm(10)                                          -> x6

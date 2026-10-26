@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	leaq	(%rax,%rax,2), %rcx
                	leaq	0x1(%rcx), %rdx
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %esi
                	incq	%rsi
                	movl	%esi, (%rcx)
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %esi
                	incq	%rsi
                	movl	%esi, (%rcx)
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %esi
                	incq	%rsi
                	movl	%esi, (%rcx)
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	leaq	0x5(%rax), %rcx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %esi
                	incq	%rsi
                	movl	%esi, (%rax)
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	leaq	0x5(%rax), %rcx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %esi
                	incq	%rsi
                	movl	%esi, (%rax)
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	orq	$0x20, %rbx
-               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)

@@ -62,7 +62,7 @@
 #pragma binding(ucrtbase::fesetround,   "fesetround")
 #pragma binding(ucrtbase::feclearexcept, "feclearexcept")
 #pragma binding(ucrtbase::fetestexcept, "fetestexcept")
-#pragma binding(ucrtbase::feraiseexcept, "feraiseexcept")
+// feraiseexcept is libc/lib/fenv_ext.c's: no C runtime DLL exports it.
 #endif
 
 int fegetround(void);

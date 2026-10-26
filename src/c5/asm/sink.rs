@@ -17,7 +17,7 @@ use crate::c5::codegen::ssa::cfi;
 #[derive(Debug, Default)]
 pub(crate) struct AsmSectionSink {
     pub(crate) sections: asm_sections::AsmSections,
-    /// `(name, flags, sh_type)` identity -> index into `sections`.
+    /// `(name, flags, sh_type, group)` identity -> index into `sections`.
     pub(crate) by_key: hashbrown::HashMap<alloc::string::String, usize>,
     /// Section name -> the identity keys carrying it, in push order. A
     /// name pushed under different attributes is several sections; the
@@ -316,6 +316,10 @@ impl AsmSectionSink {
                         "inline asm: `.set .` outside a section",
                     ));
                 }
+                AsmSectionItem::Common { name, size, align } => {
+                    self.record_common(name, *size, *align);
+                    continue;
+                }
                 _ => continue,
             };
             let di = self.sym_decl_slot(name);
@@ -350,6 +354,11 @@ impl AsmSectionSink {
         self.sym_decls.len() - 1
     }
 
+    pub(crate) fn record_common(&mut self, name: &str, size: u64, align: u64) {
+        let di = self.sym_decl_slot(name);
+        self.sym_decls[di].common = Some((size, align));
+    }
+
     /// Record a `.type` / `.size` for a name the sections define no label
     /// for, so a symbol built elsewhere in the unit takes the attributes.
     pub(crate) fn record_sym_attrs(&mut self, name: &str, sym_type: AsmSymType, size: Option<u64>) {
@@ -380,6 +389,7 @@ impl AsmSectionSink {
             sh_type: b.sh_type.clone(),
             entsize: b.entsize,
             link: b.link.clone(),
+            group: b.group.clone(),
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
             labels: alloc::vec::Vec::new(),

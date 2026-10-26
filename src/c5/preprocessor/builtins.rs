@@ -141,18 +141,15 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_memcpy"),
     direct("__builtin_memmove"),
     direct("__builtin_memset"),
-    // Hints with no code-generation effect: predefined as macros, either
-    // by the preprocessor or by the auto-included <_builtins.h>.
+    // Values the call site forms from the operands: the hints with no
+    // code-generation effect, the ASCII classifications, the infinity and
+    // NaN constants and the return-address conversions.
     direct("__builtin_expect"),
     direct("__builtin_prefetch"),
     direct("__builtin_assume_aligned"),
-    // Locale-independent classifications, folded from the operand as gcc
-    // folds them whatever the library: macros in <_builtins.h>.
     direct("__builtin_isdigit"),
     direct("__builtin_isascii"),
     direct("__builtin_toascii"),
-    // The infinity and NaN constants and the return-address conversions:
-    // macros in <_builtins.h>.
     direct("__builtin_inf"),
     direct("__builtin_inff"),
     direct("__builtin_infl"),
@@ -278,6 +275,11 @@ pub(super) const LIBRARY_BUILTINS: &[&str] = &[
     "wcscmp", "wcslen", "wcsncmp", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove",
 ];
 
+/// Whether `name` is an MSVC intrinsic `target` lowers at the call site.
+pub(crate) fn is_ms_intrinsic(name: &str, target: Target) -> bool {
+    crate::c5::ms_intrinsic::lookup(name, target).is_some()
+}
+
 fn lookup(name: &str) -> Option<&'static Builtin> {
     BUILTINS.iter().find(|b| b.name == name)
 }
@@ -332,6 +334,9 @@ pub(super) fn is_builtin(name: &str) -> bool {
 /// translation unit for `target` can use `name` with no `#include`. The
 /// x86 vector builtins are the x86 targets' only.
 pub(super) fn has_builtin(name: &str, target: Target) -> bool {
+    if is_ms_intrinsic(name, target) {
+        return true;
+    }
     match lookup(name) {
         Some(b) => !matches!(b.supply, Supply::Library(_)),
         None => {

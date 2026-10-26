@@ -628,7 +628,7 @@ mod fma_tests {
         let mut funcs =
             crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
                 .expect("ssa");
-        crate::c5::codegen::passes::fma::run(&mut funcs);
+        crate::c5::codegen::passes::fma::run(&mut funcs, false);
         let func = funcs.into_iter().find(|f| f.name == "f").expect("f");
         let (v, a, b, c) = func
             .insts

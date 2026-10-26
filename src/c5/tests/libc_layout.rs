@@ -151,14 +151,6 @@ fn epoll_event_is_packed_on_linux_x86_64() {
             align: 8,
             members: &[("events", 0), ("data", 8), ("data.u64", 8)],
         },
-        Layout {
-            target: Target::WindowsX64,
-            headers: H,
-            ty: T,
-            size: 16,
-            align: 8,
-            members: &[("events", 0), ("data", 8)],
-        },
     ]);
 }
 
@@ -187,7 +179,7 @@ fn rusage_counters_are_long() {
     let targets = [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64];
     check(&targets.map(|target| Layout {
         target,
-        headers: &["sys/time.h", "unistd.h"],
+        headers: &["sys/resource.h"],
         ty: "struct rusage",
         size: 144,
         align: 8,
@@ -567,7 +559,7 @@ fn sigset_t_is_unsigned_long_words_on_linux() {
 }
 
 /// <sys/ucontext.h> declares the context types without <ucontext.h>, as
-/// glibc's does, and both parse on every target.
+/// glibc's does, and both parse on every target that ships them.
 #[test]
 fn sys_ucontext_declares_the_machine_context() {
     check_values(
@@ -589,12 +581,7 @@ fn sys_ucontext_declares_the_machine_context() {
             ("sizeof(ucontext_t)", 4560),
         ],
     );
-    for target in [
-        Target::LinuxX64,
-        Target::LinuxAarch64,
-        Target::MacOSAarch64,
-        Target::WindowsX64,
-    ] {
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
         check_values(
             target,
             &["signal.h", "ucontext.h", "sys/ucontext.h"],
@@ -1279,4 +1266,110 @@ fn memory_and_thread_interfaces_use_void_pointers() {
             panic!("{}: {err}", target.id_str());
         }
     }
+}
+
+/// The records of the POSIX.1-2008 and XSI headers each C library ships:
+/// glibc's <utmpx.h> record with the 32-bit session and time words on
+/// x86-64 and the generic one on aarch64, the SDK's with the user name
+/// first, and wordexp_t, ENTRY, the catalog handle and ndbm's datum and
+/// DBM, as gcc 16 and Apple clang 21 lay them out.
+#[test]
+fn xsi_records_follow_each_c_library() {
+    const U: &[&str] = &["utmpx.h"];
+    const T: &str = "struct utmpx";
+    const X64: &[(&str, usize)] = &[
+        ("ut_type", 0),
+        ("ut_pid", 4),
+        ("ut_line", 8),
+        ("ut_id", 40),
+        ("ut_user", 44),
+        ("ut_host", 76),
+        ("ut_session", 336),
+        ("ut_tv", 340),
+        ("ut_addr_v6", 348),
+    ];
+    const A64: &[(&str, usize)] = &[
+        ("ut_type", 0),
+        ("ut_pid", 4),
+        ("ut_line", 8),
+        ("ut_id", 40),
+        ("ut_user", 44),
+        ("ut_host", 76),
+        ("ut_session", 336),
+        ("ut_tv", 344),
+        ("ut_addr_v6", 360),
+    ];
+    check(&[
+        Layout {
+            target: Target::LinuxX64,
+            headers: U,
+            ty: T,
+            size: 384,
+            align: 4,
+            members: X64,
+        },
+        Layout {
+            target: Target::LinuxAarch64,
+            headers: U,
+            ty: T,
+            size: 400,
+            align: 8,
+            members: A64,
+        },
+        Layout {
+            target: Target::MacOSAarch64,
+            headers: U,
+            ty: T,
+            size: 640,
+            align: 8,
+            members: &[
+                ("ut_user", 0),
+                ("ut_id", 256),
+                ("ut_line", 260),
+                ("ut_pid", 292),
+                ("ut_type", 296),
+                ("ut_tv", 304),
+                ("ut_host", 320),
+                ("ut_pad", 576),
+            ],
+        },
+    ]);
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        check(&[
+            Layout {
+                target,
+                headers: &["wordexp.h"],
+                ty: "wordexp_t",
+                size: 24,
+                align: 8,
+                members: &[("we_wordc", 0), ("we_wordv", 8), ("we_offs", 16)],
+            },
+            Layout {
+                target,
+                headers: &["search.h"],
+                ty: "ENTRY",
+                size: 16,
+                align: 8,
+                members: &[("key", 0), ("data", 8)],
+            },
+        ]);
+        check_values(
+            target,
+            &["nl_types.h"],
+            &[("sizeof(nl_catd)", 8), ("sizeof(nl_item)", 4)],
+        );
+    }
+    check(&[Layout {
+        target: Target::MacOSAarch64,
+        headers: &["ndbm.h"],
+        ty: "datum",
+        size: 16,
+        align: 8,
+        members: &[("dptr", 0), ("dsize", 8)],
+    }]);
+    check_values(
+        Target::MacOSAarch64,
+        &["ndbm.h"],
+        &[("sizeof(DBM)", 68), ("_Alignof(DBM)", 1)],
+    );
 }

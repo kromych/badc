@@ -40,21 +40,21 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-<rip>, %rax       # <addr>
-               	leaq	-<rip>, %rbx       # <addr>
-               	leaq	<rip>, %r12      # <addr>
-               	leaq	<rip>, %r13      # <addr>
-               	leaq	-<rip>, %rcx       # <addr>
+               	leaq	-<rip>, %rax # <addr>
+               	leaq	-<rip>, %rbx # <addr>
+               	leaq	<rip>, %r12 # <addr>
+               	leaq	<rip>, %r13 # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
-               	leaq	-<rip>, %rcx       # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	cmpq	%rcx, %rbx
                	jne	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	addq	$0x10, %rcx
                	cmpq	%rcx, %r12
                	jne	<addr>
-               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rcx # <addr>
                	addq	$0x8, %rcx
                	cmpq	%rcx, %r13
                	je	<addr>

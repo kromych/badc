@@ -22,7 +22,10 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::{UNSIGNED_BIT, enum_ty, rebase_enum_placeholder, struct_ty_for};
+use super::types::{
+    UNSIGNED_BIT, enum_ty, is_struct_ty, rebase_enum_placeholder, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
+};
 use super::{Compiler, EnumDef};
 
 /// The definition of an enum tag, applied to the types an earlier use of
@@ -70,10 +73,10 @@ impl EnumCompletion {
     }
 }
 
-/// `(min, max, constants)` from a parsed enum body: the enumerator value
-/// range that drives the packed underlying-type choice, plus the captured
-/// name/value pairs the caller records for DWARF.
-type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
+/// `(min, max, constants, symbols)` from a parsed enum body: the enumerator
+/// value range that drives the packed underlying-type choice, the captured
+/// name/value pairs the caller records for DWARF, and the constants' symbols.
+type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>, Vec<usize>);
 
 /// The integer type compatible with an enum whose values span
 /// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
@@ -95,17 +98,13 @@ fn enum_compatible_ty(min: i64, max: i64, wide: i64) -> i64 {
     }
 }
 
-/// The type of one enumerator constant. Within a 32-bit enum GCC
-/// types each constant by its own value -- `int` when it fits (C99
-/// 6.7.2.2p3), `unsigned int` for the wider extension values -- while
-/// every constant of an enum needing a 64-bit type takes that type.
-fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
-    if (enum_ty & !UNSIGNED_BIT) != Ty::Int as i64 {
-        enum_ty
-    } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
+/// The type of an enumerator constant while its list is parsed: `int` when
+/// the value fits (C99 6.7.2.2p3), otherwise the value's own type.
+fn enumerator_constant_ty(v: i64, wide: i64) -> i64 {
+    if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
         Ty::Int as i64
     } else {
-        Ty::Int as i64 | UNSIGNED_BIT
+        enum_compatible_ty(v, v, wide)
     }
 }
 
@@ -135,6 +134,14 @@ impl Compiler {
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
+            if let Some(name) = &tag_name
+                && let Some(id) = self.find_tag_in_current_scope(name)
+                && self.structs[id].enum_underlying.is_some()
+                && self.structs[id].is_enum
+                && self.std.c23_keywords()
+            {
+                return self.redefine_enum(id, name, packed);
+            }
             // The tag's scope begins before the list (C99 6.2.1p7). An
             // untagged enumeration is a type of its own all the same
             // (6.7.2.2p4), on an entry no tag names.
@@ -146,35 +153,12 @@ impl Compiler {
                     self.structs.len() - 1
                 }
             };
-            let (min, max, captured) = self.parse_enum_body()?;
+            let (min, max, captured, constants) = self.parse_enum_body(id)?;
             // An attribute after the closing brace binds to the enum type
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
             packed = self.skip_attribute_specifiers()? || packed;
-            self.pending.attrs.transparent_union = false;
-            let underlying = if let Some(m) = self.pending.attrs.mode.take() {
-                // `mode(M)` fixes the enum's width outright; the
-                // enumerators must fit, as GCC requires.
-                let base = enum_compatible_ty(min, max, self.enum_wide_ty());
-                let ty = self.apply_mode_to_type(base, m)?;
-                let bits = self.size_of_type(ty) as u32 * 8;
-                let fits = if min < 0 {
-                    bits >= 64 || (min >= -(1i64 << (bits - 1)) && max < (1i64 << (bits - 1)))
-                } else {
-                    bits >= 64 || max < (1i64 << bits)
-                };
-                if !fits {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "specified mode too small for enumerated values",
-                    ));
-                }
-                ty
-            } else if packed {
-                Self::packed_enum_underlying_ty(min, max, self.enum_wide_ty())
-            } else {
-                enum_compatible_ty(min, max, self.enum_wide_ty())
-            };
+            let underlying = self.enum_underlying_ty(min, max, packed)?;
             if !captured.is_empty() {
                 self.enums.push(EnumDef {
                     name: tag_name.unwrap_or_default(),
@@ -182,9 +166,26 @@ impl Compiler {
                     underlying_ty: underlying,
                 });
             }
+            // Once the list ends, every constant of an enumeration with a
+            // value outside `int` has the enumerated type (C23 6.7.2.2,
+            // gcc's `finish_enum` in every mode); the others are `int`.
+            let ty = enum_ty(underlying, id);
+            let wider_than_int = min < i32::MIN as i64 || max > i32::MAX as i64;
+            for idx in constants {
+                self.symbols[idx].type_ = if wider_than_int { ty } else { Ty::Int as i64 };
+            }
+            if self.is_ms_forward_enum(id)
+                && self.size_of_type(underlying) != 4
+                && self.enum_sized_before_definition(id)
+            {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    "an enumeration an object or member was declared with before its definition must have the size of `int`",
+                ));
+            }
             self.structs[id].enum_underlying = Some(underlying);
             self.complete_enum_placeholders(id as u32, underlying);
-            return Ok((enum_ty(underlying, id), None));
+            return Ok((ty, None));
         }
         let Some(name) = tag_name else {
             return Err(self.compile_err(Code::SYNTAX, "enum name or `{` expected"));
@@ -211,7 +212,101 @@ impl Compiler {
         if !self.enum_placeholder_tags.contains(&tag) {
             self.enum_placeholder_tags.push(tag);
         }
+        if self.is_ms_forward_enum(id) {
+            let s = &mut self.structs[id];
+            (s.size, s.align, s.natural_align, s.member_align) = (4, 4, 4, 4);
+        }
         Ok((struct_ty_for(id), Some(tag)))
+    }
+
+    /// The integer type the definition of an enum whose values span
+    /// `[min, max]` chooses, under its `mode` and `packed` attributes.
+    fn enum_underlying_ty(&mut self, min: i64, max: i64, packed: bool) -> Result<i64, C5Error> {
+        self.pending.attrs.transparent_union = false;
+        let Some(m) = self.pending.attrs.mode.take() else {
+            return Ok(if packed {
+                Self::packed_enum_underlying_ty(min, max, self.enum_wide_ty())
+            } else {
+                enum_compatible_ty(min, max, self.enum_wide_ty())
+            });
+        };
+        // `mode(M)` fixes the enum's width outright; the enumerators must
+        // fit, as GCC requires.
+        let base = enum_compatible_ty(min, max, self.enum_wide_ty());
+        let ty = self.apply_mode_to_type(base, m)?;
+        let bits = self.size_of_type(ty) as u32 * 8;
+        let fits = if min < 0 {
+            bits >= 64 || (min >= -(1i64 << (bits - 1)) && max < (1i64 << (bits - 1)))
+        } else {
+            bits >= 64 || max < (1i64 << bits)
+        };
+        if !fits {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "specified mode too small for enumerated values",
+            ));
+        }
+        Ok(ty)
+    }
+
+    /// From C23 a definition of an enum its scope already defined is taken
+    /// when it lists the same enumerators with the same values and chooses
+    /// the same type (C23 6.7.2.3, 6.2.7; gcc 15 and clang 22 under
+    /// `-std=c23`, not before); the enumerators keep their first
+    /// declaration. On entry `tk` is `{`.
+    fn redefine_enum(
+        &mut self,
+        id: usize,
+        name: &str,
+        packed: bool,
+    ) -> Result<(i64, Option<u32>), C5Error> {
+        let conflict = |c: &Self| {
+            c.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("enum `{name}` redefined with different enumerators"),
+            )
+        };
+        self.next()?; // consume `{`
+        let (mut i, mut min, mut max) = (0i64, i64::MAX, i64::MIN);
+        let mut seen: Vec<usize> = Vec::new();
+        while self.lex.tk != '}' {
+            if self.lex.tk != Token::Id {
+                return Err(self.compile_err(Code::SYNTAX, "bad enum identifier"));
+            }
+            let idx = self.lex.curr_id_idx;
+            self.next()?;
+            if self.lex.tk == Token::Assign {
+                self.next()?;
+                i = self.parse_constant_int()?;
+            }
+            let s = &self.symbols[idx];
+            if s.class != Token::Num as i64
+                || s.enumeration != Some(id as u32)
+                || s.val != i
+                || seen.contains(&idx)
+            {
+                return Err(conflict(self));
+            }
+            seen.push(idx);
+            (min, max) = (min.min(i), max.max(i));
+            i += 1;
+            self.list_separator('}', "enumerator")?;
+        }
+        self.next()?; // consume `}`
+        let packed = self.skip_attribute_specifiers()? || packed;
+        let total = self
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Num as i64 && s.enumeration == Some(id as u32))
+            .count();
+        if seen.is_empty() {
+            (min, max) = (0, 0);
+        }
+        let underlying = self.enum_underlying_ty(min, max, packed)?;
+        if seen.len() != total || self.structs[id].enum_underlying != Some(underlying) {
+            return Err(conflict(self));
+        }
+        Ok((enum_ty(underlying, id), None))
     }
 
     /// The tag entry an enum definition completes: a declaration of the tag
@@ -233,7 +328,8 @@ impl Compiler {
     /// C99 6.7.2.2p4: the definition of enum tag `tag` completes the type
     /// its earlier uses named through the tag's entry. Rewrites the
     /// objects, functions, parameters and members declared through it,
-    /// and the outer bindings an open scope shadows. A tentative definition
+    /// the outer bindings an open scope shadows, and the function types the
+    /// declarations of an identifier with linkage keep. A tentative definition
     /// declared through it is sized when the unit ends.
     fn complete_enum_placeholders(&mut self, tag: u32, underlying: i64) {
         let Some(at) = self.enum_placeholder_tags.iter().position(|&t| t == tag) else {
@@ -254,6 +350,27 @@ impl Compiler {
             c.ty(&mut f.ty, &mut f.enum_tag);
             c.fn_type(&mut f.fn_type);
         }
+        for e in self.linked_entities.values_mut() {
+            e.complete_enum(&c);
+        }
+    }
+
+    /// Whether a member or an automatic object declared before the
+    /// enumeration `id`'s definition has the enumerated type itself, so its
+    /// storage was laid out with the placeholder's size. (A tentative
+    /// definition is sized when the unit ends.)
+    fn enum_sized_before_definition(&self, id: usize) -> bool {
+        let tag = Some(id as u32);
+        let sized =
+            |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && struct_id_of(ty) == id;
+        self.symbols
+            .iter()
+            .any(|s| s.incomplete_enum_tag == tag && s.class == Token::Loc as i64 && sized(s.type_))
+            || self
+                .structs
+                .iter()
+                .flat_map(|s| s.fields.iter())
+                .any(|f| f.enum_tag == tag && sized(f.ty))
     }
 
     /// The 64-bit type an enum widens to: `long` where it is 64 bits wide,
@@ -296,8 +413,9 @@ impl Compiler {
     /// been consumed. Each constant is registered as a
     /// `Token::Num`-class symbol with `val` set to its enumerated
     /// value, so subsequent uses (including in array dimensions
-    /// via `parse_constant_int`) resolve correctly.
-    pub(super) fn parse_enum_body(&mut self) -> Result<EnumBody, C5Error> {
+    /// via `parse_constant_int`) resolve correctly; once the list ends,
+    /// each records its enumeration `id`.
+    pub(super) fn parse_enum_body(&mut self, id: usize) -> Result<EnumBody, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
@@ -327,11 +445,11 @@ impl Compiler {
             self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].incomplete_enum_tag = None;
+            self.symbols[idx].enumeration = None;
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
-            // the whole list is restamped below once the range is known.
-            self.symbols[idx].type_ =
-                enumerator_constant_ty(i, enum_compatible_ty(i, i, self.enum_wide_ty()));
+            // `parse_enum_decl` restamps the list once the type is known.
+            self.symbols[idx].type_ = enumerator_constant_ty(i, self.enum_wide_ty());
             self.symbols[idx].val = i;
             captured.push((name, i));
             sym_indexes.push(idx);
@@ -343,14 +461,9 @@ impl Compiler {
         // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
-        // On completion each constant is restamped against the whole
-        // range: per-value within a 32-bit enum, the enum's own 64-bit
-        // type otherwise (GCC). `packed` narrows only the enum type,
-        // never the constants.
-        let compatible = enum_compatible_ty(min, max, self.enum_wide_ty());
-        for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
-            self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
+        for &idx in &sym_indexes {
+            self.symbols[idx].enumeration = Some(id as u32);
         }
-        Ok((min, max, captured))
+        Ok((min, max, captured, sym_indexes))
     }
 }

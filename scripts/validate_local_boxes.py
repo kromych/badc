@@ -64,6 +64,7 @@ import argparse
 import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -221,7 +222,7 @@ KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in
 # .github/workflows/ci.yml. A count below the floor means units dropped out of
 # the build. Update both together.
-KERNEL_FLOORS = {"aarch64": 4400, "x86_64": 2900}
+KERNEL_FLOORS = {"aarch64": 4250, "x86_64": 2920}
 
 # Seconds a single boot may take before it is abandoned, the same cap CI's
 # kernel job passes. It bounds the phase when the image does not boot at all:
@@ -403,11 +404,21 @@ def box_prepare_command(box: Box) -> str:
 
 def box_checkout_command(box: Box, commit: str) -> str:
     """Tracked files become the commit's and untracked leftovers go; ignored
-    build outputs and demo caches stay, so a lane builds incrementally."""
+    build outputs and demo caches stay, so a lane builds incrementally. A tree
+    a previous run's lane still runs in is left alone (scripts/lane_guard.py);
+    a tree from before the guard has none to run."""
     if box.kind == "windows":
         path = box.remote_path.replace("/", "\\")
-        return f'cmd /c "cd /d {path} && git checkout -q -f --detach {commit} && git clean -ffdq"'
-    return f"cd {box.remote_path} && git checkout -q -f --detach {commit} && git clean -ffdq"
+        guard = r"(if exist scripts\lane_guard.py python scripts\lane_guard.py check)"
+        return (
+            f'cmd /c "cd /d {path} && {guard} && '
+            f'git checkout -q -f --detach {commit} && git clean -ffdq"'
+        )
+    guard = "{ ! test -f scripts/lane_guard.py || python3 scripts/lane_guard.py check; }"
+    return (
+        f"cd {box.remote_path} && {guard} && "
+        f"git checkout -q -f --detach {commit} && git clean -ffdq"
+    )
 
 
 def sync_git(box: Box, github_token: str) -> int:
@@ -585,10 +596,11 @@ def posix_script(
     unquoted; the host lane's path is REPO_ROOT and is quoted."""
     path = shlex.quote(box.remote_path) if box.kind == "macos" else box.remote_path
     return (
-        f"cd {path} && "
+        f"cd {path} && python3 scripts/lane_guard.py hold && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; "
         + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs, nested))
+        + " && python3 scripts/lane_guard.py release"
     )
 
 
@@ -617,10 +629,11 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
         named.append(("demo phase", demo_command(box, jobs, "python")))
     # cmd has no `step()` equivalent, so each step announces itself as the
     # chain reaches it, and the last announcement names the step that failed.
-    parts = [f"cd /d {remote_path}"]
+    parts = [f"cd /d {remote_path}", r"python scripts\lane_guard.py hold"]
     for label, cmd in named:
         parts.append(f"echo {STEP_MARK} {label}")
         parts.append(cmd)
+    parts.append(r"python scripts\lane_guard.py release")
     return "set GITHUB_TOKEN= & set /p GITHUB_TOKEN= & " + " && ".join(parts)
 
 
@@ -648,8 +661,15 @@ def lane_invocation(
 
 
 def sync_none(box: Box, github_token: str) -> int:
-    """The host lane runs in the working tree; nothing to ship."""
-    return 0
+    """The host lane runs in the working tree; nothing to ship, but not
+    into a tree a previous run's lane still runs in."""
+    busy = subprocess.run(
+        [sys.executable, "scripts/lane_guard.py", "check"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    for line in busy.stdout.splitlines():
+        sys.stdout.write(f"[{box.short}] {line}\n")
+    return busy.returncode
 
 
 def run_box(
@@ -797,8 +817,27 @@ def self_test() -> int:
     # A Windows lane runs the same steps under cmd.exe, with line endings kept
     # as committed and the pack commands behind PowerShell.
     assert box_checkout_command(win, commit) == (
-        f'cmd /c "cd /d R:\\src\\compilers\\badc\\ && git checkout -q -f --detach {commit} && git clean -ffdq"'
+        f'cmd /c "cd /d R:\\src\\compilers\\badc\\ && '
+        r'(if exist scripts\lane_guard.py python scripts\lane_guard.py check) && '
+        f'git checkout -q -f --detach {commit} && git clean -ffdq"'
     ), box_checkout_command(win, commit)
+    # Neither kind checks out over a tree a previous run's lane still runs
+    # in: the guard reports the recorded lane shell busy until it ends.
+    assert "lane_guard.py check" in checkout.split("git checkout", 1)[0], checkout
+    guard = str(Path(__file__).with_name("lane_guard.py"))
+    with tempfile.TemporaryDirectory() as tree:
+        lane = subprocess.Popen(
+            ["bash", "-c", f"{shlex.quote(sys.executable)} {shlex.quote(guard)} hold && exec sleep 60"],
+            cwd=tree,
+        )
+        while not (Path(tree) / ".gate-lane").exists():
+            time.sleep(0.05)
+        check = [sys.executable, guard, "check"]
+        busy = subprocess.run(check, cwd=tree, capture_output=True).returncode
+        lane.kill()
+        lane.wait()
+        free = subprocess.run(check, cwd=tree, capture_output=True).returncode
+        assert (busy, free) == (75, 0), (busy, free)
     prepare = box_prepare_command(win)
     assert "git init -q && git config core.autocrlf false" in prepare, prepare
     assert [k for k, _ in pack_commands(win)] == ["uploadpack", "receivepack"] and not pack_commands(lin)

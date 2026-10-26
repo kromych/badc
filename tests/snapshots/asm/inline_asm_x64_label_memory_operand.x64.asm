@@ -29,14 +29,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
-               	movl	-<rip>, %eax        # <addr>
+               	movl	-<rip>, %eax # <addr>
                	retq
 
 <code_named>:
                	jmp	<addr>
                	subb	(%rax), %al
                	addb	%al, (%rax)
-               	movl	-<rip>, %eax        # <addr>
+               	movl	-<rip>, %eax # <addr>
                	retq
 
 <section_before>:
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	subb	(%rax), %al
                	addb	%al, (%rax)
                	movl	$0x0, %eax
-               	cmpl	$0x2a, -<rip>      # <addr>
+               	cmpl	$0x2a, -<rip> # <addr>
                	jne	<addr>
                	movl	$0x2a, %eax
                	retq

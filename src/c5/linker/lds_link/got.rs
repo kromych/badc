@@ -1,27 +1,32 @@
 //! Imports, PLT and GOT slots, and symbol values taken from the
 //! previous pass.
 
-use crate::c5::linker::object::{absolute_in_pie_body, elf_reloc_desc, locate_reloc};
+use crate::c5::linker::object::{
+    absolute_in_pie_body, elf_reloc_desc, locate_reloc, narrow_import_body, weak_pc_in_pie_body,
+};
 use crate::c5::object::elf_reloc_types as rt;
 use alloc::collections::BTreeSet;
 use alloc::string::String;
-use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::inputs::RawReloc;
+use super::preempt::Reach;
 use super::{
-    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHN_ABS, SHN_COMMON, SHN_UNDEF,
-    STB_LOCAL, STB_WEAK, STT_SECTION, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_PLT, SecFate, Stmt,
+    Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, R_NONE, SHF_ALLOC,
+    SHF_EXECINSTR, SHF_WRITE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_LOCAL, STB_WEAK, STT_SECTION,
+    STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SecFate, Stmt,
 };
 
 /// A relocation writing a whole load address into a field narrower
 /// than an address. `size_dynamic_sections` rewrites the address-width
 /// form to `R_*_RELATIVE`; no dynamic form writes a narrower field.
 /// The `*_ABS_LO12_NC` group is excluded: it takes only the target's
-/// page offset, which a page-aligned load base leaves alone.
+/// page offset, which a page-aligned load base leaves alone. GNU ld
+/// writes an i386 `R_386_16` / `R_386_8` with the link-time value,
+/// subject to the field's overflow check, so none is refused there.
 fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     match machine {
-        EM_386 => matches!(rtype, rt::R_386_16 | rt::R_386_8),
+        EM_386 => false,
         EM_AARCH64 => {
             matches!(rtype, rt::R_AARCH64_ABS32 | rt::R_AARCH64_ABS16)
                 || rt::aarch64_movw_field(rtype).is_some()
@@ -33,11 +38,14 @@ fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     }
 }
 
-/// One PLT stub, on both targets.
-pub(super) const PLT_ENTRY_SIZE: u64 = 16;
-
-/// i386's relaxable GOT form, which `elf_reloc_types` does not name.
-const R_386_GOT32X: u32 = 43;
+/// The symbol a GOT slot holds the address of: a global by name, a named
+/// local by its object and symbol index, as two objects' locals may share
+/// a name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) enum GotKey {
+    Global(String),
+    Local(usize, u32),
+}
 
 /// Name -> position, for a list whose order is its index space.
 pub(super) fn index_map(names: &[String]) -> HashMap<String, usize> {
@@ -50,7 +58,7 @@ pub(super) fn index_map(names: &[String]) -> HashMap<String, usize> {
 
 /// A relocation holding a branch displacement: reaching an imported
 /// symbol from one means going through a stub.
-fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
+pub(super) fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
     match machine {
         EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
         EM_386 => matches!(rtype, rt::R_386_PC32 | rt::R_386_PLT32),
@@ -58,14 +66,51 @@ fn reloc_needs_plt(machine: u16, rtype: u32) -> bool {
     }
 }
 
+/// A branch to its target: the call forms a PLT entry serves.
+pub(super) fn branch(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_AARCH64 => matches!(rtype, rt::R_AARCH64_CALL26 | rt::R_AARCH64_JUMP26),
+        EM_386 => rtype == rt::R_386_PLT32,
+        _ => rtype == rt::R_X86_64_PLT32,
+    }
+}
+
+/// An x86 PC-relative field a dynamic relocation of its own type carries.
+pub(super) fn x86_pc_field(machine: u16, rtype: u32) -> bool {
+    match machine {
+        EM_386 => rtype == rt::R_386_PC32,
+        EM_X86_64 => matches!(
+            rtype,
+            rt::R_X86_64_PC8 | rt::R_X86_64_PC16 | rt::R_X86_64_PC32 | rt::R_X86_64_PC64
+        ),
+        _ => false,
+    }
+}
+
+/// An aarch64 field holding a PC-relative distance.
+fn aarch64_pc_field(rtype: u32) -> bool {
+    matches!(
+        rtype,
+        rt::R_AARCH64_PREL16
+            | rt::R_AARCH64_PREL32
+            | rt::R_AARCH64_PREL64
+            | rt::R_AARCH64_ADR_PREL_LO21
+            | rt::R_AARCH64_ADR_PREL_PG_HI21
+            | rt::R_AARCH64_ADR_PREL_PG_HI21_NC
+            | rt::R_AARCH64_LD_PREL_LO19
+            | rt::R_AARCH64_CONDBR19
+            | rt::R_AARCH64_TSTBR14
+    )
+}
+
 /// A relocation naming a GOT slot rather than the symbol's own address.
-fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
+pub(super) fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
     match machine {
         EM_AARCH64 => matches!(
             rtype,
             rt::R_AARCH64_ADR_GOT_PAGE | rt::R_AARCH64_LD64_GOT_LO12_NC
         ),
-        EM_386 => matches!(rtype, rt::R_386_GOT32 | R_386_GOT32X),
+        EM_386 => matches!(rtype, rt::R_386_GOT32 | rt::R_386_GOT32X),
         _ => matches!(
             rtype,
             rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
@@ -73,37 +118,30 @@ fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
     }
 }
 
-/// A stub at `at` jumping through the GOT slot at `slot`.
-fn plt_entry(machine: u16, at: u64, slot: u64) -> [u8; PLT_ENTRY_SIZE as usize] {
-    let mut e = [0u8; PLT_ENTRY_SIZE as usize];
-    if machine == EM_AARCH64 {
-        let page = (slot & !0xfff).wrapping_sub(at & !0xfff) as i64 >> 12;
-        let imm = page as u32 & 0x1f_ffff;
-        let adrp = 0x9000_0010 | (imm & 3) << 29 | (imm >> 2) << 5;
-        let ldr = 0xf940_0211 | ((slot & 0xfff) as u32 / 8) << 10;
-        for (k, w) in [adrp, ldr, 0xd61f_0220, 0xd503_201f].iter().enumerate() {
-            e[k * 4..k * 4 + 4].copy_from_slice(&w.to_le_bytes());
-        }
-        return e;
-    }
-    // jmp *disp32(%rip), then a one-byte pad to the entry size.
-    e[0] = 0xff;
-    e[1] = 0x25;
-    e[2..6].copy_from_slice(&(slot.wrapping_sub(at + 6) as u32).to_le_bytes());
-    e[6..].fill(0xcc);
-    e
-}
-
 impl<'a> LdsLinker<'a> {
     /// Bind the references no input defines against the shared
     /// libraries named on the command line. Each binding takes a
-    /// `.dynsym` entry and a GOT slot; one a call reaches also takes a
-    /// PLT stub, since a call site holds a displacement rather than a
-    /// slot to load through.
+    /// `.dynsym` entry; one a call reaches also takes a PLT entry, since
+    /// a call site holds a displacement rather than a slot to load
+    /// through, and so does a call to a preemptible definition. A GOT
+    /// slot is taken only by a reference through the GOT.
     pub(super) fn build_imports(&mut self) {
-        if self.opts.shared_libs.is_empty() {
-            return;
+        self.prune_preemptible();
+        if self.dynamically_linked() {
+            self.bind_shared_libraries();
         }
+        let reached = self.reached_by(Reach::Plt);
+        let called: BTreeSet<String> = (core::mem::take(&mut self.plt_syms).into_iter())
+            .chain(reached)
+            .collect();
+        self.plt_syms = called.into_iter().collect();
+        self.plt_of = index_map(&self.plt_syms);
+    }
+
+    /// The imports, and the ones a call reaches. A shared object also
+    /// imports a default-visibility weak reference nothing defines, as bfd
+    /// does: the loader writes 0 or another component's definition.
+    fn bind_shared_libraries(&mut self) {
         // The script's own definitions satisfy a reference on their
         // own, whether or not a library exports the same name.
         let assigned = self
@@ -123,49 +161,176 @@ impl<'a> LdsLinker<'a> {
             .map(|a| a.symbol.as_str())
             .filter(|s| *s != ".")
             .collect();
+        let (weak_dynamic, weak_pc) = self.dynamic_weak_names();
         let mut names: BTreeSet<&str> = BTreeSet::new();
-        for o in &self.objects {
-            for s in &o.symbols {
+        let mut strong: BTreeSet<&str> = BTreeSet::new();
+        for (oi, o) in self.objects.iter().enumerate() {
+            for (si, s) in o.symbols.iter().enumerate() {
                 if s.binding() != STB_LOCAL
                     && s.shndx as u16 == SHN_UNDEF
                     && !s.name.is_empty()
                     && !self.globals.contains_key(&s.name)
                     && !script_defined.contains(s.name.as_str())
-                    && self
-                        .opts
-                        .shared_libs
-                        .iter()
-                        .any(|l| l.lib.exports.contains(&s.name))
+                    && (self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(&s.name))
+                    || (self.opts.shared
+                        || weak_dynamic.contains(s.name.as_str())
+                        || weak_pc.contains(s.name.as_str()))
+                        && self.undefweak_dynamic(oi, si)
                 {
                     names.insert(&s.name);
+                    if s.binding() != STB_WEAK {
+                        strong.insert(&s.name);
+                    }
                 }
             }
         }
+        self.weak_imports = (names.iter())
+            .filter(|n| !strong.contains(*n))
+            .map(|n| String::from(*n))
+            .collect();
         let mut called: BTreeSet<&str> = BTreeSet::new();
+        let mut canonical: BTreeSet<&str> = BTreeSet::new();
         for o in &self.objects {
             for sec in &o.sections {
                 for r in &sec.relocs {
                     let Some(sym) = o.symbols.get(r.sym as usize) else {
                         continue;
                     };
+                    if !names.contains(sym.name.as_str()) {
+                        continue;
+                    }
+                    let pointer = self.function_pointer(&sym.name, r, sec.flags);
+                    // A shared object's PC-relative field takes a dynamic
+                    // relocation instead; an executable calls an undefined
+                    // weak name through a PLT entry only where it makes the
+                    // name dynamic for the call.
+                    let carried = self.opts.shared && x86_pc_field(self.machine, r.rtype);
+                    let unbound_weak = !self.opts.shared
+                        && !(self.opts.shared_libs.iter())
+                            .any(|l| l.lib.exports.contains(&sym.name))
+                        && !(branch(self.machine, r.rtype) && weak_dynamic.contains(&sym.name));
                     if reloc_needs_plt(self.machine, r.rtype)
-                        && names.contains(sym.name.as_str())
+                        && !carried
+                        && !unbound_weak
                         && !self.is_data_export(&sym.name)
+                        || pointer.is_some()
                     {
                         called.insert(&sym.name);
+                    }
+                    if pointer == Some(true) {
+                        canonical.insert(&sym.name);
                     }
                 }
             }
         }
         self.imports = names.iter().map(|s| String::from(*s)).collect();
         self.plt_syms = called.iter().map(|s| String::from(*s)).collect();
+        self.canonical = canonical.iter().map(|s| String::from(*s)).collect();
         self.import_of = index_map(&self.imports);
-        self.plt_of = index_map(&self.plt_syms);
     }
 
-    /// `.dynsym` index of an imported symbol. Imports sit right after
-    /// the null entry, in their own order.
+    /// The undefined weak names an executable linked against a library
+    /// makes dynamic, as bfd does, so that a component the loader finds
+    /// can define them: those it reaches through the GOT or a call, and in
+    /// an aarch64 PIE through an address-width word. x86 resolves one
+    /// that code also addresses directly to 0 instead. Second, the names
+    /// an i386 PIE's `R_386_PC32` names, which bfd leaves to a dynamic
+    /// relocation against the name wherever the field lies.
+    fn dynamic_weak_names(&self) -> (HashSet<String>, HashSet<String>) {
+        let pie = self.opts.emit == LdsEmit::Dyn;
+        let mut reached: HashSet<&str> = HashSet::new();
+        let mut addressed: HashSet<&str> = HashSet::new();
+        let mut pc: HashSet<String> = HashSet::new();
+        for o in &self.objects {
+            for s in &o.sections {
+                let code = s.flags & (SHF_ALLOC | SHF_EXECINSTR) == SHF_ALLOC | SHF_EXECINSTR;
+                for r in &s.relocs {
+                    let Some(sym) = o.symbols.get(r.sym as usize) else {
+                        continue;
+                    };
+                    let word = pie
+                        && self.machine == EM_AARCH64
+                        && r.rtype == rt::R_AARCH64_ABS64
+                        && s.flags & SHF_ALLOC != 0;
+                    if pie && self.machine == EM_386 && r.rtype == rt::R_386_PC32 {
+                        pc.insert(sym.name.clone());
+                    }
+                    if reloc_uses_got(self.machine, r.rtype)
+                        || branch(self.machine, r.rtype)
+                        || word
+                    {
+                        reached.insert(&sym.name);
+                    } else if code && self.machine != EM_AARCH64 && r.rtype != R_NONE {
+                        addressed.insert(&sym.name);
+                    }
+                }
+            }
+        }
+        let reached = (reached.into_iter())
+            .filter(|n| !addressed.contains(n))
+            .map(String::from)
+            .collect();
+        (reached, pc)
+    }
+
+    /// Whether `name` is an import no library defines: an undefined weak
+    /// reference the link made dynamic.
+    pub(super) fn undefined_weak_import(&self, name: &str) -> bool {
+        self.weak_imports.contains(name)
+            && !(self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(name))
+    }
+
+    /// Whether `r`, in a section with `flags`, takes the address of the
+    /// function import `name` in an executable, which then gives the
+    /// function a PLT entry: `Some(true)` where the entry is the
+    /// function's address, so it compares equal to the library's. A
+    /// position-dependent executable's direct reference takes one, as do
+    /// an x86-64 PIE's `R_X86_64_PC32` in writable data and an aarch64
+    /// executable's `R_AARCH64_ABS64`, as GNU ld links them.
+    fn function_pointer(&self, name: &str, r: &RawReloc, flags: u64) -> Option<bool> {
+        if !self.is_function_export(name) || self.opts.shared {
+            return None;
+        }
+        let pde = self.opts.emit == LdsEmit::Exec;
+        let data = flags & (SHF_ALLOC | SHF_WRITE | SHF_EXECINSTR) == SHF_ALLOC | SHF_WRITE;
+        let pie_field = self.machine == EM_X86_64 && r.rtype == rt::R_X86_64_PC32 && data;
+        if pde && self.direct_reference(r, flags, true) || !pde && pie_field {
+            return Some(true);
+        }
+        (self.machine == EM_AARCH64 && r.rtype == rt::R_AARCH64_ABS64).then_some(pde)
+    }
+
+    fn is_function_export(&self, name: &str) -> bool {
+        (self.opts.shared_libs.iter()).any(|l| l.lib.function_exports.contains(name))
+    }
+
+    /// Whether a PC-relative field naming the import `name` takes a
+    /// dynamic relocation of its own type: in a shared object, in an
+    /// executable for a data object it holds no copy of, and in a PIE for
+    /// an i386 function or an undefined weak name, as GNU ld links them.
+    pub(super) fn import_pc_dynamic(&self, name: &str, rtype: u32) -> bool {
+        let pie = self.opts.emit == LdsEmit::Dyn;
+        let i386_function = self.machine == EM_386 && self.is_function_export(name);
+        let uncopied = self.is_data_export(name) && !self.copy_of.contains_key(name);
+        x86_pc_field(self.machine, rtype)
+            && (self.opts.shared
+                || uncopied
+                || pie && (i386_function || self.undefined_weak_import(name)))
+    }
+
+    /// Whether an address-width word naming the canonical import `name`
+    /// holds its PLT entry: in a position-dependent executable. A PIE's
+    /// word takes a relocation against the symbol, as bfd links it.
+    pub(super) fn word_binds_canonical(&self, name: &str) -> bool {
+        self.opts.emit == LdsEmit::Exec && self.canonical.contains(name)
+    }
+
+    /// `.dynsym` index of `name`: the table's, and before the table is
+    /// built an import's place after the null entry, in import order.
     pub(super) fn dynsym_index(&self, name: &str) -> u32 {
+        if let Some(i) = self.dyn_tables.as_ref().and_then(|t| t.index_of(name)) {
+            return i;
+        }
         self.import_of.get(name).map_or(0, |&k| 1 + k as u32)
     }
 
@@ -178,39 +343,39 @@ impl<'a> LdsLinker<'a> {
             .any(|l| l.lib.data_exports.contains(name))
     }
 
-    /// Address a reference to an imported symbol resolves to: its PLT
-    /// stub for a call, its GOT slot for a load through one.
-    pub(super) fn import_target(&self, name: &str, rtype: u32) -> Option<u64> {
+    /// Whether `r` of object `oi` loads an import's address through the
+    /// GOT.
+    pub(super) fn imported_through_got(&self, oi: usize, r: &RawReloc) -> bool {
+        let name = &self.objects[oi].symbols[r.sym as usize].name;
+        reloc_uses_got(self.machine, r.rtype) && self.import_of.contains_key(name)
+    }
+
+    /// Address a reference to an imported symbol from a section with
+    /// `flags` resolves to: its PLT entry for a call or where the entry is
+    /// its address, its GOT slot for a load through one. An x86
+    /// PC-relative field is a call only in a position-dependent
+    /// executable's code, as bfd reads one.
+    pub(super) fn import_target(&self, name: &str, rtype: u32, flags: u64) -> Option<u64> {
         if !self.import_of.contains_key(name) {
             return None;
         }
-        if reloc_needs_plt(self.machine, rtype) {
-            let k = *self.plt_of.get(name)?;
-            return Some(self.synth_addr(SYNTH_PLT)? + k as u64 * PLT_ENTRY_SIZE);
+        let pde_code = self.opts.emit == LdsEmit::Exec && flags & SHF_EXECINSTR != 0;
+        let call = match self.machine {
+            EM_386 => rtype == rt::R_386_PLT32 || rtype == rt::R_386_PC32 && pde_code,
+            EM_X86_64 => rtype == rt::R_X86_64_PLT32 || rtype == rt::R_X86_64_PC32 && pde_code,
+            _ => reloc_needs_plt(self.machine, rtype),
+        };
+        let word = rtype == self.dyn_reloc_types().0;
+        let canonical = self.canonical.contains(name)
+            && !reloc_uses_got(self.machine, rtype)
+            && (!word || self.word_binds_canonical(name));
+        if call || canonical {
+            return self.stub_or_slot(name, Reach::Plt);
         }
         if reloc_uses_got(self.machine, rtype) {
-            let k = *self.got_map.get(name)?;
-            return Some(self.got_slot_base()? + k as u64 * self.class.addr_size());
+            return self.stub_or_slot(name, Reach::Got);
         }
         None
-    }
-
-    /// PLT stub bytes: each jumps through its symbol's GOT slot, which
-    /// the loader fills from the `GLOB_DAT` entry naming the symbol.
-    /// Lazy binding would need a `.rela.plt` the loader walks on
-    /// demand; these bind at load time.
-    pub(super) fn plt_bytes(&self) -> Vec<u8> {
-        let (Some(plt), Some(got)) = (self.synth_addr(SYNTH_PLT), self.got_slot_base()) else {
-            return Vec::new();
-        };
-        let slot_size = self.class.addr_size();
-        let mut out = Vec::with_capacity(self.plt_syms.len() * PLT_ENTRY_SIZE as usize);
-        for (k, name) in self.plt_syms.iter().enumerate() {
-            let at = plt + k as u64 * PLT_ENTRY_SIZE;
-            let slot = got + *self.got_map.get(name).unwrap_or(&0) as u64 * slot_size;
-            out.extend_from_slice(&plt_entry(self.machine, at, slot));
-        }
-        out
     }
 
     /// Resolve a symbol name to a final value through the global table
@@ -232,8 +397,8 @@ impl<'a> LdsLinker<'a> {
         let sym = &self.objects[oi].symbols[si];
         sym.shndx as u16 == SHN_UNDEF
             && sym.binding() == STB_WEAK
-            && sym.other & 0x3 == 0
             && !sym.name.is_empty()
+            && self.visibility_of(&sym.name) == STV_DEFAULT
             && !self.globals.contains_key(&sym.name)
             // During sizing the current pass's script table is swapped
             // out; the previous pass's values match at convergence.
@@ -312,6 +477,102 @@ impl<'a> LdsLinker<'a> {
             target,
             self.opts.shared,
         ))
+    }
+
+    /// Refusal for an absolute field narrower than an address naming an
+    /// import, as GNU ld refuses one: in a PIE, and on x86-64 in a
+    /// position-dependent executable's writable data, which takes no copy.
+    pub(super) fn narrow_import_refusal(
+        &self,
+        oi: usize,
+        si: usize,
+        r: &RawReloc,
+    ) -> Option<String> {
+        let obj = &self.objects[oi];
+        let sym = obj.symbols.get(r.sym as usize)?;
+        let sec = &obj.sections[si];
+        if self.opts.shared
+            || sec.flags & SHF_ALLOC == 0
+            || sym.binding() == STB_LOCAL
+            || !narrow_absolute(self.machine, r.rtype)
+            || !self.import_of.contains_key(&sym.name)
+        {
+            return None;
+        }
+        let kind = match self.opts.emit {
+            LdsEmit::Dyn => "a position-independent executable",
+            _ if self.machine == EM_X86_64 && sec.flags & SHF_WRITE != 0 => {
+                "a position-dependent executable"
+            }
+            _ => return None,
+        };
+        Some(narrow_import_body(
+            &locate_reloc(&obj.source, &sec.name, r.offset),
+            &elf_reloc_desc(self.machine, r.rtype),
+            &sym.name,
+            kind,
+        ))
+    }
+
+    /// Whether symbol `si` of object `oi` is an undefined weak reference
+    /// the link resolves to 0: nothing defines it and no library binds it.
+    pub(super) fn weak_resolves_to_zero(&self, oi: usize, si: usize) -> bool {
+        let Some(sym) = self.objects[oi].symbols.get(si) else {
+            return false;
+        };
+        sym.shndx as u16 == SHN_UNDEF
+            && sym.binding() == STB_WEAK
+            && !sym.name.is_empty()
+            && !self.globals.contains_key(&sym.name)
+            && !self.script_now.contains_key(&sym.name)
+            && !self.import_of.contains_key(&sym.name)
+    }
+
+    /// Refusal for a PIE's PC-relative field naming an undefined weak name
+    /// the link resolves to 0, as GNU ld refuses one: on x86-64 in
+    /// read-only memory, and on aarch64, in a dynamically linked PIE, for a
+    /// default-visibility name.
+    pub(super) fn weak_pc_refusal(&self, oi: usize, si: usize, r: &RawReloc) -> Option<String> {
+        let obj = &self.objects[oi];
+        let sec = &obj.sections[si];
+        let pie = self.opts.emit == LdsEmit::Dyn && !self.opts.shared;
+        if !pie || sec.flags & SHF_ALLOC == 0 || !self.weak_resolves_to_zero(oi, r.sym as usize) {
+            return None;
+        }
+        let name = &obj.symbols[r.sym as usize].name;
+        let dynamic = self.opts.interp.is_some() || !self.opts.shared_libs.is_empty();
+        let refused = match self.machine {
+            EM_X86_64 => x86_pc_field(self.machine, r.rtype) && sec.flags & SHF_WRITE == 0,
+            EM_AARCH64 => {
+                aarch64_pc_field(r.rtype) && dynamic && self.visibility_of(name) == STV_DEFAULT
+            }
+            _ => false,
+        };
+        refused.then(|| {
+            weak_pc_in_pie_body(
+                &locate_reloc(&obj.source, &sec.name, r.offset),
+                &elf_reloc_desc(self.machine, r.rtype),
+                name,
+            )
+        })
+    }
+
+    /// The value an aarch64 PC-relative field at `p` takes for an undefined
+    /// weak name the link resolves to 0: GNU ld places the name at the
+    /// field, the page of it for `adrp`, so that the field holds 0.
+    pub(super) fn weak_pc_value(&self, oi: usize, r: &RawReloc, p: u64, sa: u64) -> u64 {
+        if self.machine != EM_AARCH64
+            || !aarch64_pc_field(r.rtype)
+            || !self.weak_resolves_to_zero(oi, r.sym as usize)
+        {
+            return sa;
+        }
+        let page = matches!(
+            r.rtype,
+            rt::R_AARCH64_ADR_PREL_PG_HI21 | rt::R_AARCH64_ADR_PREL_PG_HI21_NC
+        );
+        let at = if page { p & !0xfff } else { p };
+        at.wrapping_add(r.addend as u64)
     }
 
     pub(super) fn resolve_sym_prevpass(&self, oi: usize, si: usize, addend: i64) -> Option<u64> {
@@ -413,14 +674,78 @@ impl<'a> LdsLinker<'a> {
         self.kept_synth(SYNTH_GOT)
     }
 
+    /// Whether the image keeps the section `_GLOBAL_OFFSET_TABLE_` names:
+    /// an x86 `.got.plt` sized empty goes, and the symbol with it.
+    pub(super) fn got_symbol_kept(&self) -> bool {
+        let synth = &self.objects[self.synth_obj];
+        !self.got_on_got_plt()
+            || (synth.sections.iter()).any(|s| s.name == SYNTH_GOTPLT && s.size != 0)
+    }
+
     /// The address of the first GOT entry, past the reserved header.
     pub(super) fn got_slot_base(&self) -> Option<u64> {
         Some(self.got_addr_prevpass()? + self.got_reserved() * self.class.addr_size())
     }
 
     pub(super) fn got_slot_addr(&self, oi: usize, r: &RawReloc) -> Option<u64> {
-        let name = &self.objects[oi].symbols[r.sym as usize].name;
-        let idx = *self.got_map.get(name)?;
+        let idx = *self.got_map.get(&self.got_key(oi, r.sym)?)?;
         Some(self.got_slot_base()? + idx as u64 * self.class.addr_size())
+    }
+
+    /// The slot key of symbol `sym` of object `oi`; a section symbol,
+    /// which has no name, takes none.
+    pub(super) fn got_key(&self, oi: usize, sym: u32) -> Option<GotKey> {
+        let s = self.objects[oi].symbols.get(sym as usize)?;
+        if s.name.is_empty() {
+            return None;
+        }
+        Some(if s.binding() == STB_LOCAL {
+            GotKey::Local(oi, sym)
+        } else {
+            GotKey::Global(s.name.clone())
+        })
+    }
+
+    /// True where a relocation names a GOT slot whatever its target
+    /// resolves to: an aarch64 GOT reference, and an i386 one that does
+    /// not relax. x86-64 relaxes every local one.
+    pub(super) fn got_slot_ref(&self, oi: usize, si: usize, r: &RawReloc) -> bool {
+        match self.machine {
+            EM_AARCH64 => rt::aarch64_got_slot_ref(r.rtype),
+            EM_386 => self.i386_got_slot_ref(oi, si, r),
+            _ => false,
+        }
+    }
+
+    /// Whether `key`'s slot holds a load address, which a
+    /// position-independent image relocates; an absolute symbol's holds
+    /// a number.
+    pub(super) fn slot_holds_load_address(&self, key: &GotKey) -> bool {
+        match key {
+            GotKey::Global(name) => match self.globals.get(name) {
+                Some(&(oi, si)) => self.reloc_is_relative(oi, si),
+                None => (self
+                    .script_now
+                    .get(name)
+                    .or_else(|| self.script_prev.get(name)))
+                .is_some_and(|s| matches!(s.val.att, Att::Out(_)) || s.final_out.is_some()),
+            },
+            GotKey::Local(oi, si) => self.reloc_is_relative(*oi, *si as usize),
+        }
+    }
+
+    /// The value `key`'s slot holds, `None` where the loader binds it.
+    pub(super) fn slot_value(&self, key: &GotKey) -> Option<u64> {
+        match key {
+            GotKey::Global(name) if self.preemptible.contains(name) => None,
+            // An undefined weak name the link keeps local holds 0.
+            GotKey::Global(name)
+                if !self.globals.contains_key(name) && !self.import_of.contains_key(name) =>
+            {
+                Some(self.resolve_name(name).unwrap_or(0))
+            }
+            GotKey::Global(name) => self.resolve_name(name),
+            GotKey::Local(oi, si) => self.resolve_sym_prevpass(*oi, *si as usize, 0),
+        }
     }
 }

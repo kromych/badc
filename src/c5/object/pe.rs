@@ -161,6 +161,7 @@ fn headers_raw_size(plan: &SectionPlan) -> usize {
 
 const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
 const IAT_ENTRY_SIZE: usize = 8;
+const IMAGE_ORDINAL_FLAG64: u64 = 1 << 63;
 
 const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
@@ -233,6 +234,9 @@ struct PeLayout<'a> {
     pdata_rva: u32,
     pdata_file_off: u32,
     pdata_bytes: Vec<u8>,
+    /// `(byte offset in .pdata, data-byte offset)` of each input entry's
+    /// unwind-data address, written once the data is placed.
+    pdata_info_slots: Vec<(usize, u64)>,
     pdata_directory_size: u32,
     pdata_raw_size: u32,
     idata_rva: u32,
@@ -286,7 +290,8 @@ struct PeWriter<'a> {
     subsystem: u16,
     passthrough_entry: bool,
     stub: EntryStub,
-    imports: Vec<(String, String)>,
+    /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
+    imports: Vec<(String, String, Option<u16>)>,
     dlls: Vec<DllGroup>,
     /// The stub occupies a span rounded up to the alignment `build.text`'s
     /// own input sections claim; SectionAlignment covers it, so the span
@@ -342,7 +347,7 @@ impl<'a> PeWriter<'a> {
         // Index N becomes IAT slot N. The CRT / kernel32 entries the stub
         // relies on ride the embedded runtime TU's `#pragma binding`, so
         // they already sit in `build.imports`.
-        let imports: Vec<(String, String)> = build
+        let imports: Vec<(String, String, Option<u16>)> = build
             .imports
             .imports
             .iter()
@@ -350,6 +355,7 @@ impl<'a> PeWriter<'a> {
                 (
                     imp.real_symbol.clone(),
                     build.imports.dylibs[imp.dylib_index].path.clone(),
+                    imp.ordinal,
                 )
             })
             .collect();
@@ -419,6 +425,15 @@ impl<'a> PeWriter<'a> {
     /// RVA of the code body, past the entry stub.
     fn text_body_rva(&self) -> u32 {
         self.layout.text_rva + self.text_prologue_len
+    }
+
+    /// The `_tls_index` the TLS directory names: the link's definition, else
+    /// the writer's slot ahead of the directory.
+    fn tls_index_rva(&self) -> u32 {
+        match self.build.tls_index_slot {
+            Some(off) => self.data_off_to_rva(off as u32),
+            None => self.layout.data_rva + self.layout.tls.tls_index_offset_in_data,
+        }
     }
 
     /// The data families and which sections the image carries, the DWARF
@@ -495,7 +510,8 @@ impl<'a> PeWriter<'a> {
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
             || !build.label_relocs.is_empty()
-            || !build.text_abs_relocs.is_empty();
+            || !build.text_abs_relocs.is_empty()
+            || !build.image_base_slots.is_empty();
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
         l.text_rva = l.section_align;
@@ -542,9 +558,12 @@ impl<'a> PeWriter<'a> {
             l.pdata_rva,
             self.text_prologue_len,
             &build.fn_unwind,
+            &build.a64_unwind,
             &build.early_returns,
+            &build.pe_unwind,
         );
         l.pdata_directory_size = pdata.directory_size;
+        l.pdata_info_slots = pdata.info_slots;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
         l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, l.section_align);
         l.pdata_bytes = pdata.bytes;
@@ -760,6 +779,7 @@ impl<'a> PeWriter<'a> {
             build,
             &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
             IMAGE_BASE + text_body_rva as u64,
+            Some(IMAGE_BASE),
         )?;
         let l = &self.layout;
         let reloc_present = l.reloc_present;
@@ -777,6 +797,7 @@ impl<'a> PeWriter<'a> {
                 &build.data_relocs,
                 &build.code_relocs,
                 &build.label_relocs,
+                &build.image_base_slots,
                 &text_abs_fields,
                 &tls_sites,
             )
@@ -848,6 +869,12 @@ impl<'a> PeWriter<'a> {
                             )));
                         }
                         self.data_off_to_rva(d.offset as u32)
+                    }
+                    super::DynamicExportSection::Tls => {
+                        return Err(Self::internal(format!(
+                            "PE: thread-local export `{}` has no export form",
+                            d.name
+                        )));
                     }
                 };
                 entries.push((d.name.clone(), rva));
@@ -1065,11 +1092,52 @@ impl<'a> PeWriter<'a> {
             };
             field.copy_from_slice(&disp.to_le_bytes());
         }
-        if !build.got_base_fixups.is_empty() || !build.got_rel_fields.is_empty() {
+        use crate::c5::codegen::ImageAddr;
+        let names_got = |f: &crate::c5::codegen::ImageRelField| {
+            f.to == ImageAddr::GotBase || f.from == ImageAddr::GotBase
+        };
+        if build
+            .base_fixups
+            .iter()
+            .any(|f| f.base != ImageAddr::ImageBase)
+            || build.image_rel_fields.iter().any(names_got)
+        {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
             ));
+        }
+        // `__ImageBase` is at RVA 0.
+        for f in &build.base_fixups {
+            let instr_off = f.instr_offset as u32 + prologue;
+            patch_addr_load(machine, &mut text, instr_off, text_rva, f.offset, f.part)?;
+        }
+        for f in &build.image_rel_fields {
+            let site = f.site_text_offset as usize + prologue as usize;
+            let rva = |a: ImageAddr| match a {
+                ImageAddr::Site => Some(text_rva as i64 + site as i64),
+                ImageAddr::ImageBase => Some(0),
+                ImageAddr::Text(off) => Some(i64::from(text_rva + prologue) + off as i64),
+                ImageAddr::Data(off) => Some(i64::from(self.data_off_to_rva(off as u32))),
+                ImageAddr::ImportSlot(i) => Some(i64::from(l.idata.iat_rva_for_import[i])),
+                ImageAddr::GotBase | ImageAddr::Absolute(_) => None,
+            };
+            let (Some(to), Some(from)) = (rva(f.to), rva(f.from)) else {
+                return Err(Self::internal(format!(
+                    "PE: the field at .text+{site:#x} measures {:?} from {:?}, which have no \
+                     image-relative address",
+                    f.to, f.from
+                )));
+            };
+            let value = to + f.addend - from;
+            let width = f.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok() || u32::try_from(value).is_ok();
+            let Some(field) = text.get_mut(site..site + width).filter(|_| fits) else {
+                return Err(Self::internal(format!(
+                    "PE: the image-relative field at .text+{site:#x} cannot take {value:#x}"
+                )));
+            };
+            field.copy_from_slice(&value.to_le_bytes()[..width]);
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
@@ -1149,7 +1217,7 @@ impl<'a> PeWriter<'a> {
             &build.rodata.rel32,
         )?;
         if !build.tls_index_fixups.is_empty() {
-            let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
+            let tls_index_rva = self.tls_index_rva();
             for f in &build.tls_index_fixups {
                 let instr_off = (f.instr_offset as u32) + prologue;
                 patch_tls_index_lookup(
@@ -1377,6 +1445,7 @@ impl<'a> PeWriter<'a> {
             self.build,
             self.layout.ro_len as u64,
             IMAGE_BASE + self.text_body_rva() as u64,
+            Some(IMAGE_BASE),
             &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
         )
     }
@@ -1390,7 +1459,12 @@ impl<'a> PeWriter<'a> {
         pad_to(&mut out, l.text_file_off as usize)?;
         out.extend_from_slice(&self.text_bytes);
         pad_to(&mut out, (l.text_file_off + l.text_raw_size) as usize)?;
+        let at = out.len();
         out.extend_from_slice(&l.pdata_bytes);
+        for &(slot, off) in &l.pdata_info_slots {
+            let rva = self.data_off_to_rva(off as u32);
+            out[at + slot..at + slot + 4].copy_from_slice(&rva.to_le_bytes());
+        }
         pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
         out.extend_from_slice(&l.idata.bytes);
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
@@ -1436,8 +1510,7 @@ impl<'a> PeWriter<'a> {
                 let tls_init_start_va =
                     IMAGE_BASE + (l.data_rva + l.tls.tls_init_offset_in_data) as u64;
                 let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
-                let tls_index_va =
-                    IMAGE_BASE + (l.data_rva + l.tls.tls_index_offset_in_data) as u64;
+                let tls_index_va = IMAGE_BASE + self.tls_index_rva() as u64;
                 out.extend_from_slice(&tls_init_start_va.to_le_bytes());
                 out.extend_from_slice(&tls_init_end_va.to_le_bytes());
                 out.extend_from_slice(&tls_index_va.to_le_bytes());
@@ -1617,6 +1690,7 @@ fn build_reloc_section(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
+    image_base_slots: &[crate::c5::codegen::ImageBaseSlot],
     text_abs_fields: &[AbsTextField],
     tls_sites: &[(usize, u64)],
 ) -> Vec<u8> {
@@ -1646,10 +1720,12 @@ fn build_reloc_section(
     for r in code_relocs {
         add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
     }
-    // `&&label` initializers hold a code pointer in the data stream, so
-    // they take the same DIR64 entry.
-    for r in label_relocs {
-        add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
+    // `&&label` initializers hold a code pointer in the data stream, and
+    // `&__ImageBase` the image's own address, so they take the same entry.
+    for off in (label_relocs.iter().map(|r| r.data_offset))
+        .chain(image_base_slots.iter().map(|s| s.data_offset))
+    {
+        add(data_off_to_rva(off as u32), IMAGE_REL_BASED_DIR64);
     }
     // Absolute fields in the code section. `.reloc` covers every section,
     // so the loader rebases these like a data pointer; the entry type
@@ -2056,9 +2132,9 @@ struct DllGroup {
     members: Vec<usize>,
 }
 
-fn group_imports_by_dll(imports: &[(String, String)]) -> Vec<DllGroup> {
+fn group_imports_by_dll(imports: &[(String, String, Option<u16>)]) -> Vec<DllGroup> {
     let mut groups: Vec<DllGroup> = Vec::new();
-    for (idx, (_, dll)) in imports.iter().enumerate() {
+    for (idx, (_, dll, _)) in imports.iter().enumerate() {
         if let Some(g) = groups.iter_mut().find(|g| g.dll_name == *dll) {
             g.members.push(idx);
         } else {
@@ -2081,7 +2157,11 @@ struct IDataLayout {
     iat_rva_for_import: Vec<u32>,
 }
 
-fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) -> IDataLayout {
+fn plan_idata(
+    dlls: &[DllGroup],
+    imports: &[(String, String, Option<u16>)],
+    base_rva: u32,
+) -> IDataLayout {
     let n_dlls = dlls.len();
     let n_imports = imports.len();
 
@@ -2102,8 +2182,11 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     let hint_table_off = ilt_off + ilt_size;
     let mut hint_table_size = 0usize;
     let mut hint_offsets: Vec<usize> = Vec::with_capacity(n_imports);
-    for (sym, _) in imports {
+    for (sym, _, ordinal) in imports {
         hint_offsets.push(hint_table_off + hint_table_size);
+        if ordinal.is_some() {
+            continue;
+        }
         hint_table_size += 2 + sym.len() + 1;
         if hint_table_size & 1 != 0 {
             hint_table_size += 1; // align to 2
@@ -2161,8 +2244,10 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
     }
     for (g_idx, group) in dlls.iter().enumerate() {
         for (member_pos, &global_idx) in group.members.iter().enumerate() {
-            let entry_value = base_rva + hint_offsets[global_idx] as u32; // RVA -> hint/name
-            let entry = entry_value as u64; // high bit clear -> name import
+            let entry = match imports[global_idx].2 {
+                Some(ordinal) => IMAGE_ORDINAL_FLAG64 | u64::from(ordinal),
+                None => u64::from(base_rva + hint_offsets[global_idx] as u32),
+            };
             let iat_slot = iat_off + group_iat_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
             let ilt_slot = ilt_off + group_ilt_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
             bytes[iat_slot..iat_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
@@ -2170,7 +2255,7 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         }
     }
 
-    for (i, (sym, _)) in imports.iter().enumerate() {
+    for (i, (sym, _, _)) in imports.iter().enumerate().filter(|(_, i)| i.2.is_none()) {
         let off = hint_offsets[i];
         bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
         bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());
@@ -2318,9 +2403,14 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
 struct Pdata {
     bytes: Vec<u8>,
     directory_size: u32,
+    /// Where an input entry's unwind-data RVA goes, and its data offset.
+    info_slots: Vec<(usize, u64)>,
 }
 
-/// `.pdata` Exception Directory dispatcher.
+/// `.pdata` Exception Directory dispatcher. `foreign` are the functions
+/// the inputs' own `.pdata` describes: their entries join the table as
+/// they are, and no entry of the writer's covers them.
+#[allow(clippy::too_many_arguments)]
 fn build_pdata(
     machine: Machine,
     text_rva: u32,
@@ -2328,7 +2418,9 @@ fn build_pdata(
     pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
+    a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
+    foreign: &[super::PeUnwindRange],
 ) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
@@ -2338,8 +2430,16 @@ fn build_pdata(
             text_prologue_len,
             fn_unwind,
             early_returns,
+            foreign,
         ),
-        Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
+        Machine::Aarch64 => build_aarch64_pdata(
+            text_rva,
+            text_size,
+            pdata_rva,
+            text_prologue_len,
+            a64_unwind,
+            foreign,
+        ),
     }
 }
 
@@ -2450,9 +2550,10 @@ fn build_x86_64_pdata(
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
+    foreign: &[super::PeUnwindRange],
 ) -> Pdata {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
-    if fn_unwind.is_empty() {
+    if fn_unwind.is_empty() && foreign.is_empty() {
         let mut bytes = Vec::with_capacity(16);
         let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
         bytes.extend_from_slice(&text_rva.to_le_bytes());
@@ -2462,6 +2563,7 @@ fn build_x86_64_pdata(
         return Pdata {
             bytes,
             directory_size: RUNTIME_FUNCTION_SIZE,
+            info_slots: Vec::new(),
         };
     }
 
@@ -2485,7 +2587,7 @@ fn build_x86_64_pdata(
                 })
         })
         .collect();
-    let array_size = entries.len() as u32 * RUNTIME_FUNCTION_SIZE;
+    let array_size = (entries.len() + foreign.len()) as u32 * RUNTIME_FUNCTION_SIZE;
     let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
     let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
@@ -2505,13 +2607,29 @@ fn build_x86_64_pdata(
         }
     }
 
+    // The loader binary-searches the array, so the inputs' entries take
+    // their places among the writer's by start.
+    let body = text_rva + text_prologue_len;
+    let mut rows: Vec<(u32, u32, u32, Option<u64>)> = (spans.iter().zip(&info_rvas))
+        .map(|(&(begin, end), &info)| (body + begin, body + end, info, None))
+        .collect();
+    rows.extend(foreign.iter().map(|r| {
+        let info = match r.data {
+            super::PeUnwindRef::Info(off) => Some(off),
+            super::PeUnwindRef::Packed(_) => None,
+        };
+        (body + r.begin as u32, body + r.end as u32, 0, info)
+    }));
+    rows.sort_by_key(|r| r.0);
     let mut bytes = Vec::with_capacity((array_size + blobs.len() as u32) as usize);
-    for (i, &(begin, end)) in spans.iter().enumerate() {
-        let begin = text_rva + text_prologue_len + begin;
-        let end = text_rva + text_prologue_len + end;
+    let mut info_slots = Vec::new();
+    for (begin, end, info, foreign_info) in rows {
         bytes.extend_from_slice(&begin.to_le_bytes());
         bytes.extend_from_slice(&end.to_le_bytes());
-        bytes.extend_from_slice(&info_rvas[i].to_le_bytes());
+        if let Some(off) = foreign_info {
+            info_slots.push((bytes.len(), off));
+        }
+        bytes.extend_from_slice(&info.to_le_bytes());
     }
     while pdata_rva + bytes.len() as u32 != blobs_rva {
         bytes.push(0);
@@ -2520,28 +2638,82 @@ fn build_x86_64_pdata(
     Pdata {
         bytes,
         directory_size: array_size,
+        info_slots,
     }
 }
 
-/// AArch64 `.pdata` builder.
-fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
-    let mut bytes = Vec::new();
-    let mut covered = 0u32;
-    while covered < text_size {
-        let remaining = text_size - covered;
-        let chunk = remaining.min(ARM64_PACKED_FUNCTION_MAX_BYTES);
-        let chunk_words = chunk / 4;
-        let function_length = chunk_words & 0x7FF; // 11 bits
-        let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
-        let begin_address = text_rva + covered;
-        bytes.extend_from_slice(&begin_address.to_le_bytes());
-        bytes.extend_from_slice(&unwind_data.to_le_bytes());
-        covered += chunk;
+/// AArch64 `.pdata`: an `.xdata` record after the array for each frame `a64`
+/// describes, the inputs' entries, packed frameless ones over the rest.
+fn build_aarch64_pdata(
+    text_rva: u32,
+    text_size: u32,
+    pdata_rva: u32,
+    text_prologue_len: u32,
+    a64: &[super::A64Unwind],
+    foreign: &[super::PeUnwindRange],
+) -> Pdata {
+    enum Data {
+        Packed(u32),
+        Info(u64),
+        Xdata(Vec<u8>),
     }
-    let directory_size = bytes.len() as u32;
+    let body = text_prologue_len;
+    let mut rows: Vec<(u32, u32, Data)> = (foreign.iter())
+        .map(|r| {
+            let data = match r.data {
+                super::PeUnwindRef::Packed(word) => Data::Packed(word),
+                super::PeUnwindRef::Info(off) => Data::Info(off),
+            };
+            (body + r.begin as u32, body + r.end as u32, data)
+        })
+        .collect();
+    rows.extend(a64.iter().filter_map(|u| {
+        let x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
+        Some((body + u.begin, body + u.end, Data::Xdata(x)))
+    }));
+    rows.sort_by_key(|r| r.0);
+    let mut entries: Vec<(u32, Data)> = Vec::new();
+    let leaf = |entries: &mut Vec<(u32, Data)>, from: u32, to: u32| {
+        let mut covered = from;
+        while covered < to {
+            let chunk = (to - covered).min(ARM64_PACKED_FUNCTION_MAX_BYTES);
+            let function_length = (chunk / 4) & 0x7FF; // 11 bits
+            entries.push((covered, Data::Packed((function_length << 2) | 0b01)));
+            covered += chunk;
+        }
+    };
+    let mut covered = 0u32;
+    for (begin, end, data) in rows {
+        leaf(&mut entries, covered, begin);
+        entries.push((begin, data));
+        covered = end;
+    }
+    leaf(&mut entries, covered, text_size);
+    let directory_size = entries.len() as u32 * 8;
+    let mut bytes = Vec::with_capacity(directory_size as usize);
+    let mut blobs: Vec<u8> = Vec::new();
+    let mut info_slots = Vec::new();
+    for (begin, data) in entries {
+        bytes.extend_from_slice(&(text_rva + begin).to_le_bytes());
+        let word = match data {
+            Data::Packed(word) => word,
+            Data::Info(off) => {
+                info_slots.push((bytes.len(), off));
+                0
+            }
+            Data::Xdata(x) => {
+                let rva = pdata_rva + directory_size + blobs.len() as u32;
+                blobs.extend_from_slice(&x);
+                rva
+            }
+        };
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    bytes.extend_from_slice(&blobs);
     Pdata {
         bytes,
         directory_size,
+        info_slots,
     }
 }
 
@@ -2827,7 +2999,7 @@ mod tests {
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
         let text_size = 2047 * 4 + 4 + 4;
-        let p = build_aarch64_pdata(0x1000, text_size);
+        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[]);
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);

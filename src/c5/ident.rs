@@ -124,13 +124,24 @@ fn utf8_at(bytes: &[u8], at: usize) -> Option<(u32, usize)> {
     (cp >= shortest).then_some((cp, len))
 }
 
+/// Whether `$` is an identifier character. C99 6.4.2.1p1 lets an
+/// identifier hold implementation-defined characters; gcc and clang take
+/// `$` in C (`-fdollars-in-identifiers`) and not in assembler-with-cpp,
+/// where it marks an immediate operand.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Dollar {
+    Ident,
+    Punct,
+}
+
 /// Length of the identifier character at `at`: an ASCII letter, digit or
-/// `_`, a universal character name, or a UTF-8 character in the Annex D
-/// ranges; 0 when none is there.
+/// `_`, `$` where `dollar` takes it, a universal character name, or a
+/// UTF-8 character in the Annex D ranges; 0 when none is there.
 #[inline]
-pub(crate) fn char_len(bytes: &[u8], at: usize) -> usize {
+pub(crate) fn char_len(bytes: &[u8], at: usize, dollar: Dollar) -> usize {
     match bytes.get(at) {
         Some(&b) if b.is_ascii_alphanumeric() || b == b'_' => 1,
+        Some(b'$') if dollar == Dollar::Ident => 1,
         Some(&b) if b == b'\\' || b >= 0x80 => extended_char_len(bytes, at),
         _ => 0,
     }
@@ -150,13 +161,13 @@ fn extended_char_len(bytes: &[u8], at: usize) -> usize {
 
 /// Length of the identifier starting at `at`, or 0 when none starts there.
 #[inline]
-pub(crate) fn ident_len(bytes: &[u8], at: usize) -> usize {
+pub(crate) fn ident_len(bytes: &[u8], at: usize, dollar: Dollar) -> usize {
     if bytes.get(at).is_none_or(u8::is_ascii_digit) {
         return 0;
     }
     let mut end = at;
     loop {
-        match char_len(bytes, end) {
+        match char_len(bytes, end, dollar) {
             0 => return end - at,
             len => end += len,
         }
@@ -165,12 +176,14 @@ pub(crate) fn ident_len(bytes: &[u8], at: usize) -> usize {
 
 /// Whether an identifier character ends just before `at`, so that a name
 /// starting at `at` continues that identifier.
-pub(crate) fn char_ends_at(bytes: &[u8], at: usize) -> bool {
+pub(crate) fn char_ends_at(bytes: &[u8], at: usize, dollar: Dollar) -> bool {
     let Some(&last) = at.checked_sub(1).and_then(|i| bytes.get(i)) else {
         return false;
     };
     if last < 0x80 {
-        return last.is_ascii_alphanumeric() || last == b'_';
+        return last.is_ascii_alphanumeric()
+            || last == b'_'
+            || (last == b'$' && dollar == Dollar::Ident);
     }
     (2..=4).filter_map(|n| at.checked_sub(n)).any(|start| {
         utf8_at(bytes, start).is_some_and(|(cp, len)| start + len == at && in_ranges(ANNEX_D, cp))
@@ -178,8 +191,8 @@ pub(crate) fn char_ends_at(bytes: &[u8], at: usize) -> bool {
 }
 
 /// Whether `s` is exactly one identifier.
-pub(crate) fn is_ident(s: &str) -> bool {
-    !s.is_empty() && ident_len(s.as_bytes(), 0) == s.len()
+pub(crate) fn is_ident(s: &str, dollar: Dollar) -> bool {
+    !s.is_empty() && ident_len(s.as_bytes(), 0, dollar) == s.len()
 }
 
 /// The name an identifier spelling denotes: a universal character name for
@@ -219,7 +232,7 @@ pub(crate) fn ident_error(spelling: &str) -> Option<String> {
     let bytes = spelling.as_bytes();
     let mut at = 0;
     while at < bytes.len() {
-        let len = char_len(bytes, at);
+        let len = char_len(bytes, at, Dollar::Ident);
         if len == 0 {
             return None;
         }
@@ -258,7 +271,7 @@ mod tests {
 
     #[test]
     fn identifiers_take_universal_character_names_and_utf8() {
-        let len = |s: &str| ident_len(s.as_bytes(), 0);
+        let len = |s: &str| ident_len(s.as_bytes(), 0, Dollar::Ident);
         assert_eq!(len("caf\\u00e9 x"), 9);
         assert_eq!(len("caf\u{e9}+"), 5);
         assert_eq!(len("\\U000000E9x"), 11);
@@ -268,9 +281,19 @@ mod tests {
         assert_eq!(len("a\u{d7}b"), 1);
         assert_eq!(len("a\\u00d7b"), 8);
         assert_eq!(len("1a"), 0);
-        assert!(char_ends_at("x\u{e9}".as_bytes(), 3));
-        assert!(!char_ends_at("\u{d7}".as_bytes(), 2));
-        assert!(is_ident("\u{663}x") && !is_ident("a b"));
+        assert!(char_ends_at("x\u{e9}".as_bytes(), 3, Dollar::Ident));
+        assert!(!char_ends_at("\u{d7}".as_bytes(), 2, Dollar::Ident));
+        assert!(is_ident("\u{663}x", Dollar::Ident) && !is_ident("a b", Dollar::Ident));
+    }
+
+    #[test]
+    fn dollar_is_an_identifier_character_where_the_dialect_takes_it() {
+        let len = |s: &str, d| ident_len(s.as_bytes(), 0, d);
+        assert_eq!(len("$a$b+", Dollar::Ident), 4);
+        assert_eq!(len("a$b", Dollar::Punct), 1);
+        assert_eq!(len("$a", Dollar::Punct), 0);
+        assert!(char_ends_at(b"a$", 2, Dollar::Ident) && !char_ends_at(b"a$", 2, Dollar::Punct));
+        assert!(is_ident("__$x", Dollar::Ident) && !is_ident("__$x", Dollar::Punct));
     }
 
     #[test]

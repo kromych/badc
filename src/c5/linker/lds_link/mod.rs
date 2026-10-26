@@ -21,23 +21,29 @@
 //! `sections` flattens and claims them, `pools` merges SHF_MERGE and
 //! `.eh_frame`, `layout` walks the statements, `eval` evaluates script
 //! expressions, `veneers` reserves erratum stubs, `dynamic_sections`
-//! and `got` size the dynamic tables and slots, `reloc` /
-//! `reloc_aarch64` apply relocations, `synth` fills synthetic content,
-//! `phdrs` and `symtab` build the program headers and the symbol
-//! table, and `write` assembles the image.
+//! and `got` size the dynamic tables and slots, `reloc`,
+//! `reloc_aarch64` and `reloc_i386` apply relocations, `preempt`
+//! decides which of a shared object's definitions the loader may
+//! preempt and how each reference reaches one, `synth` fills synthetic
+//! content, `phdrs` and `symtab` build the program headers and the
+//! symbol table, and `write` assembles the image.
 
 #![cfg(feature = "std")]
 #![allow(dead_code)]
 
+mod copies;
 mod dynamic_sections;
 mod eval;
 mod got;
 mod inputs;
 mod layout;
 mod phdrs;
+mod plt;
 mod pools;
+mod preempt;
 mod reloc;
 mod reloc_aarch64;
+mod reloc_i386;
 mod sections;
 mod symtab;
 mod synth;
@@ -54,7 +60,7 @@ pub(super) const MODULE: &str = "";
 use super::dynamic::{self, DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
-use super::object::{ElfClass, SharedLibrary};
+use super::object::{DynamicImage, ElfClass};
 use super::zkeyword::{ZKeyword, ZKeywords};
 use crate::c5::codegen::BuildId;
 use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
@@ -100,6 +106,8 @@ const SHT_SYMTAB_SHNDX: u32 = 18;
 const SHT_RELR: u32 = 19;
 
 const SHT_LLVM_ADDRSIG: u32 = 0x6fff4c03;
+/// `.deplibs`, which only a link that searches default libraries reads.
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff4c04;
 
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 
@@ -155,7 +163,13 @@ const STT_FILE: u8 = 4;
 
 const STT_COMMON: u8 = 5;
 
+const STT_TLS: u8 = 6;
+
+const STT_GNU_IFUNC: u8 = 10;
+
 const STV_DEFAULT: u8 = 0;
+
+const STV_INTERNAL: u8 = 1;
 
 const STV_HIDDEN: u8 = 2;
 
@@ -256,6 +270,16 @@ pub enum OrphanHandling {
     Discard,
 }
 
+/// What a dynamic relocation against read-only memory draws, which the
+/// image then carries with `DT_TEXTREL`: a warning, as `--warn-textrel`
+/// asks, an error under `-z text`, nothing under `-z notext`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextRelCheck {
+    Warn,
+    Error,
+    Allow,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LdsEmit {
     Exec,
@@ -265,7 +289,7 @@ pub enum LdsEmit {
 /// A shared library input and how the link named it.
 #[derive(Debug, Clone)]
 pub struct SharedInput {
-    pub lib: SharedLibrary,
+    pub lib: DynamicImage,
     /// Named under a linker script's `AS_NEEDED`: it takes a dependency
     /// record only where the link binds to it.
     pub as_needed: bool,
@@ -306,9 +330,8 @@ pub struct LdsOptions {
     /// Cleared by `--no-warn-rwx-segments`: a segment the image loads
     /// readable, writable and executable draws a warning.
     pub warn_rwx_segments: bool,
-    /// `-z text`: a dynamic relocation against read-only memory is an
-    /// error rather than a `DT_TEXTREL`.
-    pub text: bool,
+    /// What a dynamic relocation against read-only memory draws.
+    pub textrel: TextRelCheck,
     /// `-z common-page-size=`: `CONSTANT (COMMONPAGESIZE)`; `None` keeps
     /// the machine's.
     pub common_page_size: Option<u64>,
@@ -330,8 +353,12 @@ pub struct LdsOptions {
     pub output_name: String,
     /// `--hash-style`.
     pub hash_style: HashStyle,
-    /// `-Bsymbolic`: `DT_SYMBOLIC` and `DF_SYMBOLIC`.
+    /// `-Bsymbolic`: a shared object binds every reference to its own
+    /// definitions, and records `DT_SYMBOLIC` and `DF_SYMBOLIC`.
     pub symbolic: bool,
+    /// `-Bsymbolic-functions`: a shared object binds its references to
+    /// its own definitions other than objects.
+    pub symbolic_functions: bool,
     /// `-n` / `--nmagic`: a `PT_LOAD` aligns to the strongest
     /// alignment among its sections rather than to a page.
     pub nmagic: bool,
@@ -355,6 +382,21 @@ pub struct LdsOptions {
     /// `--fix-cortex-a53-843419`: rewrite the erratum sequences, as
     /// ADR where the page is in range and through a veneer otherwise.
     pub fix_cortex_a53_843419: bool,
+    /// `-init` / `-fini`: the functions `DT_INIT` and `DT_FINI` name
+    /// where the link defines them.
+    pub init_function: String,
+    pub fini_function: String,
+}
+
+/// An entry no symbol names read as an address, as GNU ld reads one: in
+/// C's bases, `0x` hexadecimal and a leading `0` octal, the whole name.
+fn numeric_entry(name: &str) -> Option<u64> {
+    let (digits, radix) = match name.strip_prefix("0x").or_else(|| name.strip_prefix("0X")) {
+        Some(hex) => (hex, 16),
+        None if name.len() > 1 && name.starts_with('0') => (&name[1..], 8),
+        None => (name, 10),
+    };
+    u64::from_str_radix(digits, radix).ok()
 }
 
 impl Default for LdsOptions {
@@ -376,7 +418,7 @@ impl Default for LdsOptions {
             exec_stack: None,
             warn_execstack: None,
             warn_rwx_segments: true,
-            text: false,
+            textrel: TextRelCheck::Warn,
             common_page_size: None,
             allow_multiple_definition: false,
             dynamic_flags: 0,
@@ -387,6 +429,7 @@ impl Default for LdsOptions {
             output_name: String::new(),
             hash_style: HashStyle::default(),
             symbolic: false,
+            symbolic_functions: false,
             nmagic: false,
             eh_frame_hdr: false,
             gc_sections: false,
@@ -396,6 +439,8 @@ impl Default for LdsOptions {
             rpath: Vec::new(),
             new_dtags: false,
             fix_cortex_a53_843419: false,
+            init_function: String::from("_init"),
+            fini_function: String::from("_fini"),
         }
     }
 }
@@ -414,7 +459,13 @@ impl LdsOptions {
                 ZKeyword::PackRelativeRelocs(on) => self.pack_relative_relocs = on,
                 ZKeyword::MaxPageSize(n) => self.max_page_size = n,
                 ZKeyword::CommonPageSize(n) => self.common_page_size = Some(n),
-                ZKeyword::Text(on) => self.text = on,
+                ZKeyword::Text(on) => {
+                    self.textrel = if on {
+                        TextRelCheck::Error
+                    } else {
+                        TextRelCheck::Allow
+                    }
+                }
                 ZKeyword::Muldefs => self.allow_multiple_definition = true,
                 _ => {}
             }
@@ -628,9 +679,9 @@ struct DynReloc {
     offset: u64,
     rtype: u32,
     addend: i64,
-    /// `.dynsym` index the entry names; 0 where the fixup needs no
-    /// symbol.
-    sym: u32,
+    /// The dynamic symbol the entry names, `None` where the fixup
+    /// needs none. Its index is read from the final `.dynsym`.
+    sym: Option<String>,
 }
 
 pub struct LdsLinker<'a> {
@@ -663,9 +714,25 @@ pub struct LdsLinker<'a> {
     /// symbol-named dynamic relocations carry.
     imports: Vec<String>,
     import_of: HashMap<String, usize>,
-    /// The subset reached by a call, in the order of their PLT stubs.
+    /// The imports every reference names weakly: their `.dynsym` rows bind
+    /// STB_WEAK.
+    weak_imports: HashSet<String>,
+    /// The definitions of a shared object the loader may preempt; see
+    /// the `preempt` module.
+    preemptible: HashSet<String>,
+    /// Per object, the names its `.note.badc` lists as data it reaches
+    /// through a symbol.
+    noted_data: Vec<HashSet<String>>,
+    /// The imports and preemptible definitions a call reaches, in the
+    /// order of their PLT stubs.
     plt_syms: Vec<String>,
     plt_of: HashMap<String, usize>,
+    /// The imports a position-dependent executable takes the PLT entry of
+    /// as their address, which `.dynsym` states.
+    canonical: HashSet<String>,
+    /// The data imports an executable holds a copy of, and their positions.
+    copies: Vec<copies::ObjectCopy>,
+    copy_of: HashMap<String, usize>,
     /// Program headers `SIZEOF_HEADERS` accounts for where the script
     /// declares none, measured from the previous round's layout.
     phdrs: usize,
@@ -684,6 +751,9 @@ pub struct LdsLinker<'a> {
     /// outranks a synthesized section bound whatever order the two
     /// reach the symbol table in.
     script_assigned: HashSet<String>,
+    /// Global names some input entry, definition or reference, gives a
+    /// visibility other than default: the most constraining of them.
+    visibility: HashMap<String, u8>,
 
     // Per-pass state.
     placements: Vec<Placement>,
@@ -717,10 +787,10 @@ pub struct LdsLinker<'a> {
     /// `count_reserved_none_slots`), computed once per link.
     dyn_nones: Option<u64>,
     relr_addrs: Vec<u64>,
-    /// GOT slots, keyed by referenced symbol name (a GOT reference to
-    /// an undefined symbol still needs a slot).
-    got_slots: Vec<String>,
-    got_map: HashMap<String, usize>,
+    /// GOT slots, keyed by the symbol each holds (a GOT reference to an
+    /// undefined symbol still needs a slot).
+    got_slots: Vec<got::GotKey>,
+    got_map: HashMap<got::GotKey, usize>,
     /// Dynamic tables, rebuilt each pass from the current placement.
     dyn_tables: Option<DynTables>,
     /// Version definitions from the script's `VERSION` command, base
@@ -785,11 +855,19 @@ const SYNTH_RELA: &str = ".rela.dyn";
 
 const SYNTH_REL: &str = ".rel.dyn";
 
+const SYNTH_RELAPLT: &str = ".rela.plt";
+
+const SYNTH_RELPLT: &str = ".rel.plt";
+
 const SYNTH_RELR: &str = ".relr.dyn";
 
 const SYNTH_GOT: &str = ".got";
 
 const SYNTH_GOTPLT: &str = ".got.plt";
+
+const SYNTH_DYNBSS: &str = ".dynbss";
+
+const SYNTH_DYNRELRO: &str = ".data.rel.ro";
 
 const SYNTH_BUILD_ID: &str = ".note.gnu.build-id";
 
@@ -980,14 +1058,21 @@ impl<'a> LdsLinker<'a> {
             eh_frames: Vec::new(),
             imports: Vec::new(),
             import_of: HashMap::new(),
+            weak_imports: HashSet::new(),
+            preemptible: HashSet::new(),
+            noted_data: Vec::new(),
             plt_syms: Vec::new(),
             plt_of: HashMap::new(),
+            canonical: HashSet::new(),
+            copies: Vec::new(),
+            copy_of: HashMap::new(),
             phdrs: 4,
             outs: Vec::new(),
             stmts: Vec::new(),
             globals: HashMap::new(),
             commons: HashMap::new(),
             script_assigned: HashSet::new(),
+            visibility: HashMap::new(),
             placements: Vec::new(),
             script_now: HashMap::new(),
             script_prev: HashMap::new(),
@@ -1022,10 +1107,12 @@ impl<'a> LdsLinker<'a> {
         };
         linker.dedup_groups();
         linker.resolve_globals()?;
-        linker.synthesize_sections();
-        linker.flatten_inputs();
+        linker.collect_visibility();
         linker.build_statements()?;
         linker.collect_script_assigned();
+        linker.collect_preemptible();
+        linker.synthesize_sections();
+        linker.flatten_inputs();
         linker.gc_sections();
         linker.claim_inputs()?;
         linker.build_merge_pools();
@@ -1033,6 +1120,21 @@ impl<'a> LdsLinker<'a> {
         linker.build_imports();
         linker.build_code_spans();
         Ok(linker)
+    }
+
+    /// The image carries the dynamic-linking tables: it is position
+    /// independent, or an executable linked against a shared library.
+    fn dynamic(&self) -> bool {
+        self.opts.emit == LdsEmit::Dyn || !self.opts.shared_libs.is_empty()
+    }
+
+    /// The loader binds the image's imports: a shared object, an
+    /// executable linked against a shared library, or a PIE that names an
+    /// interpreter.
+    fn dynamically_linked(&self) -> bool {
+        self.opts.shared
+            || !self.opts.shared_libs.is_empty()
+            || self.opts.emit == LdsEmit::Dyn && self.opts.interp.is_some()
     }
 
     fn insec(&self, i: usize) -> &RawSection {
@@ -1092,12 +1194,30 @@ impl<'a> LdsLinker<'a> {
         if !self.errors.is_empty() {
             return Err(self.script_errors());
         }
-        if self.opts.text && self.has_readonly_dynamic_reloc() {
-            return Err(link_err(
-                Code::RELOCATION,
-                MODULE,
-                "read-only segment has dynamic relocations (-z text)",
-            ));
+        if let Some(e) = self.preinit_array_in_shared_object() {
+            return Err(link_err(Code::LINK, MODULE, &e));
+        }
+        if self.has_readonly_dynamic_reloc() {
+            let sites = self.text_relocation_sites();
+            match self.opts.textrel {
+                TextRelCheck::Error => {
+                    let error = String::from("read-only segment has dynamic relocations");
+                    let text = sites.into_iter().chain([error]).collect::<Vec<_>>();
+                    return Err(link_err(Code::RELOCATION, MODULE, &text.join("\n")));
+                }
+                TextRelCheck::Warn => {
+                    let image = match (self.opts.shared, self.opts.emit) {
+                        (true, _) => "a shared object",
+                        (false, LdsEmit::Dyn) => "a PIE",
+                        (false, _) => "a PDE",
+                    };
+                    let summary = format!("creating DT_TEXTREL in {image}");
+                    for site in sites.into_iter().chain([summary]) {
+                        self.sink.emit(Code::TEXT_RELOCATION, None, site);
+                    }
+                }
+                TextRelCheck::Allow => {}
+            }
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self
@@ -1236,17 +1356,17 @@ impl<'a> LdsLinker<'a> {
             .clone()
             .or_else(|| self.script.entry().map(|s| s.to_string()));
         let entry = match &entry_name {
-            Some(name) => match self.final_sym_value(name) {
+            Some(name) => match self.final_sym_value(name).or_else(|| numeric_entry(name)) {
                 Some(v) => v,
                 None => {
+                    let at = self.default_entry(&emit_order);
+                    let width = 2 * self.class.addr_size() as usize;
                     self.sink.emit(
                         Code::MISSING_ENTRY,
                         None,
-                        format!(
-                            "cannot find entry symbol {name}; defaulting to first text address"
-                        ),
+                        format!("cannot find entry symbol {name}; defaulting to {at:0width$x}"),
                     );
-                    self.default_entry(&emit_order)
+                    at
                 }
             },
             // Nothing named an entry. A shared object has none, as bfd

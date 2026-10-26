@@ -46,7 +46,7 @@ from pathlib import Path
 
 VIM_DIR = Path(__file__).resolve().parent
 REPO_ROOT = VIM_DIR.parent.parent
-VERSION = "9.1.0800"
+VERSION = "9.2.1226"
 CACHE = VIM_DIR / ".cache"
 SRC = CACHE / f"vim-{VERSION}" / "src"
 BUILD_LOG = CACHE / "build.log"

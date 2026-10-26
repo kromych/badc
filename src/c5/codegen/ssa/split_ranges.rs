@@ -76,6 +76,7 @@ fn is_barrier(inst: &Inst) -> bool {
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::TlsAddr(_)

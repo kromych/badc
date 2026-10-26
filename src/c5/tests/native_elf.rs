@@ -299,6 +299,61 @@ fn recursion_factorial() {
     assert_eq!(build_and_run(src, "elf-fact"), 120);
 }
 
+/// C99 5.1.2.2.3: a return from `main` calls `exit`, which flushes the
+/// streams. The unit declares no `exit`, and its stdout is a pipe, so
+/// `puts` buffers the line until then.
+#[test]
+fn main_return_flushes_stdout() {
+    let src = "#include <stdio.h>\nint main(void) { puts(\"flushed\"); return 3; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit");
+    let path = super::unique_temp_path("badc-elf-flush", "run", ".bin");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "flushed\n");
+}
+
+/// A `#pragma binding(data ...)` object the unit does not define is the C
+/// library's: the image binds every reference to it, asm operands included,
+/// and a definition under the binding's name is the unit's own object.
+#[test]
+fn a_data_binding_reaches_the_library_object_or_the_units_definition() {
+    let imported = r#"
+        #pragma binding(data libc::my_env, "environ")
+        extern char **my_env;
+        int main(void) {
+            char ***p;
+            __asm__("adrp %0, my_env\n\tadd %0, %0, :lo12:my_env" : "=r"(p));
+            return !(p == &my_env && *p == environ && environ[0] != 0);
+        }
+    "#;
+    let defined = r#"
+        #pragma binding(data libc::dup_env, "environ")
+        char **dup_env = (char **)0x1234;
+        int main(void) { return dup_env != (char **)0x1234; }
+    "#;
+    for (src, stem) in [
+        (imported, "data-binding-import"),
+        (defined, "data-binding-def"),
+    ] {
+        for opts in [
+            NativeOptions::default(),
+            NativeOptions::new().with_optimize(),
+        ] {
+            let outcome = build_and_run_outcome_with_options(src, stem, opts);
+            assert!(outcome.matches(0), "{stem}: {outcome:?}");
+        }
+    }
+}
+
 #[test]
 fn printf_through_libc_got() {
     // printf needs the format string in __data

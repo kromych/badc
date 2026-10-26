@@ -28,7 +28,7 @@ Disassembly of section .text:
 <scalar_syndrome>:
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	leaq	0x800(%rsi), %rdx
                	movzbq	(%rdx,%rax), %rdx
                	movq	%rdx, %r8
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	xorq	%rsi, %rdx
                	movq	%rdx, %rdi
                	andq	$0xff, %rdi
-               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	leaq	0x400(%rsi), %rdx
                	movzbq	(%rdx,%rax), %rdx
                	xorq	%rdx, %rdi
@@ -86,13 +86,13 @@ Disassembly of section .text:
                	xorq	%rdi, %rdx
                	movq	%rdx, %rsi
                	andq	$0xff, %rsi
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movzbq	(%rdx,%rax), %rdx
                	xorq	%rdx, %rsi
                	xorq	%r8, %rdx
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movb	%dl, (%rdi,%rax)
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movb	%sil, (%rdx,%rax)
                	incq	%rax
                	cmpl	$0x200, %eax            # imm = 0x200
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
                	movq	%rcx, %rsi
                	shlq	$0x9, %rsi
@@ -131,8 +131,8 @@ Disassembly of section .text:
                	cmpl	$0x7, %ecx
                	jl	<addr>
                	callq	<addr>
-               	leaq	<rip>, %rdx      # <addr>
-               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	movabsq	$-0x340d631b7bdddcdb, %rax # imm = 0xCBF29CE484222325
                	movabsq	$0x100000001b3, %rdi    # imm = 0x100000001B3
                	xorl	%ecx, %ecx

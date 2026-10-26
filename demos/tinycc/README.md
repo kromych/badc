@@ -7,7 +7,7 @@ Mach-O / PE), followed by a self-host fixed point once every TU
 compiles.
 
 Source is pinned at the upstream `mob` branch HEAD
-(2026-05-13, `757507e`). The last release tag (`release_0_9_27`,
+(2026-10-16, `e23dabe`). The last release tag (`release_0_9_27`,
 2017) predates years of PE / AArch64 / Mach-O fixes that the
 cross-platform self-host requires, so the bringup follows `mob`
 the same way distros do. Pulled through the badc vendor-deps

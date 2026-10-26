@@ -74,6 +74,12 @@ catalog! {
     1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
+    1008, "date-time", [], Ignore, Controllable,
+        [], Live,
+        "a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next";
+    1009, "undef", [], Ignore, Controllable,
+        [], Live,
+        "an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0";
     1010, "directive", [], Error, Hard,
         [], Live,
         "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
@@ -89,16 +95,19 @@ catalog! {
     1014, "macro", [], Error, Hard,
         [], Live,
         "a macro definition or invocation C99 6.10.3 rejects: an argument count the definition does not take, `##` at either end of a replacement list";
-    2001, "unused-variable", ["C4101"], Ignore, Controllable,
+    1015, "macro-redefined", ["C4005"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old";
+    2001, "unused-variable", ["C4101", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
     2002, "unused-parameter", ["C4100"], Ignore, Controllable,
         [EXTRA], Live,
         "a parameter never used in the function body";
-    2003, "unused-but-set-variable", ["C4189"], Ignore, Controllable,
+    2003, "unused-but-set-variable", ["C4189", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable that is only ever assigned to";
-    2004, "unused-function", ["C4505"], Ignore, Controllable,
+    2004, "unused-function", ["C4505", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
     2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
@@ -125,6 +134,24 @@ catalog! {
     2012, "inline-asm", ["deprecated"], Warning, Controllable,
         [DEFAULT], Live,
         "an `asm` statement that lists the stack pointer as clobbered or writes it through an output, where GNU C requires it to hold its value";
+    2013, "visibility", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a tag declared in a parameter list, whose scope ends with the declaration or definition";
+    2014, "strict-prototypes", [], Ignore, Controllable,
+        [], Live,
+        "a function declarator whose empty or identifier list declares no prototype, outside a cast and a definition an earlier prototype covers";
+    2015, "missing-prototypes", [], Ignore, Controllable,
+        [], Live,
+        "an external function definition, neither `inline` nor `main`, that no file-scope declaration with a prototype precedes";
+    2016, "missing-declarations", [], Ignore, Controllable,
+        [], Live,
+        "an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes";
+    2017, "implicit-fallthrough=5", [], Ignore, Controllable,
+        [], Live,
+        "a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates";
+    2018, "vla-larger-than", ["vla-larger-than="], Ignore, Controllable,
+        [], Live,
+        "under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -179,6 +206,18 @@ catalog! {
     3013, "excess-initializers", [], Warning, Controllable,
         [DEFAULT], Live,
         "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
+    3015, "cast-function-type", [], Ignore, Controllable,
+        [EXTRA], Live,
+        "a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision";
+    3016, "designated-init", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an initializer element with no designator for a member of a struct declared `designated_init`";
+    3017, "enum-conversion", [], Ignore, Controllable,
+        [EXTRA], Live,
+        "a value of one enumerated type, or a constant of one, assigned, initialized, passed or returned as another enumerated type";
+    3014, "builtin-argument-range", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an integer constant operand of a builtin outside the values the builtin takes; 0 is used in its place";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -257,6 +296,12 @@ catalog! {
     6005, "rwx-segment", [], Warning, Controllable,
         [DEFAULT], Live,
         "a segment the image loads is readable, writable and executable, or its thread-local segment executable";
+    6006, "local-import", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition";
+    6007, "text-relocation", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`)";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -313,7 +358,7 @@ catalog! {
         "a `-gdwarf` option asks for a DWARF version or format the emitter does not produce";
     7012, "unimplemented-warning-option", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect";
+        "a diagnostic pragma or a `-W` option turns on a gcc or clang warning that badc does not implement, so it has no effect";
 
     9001, "internal-error", [], Error, Hard,
         [], Live,
@@ -329,6 +374,8 @@ impl Code {
     pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
     pub const EXEC_STACK: Code = Code::new(6004);
     pub const RWX_SEGMENT: Code = Code::new(6005);
+    pub const LOCAL_IMPORT: Code = Code::new(6006);
+    pub const TEXT_RELOCATION: Code = Code::new(6007);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);
@@ -431,6 +478,12 @@ impl Code {
     pub const SHADOWED_BINDING: Code = Code::new(2010);
     pub const IMPLICIT_INT: Code = Code::new(2011);
     pub const INLINE_ASM: Code = Code::new(2012);
+    pub const VISIBILITY: Code = Code::new(2013);
+    pub const STRICT_PROTOTYPES: Code = Code::new(2014);
+    pub const MISSING_PROTOTYPES: Code = Code::new(2015);
+    pub const MISSING_DECLARATIONS: Code = Code::new(2016);
+    pub const IMPLICIT_FALLTHROUGH: Code = Code::new(2017);
+    pub const VLA_LARGER_THAN: Code = Code::new(2018);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);
@@ -444,6 +497,10 @@ impl Code {
     pub const NESTED_QUALIFIERS: Code = Code::new(3011);
     pub const SWITCH_BOOL: Code = Code::new(3012);
     pub const EXCESS_INITIALIZERS: Code = Code::new(3013);
+    pub const CAST_FUNCTION_TYPE: Code = Code::new(3015);
+    pub const DESIGNATED_INIT: Code = Code::new(3016);
+    pub const ENUM_CONVERSION: Code = Code::new(3017);
+    pub const BUILTIN_ARGUMENT_RANGE: Code = Code::new(3014);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);

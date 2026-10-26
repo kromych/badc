@@ -58,11 +58,6 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
-pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
-    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
-}
-
 /// Test for floating-point scalar types.
 pub(super) fn is_floating_scalar(ty: i64) -> bool {
     let stripped = strip_unsigned(ty);
@@ -253,7 +248,11 @@ pub(crate) fn fold_const_int_binop(
 pub(super) fn type_size_bytes(ty: i64, target: Target) -> usize {
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
-        return 8;
+        return if crate::c5::compiler::types::is_ptr32_ty(ty) {
+            4
+        } else {
+            8
+        };
     }
     if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         1
@@ -340,6 +339,7 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::StmtExpr { .. } => "StmtExpr",
         Expr::CheckedArith { .. } => "CheckedArith",
         Expr::X86Simd { .. } => "X86Simd",
+        Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
         Expr::InlineAsm(_) => "InlineAsm",
     }

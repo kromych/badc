@@ -3,7 +3,7 @@
 
 use crate::c5::error::C5Error;
 use crate::c5::linker::dynamic::{self};
-use crate::c5::linker::lds::{Command, Expr, OutputSectionType};
+use crate::c5::linker::lds::{Assignment, Command, Expr, OutputSectionType};
 use crate::c5::linker::object::is_c_identifier;
 use alloc::format;
 use alloc::string::String;
@@ -13,8 +13,8 @@ use hashbrown::HashSet;
 use super::{
     Att, ChunkSrc, EM_386, EM_AARCH64, EM_X86_64, LdsLinker, Piece, Placement, SHF_ALLOC,
     SHF_EXCLUDE, SHF_EXECINSTR, SHF_GROUP, SHF_INFO_LINK, SHF_LINK_ORDER, SHF_MERGE, SHF_STRINGS,
-    SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_RELA, SHT_RELR, SHT_STRTAB, STT_NOTYPE, STV_PROTECTED,
-    ScriptSym, Stmt, Val, align_up,
+    SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_REL, SHT_RELA, SHT_RELR, SHT_STRTAB, STT_NOTYPE,
+    STV_PROTECTED, ScriptSym, Stmt, Val, align_up,
 };
 
 /// The fill pattern for a numeric fill value: the value's big-endian
@@ -518,25 +518,29 @@ impl<'a> LdsLinker<'a> {
     /// Every symbol the script assigns, at file scope, in the
     /// statement stream, or inside an output section.
     pub(super) fn collect_script_assigned(&mut self) {
-        let mut out: HashSet<String> = HashSet::new();
-        for c in &self.script.commands {
-            if let Command::Assign(a) = c {
-                out.insert(a.symbol.clone());
-            }
-        }
-        for st in &self.stmts {
-            if let Stmt::Assign(a) = st {
-                out.insert(a.symbol.clone());
-            }
-        }
-        for o in &self.outs {
-            for p in &o.pieces {
-                if let Piece::Assign(a) = p {
-                    out.insert(a.symbol.clone());
-                }
-            }
-        }
+        let out: HashSet<String> = self
+            .script_assignments()
+            .map(|a| a.symbol.clone())
+            .collect();
         self.script_assigned = out;
+    }
+
+    /// Every assignment of the script: those outside `SECTIONS`, then
+    /// the statements and output-section bodies inside it.
+    pub(super) fn script_assignments(&self) -> impl Iterator<Item = &Assignment> {
+        let commands = self.script.commands.iter().filter_map(|c| match c {
+            Command::Assign(a) => Some(a),
+            _ => None,
+        });
+        let stmts = self.stmts.iter().filter_map(|st| match st {
+            Stmt::Assign(a) => Some(a),
+            _ => None,
+        });
+        let pieces = (self.outs.iter().flat_map(|o| &o.pieces)).filter_map(|p| match p {
+            Piece::Assign(a) => Some(a),
+            _ => None,
+        });
+        commands.chain(stmts).chain(pieces)
     }
 
     /// Bound an output section whose name is a C identifier with
@@ -587,7 +591,8 @@ impl<'a> LdsLinker<'a> {
                         let t = self.objects[id.obj].sections[id.sec].shtype;
                         if matches!(
                             t,
-                            SHT_RELA
+                            SHT_REL
+                                | SHT_RELA
                                 | SHT_RELR
                                 | SHT_STRTAB
                                 | dynamic::SHT_HASH

@@ -1,59 +1,56 @@
-// sys/select.h -- select(2) multiplexer.
-//
-// Per-target binding for select(). On Windows the symbol lives in
-// ws2_32.dll (alongside the rest of the socket surface); on POSIX
-// it's plain libc.
-//
-// `fd_set` is a bitmap on POSIX (BSD layout: bit `fd` set in
-// position `fd / 8`'s `1 << (fd & 7)`). c5 callers can either
-// declare their own buffer (`char rfds[FD_SET_BYTES];`) or malloc
-// `FD_SET_BYTES` and pass it through to select; the macros below
-// flip / test bits without caring about the platform's actual
-// `struct fd_set` layout, which varies (macOS uses `__int32_t`
-// words, Linux uses `long int` words). Windows wraps an array of
-// socket handles instead of a bitmap, so these macros are
-// POSIX-only -- a Windows user would need a different shape.
+// sys/select.h -- synchronous I/O multiplexing (POSIX select / pselect),
+// with the types and prototypes of glibc's and the macOS SDK's headers.
 
 #pragma once
+
+#include <time.h>
 
 #define FD_SETSIZE   1024
 #define FD_SET_BYTES 128             // FD_SETSIZE / 8
 
-// `fd_set` as a fixed 128-byte bitmap; the macros below address it as bytes.
+// `fd_set` as a fixed 128-byte bitmap, bit `fd` at byte `fd / 8`'s `1 << (fd
+// & 7)` on these little-endian targets; the macros below address it as bytes.
 // Linux declares it in `unsigned long` words (the kernel's __kernel_fd_set)
 // and the macOS SDK in 32-bit words; each gives the record its word's alignment.
 #ifdef __linux__
 typedef struct {
     unsigned long fds_bits[FD_SETSIZE / (8 * sizeof(unsigned long))];
 } fd_set;
-#elif defined(__APPLE__)
+#else
 typedef struct {
     int fds_bits[FD_SETSIZE / (8 * sizeof(int))];
 } fd_set;
+#endif
+
+// POSIX defines sigset_t here as <signal.h> does.
+#ifndef __BADC_SIGSET_T
+#define __BADC_SIGSET_T
+#ifdef __APPLE__
+typedef unsigned int sigset_t;
 #else
-typedef struct {
-    unsigned char fds_bits[FD_SET_BYTES];
-} fd_set;
+typedef struct { unsigned long __val[1024 / (8 * sizeof(unsigned long))]; } sigset_t;
+#endif
 #endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
-#pragma binding(libc::select, "_select")
+#pragma binding(libc::select,  "_select")
+#pragma binding(libc::pselect, "_pselect")
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
-#pragma binding(libc::select, "select")
+#pragma binding(libc::select,  "select")
+#pragma binding(libc::pselect, "pselect")
 #endif
 
-#ifdef _WIN32
-#pragma dylib(ws2_32, "ws2_32.dll")
-#pragma binding(ws2_32::select, "select")
-#endif
+int select(int nfds, fd_set *restrict readfds, fd_set *restrict writefds,
+           fd_set *restrict errorfds, struct timeval *restrict timeout);
+int pselect(int nfds, fd_set *restrict readfds, fd_set *restrict writefds,
+            fd_set *restrict errorfds, const struct timespec *restrict timeout,
+            const sigset_t *restrict sigmask);
 
-int select(int nfds, char *rfds, char *wfds, char *efds, char *timeout);
-
-// BSD-bitmap macros. `set` is `char *` / `unsigned char *`. The
+// BSD-bitmap macros. `set` points at an `fd_set` or its bytes. The
 // `do { ... } while (0)` wrapping makes the assignment forms
 // behave like single statements inside `if` / `while` etc.
 #define FD_ZERO(set) do { \

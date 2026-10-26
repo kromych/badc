@@ -31,7 +31,7 @@ impl<'a> Walker<'a> {
             Ok(b.local_addr(*val))
         } else if *class == Token::Glo as i64 {
             if *is_thread_local {
-                match self.live_tls_addr(*sym, *val) {
+                match self.live_tls_addr(id, *sym, *val) {
                     GloAddr::Extern => Ok(b.tls_addr_extern(*sym)),
                     GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
@@ -110,7 +110,7 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => b.imm_data(off),
                 });
             } else if class == Token::Glo as i64 && is_thread_local {
-                return Ok(match self.live_tls_addr(_sym, val) {
+                return Ok(match self.live_tls_addr(id, _sym, val) {
                     GloAddr::Extern => b.tls_addr_extern(_sym),
                     GloAddr::Resolved(off) => b.tls_addr(off),
                 });
@@ -145,7 +145,7 @@ impl<'a> Walker<'a> {
                     kind: "named address space on thread-local storage",
                 });
             }
-            let addr = match self.live_tls_addr(_sym, val) {
+            let addr = match self.live_tls_addr(id, _sym, val) {
                 GloAddr::Extern => b.tls_addr_extern(_sym),
                 GloAddr::Resolved(off) => b.tls_addr(off),
             };

@@ -28,6 +28,7 @@ typedef unsigned int ALG_ID;
 #define HP_HASHSIZE  0x0004
 
 #pragma binding(advapi32::CryptAcquireContextA, "CryptAcquireContextA")
+#pragma binding(advapi32::CryptAcquireContextW, "CryptAcquireContextW")
 #pragma binding(advapi32::CryptReleaseContext,  "CryptReleaseContext")
 #pragma binding(advapi32::CryptGenRandom,       "CryptGenRandom")
 #pragma binding(advapi32::CryptCreateHash,      "CryptCreateHash")
@@ -38,10 +39,11 @@ typedef unsigned int ALG_ID;
 #pragma binding(advapi32::CryptDestroyKey,      "CryptDestroyKey")
 #pragma binding(advapi32::CryptEncrypt,         "CryptEncrypt")
 
-#define CryptAcquireContext CryptAcquireContextA
-
 int CryptAcquireContextA(HCRYPTPROV *prov, const char *container,
                          const char *provider, DWORD prov_type, DWORD flags);
+int CryptAcquireContextW(HCRYPTPROV *prov, const wchar_t *container,
+                         const wchar_t *provider, DWORD prov_type, DWORD flags);
+#define CryptAcquireContext __MINGW_NAME_AW(CryptAcquireContext)
 int CryptReleaseContext(HCRYPTPROV prov, DWORD flags);
 int CryptGenRandom(HCRYPTPROV prov, DWORD len, BYTE *buf);
 int CryptCreateHash(HCRYPTPROV prov, ALG_ID algid, HCRYPTKEY key, DWORD flags,

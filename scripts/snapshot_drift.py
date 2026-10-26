@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerate `tests/snapshots/` and fail if it differs from the tree.
+"""Regenerate `tests/snapshots/` and fail if it differs from the tree or
+the corpus is over its callee-saved budget.
 
 The same check as CI's `snapshots clean` job, without a git working
 copy: the lane's tree is an rsync/tar export with no `.git`, so the
@@ -79,6 +80,15 @@ def main() -> int:
             print(f"snapshot drift: scripts/snapshots.py failed (rc={rc})")
         elif not _same(base):
             rc = report(base)
+        else:
+            # CI's `--check` also holds the corpus to its callee-saved
+            # ceilings once the tree is clean.
+            rc = subprocess.call(
+                [sys.executable, str(REPO_ROOT / "scripts" / "snapshots.py"), "--budget"],
+                cwd=REPO_ROOT,
+            )
+            if rc != 0:
+                print("snapshot drift: the callee-saved budget is over its ceiling")
         shutil.rmtree(SNAPSHOTS)
         shutil.copytree(base, SNAPSHOTS)
     print(f"snapshot drift: {'clean' if rc == 0 else 'DRIFTED'} in {time.time() - start:.0f}s")

@@ -96,10 +96,11 @@ Disassembly of section .text:
                	vmulss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
-               	movl	$0x3fbb67a2, %edx       # imm = 0x3FBB67A2
-               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	vfmsub132ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) - xmm14
+               	mulss	%xmm15, %xmm0
+               	movl	$0x3fbb67a2, %eax       # imm = 0x3FBB67A2
+               	movq	%rax, %xmm15
+               	subss	%xmm15, %xmm0
                	movq	%rcx, %xmm15
                	ucomiss	%xmm0, %xmm15
                	jbe	<addr>

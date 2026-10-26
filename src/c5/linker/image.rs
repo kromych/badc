@@ -347,6 +347,13 @@ fn patch_data_pcrel_relocs(
     relocs: &[super::link::DataPcRel],
 ) -> Result<(), C5Error> {
     for r in relocs {
+        if r.image_relative {
+            return Err(link_err(
+                Code::OBJECT_FORMAT,
+                MODULE,
+                "an image-relative data slot names a PE construct; an ELF image has no image base",
+            ));
+        }
         let slot = r.slot_offset as usize;
         let width = r.width as usize;
         if slot + width > data.len() {
@@ -1026,6 +1033,7 @@ fn patch_data_refs(
             | NativeSymSection::Abs
             | NativeSymSection::Common
             | NativeSymSection::Got
+            | NativeSymSection::ImageBase
             | NativeSymSection::Tls
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
@@ -1350,6 +1358,8 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            image_base_slots: alloc::vec![],
+            tls_image_base_slots: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             tls_data_import_refs: alloc::vec![],
@@ -1357,17 +1367,25 @@ mod tests {
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),
+            import_ordinals: alloc::collections::BTreeMap::new(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
+            slot_reads: Default::default(),
+            warnings: Default::default(),
             preemptible_imports: alloc::collections::BTreeSet::new(),
             tls_imports: alloc::collections::BTreeSet::new(),
+            tls_got: Vec::new(),
+            tls_got_fields: Vec::new(),
+            static_tls: false,
+            tls_defined: Default::default(),
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],
@@ -1396,6 +1414,7 @@ mod tests {
             exec_stack_input: None,
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            pe_unwind: Vec::new(),
         }
     }
 

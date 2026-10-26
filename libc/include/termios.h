@@ -224,6 +224,7 @@ struct termios {
 #define IEXTEN 0100000
 #endif
 
+#ifndef _WIN32
 int tcgetattr(int fd, struct termios *termios_p);
 unsigned int cfgetospeed(const struct termios *termios_p);
 unsigned int cfgetispeed(const struct termios *termios_p);
@@ -235,6 +236,7 @@ int tcdrain(int fd);
 int tcflush(int fd, int queue_selector);
 int tcflow(int fd, int action);
 void cfmakeraw(struct termios *termios_p);
+#endif
 
 // POSIX constants completed from per-target system headers (termios baud/flags,
 // control chars, queue/flow selectors). Values extracted per target.
@@ -1450,4 +1452,17 @@ void cfmakeraw(struct termios *termios_p);
 #if defined(__linux__)
 #define XTABS 6144
 #endif
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::tcgetsid, "_tcgetsid")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::tcgetsid, "tcgetsid")
+#endif
+#include <sys/types.h>
+pid_t tcgetsid(int fd);
 #endif

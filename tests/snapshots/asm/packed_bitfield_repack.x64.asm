@@ -73,7 +73,7 @@ Disassembly of section .text:
                	sarq	$0x39, %rdx
                	cmpl	$0x3c, %edx
                	jne	<addr>
-               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movzbq	(%rdx), %rsi
                	movsbq	%sil, %rsi
                	cmpl	$0x55, %esi

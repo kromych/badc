@@ -1383,6 +1383,73 @@ pub(super) fn emit_atomic_rmw(
     Ok(())
 }
 
+/// C11 7.17.7.4 on 16 bytes as `LOCK CMPXCHG16B` (Intel SDM Vol.2), a full
+/// barrier whatever the order: rcx:rbx takes the replacement and rdx:rax
+/// the comparand from their objects, and a mismatch writes rdx:rax, the
+/// prior contents, over the comparand's object. The object rides r11; the
+/// replacement's and then the comparand's address ride r10, the latter
+/// kept on the stack meanwhile. rbx, which the caller may hold, is saved
+/// around it, as are rax, rcx and rdx where a value lives in them. The
+/// value is whether it matched.
+pub(super) fn emit_atomic_cas16(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    expected: super::super::ir::ValueId,
+    desired: super::super::ir::ValueId,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    use super::encode::emit_lock_cmpxchg16b_mem;
+    let operand = |code: &mut Vec<u8>, value, r: Reg, shift: u32| -> Emit {
+        let Some(x) = materialize_int_shifted(code, place_of(alloc, value), r, frame, shift) else {
+            return fail("AtomicCas16: operand not int reg / spill");
+        };
+        if x != r {
+            emit_mov_rr(code, r, x);
+        }
+        Ok(())
+    };
+    operand(code, expected, SCRATCH_R10, 0)?;
+    emit_push_r(code, SCRATCH_R10);
+    operand(code, desired, SCRATCH_R10, 8)?;
+    operand(code, addr, SCRATCH_R11, 8)?;
+    emit_push_r(code, Reg::RBX);
+    let mut acc = SiteRegs::new(
+        alloc,
+        v,
+        &[Reg::RAX.0, Reg::RCX.0, Reg::RDX.0],
+        &[SCRATCH_R10.0, SCRATCH_R11.0],
+        frame.fixed_regs,
+    );
+    for _ in 0..3 {
+        if acc.take(code).is_none() {
+            return fail("AtomicCas16: rax, rcx or rdx is reserved");
+        }
+    }
+    emit_mov_r_mem(code, Reg::RBX, SCRATCH_R10, 0);
+    emit_mov_r_mem(code, Reg::RCX, SCRATCH_R10, 8);
+    let parked = acc.saved_bytes() as i32 + 8;
+    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, parked);
+    emit_mov_r_mem(code, Reg::RAX, SCRATCH_R10, 0);
+    emit_mov_r_mem(code, Reg::RDX, SCRATCH_R10, 8);
+    emit_lock_cmpxchg16b_mem(code, SCRATCH_R11, 0);
+    // A match skips the write-back; the stores keep ZF.
+    let skip = code.len();
+    emit_jcc_rel8(code, Cc::E, 0);
+    emit_mov_mem_r(code, SCRATCH_R10, 0, Reg::RAX);
+    emit_mov_mem_r(code, SCRATCH_R10, 8, Reg::RDX);
+    code[skip + 1] = (code.len() - skip - 2) as u8;
+    super::encode::emit_setcc_r8(code, Cc::E, Reg::RCX);
+    emit_movzx_r_r8(code, SCRATCH_R10, Reg::RCX);
+    acc.restore(code);
+    emit_pop_r(code, Reg::RBX);
+    emit_pop_r(code, SCRATCH_R11);
+    write_atomic_result(code, dst, SCRATCH_R10, frame);
+    Ok(())
+}
+
 /// C11 7.17.7.4 compare-and-exchange as `LOCK CMPXCHG` (Intel SDM Vol.2),
 /// a full barrier whatever the order: rax takes the comparand
 /// zero-extended from `width` bytes and leaves with the prior contents,

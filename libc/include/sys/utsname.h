@@ -31,4 +31,7 @@ struct utsname {
 #pragma binding(libc::uname, "uname")
 #endif
 
+struct utsname;
+#ifndef _WIN32
 int uname(struct utsname *buf);
+#endif

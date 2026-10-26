@@ -1,6 +1,6 @@
 # qemu demo
 
-Builds the [QEMU](https://www.qemu.org/) 11.1.1 system emulator with badc and
+Builds the [QEMU](https://www.qemu.org/) 11.1.2 system emulator with badc and
 runs the result. badc compiles every unit of both `qemu-system-aarch64` and
 `qemu-system-x86_64` and its own linker lays each one out, with no system
 linker in the chain; each boots a Linux kernel plus a busybox initramfs to an
@@ -67,7 +67,7 @@ the system shared libraries.
   the demo);
 - badc archives the in-tree libraries with `--ar`;
 - badc's own linker self-links the emulator and it reports
-  `QEMU emulator version 11.1.1`.
+  `QEMU emulator version 11.1.2`.
 
 `$BADC_QEMU_OPT=1` builds at `-O` instead of `-O0`, into `objs-O/` beside
 `objs/`; `$BADC_QEMU_VERIFY_SSA=1` compiles every unit under `--verify-ssa`, so

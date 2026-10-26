@@ -902,6 +902,7 @@ impl FunctionEmitter<'_, '_> {
                     instr_offset: popped.instr_offset,
                     symbol_name: name.clone(),
                     direct_pcrel: None,
+                    import_slot: false,
                 });
         }
         Ok(())
@@ -1795,6 +1796,7 @@ fn emit_load_stack_guard(
         instr_offset: code.len(),
         symbol_name: name.into(),
         direct_pcrel: None,
+        import_slot: false,
     });
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));

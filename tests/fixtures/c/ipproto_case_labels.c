@@ -1,7 +1,11 @@
 /* <netinet/in.h> IPPROTO_* protocol numbers are integer constant
  * expressions usable as case labels (the IANA-assigned values are
- * identical across platforms). */
+ * identical across platforms), from <winsock2.h> on Windows. */
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <netinet/in.h>
+#endif
 
 static int classify(int proto) {
     switch (proto) {

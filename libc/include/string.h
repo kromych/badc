@@ -240,6 +240,19 @@ errno_t memset_s(void *s, rsize_t smax, int c, rsize_t n);
 // in the c5 surface. Names match the underscored entries
 // programs reach for directly; the POSIX aliases (stricmp /
 // strnicmp / strlwr / strupr) bind to the same symbols.
+#include <corecrt.h>
+#pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
+#pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
+#pragma binding(msvcrt::memcpy_s,  "memcpy_s")
+#pragma binding(msvcrt::memmove_s, "memmove_s")
+#pragma binding(msvcrt::_strupr_l, "_strupr_l")
+#pragma binding(msvcrt::_strlwr_l, "_strlwr_l")
+errno_t memcpy_s(void *dst, size_t dstsz, const void *src, size_t count);
+errno_t memmove_s(void *dst, size_t dstsz, const void *src, size_t count);
+char *_strupr_l(char *s, _locale_t locale);
+char *_strlwr_l(char *s, _locale_t locale);
+int _wcsicmp(const wchar_t *a, const wchar_t *b);
+int _wcsnicmp(const wchar_t *a, const wchar_t *b, size_t n);
 int stricmp(const char *a, const char *b);
 int _stricmp(const char *a, const char *b);
 int strnicmp(const char *a, const char *b, size_t n);
@@ -248,6 +261,32 @@ char *strlwr(char *s);
 char *_strlwr(char *s);
 char *strupr(char *s);
 char *_strupr(char *s);
+// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
+// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
+#pragma binding(msvcrt::strcpy_s, "strcpy_s")
+errno_t strcpy_s(char *_Dst, rsize_t _SizeInBytes, const char *_Src);
+#pragma binding(msvcrt::strcat_s, "strcat_s")
+errno_t strcat_s(char *_Dst, rsize_t _SizeInBytes, const char *_Src);
+#pragma binding(msvcrt::strncpy_s, "strncpy_s")
+errno_t strncpy_s(char *_Dst, size_t _DstSizeInChars, const char *_Src, size_t _MaxCount);
+#pragma binding(msvcrt::strncat_s, "strncat_s")
+errno_t strncat_s(char *_Dst, size_t _DstSizeInChars, const char *_Src, size_t _MaxCount);
+#pragma binding(msvcrt::strtok_s, "strtok_s")
+char *strtok_s(char *_Str, const char *_Delim, char **_Context);
+#pragma binding(msvcrt::_strerror_s, "_strerror_s")
+errno_t _strerror_s(char *_Buf, size_t _SizeInBytes, const char *_ErrMsg);
+#pragma binding(msvcrt::_strlwr_s, "_strlwr_s")
+errno_t _strlwr_s(char *_Str, size_t _Size);
+#pragma binding(msvcrt::_strlwr_s_l, "_strlwr_s_l")
+errno_t _strlwr_s_l(char *_Str, size_t _Size, _locale_t _Locale);
+#pragma binding(msvcrt::_strupr_s, "_strupr_s")
+errno_t _strupr_s(char *_Str, size_t _Size);
+#pragma binding(msvcrt::_strupr_s_l, "_strupr_s_l")
+errno_t _strupr_s_l(char *_Str, size_t _Size, _locale_t _Locale);
+#pragma binding(msvcrt::_strnset_s, "_strnset_s")
+errno_t _strnset_s(char *_Str, size_t _Size, int _Val, size_t _MaxCount);
+#pragma binding(msvcrt::_strset_s, "_strset_s")
+errno_t _strset_s(char *_Dst, size_t _DstSize, int _Value);
 #endif
 
 // POSIX.1-2008 / BSD `<string.h>` helpers that not every target libc
@@ -324,4 +363,44 @@ static inline void *mempcpy(void *dst, const void *src, size_t n) {
     }
     return d + n;
 }
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::memccpy, "_memccpy")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::memccpy, "memccpy")
+#endif
+void *memccpy(void *restrict s1, const void *restrict s2, int c, size_t n);
+#endif
+
+#if defined(__APPLE__) || defined(__linux__)
+#ifndef __BADC_LOCALE_T
+#define __BADC_LOCALE_T
+#ifdef __APPLE__
+typedef struct _xlocale *locale_t;
+#else
+typedef struct __locale_struct *locale_t;
+#endif
+#endif
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::strcoll_l, "_strcoll_l")
+#pragma binding(libc::strxfrm_l, "_strxfrm_l")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::strcoll_l, "strcoll_l")
+#pragma binding(libc::strxfrm_l, "strxfrm_l")
+#pragma binding(libc::strerror_l, "strerror_l")
+#endif
+int strcoll_l(const char *s1, const char *s2, locale_t locale);
+size_t strxfrm_l(char *restrict s1, const char *restrict s2, size_t n, locale_t locale);
+#ifdef __linux__
+// libSystem has no strerror_l.
+char *strerror_l(int errnum, locale_t locale);
+#endif
 #endif

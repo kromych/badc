@@ -27,14 +27,14 @@ Disassembly of section .text:
 
 <steps>:
                	xorl	%eax, %eax
-               	leaq	-<rip>, %rcx        # <addr>
+               	leaq	-<rip>, %rcx # <addr>
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x9, %eax
                	retq
 
 <main>:
-               	leaq	-<rip>, %rax       # <addr>
+               	leaq	-<rip>, %rax # <addr>
                	testq	%rax, %rax
                	je	<addr>
                	xorl	%eax, %eax

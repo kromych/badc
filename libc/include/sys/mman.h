@@ -74,7 +74,6 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::mmap,     "_mmap")
 #pragma binding(libc::munmap,   "_munmap")
-// mremap is Linux-only; unbound here so a use fails at link.
 #pragma binding(libc::msync,    "_msync")
 #pragma binding(libc::mprotect, "_mprotect")
 #pragma binding(libc::madvise,    "_madvise")
@@ -83,6 +82,9 @@
 #pragma binding(libc::shm_unlink, "_shm_unlink")
 #pragma binding(libc::mlockall,   "_mlockall")
 #pragma binding(libc::munlockall, "_munlockall")
+#pragma binding(libc::mlock,      "_mlock")
+#pragma binding(libc::posix_madvise, "_posix_madvise")
+#pragma binding(libc::munlock,    "_munlock")
 #endif
 
 #ifdef __linux__
@@ -102,12 +104,16 @@
 #pragma binding(libc::shm_unlink, "shm_unlink")
 #pragma binding(libc::mlockall,   "mlockall")
 #pragma binding(libc::munlockall, "munlockall")
+#pragma binding(libc::mlock,      "mlock")
+#pragma binding(libc::posix_madvise, "posix_madvise")
+#pragma binding(libc::munlock,    "munlock")
 #pragma binding(libc::memfd_create, "memfd_create")
 // The MFD_* flags live in their canonical kernel header.
 #include <linux/memfd.h>
 int memfd_create(const char *name, unsigned int flags);
 #endif
 
+#ifndef _WIN32
 // POSIX: the mapping length is size_t and the file offset is off_t, both
 // 64-bit. An `int` length/offset truncates a mapping at or past 2GB.
 // `long` / `unsigned long` match off_t / size_t on LP64 (this block's
@@ -116,7 +122,9 @@ void *mmap(void *addr, unsigned long len, int prot, int flags, int fd, long offs
 int munmap(void *addr, unsigned long len);
 // Report which pages of a mapping are resident; `vec` gets one byte per page.
 int mincore(void *addr, unsigned long len, unsigned char *vec);
+#ifdef __linux__
 void *mremap(void *old, unsigned long old_size, unsigned long new_size, int flags);
+#endif
 int msync(void *addr, unsigned long len, int flags);
 int mprotect(void *addr, unsigned long len, int prot);
 int madvise(void *addr, unsigned long len, int advice);
@@ -133,3 +141,14 @@ int shm_unlink(const char *name);
 // Lock/unlock the whole address space (POSIX); flags are the MCL_* set.
 int mlockall(int flags);
 int munlockall(void);
+// Lock/unlock the pages a range touches (POSIX).
+int mlock(const void *addr, unsigned long len);
+int munlock(const void *addr, unsigned long len);
+// POSIX advice; the values are the same in glibc and the macOS SDK.
+#define POSIX_MADV_NORMAL     0
+#define POSIX_MADV_RANDOM     1
+#define POSIX_MADV_SEQUENTIAL 2
+#define POSIX_MADV_WILLNEED   3
+#define POSIX_MADV_DONTNEED   4
+int posix_madvise(void *addr, unsigned long len, int advice);
+#endif

@@ -1813,6 +1813,7 @@ fn emit_load_stack_guard(
             instr_offset: code.len(),
             symbol_name: name.into(),
             direct_pcrel: None,
+            import_slot: false,
         });
         super::encode::emit_lea_r_rip32(code, rd, 0);
         emit_mov_r_mem(code, rd, rd, 0);
@@ -1844,6 +1845,7 @@ fn emit_load_stack_guard(
         instr_offset,
         symbol_name: symbol.into(),
         direct_pcrel: Some(-4),
+        import_slot: false,
     });
 }
 

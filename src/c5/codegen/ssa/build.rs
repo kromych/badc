@@ -181,6 +181,7 @@ impl SsaBuilder {
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             is_weak: false,
             is_internal: false,
             section: None,
@@ -1569,6 +1570,26 @@ impl SsaBuilder {
             expected,
             desired,
             width,
+            order,
+        })
+    }
+
+    /// `Inst::AtomicCas16` on the 16-byte object at `addr`, comparand and
+    /// replacement at the addresses `expected` and `desired`. Its value is
+    /// whether it matched. Writes through `addr` and `expected`, so the CSE
+    /// cache is invalidated.
+    pub(crate) fn atomic_cas16(
+        &mut self,
+        addr: ValueId,
+        expected: ValueId,
+        desired: ValueId,
+        order: MemOrder,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
             order,
         })
     }

@@ -337,6 +337,19 @@ demos/simplevisor/*
 !demos/simplevisor/include/
 !demos/simplevisor/harness/
 
+# simplesvm -- badc builds Satoshi Tanda's AMD-SVM hypervisor as a .sys.
+# `setup.py` fetches the upstream source (pinned commit, sha256 verified) and
+# rewrites its few C++ spellings to C99 into src/; the build writes into
+# .build/. Only the demo-local WDK/intrinsic headers, the translated assembly,
+# the harness, the runner scripts and the README are committed.
+demos/simplesvm/*
+!demos/simplesvm/setup.py
+!demos/simplesvm/smoke.py
+!demos/simplesvm/README.md
+!demos/simplesvm/x64_asm.c
+!demos/simplesvm/include/
+!demos/simplesvm/harness/
+
 # linux -- the kernel TU sweep. `setup.py` fetches and configures the pinned
 # release under `.cache/` and the sweep writes per-unit objects and reports
 # under `.work/`; only the runner scripts, the vendored minimal configs and

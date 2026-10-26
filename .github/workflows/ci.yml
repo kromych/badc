@@ -927,6 +927,21 @@ jobs:
         # runs under badc and, where a host cc is present, is diffed
         # against that compiler to catch a bitfield/mask codegen defect.
         run: python demos/simplevisor/smoke.py
+      - name: simplesvm smoke
+        # Satoshi Tanda's AMD-V/SVM hypervisor, the AMD counterpart to
+        # simplevisor. Upstream is C-style C++; setup.py rewrites its few
+        # C++-only spellings to C99 and badc builds it into a
+        # native-subsystem .sys for windows-x64 (x64-only upstream) from
+        # every runner. The smoke asserts the PE is PE32+/AMD64,
+        # Subsystem NATIVE, has an entry point in .text and imports only
+        # ntoskrnl.exe; on the Windows runners it also checks every
+        # import resolves against the host's own ntoskrnl.exe. It never
+        # loads the driver -- an SVM fault would take the runner down.
+        # The user-mode logic harness (the segment-descriptor and
+        # event-injection bitfield decode) runs under badc and, where a
+        # host cc is present, is diffed against that compiler to catch a
+        # bitfield/mask codegen defect.
+        run: python demos/simplesvm/smoke.py
 
   pressure:
     # Run the test suite and the functional demos with the register

@@ -356,6 +356,17 @@ SOURCES = [
         sha_kind="git",
     ),
     Source(
+        # SimpleSvm -- Satoshi Tanda's AMD-V/SVM hypervisor. No
+        # versioned releases; pinned to the head commit, author-date
+        # version. The asset is the upstream GitHub archive of the commit.
+        name="simplesvm",
+        version="20250303",
+        url="https://github.com/tandasat/SimpleSvm/archive/c4a479e0244b5771c0c865f751f97d1b4f27c091.zip",
+        ext=".zip",
+        upstream_sha="c4a479e0244b5771c0c865f751f97d1b4f27c091",
+        sha_kind="git",
+    ),
+    Source(
         # Nuklear -- immediate-mode GUI. The asset is the upstream GitHub
         # archive of commit a7353204d0, four past v4.13.3 (whose
         # demo/gdi/main.c does not compile), pinned by its own sha256.

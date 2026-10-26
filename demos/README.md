@@ -352,6 +352,16 @@ native-subsystem `.sys` whose image and ntoskrnl imports the smoke checks;
 a user-mode harness runs its descriptor and MSR decode logic. The driver is
 never loaded. See [`simplevisor/README.md`](./simplevisor/README.md).
 
+## simplesvm/
+
+[SimpleSvm](https://github.com/tandasat/SimpleSvm), Satoshi Tanda's AMD-V/SVM
+hypervisor and the AMD counterpart to `simplevisor`. Upstream is C-style C++;
+`setup.py` rewrites its few C++-only spellings to C99 and badc builds it into
+a `windows-x64` native-subsystem `.sys` whose image and ntoskrnl imports the
+smoke checks. A user-mode harness runs its segment-descriptor and
+event-injection bitfield logic. The driver is never loaded. See
+[`simplesvm/README.md`](./simplesvm/README.md).
+
 ## nt_loader/
 
 Launches user-mode NT-native programs (e.g. `nt_hello`) through a transacted

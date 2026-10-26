@@ -41,7 +41,16 @@ thousand tests, and fuzzing jobs run daily.
   single-source EFI application, its PE subsystem selected by
   `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
-  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.2.9`.
+  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.2.9`,
+* _NT native user-mode, Windows drivers and virtualization_:
+  the [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver,
+  [`SimpleVisor`](./demos/simplevisor/), an Intel VT-x hypervisor built as a
+  native-subsystem Windows driver, [`SimpleSvm`](./demos/simplesvm/), 
+  an AMD SVM hypervisor built as a native-subsystem Windows driver,
+  the NT native binaries ([`nt_hello`](./demos/README.md#nt_hello), an
+  `IMAGE_SUBSYSTEM_NATIVE` PE that runs under `ntdll` alone, and
+  [`nt_loader`](./demos/README.md#nt_loader), which spawns one through
+  `NtCreateUserProcess`).
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/), and
@@ -51,14 +60,8 @@ thousand tests, and fuzzing jobs run daily.
   [`Nuklear`](./demos/nuklear/), whose demo windows rendered headlessly give
   the same frames under badc `-O0`, `-O` and the host compiler,
   [`kissfft`](./demos/kissfft/), the [`GUI`](./demos/gui_hello/) demos (one
-  windowed program per OS family, each cross-compiled to every target), the
-  [`WDM`](./demos/README.md#wdm_driver) Windows kernel driver,
-  [`SimpleVisor`](./demos/simplevisor/), an Intel VT-x hypervisor built as a
-  native-subsystem Windows driver, the NT native
-  binaries ([`nt_hello`](./demos/README.md#nt_hello), an
-  `IMAGE_SUBSYSTEM_NATIVE` PE that runs under `ntdll` alone, and
-  [`nt_loader`](./demos/README.md#nt_loader), which spawns one through
-  `NtCreateUserProcess`), and the cooperative-concurrency libraries
+  windowed program per OS family, each cross-compiled to every target),
+  and the cooperative-concurrency libraries
   ([`libmill`](./demos/README.md#libmill-libdill-coroutines),
   [`libdill`](./demos/README.md#libmill-libdill-coroutines),
   [`coroutines`](./demos/README.md#libmill-libdill-coroutines)), whose context

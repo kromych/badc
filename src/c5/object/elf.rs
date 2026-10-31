@@ -407,6 +407,25 @@ impl SectionPlan {
         self.counts.iter().sum()
     }
 
+    /// The header an address in `s` is placed against when `s` has none:
+    /// the nearest one before it outside the TLS template, as bfd moves a
+    /// symbol off an output section it removes.
+    fn holder_of(&self, s: Sec) -> u16 {
+        let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
+        let mut end = self.index_of(s);
+        for &slot in SECTION_ORDER[..at].iter().rev() {
+            if self.count(slot) > 0 && !matches!(slot, Sec::Tdata | Sec::Tbss) {
+                return end - 1;
+            }
+            end -= self.count(slot) as u16;
+        }
+        unreachable!("the null header precedes every slot")
+    }
+
+    fn count(&self, s: Sec) -> usize {
+        self.counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()]
+    }
+
     /// Section-header index of `s`, or of the slot it would occupy.
     fn index_of(&self, s: Sec) -> u16 {
         let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
@@ -2953,7 +2972,11 @@ impl<'a> ElfImageWriter<'a> {
     /// else the family whose region it falls in.
     fn data_addr_shndx(&self, addr: u64, off: u64) -> u16 {
         let slot = self.data_slot(off);
-        let base = self.tail.plan.index_of(slot);
+        let plan = &self.tail.plan;
+        if plan.count(slot) == 0 {
+            return plan.holder_of(slot);
+        }
+        let base = plan.index_of(slot);
         match self
             .named_in(slot)
             .position(|n| addr >= n.addr && addr < n.addr + n.size)
@@ -6110,6 +6133,63 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// A label past the last data byte of an image without `.bss` is
+    /// placed against `.data`, the section bfd moves a symbol of a removed
+    /// output section to, not against the header after it.
+    #[test]
+    fn a_label_at_the_end_of_data_without_bss_is_placed_against_data() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let src = "int answer(void) { return 42; }\n#pragma export(answer)\n";
+            let program = Compiler::with_target(String::from(src), target)
+                .compile()
+                .expect("compile");
+            let opts = super::super::NativeOptions::new().with_shared_library();
+            let mut build = super::super::lower_for(&program, target, opts).expect("lower");
+            build.bss_size = 0;
+            build.image_symbols.push(crate::c5::codegen::ImageSymbol {
+                name: String::from("data_end"),
+                place: crate::c5::codegen::SymbolPlace::Data(build.data.len() as u64),
+                size: 0,
+                info: 0,
+                other: 0,
+            });
+            let bytes = write(&tiny_program(), &build, machine).unwrap();
+            assert!(find_section(&bytes, ".bss").is_none(), "{machine:?}: .bss");
+            let data = section_index(&bytes, ".data").expect(".data");
+            assert_eq!(symtab_shndx(&bytes, "data_end"), data, "{machine:?}");
+        }
+    }
+
+    fn section_index(bytes: &[u8], want: &str) -> Option<u16> {
+        let eh: super::Elf64Ehdr = read_struct(bytes, 0);
+        let shdr_at = |idx: u64| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+        let strtab: super::Elf64Shdr = read_struct(bytes, shdr_at(eh.e_shstrndx as u64));
+        (0..eh.e_shnum).find(|&i| {
+            let sh: super::Elf64Shdr = read_struct(bytes, shdr_at(i as u64));
+            let at = strtab.sh_offset as usize + sh.sh_name as usize;
+            bytes[at..].split(|&b| b == 0).next() == Some(want.as_bytes())
+        })
+    }
+
+    /// `st_shndx` of the first `.symtab` entry named `want`.
+    fn symtab_shndx(bytes: &[u8], want: &str) -> u16 {
+        let off = section_file_off(bytes, ".symtab").expect(".symtab") as usize;
+        let size = find_section(bytes, ".symtab").unwrap().3 as usize;
+        let strtab = section_file_off(bytes, ".strtab").expect(".strtab") as usize;
+        (0..size / 24)
+            .map(|i| off + 24 * i)
+            .find(|&e| {
+                let at = strtab + read_u32(bytes, e) as usize;
+                bytes[at..].split(|&b| b == 0).next() == Some(want.as_bytes())
+            })
+            .map(|e| u16::from_le_bytes([bytes[e + 6], bytes[e + 7]]))
+            .expect(want)
     }
 
     /// `st_value` of the first `.symtab` entry named `want`.

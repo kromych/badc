@@ -446,7 +446,7 @@ fn extract_asm_sections_impl(
         }
         match tok {
             ".pushsection" | ".section" => {
-                let block = parse_section_args(rest)?;
+                let block = reenter_section(&blocks, rest)?;
                 let idx = blocks.len();
                 blocks.push(block);
                 if tok == ".pushsection" {
@@ -604,6 +604,58 @@ fn is_code_mode_directive(tok: &str) -> bool {
     matches!(tok, ".code16" | ".code32" | ".code64")
 }
 
+/// The block a `.section` / `.pushsection` with arguments `rest` opens.
+/// gas identifies a section by its name, its group and the section it is
+/// ordered after: entering one again without a flags string keeps its
+/// attributes, and with a different type, attributes or entry size is an
+/// error -- except for a special name, whose first attributes stand.
+fn reenter_section(
+    prior: &[AsmSectionBlock],
+    rest: &str,
+) -> Result<AsmSectionBlock, alloc::string::String> {
+    let (block, written) = parse_section_directive(rest)?;
+    let group = |b: &AsmSectionBlock| b.group.as_ref().map(|g| g.name.clone());
+    let Some(first) = prior
+        .iter()
+        .find(|b| b.name == block.name && group(b) == group(&block) && b.link == block.link)
+    else {
+        return Ok(block);
+    };
+    let changed = |what: &str| {
+        Err(alloc::format!(
+            "inline asm: changed section {what} for `{}`",
+            block.name
+        ))
+    };
+    if special_section(&block.name).is_none() {
+        let kind = |b: &AsmSectionBlock| b.sh_type.clone().unwrap_or_else(|| "progbits".into());
+        if written.sh_type && kind(&block) != kind(first) {
+            return changed("type");
+        }
+        let attrs = |b: &AsmSectionBlock| {
+            let mut letters: alloc::vec::Vec<char> =
+                b.flags.chars().filter(|c| "awxeMST".contains(*c)).collect();
+            letters.sort_unstable();
+            letters.dedup();
+            (letters, b.group.as_ref().is_some_and(|g| g.comdat))
+        };
+        if written.flags && attrs(&block) != attrs(first) {
+            return changed("attributes");
+        }
+        if written.flags && block.flags.contains('M') && block.entsize != first.entsize {
+            return changed("entity size");
+        }
+    }
+    Ok(first.clone_identity())
+}
+
+/// Whether a section directive wrote a flags string and a type.
+#[derive(Clone, Copy)]
+struct SectionWritten {
+    flags: bool,
+    sh_type: bool,
+}
+
 /// Parse the argument list of `.pushsection` / `.section`:
 /// `name[,"flags"[,@type][,entsize][,link][,group[,comdat]]]`. The entry
 /// size follows when the flags hold `M`, the ordering section when they
@@ -611,6 +663,13 @@ fn is_code_mode_directive(tok: &str) -> bool {
 /// reads them; `M` without an entry size and `G` without a group name are
 /// dropped, as GNU as drops them.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
+    parse_section_directive(rest).map(|(block, _)| block)
+}
+
+/// [`parse_section_args`], with what the directive wrote.
+fn parse_section_directive(
+    rest: &str,
+) -> Result<(AsmSectionBlock, SectionWritten), alloc::string::String> {
     let bad = |p: &str| alloc::format!("inline asm: bad section argument `{p}`");
     fn unquote(p: &str) -> Option<&str> {
         p.strip_prefix('"').and_then(|p| p.strip_suffix('"'))
@@ -630,6 +689,10 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     let sh_type = parts
         .next_if(|p| p.starts_with(['@', '%', '"']))
         .map(|t| alloc::string::String::from(unquote(t).unwrap_or(&t[1..])));
+    let written = SectionWritten {
+        flags: !flags.is_empty(),
+        sh_type: sh_type.is_some(),
+    };
     let mut entsize = 0u32;
     if flags.contains('M') {
         if let Some(e) = parts.next() {
@@ -673,7 +736,7 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         }
         None => sh_type,
     };
-    Ok(AsmSectionBlock {
+    let block = AsmSectionBlock {
         name: alloc::string::String::from(name),
         flags,
         sh_type,
@@ -682,7 +745,8 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         group,
         subsection: 0,
         items: alloc::vec::Vec::new(),
-    })
+    };
+    Ok((block, written))
 }
 
 /// How a special section's name may continue past its prefix.

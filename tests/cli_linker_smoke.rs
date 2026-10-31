@@ -8308,6 +8308,33 @@ fn unknown_asm_section_flag_is_diagnosed() {
     );
 }
 
+/// Two assembler statements that give one section different types are
+/// refused as gas refuses them within one source, not as an internal error.
+#[test]
+fn a_section_type_changed_across_asm_statements_is_diagnosed() {
+    let dir = tempdir("asm-section-type");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__asm__(\".section .x,\\\"a\\\",@progbits\\n.byte 1\\n.previous\");\n\
+         __asm__(\".section .x,\\\"a\\\",@nobits\\n.zero 1\\n.previous\");\n\
+         int main(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("t.o"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "the second type must be refused");
+    assert!(
+        err.contains("changed section type for `.x`") && !err.contains("internal"),
+        "{err}"
+    );
+}
+
 /// An absolute 32-bit reference resolves to a fixed address, which a
 /// position-independent image cannot promise. The `-c` object carries
 /// the relocation (its shape is locked in the linker tests); linking it

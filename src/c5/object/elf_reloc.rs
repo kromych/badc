@@ -1557,7 +1557,14 @@ impl<'a> RelocWriter<'a> {
                 .carve
                 .table
                 .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
-                .map_err(Self::internal)?;
+                .map_err(|_| {
+                    // Two assembler statements that name the section with
+                    // different types, which gas refuses within one source.
+                    C5Error::hard(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!("inline asm: changed section type for `{}`", s.name),
+                    )
+                })?;
             // The first block to give an entry size or an ordering section
             // sets it, as GNU as keeps a section's first attributes.
             let ent = &mut self.layout.carve.table.entries[e];

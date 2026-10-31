@@ -869,3 +869,66 @@ mod asm_noop_tests {
         assert!(asm_statement_is_noop(&bound, AsmComments::X86));
     }
 }
+
+/// Apple's assembly names a C symbol with a leading underscore, which badc's
+/// objects do not carry: its Mach-O writer adds one to every name, as its
+/// Mach-O reader strips one. Strip one from each identifier of `text` that
+/// starts with one. String literals, comments, operand references
+/// (`%[name]`) and a `.section` statement's segment and section names are
+/// not symbols and keep their spelling.
+pub(crate) fn mach_o_symbol_names(text: &str) -> alloc::string::String {
+    let b = text.as_bytes();
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$' | b'\\');
+    let mut out = alloc::vec::Vec::with_capacity(b.len());
+    let mut i = 0;
+    let mut stmt_start = true;
+    while i < b.len() {
+        let c = b[i];
+        let skip_to = |from: usize, end: &[u8]| {
+            (b[from..].windows(end.len()).position(|w| w == end))
+                .map_or(b.len(), |p| from + p + end.len())
+        };
+        let next = match c {
+            b'"' => {
+                let mut j = i + 1;
+                while j < b.len() && b[j] != b'"' {
+                    j += if b[j] == b'\\' { 2 } else { 1 };
+                }
+                Some((j + 1).min(b.len()))
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => Some(skip_to(i, b"\n").min(b.len())),
+            b'/' if b.get(i + 1) == Some(&b'*') => Some(skip_to(i + 2, b"*/")),
+            b'%' if b.get(i + 1) == Some(&b'[') => Some(skip_to(i, b"]")),
+            b'.' if stmt_start && text[i..].starts_with(".section") => Some(
+                b[i..]
+                    .iter()
+                    .position(|&c| matches!(c, b'\n' | b';'))
+                    .map_or(b.len(), |p| i + p),
+            ),
+            b'_' if i == 0 || !ident(b[i - 1]) => {
+                stmt_start = false;
+                i += 1;
+                continue;
+            }
+            _ => None,
+        };
+        match next {
+            Some(j) => {
+                out.extend_from_slice(&b[i..j]);
+                i = j;
+                stmt_start = false;
+            }
+            None => {
+                out.push(c);
+                i += 1;
+                if matches!(c, b'\n' | b';') {
+                    stmt_start = true;
+                } else if !c.is_ascii_whitespace() {
+                    stmt_start = false;
+                }
+            }
+        }
+    }
+    // Only ASCII bytes were dropped, so the result is still UTF-8.
+    alloc::string::String::from_utf8(out).unwrap_or_default()
+}

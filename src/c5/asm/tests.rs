@@ -105,6 +105,20 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
 }
 
 #[test]
+fn mach_o_names_lose_one_leading_underscore() {
+    // Apple's `_g` is the C name `g`; a string, a comment, a named operand
+    // reference and a `.section`'s segment and section names are not
+    // symbols, and an underscore inside a name is part of it.
+    let text = ".section __TEXT,__const\n.globl _h\n_h: b ___g // _c\n\
+                adrp x0, _t@PAGE ; ldr x1, [x0, _t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+_b /* _d */\n";
+    let want = ".section __TEXT,__const\n.globl h\nh: b __g // _c\n\
+                adrp x0, t@PAGE ; ldr x1, [x0, t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+b /* _d */\n";
+    assert_eq!(mach_o_symbol_names(text), want);
+}
+
+#[test]
 fn a_reentered_section_keeps_its_identity_or_is_refused() {
     // gas 2.46.1: a section is its name, group and linked-to section; a
     // second directive without flags keeps the first one's attributes, one

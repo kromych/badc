@@ -394,12 +394,13 @@ fn apple_section_visibility_and_page_operands_assemble() {
             "{name}"
         );
     }
+    // Apple's `_f` is the C name `f`.
     let f = sym_table(&bytes)
         .into_iter()
-        .find(|s| s.0 == "_f")
-        .expect("_f");
+        .find(|s| s.0 == "f")
+        .expect("f");
     assert_eq!(f.1 >> 4, 1, "`.private_extern` is global");
-    assert_eq!(visibility(&bytes, "_f"), Some(2), "and hidden");
+    assert_eq!(visibility(&bytes, "f"), Some(2), "and hidden");
     let got: Vec<(u32, i64)> = relocs(&bytes, ".rela.text")
         .into_iter()
         .map(|(_, rtype, addend)| (rtype, addend))

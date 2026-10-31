@@ -260,7 +260,10 @@ impl Compiler {
         } else {
             crate::c5::asm::AsmComments::X86
         };
-        let prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        let mut prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
+            prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
+        }
         let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +

@@ -15575,7 +15575,10 @@ asm(".section \".export_symbol\",\"a\"\n"
 int main(void) { return 0; }
 "#;
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let options = crate::c5::compiler::CompileOptions::default();
+        let program = Compiler::with_options(String::from(src), target, options)
+            .compile()
+            .expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()

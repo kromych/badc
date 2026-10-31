@@ -1540,7 +1540,12 @@ impl Compiler {
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
-        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        let (mut template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO
+            && let Ok(text) = core::str::from_utf8(&template)
+        {
+            template = crate::c5::asm::mach_o_symbol_names(text).into_bytes();
+        }
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {

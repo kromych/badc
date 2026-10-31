@@ -7770,6 +7770,24 @@ fn tzset_outputs_are_imported_only_where_named() {
     }
 }
 
+/// On macOS, assembly names a C symbol with Apple's leading underscore,
+/// in an assembler source and in an `asm` statement alike.
+#[cfg(target_os = "macos")]
+#[test]
+fn mach_o_assembly_reaches_c_names_through_the_underscore() {
+    let dir = tempdir("mach-o-underscore");
+    write_source(
+        &dir,
+        "ia.c",
+        "int g(void) { return 3; }\nint h(void);\nint k(void);\n\
+         int main(void) { return h() + k(); }\n__asm__(\".globl _h\\n_h:\\n b _g\\n\");\n",
+    );
+    write_source(&dir, "k.s", ".text\n.globl _k\n.p2align 2\n_k:\n b _g\n");
+    let units = [dir.join("ia.c"), dir.join("k.s")];
+    let units: Vec<&Path> = units.iter().map(|p| p.as_path()).collect();
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(6));
+}
+
 /// An image with no import and no emitted relocation still lists its
 /// definitions in `.symtab`, as GNU ld writes one for every image.
 #[test]

@@ -834,15 +834,54 @@ pub(crate) fn measure_asm_section_offsets(
     // A relaxable branch resolves in place against any same-section name the
     // link cannot rebind, so only weakness holds the long form here.
     let weak_only = asm_weak_only_names(blocks, sink);
-    loop {
-        let grown: AsmRelaxSet = sites
-            .iter()
-            .filter(|s| {
-                !long.contains(&s.site)
-                    && !short_form_fits(blocks, &m, &weak_only, s, const_of, sink)
+    // A round lengthens every branch that keeps a relocation or is out of
+    // reach, except one whose span holds an item sized by where it stands
+    // (an alignment, an `.org`, a label-counted fill) behind a branch of its
+    // section lengthened in the same round: lengthening a branch moves what
+    // follows it, and only such an item between a later branch and its
+    // target can bring that branch back within reach, as gas's in-order
+    // relaxation finds.
+    let pliant: alloc::vec::Vec<((usize, usize), alloc::string::String)> = (blocks.iter())
+        .enumerate()
+        .flat_map(|(bi, b)| {
+            let key = section_key(b);
+            b.items.iter().enumerate().filter_map(move |(ii, it)| {
+                let sized_by_place = match &it.item {
+                    AsmSectionItem::Align { .. }
+                    | AsmSectionItem::Org(..)
+                    | AsmSectionItem::OrgLabel { .. }
+                    | AsmSectionItem::OrgExpr(..) => true,
+                    AsmSectionItem::Fill { count, .. } => {
+                        eval_fill_count_with(count, 0, const_of, &|_| None).is_none()
+                    }
+                    _ => false,
+                };
+                sized_by_place.then(|| ((bi, ii), key.clone()))
             })
-            .map(|s| s.site)
-            .collect();
+        })
+        .collect();
+    loop {
+        let mut grown = AsmRelaxSet::new();
+        let mut moved: alloc::collections::BTreeSet<alloc::string::String> =
+            alloc::collections::BTreeSet::new();
+        for s in sites.iter().filter(|s| !long.contains(&s.site)) {
+            let key = section_key(&blocks[s.site.0]);
+            let spans_pliant = |span: Option<(i64, i64)>| {
+                span.is_none_or(|(a, b)| {
+                    let (lo, hi) = (a.min(b), a.max(b));
+                    pliant.iter().any(|(at, k)| {
+                        *k == key && m.places.get(at).is_some_and(|&q| q > lo && q < hi)
+                    })
+                })
+            };
+            match short_form_reach(blocks, &m, &weak_only, s, const_of, sink) {
+                Reach::Fits => continue,
+                Reach::Out(span) if moved.contains(&key) && spans_pliant(span) => continue,
+                Reach::Out(_) | Reach::Reloc => {}
+            }
+            grown.insert(s.site);
+            moved.insert(key);
+        }
         if grown.is_empty() {
             m.long = long;
             return Ok(m);
@@ -853,25 +892,35 @@ pub(crate) fn measure_asm_section_offsets(
     }
 }
 
-/// Whether the site's short branch reaches its target under `m`. Only a
-/// target the materializer resolves in place qualifies; any other keeps a
-/// relocation, which the link fills at the long form's width.
-fn short_form_fits(
+/// How a relaxable branch's short form fares under one layout.
+enum Reach {
+    /// The target keeps a relocation the link fills at the long form's
+    /// width: the materializer does not resolve it in place.
+    Reloc,
+    Fits,
+    /// Out of reach, from the field at `.0` to the label at `.1` when the
+    /// target is one (an expression target has no single place).
+    Out(Option<(i64, i64)>),
+}
+
+/// Whether the site's short branch reaches its target under `m`.
+fn short_form_reach(
     blocks: &[AsmSectionBlock],
     m: &SectionLabelOffsets,
     rebindable: &AsmBindingNames<'_>,
     s: &AsmRelaxSite,
     const_of: &dyn Fn(u8) -> Option<i64>,
     sink: &AsmSectionSink,
-) -> bool {
+) -> Reach {
     let Some(AsmSectionItem::CodeBytes {
         short: Some(short), ..
     }) = blocks[s.site.0].items.get(s.site.1).map(|i| &i.item)
     else {
-        return false;
+        return Reach::Reloc;
     };
     let key = section_key(&blocks[s.site.0]);
     let place = s.at + short.reloc.offset as i64;
+    let mut label = None;
     let value = match &short.reloc.target {
         AsmSectionTarget::Symbol(name) => {
             // The reference takes the location of the name its `.set` chain
@@ -881,18 +930,19 @@ fn short_form_fits(
             // may bind to another definition at link time, so either keeps a
             // relocation at the long form's width.
             if rebindable.contains(name.as_str()) {
-                return false;
+                return Reach::Reloc;
             }
             let name = m.alias_target(name.as_str());
             if m.symbol(name).is_some() {
-                return false;
+                return Reach::Reloc;
             }
             let (Some(sec), Some(off)) = (m.section(name), m.offset(name)) else {
-                return false;
+                return Reach::Reloc;
             };
             if sec != key {
-                return false;
+                return Reach::Reloc;
             }
+            label = Some(off);
             off + short.reloc.addend - place
         }
         // A branch to an expression reaches where the materializer folds it
@@ -924,13 +974,17 @@ fn short_form_fits(
             );
             match folded {
                 Ok(AsmFieldTarget::Abs(c)) => c,
-                _ => return false,
+                _ => return Reach::Reloc,
             }
         }
-        _ => return false,
+        _ => return Reach::Reloc,
     };
     let lim = 1i64 << (8 * short.reloc.width as u32 - 1);
-    (-lim..lim).contains(&value)
+    if (-lim..lim).contains(&value) {
+        Reach::Fits
+    } else {
+        Reach::Out(label.map(|l| (place, l)))
+    }
 }
 
 /// Names the unit binds weak, from the blocks and from what earlier

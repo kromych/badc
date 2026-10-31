@@ -1198,6 +1198,26 @@ fn code32_and_code64_short_branches_take_rel8() {
     assert_eq!(t, bytes);
 }
 
+/// A branch out of reach until an earlier branch's long form moves it
+/// toward a target an alignment holds in place stays short, as GNU as
+/// 2.46.1 leaves it: with every branch short `jb near` falls 128 bytes
+/// short of `near`, and once `jne far` takes rel32 it reaches it with 124.
+#[test]
+fn a_branch_an_earlier_long_form_brings_into_reach_stays_short() {
+    let t = text_of(
+        "relax-in-order",
+        "\t.text\n\tjne far\n\t.fill 12, 1, 0x90\n\tjb near\n\t.fill 120, 1, 0x90\n\
+         \t.p2align 4\nnear:\tnop\n\t.fill 200, 1, 0x90\nfar:\tret\n",
+    );
+    assert_eq!(
+        &t[..6],
+        [0x0f, 0x85, 0x53, 0x01, 0x00, 0x00],
+        "jne far, rel32"
+    );
+    assert_eq!(&t[0x12..0x14], [0x72, 0x7c], "jb near, rel8");
+    assert_eq!(t[0x90], 0x90, "near is 16-byte aligned at 0x90");
+}
+
 /// `jcxz` / `jecxz` / `jrcxz` are one `E3 rel8` opcode; the counter the name
 /// spells is the address size, so the name off the mode's default carries the
 /// `67` prefix. Bytes are GNU as 2.46.1's for the same unit.

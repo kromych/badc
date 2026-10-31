@@ -815,6 +815,41 @@ fn a_label_in_an_empty_section_names_that_section() {
     }
 }
 
+/// Records the order of the `.init` fragments, the constructor and the
+/// destructor; the `.fini` fragment exits 7 when all ran in the gABI order.
+#[cfg(target_os = "linux")]
+const INIT_FINI_STEPS: &str = "#include <unistd.h>\n\
+int seq;\n\
+void step_a(void) { seq = seq * 10 + 1; }\n\
+void step_b(void) { seq = seq * 10 + 2; }\n\
+__attribute__((constructor)) static void ctor(void) { seq = seq * 10 + 3; }\n\
+__attribute__((destructor)) static void dtor(void) { seq = seq * 10 + 4; }\n\
+void fini_check(void) { _exit(seq == 1234 ? 7 : 9); }\n\
+int main(void) { return seq == 123 ? 0 : 1; }\n";
+
+// `.init` and `.fini` fragments run as crti.o and crtn.o bracket them under
+// GNU ld: in input order, before the constructors and after the
+// destructors. The first fragment's section is named without flags.
+#[cfg(target_os = "linux")]
+#[test]
+fn init_and_fini_fragments_run_around_constructors_and_destructors() {
+    let dir = tempdir("init-fini");
+    let (call, progbits) = if cfg!(target_arch = "aarch64") {
+        ("bl", "%progbits")
+    } else {
+        ("call", "@progbits")
+    };
+    let first = format!(
+        ".section .init\n\t{call} step_a\n.section .fini,\"ax\",{progbits}\n\t{call} fini_check\n"
+    );
+    let second = format!(".section .init,\"ax\",{progbits}\n\t{call} step_b\n");
+    let steps = write_source(&dir, "steps.c", INIT_FINI_STEPS);
+    let first = write_source(&dir, "first.s", &first);
+    let second = write_source(&dir, "second.s", &second);
+    let units = [steps.as_path(), first.as_path(), second.as_path()];
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(7));
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

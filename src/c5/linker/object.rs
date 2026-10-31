@@ -1540,9 +1540,10 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// [`grouped_by_name`] sorts to the end of its family, so the blob splits
-/// into a prefix the linker appends whole and a suffix it regroups by name
-/// across units.
+/// [`grouped_by_name`] sorts to the end of its family, as an
+/// [`is_init_fini`] one does in the text family, so the blob splits into a
+/// prefix the linker appends whole and a suffix it regroups by name across
+/// units.
 struct SectionRoles {
     text: Vec<usize>,
     rodata: Vec<usize>,
@@ -1705,6 +1706,11 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
                 .unwrap_or(false)
         });
     }
+    roles.text.sort_by_key(|&i| {
+        strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
+            .map(is_init_fini)
+            .unwrap_or(false)
+    });
     Ok(roles)
 }
 
@@ -2716,10 +2722,18 @@ pub fn grouped_by_name(name: &str) -> bool {
     is_c_identifier(name) || name == EH_FRAME
 }
 
+/// `.init` / `.fini`: the gABI's process initialization and termination
+/// code. Each input's section is a fragment of one function, which the
+/// link concatenates in input order between a prologue and an epilogue,
+/// as crti.o and crtn.o bracket them; GNU ld places them by name.
+pub fn is_init_fini(name: &str) -> bool {
+    matches!(name, ".init" | ".fini")
+}
+
 /// Standard family for a section name, `None` when the name carries
 /// no convention and the header has to decide.
 fn family_by_name(name: &str) -> Option<SectionFamily> {
-    if name == ".text" || name.starts_with(".text.") {
+    if name == ".text" || name.starts_with(".text.") || is_init_fini(name) {
         Some(SectionFamily::Text)
     } else if name == ".data.rel.ro" || name.starts_with(".data.rel.ro.") {
         Some(SectionFamily::RelRo)

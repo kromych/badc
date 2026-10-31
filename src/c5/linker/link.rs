@@ -31,7 +31,8 @@ use super::object::{
     NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
 };
 use crate::c5::codegen::{
-    CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget, PointerSlot,
+    BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
+    PointerSlot,
 };
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
@@ -677,6 +678,15 @@ impl BlobMap {
         }
     }
 
+    /// The contiguous run holding blob offset `off`: its merged-stream
+    /// start, its blob start and its length.
+    fn run(&self, off: u64) -> (u64, u64, u64) {
+        match (self.moved.iter()).find(|m| off >= m.offset && off < m.offset + m.size) {
+            Some(m) => (m.merged, m.offset, m.size),
+            None => (self.base, 0, self.prefix_len),
+        }
+    }
+
     /// Merged-stream offset of section `k`, at blob offset `offset`.
     fn section_at(&self, k: u32, offset: u64) -> u64 {
         match self.moved.iter().find(|m| m.section == k) {
@@ -690,12 +700,43 @@ impl BlobMap {
 /// The parse sorted the sections grouped by name last, so they form a
 /// suffix starting at the lowest such section's offset.
 fn named_prefix_len(obj: &NativeObject, fam: SectionFamily, blob_len: u64) -> u64 {
+    moved_prefix_len(obj, fam, blob_len, super::object::grouped_by_name)
+}
+
+/// Blob length below which this unit's `fam` sections stay in place, the
+/// rest being the sections `moves` names, which the parse sorted last.
+fn moved_prefix_len(
+    obj: &NativeObject,
+    fam: SectionFamily,
+    blob_len: u64,
+    moves: fn(&str) -> bool,
+) -> u64 {
     obj.sections
         .iter()
-        .filter(|s| s.family == fam && super::object::grouped_by_name(&s.name))
+        .filter(|s| s.family == fam && moves(&s.name))
         .map(|s| s.offset)
         .min()
         .unwrap_or(blob_len)
+}
+
+/// The prologue and epilogue crti.o and crtn.o put around the `.init` /
+/// `.fini` fragments, and the no-op that fills between fragments.
+fn init_fini_frame(machine: NativeMachine) -> (&'static [u8], &'static [u8], &'static [u8]) {
+    match machine {
+        // `sub $8, %rsp` keeps the fragments' calls 16-byte aligned;
+        // `add $8, %rsp; ret`.
+        NativeMachine::X86_64 => (
+            &[0x48, 0x83, 0xec, 0x08],
+            &[0x48, 0x83, 0xc4, 0x08, 0xc3],
+            &[0x90],
+        ),
+        // `stp x29, x30, [sp, #-16]!; mov x29, sp`; `ldp x29, x30, [sp], #16; ret`.
+        NativeMachine::Aarch64 => (
+            &[0xfd, 0x7b, 0xbf, 0xa9, 0xfd, 0x03, 0x00, 0x91],
+            &[0xfd, 0x7b, 0xc1, 0xa8, 0xc0, 0x03, 0x5f, 0xd6],
+            &crate::c5::asm::A64_NOP,
+        ),
+    }
 }
 
 /// Every unit's `fam` sections grouped by name. Name order, then link
@@ -1002,10 +1043,9 @@ pub struct LinkOptions {
     pub preemption: Preemption,
     pub export_all: bool,
     pub export_data: bool,
-    /// The format has no copy relocation (Mach-O, PE).
-    pub no_copy_relocs: bool,
-    /// The image is PE: the link defines `__ImageBase`.
-    pub pe_image: bool,
+    /// The image's container: Mach-O and PE have no copy relocation, a
+    /// PE link defines `__ImageBase`, and `.init` / `.fini` are ELF's.
+    pub format: BinaryFormat,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1020,7 +1060,7 @@ pub fn link_native_objects_with<'a>(
     link.lay_out_tls()?;
     link.lay_out_sections();
     if let Some(s) = &slot_reads {
-        let at = |&(unit, offset): &(usize, u64)| link.text_bases[unit] as u64 + offset;
+        let at = |&(unit, offset): &(usize, u64)| link.text_map[unit].at(offset);
         link.slot_reads = s.sites.iter().map(at).collect();
         link.warnings.extend(s.warnings.iter().cloned());
     }
@@ -1152,6 +1192,8 @@ struct Link<'a> {
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// The image runs `.init` / `.fini` code: an ELF one.
+    init_fini: bool,
     /// COFF COMDAT groups' sections, and those selection displaced.
     comdats: super::comdat::CoffSelection,
     preemptible: hashbrown::HashSet<&'a str>,
@@ -1177,7 +1219,9 @@ struct Link<'a> {
     tls_defined: BTreeMap<String, MergedSymbol>,
 
     text: Vec<u8>,
-    text_bases: Vec<usize>,
+    /// Where each unit's text landed; its `.init` / `.fini` fragments
+    /// were moved out to form one function each.
+    text_map: Vec<BlobMap>,
     text_align: usize,
     /// The file-backed data of every unit as one offset space: every
     /// unit's read-only payload first, then every unit's relro payload,
@@ -1204,6 +1248,9 @@ struct Link<'a> {
     /// offset)`, in run order.
     init_entries: Vec<(Option<u32>, u64)>,
     fini_entries: Vec<(Option<u32>, u64)>,
+    /// The merged text offset of the `.init` and `.fini` functions.
+    init_code: Option<u64>,
+    fini_code: Option<u64>,
     /// `[start, end)` of each pointer array in the data stream.
     init_array: (u64, u64),
     fini_array: (u64, u64),
@@ -1308,8 +1355,9 @@ impl<'a> Link<'a> {
             preemption: opts.preemption,
             export_all: opts.export_all,
             export_data: opts.export_data,
-            no_copy_relocs: opts.no_copy_relocs,
-            pe_image: opts.pe_image,
+            no_copy_relocs: opts.format != BinaryFormat::Elf,
+            pe_image: opts.format == BinaryFormat::Pe,
+            init_fini: opts.format == BinaryFormat::Elf,
             comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
             shared_libs,
@@ -1328,7 +1376,7 @@ impl<'a> Link<'a> {
             tls_symbol_offsets: HashMap::new(),
             tls_defined: BTreeMap::new(),
             text: Vec::new(),
-            text_bases: Vec::with_capacity(objs.len()),
+            text_map: Vec::with_capacity(objs.len()),
             text_align: 16,
             data: Vec::new(),
             data_align: crate::c5::layout::DATA_ALIGN_MIN,
@@ -1344,6 +1392,8 @@ impl<'a> Link<'a> {
             section_map: SectionMap::default(),
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
+            init_code: None,
+            fini_code: None,
             init_array: (0, 0),
             fini_array: (0, 0),
             defined: HashMap::new(),
@@ -1395,7 +1445,7 @@ impl<'a> Link<'a> {
         value: u64,
     ) -> Option<u64> {
         Some(match section {
-            NativeSymSection::Text => self.text_bases[unit] as u64 + value,
+            NativeSymSection::Text => self.text_map[unit].at(value),
             NativeSymSection::RoData => self.ro_map[unit].at(value),
             NativeSymSection::RelRo => self.relro_map[unit].at(value),
             NativeSymSection::Data => self.rw_map[unit].at(value),
@@ -1410,6 +1460,7 @@ impl<'a> Link<'a> {
         let own = sym.input_section.and_then(|k| {
             let s = self.objs[unit].sections.get(k as usize)?;
             let map = match s.family {
+                SectionFamily::Text => &self.text_map[unit],
                 SectionFamily::RoData => &self.ro_map[unit],
                 SectionFamily::RelRo => &self.relro_map[unit],
                 SectionFamily::Data => &self.rw_map[unit],
@@ -1766,9 +1817,10 @@ impl<'a> Link<'a> {
             ));
         }
         // The rewrite reads and writes the unit's own bytes only.
-        let base = self.text_bases[unit];
-        let text = &mut self.text[base..base + self.objs[unit].text.len()];
-        let at = reloc.offset as usize;
+        let (base, origin, len) = self.text_map[unit].run(reloc.offset);
+        let base = base as usize;
+        let text = &mut self.text[base..base + len as usize];
+        let at = (reloc.offset - origin) as usize;
         let field = match (machine, to) {
             (NativeMachine::X86_64, Model::LocalExec(value)) => {
                 let value = value + tls_relax::x86_64_addend_bias(reloc.rtype);
@@ -2081,8 +2133,18 @@ impl<'a> Link<'a> {
         for obj in objs {
             align_up(&mut self.text, obj.text_align.max(16));
             self.text_align = self.text_align.max(obj.text_align);
-            self.text_bases.push(self.text.len());
-            self.text.extend_from_slice(&obj.text);
+            let keep = match self.init_fini {
+                true => moved_prefix_len(
+                    obj,
+                    SectionFamily::Text,
+                    obj.text.len() as u64,
+                    super::object::is_init_fini,
+                ),
+                false => obj.text.len() as u64,
+            };
+            self.text_map
+                .push(BlobMap::new(self.text.len() as u64, keep));
+            self.text.extend_from_slice(&obj.text[..keep as usize]);
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.rodata_align),
@@ -2093,6 +2155,10 @@ impl<'a> Link<'a> {
             self.ro_map.push(BlobMap::new(self.data.len() as u64, keep));
             self.data.extend_from_slice(&obj.rodata[..keep as usize]);
             self.data_align = self.data_align.max(obj.data_align);
+        }
+        if self.init_fini {
+            self.init_code = self.group_init_fini(".init");
+            self.fini_code = self.group_init_fini(".fini");
         }
         self.keep_end_label_byte(SectionFamily::RoData);
         group_named_bytes(
@@ -2211,10 +2277,9 @@ impl<'a> Link<'a> {
             for s in &obj.sections {
                 let tls_at = self.unit_tls_offset(i, s.offset);
                 let (list, offset) = match s.family {
-                    SectionFamily::Text => (
-                        &mut self.section_map.text,
-                        self.text_bases[i] as u64 + s.offset,
-                    ),
+                    SectionFamily::Text => {
+                        (&mut self.section_map.text, self.text_map[i].at(s.offset))
+                    }
                     SectionFamily::RoData => {
                         (&mut self.section_map.data, self.ro_map[i].at(s.offset))
                     }
@@ -2240,6 +2305,42 @@ impl<'a> Link<'a> {
         }
     }
 
+    /// Every unit's `name` fragment, in input order, as one function in
+    /// the text stream: the frame crti.o and crtn.o give it, and no-op
+    /// fill up to each fragment's alignment, since each one falls through
+    /// into the next. Returns the function's offset; `None` when no unit
+    /// contributes.
+    fn group_init_fini(&mut self, name: &str) -> Option<u64> {
+        let objs = self.objs;
+        let fragments: Vec<(usize, u32, &super::object::InputSection)> = (objs.iter().enumerate())
+            .flat_map(|(i, o)| (o.sections.iter().enumerate()).map(move |(k, s)| (i, k as u32, s)))
+            .filter(|(_, _, s)| s.family == SectionFamily::Text && s.name == name)
+            .collect();
+        if fragments.is_empty() {
+            return None;
+        }
+        let (prologue, epilogue, nop) = init_fini_frame(self.machine);
+        align_up(&mut self.text, 16);
+        let start = self.text.len() as u64;
+        self.text.extend_from_slice(prologue);
+        for (i, section, s) in fragments {
+            while !self.text.len().is_multiple_of(s.align.max(1) as usize) {
+                self.text.extend_from_slice(nop);
+            }
+            let merged = self.text.len() as u64;
+            let bytes = &objs[i].text[s.offset as usize..(s.offset + s.size) as usize];
+            self.text.extend_from_slice(bytes);
+            self.text_map[i].moved.push(MovedSection {
+                offset: s.offset,
+                size: s.size,
+                merged,
+                section,
+            });
+        }
+        self.text.extend_from_slice(epilogue);
+        Some(start)
+    }
+
     /// `.init_array` / `.fini_array`: every unit's constructor and
     /// destructor entries, rebased to merged `.text` offsets and
     /// ordered prioritized ascending, then unprioritized in link order
@@ -2252,7 +2353,7 @@ impl<'a> Link<'a> {
     fn lay_out_init_fini_arrays(&mut self) {
         for (i, obj) in self.objs.iter().enumerate() {
             for f in &obj.init_funcs {
-                let off = self.text_bases[i] as u64 + f.unit_text_offset;
+                let off = self.text_map[i].at(f.unit_text_offset);
                 if f.is_destructor {
                     self.fini_entries.push((f.priority, off));
                 } else {
@@ -2264,6 +2365,15 @@ impl<'a> Link<'a> {
             .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
         self.fini_entries
             .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        // The `.init` function runs before every constructor and the `.fini`
+        // one after every destructor, as DT_INIT and DT_FINI run around
+        // the arrays (gABI, Initialization and Termination Functions).
+        if let Some(off) = self.init_code {
+            self.init_entries.insert(0, (None, off));
+        }
+        if let Some(off) = self.fini_code {
+            self.fini_entries.insert(0, (None, off));
+        }
         // A program with no constructors gets no `.data` change (start
         // == end leaves the runtime's walk a no-op); only touch the
         // layout when there is something to lay out, so existing data
@@ -2456,13 +2566,13 @@ impl<'a> Link<'a> {
     /// Win-x64 .pdata / DWARF CFA output.
     fn collect_prologue_anchors(&mut self) {
         for (i, obj) in self.objs.iter().enumerate() {
-            let base = self.text_bases[i] as u64;
+            let map = &self.text_map[i];
             for &(entry, post) in &obj.prologue_ends {
-                self.prologue_ends.insert(base + entry, base + post);
+                self.prologue_ends.insert(map.at(entry), map.at(post));
             }
             for &(entry, frame, exit) in &obj.early_returns {
                 self.early_returns
-                    .insert(base + entry, (base + frame, base + exit));
+                    .insert(map.at(entry), (map.at(frame), map.at(exit)));
             }
         }
     }
@@ -2479,7 +2589,7 @@ impl<'a> Link<'a> {
                     continue;
                 }
                 self.local_funcs
-                    .push((sym.name.clone(), self.text_bases[i] as u64 + sym.value));
+                    .push((sym.name.clone(), self.text_map[i].at(sym.value)));
             }
         }
     }
@@ -2630,6 +2740,24 @@ impl<'a> Link<'a> {
                     weak: false,
                 },
             );
+        }
+        // crti.o's names for the two functions, hidden as it defines them.
+        for (name, code) in [("_init", self.init_code), ("_fini", self.fini_code)] {
+            if let Some(off) = code
+                && !self.defined.contains_key(name)
+            {
+                self.defined.insert(
+                    Cow::Borrowed(name),
+                    MergedSymbol {
+                        section: NativeSymSection::Text,
+                        value: off,
+                        size: 0,
+                        kind: super::object::STT_FUNC,
+                        visibility: super::object::STV_HIDDEN,
+                        weak: false,
+                    },
+                );
+            }
         }
         // The psABIs make the GOT base a linker-defined local OBJECT on
         // the section holding the GOT; hand-written PIC computes the
@@ -2831,7 +2959,7 @@ impl<'a> Link<'a> {
                 let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
                     continue;
                 };
-                let field = self.text_bases[i] + reloc.offset as usize;
+                let field = self.text_map[i].at(reloc.offset) as usize;
                 if self.preempts(sym, reloc.rtype) || !self.needs_got_slot(sym, reloc.rtype, field)
                 {
                     continue;
@@ -2935,7 +3063,7 @@ impl<'a> Link<'a> {
                     }
                 };
                 self.compact_unwind.push(CompactUnwind {
-                    text_offset: self.text_bases[i] as u64 + e.text_offset,
+                    text_offset: self.text_map[i].at(e.text_offset),
                     encoding: e.encoding,
                     personality,
                     lsda,
@@ -3001,7 +3129,7 @@ impl<'a> Link<'a> {
                 if sym.section != NativeSymSection::Text {
                     return Err(bad(&format!("names `{}`, which is not code", sym.name)));
                 }
-                Ok((self.text_bases[i] as i64 + sym.value as i64 + addend) as u64)
+                Ok((self.text_map[i].at(sym.value) as i64 + addend) as u64)
             };
             for e in &obj.pe_unwind {
                 let begin_sym = unwind_symbol(obj, e.begin.0)?;
@@ -3256,7 +3384,7 @@ impl<'a> Link<'a> {
                         obj.symbols.len(),
                     ))
                 })?;
-                let patch_offset = self.text_bases[i] + reloc.offset as usize;
+                let patch_offset = self.text_map[i].at(reloc.offset) as usize;
                 let tls = match self.machine {
                     NativeMachine::X86_64 => x86_64_is_tls(reloc.rtype),
                     NativeMachine::Aarch64 => aarch64_is_tls(reloc.rtype),
@@ -3308,7 +3436,7 @@ impl<'a> Link<'a> {
                     || self.defined.contains_key(sym.name.as_str());
                 let relaxed = self.relax_got_reference(reloc, patch_offset, resolved_here);
                 let reloc = relaxed.as_ref().unwrap_or(reloc);
-                let patch_offset = self.text_bases[i] + reloc.offset as usize;
+                let patch_offset = self.text_map[i].at(reloc.offset) as usize;
                 let site = origin.at(
                     self.machine,
                     reloc.rtype,
@@ -3734,7 +3862,7 @@ impl<'a> Link<'a> {
                         }
                     }
                 };
-                let patch = self.text_bases[i] + *text_off as usize;
+                let patch = self.text_map[i].at(*text_off) as usize;
                 if patch + 4 > self.text.len() {
                     return Err(internal_err(
                         MODULE,
@@ -4054,7 +4182,7 @@ impl<'a> Link<'a> {
             | NativeSymSection::RelRo
             | NativeSymSection::Data
             | NativeSymSection::Bss => self.symbol_offset(unit, sym).unwrap_or(0) as i64,
-            NativeSymSection::Text => self.text_bases[unit] as i64 + sym.value as i64,
+            NativeSymSection::Text => self.symbol_offset(unit, sym).unwrap_or(0) as i64,
             NativeSymSection::Tls => {
                 return Err(link_err(
                     Code::RELOCATION,
@@ -4473,7 +4601,7 @@ impl<'a> Link<'a> {
         let mut fixups: Vec<usize> = Vec::new();
         for (i, obj) in self.objs.iter().enumerate() {
             for &off in &obj.tls_index_fixups {
-                fixups.push(self.text_bases[i] + off);
+                fixups.push(self.text_map[i].at(off as u64) as usize);
             }
         }
         fixups
@@ -4510,7 +4638,7 @@ impl<'a> Link<'a> {
                 descriptors.push(resolved);
             }
             for &(adrp, idx) in &obj.macho_tlv_fixups {
-                fixups.push((self.text_bases[i] + adrp, desc_base + idx));
+                fixups.push((self.text_map[i].at(adrp as u64) as usize, desc_base + idx));
             }
         }
         Ok(TlvMerge {
@@ -4767,7 +4895,7 @@ impl<'a> Link<'a> {
         // A string-folded target consumes the addend in its lookup.
         let mut addend_applied = false;
         let (merged_value, in_text, resolvable) = match sym.section {
-            NativeSymSection::Text => (self.text_bases[unit_idx] as u64 + sym.value, true, true),
+            NativeSymSection::Text => (self.symbol_offset(unit_idx, sym).unwrap_or(0), true, true),
             NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
                 (self.symbol_offset(unit_idx, sym).unwrap_or(0), false, true)
             }
@@ -8942,7 +9070,7 @@ mod tests {
         assert!(format!("{err}").contains("states no size"), "{err}");
 
         let no_copies = LinkOptions {
-            no_copy_relocs: true,
+            format: BinaryFormat::MachO,
             ..Default::default()
         };
         let err = link_native_objects_with(&[reader(true, movl)], &[lib(true)], &no_copies)

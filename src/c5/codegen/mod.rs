@@ -112,8 +112,9 @@ pub enum Target {
 /// relocatable objects, shared libraries and the final image share the
 /// container -- so one value answers both what `-l` searches for and
 /// what an input is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BinaryFormat {
+    #[default]
     Elf,
     MachO,
     Pe,

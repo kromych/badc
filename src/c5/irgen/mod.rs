@@ -306,8 +306,10 @@ struct Walker<'a> {
     /// `Terminator::Return`.
     scalar_return_ty: i64,
     /// True in a `void` function other than `main`, whose returns name no
-    /// value (C99 6.8.6.4p1).
+    /// value (C99 6.8.6.4p1), and in a naked one, whose asm returns.
     returns_no_value: bool,
+    /// The function is naked: it keeps no frame record.
+    naked: bool,
     /// Body-local slot holding the saved x8 indirect-result pointer
     /// when `ret_indirect` is true; zero otherwise.
     indirect_result_slot: i64,

@@ -51,8 +51,11 @@ pub(crate) fn walk_function(
     b.alloca_init(-fun.alloca_top_slot);
     let ret = ReturnAbi::classify(&mut b, structs, target, fun.conv, fun.return_ty);
     let entry = ParamEntry::plan(&mut b, fun, structs, target, ret.outptr);
-    entry.seed_param_refs(&mut b);
-    entry.emit_entry_copies(&mut b);
+    // A naked function has no prologue to home or copy its parameters in.
+    if !fun.is_naked {
+        entry.seed_param_refs(&mut b);
+        entry.emit_entry_copies(&mut b);
+    }
     let mut ctx = Walker {
         ast,
         symbols,
@@ -70,7 +73,8 @@ pub(crate) fn walk_function(
         ret_indirect: ret.indirect,
         indirect_result_slot: ret.indirect_result_slot,
         scalar_return_ty: fun.return_ty,
-        returns_no_value: is_void_ty(fun.return_ty) && fun.name != "main",
+        returns_no_value: fun.is_naked || (is_void_ty(fun.return_ty) && fun.name != "main"),
+        naked: fun.is_naked,
         optimize,
         jump_tables,
         named_refs,

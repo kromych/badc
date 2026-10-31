@@ -1564,6 +1564,11 @@ impl Compiler {
             self.truncate_data(tstart);
             return self.parse_extended_asm(template, is_volatile, true, line);
         }
+        // A naked function's templates are assembled as written.
+        if self.current_func_attrs.is_naked {
+            self.truncate_data(tstart);
+            return self.parse_extended_asm(template, is_volatile, false, line);
+        }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
         // Collapse interior whitespace runs to a single space so templates

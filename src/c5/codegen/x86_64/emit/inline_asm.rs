@@ -2156,17 +2156,10 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        // A naked function has storage for no operand but a bound or constant one.
         let staged_operand = stmt.asm.operands.iter().enumerate().any(|(i, op)| {
             !matches!(op.constraint, super::super::ir::AsmConstraint::Bound(_))
                 && (op_reg[i].is_some() || stmt.const_of(i as u8).is_none())
         });
-        if stmt.func.is_naked && staged_operand {
-            return fail(
-                "inline asm: a naked function has no frame to stage a register or memory \
-                 operand through",
-            );
-        }
         let staged = fp_area > 0 || !save_list.is_empty() || staged_operand;
         let writes_fp = stmt.asm.clobber_regs & (1 << Reg::RBP.0) != 0;
         if writes_fp && staged && stmt.frame.dynamic_sp {

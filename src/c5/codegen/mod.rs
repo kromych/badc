@@ -3881,11 +3881,12 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
 
 /// Registers kept out of the allocator, one bit per architectural number:
 /// `gpr` / `fpr` the general / floating-point ones `-ffixed-REG` names,
-/// `frame` the GPRs the frame keeps for itself (`emit_common::region_base`).
-/// The ABI still passes arguments and results through a reserved register;
-/// only the allocator's own choices, the emitters' scratch picks and the
-/// inline-asm operand pools exclude it. An asm statement that writes a
-/// `frame` register saves and restores it, a `-ffixed-` one is the program's.
+/// `frame` the GPRs the function's code keeps for itself
+/// (`emit_common::fixed_for_function`). The ABI still passes arguments and
+/// results through a reserved register; only the allocator's own choices,
+/// the emitters' scratch picks and the inline-asm operand pools exclude it.
+/// An asm statement that writes the realigned frame's base saves and
+/// restores it, a `-ffixed-` register is the program's.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FixedRegs {
     pub gpr: u32,

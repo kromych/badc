@@ -1463,6 +1463,87 @@ pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool 
         .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
+/// Why naked `func` cannot be emitted under `alloc`: with no frame and no
+/// prologue, a value has no spill slot, an automatic object no storage, a
+/// call no frame and a callee-saved register no save.
+pub(crate) fn naked_refusal(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    target: super::Target,
+) -> Option<&'static str> {
+    use super::super::ir::{Inst, Terminator};
+    use crate::c5::asm::StaticOperand;
+    use crate::c5::op::Intrinsic as I;
+    const CALL: &str = "a naked function has no frame to make a call from";
+    const OBJECT: &str = "a naked function has no frame for an automatic object";
+    const PARAM: &str = "a naked function has no prologue to read a parameter in";
+    if !func.is_naked {
+        return None;
+    }
+    if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
+        return Some("a naked function has no prologue to save a callee-saved register");
+    }
+    let tls_call = super::reg_alloc::tls_addr_is_call(target, func);
+    for block in &func.blocks {
+        if matches!(block.terminator, Terminator::TailExt(_)) {
+            return Some(CALL);
+        }
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            if matches!(
+                alloc.places.get(v as usize),
+                Some(super::reg_alloc::Place::Spill(_))
+            ) {
+                return Some("a naked function has no frame to spill a value to");
+            }
+            if inst_emits_nothing(inst, v, alloc) {
+                continue;
+            }
+            let frame_operand = |args: &[u32], asm: &super::super::ir::AsmBlock| {
+                asm.operands.iter().zip(args).any(|(op, &a)| {
+                    op.static_arg
+                        && matches!(
+                            crate::c5::asm::asm_operand_static(func, a),
+                            Some(StaticOperand::Frame(_))
+                        )
+                })
+            };
+            let why = match inst {
+                Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } => CALL,
+                Inst::TlsAddr(_) if tls_call => CALL,
+                Inst::LocalAddr(off)
+                | Inst::LoadLocal { off, .. }
+                | Inst::StoreLocal { off, .. }
+                    if *off >= 0 =>
+                {
+                    PARAM
+                }
+                Inst::ParamRef { .. } | Inst::ParamPart { .. } => PARAM,
+                Inst::LocalAddr(_) | Inst::LoadLocal { .. } | Inst::StoreLocal { .. } => OBJECT,
+                Inst::AllocaInit(slot) if *slot != 0 => OBJECT,
+                Inst::InlineAsm { asm, args } if frame_operand(args, asm) => OBJECT,
+                Inst::Intrinsic { kind, .. } => match I::from_i64(*kind) {
+                    Some(I::Alloca) => OBJECT,
+                    Some(I::VaStart | I::VaArg | I::VaEnd | I::VaCopy) => {
+                        "a naked function has no frame for its variable arguments"
+                    }
+                    Some(I::SetjmpAArch64 | I::LongjmpAArch64) => CALL,
+                    Some(I::ReturnAddress) => {
+                        "a naked function has no frame record to read a return address from"
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            return Some(why);
+        }
+    }
+    None
+}
+
 /// The prologue realigns sp (C11 6.7.5) and sp moves during the body: the
 /// realigned region needs a base register, as clang's base pointer.
 pub(crate) fn needs_region_base(
@@ -1522,14 +1603,20 @@ pub(crate) fn region_base(
 pub(crate) const NO_REGION_BASE: &str = "no callee-saved register is left to address the \
     realigned frame: -ffixed- reserves or an inline asm operand names every candidate";
 
-/// `fixed` with the register [`region_base`] picks for `func` added.
-pub(crate) fn fixed_with_region_base(
+/// `fixed` with the [`region_base`] or a naked function's
+/// [`super::reg_alloc::naked_kept_regs`] added.
+pub(crate) fn fixed_for_function(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
     mut fixed: super::super::FixedRegs,
 ) -> super::super::FixedRegs {
     if let Some(r) = region_base(func, target, fixed) {
         fixed.frame |= 1 << r;
+    }
+    if func.is_naked {
+        let (gpr, fpr) = super::reg_alloc::naked_kept_regs(func, target);
+        fixed.frame |= gpr;
+        fixed.fpr |= fpr;
     }
     fixed
 }

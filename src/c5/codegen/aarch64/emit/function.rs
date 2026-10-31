@@ -200,8 +200,13 @@ pub(crate) fn emit_function(
     }
     let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
     let frame = compute_frame(func, alloc, abi, target, max_call_scratch);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+        .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
+    {
         return fail(why);
+    }
+    if func.is_naked && frame.uses_x19 {
+        return fail("a naked function has no prologue to save x19, its operation's scratch");
     }
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
         return fail(super::ssa::emit_common::NO_REGION_BASE);
@@ -817,9 +822,9 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// Lower instruction `v` of `block`, or skip it: a naked function keeps
-    /// only its inline asm, a pure value nobody reads produces no code, and
-    /// a `ParamRef` the entry batch placed is done.
+    /// Lower instruction `v` of `block`, or skip it: a pure value nobody
+    /// reads produces no code, and a `ParamRef` the entry batch placed is
+    /// done.
     fn emit_block_inst(
         &mut self,
         block: &super::super::ir::Block,
@@ -828,9 +833,6 @@ impl FunctionEmitter<'_, '_> {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
-        if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
-            return Ok(());
-        }
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }

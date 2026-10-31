@@ -3422,37 +3422,79 @@ fn frame_pointer_clobber_is_refused_where_the_frame_is_dynamic() {
 // Emits a relocatable object, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]
-fn a_naked_function_s_asm_stages_no_operand() {
-    // A naked function has no frame, so a statement in one cannot stage a
-    // register or memory operand: the capture would land in the caller's
-    // frame on x86_64, and an sp carve would be left standing by the
-    // template's own return on aarch64. Such an operand is refused. An
-    // immediate is printed into the text and a bound register is itself,
-    // so neither needs storage and the body stays the template alone.
-    for (target, body) in [
+fn a_naked_function_s_operands_take_registers_and_no_frame() {
+    // With no frame, a register operand is loaded where the template reads
+    // it, a static's memory operand is its RIP-relative address (x86_64) or
+    // x16 holding it (aarch64), and a register output is stored after the
+    // template. Moving rsp or writing rbp moves no frame.
+    for (target, body, want) in [
         (
             crate::Target::LinuxX64,
             "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"r\"(g) : \"eax\");",
+            // leaq g(%rip), %rax; movslq (%rax), %rcx; movl %ecx, %eax; retq
+            alloc::vec![
+                0x48, 0x8d, 0x05, 0, 0, 0, 0, 0x48, 0x63, 0x08, 0x89, 0xc8, 0xc3
+            ],
         ),
         (
             crate::Target::LinuxX64,
             "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"m\"(g) : \"eax\");",
+            // movl g(%rip), %eax; retq
+            alloc::vec![0x40, 0x8b, 0x05, 0, 0, 0, 0, 0xc3],
+        ),
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movl %%eax, %0\" : \"=r\"(g)); __asm__(\"retq\");",
+            // movl %eax, %eax; leaq g(%rip), %r10; movl %eax, (%r10); retq
+            alloc::vec![
+                0x89, 0xc0, 0x4c, 0x8d, 0x15, 0, 0, 0, 0, 0x41, 0x89, 0x02, 0xc3
+            ],
+        ),
+        (
+            crate::Target::LinuxX64,
+            "__asm__ volatile(\"movq %0, %%rsp\" : : \"m\"(q));\n\
+             __asm__ volatile(\"movq %0, %%rbp\\n\\tretq\" : : \"r\"(q) : \"rbp\");",
+            // leaq q(%rip), %rax; movq q(%rip), %rsp; movq (%rax), %rax;
+            // movq %rax, %rbp; retq
+            alloc::vec![
+                0x48, 0x8d, 0x05, 0, 0, 0, 0, 0x48, 0x8b, 0x25, 0, 0, 0, 0, 0x48, 0x8b, 0x00, 0x48,
+                0x89, 0xc5, 0xc3,
+            ],
         ),
         (
             crate::Target::LinuxAarch64,
             "__asm__ volatile(\"ldr w0, %0\\n\\tret\" : : \"m\"(g) : \"x0\");",
+            // adrp x16, g; add x16, x16, :lo12:g; ldr w0, [x16]; ret
+            [0x9000_0010, 0x9100_0210, 0xb940_0200, 0xd65f_03c0]
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect(),
         ),
         (
             crate::Target::LinuxAarch64,
             "__asm__ volatile(\"mov w0, %w0\\n\\tret\" : : \"r\"(g) : \"x0\");",
+            // adrp x0, g; add x0, x0, :lo12:g; ldrsw x1, [x0]; mov w0, w1; ret
+            [
+                0x9000_0000,
+                0x9100_0000,
+                0xb980_0001,
+                0x2a01_03e0,
+                0xd65f_03c0,
+            ]
+            .into_iter()
+            .flat_map(u32::to_le_bytes)
+            .collect(),
         ),
     ] {
-        let src = alloc::format!("int g;\n__attribute__((naked)) void probe(void)\n{{ {body} }}\n");
-        let err = asm_emit(&src, target, false).err().unwrap_or_default();
-        assert!(
-            err.contains("a naked function has no frame"),
-            "{target:?}: {err}"
+        let src = alloc::format!(
+            "int g; long q;\n__attribute__((naked)) void probe(void)\n{{ {body} }}\n"
         );
+        let text = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || asm_text(&src, target, false),
+        );
+        assert_eq!(text, want, "{target:?}: {body}");
     }
     for (target, src, want) in [
         (
@@ -3481,6 +3523,317 @@ fn a_naked_function_s_asm_stages_no_operand() {
             "{target:?}: the naked body carries staging",
         );
     }
+}
+
+/// `(offset, type, symbol or section, addend)` of each `.text` relocation.
+#[cfg(feature = "native-emit")]
+fn text_relocs(
+    o: &crate::c5::linker::relocatable::EtRel,
+) -> alloc::vec::Vec<(u64, u32, alloc::string::String, i64)> {
+    use crate::c5::linker::relocatable::EtSymRef;
+    let text = o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text");
+    text.relocs
+        .iter()
+        .map(|r| {
+            let sym = &o.symbols[r.sym as usize];
+            let name = match sym.sec {
+                EtSymRef::Section(i) if sym.name.is_empty() => o.sections[i].name.clone(),
+                _ => sym.name.clone(),
+            };
+            (r.offset, r.rtype, name, r.addend)
+        })
+        .collect()
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_computes_its_operands_without_a_frame() {
+    // gcc supports only basic asm in a naked function; clang 21 -O2 compiles
+    // this with no frame, each `m` operand RIP-relative and each register
+    // operand loaded from its object into a caller-saved register. So here,
+    // with nothing saved or restored around a statement.
+    use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
+    let src = "typedef unsigned int u32; typedef unsigned long u64;\n\
+               struct ctxt { u64 rsp; unsigned short ss; u64 cr0, pat, cs;\n\
+                 struct { unsigned short l; u64 a; } __attribute__((packed)) gdtr; } ctx;\n\
+               u64 handle;\n\
+               __attribute__((naked)) void entry(void)\n\
+               {\n\
+                 asm volatile(\"lgdt %0\" : : \"m\"(ctx.gdtr));\n\
+                 asm volatile(\"movw %0, %%ss\\n\\tmovq %1, %%rsp\" :: \"m\"(ctx.ss), \"m\"(ctx.rsp));\n\
+                 asm volatile(\"wrmsr\" :: \"c\"(0x277), \"a\"((u32)ctx.pat),\n\
+                              \"d\"((u32)(ctx.pat >> 32)) : \"memory\");\n\
+                 asm volatile(\"movq %0, %%cr0\" : : \"r\"(ctx.cr0));\n\
+                 asm volatile(\"pushq %q0\\n\\tpushq %q1\\n\\tlretq\" :: \"r\"(ctx.cs), \"r\"(handle));\n\
+               }\n";
+    let obj = |optimize| {
+        let bytes = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || asm_emit(src, crate::Target::LinuxX64, optimize),
+        )
+        .expect("emit");
+        crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse")
+    };
+    let rip = |off: u64, at: i64| {
+        (
+            off,
+            R_X86_64_PC32,
+            alloc::string::String::from(".bss"),
+            at - 4,
+        )
+    };
+    let o = obj(true);
+    let text = &o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text")
+        .bytes;
+    #[rustfmt::skip]
+    let want: &[u8] = &[
+        0x48, 0x8d, 0x35, 0, 0, 0, 0, // leaq ctx(%rip), %rsi
+        0x0f, 0x01, 0x15, 0, 0, 0, 0, // lgdtq ctx+40(%rip)
+        0x8e, 0x15, 0, 0, 0, 0, // movw ctx+8(%rip), %ss
+        0x48, 0x8b, 0x25, 0, 0, 0, 0, // movq ctx(%rip), %rsp
+        0x48, 0x8b, 0x56, 0x18, // movq 24(%rsi), %rdx
+        0x89, 0xd0, // movl %edx, %eax
+        0x48, 0xc1, 0xea, 0x20, // shrq $32, %rdx
+        0xb9, 0x77, 0x02, 0, 0, // movl $0x277, %ecx
+        0x0f, 0x30, // wrmsr
+        0x48, 0x8b, 0x46, 0x10, // movq 16(%rsi), %rax
+        0x0f, 0x22, 0xc0, // movq %rax, %cr0
+        0x48, 0x8b, 0x46, 0x20, // movq 32(%rsi), %rax
+        0x48, 0x8d, 0x0d, 0, 0, 0, 0, // leaq handle(%rip), %rcx
+        0x48, 0x8b, 0x09, // movq (%rcx), %rcx
+        0x50, 0x51, 0x48, 0xcb, // pushq %rax; pushq %rcx; lretq
+    ];
+    assert_eq!(text.as_slice(), want, "{text:02x?}");
+    assert_eq!(
+        text_relocs(&o),
+        [rip(3, 0), rip(10, 40), rip(16, 8), rip(23, 0), rip(58, 56)]
+    );
+    // -O0 takes the same RIP-relative memory operands and no frame either.
+    let o = obj(false);
+    let text = &o
+        .sections
+        .iter()
+        .find(|s| s.name == ".text")
+        .expect(".text")
+        .bytes;
+    assert_ne!(text[0], 0x55, "a prologue: {text:02x?}");
+    assert!(text.ends_with(&[0x50, 0x51, 0x48, 0xcb]), "{text:02x?}");
+    let relocs = text_relocs(&o);
+    for (bytes, at) in [
+        (&[0x0f, 0x01, 0x15][..], 40),
+        (&[0x8e, 0x15], 8),
+        (&[0x48, 0x8b, 0x25], 0),
+    ] {
+        let site = text
+            .windows(bytes.len())
+            .position(|w| w == bytes)
+            .expect("site");
+        assert!(
+            relocs.contains(&rip((site + bytes.len()) as u64, at)),
+            "{bytes:02x?} at {site}: {relocs:?}"
+        );
+    }
+    assert!(
+        text.windows(7)
+            .any(|w| w == [0xb9, 0x77, 0x02, 0, 0, 0x0f, 0x30])
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_naked_function_binds_register_and_memory_operands() {
+    // The `r` operand is loaded into a register the clobbers spare, the
+    // `m` operand is the static's address formed in x16, and no frame.
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21,
+    };
+    let src = "int g; long h;\n\
+               __attribute__((naked)) void entry(void)\n\
+               { asm volatile(\"ldr w0, %0\\n\\tmov x1, %1\\n\\tret\" :: \"m\"(g), \"r\"(h) : \"x0\", \"x1\"); }\n";
+    for optimize in [false, true] {
+        let bytes = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || asm_emit(src, crate::Target::LinuxAarch64, optimize),
+        )
+        .expect("emit");
+        let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+        let text = &o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text")
+            .bytes;
+        let want: alloc::vec::Vec<u8> = [
+            0x9000_0000, // adrp x0, h
+            0x9100_0000, // add x0, x0, :lo12:h
+            0xf940_0002, // ldr x2, [x0]
+            0x9000_0010, // adrp x16, g
+            0x9100_0210, // add x16, x16, :lo12:g
+            0xb940_0200, // ldr w0, [x16]
+            0xaa02_03e1, // mov x1, x2
+            0xd65f_03c0, // ret
+        ]
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect();
+        assert_eq!(*text, want, "-O{}: {text:02x?}", optimize as u8);
+        let bss = |off, rtype, at| (off, rtype, alloc::string::String::from(".bss"), at);
+        assert_eq!(
+            text_relocs(&o),
+            [
+                bss(0, R_AARCH64_ADR_PREL_PG_HI21, 8),
+                bss(4, R_AARCH64_ADD_ABS_LO12_NC, 8),
+                bss(12, R_AARCH64_ADR_PREL_PG_HI21, 0),
+                bss(16, R_AARCH64_ADD_ABS_LO12_NC, 0),
+            ]
+        );
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_s_templates_are_assembled_as_written() {
+    // A template lowered elsewhere as an intrinsic (`lgdt %0`, the spin-loop
+    // hint, the aarch64 barriers) is assembled as written.
+    for (target, src, want) in [
+        (
+            crate::Target::LinuxX64,
+            "long g;\n__attribute__((naked)) void entry(void)\n\
+             { asm volatile(\"lgdt %0\" :: \"m\"(g)); asm volatile(\"pause\"); asm(\"retq\"); }\n",
+            // lgdtq g(%rip); pause; retq
+            alloc::vec![0x0f, 0x01, 0x15, 0, 0, 0, 0, 0xf3, 0x90, 0xc3],
+        ),
+        (
+            crate::Target::LinuxAarch64,
+            "__attribute__((naked)) void entry(void)\n\
+             { asm volatile(\"isb\"); asm volatile(\"dsb ish\"); asm volatile(\"ret\"); }\n",
+            [0xd503_3fdf_u32, 0xd503_3b9f, 0xd65f_03c0]
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect(),
+        ),
+    ] {
+        assert_eq!(asm_text(src, target, false), want, "{target:?}");
+    }
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_refuses_what_needs_a_frame() {
+    // An operand computation that calls, reaches an automatic object or spills.
+    let call = "int h(void);\n__attribute__((naked)) void entry(void)\n\
+                { asm volatile(\"\" :: \"r\"(({ h(); }))); }\n";
+    let object = "struct s { long a, b; };\n__attribute__((naked)) void entry(void)\n\
+                  { asm volatile(\"\" :: \"m\"((struct s){1, 2})); }\n";
+    let spill = "long a, b, c;\n__attribute__((naked)) void entry(void)\n\
+                 { asm volatile(\"\" :: \"r\"(a + 1), \"r\"(b + 1), \"r\"(c + 1)); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for (src, why, pool) in [
+            (call, "no frame to make a call from", usize::MAX),
+            (object, "no frame for an automatic object", usize::MAX),
+            (spill, "no frame to spill a value to", 2),
+        ] {
+            let err =
+                crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(pool, pool, || {
+                    asm_emit(src, target, false)
+                })
+                .err()
+                .unwrap_or_default();
+            assert!(err.contains(why), "{target:?}: {err}");
+        }
+    }
+    // aarch64 stages a register output to an object, which needs a frame.
+    let output = "int g;\n__attribute__((naked)) void entry(void)\n\
+                  { asm volatile(\"mov %w0, w1\" : \"=r\"(g)); asm(\"ret\"); }\n";
+    let err = asm_emit(output, crate::Target::LinuxAarch64, false)
+        .err()
+        .unwrap_or_default();
+    assert!(
+        err.contains("a naked function has no frame to stage an operand"),
+        "{err}"
+    );
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_s_statements_are_emitted_or_refused() {
+    // As gcc, a statement needing no storage is emitted; one that calls, needs
+    // an automatic object or reads a parameter no prologue homes is refused.
+    let naked = |body: &str| {
+        alloc::format!("int g; void h(void);\n__attribute__((naked)) void f(int a) {{ {body} }}\n")
+    };
+    for (body, why) in [
+        ("h(); asm(\"ret\");", "no frame to make a call from"),
+        (
+            "int x = g; asm(\"\" :: \"r\"(x));",
+            "no frame for an automatic object",
+        ),
+        (
+            "int v[a]; asm(\"ret\");",
+            "no frame for an automatic object",
+        ),
+        (
+            "asm(\"ret\" :: \"r\"(a));",
+            "no prologue to read a parameter in",
+        ),
+    ] {
+        for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+            let err = asm_emit(&naked(body), target, false)
+                .err()
+                .unwrap_or_default();
+            assert!(err.contains(why), "{target:?}: {body}: {err}");
+        }
+    }
+    for (body, want) in [
+        ("(void) a; ; asm(\"ret\");", &[0xc3u8][..]),
+        // leaq g(%rip), %rax; movl $1, (%rax); retq
+        (
+            "g = 1; asm(\"ret\");",
+            &[0x48, 0x8d, 0x05, 0, 0, 0, 0, 0xc7, 0x00, 1, 0, 0, 0, 0xc3],
+        ),
+    ] {
+        assert_eq!(
+            asm_text(&naked(body), crate::Target::LinuxX64, false),
+            want,
+            "{body}"
+        );
+    }
+    // Its asm reads the parameters and returns the value.
+    let src = "__attribute__((naked)) int f(int a) { asm(\"movl %edi, %eax; ret\"); }\n\
+               int main(void) { return 0; }\n";
+    let warnings = super::compile_str_bare_with_diags(src, &["all", "extra"]).warnings;
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+// Emits a relocatable object, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_naked_function_s_parameters_take_no_entry_copy() {
+    // No prologue copies or narrows a parameter, and the end of the body
+    // synthesizes no return value: the body is the template alone.
+    let src = "struct big { long a[6]; };\n\
+               __attribute__((naked)) struct big f(struct big s, float x, long double y, int n)\n\
+               { asm(\"ret\"); }\n";
+    assert_eq!(asm_text(src, crate::Target::LinuxX64, false), [0xc3]);
+    assert_eq!(
+        asm_text(src, crate::Target::LinuxAarch64, false),
+        0xd65f_03c0_u32.to_le_bytes()
+    );
 }
 
 // Emits a relocatable object, so it needs `native-emit`.

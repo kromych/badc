@@ -2588,11 +2588,16 @@ fn run_inline_asm(
     // output loaded from its destination address.
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
-        // A bound operand is the register itself: seed the modelled slot
-        // with the register variable's value and never treat that value
-        // as a destination address.
-        if matches!(op.constraint, crate::c5::ir::AsmConstraint::Bound(_)) {
-            xregs[r as usize] = frame.regs[args[i] as usize];
+        // A bound operand is the stack or frame pointer itself: seed the
+        // modelled slot with the proxy `StackPointer` / `FrameAddress` read,
+        // and never treat it as a destination address.
+        if let crate::c5::ir::AsmConstraint::Bound(b) = op.constraint {
+            let rsp = crate::c5::codegen::x86_64::asm::reg_by_name("rsp").map(|(n, _)| n);
+            xregs[r as usize] = if Some(b) == rsp {
+                frame.stack_base
+            } else {
+                frame.record
+            } as i64;
             continue;
         }
         if !op.is_output || (op.is_rw && op.value) {

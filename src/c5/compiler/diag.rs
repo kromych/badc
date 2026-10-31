@@ -189,7 +189,11 @@ impl Compiler {
     /// treated as not falling through, so the diagnostic never fires on
     /// a function that uses them.
     pub(super) fn check_non_void_fall_off(&mut self) {
-        if self.current_func_returns_void || self.current_function_name == "main" {
+        // A naked function's asm returns its value itself.
+        if self.current_func_returns_void
+            || self.current_function_name == "main"
+            || self.current_func_attrs.is_naked
+        {
             return;
         }
         let Some(body) = self.ast.body else {

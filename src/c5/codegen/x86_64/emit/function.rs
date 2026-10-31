@@ -217,7 +217,9 @@ pub(crate) fn emit_function(
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
     let frame = compute_frame(func, alloc, abi, target);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+        .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
+    {
         return fail(why);
     }
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
@@ -712,10 +714,6 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
-        // A naked function's machine code is exactly its inline asm.
-        if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
-            return Ok(());
-        }
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }

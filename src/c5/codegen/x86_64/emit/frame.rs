@@ -111,7 +111,7 @@ pub(crate) fn compute_frame(
     // The inline-asm scratch region, sized for the largest statement. A
     // naked function has no frame and stages nothing.
     let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
-    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let asm_bytes = if func.is_naked {
         0
     } else {
@@ -184,8 +184,9 @@ pub(crate) fn compute_frame(
             0
         },
     };
-    // A full leaf has nothing to address and no rbp to restore rsp from.
-    frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(func, frame, alloc, abi);
+    // A full leaf or naked body has nothing to address, no rbp to restore rsp from.
+    frame.dynamic_sp |=
+        func.has_sp_moving_asm(target) && !func.is_naked && !is_full_leaf(func, frame, alloc, abi);
     frame
 }
 
@@ -471,7 +472,7 @@ pub(super) fn bound_shape(
 ) -> Option<BoundShape> {
     use super::super::ir::{AsmConstraint as C, AsmSeg};
     const RESERVED: u32 = (1 << 4) | (1 << 5);
-    if func.is_naked || func.has_sp_asm() || asm.clobber_regs & (RESERVED | fixed.frame) != 0 {
+    if func.has_sp_asm() || asm.clobber_regs & (RESERVED | fixed.frame) != 0 {
         return None;
     }
     let mut shape = BoundShape {

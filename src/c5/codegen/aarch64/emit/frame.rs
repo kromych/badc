@@ -134,7 +134,7 @@ pub(crate) fn compute_frame(
     // nothing in the body overwrites x19, and the one-instruction forms
     // pay for the register's save, restore and capture.
     let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
-    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let writes_third_scratch = writes_x19(func, alloc, abi);
     let local_base = !x19_overwritten(func, fixed_regs)
         && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
@@ -649,7 +649,9 @@ pub(crate) fn asm_site_write_masks(
 /// value output, none tied, read-write or early-clobbered, the clobbers
 /// spare the frame's registers, and scratch outside them can reload every
 /// input and hold every output without a register. Such a statement stages
-/// nothing and writes only its clobbers.
+/// nothing and writes only its clobbers. A naked function saves and spills
+/// nothing, so it binds whatever a statement clobbers, a memory operand as
+/// its address, and takes scratch only for an operand formed at the site.
 pub(crate) fn asm_binds_directly(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -659,10 +661,11 @@ pub(crate) fn asm_binds_directly(
     use super::super::ir::AsmConstraint as C;
     // x18, x19, x29, x30, sp, the frame's own: saved around the template.
     const RESERVED: u32 = (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31);
-    if func.is_naked
-        || func.has_sp_asm()
-        || asm.references_sp()
-        || asm.clobber_regs & (RESERVED | fixed.frame) != 0
+    let naked = func.is_naked;
+    if !naked
+        && (func.has_sp_asm()
+            || asm.references_sp()
+            || asm.clobber_regs & (RESERVED | fixed.frame) != 0)
     {
         return false;
     }
@@ -685,7 +688,8 @@ pub(crate) fn asm_binds_directly(
     let (mut gp_out, mut fp_out) = (0usize, 0usize);
     for (i, op) in asm.operands.iter().enumerate() {
         let arg = args.get(i).copied();
-        if op.is_output {
+        let addressed = naked && matches!(op.constraint, C::Mem | C::MemBase);
+        if op.is_output && !addressed {
             if !op.value || op.is_rw || op.early_clobber {
                 return false;
             }
@@ -696,14 +700,19 @@ pub(crate) fn asm_binds_directly(
             }
             continue;
         }
+        let formed = op.static_arg
+            || arg
+                .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
+                .is_some();
         match op.constraint {
             C::Imm => {}
             C::RegOrImm { reg: None, imm }
                 if arg
                     .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
                     .is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v)) => {}
-            C::Reg | C::RegOrImm { reg: None, .. } => {
-                gp_in += 1;
+            C::Mem | C::MemBase if !addressed => return false,
+            C::Reg | C::RegOrImm { reg: None, .. } | C::Mem | C::MemBase => {
+                gp_in += usize::from(!naked || formed);
                 // A link-time address with an offset forms through a second scratch.
                 if op.static_arg
                     && let Some(crate::c5::asm::StaticOperand::Addr { off, .. }) =
@@ -741,7 +750,11 @@ pub(crate) fn asm_site_bound_values(
         .operands
         .iter()
         .zip(args)
-        .filter(|(op, _)| !op.is_output && !op.static_arg && !matches!(op.constraint, C::Imm))
+        .filter(|(op, _)| {
+            (!op.is_output || matches!(op.constraint, C::Mem | C::MemBase))
+                && !op.static_arg
+                && !matches!(op.constraint, C::Imm)
+        })
         .map(|(_, &a)| a)
         .collect();
     out.extend(
@@ -1057,10 +1070,6 @@ pub(super) fn signs_return_address(
 /// lowering's own register choice, over the instructions the emit walks.
 fn writes_x19(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> bool {
     use crate::c5::op::Intrinsic as I;
-    // A naked function emits only its inline asm and has no frame.
-    if func.is_naked {
-        return false;
-    }
     let scratch = ScratchPool::new();
     let place = |v: u32| place_of(alloc, v);
     func.blocks

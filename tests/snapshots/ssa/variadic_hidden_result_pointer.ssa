@@ -1,13 +1,11 @@
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=vpair
-fn ent_pc=4 n_params=4 variadic=true locals=2
+fn ent_pc=4 n_params=4 variadic=true locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   InlineAsm { template="movq %rsi, (%rdi)\n\tmovq %rdx, 8(%rdi)\n\tmovq %xmm0, 16(%rdi)\n\tmovslq %ecx, %rcx\n\taddq %r8, %rcx\n\tmovzbl %al, %eax\n\timulq $1000, %rax, %rax\n\taddq %rax, %rcx\n\tmovq %rcx, 24(%rdi)\n\tmovq %rdi, %rax\n\tret", ops=0, args=[] } -> -
-    v2   LifetimeEnd(-2)                                  -> -
-    v3   Imm(0)                                           -> x0
-    terminator Return(v3)   (exit_acc=v3)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=vquad
 fn ent_pc=5 n_params=3 variadic=true locals=7

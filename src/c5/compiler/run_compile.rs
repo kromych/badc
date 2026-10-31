@@ -1396,7 +1396,11 @@ impl Compiler {
             s.incomplete_enum_tag = None;
             s.enumeration = enumeration;
         }
-        self.copy_by_value_parameters(&params)?;
+        // A naked function has no prologue to copy or size its parameters in.
+        let naked = self.current_func_attrs.is_naked;
+        if !naked {
+            self.copy_by_value_parameters(&params)?;
+        }
         self.parse_function_body_items(&params)?;
         self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
@@ -1410,7 +1414,12 @@ impl Compiler {
         let bound = self.take_scope_bound();
         let vars_start = self.record_function_variables(ent_pc, &params, &bound, &param_set);
         self.classify_function_frame(vars_start)?;
-        self.warn_unused_function_bindings(&bound, &param_set);
+        let named = if naked {
+            alloc::collections::BTreeSet::new()
+        } else {
+            param_set
+        };
+        self.warn_unused_function_bindings(&bound, &named);
         self.unwind_scope_bound(bound);
         Ok(())
     }
@@ -1807,7 +1816,11 @@ impl Compiler {
         // either parses a local decl (with optional
         // initializer) into the function's symbol
         // frame, or parses a statement.
-        let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
+        let mut top_level_ids = if self.current_func_attrs.is_naked {
+            Vec::new()
+        } else {
+            self.evaluate_parameter_sizes(params)?
+        };
         self.stmt_expr_arena_ranges.clear();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on

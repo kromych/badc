@@ -832,10 +832,12 @@ impl AsmRegion {
             cap_slot[i] = n_cap;
             n_cap += u;
         }
+        // TODO: bind a register output to a static object, as x86-64 stages it.
         if ops.func.is_naked && n_cap > 0 {
             return Err(alloc::string::String::from(
-                "aarch64 inline asm: a naked function has no frame to stage a register or \
-                 memory operand through",
+                "aarch64 inline asm: a naked function has no frame to stage an operand \
+                 through: a register output, a read-write, early-clobber or matching \
+                 operand, or more operands formed at the site than x16 and x17 hold",
             ));
         }
         let size = (((n_cap + save_list.len() + fp_save_list.len()) * 8) as u32 + 15) & !15;
@@ -1262,7 +1264,10 @@ fn bind_operands(
             .iter()
             .zip(args)
             .enumerate()
-            .filter(|(_, (op, a))| !op.is_output && !takes_imm(op, **a))
+            .filter(|(_, (op, a))| {
+                (!op.is_output || matches!(op.constraint, C::Mem | C::MemBase))
+                    && !takes_imm(op, **a)
+            })
     };
     for (i, (op, &a)) in inputs().filter(|(_, (op, _))| matches!(op.constraint, C::Fp)) {
         let place = place_of(alloc, a);

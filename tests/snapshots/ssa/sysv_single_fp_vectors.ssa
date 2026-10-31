@@ -123,46 +123,28 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=peek_f1
-fn ent_pc=5 n_params=3 variadic=false locals=1
+fn ent_pc=5 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(2, kind=I64)                            -> x7
-    v4   Imm(0)                                           -> x0
-    v5   InlineAsm { template="xorl %eax, %eax\n\tcmpl $0x3fc00000, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
-    v6   LifetimeEnd(-1)                                  -> -
-    v7   Imm(0)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v1   InlineAsm { template="xorl %eax, %eax\n\tcmpl $0x3fc00000, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=peek_d1
-fn ent_pc=6 n_params=3 variadic=false locals=1
+fn ent_pc=6 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(2, kind=I64)                            -> x7
-    v4   Imm(0)                                           -> x0
-    v5   InlineAsm { template="xorl %eax, %eax\n\tmovabsq $0x3ff8000000000000, %rdx\n\tcmpq %rdx, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
-    v6   LifetimeEnd(-1)                                  -> -
-    v7   Imm(0)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v1   InlineAsm { template="xorl %eax, %eax\n\tmovabsq $0x3ff8000000000000, %rdx\n\tcmpq %rdx, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=peek_ff
-fn ent_pc=7 n_params=3 variadic=false locals=1
+fn ent_pc=7 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=F64)                            -> d0
-    v2   Imm(0)                                           -> x0
-    v3   ParamRef(2, kind=I64)                            -> x7
-    v4   Imm(0)                                           -> x0
-    v5   InlineAsm { template="xorl %eax, %eax\n\tmovabsq $0x404000003fc00000, %rdx\n\tcmpq %rdx, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
-    v6   LifetimeEnd(-1)                                  -> -
-    v7   Imm(0)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v1   InlineAsm { template="xorl %eax, %eax\n\tmovabsq $0x404000003fc00000, %rdx\n\tcmpq %rdx, 8(%rsp)\n\tjne 1f\n\torl $1, %eax\n1:\n\tmovq %xmm0, %rcx\n\tmovabsq $0x4004000000000000, %rdx\n\tcmpq %rdx, %rcx\n\tjne 2f\n\torl $2, %eax\n2:\n\tcmpq $7, %rdi\n\tjne 3f\n\torl $4, %eax\n3:\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=give_f1
 fn ent_pc=8 n_params=1 variadic=false locals=0
@@ -170,8 +152,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   InlineAsm { template="movl $0x3fc00000, (%rdi)\n\tmovq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v2   Imm(0)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=give_d1
 fn ent_pc=9 n_params=1 variadic=false locals=0
@@ -179,63 +160,47 @@ fn ent_pc=9 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   InlineAsm { template="movabsq $0x3ff8000000000000, %rax\n\tmovq %rax, (%rdi)\n\tmovq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v2   Imm(0)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=via_take_f1
 fn ent_pc=10 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovl $0x3fc00000, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovl $0x3fc00000, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=via_take_d1
 fn ent_pc=11 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovabsq $0x3ff8000000000000, %rax\n\tmovq %rax, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovabsq $0x3ff8000000000000, %rax\n\tmovq %rax, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=via_take_ff
 fn ent_pc=12 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovabsq $0x404000003fc00000, %rax\n\tmovq %rax, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovabsq $0x404000003fc00000, %rax\n\tmovq %rax, (%rsp)\n\tmovabsq $0x4004000000000000, %rax\n\tmovq %rax, %xmm0\n\tmovq $7, %rdi\n\tmovq $-1, %rsi\n\tmovq %rsi, %xmm1\n\tcall *%r11\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=via_make_f1
 fn ent_pc=13 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovq $-1, 8(%rsp)\n\tleaq 8(%rsp), %rdi\n\tmovl $0x3fc00000, %eax\n\tmovd %eax, %xmm0\n\tcall *%r11\n\tleaq 8(%rsp), %rcx\n\tcmpq %rcx, %rax\n\tmovl 8(%rsp), %eax\n\tje 1f\n\tmovq $-2, %rax\n1:\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovq $-1, 8(%rsp)\n\tleaq 8(%rsp), %rdi\n\tmovl $0x3fc00000, %eax\n\tmovd %eax, %xmm0\n\tcall *%r11\n\tleaq 8(%rsp), %rcx\n\tcmpq %rcx, %rax\n\tmovl 8(%rsp), %eax\n\tje 1f\n\tmovq $-2, %rax\n1:\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=via_make_d1
 fn ent_pc=14 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovq $-1, 8(%rsp)\n\tleaq 8(%rsp), %rdi\n\tmovabsq $0x3ff8000000000000, %rax\n\tmovq %rax, %xmm0\n\tcall *%r11\n\tleaq 8(%rsp), %rcx\n\tcmpq %rcx, %rax\n\tmovq 8(%rsp), %rax\n\tje 1f\n\tmovq $-2, %rax\n1:\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %r11\n\tsubq $24, %rsp\n\tmovq $-1, 8(%rsp)\n\tleaq 8(%rsp), %rdi\n\tmovabsq $0x3ff8000000000000, %rax\n\tmovq %rax, %xmm0\n\tcall *%r11\n\tleaq 8(%rsp), %rcx\n\tcmpq %rcx, %rax\n\tmovq 8(%rsp), %rax\n\tje 1f\n\tmovq $-2, %rax\n1:\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
 fn ent_pc=15 n_params=0 variadic=false locals=3

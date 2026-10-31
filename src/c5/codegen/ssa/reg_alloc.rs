@@ -915,6 +915,41 @@ fn preserved_regs(row: Target, fixed: FixedRegs) -> (u32, u32) {
     (gpr & !fixed.gpr, fpr & !fixed.fpr)
 }
 
+/// The `(gpr, fpr)` masks a naked function's code leaves alone: the
+/// callee-saved ones, which no prologue saves, and those its arguments
+/// arrive in, every one if variadic, with al (AMD64 psABI 3.5.7).
+pub(crate) fn naked_kept_regs(func: &FunctionSsa, target: Target) -> (u32, u32) {
+    use crate::c5::codegen::ArgPlacement as P;
+    let row = target.abi_row(func.conv);
+    let abi = row.abi();
+    let (mut gpr, mut fpr) = preserved_regs(row, FixedRegs::NONE);
+    let int_mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    if func.is_variadic {
+        gpr |= int_mask(abi.int_arg_regs) | u32::from(row == Target::LinuxX64);
+        fpr |= (1u32 << if abi.position_indexed_args { 4 } else { 8 }) - 1;
+    }
+    if func.indirect_result_slot != 0 {
+        gpr |= if target.is_aarch64() {
+            1 << 8
+        } else {
+            int_mask(&abi.int_arg_regs[..1])
+        };
+    }
+    for p in super::emit_common::param_placements_common(func, abi) {
+        match p {
+            P::IntReg(r) => gpr |= 1 << r,
+            P::FpReg(r) => fpr |= 1 << r,
+            P::StructRegs { regs, n, .. } => {
+                for c in &regs[..n as usize] {
+                    *if c.is_fp { &mut fpr } else { &mut gpr } |= 1 << c.reg;
+                }
+            }
+            _ => {}
+        }
+    }
+    (gpr, fpr)
+}
+
 /// The registers of `kept`'s preserved set that the call `inst` may change:
 /// those its callee's convention leaves volatile (AMD64 psABI 3.2.1).
 pub(crate) fn call_clobbers(
@@ -1204,7 +1239,7 @@ pub(crate) fn free_fp_register(
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let region_base = super::emit_common::region_base(func, target, fixed);
-    let fixed = super::emit_common::fixed_with_region_base(func, target, fixed);
+    let fixed = super::emit_common::fixed_for_function(func, target, fixed);
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];

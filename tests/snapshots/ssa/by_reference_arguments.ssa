@@ -1,15 +1,11 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=write_big
-fn ent_pc=0 n_params=2 variadic=false locals=3
+fn ent_pc=0 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq 16(%rsp), %rax\n\taddq %rdi, %rax\n\tmovq $-1, 8(%rsp)\n\tret", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-3)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq 16(%rsp), %rax\n\taddq %rdi, %rax\n\tmovq $-1, 8(%rsp)\n\tret", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=keep
 fn ent_pc=1 n_params=1 variadic=false locals=0

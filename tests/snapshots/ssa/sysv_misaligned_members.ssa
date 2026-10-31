@@ -158,76 +158,52 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     terminator Return(v39)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=after_p1
-fn ent_pc=6 n_params=2 variadic=false locals=1
+fn ent_pc=6 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=after_p2
-fn ent_pc=7 n_params=2 variadic=false locals=1
+fn ent_pc=7 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=after_p3
-fn ent_pc=8 n_params=2 variadic=false locals=1
+fn ent_pc=8 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x6
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rsi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq %rsi, %rax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=after_p4
-fn ent_pc=9 n_params=2 variadic=false locals=1
+fn ent_pc=9 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x6
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rsi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq %rsi, %rax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=10 ---
 ; name=after_p5
-fn ent_pc=10 n_params=2 variadic=false locals=1
+fn ent_pc=10 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(1, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=stack_p1
-fn ent_pc=11 n_params=2 variadic=false locals=1
+fn ent_pc=11 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movl 9(%rsp), %eax\n\tret\n", ops=0, args=[] } -> -
-    v4   LifetimeEnd(-1)                                  -> -
-    v5   Imm(0)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v1   InlineAsm { template="movl 9(%rsp), %eax\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=12 ---
 ; name=ret_p1
 fn ent_pc=12 n_params=1 variadic=false locals=0
@@ -235,19 +211,15 @@ fn ent_pc=12 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   InlineAsm { template="movb $5, (%rdi)\n\tmovl $42, 1(%rdi)\n\tmovq %rdi, %rax\n\tret\n", ops=0, args=[] } -> -
-    v2   Imm(0)                                           -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=via_p1
 fn ent_pc=13 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   InlineAsm { template="movq %rdi, %rax\n\tsubq $24, %rsp\n\tmovb $5, (%rsp)\n\tmovl $42, 1(%rsp)\n\tmovq $3, %rdi\n\tcall *%rax\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
-    v4   Imm(0)                                           -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v1   InlineAsm { template="movq %rdi, %rax\n\tsubq $24, %rsp\n\tmovb $5, (%rsp)\n\tmovl $42, 1(%rsp)\n\tmovq $3, %rdi\n\tcall *%rax\n\taddq $24, %rsp\n\tret\n", ops=0, args=[] } -> -
+    terminator Return
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=main
 fn ent_pc=14 n_params=0 variadic=false locals=5

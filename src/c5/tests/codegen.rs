@@ -15574,6 +15574,59 @@ fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
     }
 }
 
+/// An aggregate returned through the hidden out-pointer (the System V
+/// MEMORY class, a Win64 oversize return) is written whole by the callee
+/// and dead after its copy, so each call's result temporary shares
+/// storage with the next one's. Thirty pairs of such calls, each result
+/// copied into an object whose address escapes, keep a frame of a few
+/// temporaries rather than one per call.
+#[test]
+fn out_pointer_result_temporaries_share_their_storage() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let cases: alloc::string::String = (0..30)
+        .map(|i| {
+            alloc::format!(
+                "case {i}: r = mk(d, {i}); h.x = {i}; add(d, &r, &h); \
+                 r = mk(d, {i} + 1); add(d, &r, &h); break;\n"
+            )
+        })
+        .collect();
+    let src = alloc::format!(
+        "struct rec {{ unsigned a[12]; unsigned char b, c; int d; }};\n\
+         struct hpd {{ int x, y; }};\n\
+         void add(void *d, struct rec *r, struct hpd *h);\n\
+         static __attribute__((noinline)) struct rec mk(void *d, int i)\n\
+         {{ struct rec r = {{{{0}}}}; r.d = i + (d != 0); return r; }}\n\
+         int f(void *d, int k) {{ struct rec r; struct hpd h = {{0, 0}};\n\
+         switch (k) {{\n{cases}}}\n return 0; }}\n"
+    );
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_options(
+            src.clone(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        opts.frame_larger_than = Some(512);
+        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        assert!(
+            build
+                .diagnostics
+                .iter()
+                .all(|d| !d.text.contains("function `f`")),
+            "{target:?}: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
 /// The interpreter zeroes the destination's bytes and no byte beside them.
 #[test]
 fn the_interpreter_zero_fills_the_destination() {

@@ -249,16 +249,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x28(%rbp), %r9
+               	subq	$0x20, %rsp
+               	leaq	-0x18(%rbp), %r9
                	leaq	<rip>, %rax
                	movl	(%rax), %r10d
                	movl	%r10d, (%r9)
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	leaq	-0x18(%rbp), %rax
+               	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
@@ -282,7 +282,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x20(%rbp), %r9
+               	leaq	-0x10(%rbp), %r9
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movl	$0x7, %edi
                	subq	$0x10, %rsp
@@ -297,7 +297,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	-0x18(%rbp), %r9
+               	leaq	-0x8(%rbp), %r9
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movl	$0x7, %edi
                	subq	$0x10, %rsp
@@ -312,9 +312,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	movss	-0x10(%rbp), %xmm0
+               	leaq	-0x8(%rbp), %rdi
+               	movss	-0x8(%rbp), %xmm0
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -323,7 +324,6 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
                	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000

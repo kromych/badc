@@ -806,19 +806,19 @@ fn ent_pc=7 n_params=1 variadic=false locals=8224
     terminator Return(v127)   (exit_acc=v127)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=results
-fn ent_pc=8 n_params=1 variadic=false locals=519
+fn ent_pc=8 n_params=1 variadic=false locals=517
   spill_count=1 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x3
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-517)                                  -> x7
+    v3   LocalAddr(-512)                                  -> x7
     v4   Imm(4096)                                        -> x6
     v5   Imm(0)                                           -> x0
     v6   Call { target_pc=0, args=[v3, v4, v1], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   LocalAddr(-5)                                    -> x7
+    v9   LocalAddr(-517)                                  -> x7
     v10  Imm(0)                                           -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
@@ -832,33 +832,33 @@ fn ent_pc=8 n_params=1 variadic=false locals=519
     v20  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v21  BinopI { op=add, lhs=v1, rhs_imm=9 }             -> x14
     v22  Call { target_pc=2, args=[v9, v1, v13, v14, v15, v16, v17, v18, v19, v20, v21], fixed_args=11, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v23  LocalAddr(-5)                                    -> x0
+    v23  LocalAddr(-517)                                  -> x0
     v24  Imm(0)                                           -> x0
-    v25  LoadLocal { off=-5, kind=I64 }                   -> x12
+    v25  LoadLocal { off=-517, kind=I64 }                 -> x12
     v26  Imm(0)                                           -> x0
-    v27  LoadLocal { off=-5, disp=8, kind=I64 }           -> x13
+    v27  LoadLocal { off=-517, disp=8, kind=I64 }         -> x13
     v28  Imm(0)                                           -> x0
-    v29  LoadLocal { off=-5, disp=16, kind=I64 }          -> x14
+    v29  LoadLocal { off=-517, disp=16, kind=I64 }        -> x14
     v30  Imm(0)                                           -> x0
-    v31  LoadLocal { off=-5, disp=24, kind=I64 }          -> x15
+    v31  LoadLocal { off=-517, disp=24, kind=I64 }        -> x15
     v32  Imm(0)                                           -> x0
-    v33  LoadLocal { off=-5, disp=32, kind=I64 }          -> [spill 0]
+    v33  LoadLocal { off=-517, disp=32, kind=I64 }        -> [spill 0]
     v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
-    v36  LocalAddr(-517)                                  -> x0
-    v37  LoadLocal { off=-517, kind=I64 }                 -> x0
+    v36  LocalAddr(-512)                                  -> x0
+    v37  LoadLocal { off=-512, kind=I64 }                 -> x0
     v38  Binop { op=add, lhs=v1, rhs=v37 }                -> x7
     v39  Call { target_pc=3, args=[v38], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v40  RetPart(0, kind=I64)                             -> x0
     v41  RetPart(1, kind=I64)                             -> x2
-    v42  StoreLocal { off=-519, value=v40, kind=I64 }     -> -
-    v43  LocalAddr(-519)                                  -> x1
-    v44  StoreLocal { off=-519, disp=8, value=v41, kind=I64 } -> -
-    v45  LocalAddr(-519)                                  -> x1
+    v42  StoreLocal { off=-514, value=v40, kind=I64 }     -> -
+    v43  LocalAddr(-514)                                  -> x1
+    v44  StoreLocal { off=-514, disp=8, value=v41, kind=I64 } -> -
+    v45  LocalAddr(-514)                                  -> x1
     v46  Imm(0)                                           -> x1
-    v47  LoadLocal { off=-519, kind=I64 }                 -> x1
+    v47  LoadLocal { off=-514, kind=I64 }                 -> x1
     v48  Imm(0)                                           -> x1
-    v49  LoadLocal { off=-519, disp=8, kind=I64 }         -> x1
+    v49  LoadLocal { off=-514, disp=8, kind=I64 }         -> x1
     v50  Imm(0)                                           -> x1
     v51  Imm(0)                                           -> x1
     v52  Imm(0)                                           -> x1
@@ -934,14 +934,14 @@ fn ent_pc=8 n_params=1 variadic=false locals=519
     v112 Imm(31)                                          -> x0
     v113 LifetimeEnd(0)                                   -> -
     v114 LifetimeEnd(0)                                   -> -
-    v115 LifetimeEnd(-517)                                -> -
+    v115 LifetimeEnd(-512)                                -> -
     terminator Return(v112)   (exit_acc=v112)
   block 6  start_pc=0
     v116 Imm(0)                                           -> x1
     v117 Imm(0)                                           -> x1
     v118 Imm(0)                                           -> x1
-    v119 LocalAddr(-517)                                  -> x1
-    v120 LoadLocal { off=-517, kind=I64 }                 -> x1
+    v119 LocalAddr(-512)                                  -> x1
+    v120 LoadLocal { off=-512, kind=I64 }                 -> x1
     v121 Binop { op=add, lhs=v1, rhs=v120 }               -> x1
     v122 Binop { op=ne, lhs=v40, rhs=v121 }               -> x0
     v123 Imm(0)                                           -> x1
@@ -952,8 +952,8 @@ fn ent_pc=8 n_params=1 variadic=false locals=519
     v126 Imm(0)                                           -> x0
     v127 Imm(3)                                           -> x0
     v128 Imm(0)                                           -> x0
-    v129 LocalAddr(-517)                                  -> x0
-    v130 LoadLocal { off=-517, kind=I64 }                 -> x0
+    v129 LocalAddr(-512)                                  -> x0
+    v130 LoadLocal { off=-512, kind=I64 }                 -> x0
     v131 Binop { op=add, lhs=v1, rhs=v130 }               -> x0
     v132 BinopI { op=mul, lhs=v131, rhs_imm=3 }           -> x0
     v133 Binop { op=ne, lhs=v41, rhs=v132 }               -> x0
@@ -965,13 +965,13 @@ fn ent_pc=8 n_params=1 variadic=false locals=519
     v137 Imm(32)                                          -> x0
     v138 LifetimeEnd(0)                                   -> -
     v139 LifetimeEnd(0)                                   -> -
-    v140 LifetimeEnd(-517)                                -> -
+    v140 LifetimeEnd(-512)                                -> -
     terminator Return(v137)   (exit_acc=v137)
   block 9  start_pc=0
     v141 Imm(0)                                           -> x0
     v142 LifetimeEnd(0)                                   -> -
     v143 LifetimeEnd(0)                                   -> -
-    v144 LifetimeEnd(-517)                                -> -
+    v144 LifetimeEnd(-512)                                -> -
     terminator Return(v141)   (exit_acc=v141)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=main

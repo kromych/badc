@@ -45,7 +45,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%eax, %eax
@@ -76,13 +76,13 @@ Disassembly of section .text:
                	sete	%cl
                	movzbq	%cl, %rcx
                	movl	$0x1234abcd, %eax       # imm = 0x1234ABCD
-               	movq	%rax, -0x48(%rbp)
+               	movq	%rax, -0x8(%rbp)
                	xorq	$0xfeed, %rax           # imm = 0xFEED
-               	movq	%rax, -0x48(%rbp)
+               	movq	%rax, -0x8(%rbp)
                	xorl	%ebx, %ebx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movq	-0x48(%rbp), %rax
+               	movq	-0x8(%rbp), %rax
                	cmpq	$0x12345520, %rax       # imm = 0x12345520
                	sete	%al
                	movzbq	%al, %rax

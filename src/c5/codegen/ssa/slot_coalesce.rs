@@ -509,6 +509,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         let Some((base, off)) = base_of(a) else {
                             continue;
                         };
+                        // The out-pointer of an aggregate return outside the
+                        // host ABI addresses the recorded result temporary the
+                        // callee writes whole, bounded by the call as the host
+                        // ABI's result slot is below.
+                        if k == 0
+                            && ret_agg.is_none()
+                            && base == *ret_slot_local
+                            && off == Some(0)
+                            && let Some(&cells) = recorded.get(&base)
+                        {
+                            if touch(&mut extent, &mut escaped, pc, base, off, cells * 8) {
+                                raw_events.push((pc, base, WRITE));
+                            }
+                            continue;
+                        }
                         // A by-value aggregate argument is read (and, on the
                         // memory-passed ABIs, scratched) during the call and
                         // the callee's copy dies at its return, so the call

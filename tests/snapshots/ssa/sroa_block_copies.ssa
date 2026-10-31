@@ -1078,24 +1078,24 @@ fn ent_pc=33 n_params=1 variadic=false locals=1
     terminator Return(v105)   (exit_acc=v105)
 ; --- SSA dump (ok=true) ent_pc=34 ---
 ; name=main
-fn ent_pc=34 n_params=0 variadic=false locals=83
+fn ent_pc=34 n_params=0 variadic=false locals=80
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I64, volatile }     -> x3
     v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-82)                                   -> x7
+    v4   LocalAddr(-79)                                   -> x7
     v5   Mzero { dst=v4, size=16, align=8 }               -> -
     v6   Imm(0)                                           -> x0
-    v7   LocalAddr(-82)                                   -> x0
-    v8   StoreLocal { off=-82, value=v2, kind=I64 }       -> -
+    v7   LocalAddr(-79)                                   -> x0
+    v8   StoreLocal { off=-79, value=v2, kind=I64 }       -> -
     v9   Imm(0)                                           -> x0
     v10  BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x0
-    v11  LocalAddr(-82)                                   -> x1
+    v11  LocalAddr(-79)                                   -> x1
     v12  BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x1
-    v13  StoreLocal { off=-82, disp=8, value=v10, kind=I64 } -> -
-    v14  LocalAddr(-82)                                   -> x0
+    v13  StoreLocal { off=-79, disp=8, value=v10, kind=I64 } -> -
+    v14  LocalAddr(-79)                                   -> x0
     v15  Call { target_pc=0, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v16  Imm(2)                                           -> x1
     v17  Imm(0)                                           -> x1
@@ -1105,30 +1105,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0
     v21  Imm(1)                                           -> x0
-    v22  LifetimeEnd(-60)                                 -> -
-    v23  LifetimeEnd(-62)                                 -> -
-    v24  LifetimeEnd(-64)                                 -> -
-    v25  LifetimeEnd(-19)                                 -> -
-    v26  LifetimeEnd(-66)                                 -> -
-    v27  LifetimeEnd(-35)                                 -> -
-    v28  LifetimeEnd(-51)                                 -> -
-    v29  LifetimeEnd(-68)                                 -> -
+    v22  LifetimeEnd(-57)                                 -> -
+    v23  LifetimeEnd(-59)                                 -> -
+    v24  LifetimeEnd(-61)                                 -> -
+    v25  LifetimeEnd(-16)                                 -> -
+    v26  LifetimeEnd(-63)                                 -> -
+    v27  LifetimeEnd(-32)                                 -> -
+    v28  LifetimeEnd(-48)                                 -> -
+    v29  LifetimeEnd(-65)                                 -> -
     v30  LifetimeEnd(0)                                   -> -
     v31  LifetimeEnd(0)                                   -> -
-    v32  LifetimeEnd(-70)                                 -> -
-    v33  LifetimeEnd(-72)                                 -> -
-    v34  LifetimeEnd(-74)                                 -> -
-    v35  LifetimeEnd(-58)                                 -> -
-    v36  LifetimeEnd(-76)                                 -> -
-    v37  LifetimeEnd(-78)                                 -> -
-    v38  LifetimeEnd(-83)                                 -> -
-    v39  LifetimeEnd(-55)                                 -> -
+    v32  LifetimeEnd(-67)                                 -> -
+    v33  LifetimeEnd(-69)                                 -> -
+    v34  LifetimeEnd(-71)                                 -> -
+    v35  LifetimeEnd(-55)                                 -> -
+    v36  LifetimeEnd(-73)                                 -> -
+    v37  LifetimeEnd(-75)                                 -> -
+    v38  LifetimeEnd(-80)                                 -> -
+    v39  LifetimeEnd(-52)                                 -> -
     v40  LifetimeEnd(0)                                   -> -
-    v41  LifetimeEnd(-80)                                 -> -
-    v42  LifetimeEnd(-82)                                 -> -
+    v41  LifetimeEnd(-77)                                 -> -
+    v42  LifetimeEnd(-79)                                 -> -
     terminator Return(v21)   (exit_acc=v21)
   block 2  start_pc=0
-    v43  LocalAddr(-82)                                   -> x7
+    v43  LocalAddr(-79)                                   -> x7
     v44  Call { target_pc=2, args=[v43], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  Imm(2)                                           -> x1
     v46  Imm(0)                                           -> x1
@@ -1138,27 +1138,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v49, target=b4, fall=b3 }   (exit_acc=v49)
   block 3  start_pc=0
     v50  Imm(2)                                           -> x0
-    v51  LifetimeEnd(-60)                                 -> -
-    v52  LifetimeEnd(-62)                                 -> -
-    v53  LifetimeEnd(-64)                                 -> -
-    v54  LifetimeEnd(-19)                                 -> -
-    v55  LifetimeEnd(-66)                                 -> -
-    v56  LifetimeEnd(-35)                                 -> -
-    v57  LifetimeEnd(-51)                                 -> -
-    v58  LifetimeEnd(-68)                                 -> -
+    v51  LifetimeEnd(-57)                                 -> -
+    v52  LifetimeEnd(-59)                                 -> -
+    v53  LifetimeEnd(-61)                                 -> -
+    v54  LifetimeEnd(-16)                                 -> -
+    v55  LifetimeEnd(-63)                                 -> -
+    v56  LifetimeEnd(-32)                                 -> -
+    v57  LifetimeEnd(-48)                                 -> -
+    v58  LifetimeEnd(-65)                                 -> -
     v59  LifetimeEnd(0)                                   -> -
     v60  LifetimeEnd(0)                                   -> -
-    v61  LifetimeEnd(-70)                                 -> -
-    v62  LifetimeEnd(-72)                                 -> -
-    v63  LifetimeEnd(-74)                                 -> -
-    v64  LifetimeEnd(-58)                                 -> -
-    v65  LifetimeEnd(-76)                                 -> -
-    v66  LifetimeEnd(-78)                                 -> -
-    v67  LifetimeEnd(-83)                                 -> -
-    v68  LifetimeEnd(-55)                                 -> -
+    v61  LifetimeEnd(-67)                                 -> -
+    v62  LifetimeEnd(-69)                                 -> -
+    v63  LifetimeEnd(-71)                                 -> -
+    v64  LifetimeEnd(-55)                                 -> -
+    v65  LifetimeEnd(-73)                                 -> -
+    v66  LifetimeEnd(-75)                                 -> -
+    v67  LifetimeEnd(-80)                                 -> -
+    v68  LifetimeEnd(-52)                                 -> -
     v69  LifetimeEnd(0)                                   -> -
-    v70  LifetimeEnd(-80)                                 -> -
-    v71  LifetimeEnd(-82)                                 -> -
+    v70  LifetimeEnd(-77)                                 -> -
+    v71  LifetimeEnd(-79)                                 -> -
     terminator Return(v50)   (exit_acc=v50)
   block 4  start_pc=0
     v72  Imm(0)                                           -> x0
@@ -1170,42 +1170,42 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v77, target=b6, fall=b5 }   (exit_acc=v77)
   block 5  start_pc=0
     v78  Imm(3)                                           -> x0
-    v79  LifetimeEnd(-60)                                 -> -
-    v80  LifetimeEnd(-62)                                 -> -
-    v81  LifetimeEnd(-64)                                 -> -
-    v82  LifetimeEnd(-19)                                 -> -
-    v83  LifetimeEnd(-66)                                 -> -
-    v84  LifetimeEnd(-35)                                 -> -
-    v85  LifetimeEnd(-51)                                 -> -
-    v86  LifetimeEnd(-68)                                 -> -
+    v79  LifetimeEnd(-57)                                 -> -
+    v80  LifetimeEnd(-59)                                 -> -
+    v81  LifetimeEnd(-61)                                 -> -
+    v82  LifetimeEnd(-16)                                 -> -
+    v83  LifetimeEnd(-63)                                 -> -
+    v84  LifetimeEnd(-32)                                 -> -
+    v85  LifetimeEnd(-48)                                 -> -
+    v86  LifetimeEnd(-65)                                 -> -
     v87  LifetimeEnd(0)                                   -> -
     v88  LifetimeEnd(0)                                   -> -
-    v89  LifetimeEnd(-70)                                 -> -
-    v90  LifetimeEnd(-72)                                 -> -
-    v91  LifetimeEnd(-74)                                 -> -
-    v92  LifetimeEnd(-58)                                 -> -
-    v93  LifetimeEnd(-76)                                 -> -
-    v94  LifetimeEnd(-78)                                 -> -
-    v95  LifetimeEnd(-83)                                 -> -
-    v96  LifetimeEnd(-55)                                 -> -
+    v89  LifetimeEnd(-67)                                 -> -
+    v90  LifetimeEnd(-69)                                 -> -
+    v91  LifetimeEnd(-71)                                 -> -
+    v92  LifetimeEnd(-55)                                 -> -
+    v93  LifetimeEnd(-73)                                 -> -
+    v94  LifetimeEnd(-75)                                 -> -
+    v95  LifetimeEnd(-80)                                 -> -
+    v96  LifetimeEnd(-52)                                 -> -
     v97  LifetimeEnd(0)                                   -> -
-    v98  LifetimeEnd(-80)                                 -> -
-    v99  LifetimeEnd(-82)                                 -> -
+    v98  LifetimeEnd(-77)                                 -> -
+    v99  LifetimeEnd(-79)                                 -> -
     terminator Return(v78)   (exit_acc=v78)
   block 6  start_pc=0
-    v100 LocalAddr(-80)                                   -> x7
+    v100 LocalAddr(-77)                                   -> x7
     v101 Imm(0)                                           -> x0
     v102 Call { target_pc=4, args=[v100, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v103 LocalAddr(-80)                                   -> x0
-    v104 LoadLocal { off=-80, kind=I64 }                  -> x0
+    v103 LocalAddr(-77)                                   -> x0
+    v104 LoadLocal { off=-77, kind=I64 }                  -> x0
     v105 Imm(0)                                           -> x1
     v106 Binop { op=ne, lhs=v104, rhs=v2 }                -> x0
     v107 Imm(0)                                           -> x1
     terminator Bnz { cond=v106, target=b8, fall=b7 }   (exit_acc=v106)
   block 7  start_pc=0
-    v108 LocalAddr(-80)                                   -> x0
+    v108 LocalAddr(-77)                                   -> x0
     v109 BinopI { op=add, lhs=v103, rhs_imm=8 }           -> x0
-    v110 LoadLocal { off=-80, disp=8, kind=I64 }          -> x0
+    v110 LoadLocal { off=-77, disp=8, kind=I64 }          -> x0
     v111 BinopI { op=ne, lhs=v110, rhs_imm=7 }            -> x0
     v112 Imm(0)                                           -> x1
     v113 Imm(0)                                           -> x1
@@ -1213,41 +1213,41 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v111, target=b9, fall=b8 }   (exit_acc=v111)
   block 8  start_pc=0
     v115 Imm(4)                                           -> x0
-    v116 LifetimeEnd(-60)                                 -> -
-    v117 LifetimeEnd(-62)                                 -> -
-    v118 LifetimeEnd(-64)                                 -> -
-    v119 LifetimeEnd(-19)                                 -> -
-    v120 LifetimeEnd(-66)                                 -> -
-    v121 LifetimeEnd(-35)                                 -> -
-    v122 LifetimeEnd(-51)                                 -> -
-    v123 LifetimeEnd(-68)                                 -> -
+    v116 LifetimeEnd(-57)                                 -> -
+    v117 LifetimeEnd(-59)                                 -> -
+    v118 LifetimeEnd(-61)                                 -> -
+    v119 LifetimeEnd(-16)                                 -> -
+    v120 LifetimeEnd(-63)                                 -> -
+    v121 LifetimeEnd(-32)                                 -> -
+    v122 LifetimeEnd(-48)                                 -> -
+    v123 LifetimeEnd(-65)                                 -> -
     v124 LifetimeEnd(0)                                   -> -
     v125 LifetimeEnd(0)                                   -> -
-    v126 LifetimeEnd(-70)                                 -> -
-    v127 LifetimeEnd(-72)                                 -> -
-    v128 LifetimeEnd(-74)                                 -> -
-    v129 LifetimeEnd(-58)                                 -> -
-    v130 LifetimeEnd(-76)                                 -> -
-    v131 LifetimeEnd(-78)                                 -> -
-    v132 LifetimeEnd(-83)                                 -> -
-    v133 LifetimeEnd(-55)                                 -> -
+    v126 LifetimeEnd(-67)                                 -> -
+    v127 LifetimeEnd(-69)                                 -> -
+    v128 LifetimeEnd(-71)                                 -> -
+    v129 LifetimeEnd(-55)                                 -> -
+    v130 LifetimeEnd(-73)                                 -> -
+    v131 LifetimeEnd(-75)                                 -> -
+    v132 LifetimeEnd(-80)                                 -> -
+    v133 LifetimeEnd(-52)                                 -> -
     v134 LifetimeEnd(0)                                   -> -
-    v135 LifetimeEnd(-80)                                 -> -
-    v136 LifetimeEnd(-82)                                 -> -
+    v135 LifetimeEnd(-77)                                 -> -
+    v136 LifetimeEnd(-79)                                 -> -
     terminator Return(v115)   (exit_acc=v115)
   block 9  start_pc=0
-    v137 LocalAddr(-82)                                   -> x7
+    v137 LocalAddr(-79)                                   -> x7
     v138 Call { target_pc=5, args=[v137], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v139 RetPart(0, kind=I64)                             -> x0
     v140 RetPart(1, kind=I64)                             -> x2
-    v141 StoreLocal { off=-5, value=v139, kind=I64 }      -> -
-    v142 LocalAddr(-5)                                    -> x1
-    v143 StoreLocal { off=-5, disp=8, value=v140, kind=I64 } -> -
-    v144 LocalAddr(-5)                                    -> x1
+    v141 StoreLocal { off=-2, value=v139, kind=I64 }      -> -
+    v142 LocalAddr(-2)                                    -> x1
+    v143 StoreLocal { off=-2, disp=8, value=v140, kind=I64 } -> -
+    v144 LocalAddr(-2)                                    -> x1
     v145 Imm(0)                                           -> x1
-    v146 LoadLocal { off=-5, kind=I64 }                   -> x1
+    v146 LoadLocal { off=-2, kind=I64 }                   -> x1
     v147 Imm(0)                                           -> x1
-    v148 LoadLocal { off=-5, disp=8, kind=I64 }           -> x1
+    v148 LoadLocal { off=-2, disp=8, kind=I64 }           -> x1
     v149 Imm(0)                                           -> x1
     v150 Imm(0)                                           -> x1
     v151 Imm(0)                                           -> x1
@@ -1269,48 +1269,48 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v161, target=b12, fall=b11 }   (exit_acc=v161)
   block 11  start_pc=0
     v165 Imm(5)                                           -> x0
-    v166 LifetimeEnd(-60)                                 -> -
-    v167 LifetimeEnd(-62)                                 -> -
-    v168 LifetimeEnd(-64)                                 -> -
-    v169 LifetimeEnd(-19)                                 -> -
-    v170 LifetimeEnd(-66)                                 -> -
-    v171 LifetimeEnd(-35)                                 -> -
-    v172 LifetimeEnd(-51)                                 -> -
-    v173 LifetimeEnd(-68)                                 -> -
+    v166 LifetimeEnd(-57)                                 -> -
+    v167 LifetimeEnd(-59)                                 -> -
+    v168 LifetimeEnd(-61)                                 -> -
+    v169 LifetimeEnd(-16)                                 -> -
+    v170 LifetimeEnd(-63)                                 -> -
+    v171 LifetimeEnd(-32)                                 -> -
+    v172 LifetimeEnd(-48)                                 -> -
+    v173 LifetimeEnd(-65)                                 -> -
     v174 LifetimeEnd(0)                                   -> -
     v175 LifetimeEnd(0)                                   -> -
-    v176 LifetimeEnd(-70)                                 -> -
-    v177 LifetimeEnd(-72)                                 -> -
-    v178 LifetimeEnd(-74)                                 -> -
-    v179 LifetimeEnd(-58)                                 -> -
-    v180 LifetimeEnd(-76)                                 -> -
-    v181 LifetimeEnd(-78)                                 -> -
-    v182 LifetimeEnd(-83)                                 -> -
-    v183 LifetimeEnd(-55)                                 -> -
+    v176 LifetimeEnd(-67)                                 -> -
+    v177 LifetimeEnd(-69)                                 -> -
+    v178 LifetimeEnd(-71)                                 -> -
+    v179 LifetimeEnd(-55)                                 -> -
+    v180 LifetimeEnd(-73)                                 -> -
+    v181 LifetimeEnd(-75)                                 -> -
+    v182 LifetimeEnd(-80)                                 -> -
+    v183 LifetimeEnd(-52)                                 -> -
     v184 LifetimeEnd(0)                                   -> -
-    v185 LifetimeEnd(-80)                                 -> -
-    v186 LifetimeEnd(-82)                                 -> -
+    v185 LifetimeEnd(-77)                                 -> -
+    v186 LifetimeEnd(-79)                                 -> -
     terminator Return(v165)   (exit_acc=v165)
   block 12  start_pc=0
-    v187 LocalAddr(-55)                                   -> x7
+    v187 LocalAddr(-52)                                   -> x7
     v188 Mzero { dst=v187, size=32, align=8 }             -> -
     v189 Imm(0)                                           -> x0
     v190 Extend { value=v2, kind=I32 }                    -> x0
-    v191 LocalAddr(-55)                                   -> x0
-    v192 StoreLocal { off=-55, value=v2, kind=I32 }       -> -
+    v191 LocalAddr(-52)                                   -> x0
+    v192 StoreLocal { off=-52, value=v2, kind=I32 }       -> -
     v193 Imm(2)                                           -> x0
-    v194 LocalAddr(-55)                                   -> x1
+    v194 LocalAddr(-52)                                   -> x1
     v195 BinopI { op=add, lhs=v187, rhs_imm=8 }           -> x1
-    v196 StoreLocal { off=-55, disp=8, value=v193, kind=I64 } -> -
+    v196 StoreLocal { off=-52, disp=8, value=v193, kind=I64 } -> -
     v197 Imm(3)                                           -> x0
-    v198 LocalAddr(-55)                                   -> x1
+    v198 LocalAddr(-52)                                   -> x1
     v199 BinopI { op=add, lhs=v187, rhs_imm=16 }          -> x1
-    v200 StoreLocal { off=-55, disp=16, value=v197, kind=I64 } -> -
+    v200 StoreLocal { off=-52, disp=16, value=v197, kind=I64 } -> -
     v201 Imm(120)                                         -> x0
-    v202 LocalAddr(-55)                                   -> x1
+    v202 LocalAddr(-52)                                   -> x1
     v203 BinopI { op=add, lhs=v187, rhs_imm=24 }          -> x1
-    v204 StoreLocal { off=-55, disp=24, value=v201, kind=I8 } -> -
-    v205 LocalAddr(-55)                                   -> x0
+    v204 StoreLocal { off=-52, disp=24, value=v201, kind=I8 } -> -
+    v205 LocalAddr(-52)                                   -> x0
     v206 Call { target_pc=6, args=[v187], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v207 Imm(2)                                           -> x1
     v208 Imm(0)                                           -> x1
@@ -1320,27 +1320,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v211, target=b14, fall=b13 }   (exit_acc=v211)
   block 13  start_pc=0
     v212 Imm(6)                                           -> x0
-    v213 LifetimeEnd(-60)                                 -> -
-    v214 LifetimeEnd(-62)                                 -> -
-    v215 LifetimeEnd(-64)                                 -> -
-    v216 LifetimeEnd(-19)                                 -> -
-    v217 LifetimeEnd(-66)                                 -> -
-    v218 LifetimeEnd(-35)                                 -> -
-    v219 LifetimeEnd(-51)                                 -> -
-    v220 LifetimeEnd(-68)                                 -> -
+    v213 LifetimeEnd(-57)                                 -> -
+    v214 LifetimeEnd(-59)                                 -> -
+    v215 LifetimeEnd(-61)                                 -> -
+    v216 LifetimeEnd(-16)                                 -> -
+    v217 LifetimeEnd(-63)                                 -> -
+    v218 LifetimeEnd(-32)                                 -> -
+    v219 LifetimeEnd(-48)                                 -> -
+    v220 LifetimeEnd(-65)                                 -> -
     v221 LifetimeEnd(0)                                   -> -
     v222 LifetimeEnd(0)                                   -> -
-    v223 LifetimeEnd(-70)                                 -> -
-    v224 LifetimeEnd(-72)                                 -> -
-    v225 LifetimeEnd(-74)                                 -> -
-    v226 LifetimeEnd(-58)                                 -> -
-    v227 LifetimeEnd(-76)                                 -> -
-    v228 LifetimeEnd(-78)                                 -> -
-    v229 LifetimeEnd(-83)                                 -> -
-    v230 LifetimeEnd(-55)                                 -> -
+    v223 LifetimeEnd(-67)                                 -> -
+    v224 LifetimeEnd(-69)                                 -> -
+    v225 LifetimeEnd(-71)                                 -> -
+    v226 LifetimeEnd(-55)                                 -> -
+    v227 LifetimeEnd(-73)                                 -> -
+    v228 LifetimeEnd(-75)                                 -> -
+    v229 LifetimeEnd(-80)                                 -> -
+    v230 LifetimeEnd(-52)                                 -> -
     v231 LifetimeEnd(0)                                   -> -
-    v232 LifetimeEnd(-80)                                 -> -
-    v233 LifetimeEnd(-82)                                 -> -
+    v232 LifetimeEnd(-77)                                 -> -
+    v233 LifetimeEnd(-79)                                 -> -
     terminator Return(v212)   (exit_acc=v212)
   block 14  start_pc=0
     v234 Imm(0)                                           -> x0
@@ -1350,30 +1350,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v237, target=b16, fall=b15 }   (exit_acc=v237)
   block 15  start_pc=0
     v238 Imm(7)                                           -> x0
-    v239 LifetimeEnd(-60)                                 -> -
-    v240 LifetimeEnd(-62)                                 -> -
-    v241 LifetimeEnd(-64)                                 -> -
-    v242 LifetimeEnd(-19)                                 -> -
-    v243 LifetimeEnd(-66)                                 -> -
-    v244 LifetimeEnd(-35)                                 -> -
-    v245 LifetimeEnd(-51)                                 -> -
-    v246 LifetimeEnd(-68)                                 -> -
+    v239 LifetimeEnd(-57)                                 -> -
+    v240 LifetimeEnd(-59)                                 -> -
+    v241 LifetimeEnd(-61)                                 -> -
+    v242 LifetimeEnd(-16)                                 -> -
+    v243 LifetimeEnd(-63)                                 -> -
+    v244 LifetimeEnd(-32)                                 -> -
+    v245 LifetimeEnd(-48)                                 -> -
+    v246 LifetimeEnd(-65)                                 -> -
     v247 LifetimeEnd(0)                                   -> -
     v248 LifetimeEnd(0)                                   -> -
-    v249 LifetimeEnd(-70)                                 -> -
-    v250 LifetimeEnd(-72)                                 -> -
-    v251 LifetimeEnd(-74)                                 -> -
-    v252 LifetimeEnd(-58)                                 -> -
-    v253 LifetimeEnd(-76)                                 -> -
-    v254 LifetimeEnd(-78)                                 -> -
-    v255 LifetimeEnd(-83)                                 -> -
-    v256 LifetimeEnd(-55)                                 -> -
+    v249 LifetimeEnd(-67)                                 -> -
+    v250 LifetimeEnd(-69)                                 -> -
+    v251 LifetimeEnd(-71)                                 -> -
+    v252 LifetimeEnd(-55)                                 -> -
+    v253 LifetimeEnd(-73)                                 -> -
+    v254 LifetimeEnd(-75)                                 -> -
+    v255 LifetimeEnd(-80)                                 -> -
+    v256 LifetimeEnd(-52)                                 -> -
     v257 LifetimeEnd(0)                                   -> -
-    v258 LifetimeEnd(-80)                                 -> -
-    v259 LifetimeEnd(-82)                                 -> -
+    v258 LifetimeEnd(-77)                                 -> -
+    v259 LifetimeEnd(-79)                                 -> -
     terminator Return(v238)   (exit_acc=v238)
   block 16  start_pc=0
-    v260 LocalAddr(-83)                                   -> x7
+    v260 LocalAddr(-80)                                   -> x7
     v261 Imm(0)                                           -> x0
     v262 BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x6
     v263 BinopI { op=or, lhs=v262, rhs_imm=9 }            -> x6
@@ -1382,8 +1382,8 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v266 Imm(0)                                           -> x1
     terminator Bnz { cond=v265, target=b18, fall=b17 }   (exit_acc=v265)
   block 17  start_pc=0
-    v267 LocalAddr(-83)                                   -> x0
-    v268 LoadLocal { off=-83, kind=I32 }                  -> x0
+    v267 LocalAddr(-80)                                   -> x0
+    v268 LoadLocal { off=-80, kind=I32 }                  -> x0
     v269 BinopI { op=ne, lhs=v268, rhs_imm=5 }            -> x0
     v270 Imm(0)                                           -> x1
     v271 Imm(0)                                           -> x1
@@ -1391,42 +1391,42 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v269, target=b19, fall=b18 }   (exit_acc=v269)
   block 18  start_pc=0
     v273 Imm(8)                                           -> x0
-    v274 LifetimeEnd(-60)                                 -> -
-    v275 LifetimeEnd(-62)                                 -> -
-    v276 LifetimeEnd(-64)                                 -> -
-    v277 LifetimeEnd(-19)                                 -> -
-    v278 LifetimeEnd(-66)                                 -> -
-    v279 LifetimeEnd(-35)                                 -> -
-    v280 LifetimeEnd(-51)                                 -> -
-    v281 LifetimeEnd(-68)                                 -> -
+    v274 LifetimeEnd(-57)                                 -> -
+    v275 LifetimeEnd(-59)                                 -> -
+    v276 LifetimeEnd(-61)                                 -> -
+    v277 LifetimeEnd(-16)                                 -> -
+    v278 LifetimeEnd(-63)                                 -> -
+    v279 LifetimeEnd(-32)                                 -> -
+    v280 LifetimeEnd(-48)                                 -> -
+    v281 LifetimeEnd(-65)                                 -> -
     v282 LifetimeEnd(0)                                   -> -
     v283 LifetimeEnd(0)                                   -> -
-    v284 LifetimeEnd(-70)                                 -> -
-    v285 LifetimeEnd(-72)                                 -> -
-    v286 LifetimeEnd(-74)                                 -> -
-    v287 LifetimeEnd(-58)                                 -> -
-    v288 LifetimeEnd(-76)                                 -> -
-    v289 LifetimeEnd(-78)                                 -> -
-    v290 LifetimeEnd(-83)                                 -> -
-    v291 LifetimeEnd(-55)                                 -> -
+    v284 LifetimeEnd(-67)                                 -> -
+    v285 LifetimeEnd(-69)                                 -> -
+    v286 LifetimeEnd(-71)                                 -> -
+    v287 LifetimeEnd(-55)                                 -> -
+    v288 LifetimeEnd(-73)                                 -> -
+    v289 LifetimeEnd(-75)                                 -> -
+    v290 LifetimeEnd(-80)                                 -> -
+    v291 LifetimeEnd(-52)                                 -> -
     v292 LifetimeEnd(0)                                   -> -
-    v293 LifetimeEnd(-80)                                 -> -
-    v294 LifetimeEnd(-82)                                 -> -
+    v293 LifetimeEnd(-77)                                 -> -
+    v294 LifetimeEnd(-79)                                 -> -
     terminator Return(v273)   (exit_acc=v273)
   block 19  start_pc=0
-    v295 LocalAddr(-78)                                   -> x7
+    v295 LocalAddr(-75)                                   -> x7
     v296 Imm(0)                                           -> x0
     v297 Call { target_pc=9, args=[v295, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v298 LocalAddr(-78)                                   -> x0
-    v299 LoadLocal { off=-78, kind=U32 }                  -> x0
+    v298 LocalAddr(-75)                                   -> x0
+    v299 LoadLocal { off=-75, kind=U32 }                  -> x0
     v300 BinopI { op=and, lhs=v299, rhs_imm=7 }           -> x0
     v301 BinopI { op=ne, lhs=v300, rhs_imm=5 }            -> x0
     v302 Imm(1)                                           -> x1
     v303 Imm(0)                                           -> x1
     terminator Bnz { cond=v301, target=b23, fall=b20 }   (exit_acc=v301)
   block 20  start_pc=0
-    v304 LocalAddr(-78)                                   -> x0
-    v305 LoadLocal { off=-78, kind=U32 }                  -> x0
+    v304 LocalAddr(-75)                                   -> x0
+    v305 LoadLocal { off=-75, kind=U32 }                  -> x0
     v306 BinopI { op=shr, lhs=v305, rhs_imm=3 }           -> x0
     v307 BinopI { op=and, lhs=v306, rhs_imm=31 }          -> x0
     v308 BinopI { op=ne, lhs=v307, rhs_imm=17 }           -> x0
@@ -1438,8 +1438,8 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v314 Imm(0)                                           -> x1
     terminator Bnz { cond=v308, target=b23, fall=b21 }   (exit_acc=v308)
   block 21  start_pc=0
-    v315 LocalAddr(-78)                                   -> x0
-    v316 LoadLocal { off=-78, kind=U32 }                  -> x0
+    v315 LocalAddr(-75)                                   -> x0
+    v316 LoadLocal { off=-75, kind=U32 }                  -> x0
     v317 BinopI { op=shr, lhs=v316, rhs_imm=8 }           -> x0
     v318 BinopI { op=and, lhs=v317, rhs_imm=4095 }        -> x0
     v319 Imm(0)                                           -> x1
@@ -1452,9 +1452,9 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v326 Imm(0)                                           -> x1
     terminator Bnz { cond=v321, target=b23, fall=b22 }   (exit_acc=v321)
   block 22  start_pc=0
-    v327 LocalAddr(-78)                                   -> x0
+    v327 LocalAddr(-75)                                   -> x0
     v328 BinopI { op=add, lhs=v298, rhs_imm=8 }           -> x0
-    v329 LoadLocal { off=-78, disp=8, kind=I64 }          -> x0
+    v329 LoadLocal { off=-75, disp=8, kind=I64 }          -> x0
     v330 Imm(0)                                           -> x1
     v331 Binop { op=ne, lhs=v329, rhs=v2 }                -> x0
     v332 Imm(0)                                           -> x1
@@ -1463,43 +1463,43 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v331, target=b24, fall=b23 }   (exit_acc=v331)
   block 23  start_pc=0
     v335 Imm(9)                                           -> x0
-    v336 LifetimeEnd(-60)                                 -> -
-    v337 LifetimeEnd(-62)                                 -> -
-    v338 LifetimeEnd(-64)                                 -> -
-    v339 LifetimeEnd(-19)                                 -> -
-    v340 LifetimeEnd(-66)                                 -> -
-    v341 LifetimeEnd(-35)                                 -> -
-    v342 LifetimeEnd(-51)                                 -> -
-    v343 LifetimeEnd(-68)                                 -> -
+    v336 LifetimeEnd(-57)                                 -> -
+    v337 LifetimeEnd(-59)                                 -> -
+    v338 LifetimeEnd(-61)                                 -> -
+    v339 LifetimeEnd(-16)                                 -> -
+    v340 LifetimeEnd(-63)                                 -> -
+    v341 LifetimeEnd(-32)                                 -> -
+    v342 LifetimeEnd(-48)                                 -> -
+    v343 LifetimeEnd(-65)                                 -> -
     v344 LifetimeEnd(0)                                   -> -
     v345 LifetimeEnd(0)                                   -> -
-    v346 LifetimeEnd(-70)                                 -> -
-    v347 LifetimeEnd(-72)                                 -> -
-    v348 LifetimeEnd(-74)                                 -> -
-    v349 LifetimeEnd(-58)                                 -> -
-    v350 LifetimeEnd(-76)                                 -> -
-    v351 LifetimeEnd(-78)                                 -> -
-    v352 LifetimeEnd(-83)                                 -> -
-    v353 LifetimeEnd(-55)                                 -> -
+    v346 LifetimeEnd(-67)                                 -> -
+    v347 LifetimeEnd(-69)                                 -> -
+    v348 LifetimeEnd(-71)                                 -> -
+    v349 LifetimeEnd(-55)                                 -> -
+    v350 LifetimeEnd(-73)                                 -> -
+    v351 LifetimeEnd(-75)                                 -> -
+    v352 LifetimeEnd(-80)                                 -> -
+    v353 LifetimeEnd(-52)                                 -> -
     v354 LifetimeEnd(0)                                   -> -
-    v355 LifetimeEnd(-80)                                 -> -
-    v356 LifetimeEnd(-82)                                 -> -
+    v355 LifetimeEnd(-77)                                 -> -
+    v356 LifetimeEnd(-79)                                 -> -
     terminator Return(v335)   (exit_acc=v335)
   block 24  start_pc=0
-    v357 LocalAddr(-76)                                   -> x7
+    v357 LocalAddr(-73)                                   -> x7
     v358 Imm(0)                                           -> x0
     v359 Call { target_pc=10, args=[v357, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v360 LocalAddr(-76)                                   -> x0
-    v361 LoadLocal { off=-76, kind=I8 }                   -> x0
+    v360 LocalAddr(-73)                                   -> x0
+    v361 LoadLocal { off=-73, kind=I8 }                   -> x0
     v362 Imm(0)                                           -> x1
     v363 Extend { value=v2, kind=I8 }                     -> x1
     v364 Binop { op=ne, lhs=v361, rhs=v363 }              -> x0
     v365 Imm(0)                                           -> x1
     terminator Bnz { cond=v364, target=b26, fall=b25 }   (exit_acc=v364)
   block 25  start_pc=0
-    v366 LocalAddr(-76)                                   -> x0
+    v366 LocalAddr(-73)                                   -> x0
     v367 BinopI { op=add, lhs=v360, rhs_imm=8 }           -> x0
-    v368 LoadLocal { off=-76, disp=8, kind=I64 }          -> x0
+    v368 LoadLocal { off=-73, disp=8, kind=I64 }          -> x0
     v369 Imm(3)                                           -> x1
     v370 Imm(0)                                           -> x1
     v371 BinopI { op=mul, lhs=v2, rhs_imm=3 }             -> x1
@@ -1510,35 +1510,35 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v372, target=b27, fall=b26 }   (exit_acc=v372)
   block 26  start_pc=0
     v376 Imm(10)                                          -> x0
-    v377 LifetimeEnd(-60)                                 -> -
-    v378 LifetimeEnd(-62)                                 -> -
-    v379 LifetimeEnd(-64)                                 -> -
-    v380 LifetimeEnd(-19)                                 -> -
-    v381 LifetimeEnd(-66)                                 -> -
-    v382 LifetimeEnd(-35)                                 -> -
-    v383 LifetimeEnd(-51)                                 -> -
-    v384 LifetimeEnd(-68)                                 -> -
+    v377 LifetimeEnd(-57)                                 -> -
+    v378 LifetimeEnd(-59)                                 -> -
+    v379 LifetimeEnd(-61)                                 -> -
+    v380 LifetimeEnd(-16)                                 -> -
+    v381 LifetimeEnd(-63)                                 -> -
+    v382 LifetimeEnd(-32)                                 -> -
+    v383 LifetimeEnd(-48)                                 -> -
+    v384 LifetimeEnd(-65)                                 -> -
     v385 LifetimeEnd(0)                                   -> -
     v386 LifetimeEnd(0)                                   -> -
-    v387 LifetimeEnd(-70)                                 -> -
-    v388 LifetimeEnd(-72)                                 -> -
-    v389 LifetimeEnd(-74)                                 -> -
-    v390 LifetimeEnd(-58)                                 -> -
-    v391 LifetimeEnd(-76)                                 -> -
-    v392 LifetimeEnd(-78)                                 -> -
-    v393 LifetimeEnd(-83)                                 -> -
-    v394 LifetimeEnd(-55)                                 -> -
+    v387 LifetimeEnd(-67)                                 -> -
+    v388 LifetimeEnd(-69)                                 -> -
+    v389 LifetimeEnd(-71)                                 -> -
+    v390 LifetimeEnd(-55)                                 -> -
+    v391 LifetimeEnd(-73)                                 -> -
+    v392 LifetimeEnd(-75)                                 -> -
+    v393 LifetimeEnd(-80)                                 -> -
+    v394 LifetimeEnd(-52)                                 -> -
     v395 LifetimeEnd(0)                                   -> -
-    v396 LifetimeEnd(-80)                                 -> -
-    v397 LifetimeEnd(-82)                                 -> -
+    v396 LifetimeEnd(-77)                                 -> -
+    v397 LifetimeEnd(-79)                                 -> -
     terminator Return(v376)   (exit_acc=v376)
   block 27  start_pc=0
-    v398 LocalAddr(-58)                                   -> x7
+    v398 LocalAddr(-55)                                   -> x7
     v399 ImmData(8)                                       -> x0
     v400 Mcpy { dst=v398, src=v399, size=24, align=8 }    -> -
     v401 Imm(43)                                          -> x0
     v402 Imm(0)                                           -> x0
-    v403 LocalAddr(-58)                                   -> x0
+    v403 LocalAddr(-55)                                   -> x0
     v404 Imm(0)                                           -> x0
     v405 Call { target_pc=11, args=[v398, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v406 Imm(0)                                           -> x1
@@ -1547,7 +1547,7 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v409 Imm(0)                                           -> x1
     terminator Bnz { cond=v408, target=b77, fall=b28 }   (exit_acc=v408)
   block 28  start_pc=0
-    v410 LocalAddr(-58)                                   -> x0
+    v410 LocalAddr(-55)                                   -> x0
     v411 Imm(16)                                          -> x0
     v412 BinopI { op=add, lhs=v410, rhs_imm=16 }          -> x0
     v413 Imm(0)                                           -> x0
@@ -1564,27 +1564,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v423, target=b30, fall=b29 }   (exit_acc=v423)
   block 29  start_pc=0
     v446 Imm(12)                                          -> x0
-    v447 LifetimeEnd(-60)                                 -> -
-    v448 LifetimeEnd(-62)                                 -> -
-    v449 LifetimeEnd(-64)                                 -> -
-    v450 LifetimeEnd(-19)                                 -> -
-    v451 LifetimeEnd(-66)                                 -> -
-    v452 LifetimeEnd(-35)                                 -> -
-    v453 LifetimeEnd(-51)                                 -> -
-    v454 LifetimeEnd(-68)                                 -> -
+    v447 LifetimeEnd(-57)                                 -> -
+    v448 LifetimeEnd(-59)                                 -> -
+    v449 LifetimeEnd(-61)                                 -> -
+    v450 LifetimeEnd(-16)                                 -> -
+    v451 LifetimeEnd(-63)                                 -> -
+    v452 LifetimeEnd(-32)                                 -> -
+    v453 LifetimeEnd(-48)                                 -> -
+    v454 LifetimeEnd(-65)                                 -> -
     v455 LifetimeEnd(0)                                   -> -
     v456 LifetimeEnd(0)                                   -> -
-    v457 LifetimeEnd(-70)                                 -> -
-    v458 LifetimeEnd(-72)                                 -> -
-    v459 LifetimeEnd(-74)                                 -> -
-    v460 LifetimeEnd(-58)                                 -> -
-    v461 LifetimeEnd(-76)                                 -> -
-    v462 LifetimeEnd(-78)                                 -> -
-    v463 LifetimeEnd(-83)                                 -> -
-    v464 LifetimeEnd(-55)                                 -> -
+    v457 LifetimeEnd(-67)                                 -> -
+    v458 LifetimeEnd(-69)                                 -> -
+    v459 LifetimeEnd(-71)                                 -> -
+    v460 LifetimeEnd(-55)                                 -> -
+    v461 LifetimeEnd(-73)                                 -> -
+    v462 LifetimeEnd(-75)                                 -> -
+    v463 LifetimeEnd(-80)                                 -> -
+    v464 LifetimeEnd(-52)                                 -> -
     v465 LifetimeEnd(0)                                   -> -
-    v466 LifetimeEnd(-80)                                 -> -
-    v467 LifetimeEnd(-82)                                 -> -
+    v466 LifetimeEnd(-77)                                 -> -
+    v467 LifetimeEnd(-79)                                 -> -
     terminator Return(v446)   (exit_acc=v446)
   block 30  start_pc=0
     v468 Imm(0)                                           -> x0
@@ -1598,30 +1598,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v475, target=b32, fall=b31 }   (exit_acc=v475)
   block 31  start_pc=0
     v476 Imm(13)                                          -> x0
-    v477 LifetimeEnd(-60)                                 -> -
-    v478 LifetimeEnd(-62)                                 -> -
-    v479 LifetimeEnd(-64)                                 -> -
-    v480 LifetimeEnd(-19)                                 -> -
-    v481 LifetimeEnd(-66)                                 -> -
-    v482 LifetimeEnd(-35)                                 -> -
-    v483 LifetimeEnd(-51)                                 -> -
-    v484 LifetimeEnd(-68)                                 -> -
+    v477 LifetimeEnd(-57)                                 -> -
+    v478 LifetimeEnd(-59)                                 -> -
+    v479 LifetimeEnd(-61)                                 -> -
+    v480 LifetimeEnd(-16)                                 -> -
+    v481 LifetimeEnd(-63)                                 -> -
+    v482 LifetimeEnd(-32)                                 -> -
+    v483 LifetimeEnd(-48)                                 -> -
+    v484 LifetimeEnd(-65)                                 -> -
     v485 LifetimeEnd(0)                                   -> -
     v486 LifetimeEnd(0)                                   -> -
-    v487 LifetimeEnd(-70)                                 -> -
-    v488 LifetimeEnd(-72)                                 -> -
-    v489 LifetimeEnd(-74)                                 -> -
-    v490 LifetimeEnd(-58)                                 -> -
-    v491 LifetimeEnd(-76)                                 -> -
-    v492 LifetimeEnd(-78)                                 -> -
-    v493 LifetimeEnd(-83)                                 -> -
-    v494 LifetimeEnd(-55)                                 -> -
+    v487 LifetimeEnd(-67)                                 -> -
+    v488 LifetimeEnd(-69)                                 -> -
+    v489 LifetimeEnd(-71)                                 -> -
+    v490 LifetimeEnd(-55)                                 -> -
+    v491 LifetimeEnd(-73)                                 -> -
+    v492 LifetimeEnd(-75)                                 -> -
+    v493 LifetimeEnd(-80)                                 -> -
+    v494 LifetimeEnd(-52)                                 -> -
     v495 LifetimeEnd(0)                                   -> -
-    v496 LifetimeEnd(-80)                                 -> -
-    v497 LifetimeEnd(-82)                                 -> -
+    v496 LifetimeEnd(-77)                                 -> -
+    v497 LifetimeEnd(-79)                                 -> -
     terminator Return(v476)   (exit_acc=v476)
   block 32  start_pc=0
-    v498 LocalAddr(-74)                                   -> x7
+    v498 LocalAddr(-71)                                   -> x7
     v499 Imm(0)                                           -> x0
     v500 Call { target_pc=14, args=[v498, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v501 Imm(2)                                           -> x1
@@ -1633,8 +1633,8 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v507 Imm(0)                                           -> x1
     terminator Bnz { cond=v505, target=b35, fall=b33 }   (exit_acc=v505)
   block 33  start_pc=0
-    v508 LocalAddr(-74)                                   -> x0
-    v509 LoadLocal { off=-74, kind=I64 }                  -> x0
+    v508 LocalAddr(-71)                                   -> x0
+    v509 LoadLocal { off=-71, kind=I64 }                  -> x0
     v510 Imm(0)                                           -> x1
     v511 Binop { op=ne, lhs=v509, rhs=v2 }                -> x0
     v512 BinopI { op=ne, lhs=v511, rhs_imm=0 }            -> x1
@@ -1644,9 +1644,9 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v516 Imm(0)                                           -> x1
     terminator Bnz { cond=v511, target=b35, fall=b34 }   (exit_acc=v511)
   block 34  start_pc=0
-    v517 LocalAddr(-74)                                   -> x0
+    v517 LocalAddr(-71)                                   -> x0
     v518 BinopI { op=add, lhs=v508, rhs_imm=8 }           -> x0
-    v519 LoadLocal { off=-74, disp=8, kind=I64 }          -> x0
+    v519 LoadLocal { off=-71, disp=8, kind=I64 }          -> x0
     v520 Imm(0)                                           -> x1
     v521 BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v522 Binop { op=ne, lhs=v519, rhs=v521 }              -> x0
@@ -1656,30 +1656,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v522, target=b36, fall=b35 }   (exit_acc=v522)
   block 35  start_pc=0
     v526 Imm(14)                                          -> x0
-    v527 LifetimeEnd(-60)                                 -> -
-    v528 LifetimeEnd(-62)                                 -> -
-    v529 LifetimeEnd(-64)                                 -> -
-    v530 LifetimeEnd(-19)                                 -> -
-    v531 LifetimeEnd(-66)                                 -> -
-    v532 LifetimeEnd(-35)                                 -> -
-    v533 LifetimeEnd(-51)                                 -> -
-    v534 LifetimeEnd(-68)                                 -> -
+    v527 LifetimeEnd(-57)                                 -> -
+    v528 LifetimeEnd(-59)                                 -> -
+    v529 LifetimeEnd(-61)                                 -> -
+    v530 LifetimeEnd(-16)                                 -> -
+    v531 LifetimeEnd(-63)                                 -> -
+    v532 LifetimeEnd(-32)                                 -> -
+    v533 LifetimeEnd(-48)                                 -> -
+    v534 LifetimeEnd(-65)                                 -> -
     v535 LifetimeEnd(0)                                   -> -
     v536 LifetimeEnd(0)                                   -> -
-    v537 LifetimeEnd(-70)                                 -> -
-    v538 LifetimeEnd(-72)                                 -> -
-    v539 LifetimeEnd(-74)                                 -> -
-    v540 LifetimeEnd(-58)                                 -> -
-    v541 LifetimeEnd(-76)                                 -> -
-    v542 LifetimeEnd(-78)                                 -> -
-    v543 LifetimeEnd(-83)                                 -> -
-    v544 LifetimeEnd(-55)                                 -> -
+    v537 LifetimeEnd(-67)                                 -> -
+    v538 LifetimeEnd(-69)                                 -> -
+    v539 LifetimeEnd(-71)                                 -> -
+    v540 LifetimeEnd(-55)                                 -> -
+    v541 LifetimeEnd(-73)                                 -> -
+    v542 LifetimeEnd(-75)                                 -> -
+    v543 LifetimeEnd(-80)                                 -> -
+    v544 LifetimeEnd(-52)                                 -> -
     v545 LifetimeEnd(0)                                   -> -
-    v546 LifetimeEnd(-80)                                 -> -
-    v547 LifetimeEnd(-82)                                 -> -
+    v546 LifetimeEnd(-77)                                 -> -
+    v547 LifetimeEnd(-79)                                 -> -
     terminator Return(v526)   (exit_acc=v526)
   block 36  start_pc=0
-    v548 LocalAddr(-72)                                   -> x7
+    v548 LocalAddr(-69)                                   -> x7
     v549 Imm(0)                                           -> x0
     v550 Call { target_pc=16, args=[v548, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v551 Imm(3)                                           -> x1
@@ -1690,30 +1690,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v555, target=b38, fall=b37 }   (exit_acc=v555)
   block 37  start_pc=0
     v556 Imm(15)                                          -> x0
-    v557 LifetimeEnd(-60)                                 -> -
-    v558 LifetimeEnd(-62)                                 -> -
-    v559 LifetimeEnd(-64)                                 -> -
-    v560 LifetimeEnd(-19)                                 -> -
-    v561 LifetimeEnd(-66)                                 -> -
-    v562 LifetimeEnd(-35)                                 -> -
-    v563 LifetimeEnd(-51)                                 -> -
-    v564 LifetimeEnd(-68)                                 -> -
+    v557 LifetimeEnd(-57)                                 -> -
+    v558 LifetimeEnd(-59)                                 -> -
+    v559 LifetimeEnd(-61)                                 -> -
+    v560 LifetimeEnd(-16)                                 -> -
+    v561 LifetimeEnd(-63)                                 -> -
+    v562 LifetimeEnd(-32)                                 -> -
+    v563 LifetimeEnd(-48)                                 -> -
+    v564 LifetimeEnd(-65)                                 -> -
     v565 LifetimeEnd(0)                                   -> -
     v566 LifetimeEnd(0)                                   -> -
-    v567 LifetimeEnd(-70)                                 -> -
-    v568 LifetimeEnd(-72)                                 -> -
-    v569 LifetimeEnd(-74)                                 -> -
-    v570 LifetimeEnd(-58)                                 -> -
-    v571 LifetimeEnd(-76)                                 -> -
-    v572 LifetimeEnd(-78)                                 -> -
-    v573 LifetimeEnd(-83)                                 -> -
-    v574 LifetimeEnd(-55)                                 -> -
+    v567 LifetimeEnd(-67)                                 -> -
+    v568 LifetimeEnd(-69)                                 -> -
+    v569 LifetimeEnd(-71)                                 -> -
+    v570 LifetimeEnd(-55)                                 -> -
+    v571 LifetimeEnd(-73)                                 -> -
+    v572 LifetimeEnd(-75)                                 -> -
+    v573 LifetimeEnd(-80)                                 -> -
+    v574 LifetimeEnd(-52)                                 -> -
     v575 LifetimeEnd(0)                                   -> -
-    v576 LifetimeEnd(-80)                                 -> -
-    v577 LifetimeEnd(-82)                                 -> -
+    v576 LifetimeEnd(-77)                                 -> -
+    v577 LifetimeEnd(-79)                                 -> -
     terminator Return(v556)   (exit_acc=v556)
   block 38  start_pc=0
-    v578 LocalAddr(-70)                                   -> x7
+    v578 LocalAddr(-67)                                   -> x7
     v579 Imm(0)                                           -> x0
     v580 Call { target_pc=18, args=[v578, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v581 Imm(3)                                           -> x1
@@ -1725,8 +1725,8 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v587 Imm(0)                                           -> x1
     terminator Bnz { cond=v585, target=b41, fall=b39 }   (exit_acc=v585)
   block 39  start_pc=0
-    v588 LocalAddr(-70)                                   -> x0
-    v589 LoadLocal { off=-70, kind=I64 }                  -> x0
+    v588 LocalAddr(-67)                                   -> x0
+    v589 LoadLocal { off=-67, kind=I64 }                  -> x0
     v590 Imm(0)                                           -> x1
     v591 Binop { op=ne, lhs=v589, rhs=v2 }                -> x0
     v592 BinopI { op=ne, lhs=v591, rhs_imm=0 }            -> x1
@@ -1736,9 +1736,9 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v596 Imm(0)                                           -> x1
     terminator Bnz { cond=v591, target=b41, fall=b40 }   (exit_acc=v591)
   block 40  start_pc=0
-    v597 LocalAddr(-70)                                   -> x0
+    v597 LocalAddr(-67)                                   -> x0
     v598 BinopI { op=add, lhs=v588, rhs_imm=8 }           -> x0
-    v599 LoadLocal { off=-70, disp=8, kind=I64 }          -> x0
+    v599 LoadLocal { off=-67, disp=8, kind=I64 }          -> x0
     v600 BinopI { op=ne, lhs=v599, rhs_imm=4 }            -> x0
     v601 Imm(0)                                           -> x1
     v602 Imm(0)                                           -> x1
@@ -1746,41 +1746,41 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v600, target=b42, fall=b41 }   (exit_acc=v600)
   block 41  start_pc=0
     v604 Imm(16)                                          -> x0
-    v605 LifetimeEnd(-60)                                 -> -
-    v606 LifetimeEnd(-62)                                 -> -
-    v607 LifetimeEnd(-64)                                 -> -
-    v608 LifetimeEnd(-19)                                 -> -
-    v609 LifetimeEnd(-66)                                 -> -
-    v610 LifetimeEnd(-35)                                 -> -
-    v611 LifetimeEnd(-51)                                 -> -
-    v612 LifetimeEnd(-68)                                 -> -
+    v605 LifetimeEnd(-57)                                 -> -
+    v606 LifetimeEnd(-59)                                 -> -
+    v607 LifetimeEnd(-61)                                 -> -
+    v608 LifetimeEnd(-16)                                 -> -
+    v609 LifetimeEnd(-63)                                 -> -
+    v610 LifetimeEnd(-32)                                 -> -
+    v611 LifetimeEnd(-48)                                 -> -
+    v612 LifetimeEnd(-65)                                 -> -
     v613 LifetimeEnd(0)                                   -> -
     v614 LifetimeEnd(0)                                   -> -
-    v615 LifetimeEnd(-70)                                 -> -
-    v616 LifetimeEnd(-72)                                 -> -
-    v617 LifetimeEnd(-74)                                 -> -
-    v618 LifetimeEnd(-58)                                 -> -
-    v619 LifetimeEnd(-76)                                 -> -
-    v620 LifetimeEnd(-78)                                 -> -
-    v621 LifetimeEnd(-83)                                 -> -
-    v622 LifetimeEnd(-55)                                 -> -
+    v615 LifetimeEnd(-67)                                 -> -
+    v616 LifetimeEnd(-69)                                 -> -
+    v617 LifetimeEnd(-71)                                 -> -
+    v618 LifetimeEnd(-55)                                 -> -
+    v619 LifetimeEnd(-73)                                 -> -
+    v620 LifetimeEnd(-75)                                 -> -
+    v621 LifetimeEnd(-80)                                 -> -
+    v622 LifetimeEnd(-52)                                 -> -
     v623 LifetimeEnd(0)                                   -> -
-    v624 LifetimeEnd(-80)                                 -> -
-    v625 LifetimeEnd(-82)                                 -> -
+    v624 LifetimeEnd(-77)                                 -> -
+    v625 LifetimeEnd(-79)                                 -> -
     terminator Return(v604)   (exit_acc=v604)
   block 42  start_pc=0
     v626 Imm(0)                                           -> x0
     v627 Call { target_pc=19, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v628 RetPart(0, kind=I64)                             -> x0
     v629 RetPart(1, kind=I64)                             -> x2
-    v630 StoreLocal { off=-5, value=v628, kind=I64 }      -> -
-    v631 LocalAddr(-5)                                    -> x1
-    v632 StoreLocal { off=-5, disp=8, value=v629, kind=I64 } -> -
-    v633 LocalAddr(-5)                                    -> x1
+    v630 StoreLocal { off=-2, value=v628, kind=I64 }      -> -
+    v631 LocalAddr(-2)                                    -> x1
+    v632 StoreLocal { off=-2, disp=8, value=v629, kind=I64 } -> -
+    v633 LocalAddr(-2)                                    -> x1
     v634 Imm(0)                                           -> x1
-    v635 LoadLocal { off=-5, kind=I64 }                   -> x1
+    v635 LoadLocal { off=-2, kind=I64 }                   -> x1
     v636 Imm(0)                                           -> x1
-    v637 LoadLocal { off=-5, disp=8, kind=I64 }           -> x1
+    v637 LoadLocal { off=-2, disp=8, kind=I64 }           -> x1
     v638 Imm(0)                                           -> x1
     v639 Imm(0)                                           -> x1
     v640 Imm(0)                                           -> x1
@@ -1799,27 +1799,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v647, target=b45, fall=b44 }   (exit_acc=v647)
   block 44  start_pc=0
     v651 Imm(17)                                          -> x0
-    v652 LifetimeEnd(-60)                                 -> -
-    v653 LifetimeEnd(-62)                                 -> -
-    v654 LifetimeEnd(-64)                                 -> -
-    v655 LifetimeEnd(-19)                                 -> -
-    v656 LifetimeEnd(-66)                                 -> -
-    v657 LifetimeEnd(-35)                                 -> -
-    v658 LifetimeEnd(-51)                                 -> -
-    v659 LifetimeEnd(-68)                                 -> -
+    v652 LifetimeEnd(-57)                                 -> -
+    v653 LifetimeEnd(-59)                                 -> -
+    v654 LifetimeEnd(-61)                                 -> -
+    v655 LifetimeEnd(-16)                                 -> -
+    v656 LifetimeEnd(-63)                                 -> -
+    v657 LifetimeEnd(-32)                                 -> -
+    v658 LifetimeEnd(-48)                                 -> -
+    v659 LifetimeEnd(-65)                                 -> -
     v660 LifetimeEnd(0)                                   -> -
     v661 LifetimeEnd(0)                                   -> -
-    v662 LifetimeEnd(-70)                                 -> -
-    v663 LifetimeEnd(-72)                                 -> -
-    v664 LifetimeEnd(-74)                                 -> -
-    v665 LifetimeEnd(-58)                                 -> -
-    v666 LifetimeEnd(-76)                                 -> -
-    v667 LifetimeEnd(-78)                                 -> -
-    v668 LifetimeEnd(-83)                                 -> -
-    v669 LifetimeEnd(-55)                                 -> -
+    v662 LifetimeEnd(-67)                                 -> -
+    v663 LifetimeEnd(-69)                                 -> -
+    v664 LifetimeEnd(-71)                                 -> -
+    v665 LifetimeEnd(-55)                                 -> -
+    v666 LifetimeEnd(-73)                                 -> -
+    v667 LifetimeEnd(-75)                                 -> -
+    v668 LifetimeEnd(-80)                                 -> -
+    v669 LifetimeEnd(-52)                                 -> -
     v670 LifetimeEnd(0)                                   -> -
-    v671 LifetimeEnd(-80)                                 -> -
-    v672 LifetimeEnd(-82)                                 -> -
+    v671 LifetimeEnd(-77)                                 -> -
+    v672 LifetimeEnd(-79)                                 -> -
     terminator Return(v651)   (exit_acc=v651)
   block 45  start_pc=0
     v673 LocalAddr(-3)                                    -> x7
@@ -1867,27 +1867,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v707, target=b49, fall=b48 }   (exit_acc=v707)
   block 48  start_pc=0
     v711 Imm(18)                                          -> x0
-    v712 LifetimeEnd(-60)                                 -> -
-    v713 LifetimeEnd(-62)                                 -> -
-    v714 LifetimeEnd(-64)                                 -> -
-    v715 LifetimeEnd(-19)                                 -> -
-    v716 LifetimeEnd(-66)                                 -> -
-    v717 LifetimeEnd(-35)                                 -> -
-    v718 LifetimeEnd(-51)                                 -> -
-    v719 LifetimeEnd(-68)                                 -> -
+    v712 LifetimeEnd(-57)                                 -> -
+    v713 LifetimeEnd(-59)                                 -> -
+    v714 LifetimeEnd(-61)                                 -> -
+    v715 LifetimeEnd(-16)                                 -> -
+    v716 LifetimeEnd(-63)                                 -> -
+    v717 LifetimeEnd(-32)                                 -> -
+    v718 LifetimeEnd(-48)                                 -> -
+    v719 LifetimeEnd(-65)                                 -> -
     v720 LifetimeEnd(0)                                   -> -
     v721 LifetimeEnd(0)                                   -> -
-    v722 LifetimeEnd(-70)                                 -> -
-    v723 LifetimeEnd(-72)                                 -> -
-    v724 LifetimeEnd(-74)                                 -> -
-    v725 LifetimeEnd(-58)                                 -> -
-    v726 LifetimeEnd(-76)                                 -> -
-    v727 LifetimeEnd(-78)                                 -> -
-    v728 LifetimeEnd(-83)                                 -> -
-    v729 LifetimeEnd(-55)                                 -> -
+    v722 LifetimeEnd(-67)                                 -> -
+    v723 LifetimeEnd(-69)                                 -> -
+    v724 LifetimeEnd(-71)                                 -> -
+    v725 LifetimeEnd(-55)                                 -> -
+    v726 LifetimeEnd(-73)                                 -> -
+    v727 LifetimeEnd(-75)                                 -> -
+    v728 LifetimeEnd(-80)                                 -> -
+    v729 LifetimeEnd(-52)                                 -> -
     v730 LifetimeEnd(0)                                   -> -
-    v731 LifetimeEnd(-80)                                 -> -
-    v732 LifetimeEnd(-82)                                 -> -
+    v731 LifetimeEnd(-77)                                 -> -
+    v732 LifetimeEnd(-79)                                 -> -
     terminator Return(v711)   (exit_acc=v711)
   block 49  start_pc=0
     v733 Imm(0)                                           -> x0
@@ -1898,30 +1898,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v737, target=b51, fall=b50 }   (exit_acc=v737)
   block 50  start_pc=0
     v738 Imm(19)                                          -> x0
-    v739 LifetimeEnd(-60)                                 -> -
-    v740 LifetimeEnd(-62)                                 -> -
-    v741 LifetimeEnd(-64)                                 -> -
-    v742 LifetimeEnd(-19)                                 -> -
-    v743 LifetimeEnd(-66)                                 -> -
-    v744 LifetimeEnd(-35)                                 -> -
-    v745 LifetimeEnd(-51)                                 -> -
-    v746 LifetimeEnd(-68)                                 -> -
+    v739 LifetimeEnd(-57)                                 -> -
+    v740 LifetimeEnd(-59)                                 -> -
+    v741 LifetimeEnd(-61)                                 -> -
+    v742 LifetimeEnd(-16)                                 -> -
+    v743 LifetimeEnd(-63)                                 -> -
+    v744 LifetimeEnd(-32)                                 -> -
+    v745 LifetimeEnd(-48)                                 -> -
+    v746 LifetimeEnd(-65)                                 -> -
     v747 LifetimeEnd(0)                                   -> -
     v748 LifetimeEnd(0)                                   -> -
-    v749 LifetimeEnd(-70)                                 -> -
-    v750 LifetimeEnd(-72)                                 -> -
-    v751 LifetimeEnd(-74)                                 -> -
-    v752 LifetimeEnd(-58)                                 -> -
-    v753 LifetimeEnd(-76)                                 -> -
-    v754 LifetimeEnd(-78)                                 -> -
-    v755 LifetimeEnd(-83)                                 -> -
-    v756 LifetimeEnd(-55)                                 -> -
+    v749 LifetimeEnd(-67)                                 -> -
+    v750 LifetimeEnd(-69)                                 -> -
+    v751 LifetimeEnd(-71)                                 -> -
+    v752 LifetimeEnd(-55)                                 -> -
+    v753 LifetimeEnd(-73)                                 -> -
+    v754 LifetimeEnd(-75)                                 -> -
+    v755 LifetimeEnd(-80)                                 -> -
+    v756 LifetimeEnd(-52)                                 -> -
     v757 LifetimeEnd(0)                                   -> -
-    v758 LifetimeEnd(-80)                                 -> -
-    v759 LifetimeEnd(-82)                                 -> -
+    v758 LifetimeEnd(-77)                                 -> -
+    v759 LifetimeEnd(-79)                                 -> -
     terminator Return(v738)   (exit_acc=v738)
   block 51  start_pc=0
-    v760 LocalAddr(-68)                                   -> x7
+    v760 LocalAddr(-65)                                   -> x7
     v761 Imm(0)                                           -> x0
     v762 Call { target_pc=24, args=[v760, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v763 Imm(0)                                           -> x1
@@ -1930,30 +1930,30 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v765, target=b53, fall=b52 }   (exit_acc=v765)
   block 52  start_pc=0
     v766 Imm(20)                                          -> x0
-    v767 LifetimeEnd(-60)                                 -> -
-    v768 LifetimeEnd(-62)                                 -> -
-    v769 LifetimeEnd(-64)                                 -> -
-    v770 LifetimeEnd(-19)                                 -> -
-    v771 LifetimeEnd(-66)                                 -> -
-    v772 LifetimeEnd(-35)                                 -> -
-    v773 LifetimeEnd(-51)                                 -> -
-    v774 LifetimeEnd(-68)                                 -> -
+    v767 LifetimeEnd(-57)                                 -> -
+    v768 LifetimeEnd(-59)                                 -> -
+    v769 LifetimeEnd(-61)                                 -> -
+    v770 LifetimeEnd(-16)                                 -> -
+    v771 LifetimeEnd(-63)                                 -> -
+    v772 LifetimeEnd(-32)                                 -> -
+    v773 LifetimeEnd(-48)                                 -> -
+    v774 LifetimeEnd(-65)                                 -> -
     v775 LifetimeEnd(0)                                   -> -
     v776 LifetimeEnd(0)                                   -> -
-    v777 LifetimeEnd(-70)                                 -> -
-    v778 LifetimeEnd(-72)                                 -> -
-    v779 LifetimeEnd(-74)                                 -> -
-    v780 LifetimeEnd(-58)                                 -> -
-    v781 LifetimeEnd(-76)                                 -> -
-    v782 LifetimeEnd(-78)                                 -> -
-    v783 LifetimeEnd(-83)                                 -> -
-    v784 LifetimeEnd(-55)                                 -> -
+    v777 LifetimeEnd(-67)                                 -> -
+    v778 LifetimeEnd(-69)                                 -> -
+    v779 LifetimeEnd(-71)                                 -> -
+    v780 LifetimeEnd(-55)                                 -> -
+    v781 LifetimeEnd(-73)                                 -> -
+    v782 LifetimeEnd(-75)                                 -> -
+    v783 LifetimeEnd(-80)                                 -> -
+    v784 LifetimeEnd(-52)                                 -> -
     v785 LifetimeEnd(0)                                   -> -
-    v786 LifetimeEnd(-80)                                 -> -
-    v787 LifetimeEnd(-82)                                 -> -
+    v786 LifetimeEnd(-77)                                 -> -
+    v787 LifetimeEnd(-79)                                 -> -
     terminator Return(v766)   (exit_acc=v766)
   block 53  start_pc=0
-    v788 LocalAddr(-82)                                   -> x7
+    v788 LocalAddr(-79)                                   -> x7
     v789 Imm(0)                                           -> x0
     v790 Call { target_pc=25, args=[v788, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v791 Imm(2)                                           -> x1
@@ -1964,227 +1964,227 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v795, target=b55, fall=b54 }   (exit_acc=v795)
   block 54  start_pc=0
     v796 Imm(21)                                          -> x0
-    v797 LifetimeEnd(-60)                                 -> -
-    v798 LifetimeEnd(-62)                                 -> -
-    v799 LifetimeEnd(-64)                                 -> -
-    v800 LifetimeEnd(-19)                                 -> -
-    v801 LifetimeEnd(-66)                                 -> -
-    v802 LifetimeEnd(-35)                                 -> -
-    v803 LifetimeEnd(-51)                                 -> -
-    v804 LifetimeEnd(-68)                                 -> -
+    v797 LifetimeEnd(-57)                                 -> -
+    v798 LifetimeEnd(-59)                                 -> -
+    v799 LifetimeEnd(-61)                                 -> -
+    v800 LifetimeEnd(-16)                                 -> -
+    v801 LifetimeEnd(-63)                                 -> -
+    v802 LifetimeEnd(-32)                                 -> -
+    v803 LifetimeEnd(-48)                                 -> -
+    v804 LifetimeEnd(-65)                                 -> -
     v805 LifetimeEnd(0)                                   -> -
     v806 LifetimeEnd(0)                                   -> -
-    v807 LifetimeEnd(-70)                                 -> -
-    v808 LifetimeEnd(-72)                                 -> -
-    v809 LifetimeEnd(-74)                                 -> -
-    v810 LifetimeEnd(-58)                                 -> -
-    v811 LifetimeEnd(-76)                                 -> -
-    v812 LifetimeEnd(-78)                                 -> -
-    v813 LifetimeEnd(-83)                                 -> -
-    v814 LifetimeEnd(-55)                                 -> -
+    v807 LifetimeEnd(-67)                                 -> -
+    v808 LifetimeEnd(-69)                                 -> -
+    v809 LifetimeEnd(-71)                                 -> -
+    v810 LifetimeEnd(-55)                                 -> -
+    v811 LifetimeEnd(-73)                                 -> -
+    v812 LifetimeEnd(-75)                                 -> -
+    v813 LifetimeEnd(-80)                                 -> -
+    v814 LifetimeEnd(-52)                                 -> -
     v815 LifetimeEnd(0)                                   -> -
-    v816 LifetimeEnd(-80)                                 -> -
-    v817 LifetimeEnd(-82)                                 -> -
+    v816 LifetimeEnd(-77)                                 -> -
+    v817 LifetimeEnd(-79)                                 -> -
     terminator Return(v796)   (exit_acc=v796)
   block 55  start_pc=0
     v818 Imm(0)                                           -> x0
     v819 Imm(0)                                           -> x0
     v820 Imm(0)                                           -> x0
     v821 Imm(1)                                           -> x0
-    v822 LocalAddr(-51)                                   -> x0
+    v822 LocalAddr(-48)                                   -> x0
     v823 Imm(0)                                           -> x0
     v824 Imm(0)                                           -> x0
     v825 BinopI { op=add, lhs=v822, rhs_imm=0 }           -> x0
     v826 Imm(0)                                           -> x0
     v827 BinopI { op=mul, lhs=v2, rhs_imm=0 }             -> x0
-    v828 StoreLocal { off=-51, value=v827, kind=I64 }     -> -
+    v828 StoreLocal { off=-48, value=v827, kind=I64 }     -> -
     v829 Imm(0)                                           -> x0
     v830 Imm(1)                                           -> x0
     v831 Imm(1)                                           -> x0
     v832 Imm(1)                                           -> x0
     v833 Imm(1)                                           -> x0
-    v834 LocalAddr(-51)                                   -> x0
+    v834 LocalAddr(-48)                                   -> x0
     v835 Imm(1)                                           -> x0
     v836 Imm(8)                                           -> x0
     v837 BinopI { op=add, lhs=v822, rhs_imm=8 }           -> x0
     v838 Imm(0)                                           -> x0
     v839 BinopI { op=mul, lhs=v2, rhs_imm=1 }             -> x0
-    v840 StoreLocal { off=-51, disp=8, value=v2, kind=I64 } -> -
+    v840 StoreLocal { off=-48, disp=8, value=v2, kind=I64 } -> -
     v841 Imm(1)                                           -> x0
     v842 Imm(2)                                           -> x0
     v843 Imm(2)                                           -> x0
     v844 Imm(2)                                           -> x0
     v845 Imm(1)                                           -> x0
-    v846 LocalAddr(-51)                                   -> x0
+    v846 LocalAddr(-48)                                   -> x0
     v847 Imm(2)                                           -> x0
     v848 Imm(16)                                          -> x0
     v849 BinopI { op=add, lhs=v822, rhs_imm=16 }          -> x0
     v850 Imm(0)                                           -> x0
     v851 BinopI { op=mul, lhs=v2, rhs_imm=2 }             -> x0
-    v852 StoreLocal { off=-51, disp=16, value=v851, kind=I64 } -> -
+    v852 StoreLocal { off=-48, disp=16, value=v851, kind=I64 } -> -
     v853 Imm(2)                                           -> x0
     v854 Imm(3)                                           -> x0
     v855 Imm(3)                                           -> x0
     v856 Imm(3)                                           -> x0
     v857 Imm(1)                                           -> x0
-    v858 LocalAddr(-51)                                   -> x0
+    v858 LocalAddr(-48)                                   -> x0
     v859 Imm(3)                                           -> x0
     v860 Imm(24)                                          -> x0
     v861 BinopI { op=add, lhs=v822, rhs_imm=24 }          -> x0
     v862 Imm(0)                                           -> x0
     v863 BinopI { op=mul, lhs=v2, rhs_imm=3 }             -> x0
-    v864 StoreLocal { off=-51, disp=24, value=v863, kind=I64 } -> -
+    v864 StoreLocal { off=-48, disp=24, value=v863, kind=I64 } -> -
     v865 Imm(3)                                           -> x0
     v866 Imm(4)                                           -> x0
     v867 Imm(4)                                           -> x0
     v868 Imm(4)                                           -> x0
     v869 Imm(1)                                           -> x0
-    v870 LocalAddr(-51)                                   -> x0
+    v870 LocalAddr(-48)                                   -> x0
     v871 Imm(4)                                           -> x0
     v872 Imm(32)                                          -> x0
     v873 BinopI { op=add, lhs=v822, rhs_imm=32 }          -> x0
     v874 Imm(0)                                           -> x0
     v875 BinopI { op=mul, lhs=v2, rhs_imm=4 }             -> x0
-    v876 StoreLocal { off=-51, disp=32, value=v875, kind=I64 } -> -
+    v876 StoreLocal { off=-48, disp=32, value=v875, kind=I64 } -> -
     v877 Imm(4)                                           -> x0
     v878 Imm(5)                                           -> x0
     v879 Imm(5)                                           -> x0
     v880 Imm(5)                                           -> x0
     v881 Imm(1)                                           -> x0
-    v882 LocalAddr(-51)                                   -> x0
+    v882 LocalAddr(-48)                                   -> x0
     v883 Imm(5)                                           -> x0
     v884 Imm(40)                                          -> x0
     v885 BinopI { op=add, lhs=v822, rhs_imm=40 }          -> x0
     v886 Imm(0)                                           -> x0
     v887 BinopI { op=mul, lhs=v2, rhs_imm=5 }             -> x0
-    v888 StoreLocal { off=-51, disp=40, value=v887, kind=I64 } -> -
+    v888 StoreLocal { off=-48, disp=40, value=v887, kind=I64 } -> -
     v889 Imm(5)                                           -> x0
     v890 Imm(6)                                           -> x0
     v891 Imm(6)                                           -> x0
     v892 Imm(6)                                           -> x0
     v893 Imm(1)                                           -> x0
-    v894 LocalAddr(-51)                                   -> x0
+    v894 LocalAddr(-48)                                   -> x0
     v895 Imm(6)                                           -> x0
     v896 Imm(48)                                          -> x0
     v897 BinopI { op=add, lhs=v894, rhs_imm=48 }          -> x0
     v898 Imm(0)                                           -> x0
     v899 BinopI { op=mul, lhs=v2, rhs_imm=6 }             -> x0
-    v900 StoreLocal { off=-51, disp=48, value=v899, kind=I64 } -> -
+    v900 StoreLocal { off=-48, disp=48, value=v899, kind=I64 } -> -
     v901 Imm(6)                                           -> x0
     v902 Imm(7)                                           -> x0
     v903 Imm(7)                                           -> x0
     v904 Imm(7)                                           -> x0
     v905 Imm(1)                                           -> x0
-    v906 LocalAddr(-51)                                   -> x0
+    v906 LocalAddr(-48)                                   -> x0
     v907 Imm(7)                                           -> x0
     v908 Imm(56)                                          -> x0
     v909 BinopI { op=add, lhs=v894, rhs_imm=56 }          -> x0
     v910 Imm(0)                                           -> x0
     v911 BinopI { op=mul, lhs=v2, rhs_imm=7 }             -> x0
-    v912 StoreLocal { off=-51, disp=56, value=v911, kind=I64 } -> -
+    v912 StoreLocal { off=-48, disp=56, value=v911, kind=I64 } -> -
     v913 Imm(7)                                           -> x0
     v914 Imm(8)                                           -> x0
     v915 Imm(8)                                           -> x0
     v916 Imm(8)                                           -> x0
     v917 Imm(1)                                           -> x0
-    v918 LocalAddr(-51)                                   -> x0
+    v918 LocalAddr(-48)                                   -> x0
     v919 Imm(8)                                           -> x0
     v920 Imm(64)                                          -> x0
     v921 BinopI { op=add, lhs=v894, rhs_imm=64 }          -> x0
     v922 Imm(0)                                           -> x0
     v923 BinopI { op=mul, lhs=v2, rhs_imm=8 }             -> x0
-    v924 StoreLocal { off=-51, disp=64, value=v923, kind=I64 } -> -
+    v924 StoreLocal { off=-48, disp=64, value=v923, kind=I64 } -> -
     v925 Imm(8)                                           -> x0
     v926 Imm(9)                                           -> x0
     v927 Imm(9)                                           -> x0
     v928 Imm(9)                                           -> x0
     v929 Imm(1)                                           -> x0
-    v930 LocalAddr(-51)                                   -> x0
+    v930 LocalAddr(-48)                                   -> x0
     v931 Imm(9)                                           -> x0
     v932 Imm(72)                                          -> x0
     v933 BinopI { op=add, lhs=v894, rhs_imm=72 }          -> x0
     v934 Imm(0)                                           -> x0
     v935 BinopI { op=mul, lhs=v2, rhs_imm=9 }             -> x0
-    v936 StoreLocal { off=-51, disp=72, value=v935, kind=I64 } -> -
+    v936 StoreLocal { off=-48, disp=72, value=v935, kind=I64 } -> -
     v937 Imm(9)                                           -> x0
     v938 Imm(10)                                          -> x0
     v939 Imm(10)                                          -> x0
     v940 Imm(10)                                          -> x0
     v941 Imm(1)                                           -> x0
-    v942 LocalAddr(-51)                                   -> x0
+    v942 LocalAddr(-48)                                   -> x0
     v943 Imm(10)                                          -> x0
     v944 Imm(80)                                          -> x0
     v945 BinopI { op=add, lhs=v894, rhs_imm=80 }          -> x0
     v946 Imm(0)                                           -> x0
     v947 BinopI { op=mul, lhs=v2, rhs_imm=10 }            -> x0
-    v948 StoreLocal { off=-51, disp=80, value=v947, kind=I64 } -> -
+    v948 StoreLocal { off=-48, disp=80, value=v947, kind=I64 } -> -
     v949 Imm(10)                                          -> x0
     v950 Imm(11)                                          -> x0
     v951 Imm(11)                                          -> x0
     v952 Imm(11)                                          -> x0
     v953 Imm(1)                                           -> x0
-    v954 LocalAddr(-51)                                   -> x0
+    v954 LocalAddr(-48)                                   -> x0
     v955 Imm(11)                                          -> x0
     v956 Imm(88)                                          -> x0
     v957 BinopI { op=add, lhs=v894, rhs_imm=88 }          -> x0
     v958 Imm(0)                                           -> x0
     v959 BinopI { op=mul, lhs=v2, rhs_imm=11 }            -> x0
-    v960 StoreLocal { off=-51, disp=88, value=v959, kind=I64 } -> -
+    v960 StoreLocal { off=-48, disp=88, value=v959, kind=I64 } -> -
     v961 Imm(11)                                          -> x0
     v962 Imm(12)                                          -> x0
     v963 Imm(12)                                          -> x0
     v964 Imm(12)                                          -> x0
     v965 Imm(1)                                           -> x0
-    v966 LocalAddr(-51)                                   -> x6
+    v966 LocalAddr(-48)                                   -> x6
     v967 Imm(12)                                          -> x0
     v968 Imm(96)                                          -> x0
     v969 BinopI { op=add, lhs=v966, rhs_imm=96 }          -> x0
     v970 Imm(0)                                           -> x0
     v971 BinopI { op=mul, lhs=v2, rhs_imm=12 }            -> x0
-    v972 StoreLocal { off=-51, disp=96, value=v971, kind=I64 } -> -
+    v972 StoreLocal { off=-48, disp=96, value=v971, kind=I64 } -> -
     v973 Imm(12)                                          -> x0
     v974 Imm(13)                                          -> x0
     v975 Imm(13)                                          -> x0
     v976 Imm(13)                                          -> x0
     v977 Imm(1)                                           -> x0
-    v978 LocalAddr(-51)                                   -> x0
+    v978 LocalAddr(-48)                                   -> x0
     v979 Imm(13)                                          -> x0
     v980 Imm(104)                                         -> x0
     v981 BinopI { op=add, lhs=v966, rhs_imm=104 }         -> x0
     v982 Imm(0)                                           -> x0
     v983 BinopI { op=mul, lhs=v2, rhs_imm=13 }            -> x0
-    v984 StoreLocal { off=-51, disp=104, value=v983, kind=I64 } -> -
+    v984 StoreLocal { off=-48, disp=104, value=v983, kind=I64 } -> -
     v985 Imm(13)                                          -> x0
     v986 Imm(14)                                          -> x0
     v987 Imm(14)                                          -> x0
     v988 Imm(14)                                          -> x0
     v989 Imm(1)                                           -> x0
-    v990 LocalAddr(-51)                                   -> x0
+    v990 LocalAddr(-48)                                   -> x0
     v991 Imm(14)                                          -> x0
     v992 Imm(112)                                         -> x0
     v993 BinopI { op=add, lhs=v966, rhs_imm=112 }         -> x0
     v994 Imm(0)                                           -> x0
     v995 BinopI { op=mul, lhs=v2, rhs_imm=14 }            -> x0
-    v996 StoreLocal { off=-51, disp=112, value=v995, kind=I64 } -> -
+    v996 StoreLocal { off=-48, disp=112, value=v995, kind=I64 } -> -
     v997 Imm(14)                                          -> x0
     v998 Imm(15)                                          -> x0
     v999 Imm(15)                                          -> x0
     v1000 Imm(15)                                          -> x0
     v1001 Imm(1)                                           -> x0
-    v1002 LocalAddr(-51)                                   -> x0
+    v1002 LocalAddr(-48)                                   -> x0
     v1003 Imm(15)                                          -> x0
     v1004 Imm(120)                                         -> x0
     v1005 BinopI { op=add, lhs=v966, rhs_imm=120 }         -> x0
     v1006 Imm(0)                                           -> x0
     v1007 BinopI { op=mul, lhs=v2, rhs_imm=15 }            -> x0
-    v1008 StoreLocal { off=-51, disp=120, value=v1007, kind=I64 } -> -
+    v1008 StoreLocal { off=-48, disp=120, value=v1007, kind=I64 } -> -
     v1009 Imm(15)                                          -> x0
     v1010 Imm(16)                                          -> x0
     v1011 Imm(16)                                          -> x0
     v1012 Imm(16)                                          -> x0
     v1013 Imm(0)                                           -> x0
-    v1014 LocalAddr(-35)                                   -> x7
-    v1015 LocalAddr(-51)                                   -> x0
+    v1014 LocalAddr(-32)                                   -> x7
+    v1015 LocalAddr(-48)                                   -> x0
     v1016 Imm(5)                                           -> x2
     v1017 Call { target_pc=26, args=[v1014, v966, v1016], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v1018 Imm(5)                                           -> x1
@@ -2196,10 +2196,10 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v1024 Imm(0)                                           -> x1
     terminator Bnz { cond=v1023, target=b57, fall=b56 }   (exit_acc=v1023)
   block 56  start_pc=0
-    v1025 LocalAddr(-35)                                   -> x0
+    v1025 LocalAddr(-32)                                   -> x0
     v1026 Imm(16)                                          -> x0
     v1027 BinopI { op=add, lhs=v1025, rhs_imm=16 }         -> x0
-    v1028 LoadLocal { off=-35, disp=16, kind=I64 }         -> x0
+    v1028 LoadLocal { off=-32, disp=16, kind=I64 }         -> x0
     v1029 Imm(2)                                           -> x1
     v1030 Imm(0)                                           -> x1
     v1031 BinopI { op=shl, lhs=v2, rhs_imm=1 }             -> x1
@@ -2210,44 +2210,44 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1032, target=b58, fall=b57 }   (exit_acc=v1032)
   block 57  start_pc=0
     v1036 Imm(22)                                          -> x0
-    v1037 LifetimeEnd(-60)                                 -> -
-    v1038 LifetimeEnd(-62)                                 -> -
-    v1039 LifetimeEnd(-64)                                 -> -
-    v1040 LifetimeEnd(-19)                                 -> -
-    v1041 LifetimeEnd(-66)                                 -> -
-    v1042 LifetimeEnd(-35)                                 -> -
-    v1043 LifetimeEnd(-51)                                 -> -
-    v1044 LifetimeEnd(-68)                                 -> -
+    v1037 LifetimeEnd(-57)                                 -> -
+    v1038 LifetimeEnd(-59)                                 -> -
+    v1039 LifetimeEnd(-61)                                 -> -
+    v1040 LifetimeEnd(-16)                                 -> -
+    v1041 LifetimeEnd(-63)                                 -> -
+    v1042 LifetimeEnd(-32)                                 -> -
+    v1043 LifetimeEnd(-48)                                 -> -
+    v1044 LifetimeEnd(-65)                                 -> -
     v1045 LifetimeEnd(0)                                   -> -
     v1046 LifetimeEnd(0)                                   -> -
-    v1047 LifetimeEnd(-70)                                 -> -
-    v1048 LifetimeEnd(-72)                                 -> -
-    v1049 LifetimeEnd(-74)                                 -> -
-    v1050 LifetimeEnd(-58)                                 -> -
-    v1051 LifetimeEnd(-76)                                 -> -
-    v1052 LifetimeEnd(-78)                                 -> -
-    v1053 LifetimeEnd(-83)                                 -> -
-    v1054 LifetimeEnd(-55)                                 -> -
+    v1047 LifetimeEnd(-67)                                 -> -
+    v1048 LifetimeEnd(-69)                                 -> -
+    v1049 LifetimeEnd(-71)                                 -> -
+    v1050 LifetimeEnd(-55)                                 -> -
+    v1051 LifetimeEnd(-73)                                 -> -
+    v1052 LifetimeEnd(-75)                                 -> -
+    v1053 LifetimeEnd(-80)                                 -> -
+    v1054 LifetimeEnd(-52)                                 -> -
     v1055 LifetimeEnd(0)                                   -> -
-    v1056 LifetimeEnd(-80)                                 -> -
-    v1057 LifetimeEnd(-82)                                 -> -
+    v1056 LifetimeEnd(-77)                                 -> -
+    v1057 LifetimeEnd(-79)                                 -> -
     terminator Return(v1036)   (exit_acc=v1036)
   block 58  start_pc=0
-    v1058 LocalAddr(-66)                                   -> x7
+    v1058 LocalAddr(-63)                                   -> x7
     v1059 Imm(0)                                           -> x0
     v1060 Call { target_pc=27, args=[v1058, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1061 LocalAddr(-66)                                   -> x0
+    v1061 LocalAddr(-63)                                   -> x0
     v1062 Imm(0)                                           -> x0
-    v1063 LoadLocal { off=-66, kind=I64 }                  -> x0
+    v1063 LoadLocal { off=-63, kind=I64 }                  -> x0
     v1064 Imm(0)                                           -> x1
     v1065 Binop { op=ne, lhs=v1063, rhs=v2 }               -> x0
     v1066 Imm(0)                                           -> x1
     terminator Bnz { cond=v1065, target=b60, fall=b59 }   (exit_acc=v1065)
   block 59  start_pc=0
-    v1067 LocalAddr(-66)                                   -> x0
+    v1067 LocalAddr(-63)                                   -> x0
     v1068 Imm(8)                                           -> x0
     v1069 BinopI { op=add, lhs=v1061, rhs_imm=8 }          -> x0
-    v1070 LoadLocal { off=-66, disp=8, kind=I64 }          -> x0
+    v1070 LoadLocal { off=-63, disp=8, kind=I64 }          -> x0
     v1071 Imm(0)                                           -> x1
     v1072 BinopI { op=add, lhs=v2, rhs_imm=5 }             -> x1
     v1073 Binop { op=ne, lhs=v1070, rhs=v1072 }            -> x0
@@ -2257,43 +2257,43 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1073, target=b61, fall=b60 }   (exit_acc=v1073)
   block 60  start_pc=0
     v1077 Imm(23)                                          -> x0
-    v1078 LifetimeEnd(-60)                                 -> -
-    v1079 LifetimeEnd(-62)                                 -> -
-    v1080 LifetimeEnd(-64)                                 -> -
-    v1081 LifetimeEnd(-19)                                 -> -
-    v1082 LifetimeEnd(-66)                                 -> -
-    v1083 LifetimeEnd(-35)                                 -> -
-    v1084 LifetimeEnd(-51)                                 -> -
-    v1085 LifetimeEnd(-68)                                 -> -
+    v1078 LifetimeEnd(-57)                                 -> -
+    v1079 LifetimeEnd(-59)                                 -> -
+    v1080 LifetimeEnd(-61)                                 -> -
+    v1081 LifetimeEnd(-16)                                 -> -
+    v1082 LifetimeEnd(-63)                                 -> -
+    v1083 LifetimeEnd(-32)                                 -> -
+    v1084 LifetimeEnd(-48)                                 -> -
+    v1085 LifetimeEnd(-65)                                 -> -
     v1086 LifetimeEnd(0)                                   -> -
     v1087 LifetimeEnd(0)                                   -> -
-    v1088 LifetimeEnd(-70)                                 -> -
-    v1089 LifetimeEnd(-72)                                 -> -
-    v1090 LifetimeEnd(-74)                                 -> -
-    v1091 LifetimeEnd(-58)                                 -> -
-    v1092 LifetimeEnd(-76)                                 -> -
-    v1093 LifetimeEnd(-78)                                 -> -
-    v1094 LifetimeEnd(-83)                                 -> -
-    v1095 LifetimeEnd(-55)                                 -> -
+    v1088 LifetimeEnd(-67)                                 -> -
+    v1089 LifetimeEnd(-69)                                 -> -
+    v1090 LifetimeEnd(-71)                                 -> -
+    v1091 LifetimeEnd(-55)                                 -> -
+    v1092 LifetimeEnd(-73)                                 -> -
+    v1093 LifetimeEnd(-75)                                 -> -
+    v1094 LifetimeEnd(-80)                                 -> -
+    v1095 LifetimeEnd(-52)                                 -> -
     v1096 LifetimeEnd(0)                                   -> -
-    v1097 LifetimeEnd(-80)                                 -> -
-    v1098 LifetimeEnd(-82)                                 -> -
+    v1097 LifetimeEnd(-77)                                 -> -
+    v1098 LifetimeEnd(-79)                                 -> -
     terminator Return(v1077)   (exit_acc=v1077)
   block 61  start_pc=0
-    v1099 LocalAddr(-19)                                   -> x7
+    v1099 LocalAddr(-16)                                   -> x7
     v1100 Imm(0)                                           -> x0
     v1101 Call { target_pc=28, args=[v1099, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1102 LocalAddr(-19)                                   -> x0
-    v1103 LoadLocal { off=-19, kind=I64 }                  -> x0
+    v1102 LocalAddr(-16)                                   -> x0
+    v1103 LoadLocal { off=-16, kind=I64 }                  -> x0
     v1104 Imm(0)                                           -> x1
     v1105 Binop { op=ne, lhs=v1103, rhs=v2 }               -> x0
     v1106 Imm(1)                                           -> x1
     v1107 Imm(0)                                           -> x1
     terminator Bnz { cond=v1105, target=b64, fall=b62 }   (exit_acc=v1105)
   block 62  start_pc=0
-    v1108 LocalAddr(-19)                                   -> x0
+    v1108 LocalAddr(-16)                                   -> x0
     v1109 BinopI { op=add, lhs=v1102, rhs_imm=56 }         -> x0
-    v1110 LoadLocal { off=-19, disp=56, kind=I64 }         -> x0
+    v1110 LoadLocal { off=-16, disp=56, kind=I64 }         -> x0
     v1111 BinopI { op=ne, lhs=v1110, rhs_imm=0 }           -> x1
     v1112 BinopI { op=ne, lhs=v1111, rhs_imm=0 }           -> x1
     v1113 Imm(0)                                           -> x1
@@ -2302,9 +2302,9 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     v1116 Imm(0)                                           -> x1
     terminator Bnz { cond=v1110, target=b64, fall=b63 }   (exit_acc=v1111)
   block 63  start_pc=0
-    v1117 LocalAddr(-19)                                   -> x0
+    v1117 LocalAddr(-16)                                   -> x0
     v1118 BinopI { op=add, lhs=v1102, rhs_imm=120 }        -> x0
-    v1119 LoadLocal { off=-19, disp=120, kind=I64 }        -> x0
+    v1119 LoadLocal { off=-16, disp=120, kind=I64 }        -> x0
     v1120 Imm(0)                                           -> x1
     v1121 BinopI { op=add, lhs=v2, rhs_imm=1 }             -> x1
     v1122 Binop { op=ne, lhs=v1119, rhs=v1121 }            -> x0
@@ -2314,43 +2314,43 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1122, target=b65, fall=b64 }   (exit_acc=v1122)
   block 64  start_pc=0
     v1126 Imm(24)                                          -> x0
-    v1127 LifetimeEnd(-60)                                 -> -
-    v1128 LifetimeEnd(-62)                                 -> -
-    v1129 LifetimeEnd(-64)                                 -> -
-    v1130 LifetimeEnd(-19)                                 -> -
-    v1131 LifetimeEnd(-66)                                 -> -
-    v1132 LifetimeEnd(-35)                                 -> -
-    v1133 LifetimeEnd(-51)                                 -> -
-    v1134 LifetimeEnd(-68)                                 -> -
+    v1127 LifetimeEnd(-57)                                 -> -
+    v1128 LifetimeEnd(-59)                                 -> -
+    v1129 LifetimeEnd(-61)                                 -> -
+    v1130 LifetimeEnd(-16)                                 -> -
+    v1131 LifetimeEnd(-63)                                 -> -
+    v1132 LifetimeEnd(-32)                                 -> -
+    v1133 LifetimeEnd(-48)                                 -> -
+    v1134 LifetimeEnd(-65)                                 -> -
     v1135 LifetimeEnd(0)                                   -> -
     v1136 LifetimeEnd(0)                                   -> -
-    v1137 LifetimeEnd(-70)                                 -> -
-    v1138 LifetimeEnd(-72)                                 -> -
-    v1139 LifetimeEnd(-74)                                 -> -
-    v1140 LifetimeEnd(-58)                                 -> -
-    v1141 LifetimeEnd(-76)                                 -> -
-    v1142 LifetimeEnd(-78)                                 -> -
-    v1143 LifetimeEnd(-83)                                 -> -
-    v1144 LifetimeEnd(-55)                                 -> -
+    v1137 LifetimeEnd(-67)                                 -> -
+    v1138 LifetimeEnd(-69)                                 -> -
+    v1139 LifetimeEnd(-71)                                 -> -
+    v1140 LifetimeEnd(-55)                                 -> -
+    v1141 LifetimeEnd(-73)                                 -> -
+    v1142 LifetimeEnd(-75)                                 -> -
+    v1143 LifetimeEnd(-80)                                 -> -
+    v1144 LifetimeEnd(-52)                                 -> -
     v1145 LifetimeEnd(0)                                   -> -
-    v1146 LifetimeEnd(-80)                                 -> -
-    v1147 LifetimeEnd(-82)                                 -> -
+    v1146 LifetimeEnd(-77)                                 -> -
+    v1147 LifetimeEnd(-79)                                 -> -
     terminator Return(v1126)   (exit_acc=v1126)
   block 65  start_pc=0
-    v1148 LocalAddr(-64)                                   -> x7
+    v1148 LocalAddr(-61)                                   -> x7
     v1149 Imm(0)                                           -> x0
     v1150 Call { target_pc=29, args=[v1148, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1151 LocalAddr(-64)                                   -> x0
-    v1152 LoadLocal { off=-64, kind=F64 }                  -> d0
+    v1151 LocalAddr(-61)                                   -> x0
+    v1152 LoadLocal { off=-61, kind=F64 }                  -> d0
     v1153 Imm(0)                                           -> x0
     v1154 FpCast { kind=IntToFp, value=v2 }                -> d1
     v1155 Binop { op=fne, lhs=v1152, rhs=v1154 }           -> x0
     v1156 Imm(0)                                           -> x1
     terminator Bnz { cond=v1155, target=b67, fall=b66 }   (exit_acc=v1155)
   block 66  start_pc=0
-    v1157 LocalAddr(-64)                                   -> x0
+    v1157 LocalAddr(-61)                                   -> x0
     v1158 BinopI { op=add, lhs=v1151, rhs_imm=8 }          -> x0
-    v1159 LoadLocal { off=-64, disp=8, kind=F64 }          -> d0
+    v1159 LoadLocal { off=-61, disp=8, kind=F64 }          -> d0
     v1160 Imm(4602678819172646912)                         -> x0
     v1161 Binop { op=fne, lhs=v1159, rhs=v1160 }           -> x0
     v1162 Imm(0)                                           -> x1
@@ -2359,42 +2359,42 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1161, target=b68, fall=b67 }   (exit_acc=v1161)
   block 67  start_pc=0
     v1165 Imm(25)                                          -> x0
-    v1166 LifetimeEnd(-60)                                 -> -
-    v1167 LifetimeEnd(-62)                                 -> -
-    v1168 LifetimeEnd(-64)                                 -> -
-    v1169 LifetimeEnd(-19)                                 -> -
-    v1170 LifetimeEnd(-66)                                 -> -
-    v1171 LifetimeEnd(-35)                                 -> -
-    v1172 LifetimeEnd(-51)                                 -> -
-    v1173 LifetimeEnd(-68)                                 -> -
+    v1166 LifetimeEnd(-57)                                 -> -
+    v1167 LifetimeEnd(-59)                                 -> -
+    v1168 LifetimeEnd(-61)                                 -> -
+    v1169 LifetimeEnd(-16)                                 -> -
+    v1170 LifetimeEnd(-63)                                 -> -
+    v1171 LifetimeEnd(-32)                                 -> -
+    v1172 LifetimeEnd(-48)                                 -> -
+    v1173 LifetimeEnd(-65)                                 -> -
     v1174 LifetimeEnd(0)                                   -> -
     v1175 LifetimeEnd(0)                                   -> -
-    v1176 LifetimeEnd(-70)                                 -> -
-    v1177 LifetimeEnd(-72)                                 -> -
-    v1178 LifetimeEnd(-74)                                 -> -
-    v1179 LifetimeEnd(-58)                                 -> -
-    v1180 LifetimeEnd(-76)                                 -> -
-    v1181 LifetimeEnd(-78)                                 -> -
-    v1182 LifetimeEnd(-83)                                 -> -
-    v1183 LifetimeEnd(-55)                                 -> -
+    v1176 LifetimeEnd(-67)                                 -> -
+    v1177 LifetimeEnd(-69)                                 -> -
+    v1178 LifetimeEnd(-71)                                 -> -
+    v1179 LifetimeEnd(-55)                                 -> -
+    v1180 LifetimeEnd(-73)                                 -> -
+    v1181 LifetimeEnd(-75)                                 -> -
+    v1182 LifetimeEnd(-80)                                 -> -
+    v1183 LifetimeEnd(-52)                                 -> -
     v1184 LifetimeEnd(0)                                   -> -
-    v1185 LifetimeEnd(-80)                                 -> -
-    v1186 LifetimeEnd(-82)                                 -> -
+    v1185 LifetimeEnd(-77)                                 -> -
+    v1186 LifetimeEnd(-79)                                 -> -
     terminator Return(v1165)   (exit_acc=v1165)
   block 68  start_pc=0
-    v1187 LocalAddr(-62)                                   -> x7
+    v1187 LocalAddr(-59)                                   -> x7
     v1188 Imm(0)                                           -> x0
     v1189 Call { target_pc=30, args=[v1187, v2], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1190 LocalAddr(-62)                                   -> x0
-    v1191 LoadLocal { off=-62, kind=I64 }                  -> x0
+    v1190 LocalAddr(-59)                                   -> x0
+    v1191 LoadLocal { off=-59, kind=I64 }                  -> x0
     v1192 Imm(0)                                           -> x1
     v1193 Binop { op=ne, lhs=v1191, rhs=v2 }               -> x0
     v1194 Imm(0)                                           -> x1
     terminator Bnz { cond=v1193, target=b70, fall=b69 }   (exit_acc=v1193)
   block 69  start_pc=0
-    v1195 LocalAddr(-62)                                   -> x0
+    v1195 LocalAddr(-59)                                   -> x0
     v1196 BinopI { op=add, lhs=v1190, rhs_imm=8 }          -> x0
-    v1197 LoadLocal { off=-62, disp=8, kind=I64 }          -> x0
+    v1197 LoadLocal { off=-59, disp=8, kind=I64 }          -> x0
     v1198 Imm(0)                                           -> x1
     v1199 BinopI { op=add, lhs=v2, rhs_imm=2 }             -> x1
     v1200 Binop { op=ne, lhs=v1197, rhs=v1199 }            -> x0
@@ -2404,43 +2404,43 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1200, target=b71, fall=b70 }   (exit_acc=v1200)
   block 70  start_pc=0
     v1204 Imm(26)                                          -> x0
-    v1205 LifetimeEnd(-60)                                 -> -
-    v1206 LifetimeEnd(-62)                                 -> -
-    v1207 LifetimeEnd(-64)                                 -> -
-    v1208 LifetimeEnd(-19)                                 -> -
-    v1209 LifetimeEnd(-66)                                 -> -
-    v1210 LifetimeEnd(-35)                                 -> -
-    v1211 LifetimeEnd(-51)                                 -> -
-    v1212 LifetimeEnd(-68)                                 -> -
+    v1205 LifetimeEnd(-57)                                 -> -
+    v1206 LifetimeEnd(-59)                                 -> -
+    v1207 LifetimeEnd(-61)                                 -> -
+    v1208 LifetimeEnd(-16)                                 -> -
+    v1209 LifetimeEnd(-63)                                 -> -
+    v1210 LifetimeEnd(-32)                                 -> -
+    v1211 LifetimeEnd(-48)                                 -> -
+    v1212 LifetimeEnd(-65)                                 -> -
     v1213 LifetimeEnd(0)                                   -> -
     v1214 LifetimeEnd(0)                                   -> -
-    v1215 LifetimeEnd(-70)                                 -> -
-    v1216 LifetimeEnd(-72)                                 -> -
-    v1217 LifetimeEnd(-74)                                 -> -
-    v1218 LifetimeEnd(-58)                                 -> -
-    v1219 LifetimeEnd(-76)                                 -> -
-    v1220 LifetimeEnd(-78)                                 -> -
-    v1221 LifetimeEnd(-83)                                 -> -
-    v1222 LifetimeEnd(-55)                                 -> -
+    v1215 LifetimeEnd(-67)                                 -> -
+    v1216 LifetimeEnd(-69)                                 -> -
+    v1217 LifetimeEnd(-71)                                 -> -
+    v1218 LifetimeEnd(-55)                                 -> -
+    v1219 LifetimeEnd(-73)                                 -> -
+    v1220 LifetimeEnd(-75)                                 -> -
+    v1221 LifetimeEnd(-80)                                 -> -
+    v1222 LifetimeEnd(-52)                                 -> -
     v1223 LifetimeEnd(0)                                   -> -
-    v1224 LifetimeEnd(-80)                                 -> -
-    v1225 LifetimeEnd(-82)                                 -> -
+    v1224 LifetimeEnd(-77)                                 -> -
+    v1225 LifetimeEnd(-79)                                 -> -
     terminator Return(v1204)   (exit_acc=v1204)
   block 71  start_pc=0
-    v1226 LocalAddr(-60)                                   -> x7
+    v1226 LocalAddr(-57)                                   -> x7
     v1227 Imm(0)                                           -> x0
     v1228 Imm(6)                                           -> x2
     v1229 Call { target_pc=31, args=[v1226, v2, v1228], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v1230 LocalAddr(-60)                                   -> x0
-    v1231 LoadLocal { off=-60, kind=I64 }                  -> x0
+    v1230 LocalAddr(-57)                                   -> x0
+    v1231 LoadLocal { off=-57, kind=I64 }                  -> x0
     v1232 Imm(0)                                           -> x1
     v1233 Binop { op=ne, lhs=v1231, rhs=v2 }               -> x0
     v1234 Imm(0)                                           -> x1
     terminator Bnz { cond=v1233, target=b73, fall=b72 }   (exit_acc=v1233)
   block 72  start_pc=0
-    v1235 LocalAddr(-60)                                   -> x0
+    v1235 LocalAddr(-57)                                   -> x0
     v1236 BinopI { op=add, lhs=v1230, rhs_imm=8 }          -> x0
-    v1237 LoadLocal { off=-60, disp=8, kind=I64 }          -> x0
+    v1237 LoadLocal { off=-57, disp=8, kind=I64 }          -> x0
     v1238 BinopI { op=ne, lhs=v1237, rhs_imm=6 }           -> x0
     v1239 Imm(0)                                           -> x1
     v1240 Imm(0)                                           -> x1
@@ -2448,27 +2448,27 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1238, target=b74, fall=b73 }   (exit_acc=v1238)
   block 73  start_pc=0
     v1242 Imm(27)                                          -> x0
-    v1243 LifetimeEnd(-60)                                 -> -
-    v1244 LifetimeEnd(-62)                                 -> -
-    v1245 LifetimeEnd(-64)                                 -> -
-    v1246 LifetimeEnd(-19)                                 -> -
-    v1247 LifetimeEnd(-66)                                 -> -
-    v1248 LifetimeEnd(-35)                                 -> -
-    v1249 LifetimeEnd(-51)                                 -> -
-    v1250 LifetimeEnd(-68)                                 -> -
+    v1243 LifetimeEnd(-57)                                 -> -
+    v1244 LifetimeEnd(-59)                                 -> -
+    v1245 LifetimeEnd(-61)                                 -> -
+    v1246 LifetimeEnd(-16)                                 -> -
+    v1247 LifetimeEnd(-63)                                 -> -
+    v1248 LifetimeEnd(-32)                                 -> -
+    v1249 LifetimeEnd(-48)                                 -> -
+    v1250 LifetimeEnd(-65)                                 -> -
     v1251 LifetimeEnd(0)                                   -> -
     v1252 LifetimeEnd(0)                                   -> -
-    v1253 LifetimeEnd(-70)                                 -> -
-    v1254 LifetimeEnd(-72)                                 -> -
-    v1255 LifetimeEnd(-74)                                 -> -
-    v1256 LifetimeEnd(-58)                                 -> -
-    v1257 LifetimeEnd(-76)                                 -> -
-    v1258 LifetimeEnd(-78)                                 -> -
-    v1259 LifetimeEnd(-83)                                 -> -
-    v1260 LifetimeEnd(-55)                                 -> -
+    v1253 LifetimeEnd(-67)                                 -> -
+    v1254 LifetimeEnd(-69)                                 -> -
+    v1255 LifetimeEnd(-71)                                 -> -
+    v1256 LifetimeEnd(-55)                                 -> -
+    v1257 LifetimeEnd(-73)                                 -> -
+    v1258 LifetimeEnd(-75)                                 -> -
+    v1259 LifetimeEnd(-80)                                 -> -
+    v1260 LifetimeEnd(-52)                                 -> -
     v1261 LifetimeEnd(0)                                   -> -
-    v1262 LifetimeEnd(-80)                                 -> -
-    v1263 LifetimeEnd(-82)                                 -> -
+    v1262 LifetimeEnd(-77)                                 -> -
+    v1263 LifetimeEnd(-79)                                 -> -
     terminator Return(v1242)   (exit_acc=v1242)
   block 74  start_pc=0
     v1264 Imm(0)                                           -> x0
@@ -2489,75 +2489,75 @@ fn ent_pc=34 n_params=0 variadic=false locals=83
     terminator Bz { cond=v1278, target=b76, fall=b75 }   (exit_acc=v1278)
   block 75  start_pc=0
     v1279 Imm(28)                                          -> x0
-    v1280 LifetimeEnd(-60)                                 -> -
-    v1281 LifetimeEnd(-62)                                 -> -
-    v1282 LifetimeEnd(-64)                                 -> -
-    v1283 LifetimeEnd(-19)                                 -> -
-    v1284 LifetimeEnd(-66)                                 -> -
-    v1285 LifetimeEnd(-35)                                 -> -
-    v1286 LifetimeEnd(-51)                                 -> -
-    v1287 LifetimeEnd(-68)                                 -> -
+    v1280 LifetimeEnd(-57)                                 -> -
+    v1281 LifetimeEnd(-59)                                 -> -
+    v1282 LifetimeEnd(-61)                                 -> -
+    v1283 LifetimeEnd(-16)                                 -> -
+    v1284 LifetimeEnd(-63)                                 -> -
+    v1285 LifetimeEnd(-32)                                 -> -
+    v1286 LifetimeEnd(-48)                                 -> -
+    v1287 LifetimeEnd(-65)                                 -> -
     v1288 LifetimeEnd(0)                                   -> -
     v1289 LifetimeEnd(0)                                   -> -
-    v1290 LifetimeEnd(-70)                                 -> -
-    v1291 LifetimeEnd(-72)                                 -> -
-    v1292 LifetimeEnd(-74)                                 -> -
-    v1293 LifetimeEnd(-58)                                 -> -
-    v1294 LifetimeEnd(-76)                                 -> -
-    v1295 LifetimeEnd(-78)                                 -> -
-    v1296 LifetimeEnd(-83)                                 -> -
-    v1297 LifetimeEnd(-55)                                 -> -
+    v1290 LifetimeEnd(-67)                                 -> -
+    v1291 LifetimeEnd(-69)                                 -> -
+    v1292 LifetimeEnd(-71)                                 -> -
+    v1293 LifetimeEnd(-55)                                 -> -
+    v1294 LifetimeEnd(-73)                                 -> -
+    v1295 LifetimeEnd(-75)                                 -> -
+    v1296 LifetimeEnd(-80)                                 -> -
+    v1297 LifetimeEnd(-52)                                 -> -
     v1298 LifetimeEnd(0)                                   -> -
-    v1299 LifetimeEnd(-80)                                 -> -
-    v1300 LifetimeEnd(-82)                                 -> -
+    v1299 LifetimeEnd(-77)                                 -> -
+    v1300 LifetimeEnd(-79)                                 -> -
     terminator Return(v1279)   (exit_acc=v1279)
   block 76  start_pc=0
     v1301 Imm(0)                                           -> x0
-    v1302 LifetimeEnd(-60)                                 -> -
-    v1303 LifetimeEnd(-62)                                 -> -
-    v1304 LifetimeEnd(-64)                                 -> -
-    v1305 LifetimeEnd(-19)                                 -> -
-    v1306 LifetimeEnd(-66)                                 -> -
-    v1307 LifetimeEnd(-35)                                 -> -
-    v1308 LifetimeEnd(-51)                                 -> -
-    v1309 LifetimeEnd(-68)                                 -> -
+    v1302 LifetimeEnd(-57)                                 -> -
+    v1303 LifetimeEnd(-59)                                 -> -
+    v1304 LifetimeEnd(-61)                                 -> -
+    v1305 LifetimeEnd(-16)                                 -> -
+    v1306 LifetimeEnd(-63)                                 -> -
+    v1307 LifetimeEnd(-32)                                 -> -
+    v1308 LifetimeEnd(-48)                                 -> -
+    v1309 LifetimeEnd(-65)                                 -> -
     v1310 LifetimeEnd(0)                                   -> -
     v1311 LifetimeEnd(0)                                   -> -
-    v1312 LifetimeEnd(-70)                                 -> -
-    v1313 LifetimeEnd(-72)                                 -> -
-    v1314 LifetimeEnd(-74)                                 -> -
-    v1315 LifetimeEnd(-58)                                 -> -
-    v1316 LifetimeEnd(-76)                                 -> -
-    v1317 LifetimeEnd(-78)                                 -> -
-    v1318 LifetimeEnd(-83)                                 -> -
-    v1319 LifetimeEnd(-55)                                 -> -
+    v1312 LifetimeEnd(-67)                                 -> -
+    v1313 LifetimeEnd(-69)                                 -> -
+    v1314 LifetimeEnd(-71)                                 -> -
+    v1315 LifetimeEnd(-55)                                 -> -
+    v1316 LifetimeEnd(-73)                                 -> -
+    v1317 LifetimeEnd(-75)                                 -> -
+    v1318 LifetimeEnd(-80)                                 -> -
+    v1319 LifetimeEnd(-52)                                 -> -
     v1320 LifetimeEnd(0)                                   -> -
-    v1321 LifetimeEnd(-80)                                 -> -
-    v1322 LifetimeEnd(-82)                                 -> -
+    v1321 LifetimeEnd(-77)                                 -> -
+    v1322 LifetimeEnd(-79)                                 -> -
     terminator Return(v1301)   (exit_acc=v1301)
   block 77  start_pc=0
     v424 Imm(11)                                          -> x0
-    v425 LifetimeEnd(-60)                                 -> -
-    v426 LifetimeEnd(-62)                                 -> -
-    v427 LifetimeEnd(-64)                                 -> -
-    v428 LifetimeEnd(-19)                                 -> -
-    v429 LifetimeEnd(-66)                                 -> -
-    v430 LifetimeEnd(-35)                                 -> -
-    v431 LifetimeEnd(-51)                                 -> -
-    v432 LifetimeEnd(-68)                                 -> -
+    v425 LifetimeEnd(-57)                                 -> -
+    v426 LifetimeEnd(-59)                                 -> -
+    v427 LifetimeEnd(-61)                                 -> -
+    v428 LifetimeEnd(-16)                                 -> -
+    v429 LifetimeEnd(-63)                                 -> -
+    v430 LifetimeEnd(-32)                                 -> -
+    v431 LifetimeEnd(-48)                                 -> -
+    v432 LifetimeEnd(-65)                                 -> -
     v433 LifetimeEnd(0)                                   -> -
     v434 LifetimeEnd(0)                                   -> -
-    v435 LifetimeEnd(-70)                                 -> -
-    v436 LifetimeEnd(-72)                                 -> -
-    v437 LifetimeEnd(-74)                                 -> -
-    v438 LifetimeEnd(-58)                                 -> -
-    v439 LifetimeEnd(-76)                                 -> -
-    v440 LifetimeEnd(-78)                                 -> -
-    v441 LifetimeEnd(-83)                                 -> -
-    v442 LifetimeEnd(-55)                                 -> -
+    v435 LifetimeEnd(-67)                                 -> -
+    v436 LifetimeEnd(-69)                                 -> -
+    v437 LifetimeEnd(-71)                                 -> -
+    v438 LifetimeEnd(-55)                                 -> -
+    v439 LifetimeEnd(-73)                                 -> -
+    v440 LifetimeEnd(-75)                                 -> -
+    v441 LifetimeEnd(-80)                                 -> -
+    v442 LifetimeEnd(-52)                                 -> -
     v443 LifetimeEnd(0)                                   -> -
-    v444 LifetimeEnd(-80)                                 -> -
-    v445 LifetimeEnd(-82)                                 -> -
+    v444 LifetimeEnd(-77)                                 -> -
+    v445 LifetimeEnd(-79)                                 -> -
     terminator Return(v424)   (exit_acc=v424)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

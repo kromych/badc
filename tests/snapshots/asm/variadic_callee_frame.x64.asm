@@ -214,16 +214,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x30(%rbp), %rdi
+               	subq	$0x20, %rsp
+               	leaq	-0x18(%rbp), %rdi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	-0x30(%rbp), %rax
-               	movq	-0x28(%rbp), %rcx
-               	movq	-0x20(%rbp), %rdx
+               	movq	-0x18(%rbp), %rax
+               	movq	-0x10(%rbp), %rcx
+               	movq	-0x8(%rbp), %rdx
                	cmpq	$0x1, %rax
                	jne	<addr>
                	cmpq	$0x2, %rcx

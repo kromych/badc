@@ -186,7 +186,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Return(v99)   (exit_acc=v99)
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
-fn ent_pc=7 n_params=0 variadic=false locals=9
+fn ent_pc=7 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -232,14 +232,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v7   Binop { op=eq, lhs=v388, rhs=v402 }              -> x1
     v8   Imm(0)                                           -> x0
     v9   Imm(305441741)                                   -> x0
-    v10  StoreLocal { off=-9, value=v9, kind=I64 }        -> -
+    v10  StoreLocal { off=-1, value=v9, kind=I64 }        -> -
     v11  Imm(0)                                           -> x2
-    v12  LocalAddr(-9)                                    -> x2
+    v12  LocalAddr(-1)                                    -> x2
     v13  Imm(0)                                           -> x2
     v14  Imm(0)                                           -> x2
-    v15  LoadLocal { off=-9, kind=I64 }                   -> x2
+    v15  LoadLocal { off=-1, kind=I64 }                   -> x2
     v16  BinopI { op=xor, lhs=v9, rhs_imm=65261 }         -> x0
-    v17  StoreLocal { off=-9, value=v16, kind=I64 }       -> -
+    v17  StoreLocal { off=-1, value=v16, kind=I64 }       -> -
     v18  Imm(0)                                           -> x0
     v19  Imm(305419552)                                   -> x0
     v20  Imm(0)                                           -> x0
@@ -248,7 +248,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v23  Imm(0)                                           -> x0
     terminator Bz { cond=v7, target=b24, fall=b7 }   (exit_acc=v7)
   block 7  start_pc=0
-    v24  LoadLocal { off=-9, kind=I64 }                   -> x0
+    v24  LoadLocal { off=-1, kind=I64 }                   -> x0
     v25  Imm(0)                                           -> x1
     v26  BinopI { op=eq, lhs=v24, rhs_imm=305419552 }     -> x0
     v27  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x1
@@ -627,14 +627,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=9
     v378 LifetimeEnd(0)                                   -> -
     v379 LifetimeEnd(0)                                   -> -
     v380 LifetimeEnd(0)                                   -> -
-    v381 LifetimeEnd(-9)                                  -> -
+    v381 LifetimeEnd(-1)                                  -> -
     terminator Return(v377)   (exit_acc=v377)
   block 19  start_pc=0
     v382 Imm(0)                                           -> x0
     v383 LifetimeEnd(0)                                   -> -
     v384 LifetimeEnd(0)                                   -> -
     v385 LifetimeEnd(0)                                   -> -
-    v386 LifetimeEnd(-9)                                  -> -
+    v386 LifetimeEnd(-1)                                  -> -
     terminator Return(v382)   (exit_acc=v382)
   block 20  start_pc=0
     terminator Jmp(b16)

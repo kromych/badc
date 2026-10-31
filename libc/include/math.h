@@ -554,26 +554,23 @@
 #pragma binding(ucrtbase::nexttowardl, "nexttoward")
 #endif
 
-// IEEE-754 sentinel values. The c5 lexer accepts the typical
-// `1e308 * 10.0` / `0.0 / 0.0` shapes so the math.h macros can
-// land their bit patterns without compiler intrinsics. Worth
-// noting that c5 widens both sides of the FP-overflow chain to
-// `double` automatically -- the resulting bit pattern is the
-// IEEE infinity and NaN that downstream code expects.
+// C99 7.12p3-5: HUGE_VAL, HUGE_VALF and HUGE_VALL have the type their name
+// gives; INFINITY and NAN are constant expressions of type float, NAN a quiet
+// NaN with a clear sign bit.
 #ifndef INFINITY
-#define INFINITY (1.0e+308 * 10.0)
+#define INFINITY __builtin_inff()
 #endif
 #ifndef NAN
-#define NAN (0.0 / 0.0)
+#define NAN __builtin_nanf("")
 #endif
 #ifndef HUGE_VAL
-#define HUGE_VAL INFINITY
+#define HUGE_VAL __builtin_huge_val()
 #endif
 #ifndef HUGE_VALF
-#define HUGE_VALF INFINITY
+#define HUGE_VALF __builtin_huge_valf()
 #endif
 #ifndef HUGE_VALL
-#define HUGE_VALL ((long double)INFINITY)
+#define HUGE_VALL __builtin_huge_vall()
 #endif
 
 #ifndef M_PI

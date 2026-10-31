@@ -124,7 +124,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x290]
+               	ldr	s1, [x16, #0x288]
                	fcmp	s0, s1
                	b.ne	<addr>
                	bl	<addr>
@@ -151,13 +151,9 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x288]
-               	fmov	d2, #10.00000000
-               	fmul	d1, d1, d2
-               	fneg	d1, d1
-               	fcvt	d0, s0
-               	fcmp	d0, d1
+               	mov	x16, #0xff800000        // =4286578688
+               	fmov	s1, w16
+               	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x60
@@ -168,7 +164,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x294]
+               	ldr	s1, [x16, #0x28c]
                	fcmp	s0, s1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -181,11 +177,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x288]
-               	fmov	d2, #10.00000000
-               	fmul	d1, d1, d2
-               	fcvt	s1, d1
+               	mov	x16, #0x7f800000        // =2139095040
+               	fmov	s1, w16
                	fcmp	s0, s1
                	b.ne	<addr>
                	bl	<addr>

@@ -7720,6 +7720,56 @@ fn elf_symbol_table(bytes: &[u8], sh_type: u32) -> (Vec<SymtabRow>, u32) {
     (rows, rd32(sh(symtab) + 44))
 }
 
+/// `<time.h>`'s data bindings import `tzname`, `timezone` and `daylight`
+/// only into an image that names them, which reads the C library's own
+/// objects as gcc's image does.
+#[test]
+fn tzset_outputs_are_imported_only_where_named() {
+    let dir = tempdir("tzset-outputs");
+    write_source(
+        &dir,
+        "quiet.c",
+        "#include <time.h>\nint main(void) { return 0; }\n",
+    );
+    write_source(
+        &dir,
+        "uses.c",
+        "#include <stdio.h>\n#include <time.h>\n\
+         int main(void) { tzset(); printf(\"%s %ld %d\\n\", tzname[0], timezone, daylight); \
+         return 0; }\n",
+    );
+    let names = ["tzname", "timezone", "daylight"];
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        for (src, named) in [("quiet.c", false), ("uses.c", true)] {
+            let args = ["-q", target, src, "-o", "prog"];
+            run(Command::new(badc()).args(args).current_dir(&dir), "link");
+            let dynsym = elf_symbol_table(&std::fs::read(dir.join("prog")).unwrap(), 11).0;
+            for name in names {
+                let row = dynsym.iter().find(|r| r.0 == name);
+                // An import, not a copy the image defines.
+                assert_eq!(
+                    row.map(|r| r.4),
+                    named.then_some(0),
+                    "{target} {src}: {name}"
+                );
+            }
+        }
+    }
+    if cfg!(target_os = "linux") {
+        run(
+            Command::new(badc())
+                .args(["-q", "uses.c", "-o", "uses"])
+                .current_dir(&dir),
+            "link",
+        );
+        let out = Command::new(dir.join("uses"))
+            .env("TZ", "UTC")
+            .output()
+            .expect("run");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "UTC 0 0\n");
+    }
+}
+
 /// An image with no import and no emitted relocation still lists its
 /// definitions in `.symtab`, as GNU ld writes one for every image.
 #[test]

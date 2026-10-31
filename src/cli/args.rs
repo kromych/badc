@@ -458,7 +458,7 @@ impl Cli {
             if script {
                 kw.in_script_link()
             } else {
-                kw.in_hosted_link(shared)
+                kw.in_hosted_link(shared, !shared && self.exec_form().placed())
             }
         });
         let refusal = if !elf && elf_only {

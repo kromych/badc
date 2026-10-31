@@ -8285,7 +8285,7 @@ fn unknown_asm_section_flag_is_diagnosed() {
     let src = write_source(
         &dir,
         "t.c",
-        "__asm__(\".pushsection .tls.tab,\\\"awT\\\",@progbits\\n\"\n\
+        "__asm__(\".pushsection .excl.tab,\\\"awe\\\",@progbits\\n\"\n\
          \"       .long 1\\n\"\n\
          \"       .popsection\\n\");\n\
          int main(void) { return 0; }\n",
@@ -8297,10 +8297,13 @@ fn unknown_asm_section_flag_is_diagnosed() {
         .current_dir(&dir)
         .output()
         .expect("run badc");
-    assert!(!out.status.success(), "expected the T flag to be rejected");
+    assert!(
+        !out.status.success(),
+        "expected the `e` flag to be rejected"
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.contains("TLS") && err.contains(".tls.tab"),
+        err.contains("flag `e`") && err.contains(".excl.tab"),
         "diagnostic should name the section and the flag: {err}",
     );
 }

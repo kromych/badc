@@ -666,9 +666,13 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     if let Some(p) = parts.next() {
         return Err(bad(p));
     }
-    if flags.is_empty() {
-        flags = alloc::string::String::from(default_section_flags(name));
-    }
+    let sh_type = match special_section(name) {
+        Some(special) => {
+            special.merge_flags(name, &mut flags);
+            special.section_type(sh_type)
+        }
+        None => sh_type,
+    };
     Ok(AsmSectionBlock {
         name: alloc::string::String::from(name),
         flags,
@@ -681,24 +685,109 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     })
 }
 
-/// GNU as default attributes for a well-known section name, used when the
-/// directive gives no explicit `"flags"`. GNU as knows these names carry
-/// allocation, write, and execute attributes; a `.pushsection .rodata`
-/// without flags is allocatable, an unknown name defaults to none. The
-/// match is exact or on the dotted-suffix form (`.rodata.str1.1`).
-fn default_section_flags(name: &str) -> &'static str {
-    // The leading `.` and first dotted component: `.rodata.str1.1` -> `.rodata`.
-    let base = match name.get(1..).and_then(|r| r.find('.')) {
-        Some(i) => &name[..1 + i],
-        None => name,
-    };
-    match base {
-        ".text" => "ax",
-        ".rodata" => "a",
-        ".data" | ".data1" | ".sdata" => "aw",
-        ".bss" | ".sbss" => "aw",
-        ".init_array" | ".fini_array" | ".preinit_array" => "aw",
-        _ => "",
+/// How a special section's name may continue past its prefix.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpecialRest {
+    /// The prefix is the whole name.
+    None,
+    /// The prefix alone or followed by `.` and anything.
+    Dotted,
+    /// Anything.
+    Any,
+}
+
+/// A name GNU as gives an ELF section type and attributes (bfd's
+/// `special_sections` table, first match wins).
+struct SpecialSection {
+    prefix: &'static str,
+    rest: SpecialRest,
+    sh_type: &'static str,
+    flags: &'static str,
+}
+
+/// The rows an assembler source names; the sections a link editor
+/// synthesizes (`.dynamic`, `.rela*`, `.symtab`, ...) are left out.
+/// TODO: the x86-64 large-model names (`.ldata`, `.lbss`, `.lrodata`),
+/// which take `SHF_X86_64_LARGE`.
+const SPECIAL_SECTIONS: &[SpecialSection] = {
+    use SpecialRest::{Any, Dotted, None};
+    const fn row(
+        prefix: &'static str,
+        rest: SpecialRest,
+        sh_type: &'static str,
+        flags: &'static str,
+    ) -> SpecialSection {
+        SpecialSection {
+            prefix,
+            rest,
+            sh_type,
+            flags,
+        }
+    }
+    &[
+        row(".bss", Dotted, "nobits", "aw"),
+        row(".data", Dotted, "progbits", "aw"),
+        row(".data1", None, "progbits", "aw"),
+        row(".fini", None, "progbits", "ax"),
+        row(".fini_array", Dotted, "fini_array", "aw"),
+        row(".gnu.linkonce.b", Dotted, "nobits", "aw"),
+        row(".gnu.linkonce.n", Dotted, "nobits", "aw"),
+        row(".gnu.linkonce.p", Dotted, "progbits", "aw"),
+        row(".init", None, "progbits", "ax"),
+        row(".init_array", Dotted, "init_array", "aw"),
+        row(".noinit", Dotted, "nobits", "aw"),
+        row(".note.GNU-stack", None, "progbits", ""),
+        row(".note", Any, "note", ""),
+        row(".persistent.bss", None, "nobits", "aw"),
+        row(".persistent", Dotted, "progbits", "aw"),
+        row(".preinit_array", Dotted, "preinit_array", "aw"),
+        row(".rodata", Dotted, "progbits", "a"),
+        row(".rodata1", None, "progbits", "a"),
+        row(".tbss", Dotted, "nobits", "awT"),
+        row(".tdata", Dotted, "progbits", "awT"),
+        row(".text", Dotted, "progbits", "ax"),
+    ]
+};
+
+fn special_section(name: &str) -> Option<&'static SpecialSection> {
+    SPECIAL_SECTIONS.iter().find(|s| {
+        name.strip_prefix(s.prefix)
+            .is_some_and(|rest| match s.rest {
+                SpecialRest::None => rest.is_empty(),
+                SpecialRest::Dotted => rest.is_empty() || rest.starts_with('.'),
+                SpecialRest::Any => true,
+            })
+    })
+}
+
+impl SpecialSection {
+    /// The type a directive gives the section: the name's when the
+    /// directive gives none, and the name's array type over any other, as
+    /// gas overrides `@progbits` on `.init_array`.
+    fn section_type(&self, given: Option<alloc::string::String>) -> Option<alloc::string::String> {
+        let array = self.sh_type.ends_with("_array");
+        match given {
+            Some(t) if !array => Some(t),
+            _ => Some(alloc::string::String::from(self.sh_type)),
+        }
+    }
+
+    /// gas adds the name's attributes to the written ones unless the
+    /// written ones hold another attribute; the link-order, retain and
+    /// exclude flags do not count, nor do `M` and `S` after a `.`-suffix
+    /// (`.rodata.str1.1`).
+    fn merge_flags(&self, name: &str, flags: &mut alloc::string::String) {
+        let suffixed = self.rest == SpecialRest::Dotted && name.len() > self.prefix.len();
+        let foreign = flags.chars().any(|c| {
+            !self.flags.contains(c)
+                && !matches!(c, 'o' | 'R' | 'e')
+                && !(suffixed && matches!(c, 'M' | 'S'))
+        });
+        if !foreign {
+            let missing: alloc::string::String =
+                self.flags.chars().filter(|&c| !flags.contains(c)).collect();
+            flags.push_str(&missing);
+        }
     }
 }
 

@@ -307,6 +307,62 @@ fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
     out
 }
 
+/// gas takes an ELF section's type from its name (bfd's special-section
+/// table) and adds the name's attributes to the written ones unless the
+/// written ones name another attribute. A symbol in a thread-local section
+/// is `STT_TLS`. Rows measured against gas 2.46.1 on x86-64.
+#[test]
+fn special_section_names_take_their_type_and_attributes() {
+    const PROGBITS: u32 = 1;
+    const NOTE: u32 = 7;
+    const NOBITS: u32 = 8;
+    const INIT_ARRAY: u32 = 14;
+    const FINI_ARRAY: u32 = 15;
+    const PREINIT_ARRAY: u32 = 16;
+    const W: u64 = 0x1;
+    const A: u64 = 0x2;
+    const X: u64 = 0x4;
+    const T: u64 = 0x400;
+    let cases: &[(&str, &str, u32, u64)] = &[
+        (".init", ".init", PROGBITS, A | X),
+        (".fini", ".fini", PROGBITS, A | X),
+        (".init_array", ".init_array", INIT_ARRAY, W | A),
+        (".fini_array", ".fini_array", FINI_ARRAY, W | A),
+        (".preinit_array", ".preinit_array", PREINIT_ARRAY, W | A),
+        (".note.x", ".note.x", NOTE, 0),
+        (".note.gnu.property, \"a\"", ".note.gnu.property", NOTE, A),
+        (".tdata.x", ".tdata.x", PROGBITS, W | A | T),
+        (".tbss.x", ".tbss.x", NOBITS, W | A | T),
+        (".tdata.y, \"aw\"", ".tdata.y", PROGBITS, W | A | T),
+        (".text.x", ".text.x", PROGBITS, A | X),
+        (".rodata.x", ".rodata.x", PROGBITS, A),
+        (".bss.x", ".bss.x", NOBITS, W | A),
+        (".note.GNU-stack", ".note.GNU-stack", PROGBITS, 0),
+        (".textx", ".textx", PROGBITS, 0),
+    ];
+    let d = dir("special-sections");
+    let mut src = String::new();
+    for (i, (directive, _, _, _)) in cases.iter().enumerate() {
+        src.push_str(&format!(".section {directive}\nsym{i}: .byte 0\n"));
+    }
+    write(&d, "s.s", &src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "s.s"]);
+    let bytes = std::fs::read(d.join("s.o")).expect("object");
+    let headers = section_headers(&bytes);
+    let symbols = sym_table(&bytes);
+    for (i, (directive, name, sh_type, flags)) in cases.iter().enumerate() {
+        let got = headers.iter().find(|h| h.0 == *name);
+        assert_eq!(
+            got.map(|h| (h.1, h.2)),
+            Some((*sh_type, *flags)),
+            "`.section {directive}`"
+        );
+        let sym = symbols.iter().find(|s| s.0 == format!("sym{i}"));
+        let tls = sym.map(|s| s.1 & 0xf == 6);
+        assert_eq!(tls, Some(flags & T != 0), "`sym{i}` in `{name}`");
+    }
+}
+
 /// A `.globl` naming a symbol the unit neither defines nor references still
 /// gets an undefined global entry; a `.weak` in the same position gets no
 /// entry at all. Both are GNU as 2.46.1's symbol table for the same source,

@@ -153,6 +153,7 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".hidden"
             | ".internal"
             | ".protected"
+            | ".private_extern"
             | ".type"
             | ".size"
             | ".set"
@@ -173,6 +174,7 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".hidden")
         || text.contains(".internal")
         || text.contains(".protected")
+        || text.contains(".private_extern")
         || text.contains(".type")
         || text.contains(".size")
         || text.contains(".set")
@@ -206,6 +208,13 @@ fn push_sym_directive_items(
         for name in rest.split(',') {
             out.push(parse_section_item(tok, name.trim(), is_aarch64)?);
         }
+        return Ok(());
+    }
+    // Apple's private external symbol: global to the link, hidden from the
+    // image's dynamic symbols.
+    if tok == ".private_extern" {
+        out.push(parse_section_item(".globl", rest, is_aarch64)?);
+        out.push(parse_section_item(".hidden", rest, is_aarch64)?);
         return Ok(());
     }
     out.push(parse_section_item(tok, rest, is_aarch64)?);
@@ -649,6 +658,54 @@ fn reenter_section(
     Ok(first.clone_identity())
 }
 
+/// The ELF section an Apple `.section SEGMENT,SECTION[,TYPE[,ATTRIBUTES]]`
+/// stands for: the one badc's Mach-O writer places in that section, as its
+/// Mach-O reader classifies one -- `__text` and `pure_instructions` code,
+/// the rest of `__TEXT` read-only data, `__DATA,__const` relocated
+/// read-only data, a `zerofill` or `__bss` section zero-fill. Another
+/// section keeps the pair as its name, with its segment's attributes.
+fn mach_o_section(
+    seg: &str,
+    sect: &str,
+    rest: &[&str],
+) -> Result<AsmSectionBlock, alloc::string::String> {
+    let code = rest
+        .iter()
+        .any(|a| a.split('+').any(|a| a.trim() == "pure_instructions"));
+    let zerofill = rest.first().is_some_and(|t| t.trim() == "zerofill");
+    let (name, flags, sh_type) = match (seg, sect) {
+        ("__TEXT", "__text") => (".text", "ax", "progbits"),
+        ("__TEXT", "__const") => (".rodata", "a", "progbits"),
+        ("__DATA" | "__DATA_CONST", "__const") => (".data.rel.ro", "aw", "progbits"),
+        ("__DATA", "__data") => (".data", "aw", "progbits"),
+        ("__DATA", "__bss") => (".bss", "aw", "nobits"),
+        ("__TEXT", _) if code => ("", "ax", "progbits"),
+        ("__TEXT", _) => ("", "a", "progbits"),
+        ("__DATA" | "__DATA_CONST", _) if zerofill => ("", "aw", "nobits"),
+        ("__DATA" | "__DATA_CONST", _) => ("", "aw", "progbits"),
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: section `{seg},{sect}` is in a segment the Mach-O writer \
+                 places no section of"
+            ));
+        }
+    };
+    let name = match name {
+        "" => alloc::format!("{seg},{sect}"),
+        n => alloc::string::String::from(n),
+    };
+    Ok(AsmSectionBlock {
+        name,
+        flags: alloc::string::String::from(flags),
+        sh_type: Some(alloc::string::String::from(sh_type)),
+        entsize: 0,
+        link: None,
+        group: None,
+        subsection: 0,
+        items: alloc::vec::Vec::new(),
+    })
+}
+
 /// Whether a section directive wrote a flags string and a type.
 #[derive(Clone, Copy)]
 struct SectionWritten {
@@ -682,6 +739,19 @@ fn parse_section_directive(
         .map(|n| unquote(n).unwrap_or(n))
         .filter(|n| !n.is_empty())
         .ok_or_else(|| alloc::string::String::from("inline asm: section name expected"))?;
+    // Apple's `segment,section`, which no ELF directive spells: a second
+    // operand that is neither a flags string nor a type.
+    if !name.starts_with('.')
+        && let Some(sect) = parts.next_if(|p| is_asm_symbol_name(p))
+    {
+        let rest: alloc::vec::Vec<&str> = parts.collect();
+        let block = mach_o_section(name, sect, &rest)?;
+        let written = SectionWritten {
+            flags: true,
+            sh_type: true,
+        };
+        return Ok((block, written));
+    }
     let mut flags = alloc::string::String::new();
     if let Some(f) = parts.next_if(|p| p.starts_with('"')) {
         flags = alloc::string::String::from(unquote(f).ok_or_else(|| bad(f))?);

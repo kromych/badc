@@ -815,6 +815,17 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
         _ => Err(format!("inline asm: expected a register `[{inner}]`")),
     };
     let base = mem_base(parts[0])?;
+    // `[base, sym@PAGEOFF]`: Apple's spelling of the same field.
+    if parts.len() == 2
+        && let Some((expr, SymSpec::Lo12)) = apple_page_operand(parts[1])
+    {
+        if pre {
+            return Err(format!(
+                "inline asm: `@PAGEOFF` has no writeback `[{inner}]`"
+            ));
+        }
+        return Ok(AsmOpndA64::MemSymLo12 { base, expr });
+    }
     // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate.
     if parts.len() == 2
         && let Some(spec) = parts[1]
@@ -995,6 +1006,23 @@ fn sve_count_operand(tok: &str) -> Result<Option<AsmOpndA64>, String> {
         _ => return Ok(None),
     };
     Ok(Some(AsmOpndA64::SvePattern(pattern)))
+}
+
+/// Apple's `sym@PAGE` (the page of the address, for `adrp`) and
+/// `sym@PAGEOFF` (its offset in the page, the `:lo12:` field), with an addend
+/// on either side of the specifier (`sym+16@PAGE`, `sym@PAGEOFF+16`).
+fn apple_page_operand(tok: &str) -> Option<(String, SymSpec)> {
+    let (sym, rest) = tok.split_once('@')?;
+    let (spec, addend) = match rest.get(..7) {
+        Some(p) if p.eq_ignore_ascii_case("PAGEOFF") => (SymSpec::Lo12, &rest[7..]),
+        _ => match rest.get(..4) {
+            Some(p) if p.eq_ignore_ascii_case("PAGE") => (SymSpec::Addr, &rest[4..]),
+            _ => return None,
+        },
+    };
+    let expr = format!("{}{}", sym.trim(), addend.trim());
+    let expr = split_sym_addend(&expr)?;
+    Some((String::from(expr), spec))
 }
 
 /// The text after the keyword `kw` that starts `tok`, when the keyword is a
@@ -1305,6 +1333,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             expr: String::from(expr),
             spec: SymSpec::Lo12,
         });
+    }
+    if let Some((expr, spec)) = apple_page_operand(bare) {
+        return Ok(AsmOpndA64::Sym { expr, spec });
     }
     // `:abs_gN[_s|_nc]:expr`: one 16-bit group of the value. The expression
     // is kept whole -- it may be a parenthesized constant or reach a symbol

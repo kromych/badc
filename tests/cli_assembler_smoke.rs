@@ -362,6 +362,59 @@ fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
     out
 }
 
+/// Apple's assembler syntax: `.section SEGMENT,SECTION` names the section
+/// badc's Mach-O writer places there, `.private_extern` is a hidden global,
+/// and `sym@PAGE` / `sym@PAGEOFF` are the page and in-page relocations of
+/// `adrp` and of an `add` or load offset, the addend on either side.
+#[test]
+fn apple_section_visibility_and_page_operands_assemble() {
+    const ADR_PREL_PG_HI21: u32 = 275;
+    const ADD_ABS_LO12_NC: u32 = 277;
+    const LDST32_ABS_LO12_NC: u32 = 285;
+    let d = dir("apple-syntax");
+    write(
+        &d,
+        "m.s",
+        ".section __TEXT,__const\nLrcon: .long 1,2,3,4\n.globl _tab\n_tab: .long 5\n\
+         .section __DATA,__data\n_d: .long 1\n.section __DATA,__bss\n_z: .space 8\n\
+         .text\n.private_extern _f\n.globl _f\n_f:\n\
+         adrp x8, Lrcon@PAGE\nadd x8, x8, Lrcon@PAGEOFF\n\
+         adrp x9, _tab@PAGE\nldr w1, [x9, _tab@PAGEOFF]\n\
+         adrp x10, Lrcon+16@PAGE\nadd x10, x10, Lrcon@PAGEOFF+16\nret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=macos-aarch64", "m.s", "-o", "m.o"],
+    );
+    let bytes = std::fs::read(d.join("m.o")).unwrap();
+    let headers = section_headers(&bytes);
+    for (name, sh_type) in [(".rodata", 1), (".data", 1), (".bss", 8)] {
+        assert!(
+            headers.iter().any(|h| h.0 == name && h.1 == sh_type),
+            "{name}"
+        );
+    }
+    let f = sym_table(&bytes)
+        .into_iter()
+        .find(|s| s.0 == "_f")
+        .expect("_f");
+    assert_eq!(f.1 >> 4, 1, "`.private_extern` is global");
+    assert_eq!(visibility(&bytes, "_f"), Some(2), "and hidden");
+    let got: Vec<(u32, i64)> = relocs(&bytes, ".rela.text")
+        .into_iter()
+        .map(|(_, rtype, addend)| (rtype, addend))
+        .collect();
+    let want = [
+        (ADR_PREL_PG_HI21, 0),
+        (ADD_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 0),
+        (LDST32_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 16),
+        (ADD_ABS_LO12_NC, 16),
+    ];
+    assert_eq!(got, want);
+}
+
 /// gas takes an ELF section's type from its name (bfd's special-section
 /// table) and adds the name's attributes to the written ones unless the
 /// written ones name another attribute. A symbol in a thread-local section

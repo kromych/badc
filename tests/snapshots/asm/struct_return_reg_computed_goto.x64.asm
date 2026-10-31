@@ -34,8 +34,6 @@ Disassembly of section .text:
 <ternary>:
                	leaq	<rip>, %rax # <addr>
                	jmpq	*%rax
-               	movl	$0x1, %eax
-               	retq
                	xorl	%eax, %eax
                	retq
 

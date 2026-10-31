@@ -15,7 +15,8 @@
 //! renumbers those target lists after compaction. An address-taken
 //! label (`Inst::BlockAddr`, recorded in `func.computed_goto_targets`)
 //! is likewise entered indirectly, and its address may escape the
-//! function, so every such block is a reachability root.
+//! function, so it is a reachability root once a reachable block takes
+//! its address or static data holds it.
 
 use alloc::vec::Vec;
 
@@ -57,33 +58,40 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     // Reachability from block 0 through terminator successors, plus a
     // jump table's target blocks (reached via its indirect dispatch,
     // recorded in `func.jump_tables` rather than the terminator).
-    // An address-taken label (`computed_goto_targets`) is a root of its
-    // own: no terminator edge names it, and its address may outlive --
-    // or escape -- the `goto *` that used it.
+    // An address-taken label is a root of its own once its address
+    // exists: a reachable block takes it (`Inst::BlockAddr`) or static
+    // data holds it. No terminator edge names it, and the address may
+    // outlive -- or escape -- the `goto *` that used it. A label whose
+    // address only dead code takes is dead with that code.
     let mut reachable = alloc::vec![false; n];
     let mut stack = alloc::vec![0 as BlockId];
     reachable[0] = true;
-    for &t in &func.computed_goto_targets {
-        if !reachable[t as usize] {
-            reachable[t as usize] = true;
-            stack.push(t);
-        }
-    }
-    let mut succ = Vec::new();
-    while let Some(b) = stack.pop() {
-        succ.clear();
-        push_successors(&func.blocks[b as usize].terminator, &mut succ);
-        if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } =
-            func.blocks[b as usize].terminator
-        {
-            succ.extend_from_slice(&func.jump_tables[table as usize]);
-        }
+    let mut succ: Vec<BlockId> = func.label_data_relocs.iter().map(|r| r.block).collect();
+    loop {
         for &s in &succ {
             if !reachable[s as usize] {
                 reachable[s as usize] = true;
                 stack.push(s);
             }
         }
+        let Some(b) = stack.pop() else {
+            break;
+        };
+        let blk = &func.blocks[b as usize];
+        succ.clear();
+        push_successors(&blk.terminator, &mut succ);
+        if let Terminator::JumpTable { table, .. } | Terminator::AsmGoto { table } = blk.terminator
+        {
+            succ.extend_from_slice(&func.jump_tables[table as usize]);
+        }
+        succ.extend(
+            blk.inst_range
+                .clone()
+                .filter_map(|v| match func.insts[v as usize] {
+                    Inst::BlockAddr(t) => Some(t),
+                    _ => None,
+                }),
+        );
     }
     if reachable.iter().all(|&r| r) {
         return false;
@@ -153,6 +161,9 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             row.clear();
         }
     }
+    // A `goto *` can reach only a label whose address exists.
+    func.computed_goto_targets
+        .retain(|&t| reachable[t as usize]);
 
     // Compact the survivors (original order preserved) and renumber.
     let mut order = Vec::new();
@@ -356,5 +367,33 @@ mod tests {
         );
         // b3 was renumbered to 2; the table now names [b1, b2].
         assert_eq!(f.jump_tables[0], vec![1, 2]);
+    }
+
+    #[test]
+    fn an_address_taken_label_lives_while_a_reachable_block_takes_its_address() {
+        // b0 takes b2's address and returns; b1 is orphaned by a folded
+        // branch and takes its own address, as `({ l: &&l; })` in a dead
+        // branch does. b2 stays as an indirect-branch root, b1 goes with
+        // the only code that names it, and neither its values nor its
+        // target entry survive.
+        let mut f = fresh(
+            vec![
+                Inst::BlockAddr(2), // v0 (b0)
+                Inst::BlockAddr(1), // v1 (b1, dead)
+                Inst::Imm(5),       // v2 (b1, dead)
+                Inst::Imm(0),       // v3 (b2)
+            ],
+            vec![
+                block(0..1, Terminator::Return(0)),
+                block(1..3, Terminator::Jmp(2)),
+                block(3..4, Terminator::Return(3)),
+            ],
+        );
+        f.computed_goto_targets = vec![1, 2];
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks.len(), 2, "b1 is removed, b2 kept");
+        assert_eq!(f.computed_goto_targets, vec![1], "b2, renumbered");
+        assert!(matches!(f.insts[0], Inst::BlockAddr(1)));
+        assert!(matches!(f.insts[2], Inst::Imm(0)), "b1's value is inert");
     }
 }

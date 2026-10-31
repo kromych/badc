@@ -27,11 +27,9 @@ use common::TempDir;
 /// fixture is excluded for a different reason on each target, both
 /// are named.
 const COMPILE_SKIPLIST: &[&str] = &[
-    // VLA fixtures that assert a clean rejection diagnostic rather
-    // than compiling; the constructs are unsupported by design (C99
-    // 6.7.6.2 corners left as TODO). The diagnostics are locked in
-    // `src/c5/tests/vla.rs`.
-    "vla_multidim_rejected.c",
+    // VLA fixtures that assert a C99 constraint's rejection
+    // (6.7.5.2p2 file scope, 6.7.8p3 initializer); the diagnostics are
+    // locked in `src/c5/tests/vla.rs`.
     "vla_file_scope_rejected.c",
     "vla_initializer_rejected.c",
     // x86-64 asm on both counts: aarch64 rejects `%c1(%%rip)`, and on

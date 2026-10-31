@@ -6135,12 +6135,14 @@ impl Compiler {
     /// The variable-length array type of `dim` elements of `elem`, and the
     /// store of its byte count into the frame slot the type reads, which
     /// runs where the declaration or type name is evaluated (C99 6.7.5.2p4).
+    /// An element of variable-length array type contributes the byte count
+    /// its own slot holds.
     pub(super) fn vla_bound_type(
         &mut self,
         elem: i64,
         dim: super::super::ast::ExprId,
     ) -> (i64, VmBound) {
-        let elem_size = self.size_of_type(elem) as i64;
+        let scale = self.element_bytes(elem);
         let slot = self.reserve_slots(1);
         let size_t = self.size_t_ty();
         let pos = self.ast_src_pos();
@@ -6149,13 +6151,6 @@ impl Compiler {
             Expr::Cast {
                 child: dim,
                 to_ty: size_t,
-            },
-            pos,
-        );
-        let scale = self.ast.push_expr(
-            Expr::IntLit {
-                val: elem_size,
-                ty: size_t,
             },
             pos,
         );
@@ -6179,6 +6174,21 @@ impl Compiler {
         );
         self.vla_type_sizes.insert(slot, size);
         (self.vla_array_type(elem, slot), VmBound { slot, store })
+    }
+
+    /// The byte count of one `elem`, as a `size_t` expression: the frame slot
+    /// of a variable-length array type, else the constant size.
+    pub(super) fn element_bytes(&mut self, elem: i64) -> super::super::ast::ExprId {
+        use super::super::ast::Expr;
+        let pos = self.ast_src_pos();
+        match self.vla_value_slot(elem) {
+            Some(size_slot) => self.ast.push_expr(Expr::VlaSizeof { size_slot }, pos),
+            None => {
+                let val = self.size_of_type(elem) as i64;
+                let ty = self.size_t_ty();
+                self.ast.push_expr(Expr::IntLit { val, ty }, pos)
+            }
+        }
     }
 
     /// A function returning the type `t` holds, on convention `conv`, which

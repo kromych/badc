@@ -57,6 +57,10 @@ pub(super) struct AbstractDecl {
     pub(super) derivations: alloc::vec::Vec<Derivation>,
 }
 
+/// One array bound below the outermost: a constant, or a variable bound's
+/// expression.
+type VlaBound = Result<i64, super::super::ast::ExprId>;
+
 impl Compiler {
     /// Record the array shape `idx` holds before this declarator
     /// overwrites it, for the scope save that runs after the declarator.
@@ -342,19 +346,86 @@ impl Compiler {
     /// array its constant inner dimensions and an array typedef base form,
     /// if any (C99 6.7.5.2p3).
     fn vla_element_type(&mut self, ty: i64) -> Result<i64, C5Error> {
-        let mut inner = self.parse_inner_bounds(false)?;
+        let mut inner = self.parse_vla_inner_bounds()?;
         if !self.pending.base_array_taken && self.typedef_base_incomplete() {
             return Err(self.unknown_size_element_err());
         }
         if self.typedef_base_sized() && !self.pending.base_array_taken {
             self.pending.base_array_taken = true;
-            inner.extend(self.typedef_base_dims());
+            inner.extend(self.typedef_base_dims().into_iter().map(Ok));
         }
-        Ok(if inner.is_empty() {
-            ty
-        } else {
-            self.array_agg_type(ty, &inner)
-        })
+        Ok(self.vla_inner_type(ty, &inner))
+    }
+
+    /// The bounds below a block-scope array's outermost one: constants, or
+    /// the expressions of variable ones (C99 6.7.5.2p4).
+    fn parse_vla_inner_bounds(&mut self) -> Result<alloc::vec::Vec<VlaBound>, C5Error> {
+        let mut bounds = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+            if self.lex.tk == ']' {
+                return Err(self.unknown_size_element_err());
+            }
+            match self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())? {
+                Some(m) if m <= 0 => {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("array dimension must be positive (got {m})"),
+                    ));
+                }
+                Some(m) => bounds.push(Ok(m)),
+                None => {
+                    self.expr(Token::Assign as i64)?;
+                    self.require_integer_size(self.ty)?;
+                    if self.is_int128_ty(self.ty) {
+                        self.ast_apply_assign_conv(self.size_t_ty());
+                    }
+                    let dim = self.ast_acc.take().expect("an expression's tree");
+                    bounds.push(Err(dim));
+                }
+            }
+            self.consume(b']', "close bracket expected in array declarator")?;
+        }
+        Ok(bounds)
+    }
+
+    /// The element type `bounds` (outermost first) make of `ty`: an array
+    /// aggregate while every bound and `ty` are constant, a variable-length
+    /// array type from the innermost variable bound out, whose byte count
+    /// is stored where the declaration is reached.
+    fn vla_inner_type(&mut self, ty: i64, bounds: &[VlaBound]) -> i64 {
+        let mut elem = ty;
+        let mut constant: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        for bound in bounds.iter().rev() {
+            let dim = match *bound {
+                Ok(m) if self.vla_value_slot(elem).is_none() => {
+                    constant.insert(0, m);
+                    continue;
+                }
+                Ok(m) => {
+                    let pos = self.ast_src_pos();
+                    let ty = self.size_t_ty();
+                    let lit = super::super::ast::Expr::IntLit { val: m, ty };
+                    self.ast.push_expr(lit, pos)
+                }
+                Err(e) => e,
+            };
+            if !constant.is_empty() {
+                elem = self.array_agg_type(elem, &core::mem::take(&mut constant));
+            }
+            let (vla, bound) = self.vla_bound_type(elem, dim);
+            let pos = self.ast_src_pos();
+            self.ast
+                .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
+            elem = vla;
+        }
+        match constant.is_empty() {
+            true => elem,
+            false => self.array_agg_type(elem, &constant),
+        }
     }
 
     /// Parse a declarator over `base`. Returns the symbol it declares
@@ -1076,7 +1147,31 @@ impl Compiler {
             if array_size > 0 {
                 dims.push(array_size);
             }
-            for m in self.parse_inner_bounds(param_ctx)? {
+            let inner = match self.pending.vla_allowed && !param_ctx && idx != usize::MAX {
+                true => self.parse_vla_inner_bounds()?,
+                false => (self.parse_inner_bounds(param_ctx)?.into_iter().map(Ok)).collect(),
+            };
+            // A variable bound below a constant one makes the object a
+            // variable-length array of that many variable-length rows.
+            if inner.iter().any(Result::is_err) {
+                if array_size <= 0 {
+                    return Err(self.unknown_size_element_err());
+                }
+                let mut inner = inner;
+                if self.typedef_base_sized() && !self.pending.base_array_taken {
+                    self.pending.base_array_taken = true;
+                    inner.extend(self.typedef_base_dims().into_iter().map(Ok));
+                }
+                let elem = self.vla_inner_type(ty, &inner);
+                let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+                let count = super::super::ast::Expr::IntLit {
+                    val: array_size,
+                    ty: size_t,
+                };
+                self.pending.vla_dim_expr = Some(self.ast.push_expr(count, pos));
+                return Ok((idx, elem, super::VLA_ARRAY_SIZE, own_levels));
+            }
+            for m in inner.into_iter().flatten() {
                 dims.push(m);
                 if array_size > 0 {
                     array_size *= m;

@@ -815,11 +815,23 @@ impl Compiler {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
             self.emit_vm_bound_stores(id_idx, false)?;
+            // An array of a variable-length array type is one too, its byte
+            // count the element's times the bound.
+            if td_array > 0 && self.vla_value_slot(ty).is_some() {
+                let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+                let count = super::super::ast::Expr::IntLit {
+                    val: td_array,
+                    ty: size_t,
+                };
+                let count = self.ast.push_expr(count, pos);
+                let (vla_ty, bound) = self.vla_bound_type(ty, count);
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
+                self.note_jump_barrier(id_idx, true);
+                (ty, td_array) = (vla_ty, 0);
+            }
             if td_array != 0 && self.vla_value_slot(ty).is_some() {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "a non-constant inner array dimension is not supported",
-                ));
+                return Err(self.unknown_size_element_err());
             }
             if td_array == super::VLA_ARRAY_SIZE {
                 let dim = self.pending.vla_dim_expr.take().ok_or_else(|| {

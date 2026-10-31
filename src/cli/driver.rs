@@ -7,7 +7,7 @@ use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbo
 use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
 use super::objects::{build_archive, check_syntax, compile_objects};
-use super::options::{Mode, SourceKind};
+use super::options::Mode;
 use super::paths::{
     declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
 };
@@ -227,7 +227,10 @@ fn dispatch(cli: Cli) {
     // section, so an asm unit would run as an empty program. Refuse it
     // rather than run nothing.
     if matches!(cli.mode, Mode::Jit | Mode::Interp)
-        && let Some(src) = inputs.sources.iter().find(|s| SourceKind::of(s).is_asm())
+        && let Some(src) = inputs
+            .sources
+            .iter()
+            .find(|s| cli.front.source_kind(s).is_asm())
     {
         eprint_diagnostic(format!(
             "badc: error: {} does not run assembly (`{src}`); assemble it with \
@@ -257,7 +260,11 @@ fn dispatch(cli: Cli) {
         let preprocess_only = cli.mode == Mode::DumpPp
             || cli.deps.as_ref().map(|d| d.kind) == Some(DepKind::Only) && !cli.compile_only;
         if !preprocess_only {
-            if let Some(src) = inputs.sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
+            if let Some(src) = inputs
+                .sources
+                .iter()
+                .find(|s| !cli.front.source_kind(s).is_asm())
+            {
                 eprint_diagnostic(format!(
                     "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
                      and badc emits no 32-bit code"

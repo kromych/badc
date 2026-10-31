@@ -114,7 +114,7 @@ pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     compile_units(sources, workers, |_, src| {
         // An assembler unit is checked by assembling it, which happens as
         // its object is encoded.
-        if super::options::SourceKind::of(src).is_asm() {
+        if cli.front.source_kind(src).is_asm() {
             let (log, res) = compile_object_tu(src, &cfg);
             return (log, res.map(drop));
         }

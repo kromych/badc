@@ -12,7 +12,10 @@ linker. `.i` is C that is preprocessed already: its line markers
 and pragmas apply and nothing in it is expanded again. `.S` (and
 `.sx`) run through the preprocessor with `__ASSEMBLER__`
 predefined before being assembled; `.s` is assembled verbatim, as
-in gcc's suffix table.
+in gcc's suffix table. `-x <language>` names the language of the
+inputs after it instead -- `c`, `cpp-output`, `assembler` or
+`assembler-with-cpp` -- until the next `-x`; `-x none` returns to
+the suffix.
 
 Output mode -- pick at most one (defaults to a native binary):
   --interp                 Run under the SSA interpreter.

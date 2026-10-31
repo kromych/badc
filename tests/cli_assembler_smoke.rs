@@ -146,6 +146,61 @@ fn dot_capital_s_preprocesses_and_predefines_assembler() {
     assert_eq!(&std::fs::read(d.join("leaf.o")).unwrap()[..4], b"\x7fELF");
 }
 
+/// `-x assembler` assembles an input whatever its name, the form
+/// configure-time probes use on `/dev/null`; `-x assembler-with-cpp`
+/// preprocesses it first, as a `.S` is.
+#[test]
+fn x_assembler_takes_an_input_of_any_name() {
+    let d = dir("x-assembler");
+    write(&d, "leaf.txt", LEAF);
+    write(&d, "macro.txt", &LEAF.replace("7", "SEVEN"));
+    let target = format!("--target={TARGET}");
+    let target = target.as_str();
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            target,
+            "-x",
+            "assembler",
+            "leaf.txt",
+            "-o",
+            "a.o",
+        ],
+    );
+    let cpp = [
+        "-x",
+        "assembler-with-cpp",
+        "macro.txt",
+        "-DSEVEN=7",
+        "-o",
+        "b.o",
+    ];
+    run_ok(&d, &[&["-q", "-c", target][..], &cpp].concat());
+    for obj in ["a.o", "b.o"] {
+        assert_eq!(
+            &std::fs::read(d.join(obj)).unwrap()[..4],
+            b"\x7fELF",
+            "{obj}"
+        );
+    }
+    if cfg!(unix) {
+        run_ok(
+            &d,
+            &[
+                "-q",
+                "-c",
+                "-o",
+                "/dev/null",
+                "-x",
+                "assembler",
+                "/dev/null",
+            ],
+        );
+    }
+}
+
 #[test]
 fn dot_s_is_not_preprocessed() {
     let d = dir("dot-s-verbatim");

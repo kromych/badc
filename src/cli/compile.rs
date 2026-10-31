@@ -21,8 +21,8 @@ pub(crate) const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
 /// `__ASSEMBLER__` for a `.S`, and a header shared with assembly gates its
 /// C-only content on it. It goes ahead of the command-line list so
 /// `-U__ASSEMBLER__` and an explicit `-D__ASSEMBLER__=<v>` both still win.
-pub(crate) fn tu_defines(src_path: &str, defines: &[(String, String)]) -> Vec<(String, String)> {
-    if !SourceKind::of(src_path).is_asm() {
+pub(crate) fn tu_defines(kind: SourceKind, defines: &[(String, String)]) -> Vec<(String, String)> {
+    if !kind.is_asm() {
         return defines.to_vec();
     }
     let mut out = Vec::with_capacity(defines.len() + 1);
@@ -227,7 +227,7 @@ pub(crate) fn tu_compile_options(
 ) -> badc::CompileOptions {
     cfg.front
         .compile_options(src_path)
-        .with_asm_source(SourceKind::of(src_path).is_asm())
+        .with_asm_source(cfg.front.source_kind(src_path).is_asm())
         .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
         .with_export_all_functions(cfg.export_all)
         .with_implicit_extern_fns(implicit_externs.to_vec())
@@ -270,7 +270,7 @@ pub(crate) fn assemble_tu(
 ) -> Result<badc::Program, ()> {
     let src_bytes = read_tu_source(src_path, cfg, log)?;
     let copts = tu_compile_options(src_path, &[], cfg);
-    let text = if SourceKind::of(src_path) == (SourceKind::Asm { preprocess: true }) {
+    let text = if cfg.front.source_kind(src_path) == (SourceKind::Asm { preprocess: true }) {
         let (text, records) =
             match badc::Compiler::preprocess_tracked(src_bytes, cfg.target, copts.clone()) {
                 Ok(r) => r,
@@ -316,7 +316,7 @@ pub(crate) fn translate_tu(
     cfg: &CompileCfg,
     log: &mut TuLog,
 ) -> Result<badc::Program, ()> {
-    if SourceKind::of(src_path).is_asm() {
+    if cfg.front.source_kind(src_path).is_asm() {
         return assemble_tu(src_path, cfg, log);
     }
     let src_bytes = read_tu_source(src_path, cfg, log)?;

@@ -473,7 +473,8 @@ fn linker_input_kind(path: &str, target: Target) -> Result<InputKind, String> {
 }
 
 impl Inputs {
-    /// Classify every positional input by extension: `.c`, and a name
+    /// Classify every positional input by extension, unless a `-x` names
+    /// its language: `.c`, and a name
     /// with no extension, is a C source; `.s` / `.S` / `.sx` an
     /// assembler source; `.o` / `.obj` a relocatable object; `.a` /
     /// `.lib` a static archive; `.so` / `.dylib` / `.tbd` / `.dll` a shared
@@ -512,7 +513,7 @@ impl Inputs {
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
             let kind = match ext {
-                _ if a == "-" => InputKind::Source,
+                _ if a == "-" || cli.front.languages.contains_key(a) => InputKind::Source,
                 "c" | "i" | "" | "s" | "S" | "sx" => InputKind::Source,
                 "o" | "obj" => InputKind::Object,
                 "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => InputKind::Shared,

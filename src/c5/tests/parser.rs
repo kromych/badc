@@ -6336,6 +6336,38 @@ fn implicit_fallthrough_reports_where_gcc_does() {
                }\n",
             &[6, 8, 14, 18, 20, 26, 34, 36, 38, 40],
         ),
+        // A nested switch completes only through a `break` control reaches
+        // or a value no label matches: the unreachable `break` after an
+        // `if` whose arms both return does not end it, and a switch with
+        // no `default` does (gcc 16.2.1 reports line 16 alone).
+        (
+            "int g(int);\n\
+               int f(int a, int b) {\n\
+               switch (a) {\n\
+               case 1: {\n\
+               switch (b) {\n\
+               case 1:\n\
+               if (g(b)) { return 1; } else { return 2; }\n\
+               break;\n\
+               default:\n\
+               return 3;\n\
+               }\n\
+               }\n\
+               case 2:\n\
+               return 4;\n\
+               case 3:\n\
+               switch (b) { case 1: return 1; }\n\
+               case 4:\n\
+               return 5;\n\
+               case 5:\n\
+               switch (b) { case 1: return 1; default: return 2; }\n\
+               case 6:\n\
+               return 6;\n\
+               }\n\
+               return 0;\n\
+               }\n",
+            &[16],
+        ),
         // What precedes a switch body's first label is never reached, so it
         // falls into nothing; gcc reports none of these.
         (

@@ -2235,6 +2235,27 @@ fn a_compatible_tag_redefinition_is_taken_from_c23() {
 /// reached through a pointer only takes the type badc's PE targets give
 /// any enum (the windows-gnu one).
 #[test]
+fn a_function_parameter_of_a_parameter_names_the_completed_enum() {
+    // C99 6.7.2.3: the definition completes every earlier use of the tag,
+    // including a parameter type of a function a parameter points to; a
+    // function declared after the definition then converts to it.
+    let src = "enum E;\n\
+               typedef int cb_t(enum E t, void *data);\n\
+               int setup(void *p, cb_t *cb);\n\
+               int nested(int (*(*pp)(cb_t *))(enum E, void *));\n\
+               enum E { E_A, E_B };\n\
+               static inline int cb(enum E t, void *data) { return t + (data != 0); }\n\
+               static cb_t *pass(cb_t *c) { return c; }\n\
+               int use(void *p) { return setup(p, cb) + nested(pass); }\n";
+    for target in [crate::Target::LinuxAarch64, crate::Target::LinuxX64] {
+        let options = crate::c5::compiler::CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
+#[test]
 fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
     use crate::{Compiler, Target};
     const SRC: &str = "typedef enum _INTERFACE_TYPE INTERFACE_TYPE;\n\

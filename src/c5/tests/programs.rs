@@ -591,6 +591,21 @@ fn builtin_inf() {
 }
 
 #[test]
+fn math_constant_types() {
+    // <math.h>'s NAN and INFINITY are float constant expressions, HUGE_VAL*
+    // of the type its name gives; NAN's sign bit is clear on every target.
+    assert_eq!(run_fixture("math_constant_types.c"), 0);
+}
+
+#[test]
+fn sizeof_builtin_result_shape() {
+    // `sizeof` over a value builtin with a string operand measured the
+    // string, and over `__builtin_choose_expr` lost the chosen array to the
+    // discarded operand; each answers with its result's own type.
+    assert_eq!(run_fixture("sizeof_builtin_result_shape.c"), 0);
+}
+
+#[test]
 fn alignof_expression() {
     // GCC `__alignof__` accepts an expression operand (C11 `_Alignof` is
     // type-only); the alignment is that of the operand's unevaluated type,

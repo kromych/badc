@@ -21,14 +21,6 @@ fn compile_error(name: &str) -> String {
 }
 
 #[test]
-fn multidim_vla_rejected() {
-    assert!(
-        compile_error("vla_multidim_rejected.c").contains("non-constant inner array dimension"),
-        "wrong diagnostic for a VLA with a non-constant inner dimension"
-    );
-}
-
-#[test]
 fn file_scope_vla_rejected() {
     assert!(
         compile_error("vla_file_scope_rejected.c").contains("variable-length array"),
@@ -85,14 +77,6 @@ fn vla_typedef_constraints_are_diagnosed() {
             "struct S { U m; } s;",
             "field `m` has a variably modified type",
         ),
-        (
-            "U a[2];",
-            "a non-constant inner array dimension is not supported",
-        ),
-        (
-            "typedef U W[3];",
-            "a non-constant inner array dimension is not supported",
-        ),
     ] {
         let src = alloc::format!("int f(int n) {{ typedef char U[n]; {body} return n; }}\n");
         match Compiler::new(src).compile() {
@@ -136,6 +120,32 @@ fn a_block_scope_pointer_to_a_vla_takes_its_bound_where_declared() {
     ] {
         let msg = alloc::format!("{}", Compiler::new(src.into()).compile().unwrap_err());
         assert!(msg.contains(text), "{src}: {msg}");
+    }
+}
+
+/// Parameters pointing to arrays with more than one variable bound, or a
+/// variable bound below a constant one, prototyped and defined (C99
+/// 6.7.5.2p4, 6.9.1p10), under the interpreter for both data models;
+/// clang 22 runs the fixture to 0.
+#[test]
+fn a_parameter_may_point_to_an_array_of_variable_length_arrays() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(
+            super::run_fixture_for("vla_parameter_bounds.c", t),
+            0,
+            "{t:?}"
+        );
+    }
+}
+
+/// Arrays whose element type is variable-length (C99 6.7.5.2p4) at block
+/// scope -- `int a[n][m]`, `int b[3][m]`, `long c[n][m][k]`, arrays of a
+/// variably modified typedef and a typedef of one -- under the interpreter
+/// for both data models; clang 22 runs the fixture to 0.
+#[test]
+fn an_array_may_have_variable_length_elements() {
+    for t in [crate::Target::LinuxX64, crate::Target::WindowsAarch64] {
+        assert_eq!(super::run_fixture_for("vla_element_types.c", t), 0, "{t:?}");
     }
 }
 

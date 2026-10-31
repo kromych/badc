@@ -1527,9 +1527,7 @@ impl<'a> RelocWriter<'a> {
                     b'S' => flags |= SHF_STRINGS,
                     b'o' => flags |= SHF_LINK_ORDER,
                     b'G' => flags |= SHF_GROUP,
-                    b'T' => {
-                        return Err(asm_section_err(&s.name, "the `T` (TLS) section flag"));
-                    }
+                    b'T' => flags |= SHF_TLS,
                     _ => {
                         return Err(asm_section_err(
                             &s.name,
@@ -1559,7 +1557,14 @@ impl<'a> RelocWriter<'a> {
                 .carve
                 .table
                 .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
-                .map_err(Self::internal)?;
+                .map_err(|_| {
+                    // Two assembler statements that name the section with
+                    // different types, which gas refuses within one source.
+                    C5Error::hard(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!("inline asm: changed section type for `{}`", s.name),
+                    )
+                })?;
             // The first block to give an entry size or an ordering section
             // sets it, as GNU as keeps a section's first attributes.
             let ent = &mut self.layout.carve.table.entries[e];
@@ -2221,6 +2226,7 @@ impl<'a> RelocWriter<'a> {
                 let shndx = carve.shndx[e];
                 let sec_sym = carve.sym_idx[e];
                 let merge = carve.table.entries[e].flags & SHF_MERGE != 0;
+                let tls = carve.table.entries[e].flags & SHF_TLS != 0;
                 s.labels.iter().map(move |l| {
                     let d = this.sym_decl(l.name.as_str());
                     let ty = match l.sym_type {
@@ -2244,7 +2250,8 @@ impl<'a> RelocWriter<'a> {
                             },
                         weak: l.weak || weak_names.contains(l.name.as_str()),
                         unique,
-                        st_type: st_type_of(ty),
+                        // bfd types every symbol in a thread-local section STT_TLS.
+                        st_type: if tls { STT_TLS } else { st_type_of(ty) },
                         st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
                         merge,
                     }

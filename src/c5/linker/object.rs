@@ -903,6 +903,7 @@ pub const STV_DEFAULT: u8 = 0;
 pub const STV_INTERNAL: u8 = 1;
 pub const STV_HIDDEN: u8 = 2;
 pub const STV_PROTECTED: u8 = 3;
+pub const STB_GNU_UNIQUE: u8 = 10;
 
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped
@@ -1157,6 +1158,9 @@ pub struct NativeObject {
     /// Functions that return ahead of their frame (`NT_BADC_EARLY_RETURN`),
     /// each `(entry, frame path, early return)` offsets in this unit's `.text`.
     pub early_returns: Vec<(u64, u64, u64)>,
+    /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
+    /// global definitions and states the binding in its symbol tables.
+    pub unique: Vec<String>,
     /// Names this unit materialises the address of through an undefined
     /// symbol (`NT_BADC_EXTERN_DATA`) -- extern data, and an extern
     /// function whose address is taken, which shares that lowering.
@@ -1359,7 +1363,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let blobs = concat_families(bytes, &shdrs, &roles)?;
     let (sections, record_of) =
         input_section_records(&shdrs, shstrtab_bytes, roles.tdata.len(), &blobs)?;
-    let (symbols, shndx_map) =
+    let (symbols, unique, shndx_map) =
         decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles, &record_of)?;
     let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
     let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
@@ -1418,6 +1422,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         copy_relocs: note.copy_relocs,
         prologue_ends: note.prologue_ends,
         early_returns: note.early_returns,
+        unique,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
         comdats,
@@ -1540,9 +1545,10 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// [`grouped_by_name`] sorts to the end of its family, so the blob splits
-/// into a prefix the linker appends whole and a suffix it regroups by name
-/// across units.
+/// [`grouped_by_name`] sorts to the end of its family, as an
+/// [`is_init_fini`] one does in the text family, so the blob splits into a
+/// prefix the linker appends whole and a suffix it regroups by name across
+/// units.
 struct SectionRoles {
     text: Vec<usize>,
     rodata: Vec<usize>,
@@ -1705,6 +1711,11 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
                 .unwrap_or(false)
         });
     }
+    roles.text.sort_by_key(|&i| {
+        strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
+            .map(is_init_fini)
+            .unwrap_or(false)
+    });
     Ok(roles)
 }
 
@@ -2003,7 +2014,7 @@ fn decode_symbols(
     blobs: &FamilyBlobs,
     roles: &SectionRoles,
     record_of: &[Option<u32>],
-) -> Result<(Vec<NativeSymbol>, ShndxMap), C5Error> {
+) -> Result<(Vec<NativeSymbol>, Vec<String>, ShndxMap), C5Error> {
     let symtab_sh = &shdrs[symtab_sh_i];
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.sh_link as usize;
@@ -2035,6 +2046,7 @@ fn decode_symbols(
     let symtab_bytes = section_slice(bytes, symtab_sh)?;
     let n_syms = symtab_bytes.len() / ELF64_SYM_SIZE;
     let mut symbols: Vec<NativeSymbol> = Vec::with_capacity(n_syms);
+    let mut unique: Vec<String> = Vec::new();
     let shndx_map = ShndxMap::build(
         shdrs.len(),
         &[
@@ -2053,20 +2065,25 @@ fn decode_symbols(
     );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
-        // GNU ld links an `STB_GNU_UNIQUE` definition as a global one. TODO:
-        // keep the binding in a shared library's dynamic symbols.
+        let name = if sym.st_name == 0 {
+            String::new()
+        } else {
+            strtab_str(strtab_bytes, sym.st_name as usize)?.to_string()
+        };
+        // GNU ld links an `STB_GNU_UNIQUE` definition as a global one.
         let binding = match sym.st_info >> 4 {
-            10 => 1,
+            10 => {
+                if sym.st_shndx != SHN_UNDEF {
+                    unique.push(name.clone());
+                }
+                1
+            }
             b => b,
         };
         let kind = sym.st_info & 0xf;
         let (section, value_offset) = shndx_map.lookup(sym.st_shndx);
         symbols.push(NativeSymbol {
-            name: if sym.st_name == 0 {
-                String::new()
-            } else {
-                strtab_str(strtab_bytes, sym.st_name as usize)?.to_string()
-            },
+            name,
             section,
             value: sym.st_value + value_offset,
             size: sym.st_size,
@@ -2076,7 +2093,7 @@ fn decode_symbols(
             input_section: record_of.get(sym.st_shndx as usize).copied().flatten(),
         });
     }
-    Ok((symbols, shndx_map))
+    Ok((symbols, unique, shndx_map))
 }
 
 /// The relocations of each patchable family, `r_offset` rebased by
@@ -2716,10 +2733,18 @@ pub fn grouped_by_name(name: &str) -> bool {
     is_c_identifier(name) || name == EH_FRAME
 }
 
+/// `.init` / `.fini`: the gABI's process initialization and termination
+/// code. Each input's section is a fragment of one function, which the
+/// link concatenates in input order between a prologue and an epilogue,
+/// as crti.o and crtn.o bracket them; GNU ld places them by name.
+pub fn is_init_fini(name: &str) -> bool {
+    matches!(name, ".init" | ".fini")
+}
+
 /// Standard family for a section name, `None` when the name carries
 /// no convention and the header has to decide.
 fn family_by_name(name: &str) -> Option<SectionFamily> {
-    if name == ".text" || name.starts_with(".text.") {
+    if name == ".text" || name.starts_with(".text.") || is_init_fini(name) {
         Some(SectionFamily::Text)
     } else if name == ".data.rel.ro" || name.starts_with(".data.rel.ro.") {
         Some(SectionFamily::RelRo)

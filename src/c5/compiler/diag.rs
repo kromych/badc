@@ -101,15 +101,16 @@ fn binary_operands_fit(op: &str, compound: bool, l: Operand, r: Operand) -> bool
 /// bounds agree where both are known (6.7.5.2p6). An array's qualifiers are
 /// its elements' (6.7.3p8), so one directly pointed to compares without them.
 fn pointees_compatible(structs: &[super::StructDef], a: i64, b: i64) -> bool {
-    use super::types::{VOLATILE_BIT, enum_compatible, struct_id_of, unqualified_version_ty};
+    use super::types::{
+        VOLATILE_BIT, array_shape, enum_compatible, struct_id_of, unqualified_version_ty,
+    };
     if enum_compatible(a & !VOLATILE_BIT, b & !VOLATILE_BIT) {
         return true;
     }
     let array = |t: i64| {
         (is_struct_ty(t) && struct_ptr_depth(t) > 0)
-            .then(|| structs.get(struct_id_of(t)))
-            .flatten()
-            .filter(|s| s.is_array)
+            .then(|| struct_id_of(t))
+            .filter(|&id| structs.get(id).is_some_and(|s| s.is_array))
     };
     let (Some(x), Some(y)) = (array(a), array(b)) else {
         return false;
@@ -118,7 +119,7 @@ fn pointees_compatible(structs: &[super::StructDef], a: i64, b: i64) -> bool {
     if depth != struct_ptr_depth(b) || a ^ strip_unsigned(a) != b ^ strip_unsigned(b) {
         return false;
     }
-    let (fx, fy) = (&x.fields[0], &y.fields[0]);
+    let ((ex, dx), (ey, dy)) = (array_shape(structs, x), array_shape(structs, y));
     let elem = |t: i64| {
         let t = if depth == 1 {
             unqualified_version_ty(t)
@@ -127,15 +128,7 @@ fn pointees_compatible(structs: &[super::StructDef], a: i64, b: i64) -> bool {
         };
         t & !VOLATILE_BIT
     };
-    let dims = |f: &super::StructField| {
-        if f.array_dims.len() >= 2 {
-            f.array_dims.clone()
-        } else {
-            alloc::vec![f.array_size]
-        }
-    };
-    let (dx, dy) = (dims(fx), dims(fy));
-    enum_compatible(elem(fx.ty), elem(fy.ty))
+    enum_compatible(elem(ex), elem(ey))
         && dx.len() == dy.len()
         && dx.iter().zip(&dy).all(|(m, n)| *m < 0 || *n < 0 || m == n)
 }

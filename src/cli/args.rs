@@ -84,6 +84,9 @@ pub(crate) enum Parsed {
 /// under. The two path lists the driver fills after parsing are noted.
 #[derive(Default, Clone)]
 pub(crate) struct FrontEnd {
+    /// Each input named while a `-x` language was in effect, with that
+    /// language; any other input's comes from its file name.
+    pub(crate) languages: std::collections::BTreeMap<String, SourceKind>,
     pub(crate) gnu: bool,
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
@@ -455,7 +458,7 @@ impl Cli {
             if script {
                 kw.in_script_link()
             } else {
-                kw.in_hosted_link(shared)
+                kw.in_hosted_link(shared, !shared && self.exec_form().placed())
             }
         });
         let refusal = if !elf && elf_only {
@@ -553,6 +556,9 @@ struct Parser {
     track_pointers: bool,
     trace: bool,
     positional: Vec<String>,
+    /// The language the last `-x` gave the inputs after it; `None` before
+    /// any and after `-x none`.
+    language: Option<SourceKind>,
     /// The mode-picking flag seen, with its spelling for the
     /// mutual-exclusion diagnostic.
     mode: Option<(Mode, &'static str)>,
@@ -658,6 +664,9 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
                 "badc: error: unknown option `{arg}`"
             )));
         }
+        if let Some(kind) = p.language {
+            p.front.languages.insert(arg.clone(), kind);
+        }
         p.positional.push(arg);
     }
     p.finish()
@@ -689,6 +698,25 @@ const AARCH64_CPUS: &[&str] = &[
     "saphira", "thunderx", "thunderx2t99", "thunderx2t99p1", "thunderx3t110", "thunderxt81",
     "thunderxt83", "thunderxt88", "thunderxt88p1", "tsv110", "vulcan", "xgene1", "zeus",
 ];
+
+/// The language a gcc `-x` name selects, `None` for `none`: the
+/// languages badc translates.
+fn source_language(name: &str) -> Result<Option<SourceKind>, ParseError> {
+    Ok(Some(match name {
+        "none" => return Ok(None),
+        "c" => SourceKind::C {
+            preprocessed: false,
+        },
+        "cpp-output" => SourceKind::C { preprocessed: true },
+        "assembler" => SourceKind::Asm { preprocess: false },
+        "assembler-with-cpp" => SourceKind::Asm { preprocess: true },
+        _ => {
+            return Err(ParseError::diag(format!(
+                "badc: error: language `{name}` not recognized"
+            )));
+        }
+    }))
+}
 
 impl Parser {
     /// Handle one argument, or report that it is a positional. The
@@ -1104,6 +1132,14 @@ impl Parser {
     fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         if arg == "-arch" {
             self.arch = Some(operand(iter, "badc: error: -arch requires a name")?);
+            return Ok(true);
+        }
+        if let Some(joined) = arg.strip_prefix("-x") {
+            let name = match joined {
+                "" => operand(iter, "badc: error: -x requires a language")?,
+                _ => joined.to_string(),
+            };
+            self.language = source_language(&name)?;
             return Ok(true);
         }
         let front = &mut self.front;
@@ -2548,7 +2584,7 @@ impl FrontEnd {
             .with_std(self.std)
             .with_optimize(self.optimize)
             .with_vla_larger_than(self.vla_larger_than)
-            .with_defines(tu_defines(label, &self.defines))
+            .with_defines(tu_defines(self.source_kind(label), &self.defines))
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
             .with_quote_include_paths(self.quote_include_paths.clone())
@@ -2559,7 +2595,13 @@ impl FrontEnd {
             .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
-            .with_preprocessed(SourceKind::of(label).is_preprocessed())
+            .with_preprocessed(self.source_kind(label).is_preprocessed())
+    }
+
+    /// The language `path` is translated as: its `-x` language, or the one
+    /// its suffix selects.
+    pub(crate) fn source_kind(&self, path: &str) -> SourceKind {
+        (self.languages.get(path).copied()).unwrap_or_else(|| SourceKind::of(path))
     }
 }
 
@@ -3882,6 +3924,53 @@ mod tests {
                 other => panic!("{flag}: expected the build info, got {}", outcome(&other)),
             }
         }
+    }
+
+    /// gcc's `-x`: the language of the inputs after it, until the next
+    /// `-x`; `-x none` returns to the file name's suffix.
+    #[test]
+    fn x_names_the_language_of_the_inputs_after_it() {
+        use SourceKind::{Asm, C};
+        let cli = parse(&[
+            "-c",
+            "a.c",
+            "-x",
+            "assembler",
+            "b",
+            "c.c",
+            "-xc",
+            "d.s",
+            "-x",
+            "none",
+            "e.s",
+        ]);
+        let kinds: Vec<_> = ["a.c", "b", "c.c", "d.s", "e.s"]
+            .map(|p| cli.front.source_kind(p))
+            .into();
+        let asm = Asm { preprocess: false };
+        let c = C {
+            preprocessed: false,
+        };
+        assert!(kinds == [c, asm, asm, c, asm]);
+        let cli = parse(&[
+            "-c",
+            "-x",
+            "assembler-with-cpp",
+            "f",
+            "-x",
+            "cpp-output",
+            "g",
+        ]);
+        assert!(cli.front.source_kind("f") == Asm { preprocess: true });
+        assert!(cli.front.source_kind("g") == C { preprocessed: true });
+        assert_eq!(
+            reject(&["-x", "c++", "a.c"]),
+            ("badc: error: language `c++` not recognized".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-c", "a.c", "-x"]),
+            ("badc: error: -x requires a language".to_string(), 1)
+        );
     }
 
     #[test]

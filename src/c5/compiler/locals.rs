@@ -1764,23 +1764,29 @@ impl Compiler {
         let Some(slot) = self.vla_value_slot(ty) else {
             return Ok((ty, array_size));
         };
+        // An array of such elements is itself a variable-length array: its
+        // declarator gave the count, which scales the elements' byte count.
+        if array_size == super::VLA_ARRAY_SIZE {
+            return Ok((ty, array_size));
+        }
         if array_size != 0 {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "a non-constant inner array dimension is not supported",
-            ));
+            if array_size < 0 {
+                return Err(self.unknown_size_element_err());
+            }
+            let pos = self.ast_src_pos();
+            let size_t = self.size_t_ty();
+            let count = Expr::IntLit {
+                val: array_size,
+                ty: size_t,
+            };
+            self.pending.vla_dim_expr = Some(self.ast.push_expr(count, pos));
+            return Ok((ty, super::VLA_ARRAY_SIZE));
         }
         let elem = self.structs[super::types::struct_id_of(ty)].fields[0].ty;
         let size_t = self.size_t_ty();
         let pos = self.ast_src_pos();
         let bytes = self.ast.push_expr(Expr::VlaSizeof { size_slot: slot }, pos);
-        let elem_size = self.ast.push_expr(
-            Expr::IntLit {
-                val: self.size_of_type(elem) as i64,
-                ty: size_t,
-            },
-            pos,
-        );
+        let elem_size = self.element_bytes(elem);
         let count = self.ast.push_expr(
             Expr::Binary {
                 op: crate::c5::ir::BinOp::Divu,
@@ -1824,7 +1830,25 @@ impl Compiler {
         };
         let ptr_slot = self.reserve_slots(1);
         let size_slot = self.reserve_slots(1);
-        let elem_size = self.size_of_type(elem_ty) as i64;
+        // An element of variable-length array type has the byte count its
+        // slot holds, so the count of bytes is what the dimension scales.
+        let (dim, elem_size) = match self.vla_value_slot(elem_ty) {
+            Some(_) => {
+                let bytes = self.element_bytes(elem_ty);
+                let ty = self.size_t_ty();
+                let pos = self.ast_src_pos();
+                let op = crate::c5::ir::BinOp::Mul;
+                let mul = super::super::ast::Expr::Binary {
+                    op,
+                    lhs: dim,
+                    rhs: bytes,
+                    ty,
+                };
+                let dim = self.ast.push_expr(mul, pos);
+                (dim, 1)
+            }
+            None => (dim, self.size_of_type(elem_ty) as i64),
+        };
         self.check_vla_bound(dim, elem_size as u64);
         let s = &mut self.symbols[loc_idx];
         s.is_vla = true;

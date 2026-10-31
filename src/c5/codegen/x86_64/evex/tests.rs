@@ -214,6 +214,75 @@ fn vex_and_evex_forms_of_one_operation() {
 /// VAES on zmm registers and the 128-bit lane shuffles: EVEX at 512 bits
 /// or with a high register, VEX otherwise.
 #[test]
+fn ifma_masked_blends_valign_and_sign_masks() {
+    // AVX512-IFMA, its AVX-IFMA VEX form under gas's `{vex}`, the masked
+    // blends, `valign`, the VEX sign-mask extracts, `vblendp*`,
+    // `vmovs{h,l}dup` and the register-only `movhlps` / `movlhps`.
+    let cases: &[(&str, &[u8])] = &[
+        (
+            "vpmadd52luq %zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF2, 0xED, 0x48, 0xB4, 0xD9],
+        ),
+        (
+            "vpmadd52huq (%rsi),%ymm2,%ymm3",
+            &[0x62, 0xF2, 0xED, 0x28, 0xB5, 0x1E],
+        ),
+        (
+            "vpmadd52luq 64(%rsi){1to8},%zmm2,%zmm3{%k1}",
+            &[0x62, 0xF2, 0xED, 0x59, 0xB4, 0x5E, 0x08],
+        ),
+        (
+            "{vex} vpmadd52luq %ymm1,%ymm2,%ymm3",
+            &[0xC4, 0xE2, 0xED, 0xB4, 0xD9],
+        ),
+        (
+            "{vex} vpmadd52huq (%rsi),%xmm2,%xmm13",
+            &[0xC4, 0x62, 0xE9, 0xB5, 0x2E],
+        ),
+        (
+            "valignq $3,%zmm1,%zmm2,%zmm3",
+            &[0x62, 0xF3, 0xED, 0x48, 0x03, 0xD9, 0x03],
+        ),
+        (
+            "valignd $1,(%rax),%ymm2,%ymm3{%k2}{z}",
+            &[0x62, 0xF3, 0x6D, 0xAA, 0x03, 0x18, 0x01],
+        ),
+        (
+            "vpblendmq %zmm1,%zmm2,%zmm3{%k1}",
+            &[0x62, 0xF2, 0xED, 0x49, 0x64, 0xD9],
+        ),
+        (
+            "vpblendmb %ymm1,%ymm2,%ymm3{%k3}",
+            &[0x62, 0xF2, 0x6D, 0x2B, 0x66, 0xD9],
+        ),
+        (
+            "vpblendmd 8(%rax){1to16},%zmm2,%zmm3{%k1}",
+            &[0x62, 0xF2, 0x6D, 0x59, 0x64, 0x58, 0x02],
+        ),
+        ("vmovmskpd %ymm3,%eax", &[0xC5, 0xFD, 0x50, 0xC3]),
+        ("vmovmskps %xmm9,%r10d", &[0xC4, 0x41, 0x78, 0x50, 0xD1]),
+        ("vpmovmskb %ymm1,%ecx", &[0xC5, 0xFD, 0xD7, 0xC9]),
+        (
+            "vblendpd $5,%ymm1,%ymm2,%ymm3",
+            &[0xC4, 0xE3, 0x6D, 0x0D, 0xD9, 0x05],
+        ),
+        (
+            "vblendps $0x11,(%rdx),%xmm12,%xmm0",
+            &[0xC4, 0xE3, 0x19, 0x0C, 0x02, 0x11],
+        ),
+        ("vmovshdup %ymm1,%ymm2", &[0xC5, 0xFE, 0x16, 0xD1]),
+        ("vmovsldup (%rsi),%xmm9", &[0xC5, 0x7A, 0x12, 0x0E]),
+        ("movhlps %xmm1,%xmm0", &[0x0F, 0x12, 0xC1]),
+        ("movlhps %xmm12,%xmm3", &[0x41, 0x0F, 0x16, 0xDC]),
+    ];
+    for (text, bytes) in cases {
+        gas(text, bytes);
+    }
+    refused("{vex} vpmadd52luq %zmm1,%zmm2,%zmm3", "must be xmm/ymm");
+    refused("movhlps (%rax),%xmm0", "two xmm registers");
+}
+
+#[test]
 fn vaes_and_lane_shuffles() {
     gas(
         "vaesenc %zmm14,%zmm0,%zmm0",

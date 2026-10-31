@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
 use crate::c5::asm::AsmSectionItem;
-use crate::c5::asm::data_directive_width;
+use crate::c5::asm::x86_data_directive_width as data_directive_width;
 
 /// The width of one operand of a VEX form: `Vl` operands carry the
 /// instruction's vector length (VEX.L) and so must all name the same bank;
@@ -150,6 +150,18 @@ pub(crate) enum Mnemonic {
     /// vector in r/m. Covers pmovmskb and movmsk{ps,pd}.
     SseSignMask {
         prefix: u8,
+        opcode: u8,
+    },
+    /// The VEX sign-mask extract `<op> %xmm_or_ymm_src, %r32_dst`: VEX.L
+    /// from the source, the general register in ModRM.reg, the vector in
+    /// r/m. Covers vpmovmskb and vmovmsk{ps,pd}.
+    VexSignMask {
+        pp: u8,
+        opcode: u8,
+    },
+    /// A register-to-register SSE op `0F <opcode> /r` with no memory form:
+    /// movhlps and movlhps, whose memory encodings are movlps and movhps.
+    SseRegPair {
         opcode: u8,
     },
     /// A scalar conversion between an integer and an xmm register,
@@ -1615,6 +1627,13 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
     if let Some(&(_, prefix, opcode)) = MASKS.iter().find(|(n, _, _)| *n == name) {
         return Some(Mnemonic::SseSignMask { prefix, opcode });
     }
+    if let Some(opcode) = match name {
+        "movhlps" => Some(0x12),
+        "movlhps" => Some(0x16),
+        _ => None,
+    } {
+        return Some(Mnemonic::SseRegPair { opcode });
+    }
     // The scalar integer conversions, `(name, prefix, opcode, to_gpr)`.
     #[rustfmt::skip]
     const CVTS: &[(&str, u8, u8, bool)] = &[
@@ -1674,6 +1693,23 @@ fn vex_len(name: &str) -> VexLen {
 /// SSE prefix (0 none, 1 0x66, 2 0xF3, 3 0xF2). All are 0F-map, VEX.W 0. The
 /// non-destructive 3-operand form `v-op %src2, %src1, %dst` mirrors the SSE
 /// two-operand op with an extra source. Byte-verified against clang.
+/// The VEX form `{vex}` selects: AVX-IFMA's multiply-adds (66 0F38 W1),
+/// whose EVEX form the bare name takes, else the name's ordinary VEX form.
+fn vex_requested(name: &str) -> Option<Mnemonic> {
+    let opcode = match name {
+        "vpmadd52luq" => 0xB4,
+        "vpmadd52huq" => 0xB5,
+        _ => return vex_op(name),
+    };
+    Some(Mnemonic::Vex {
+        pp: 1,
+        map: 2,
+        w: true,
+        opcode,
+        len: VexLen::Both,
+    })
+}
+
 fn vex_op(name: &str) -> Option<Mnemonic> {
     use VexWidth::{Vl, Xmm};
     let len = vex_len(name);
@@ -1684,6 +1720,14 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         _ => None,
     } {
         return Some(Mnemonic::VexNullary { l });
+    }
+    if let Some((pp, opcode)) = match name {
+        "vpmovmskb" => Some((1u8, 0xD7u8)),
+        "vmovmskps" => Some((0, 0x50)),
+        "vmovmskpd" => Some((1, 0x50)),
+        _ => None,
+    } {
+        return Some(Mnemonic::VexSignMask { pp, opcode });
     }
     // VEX general-register ops as `(name, pp, map, opcode, imm, vvvv_first)`:
     // the BMI / BMI2 set, which encodes with VEX but names no vector register.
@@ -1762,6 +1806,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vcvtdq2pd" => Some((2, 1, 0xE6, Xmm)),
         "vcvtps2pd" => Some((0, 1, 0x5A, Xmm)),
         "vmovddup" => Some((3, 1, 0x12, Vl)),
+        "vmovsldup" => Some((2, 1, 0x12, Vl)),
+        "vmovshdup" => Some((2, 1, 0x16, Vl)),
         "vbroadcastss" => Some((1, 2, 0x18, Xmm)),
         "vbroadcastsd" => Some((1, 2, 0x19, Xmm)),
         "vpbroadcastb" => Some((1, 2, 0x78, Xmm)),
@@ -1910,6 +1956,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vperm2f128" => Some((1, 3, false, 0x06, Vl)),
         "vperm2i128" => Some((1, 3, false, 0x46, Vl)),
         "vpblendd" => Some((1, 3, false, 0x02, Vl)),
+        "vblendps" => Some((1, 3, false, 0x0C, Vl)),
+        "vblendpd" => Some((1, 3, false, 0x0D, Vl)),
         "vpalignr" => Some((1, 3, false, 0x0F, Vl)),
         "vinsertf128" => Some((1, 3, false, 0x18, Xmm)),
         "vinserti128" => Some((1, 3, false, 0x38, Xmm)),
@@ -3110,6 +3158,15 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // exception: leading an instruction it merges into that
         // instruction's own REX byte, as GNU as merges it, and only a
         // statement of its own deposits a byte.
+        // gas's `{vex}` asks for the VEX form of an instruction it would
+        // otherwise encode with EVEX: AVX-IFMA's, which takes only this way.
+        let force_vex = mnem_tok == "{vex}" && !rest.is_empty();
+        if force_vex {
+            (mnem_tok, rest) = match rest.find(char::is_whitespace) {
+                Some(p) => (&rest[..p], rest[p..].trim()),
+                None => (rest, ""),
+            };
+        }
         let mut rex = None;
         while !rest.is_empty()
             && let Some((Mnemonic::Prefix(b), None)) = split_mnemonic(mnem_tok)
@@ -3138,8 +3195,11 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // branches below), so resolve its case once here.
         let folded = fold_mnemonic_case(mnem_tok);
         let mnem_tok = folded.as_deref().unwrap_or(mnem_tok);
-        let (mnemonic, suffix) = split_mnemonic(mnem_tok)
-            .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
+        let (mnemonic, suffix) = match force_vex {
+            true => vex_requested(mnem_tok).map(|m| (m, None)),
+            false => split_mnemonic(mnem_tok),
+        }
+        .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
         // A direct `call` / `jmp` / `jcc` to a symbol name or to an expression
         // over symbols and labels (`call schedule`, `jmp sym + 4`) is a symbol
         // reference; the target is resolved to a rel32 by a relocation, not
@@ -3263,7 +3323,16 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 });
             }
         }
-        let mnemonic = resolve_evex(mnemonic, mnem_tok, &operands, decor)?;
+        let mnemonic = match force_vex {
+            // Any operand the VEX form cannot take is the encoder's refusal.
+            true if !decor.any() => mnemonic,
+            true => {
+                return Err(format!(
+                    "inline asm: `{{vex}} {mnem_tok}` takes no EVEX decorator"
+                ));
+            }
+            false => resolve_evex(mnemonic, mnem_tok, &operands, decor)?,
+        };
         insns.push(AsmInsn {
             mnemonic,
             suffix,
@@ -4445,6 +4514,45 @@ fn encode_bespoke(
                     mr.emit(code, mode, addr, v_field & 7)?;
                 }
             }
+            Ok(())
+        }
+        Mnemonic::VexSignMask { pp, opcode } => {
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Some((s, ymm))) = (dst, vec_reg(&src)) else {
+                return Err(String::from(
+                    "inline asm: this VEX op takes a vector source and a general register",
+                ));
+            };
+            if d >= XMM_BASE {
+                return Err(String::from(
+                    "inline asm: this VEX op takes a vector source and a general register",
+                ));
+            }
+            emit_vex(code, d >= 8, false, s >= 8, 1, false, 0, u8::from(ymm), pp);
+            code.push(opcode);
+            code.push(modrm_reg(d & 7, s & 7));
+            Ok(())
+        }
+        Mnemonic::SseRegPair { opcode } => {
+            // `<op> %xmm_src, %xmm_dst`: [REX] 0F <opcode> /r, register form only.
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Concrete::Reg { reg: s, .. }) = (dst, src) else {
+                return Err(String::from(
+                    "inline asm: this SSE op takes two xmm registers",
+                ));
+            };
+            let xmm = XMM_BASE..XMM_BASE + 16;
+            if !xmm.contains(&d) || !xmm.contains(&s) {
+                return Err(String::from(
+                    "inline asm: this SSE op takes two xmm registers",
+                ));
+            }
+            let (d, s) = (d - XMM_BASE, s - XMM_BASE);
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(d & 7, s & 7));
             Ok(())
         }
         Mnemonic::SseSignMask { prefix, opcode } => {

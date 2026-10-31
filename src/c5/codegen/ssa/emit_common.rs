@@ -3125,6 +3125,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
         protected_exports: Default::default(),
+        unique_symbols: Default::default(),
         image_symbols: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,

@@ -5669,23 +5669,13 @@ impl Compiler {
         if struct_ptr_depth(a) != struct_ptr_depth(b) || quals(a) != quals(b) {
             return false;
         }
-        let dims_of = |id: usize| -> alloc::vec::Vec<i64> {
-            let f = &self.structs[id].fields[0];
-            if f.array_dims.len() >= 2 {
-                f.array_dims.clone()
-            } else {
-                alloc::vec![f.array_size]
-            }
+        let shape = |id| super::types::array_shape(&self.structs, id);
+        let ((ea, da), (eb, db)) = (shape(ia), shape(ib));
+        let unqualified = |ty: i64| match pointee_unqualified && struct_ptr_depth(a) == 1 {
+            true => unqualified_version_ty(ty),
+            false => ty,
         };
-        let elem = |id: usize| {
-            let ty = self.structs[id].fields[0].ty;
-            if pointee_unqualified && struct_ptr_depth(a) == 1 {
-                unqualified_version_ty(ty)
-            } else {
-                ty
-            }
-        };
-        generic_type_match(elem(ia), elem(ib)) && array_dims_match(&dims_of(ia), &dims_of(ib))
+        generic_type_match(unqualified(ea), unqualified(eb)) && array_dims_match(&da, &db)
     }
 
     /// `__builtin_offsetof ( type-name , member-designator )` (GCC / C11
@@ -6080,10 +6070,15 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
         if t.vla_value {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "a non-constant inner array dimension is not supported",
-            ));
+            if n < 0 {
+                return Err(self.unknown_size_element_err());
+            }
+            let (pos, ty) = (self.ast_src_pos(), self.size_t_ty());
+            let dim = self
+                .ast
+                .push_expr(super::super::ast::Expr::IntLit { val: n, ty }, pos);
+            self.derive_array_of_vla(t, dim);
+            return Ok(());
         }
         t.dims.insert(0, n);
         self.require_complete_elements(t.ty, &t.dims)?;
@@ -6107,10 +6102,8 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
         if t.vla_value {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "a non-constant inner array dimension is not supported",
-            ));
+            self.derive_array_of_vla(t, dim);
+            return Ok(());
         }
         let mut dims = alloc::vec![-1];
         dims.extend_from_slice(&t.dims);
@@ -6132,15 +6125,39 @@ impl Compiler {
         Ok(())
     }
 
+    /// An array of `dim` of the variable-length array type `t` holds: another
+    /// one, whose size store runs after the element's, which it reads.
+    fn derive_array_of_vla(&mut self, t: &mut DerivedType, dim: super::super::ast::ExprId) {
+        let (ty, bound) = self.vla_bound_type(t.ty, dim);
+        let inner = t.vla.take().expect("a variable-length array type's bound");
+        let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+        let both = super::super::ast::Expr::Comma {
+            lhs: inner.store,
+            rhs: bound.store,
+            ty: size_t,
+        };
+        let store = self.ast.push_expr(both, pos);
+        t.ty = ty;
+        t.vla = Some(VmBound {
+            slot: bound.slot,
+            store,
+        });
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+    }
+
     /// The variable-length array type of `dim` elements of `elem`, and the
     /// store of its byte count into the frame slot the type reads, which
     /// runs where the declaration or type name is evaluated (C99 6.7.5.2p4).
+    /// An element of variable-length array type contributes the byte count
+    /// its own slot holds.
     pub(super) fn vla_bound_type(
         &mut self,
         elem: i64,
         dim: super::super::ast::ExprId,
     ) -> (i64, VmBound) {
-        let elem_size = self.size_of_type(elem) as i64;
+        let scale = self.element_bytes(elem);
         let slot = self.reserve_slots(1);
         let size_t = self.size_t_ty();
         let pos = self.ast_src_pos();
@@ -6149,13 +6166,6 @@ impl Compiler {
             Expr::Cast {
                 child: dim,
                 to_ty: size_t,
-            },
-            pos,
-        );
-        let scale = self.ast.push_expr(
-            Expr::IntLit {
-                val: elem_size,
-                ty: size_t,
             },
             pos,
         );
@@ -6179,6 +6189,21 @@ impl Compiler {
         );
         self.vla_type_sizes.insert(slot, size);
         (self.vla_array_type(elem, slot), VmBound { slot, store })
+    }
+
+    /// The byte count of one `elem`, as a `size_t` expression: the frame slot
+    /// of a variable-length array type, else the constant size.
+    pub(super) fn element_bytes(&mut self, elem: i64) -> super::super::ast::ExprId {
+        use super::super::ast::Expr;
+        let pos = self.ast_src_pos();
+        match self.vla_value_slot(elem) {
+            Some(size_slot) => self.ast.push_expr(Expr::VlaSizeof { size_slot }, pos),
+            None => {
+                let val = self.size_of_type(elem) as i64;
+                let ty = self.size_t_ty();
+                self.ast.push_expr(Expr::IntLit { val, ty }, pos)
+            }
+        }
     }
 
     /// A function returning the type `t` holds, on convention `conv`, which

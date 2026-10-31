@@ -17,8 +17,8 @@ behind, and no two runs share the scratch space tcltest writes into.
 
 POSIX only (the build runs ``configure`` + ``make``). Linux is the
 supported host; the CI lane and ``validate_local_boxes`` invoke it there.
-On darwin the tests in ``DARWIN_SKIP`` are skipped for the reason
-recorded there.
+The tests in ``SKIP``, and on darwin those in ``DARWIN_SKIP``, are skipped
+for the reasons recorded there.
 """
 
 from __future__ import annotations
@@ -70,6 +70,12 @@ SUITE_TIMEOUT = 1800
 # program that calls copyfile() over two FIFOs with the flags
 # tclMacOSXFCmd.c passes, so no badc-generated code is involved.
 DARWIN_SKIP = ("unixFCmd-2.4",)
+
+# http-4.15 requests //not_a_host.tcl.tk and expects the lookup to fail.
+# tcl.tk answers every subdomain with one address (168.144.86.202 from
+# 8.8.8.8 and 1.1.1.1 on 2026-10-30), so the request completes and the
+# test fails whatever compiled tclsh.
+SKIP = ("http-4.15",)
 
 
 def run(cmd, **kw):
@@ -211,9 +217,9 @@ def run_suite(tclsh: Path, log) -> None:
     runs.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=runs))
     cmd = [str(tclsh), str(tests / "all.tcl")]
-    if sys.platform == "darwin":
-        cmd += ["-skip", " ".join(DARWIN_SKIP)]
-        log(f"skipping on darwin: {' '.join(DARWIN_SKIP)}")
+    skip = SKIP + (DARWIN_SKIP if sys.platform == "darwin" else ())
+    cmd += ["-skip", " ".join(skip)]
+    log(f"skipping: {' '.join(skip)}")
     log(f"running tests/all.tcl in {work}")
     # Its own process group. tcltest runs each test file in a child
     # interpreter, so killing the process this starts leaves that child

@@ -57,6 +57,10 @@ pub(super) struct AbstractDecl {
     pub(super) derivations: alloc::vec::Vec<Derivation>,
 }
 
+/// One array bound below the outermost: a constant, or a variable bound's
+/// expression.
+pub(super) type VlaBound = Result<i64, super::super::ast::ExprId>;
+
 impl Compiler {
     /// Record the array shape `idx` holds before this declarator
     /// overwrites it, for the scope save that runs after the declarator.
@@ -342,19 +346,128 @@ impl Compiler {
     /// array its constant inner dimensions and an array typedef base form,
     /// if any (C99 6.7.5.2p3).
     fn vla_element_type(&mut self, ty: i64) -> Result<i64, C5Error> {
-        let mut inner = self.parse_inner_bounds(false)?;
+        let mut inner = self.parse_vla_inner_bounds()?;
         if !self.pending.base_array_taken && self.typedef_base_incomplete() {
             return Err(self.unknown_size_element_err());
         }
         if self.typedef_base_sized() && !self.pending.base_array_taken {
             self.pending.base_array_taken = true;
-            inner.extend(self.typedef_base_dims());
+            inner.extend(self.typedef_base_dims().into_iter().map(Ok));
         }
-        Ok(if inner.is_empty() {
-            ty
-        } else {
-            self.array_agg_type(ty, &inner)
-        })
+        let (elem, stores) = self.vla_inner_type(ty, &inner);
+        self.push_vla_stores(stores);
+        Ok(elem)
+    }
+
+    /// The array type of `elem` with `dims` (outermost first) a prototype
+    /// gives a parameter whose `variable` bounds it does not evaluate: from
+    /// the innermost of them outward a variable-length array of unspecified
+    /// size (C99 6.7.5.2p4), which a definition replaces on entry.
+    pub(super) fn unspecified_vla_type(
+        &mut self,
+        elem: i64,
+        dims: &[i64],
+        variable: &[bool],
+    ) -> Result<i64, C5Error> {
+        let Some(deepest) = variable.iter().rposition(|&v| v) else {
+            return Ok(self.array_agg_type(elem, dims));
+        };
+        let (outer, inner) = dims.split_at(deepest + 1);
+        self.require_complete_elements(elem, inner)?;
+        let mut t = match inner.is_empty() {
+            true => elem,
+            false => self.array_agg_type(elem, inner),
+        };
+        for _ in outer {
+            t = self.vla_array_type(t, super::VLA_UNSPECIFIED_SLOT);
+        }
+        Ok(t)
+    }
+
+    /// Place the byte-count stores of a block-scope declaration's
+    /// variable-length array types where the declaration is reached.
+    fn push_vla_stores(&mut self, stores: alloc::vec::Vec<super::super::ast::ExprId>) {
+        let pos = self.ast_src_pos();
+        for store in stores {
+            self.ast
+                .push_stmt(super::super::ast::Stmt::Expr(store), pos);
+        }
+    }
+
+    /// The bounds below a block-scope array's outermost one: constants, or
+    /// the expressions of variable ones (C99 6.7.5.2p4).
+    fn parse_vla_inner_bounds(&mut self) -> Result<alloc::vec::Vec<VlaBound>, C5Error> {
+        let mut bounds = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+            if self.lex.tk == ']' {
+                return Err(self.unknown_size_element_err());
+            }
+            match self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())? {
+                Some(m) if m <= 0 => {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("array dimension must be positive (got {m})"),
+                    ));
+                }
+                Some(m) => bounds.push(Ok(m)),
+                None => {
+                    self.expr(Token::Assign as i64)?;
+                    self.require_integer_size(self.ty)?;
+                    if self.is_int128_ty(self.ty) {
+                        self.ast_apply_assign_conv(self.size_t_ty());
+                    }
+                    let dim = self.ast_acc.take().expect("an expression's tree");
+                    bounds.push(Err(dim));
+                }
+            }
+            self.consume(b']', "close bracket expected in array declarator")?;
+        }
+        Ok(bounds)
+    }
+
+    /// The element type `bounds` (outermost first) make of `ty`: an array
+    /// aggregate while every bound and `ty` are constant, a variable-length
+    /// array type from the innermost variable bound out. Returns the stores
+    /// of their byte counts, innermost first, for the caller to place where
+    /// the declaration is reached.
+    pub(super) fn vla_inner_type(
+        &mut self,
+        ty: i64,
+        bounds: &[VlaBound],
+    ) -> (i64, alloc::vec::Vec<super::super::ast::ExprId>) {
+        let mut stores = alloc::vec::Vec::new();
+        let mut elem = ty;
+        let mut constant: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        for bound in bounds.iter().rev() {
+            let dim = match *bound {
+                Ok(m) if self.vla_value_slot(elem).is_none() => {
+                    constant.insert(0, m);
+                    continue;
+                }
+                Ok(m) => {
+                    let pos = self.ast_src_pos();
+                    let ty = self.size_t_ty();
+                    let lit = super::super::ast::Expr::IntLit { val: m, ty };
+                    self.ast.push_expr(lit, pos)
+                }
+                Err(e) => e,
+            };
+            if !constant.is_empty() {
+                elem = self.array_agg_type(elem, &core::mem::take(&mut constant));
+            }
+            let (vla, bound) = self.vla_bound_type(elem, dim);
+            stores.push(bound.store);
+            elem = vla;
+        }
+        let elem = match constant.is_empty() {
+            true => elem,
+            false => self.array_agg_type(elem, &constant),
+        };
+        (elem, stores)
     }
 
     /// Parse a declarator over `base`. Returns the symbol it declares
@@ -691,8 +804,13 @@ impl Compiler {
             // C99 6.7.5.2p2: at block scope the outermost pointee bound may
             // be variable (`T (*p)[n]`), the pointer's type variably modified;
             // a parameter's bound is evaluated on entry (6.9.1p10).
-            let mut vm_dim = None;
-            let mut vm_param = None;
+            // A block-scope pointee's variable bounds, by position.
+            let mut vm_dims: alloc::vec::Vec<(usize, super::super::ast::ExprId)> =
+                alloc::vec::Vec::new();
+            // Each variable bound of a parameter's pointee, by position, with
+            // the size expression a definition evaluates on entry.
+            let mut vm_params: alloc::vec::Vec<(usize, Option<super::function::ParamSize>)> =
+                alloc::vec::Vec::new();
             let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
@@ -782,15 +900,10 @@ impl Compiler {
                             Some(self.parse_constant_int()?)
                         };
                         let Some(m) = m else {
-                            if vm_dim.is_some() || !pointee_dims.is_empty() {
-                                return Err(self.compile_err(
-                                    Code::UNSUPPORTED,
-                                    "a non-constant inner array dimension is not supported",
-                                ));
-                            }
                             if param_ctx {
-                                vm_param = self.parse_param_array_size()?;
+                                let size = self.parse_param_array_size()?;
                                 self.accept(']')?;
+                                vm_params.push((pointee_dims.len(), size));
                                 pointee_dims.push(-1);
                                 continue;
                             }
@@ -799,7 +912,9 @@ impl Compiler {
                             if self.is_int128_ty(self.ty) {
                                 self.ast_apply_assign_conv(self.size_t_ty());
                             }
-                            vm_dim = self.ast_acc.take();
+                            let dim = self.ast_acc.take().expect("an expression's tree");
+                            vm_dims.push((pointee_dims.len(), dim));
+                            pointee_dims.push(-1);
                             self.accept(']')?;
                             continue;
                         };
@@ -857,8 +972,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
-            if (!pointee_dims.is_empty() || vm_dim.is_some()) && !after_sig && inner_ptr_levels > 0
-            {
+            if !pointee_dims.is_empty() && !after_sig && inner_ptr_levels > 0 {
                 // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
                 // the pointee dimensions into the aggregate-backed
                 // tag, one pointer level per inner `*`. Also covers
@@ -870,31 +984,69 @@ impl Compiler {
                 } else if base_array_open && self.typedef_base_incomplete() {
                     return Err(self.unknown_size_element_err());
                 }
-                self.require_complete_elements(outer_ty_before_inner, &pointee_dims)?;
-                self.pending.fn_chain_array_levels +=
-                    pointee_dims.len() as i64 + i64::from(vm_dim.is_some());
-                let mut pointee = if pointee_dims.is_empty() {
-                    outer_ty_before_inner
-                } else {
-                    self.array_agg_type(outer_ty_before_inner, &pointee_dims)
-                };
-                if let Some(dim) = vm_dim {
-                    let (vla_ty, bound) = self.vla_bound_type(pointee, dim);
-                    self.pending.vm_bound_stores.push(bound.store);
-                    pointee = vla_ty;
+                let var_at: alloc::vec::Vec<usize> = (vm_params.iter().map(|&(at, _)| at))
+                    .chain(vm_dims.iter().map(|&(at, _)| at))
+                    .collect();
+                let variable = |i: usize| var_at.contains(&i);
+                let checked: alloc::vec::Vec<i64> = (pointee_dims.iter().enumerate())
+                    .map(|(i, &d)| if variable(i) { 1 } else { d })
+                    .collect();
+                self.require_complete_elements(outer_ty_before_inner, &checked)?;
+                self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
+                // A variable bound below the outermost leaves every array
+                // from it outward of a size the declaration does not fix: a
+                // variable-length array of unspecified size (C99 6.7.5.2p4),
+                // which the definition replaces on entry.
+                let deep = (vm_params.iter().map(|&(at, _)| at).max()).filter(|&at| at > 0);
+                if !var_at.is_empty() && checked.iter().skip(1).any(|&d| d < 0)
+                    || deep.is_some() && checked.contains(&-1)
+                {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "an array of unknown size of variable-length arrays is not supported",
+                    ));
                 }
-                if let Some(mut size) = vm_param.take().filter(|_| idx != usize::MAX) {
-                    let rest = &pointee_dims[1..];
-                    let elem = if rest.is_empty() {
-                        outer_ty_before_inner
-                    } else {
-                        self.array_agg_type(outer_ty_before_inner, rest)
-                    };
-                    let levels = inner_ptr_levels;
+                let pointee = match deep {
+                    Some(_) => {
+                        let variable: alloc::vec::Vec<bool> =
+                            (0..pointee_dims.len()).map(variable).collect();
+                        self.unspecified_vla_type(outer_ty_before_inner, &pointee_dims, &variable)?
+                    }
+                    // A block-scope pointee's types take their sizes where the
+                    // declaration is reached.
+                    None if !vm_dims.is_empty() => {
+                        let bounds: alloc::vec::Vec<VlaBound> = (pointee_dims.iter().enumerate())
+                            .map(|(i, &d)| match vm_dims.iter().find(|&&(at, _)| at == i) {
+                                Some(&(_, e)) => Err(e),
+                                None => Ok(d),
+                            })
+                            .collect();
+                        let (t, stores) = self.vla_inner_type(outer_ty_before_inner, &bounds);
+                        self.pending.vm_bound_stores.extend(stores);
+                        t
+                    }
+                    None => self.array_agg_type(outer_ty_before_inner, &pointee_dims),
+                };
+                // A definition evaluates each variable bound on entry, in
+                // order, the first one's size carrying the shape.
+                let sizes: Option<alloc::vec::Vec<_>> = core::mem::take(&mut vm_params)
+                    .into_iter()
+                    .map(|(_, s)| s)
+                    .collect();
+                if let Some(mut sizes) = sizes.filter(|s| !s.is_empty() && idx != usize::MAX) {
+                    let mut size = sizes.remove(0);
+                    let dims = (pointee_dims.iter().enumerate())
+                        .map(|(i, &d)| (!variable(i)).then_some(d))
+                        .collect();
+                    for more in &sizes {
+                        size.outer_names.extend(&more.outer_names);
+                    }
                     size.vm = Some(super::function::VmParam {
                         sym: idx,
-                        elem,
-                        levels,
+                        base: outer_ty_before_inner,
+                        dims,
+                        more: sizes.iter().map(|s| s.at).collect(),
+                        levels: inner_ptr_levels,
                     });
                     self.param_sizes.push(size);
                 }
@@ -1076,7 +1228,32 @@ impl Compiler {
             if array_size > 0 {
                 dims.push(array_size);
             }
-            for m in self.parse_inner_bounds(param_ctx)? {
+            let inner = match self.pending.vla_allowed && !param_ctx && idx != usize::MAX {
+                true => self.parse_vla_inner_bounds()?,
+                false => (self.parse_inner_bounds(param_ctx)?.into_iter().map(Ok)).collect(),
+            };
+            // A variable bound below a constant one makes the object a
+            // variable-length array of that many variable-length rows.
+            if inner.iter().any(Result::is_err) {
+                if array_size <= 0 {
+                    return Err(self.unknown_size_element_err());
+                }
+                let mut inner = inner;
+                if self.typedef_base_sized() && !self.pending.base_array_taken {
+                    self.pending.base_array_taken = true;
+                    inner.extend(self.typedef_base_dims().into_iter().map(Ok));
+                }
+                let (elem, stores) = self.vla_inner_type(ty, &inner);
+                self.push_vla_stores(stores);
+                let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+                let count = super::super::ast::Expr::IntLit {
+                    val: array_size,
+                    ty: size_t,
+                };
+                self.pending.vla_dim_expr = Some(self.ast.push_expr(count, pos));
+                return Ok((idx, elem, super::VLA_ARRAY_SIZE, own_levels));
+            }
+            for m in inner.into_iter().flatten() {
                 dims.push(m);
                 if array_size > 0 {
                     array_size *= m;
@@ -1147,18 +1324,28 @@ impl Compiler {
             } else {
                 0
             };
-            if let Some(mut size) = self.pending.vm_param_bound.take()
+            // The adjusted parameter points to the array of the inner bounds;
+            // a definition evaluates their variable ones on entry, in order,
+            // the first one's size carrying the shape.
+            let bounds = core::mem::take(&mut self.pending.vm_param_bounds);
+            let var_at: alloc::vec::Vec<usize> = bounds.iter().map(|&(at, _)| at + 1).collect();
+            let sizes: Option<alloc::vec::Vec<_>> = bounds.into_iter().map(|(_, s)| s).collect();
+            if let Some(mut sizes) = sizes.filter(|s| !s.is_empty())
                 && idx != usize::MAX
                 && full_dims.len() >= 2
             {
-                let elem = if full_dims.len() > 2 {
-                    self.array_agg_type(ty, &full_dims[2..])
-                } else {
-                    ty
-                };
+                let mut size = sizes.remove(0);
+                for more in &sizes {
+                    size.outer_names.extend(&more.outer_names);
+                }
+                let dims = (full_dims.iter().enumerate().skip(1))
+                    .map(|(i, &d)| (!var_at.contains(&i)).then_some(d))
+                    .collect();
                 size.vm = Some(super::function::VmParam {
                     sym: idx,
-                    elem,
+                    base: ty,
+                    dims,
+                    more: sizes.iter().map(|s| s.at).collect(),
                     levels: 1,
                 });
                 self.param_sizes.push(size);
@@ -1219,12 +1406,13 @@ impl Compiler {
             }
             let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
             else {
-                // A parameter's first inner bound may be variable: the
-                // adjusted parameter points to a variable-length array whose
-                // bound the definition evaluates on entry (C99 6.9.1p10).
-                if param_ctx && dims.is_empty() && self.pending.vm_param_bound.is_none() {
-                    self.pending.vm_param_bound = self.parse_param_array_size()?;
+                // A parameter's inner bound may be variable: the adjusted
+                // parameter points to a variable-length array whose bounds
+                // the definition evaluates on entry (C99 6.9.1p10).
+                if param_ctx {
+                    let size = self.parse_param_array_size()?;
                     self.consume(b']', "close bracket expected in array declarator")?;
+                    self.pending.vm_param_bounds.push((dims.len(), size));
                     dims.push(-1);
                     continue;
                 }

@@ -105,6 +105,94 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
 }
 
 #[test]
+fn value_is_an_x86_two_byte_element() {
+    // GNU as defines `.value` on x86 alone, as `.word` there; the AArch64
+    // assembler reports an unknown pseudo-op.
+    match parse_section_item(".value", "0x1234, 7", false) {
+        Ok(AsmSectionItem::Data { width: 2, values }) => assert_eq!(values.len(), 2),
+        other => panic!("{other:?}"),
+    }
+    assert!(parse_section_item(".value", "1", true).is_err());
+}
+
+#[test]
+fn mach_o_names_lose_one_leading_underscore() {
+    // Apple's `_g` is the C name `g`; a string, a comment, a named operand
+    // reference and a `.section`'s segment and section names are not
+    // symbols, and an underscore inside a name is part of it.
+    let text = ".section __TEXT,__const\n.globl _h\n_h: b ___g // _c\n\
+                adrp x0, _t@PAGE ; ldr x1, [x0, _t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+_b /* _d */\n";
+    let want = ".section __TEXT,__const\n.globl h\nh: b __g // _c\n\
+                adrp x0, t@PAGE ; ldr x1, [x0, t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+b /* _d */\n";
+    assert_eq!(mach_o_symbol_names(text), want);
+}
+
+#[test]
+fn a_reentered_section_keeps_its_identity_or_is_refused() {
+    // gas 2.46.1: a section is its name, group and linked-to section; a
+    // second directive without flags keeps the first one's attributes, one
+    // that writes others is refused unless the name is special.
+    let blocks = |text: &str| {
+        extract_asm_sections(text, false).map(|e| {
+            let AsmExtract { blocks, .. } = e.expect("sections");
+            blocks
+                .into_iter()
+                .map(|b| {
+                    (
+                        b.name,
+                        b.flags,
+                        b.sh_type,
+                        b.group.map(|g| (g.name, g.comdat)),
+                    )
+                })
+                .collect::<alloc::vec::Vec<_>>()
+        })
+    };
+    for (second, err) in [
+        (
+            ".section .x,\"aG\",@progbits,g",
+            "changed section attributes for `.x`",
+        ),
+        (
+            ".section .x,\"awG\",@progbits,g,comdat",
+            "changed section attributes for `.x`",
+        ),
+        (
+            ".section .x,\"aG\",@nobits,g,comdat",
+            "changed section type for `.x`",
+        ),
+    ] {
+        let text = alloc::format!(".section .x,\"aG\",@progbits,g,comdat\n.byte 1\n{second}\n");
+        let got = blocks(&text).expect_err(second);
+        assert!(got.contains(err), "{second}: {got}");
+    }
+    let text = ".section .y,\"aM\",@progbits,4\n.section .y,\"aM\",@progbits,8\n";
+    assert!(
+        blocks(text)
+            .unwrap_err()
+            .contains("changed section entity size for `.y`")
+    );
+    // No flags, and a special name's other flags, take the first attributes;
+    // another group is another section.
+    let got = blocks(
+        ".section .z,\"aw\"\n.section .z\n.section .text.t,\"ax\"\n.section .text.t,\"a\"\n\
+         .section .z,\"aG\",@progbits,h\n",
+    )
+    .unwrap();
+    let z = (".z".into(), "aw".into(), None, None);
+    let t = (".text.t".into(), "ax".into(), Some("progbits".into()), None);
+    let h = (
+        ".z".into(),
+        "aG".into(),
+        Some("progbits".into()),
+        Some(("h".into(), false)),
+    );
+    assert_eq!(got, [z.clone(), z, t.clone(), t, h]);
+}
+
+#[test]
 fn extract_and_materialize() {
     let text = "1: nop\n.pushsection .discard.t,\"aw\",@progbits\n.balign 8\n.quad 1b\n.long 1b - .\n.long %c0, 7\n.asciz \"hi\"\n.popsection\nnop\n";
     let AsmExtract { code, blocks, .. } = extract_asm_sections(text, false).unwrap().unwrap();

@@ -36,17 +36,6 @@
 #if !defined(__APPLE__) && !defined(_WIN32)
 char **environ;
 #endif
-#if defined(__linux__)
-// POSIX `tzset` outputs. Like `environ`, the Linux bindings route these
-// through a COPY relocation against the C library's symbols so a read
-// after `tzset()` sees what the library wrote; the local slots here are
-// the relocation targets. Windows binds them as msvcrt data imports on
-// both architectures (see <time.h>), so the symbols must stay
-// undefined there.
-char *tzname[2];
-long timezone;
-int daylight;
-#endif
 
 // `__c5_exit` runs libc's `exit` so the atexit chain (including the
 // stdio flush) executes before the kernel reaps the process. The

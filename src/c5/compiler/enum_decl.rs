@@ -55,8 +55,13 @@ impl EnumCompletion {
         });
     }
 
+    /// The parameter types, and the function types the parameters that
+    /// lead to one spell, the tag in turn.
     pub(super) fn params(&self, p: &mut FnParams) {
         self.list(&mut p.types, &mut p.enum_tags);
+        for (_, f, _) in &mut p.fn_types {
+            self.fn_type(f);
+        }
     }
 
     /// A function type and the ones a returned pointer leads to.

@@ -1,8 +1,9 @@
 //! ELF64 image writer for Linux aarch64 and x86_64: a PIE (`ET_DYN`), a
 //! shared object, or an executable placed at its link address (`ET_EXEC`,
-//! `-no-pie` and `--freestanding`). `PT_INTERP` and the dynamic tables are
-//! present when the loader has work in the image: a position-independent
-//! placement, or a shared-library binding.
+//! `-no-pie` and `--freestanding`). The dynamic tables are present when the
+//! loader has work in the image: a position-independent placement, or a
+//! shared-library binding; an executable among them also names the loader
+//! in `PT_INTERP`. An `ET_DYN` image is linked at 0, as GNU ld links it.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -29,6 +30,7 @@ const ELFCLASS64: u8 = 2;
 const ELFDATA2LSB: u8 = 1;
 const EV_CURRENT: u8 = 1;
 const ELFOSABI_SYSV: u8 = 0;
+const ELFOSABI_GNU: u8 = 3;
 
 const ET_EXEC: u16 = 2;
 const ET_DYN: u16 = 3;
@@ -86,6 +88,7 @@ const VER_NDX_FIRST: u16 = 2;
 
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
+const STB_GNU_UNIQUE: u8 = 10;
 const STB_WEAK: u8 = 2;
 const STT_FUNC: u8 = 2;
 const STT_OBJECT: u8 = 1;
@@ -112,9 +115,11 @@ const ELF_HEADER_SIZE: u64 = 64;
 const PROGRAM_HEADER_SIZE: u64 = 56;
 /// The r-x and rw loads and `PT_GNU_STACK`.
 const N_BASE_PROGRAM_HEADERS: u64 = 3;
-/// `PT_PHDR`, `PT_INTERP`, `PT_DYNAMIC` and `PT_GNU_RELRO`, in an image
-/// that carries the loader tables.
-const N_LOADER_PROGRAM_HEADERS: u64 = 4;
+/// `PT_DYNAMIC` and `PT_GNU_RELRO`, in an image that carries the loader
+/// tables.
+const N_LOADER_PROGRAM_HEADERS: u64 = 2;
+/// `PT_PHDR` and `PT_INTERP`, in an executable that carries them.
+const N_INTERP_PROGRAM_HEADERS: u64 = 2;
 
 const RELRO_EMPTY_END_ALIGN: u64 = 0x1000;
 
@@ -325,8 +330,9 @@ struct NamedOut<'a> {
 /// Which optional sections an image carries.
 #[derive(Clone, Copy, Default)]
 struct SectionsPresent {
-    /// `.interp`, the dynamic tables, `.dynamic` and `.got`.
+    /// The dynamic tables, `.dynamic` and `.got`.
     dynamic: bool,
+    interp: bool,
     versions: bool,
     build_id: bool,
     relr: bool,
@@ -355,7 +361,6 @@ impl SectionPlan {
         let mut set =
             |s: Sec, n: usize| counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()] = n;
         for s in [
-            Sec::Interp,
             Sec::Dynsym,
             Sec::Dynstr,
             Sec::Hash,
@@ -365,6 +370,7 @@ impl SectionPlan {
         ] {
             set(s, p.dynamic as usize);
         }
+        set(Sec::Interp, p.interp as usize);
         set(Sec::GnuVersion, (p.dynamic && p.versions) as usize);
         set(Sec::GnuVersionR, (p.dynamic && p.versions) as usize);
         set(Sec::BuildId, p.build_id as usize);
@@ -386,9 +392,10 @@ impl SectionPlan {
 
     /// Plan carrying only the sections that precede `.text`, for the early
     /// `text_shndx` the symbol tables need.
-    fn prefix(dynamic: bool, has_versions: bool, build_id: bool, relr: bool) -> Self {
+    fn prefix(dynamic: bool, interp: bool, has_versions: bool, build_id: bool, relr: bool) -> Self {
         Self::new(SectionsPresent {
             dynamic,
+            interp,
             versions: has_versions,
             build_id,
             relr,
@@ -398,6 +405,25 @@ impl SectionPlan {
 
     fn len(&self) -> usize {
         self.counts.iter().sum()
+    }
+
+    /// The header an address in `s` is placed against when `s` has none:
+    /// the nearest one before it outside the TLS template, as bfd moves a
+    /// symbol off an output section it removes.
+    fn holder_of(&self, s: Sec) -> u16 {
+        let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
+        let mut end = self.index_of(s);
+        for &slot in SECTION_ORDER[..at].iter().rev() {
+            if self.count(slot) > 0 && !matches!(slot, Sec::Tdata | Sec::Tbss) {
+                return end - 1;
+            }
+            end -= self.count(slot) as u16;
+        }
+        unreachable!("the null header precedes every slot")
+    }
+
+    fn count(&self, s: Sec) -> usize {
+        self.counts[SECTION_ORDER.iter().position(|&x| x == s).unwrap()]
     }
 
     /// Section-header index of `s`, or of the slot it would occupy.
@@ -1052,10 +1078,14 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
     }
     let symbolic = if info.symbolic { DF_SYMBOLIC } else { 0 };
     let static_tls = if info.static_tls { DF_STATIC_TLS } else { 0 };
+    if info.rela_size > 0 {
+        entries.extend([
+            (DT_RELA, info.rela_vmaddr),
+            (DT_RELASZ, info.rela_size),
+            (DT_RELAENT, ELF64_RELA_SIZE),
+        ]);
+    }
     entries.extend([
-        (DT_RELA, info.rela_vmaddr),
-        (DT_RELASZ, info.rela_size),
-        (DT_RELAENT, ELF64_RELA_SIZE),
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW | symbolic | static_tls),
     ]);
@@ -1417,6 +1447,8 @@ struct DynTables {
 /// File offsets and sizes of the loaded segments.
 #[derive(Default)]
 struct Segments {
+    /// The address of file offset 0.
+    base: u64,
     has_tls: bool,
     ro_len: u64,
     relro_total: u64,
@@ -1540,7 +1572,7 @@ fn segment_vaddr(seg: &Segments, off: u64) -> u64 {
     } else {
         0
     };
-    TEXT_VMADDR_BASE + off + bias
+    seg.base + off + bias
 }
 
 /// How the image is entered.
@@ -1650,11 +1682,12 @@ impl<'a> ElfImageWriter<'a> {
         };
         let text_align = build.text_align.max(16) as u64;
         let stub_len = round_up(stub_body_len, text_align);
+        let emit_dyn = is_shared || !build.exec_form.placed();
         Ok(ElfImageWriter {
             program,
             build,
             machine,
-            emit_dyn: is_shared || !build.exec_form.placed(),
+            emit_dyn,
             loader_tables: false,
             n_imports: build.imports.imports.len(),
             relr: false,
@@ -1667,7 +1700,10 @@ impl<'a> ElfImageWriter<'a> {
             exports: Vec::new(),
             defined_imports: Vec::new(),
             dynamic: DynTables::default(),
-            seg: Segments::default(),
+            seg: Segments {
+                base: if emit_dyn { 0 } else { TEXT_VMADDR_BASE },
+                ..Default::default()
+            },
             tail: Tail::default(),
             out: Vec::new(),
             shdr_cursor: 0,
@@ -1681,6 +1717,12 @@ impl<'a> ElfImageWriter<'a> {
     /// An `ET_EXEC` image, loaded at the addresses it was linked for.
     fn placed(&self) -> bool {
         !self.emit_dyn
+    }
+
+    /// `PT_PHDR`, `PT_INTERP` and `.interp`: an executable with the loader
+    /// tables. The loader maps a shared object without consulting either.
+    fn interpreted(&self) -> bool {
+        self.loader_tables && !matches!(self.entry, Entry::Exports)
     }
 
     /// Runtime address of a file offset in a loaded segment.
@@ -1896,6 +1938,7 @@ impl<'a> ElfImageWriter<'a> {
     /// GNU symbol-version requirements.
     fn build_version_tables(&mut self) {
         let build = self.build;
+        let interpreted = self.interpreted();
         let import_version_reqs = resolve_import_version_reqs(&build.imports, self.machine);
         let mut import_versym: Vec<u16> = alloc::vec![VER_NDX_GLOBAL; self.n_imports];
         let mut verneed_groups: Vec<VerneedGroup> = Vec::new();
@@ -1966,6 +2009,7 @@ impl<'a> ElfImageWriter<'a> {
         let has_versions = !verneed_groups.is_empty();
         dynamic.text_shndx = SectionPlan::prefix(
             self.loader_tables,
+            interpreted,
             has_versions,
             build.elf.build_id != BuildId::None,
             self.relr,
@@ -2011,7 +2055,7 @@ impl<'a> ElfImageWriter<'a> {
         dynamic.import_versym = import_versym;
         dynamic.verneed_groups = verneed_groups;
         dynamic.has_versions = has_versions;
-        if self.loader_tables {
+        if interpreted {
             let mut interp = interp_path(self.machine).as_bytes().to_vec();
             interp.push(0);
             while !interp.len().is_multiple_of(8) {
@@ -2121,6 +2165,7 @@ impl<'a> ElfImageWriter<'a> {
         let build = self.build;
         let machine = self.machine;
         let placed = self.placed();
+        let interpreted = self.interpreted();
         // A position-independent image turns each internal absolute pointer
         // in static data into an R_*_RELATIVE fixup so it tracks the load
         // base; under `DT_RELR` the aligned ones move to `.relr.dyn`.
@@ -2158,6 +2203,11 @@ impl<'a> ElfImageWriter<'a> {
         seg.n_program_headers = N_BASE_PROGRAM_HEADERS
             + if self.loader_tables {
                 N_LOADER_PROGRAM_HEADERS
+            } else {
+                0
+            }
+            + if interpreted {
+                N_INTERP_PROGRAM_HEADERS
             } else {
                 0
             }
@@ -2269,12 +2319,13 @@ impl<'a> ElfImageWriter<'a> {
         seg.rw_seg_align = data_load_align.max(seg.tls_align);
         seg.code_seg_align = seg.align.max(text_align);
         let widest = seg.rw_seg_align.max(seg.code_seg_align);
-        if !TEXT_VMADDR_BASE.is_multiple_of(widest) {
+        if !seg.base.is_multiple_of(widest) {
             return Err(C5Error::hard(
                 Code::LIMIT,
                 format!(
-                    "ELF: section alignment {widest} exceeds the {TEXT_VMADDR_BASE:#x} boundary \
-                     the image is linked at"
+                    "ELF: section alignment {widest} exceeds the {:#x} boundary the image is \
+                     linked at",
+                    seg.base
                 ),
             ));
         }
@@ -2450,6 +2501,7 @@ impl<'a> ElfImageWriter<'a> {
     /// reference.
     fn plan_section_table(&mut self) {
         let build = self.build;
+        let interpreted = self.interpreted();
         let seg = &self.seg;
         let mut named_out: Vec<NamedOut> = build
             .named_sections
@@ -2496,8 +2548,10 @@ impl<'a> ElfImageWriter<'a> {
             .collect();
         let has_rela_text = !tail.er_text.is_empty();
         let has_rela_data = !tail.er_data.is_empty();
-        tail.emit_symtab =
-            !build.plt_trampoline_offsets.is_empty() || has_rela_text || has_rela_data;
+        tail.emit_symtab = !build.plt_trampoline_offsets.is_empty()
+            || has_rela_text
+            || has_rela_data
+            || !build.image_symbols.is_empty();
         tail.has_relro = seg.relro_size > 0;
         tail.has_data = seg.data_size > 0;
         tail.has_tdata = seg.has_tls && seg.tdata_size > 0;
@@ -2505,6 +2559,7 @@ impl<'a> ElfImageWriter<'a> {
         tail.has_bss = build.bss_size > 0;
         tail.plan = SectionPlan::new(SectionsPresent {
             dynamic: self.loader_tables,
+            interp: interpreted,
             versions: self.dynamic.has_versions,
             build_id: build.elf.build_id != BuildId::None,
             relr: self.relr,
@@ -2917,7 +2972,11 @@ impl<'a> ElfImageWriter<'a> {
     /// else the family whose region it falls in.
     fn data_addr_shndx(&self, addr: u64, off: u64) -> u16 {
         let slot = self.data_slot(off);
-        let base = self.tail.plan.index_of(slot);
+        let plan = &self.tail.plan;
+        if plan.count(slot) == 0 {
+            return plan.holder_of(slot);
+        }
+        let base = plan.index_of(slot);
         match self
             .named_in(slot)
             .position(|n| addr >= n.addr && addr < n.addr + n.size)
@@ -2937,8 +2996,9 @@ impl<'a> ElfImageWriter<'a> {
     /// r-x load, the read-only load when the data image has a read-only
     /// prefix, the rw load, `PT_DYNAMIC`, `PT_TLS` when the program has
     /// `_Thread_local` globals, `PT_GNU_STACK` and `PT_GNU_RELRO` over
-    /// `.dynamic`, `.got` and the relro region. The loader's four are
-    /// absent from an image without the loader tables.
+    /// `.dynamic`, `.got` and the relro region. The loader's headers are
+    /// absent from an image without the loader tables, and `PT_PHDR` and
+    /// `PT_INTERP` from a shared object.
     fn emit_file_headers(&mut self) {
         let seg = &self.seg;
         let tail = &self.tail;
@@ -2948,7 +3008,11 @@ impl<'a> ElfImageWriter<'a> {
         e_ident[4] = ELFCLASS64;
         e_ident[5] = ELFDATA2LSB;
         e_ident[6] = EV_CURRENT;
-        e_ident[7] = ELFOSABI_SYSV;
+        // bfd marks an image defining an `STB_GNU_UNIQUE` symbol GNU.
+        e_ident[7] = match self.build.unique_symbols.is_empty() {
+            true => ELFOSABI_SYSV,
+            false => ELFOSABI_GNU,
+        };
         write_struct(
             &mut out,
             &Elf64Ehdr {
@@ -2973,7 +3037,7 @@ impl<'a> ElfImageWriter<'a> {
             },
         );
         debug_assert_eq!(out.len() as u64, ELF_HEADER_SIZE);
-        if self.loader_tables {
+        if self.interpreted() {
             write_phdr(
                 &mut out,
                 PT_PHDR,
@@ -3001,7 +3065,7 @@ impl<'a> ElfImageWriter<'a> {
             PT_LOAD,
             PF_R | PF_X,
             0,
-            TEXT_VMADDR_BASE,
+            seg.base,
             seg.segment1_filesize,
             seg.segment1_filesize,
             seg.code_seg_align,
@@ -3143,7 +3207,11 @@ impl<'a> ElfImageWriter<'a> {
                 (e.offset, plan.index_of(sec))
             }
         };
-        let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
+        let binding = match () {
+            _ if self.build.unique_symbols.contains(&e.name) => STB_GNU_UNIQUE,
+            _ if e.weak => STB_WEAK,
+            _ => STB_GLOBAL,
+        };
         let st_type = match e.section {
             super::DynamicExportSection::Tls => STT_TLS,
             _ if e.is_object => STT_OBJECT,
@@ -3631,8 +3699,9 @@ impl<'a> ElfImageWriter<'a> {
         }
         let seg = &self.seg;
         let dynamic = &self.dynamic;
-        let mut headers: Vec<(Sec, Elf64Shdr)> = alloc::vec![
-            (
+        let mut headers: Vec<(Sec, Elf64Shdr)> = Vec::new();
+        if self.interpreted() {
+            headers.push((
                 Sec::Interp,
                 Elf64Shdr {
                     sh_name: self.name_off(".interp"),
@@ -3644,7 +3713,9 @@ impl<'a> ElfImageWriter<'a> {
                     sh_addralign: 1,
                     ..Default::default()
                 },
-            ),
+            ));
+        }
+        headers.extend([
             (
                 Sec::Dynsym,
                 Elf64Shdr {
@@ -3688,7 +3759,7 @@ impl<'a> ElfImageWriter<'a> {
                     ..Default::default()
                 },
             ),
-        ];
+        ]);
         if dynamic.has_versions {
             headers.push((
                 Sec::GnuVersion,
@@ -4465,10 +4536,12 @@ mod tests {
     /// Smallest plausible Build that exercises the writer end to end.
     #[test]
     fn section_indices_resolve_to_their_own_section() {
-        for bits in 0u16..512 {
+        for bits in 0u16..1024 {
             let dynamic = bits & 256 != 0;
+            let interp = dynamic && bits & 512 != 0;
             let plan = SectionPlan::new(SectionsPresent {
                 dynamic,
+                interp,
                 versions: bits & 1 != 0,
                 build_id: false,
                 relr: false,
@@ -4490,7 +4563,7 @@ mod tests {
                 named_data: (bits & 4 != 0) as usize * 3,
                 named_bss: (bits & 16 != 0) as usize,
             });
-            let mut expected = 4 + 7 * dynamic as usize;
+            let mut expected = 4 + 6 * dynamic as usize + interp as usize;
             expected += 2 * (dynamic && bits & 1 != 0) as usize; // .gnu.version{,_r}
             expected += (bits & 64 != 0) as usize * 4; // .rodata + 2 named + .eh_frame_hdr
             expected += (bits & 2 != 0) as usize; // .tdata
@@ -4837,7 +4910,8 @@ mod tests {
             p += ELF64_DYN_SIZE as usize;
         }
         assert!(rela_vmaddr > 0 && rela_size > 0);
-        let rela_file_off = (rela_vmaddr - TEXT_VMADDR_BASE) as usize;
+        // An `ET_DYN` image maps file offset 0 at address 0.
+        let rela_file_off = rela_vmaddr as usize;
         let n = (rela_size / ELF64_RELA_SIZE) as usize;
         for i in 0..n {
             let r_offset = read_u64(&bytes, rela_file_off + i * ELF64_RELA_SIZE as usize);
@@ -4849,6 +4923,68 @@ mod tests {
     }
 
     /// Walk the program-header table for the first phdr matching `p_type`.
+    /// An `ET_DYN` image is linked at 0 and an `ET_EXEC` one at its
+    /// placement; only an executable names the loader in `PT_INTERP`, and
+    /// `DT_RELA` appears with a non-empty `.rela.dyn`, as under GNU ld.
+    #[test]
+    fn a_shared_object_is_linked_at_zero_and_names_no_loader() {
+        use crate::Compiler;
+        let src = "int answer() { return 42; }\n#pragma export(answer)\nint main() { return 0; }";
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let compile = |src: String| {
+                Compiler::with_target(src, target)
+                    .compile()
+                    .expect("compile")
+            };
+            let program = compile(super::super::super::tests::with_prelude(src));
+            let no_imports = compile(String::from(
+                "int answer(void) { return 42; }\n#pragma export(answer)\n",
+            ));
+            for (program, form, shared, base, interp) in [
+                (&program, ExecForm::Pie, false, 0, true),
+                (&program, ExecForm::Placed, false, TEXT_VMADDR_BASE, true),
+                (&program, ExecForm::Pie, true, 0, false),
+                (&no_imports, ExecForm::Pie, true, 0, false),
+            ] {
+                let opts = if shared {
+                    super::super::NativeOptions::new().with_shared_library()
+                } else {
+                    super::super::NativeOptions::default()
+                };
+                let mut build = super::super::lower_for(program, target, opts).expect("lower");
+                build.exec_form = form;
+                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let what = format!("{machine:?} {form:?} shared={shared}");
+                let load = find_phdr(&bytes, PT_LOAD).expect("PT_LOAD");
+                assert_eq!(read_u64(&bytes, load + 16), base, "{what}: first load");
+                assert_eq!(
+                    find_phdr(&bytes, PT_PHDR).is_some(),
+                    interp,
+                    "{what}: PT_PHDR"
+                );
+                assert_eq!(
+                    find_phdr(&bytes, PT_INTERP).is_some(),
+                    interp,
+                    "{what}: PT_INTERP"
+                );
+                assert_eq!(
+                    find_section(&bytes, ".interp").is_some(),
+                    interp,
+                    "{what}: .interp"
+                );
+                let rela_size = find_section(&bytes, ".rela.dyn").expect(".rela.dyn").3;
+                let tags = dynamic_entries(&bytes);
+                for tag in [DT_RELA, DT_RELASZ, DT_RELAENT] {
+                    let present = tags.iter().any(|&(t, _)| t == tag);
+                    assert_eq!(present, rela_size > 0, "{what}: tag {tag} with {rela_size}");
+                }
+            }
+        }
+    }
+
     fn find_phdr(bytes: &[u8], p_type: u32) -> Option<usize> {
         let phoff = read_u64(bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -5997,6 +6133,63 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// A label past the last data byte of an image without `.bss` is
+    /// placed against `.data`, the section bfd moves a symbol of a removed
+    /// output section to, not against the header after it.
+    #[test]
+    fn a_label_at_the_end_of_data_without_bss_is_placed_against_data() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let src = "int answer(void) { return 42; }\n#pragma export(answer)\n";
+            let program = Compiler::with_target(String::from(src), target)
+                .compile()
+                .expect("compile");
+            let opts = super::super::NativeOptions::new().with_shared_library();
+            let mut build = super::super::lower_for(&program, target, opts).expect("lower");
+            build.bss_size = 0;
+            build.image_symbols.push(crate::c5::codegen::ImageSymbol {
+                name: String::from("data_end"),
+                place: crate::c5::codegen::SymbolPlace::Data(build.data.len() as u64),
+                size: 0,
+                info: 0,
+                other: 0,
+            });
+            let bytes = write(&tiny_program(), &build, machine).unwrap();
+            assert!(find_section(&bytes, ".bss").is_none(), "{machine:?}: .bss");
+            let data = section_index(&bytes, ".data").expect(".data");
+            assert_eq!(symtab_shndx(&bytes, "data_end"), data, "{machine:?}");
+        }
+    }
+
+    fn section_index(bytes: &[u8], want: &str) -> Option<u16> {
+        let eh: super::Elf64Ehdr = read_struct(bytes, 0);
+        let shdr_at = |idx: u64| eh.e_shoff as usize + idx as usize * eh.e_shentsize as usize;
+        let strtab: super::Elf64Shdr = read_struct(bytes, shdr_at(eh.e_shstrndx as u64));
+        (0..eh.e_shnum).find(|&i| {
+            let sh: super::Elf64Shdr = read_struct(bytes, shdr_at(i as u64));
+            let at = strtab.sh_offset as usize + sh.sh_name as usize;
+            bytes[at..].split(|&b| b == 0).next() == Some(want.as_bytes())
+        })
+    }
+
+    /// `st_shndx` of the first `.symtab` entry named `want`.
+    fn symtab_shndx(bytes: &[u8], want: &str) -> u16 {
+        let off = section_file_off(bytes, ".symtab").expect(".symtab") as usize;
+        let size = find_section(bytes, ".symtab").unwrap().3 as usize;
+        let strtab = section_file_off(bytes, ".strtab").expect(".strtab") as usize;
+        (0..size / 24)
+            .map(|i| off + 24 * i)
+            .find(|&e| {
+                let at = strtab + read_u32(bytes, e) as usize;
+                bytes[at..].split(|&b| b == 0).next() == Some(want.as_bytes())
+            })
+            .map(|e| u16::from_le_bytes([bytes[e + 6], bytes[e + 7]]))
+            .expect(want)
     }
 
     /// `st_value` of the first `.symtab` entry named `want`.

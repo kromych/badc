@@ -260,7 +260,10 @@ impl Compiler {
         } else {
             crate::c5::asm::AsmComments::X86
         };
-        let prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        let mut prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
+            prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
+        }
         let text = prepared.as_str();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
@@ -1554,24 +1557,35 @@ impl Compiler {
             }
             self.restore_lex(size.at);
             self.expr(Token::Assign as i64)?;
-            let Some(vm) = size.vm else {
+            let Some(vm) = size.vm.clone() else {
                 items.extend(self.ast_emit_expr_stmt());
                 continue;
             };
-            // The parameter's type takes the variable-length array whose byte
-            // count this evaluation stores.
-            if self.is_int128_ty(self.ty) {
-                self.ast_apply_assign_conv(self.size_t_ty());
+            // The parameter's type takes the variable-length arrays whose byte
+            // counts these evaluations store.
+            let mut dims = Vec::with_capacity(vm.more.len() + 1);
+            for at in core::iter::once(None).chain(vm.more.iter().map(Some)) {
+                if let Some(&at) = at {
+                    self.restore_lex(at);
+                    self.expr(Token::Assign as i64)?;
+                }
+                if self.is_int128_ty(self.ty) {
+                    self.ast_apply_assign_conv(self.size_t_ty());
+                }
+                dims.extend(self.ast_acc.take());
             }
-            let Some(dim) = self.ast_acc.take() else {
-                continue;
-            };
-            let (vla_ty, bound) = self.vla_bound_type(vm.elem, dim);
+            let mut dims = dims.into_iter();
+            let bounds: Vec<_> = (vm.dims.iter())
+                .map(|d| d.ok_or_else(|| dims.next().expect("a bound per variable dimension")))
+                .collect();
+            let (vla_ty, stores) = self.vla_inner_type(vm.base, &bounds);
             let pos = self.ast_src_pos();
-            items.push(
-                self.ast
-                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos),
-            );
+            for store in stores {
+                items.push(
+                    self.ast
+                        .push_stmt(super::super::ast::Stmt::Expr(store), pos),
+                );
+            }
             let declared = self.symbols[vm.sym].type_;
             let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
             self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;

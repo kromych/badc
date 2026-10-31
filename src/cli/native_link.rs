@@ -1102,8 +1102,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         preemption: cli.preemption(),
         export_all: cli.link.export_all || cli.exports_definitions(),
         export_data: cli.link.export_data || cli.exports_definitions(),
-        no_copy_relocs: cli.target.binary_format() != badc::BinaryFormat::Elf,
-        pe_image: cli.target.binary_format() == badc::BinaryFormat::Pe,
+        format: cli.target.binary_format(),
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,

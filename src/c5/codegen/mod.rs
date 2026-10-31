@@ -112,8 +112,9 @@ pub enum Target {
 /// relocatable objects, shared libraries and the final image share the
 /// container -- so one value answers both what `-l` searches for and
 /// what an input is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BinaryFormat {
+    #[default]
     Elf,
     MachO,
     Pe,
@@ -2338,6 +2339,9 @@ pub(crate) struct Build {
     /// The exports of protected visibility, which an ELF image states as
     /// `STV_PROTECTED` in `.dynsym`.
     pub protected_exports: alloc::collections::BTreeSet<String>,
+    /// The definitions bound `STB_GNU_UNIQUE`, which an ELF image states in
+    /// both symbol tables and marks `ELFOSABI_GNU` for.
+    pub unique_symbols: alloc::collections::BTreeSet<String>,
     /// A linked image's static symbol table past its import trampolines,
     /// locals first. Empty where no link produced the build.
     pub image_symbols: Vec<ImageSymbol>,

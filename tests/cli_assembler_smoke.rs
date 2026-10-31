@@ -146,6 +146,61 @@ fn dot_capital_s_preprocesses_and_predefines_assembler() {
     assert_eq!(&std::fs::read(d.join("leaf.o")).unwrap()[..4], b"\x7fELF");
 }
 
+/// `-x assembler` assembles an input whatever its name, the form
+/// configure-time probes use on `/dev/null`; `-x assembler-with-cpp`
+/// preprocesses it first, as a `.S` is.
+#[test]
+fn x_assembler_takes_an_input_of_any_name() {
+    let d = dir("x-assembler");
+    write(&d, "leaf.txt", LEAF);
+    write(&d, "macro.txt", &LEAF.replace("7", "SEVEN"));
+    let target = format!("--target={TARGET}");
+    let target = target.as_str();
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            target,
+            "-x",
+            "assembler",
+            "leaf.txt",
+            "-o",
+            "a.o",
+        ],
+    );
+    let cpp = [
+        "-x",
+        "assembler-with-cpp",
+        "macro.txt",
+        "-DSEVEN=7",
+        "-o",
+        "b.o",
+    ];
+    run_ok(&d, &[&["-q", "-c", target][..], &cpp].concat());
+    for obj in ["a.o", "b.o"] {
+        assert_eq!(
+            &std::fs::read(d.join(obj)).unwrap()[..4],
+            b"\x7fELF",
+            "{obj}"
+        );
+    }
+    if cfg!(unix) {
+        run_ok(
+            &d,
+            &[
+                "-q",
+                "-c",
+                "-o",
+                "/dev/null",
+                "-x",
+                "assembler",
+                "/dev/null",
+            ],
+        );
+    }
+}
+
 #[test]
 fn dot_s_is_not_preprocessed() {
     let d = dir("dot-s-verbatim");
@@ -305,6 +360,116 @@ fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
         }
     }
     out
+}
+
+/// Apple's assembler syntax: `.section SEGMENT,SECTION` names the section
+/// badc's Mach-O writer places there, `.private_extern` is a hidden global,
+/// and `sym@PAGE` / `sym@PAGEOFF` are the page and in-page relocations of
+/// `adrp` and of an `add` or load offset, the addend on either side.
+#[test]
+fn apple_section_visibility_and_page_operands_assemble() {
+    const ADR_PREL_PG_HI21: u32 = 275;
+    const ADD_ABS_LO12_NC: u32 = 277;
+    const LDST32_ABS_LO12_NC: u32 = 285;
+    let d = dir("apple-syntax");
+    write(
+        &d,
+        "m.s",
+        ".section __TEXT,__const\nLrcon: .long 1,2,3,4\n.globl _tab\n_tab: .long 5\n\
+         .section __DATA,__data\n_d: .long 1\n.section __DATA,__bss\n_z: .space 8\n\
+         .text\n.private_extern _f\n.globl _f\n_f:\n\
+         adrp x8, Lrcon@PAGE\nadd x8, x8, Lrcon@PAGEOFF\n\
+         adrp x9, _tab@PAGE\nldr w1, [x9, _tab@PAGEOFF]\n\
+         adrp x10, Lrcon+16@PAGE\nadd x10, x10, Lrcon@PAGEOFF+16\nret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=macos-aarch64", "m.s", "-o", "m.o"],
+    );
+    let bytes = std::fs::read(d.join("m.o")).unwrap();
+    let headers = section_headers(&bytes);
+    for (name, sh_type) in [(".rodata", 1), (".data", 1), (".bss", 8)] {
+        assert!(
+            headers.iter().any(|h| h.0 == name && h.1 == sh_type),
+            "{name}"
+        );
+    }
+    // Apple's `_f` is the C name `f`.
+    let f = sym_table(&bytes)
+        .into_iter()
+        .find(|s| s.0 == "f")
+        .expect("f");
+    assert_eq!(f.1 >> 4, 1, "`.private_extern` is global");
+    assert_eq!(visibility(&bytes, "f"), Some(2), "and hidden");
+    let got: Vec<(u32, i64)> = relocs(&bytes, ".rela.text")
+        .into_iter()
+        .map(|(_, rtype, addend)| (rtype, addend))
+        .collect();
+    let want = [
+        (ADR_PREL_PG_HI21, 0),
+        (ADD_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 0),
+        (LDST32_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 16),
+        (ADD_ABS_LO12_NC, 16),
+    ];
+    assert_eq!(got, want);
+}
+
+/// gas takes an ELF section's type from its name (bfd's special-section
+/// table) and adds the name's attributes to the written ones unless the
+/// written ones name another attribute. A symbol in a thread-local section
+/// is `STT_TLS`. Rows measured against gas 2.46.1 on x86-64.
+#[test]
+fn special_section_names_take_their_type_and_attributes() {
+    const PROGBITS: u32 = 1;
+    const NOTE: u32 = 7;
+    const NOBITS: u32 = 8;
+    const INIT_ARRAY: u32 = 14;
+    const FINI_ARRAY: u32 = 15;
+    const PREINIT_ARRAY: u32 = 16;
+    const W: u64 = 0x1;
+    const A: u64 = 0x2;
+    const X: u64 = 0x4;
+    const T: u64 = 0x400;
+    let cases: &[(&str, &str, u32, u64)] = &[
+        (".init", ".init", PROGBITS, A | X),
+        (".fini", ".fini", PROGBITS, A | X),
+        (".init_array", ".init_array", INIT_ARRAY, W | A),
+        (".fini_array", ".fini_array", FINI_ARRAY, W | A),
+        (".preinit_array", ".preinit_array", PREINIT_ARRAY, W | A),
+        (".note.x", ".note.x", NOTE, 0),
+        (".note.gnu.property, \"a\"", ".note.gnu.property", NOTE, A),
+        (".tdata.x", ".tdata.x", PROGBITS, W | A | T),
+        (".tbss.x", ".tbss.x", NOBITS, W | A | T),
+        (".tdata.y, \"aw\"", ".tdata.y", PROGBITS, W | A | T),
+        (".text.x", ".text.x", PROGBITS, A | X),
+        (".rodata.x", ".rodata.x", PROGBITS, A),
+        (".bss.x", ".bss.x", NOBITS, W | A),
+        (".note.GNU-stack", ".note.GNU-stack", PROGBITS, 0),
+        (".textx", ".textx", PROGBITS, 0),
+    ];
+    let d = dir("special-sections");
+    let mut src = String::new();
+    for (i, (directive, _, _, _)) in cases.iter().enumerate() {
+        src.push_str(&format!(".section {directive}\nsym{i}: .byte 0\n"));
+    }
+    write(&d, "s.s", &src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "s.s"]);
+    let bytes = std::fs::read(d.join("s.o")).expect("object");
+    let headers = section_headers(&bytes);
+    let symbols = sym_table(&bytes);
+    for (i, (directive, name, sh_type, flags)) in cases.iter().enumerate() {
+        let got = headers.iter().find(|h| h.0 == *name);
+        assert_eq!(
+            got.map(|h| (h.1, h.2)),
+            Some((*sh_type, *flags)),
+            "`.section {directive}`"
+        );
+        let sym = symbols.iter().find(|s| s.0 == format!("sym{i}"));
+        let tls = sym.map(|s| s.1 & 0xf == 6);
+        assert_eq!(tls, Some(flags & T != 0), "`sym{i}` in `{name}`");
+    }
 }
 
 /// A `.globl` naming a symbol the unit neither defines nor references still

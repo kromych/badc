@@ -6,7 +6,6 @@ use super::args::Cli;
 use super::deps::{DepKind, DepOptions, emit_deps};
 use super::diag::{TuLog, eprint_diagnostic, rendered};
 use super::inputs::{Inputs, StdinSource};
-use super::options::SourceKind;
 
 /// `-M` / `-MM` preprocess only: emit the rule and produce no
 /// object, as gcc does.
@@ -34,7 +33,7 @@ pub(crate) fn dump_dependencies(
         let copts = cli
             .front
             .compile_options(src)
-            .with_asm_source(SourceKind::of(src).is_asm())
+            .with_asm_source(cli.front.source_kind(src).is_asm())
             .with_track_includes(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
@@ -131,7 +130,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         let opts = cli
             .front
             .compile_options(&label)
-            .with_asm_source(SourceKind::of(src_path).is_asm())
+            .with_asm_source(cli.front.source_kind(src_path).is_asm())
             .with_track_includes(dump_deps.is_some())
             .with_keep_pragmas(true)
             .with_elf_class(cli.codegen.elf_class)

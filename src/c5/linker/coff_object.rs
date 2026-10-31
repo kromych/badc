@@ -1563,6 +1563,7 @@ pub fn parse_native_coff(
         .map(|s| (s.name.clone(), s.value, s.size))
         .collect();
     Ok(NativeObject {
+        unique: Default::default(),
         source: String::new(),
         sections: blobs.sections,
         discarded: blobs.discarded,

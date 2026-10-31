@@ -304,6 +304,8 @@ impl Compiler {
             (ValueBuiltin::ReturnAddr, &[Arg::Value(addr)]) => (addr, void_ptr_ty()),
             _ => unreachable!("`{name}` operands follow its parameters"),
         };
+        // The value is never an array, whatever an operand decayed from.
+        self.drop_operand_array_decay();
         self.ast_acc = Some(value);
         self.ty = ty;
         Ok(())

@@ -624,14 +624,17 @@ fn fixture_jobs() -> usize {
     })
 }
 
+/// A bound on the fixtures checked at once, shared by every run that
+/// draws from it.
 struct FixturePermits {
+    capacity: usize,
     free: Mutex<usize>,
     released: Condvar,
 }
 
-struct FixturePermit(&'static FixturePermits);
+struct FixturePermit<'a>(&'a FixturePermits);
 
-impl Drop for FixturePermit {
+impl Drop for FixturePermit<'_> {
     fn drop(&mut self) {
         let mut free = self.0.free.lock().unwrap_or_else(|e| e.into_inner());
         *free += 1;
@@ -639,19 +642,30 @@ impl Drop for FixturePermit {
     }
 }
 
-fn acquire_fixture_permit() -> FixturePermit {
-    static POOL: OnceLock<FixturePermits> = OnceLock::new();
-    let pool = POOL.get_or_init(|| FixturePermits {
-        free: Mutex::new(fixture_jobs()),
-        released: Condvar::new(),
-    });
-    let mut free = pool.free.lock().unwrap_or_else(|e| e.into_inner());
-    while *free == 0 {
-        free = pool.released.wait(free).unwrap_or_else(|e| e.into_inner());
+impl FixturePermits {
+    fn new(capacity: usize) -> Self {
+        FixturePermits {
+            capacity,
+            free: Mutex::new(capacity),
+            released: Condvar::new(),
+        }
     }
-    *free -= 1;
-    drop(free);
-    FixturePermit(pool)
+
+    fn acquire(&self) -> FixturePermit<'_> {
+        let mut free = self.free.lock().unwrap_or_else(|e| e.into_inner());
+        while *free == 0 {
+            free = self.released.wait(free).unwrap_or_else(|e| e.into_inner());
+        }
+        *free -= 1;
+        FixturePermit(self)
+    }
+}
+
+/// The process-wide pool of [`fixture_jobs`] permits every whole-corpus
+/// parity test draws from.
+fn fixture_permits() -> &'static FixturePermits {
+    static POOL: OnceLock<FixturePermits> = OnceLock::new();
+    POOL.get_or_init(|| FixturePermits::new(fixture_jobs()))
 }
 
 /// Check every entry of `corpus` on up to [`fixture_jobs`] threads and
@@ -662,9 +676,18 @@ where
     T: Sync,
     F: Fn(&str, &T) -> Option<String> + Sync,
 {
+    parity_failures_in(fixture_permits(), corpus, check)
+}
+
+/// [`parity_failures`] under the permits of `pool`.
+fn parity_failures_in<T, F>(pool: &FixturePermits, corpus: &[(&str, T)], check: F) -> Vec<String>
+where
+    T: Sync,
+    F: Fn(&str, &T) -> Option<String> + Sync,
+{
     let next = AtomicUsize::new(0);
     let failures: Mutex<Vec<(usize, String)>> = Mutex::new(Vec::new());
-    let width = fixture_jobs().min(corpus.len().max(1));
+    let width = pool.capacity.min(corpus.len().max(1));
     std::thread::scope(|scope| {
         for _ in 0..width {
             scope.spawn(|| {
@@ -673,7 +696,7 @@ where
                     let Some((name, expected)) = corpus.get(i) else {
                         break;
                     };
-                    let _permit = acquire_fixture_permit();
+                    let _permit = pool.acquire();
                     if let Some(msg) = check(name, expected) {
                         failures
                             .lock()
@@ -742,11 +765,13 @@ fn an_image_that_cannot_start_is_a_spawn_error() {
 }
 
 /// Completion order is the reverse of corpus order here, so an unsorted
-/// collection would report the same regression differently per run.
+/// collection would report the same regression differently per run. The
+/// runner tests take pools of their own: the process-wide one is held by
+/// the corpus runs for minutes.
 #[test]
 fn parity_failures_report_in_corpus_order() {
     let corpus: Vec<(&str, u64)> = (0..32).map(|i| ("fixture", i)).collect();
-    let got = parity_failures(&corpus, |name, i| {
+    let got = parity_failures_in(&FixturePermits::new(4), &corpus, |name, i| {
         std::thread::sleep(std::time::Duration::from_millis(32 - *i));
         Some(format!("{name} {i}"))
     });
@@ -754,26 +779,30 @@ fn parity_failures_report_in_corpus_order() {
     assert_eq!(got, want);
 }
 
-/// The permit pool is process-wide, so no run of the corpus exceeds
-/// [`fixture_jobs`] however many parity tests the harness has in flight.
+/// Runs that share a pool stay within its permits together, as every
+/// parity test the harness has in flight shares [`fixture_permits`].
 #[test]
 fn parity_failures_hold_the_concurrency_bound() {
+    let pool = FixturePermits::new(3);
     let live = AtomicUsize::new(0);
     let peak = AtomicUsize::new(0);
     let corpus: Vec<(&str, u64)> = (0..64).map(|i| ("fixture", i)).collect();
-    let got = parity_failures(&corpus, |_, _| {
-        peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        live.fetch_sub(1, Ordering::SeqCst);
-        None
+    let run = || {
+        parity_failures_in(&pool, &corpus, |_, _| {
+            peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            live.fetch_sub(1, Ordering::SeqCst);
+            None
+        })
+    };
+    let (a, b) = std::thread::scope(|scope| {
+        let a = scope.spawn(run);
+        let b = scope.spawn(run);
+        (a.join().unwrap(), b.join().unwrap())
     });
-    assert!(got.is_empty());
+    assert!(a.is_empty() && b.is_empty());
     let peak = peak.load(Ordering::SeqCst);
-    assert!(
-        (1..=fixture_jobs()).contains(&peak),
-        "peak {peak} outside 1..={}",
-        fixture_jobs()
-    );
+    assert!((1..=3).contains(&peak), "peak {peak} outside 1..=3");
 }
 
 /// Standard-library prelude prepended to every inline-source test.

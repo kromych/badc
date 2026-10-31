@@ -1046,6 +1046,29 @@ pub(crate) fn ssp_classify(
     out
 }
 
+/// The innermost element type and the bounds, outermost first, of the array
+/// aggregate `id`: an aggregate whose element is another one (a
+/// variable-length array of rows) contributes its bounds, as an array of
+/// arrays is (C99 6.7.5.2p3). A negative bound is unspecified or variable.
+pub(super) fn array_shape(
+    structs: &[super::StructDef],
+    mut id: usize,
+) -> (i64, alloc::vec::Vec<i64>) {
+    let mut dims = alloc::vec::Vec::new();
+    loop {
+        let f = &structs[id].fields[0];
+        match f.array_dims.len() >= 2 {
+            true => dims.extend(&f.array_dims),
+            false => dims.push(f.array_size),
+        }
+        let inner = struct_id_of(f.ty);
+        if !is_struct_value_ty(f.ty) || f.ty != struct_ty_for(inner) || !structs[inner].is_array {
+            return (f.ty, dims);
+        }
+        id = inner;
+    }
+}
+
 pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }

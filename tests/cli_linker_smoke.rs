@@ -815,6 +815,41 @@ fn a_label_in_an_empty_section_names_that_section() {
     }
 }
 
+/// Records the order of the `.init` fragments, the constructor and the
+/// destructor; the `.fini` fragment exits 7 when all ran in the gABI order.
+#[cfg(target_os = "linux")]
+const INIT_FINI_STEPS: &str = "#include <unistd.h>\n\
+int seq;\n\
+void step_a(void) { seq = seq * 10 + 1; }\n\
+void step_b(void) { seq = seq * 10 + 2; }\n\
+__attribute__((constructor)) static void ctor(void) { seq = seq * 10 + 3; }\n\
+__attribute__((destructor)) static void dtor(void) { seq = seq * 10 + 4; }\n\
+void fini_check(void) { _exit(seq == 1234 ? 7 : 9); }\n\
+int main(void) { return seq == 123 ? 0 : 1; }\n";
+
+// `.init` and `.fini` fragments run as crti.o and crtn.o bracket them under
+// GNU ld: in input order, before the constructors and after the
+// destructors. The first fragment's section is named without flags.
+#[cfg(target_os = "linux")]
+#[test]
+fn init_and_fini_fragments_run_around_constructors_and_destructors() {
+    let dir = tempdir("init-fini");
+    let (call, progbits) = if cfg!(target_arch = "aarch64") {
+        ("bl", "%progbits")
+    } else {
+        ("call", "@progbits")
+    };
+    let first = format!(
+        ".section .init\n\t{call} step_a\n.section .fini,\"ax\",{progbits}\n\t{call} fini_check\n"
+    );
+    let second = format!(".section .init,\"ax\",{progbits}\n\t{call} step_b\n");
+    let steps = write_source(&dir, "steps.c", INIT_FINI_STEPS);
+    let first = write_source(&dir, "first.s", &first);
+    let second = write_source(&dir, "second.s", &second);
+    let units = [steps.as_path(), first.as_path(), second.as_path()];
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(7));
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]
@@ -7649,6 +7684,12 @@ type SymtabRow = (String, u8, u64, u64, u16);
 
 /// `SHT_SYMTAB` entries of an ELF64 image and the table's `sh_info`.
 fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
+    elf_symbol_table(bytes, 2)
+}
+
+/// The entries of an ELF64 image's symbol table of type `sh_type`
+/// (`SHT_SYMTAB` 2, `SHT_DYNSYM` 11) and the table's `sh_info`.
+fn elf_symbol_table(bytes: &[u8], sh_type: u32) -> (Vec<SymtabRow>, u32) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -7657,8 +7698,8 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     let e_shnum = rd16(0x3c) as usize;
     let sh = |i: usize| e_shoff + i * e_shentsize;
     let symtab = (0..e_shnum)
-        .find(|&i| rd32(sh(i) + 4) == 2)
-        .expect("no .symtab");
+        .find(|&i| rd32(sh(i) + 4) == sh_type)
+        .expect("no symbol table of the type");
     let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
     let off = rd64(sh(symtab) + 24) as usize;
     let count = rd64(sh(symtab) + 32) as usize / 24;
@@ -7677,6 +7718,186 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
         })
         .collect();
     (rows, rd32(sh(symtab) + 44))
+}
+
+/// `<time.h>`'s data bindings import `tzname`, `timezone` and `daylight`
+/// only into an image that names them, which reads the C library's own
+/// objects as gcc's image does.
+#[test]
+fn tzset_outputs_are_imported_only_where_named() {
+    let dir = tempdir("tzset-outputs");
+    write_source(
+        &dir,
+        "quiet.c",
+        "#include <time.h>\nint main(void) { return 0; }\n",
+    );
+    write_source(
+        &dir,
+        "uses.c",
+        "#include <stdio.h>\n#include <time.h>\n\
+         int main(void) { tzset(); printf(\"%s %ld %d\\n\", tzname[0], timezone, daylight); \
+         return 0; }\n",
+    );
+    let names = ["tzname", "timezone", "daylight"];
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        for (src, named) in [("quiet.c", false), ("uses.c", true)] {
+            let args = ["-q", target, src, "-o", "prog"];
+            run(Command::new(badc()).args(args).current_dir(&dir), "link");
+            let dynsym = elf_symbol_table(&std::fs::read(dir.join("prog")).unwrap(), 11).0;
+            for name in names {
+                let row = dynsym.iter().find(|r| r.0 == name);
+                // An import, not a copy the image defines.
+                assert_eq!(
+                    row.map(|r| r.4),
+                    named.then_some(0),
+                    "{target} {src}: {name}"
+                );
+            }
+        }
+    }
+    if cfg!(target_os = "linux") {
+        run(
+            Command::new(badc())
+                .args(["-q", "uses.c", "-o", "uses"])
+                .current_dir(&dir),
+            "link",
+        );
+        let out = Command::new(dir.join("uses"))
+            .env("TZ", "UTC")
+            .output()
+            .expect("run");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "UTC 0 0\n");
+    }
+}
+
+/// On macOS, assembly names a C symbol with Apple's leading underscore,
+/// in an assembler source and in an `asm` statement alike.
+#[cfg(target_os = "macos")]
+#[test]
+fn mach_o_assembly_reaches_c_names_through_the_underscore() {
+    let dir = tempdir("mach-o-underscore");
+    write_source(
+        &dir,
+        "ia.c",
+        "int g(void) { return 3; }\nint h(void);\nint k(void);\n\
+         int main(void) { return h() + k(); }\n__asm__(\".globl _h\\n_h:\\n b _g\\n\");\n",
+    );
+    write_source(&dir, "k.s", ".text\n.globl _k\n.p2align 2\n_k:\n b _g\n");
+    let units = [dir.join("ia.c"), dir.join("k.s")];
+    let units: Vec<&Path> = units.iter().map(|p| p.as_path()).collect();
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(6));
+}
+
+/// An image with no import and no emitted relocation still lists its
+/// definitions in `.symtab`, as GNU ld writes one for every image.
+#[test]
+fn an_image_without_imports_lists_its_definitions() {
+    let dir = tempdir("symtab-no-imports");
+    write_source(&dir, "f.c", "int f(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "e.c",
+        "int g = 3;\nvoid __c5_entry(void) { for (;;); }\n",
+    );
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        let shared = ["-q", target, "--shared", "f.c", "-o", "f.so"];
+        run(
+            Command::new(badc()).args(shared).current_dir(&dir),
+            "shared",
+        );
+        let bare = ["-q", target, "--freestanding", "e.c", "-o", "e"];
+        run(
+            Command::new(badc()).args(bare).current_dir(&dir),
+            "freestanding",
+        );
+        for (image, names) in [("f.so", &["f"][..]), ("e", &["g", "__c5_entry"][..])] {
+            let rows = elf_symtab(&std::fs::read(dir.join(image)).expect("image")).0;
+            for name in names {
+                let row = rows.iter().find(|r| r.0 == *name);
+                assert!(
+                    row.is_some_and(|r| r.1 >> 4 == 1),
+                    "{target} {image}: {name}"
+                );
+            }
+        }
+    }
+}
+
+/// A definition the assembler binds `STB_GNU_UNIQUE` keeps the binding in
+/// the image's symbol tables, `.dynsym` included, and the image is marked
+/// `ELFOSABI_GNU`, as GNU ld 2.46.1 writes both; through either link.
+#[test]
+fn a_unique_definition_keeps_its_binding_in_the_image() {
+    const STB_GNU_UNIQUE: u8 = 10;
+    let dir = tempdir("unique-binding");
+    write_source(
+        &dir,
+        "uv.s",
+        ".data\n.globl uv\n.type uv, @gnu_unique_object\n.size uv, 4\nuv: .long 7\n",
+    );
+    write_source(
+        &dir,
+        "m.c",
+        "extern int uv;\nint main(void) { return uv - 7; }\n",
+    );
+    let badc_in = |args: &[&str], what: &str| {
+        run(Command::new(badc()).args(args).current_dir(&dir), what);
+    };
+    badc_in(
+        &["-q", "-c", "--target=linux-x64", "uv.s", "-o", "uv.o"],
+        "assemble",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "uv.o", "-o", "prog"],
+        "link",
+    );
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "uv.o",
+            "-o",
+            "lib.so",
+        ],
+        "shared",
+    );
+    badc_in(
+        &["--ld", "-m", "elf_x86_64", "-shared", "uv.o", "-o", "ld.so"],
+        "--ld",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "-c", "-o", "m.o"],
+        "compile",
+    );
+    for (image, dynamic) in [("prog", false), ("lib.so", true), ("ld.so", true)] {
+        let bytes = std::fs::read(dir.join(image)).expect("image");
+        assert_eq!(bytes[7], 3, "{image}: EI_OSABI");
+        let mut tables = vec![("symtab", elf_symbol_table(&bytes, 2).0)];
+        if dynamic {
+            tables.push(("dynsym", elf_symbol_table(&bytes, 11).0));
+        }
+        for (table, rows) in tables {
+            let uv = rows.iter().find(|r| r.0 == "uv").expect("uv");
+            assert_eq!(uv.1 >> 4, STB_GNU_UNIQUE, "{image} {table}");
+        }
+    }
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "m.o",
+            "-o",
+            "plain.so",
+        ],
+        "plain",
+    );
+    let plain = std::fs::read(dir.join("plain.so")).expect("image");
+    assert_eq!(
+        plain[7], 0,
+        "an image with no unique definition stays System V"
+    );
 }
 
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
@@ -8250,7 +8471,7 @@ fn unknown_asm_section_flag_is_diagnosed() {
     let src = write_source(
         &dir,
         "t.c",
-        "__asm__(\".pushsection .tls.tab,\\\"awT\\\",@progbits\\n\"\n\
+        "__asm__(\".pushsection .excl.tab,\\\"awe\\\",@progbits\\n\"\n\
          \"       .long 1\\n\"\n\
          \"       .popsection\\n\");\n\
          int main(void) { return 0; }\n",
@@ -8262,11 +8483,41 @@ fn unknown_asm_section_flag_is_diagnosed() {
         .current_dir(&dir)
         .output()
         .expect("run badc");
-    assert!(!out.status.success(), "expected the T flag to be rejected");
+    assert!(
+        !out.status.success(),
+        "expected the `e` flag to be rejected"
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.contains("TLS") && err.contains(".tls.tab"),
+        err.contains("flag `e`") && err.contains(".excl.tab"),
         "diagnostic should name the section and the flag: {err}",
+    );
+}
+
+/// Two assembler statements that give one section different types are
+/// refused as gas refuses them within one source, not as an internal error.
+#[test]
+fn a_section_type_changed_across_asm_statements_is_diagnosed() {
+    let dir = tempdir("asm-section-type");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__asm__(\".section .x,\\\"a\\\",@progbits\\n.byte 1\\n.previous\");\n\
+         __asm__(\".section .x,\\\"a\\\",@nobits\\n.zero 1\\n.previous\");\n\
+         int main(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("t.o"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "the second type must be refused");
+    assert!(
+        err.contains("changed section type for `.x`") && !err.contains("internal"),
+        "{err}"
     );
 }
 

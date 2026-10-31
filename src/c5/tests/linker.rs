@@ -7238,6 +7238,7 @@ fn minimal_native_object(
     data_relocs: Vec<crate::c5::linker::object::NativeReloc>,
 ) -> crate::c5::linker::NativeObject {
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7567,6 +7568,7 @@ fn aarch64_data_ref_object_ex(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7832,6 +7834,7 @@ fn aarch64_lo12_relocations_link_through_the_elf64_image_writer() {
 fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
     use crate::c5::linker::NativeMachine;
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7906,6 +7909,7 @@ fn aarch64_pcrel_object(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "reloc_ref.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,
@@ -8012,6 +8016,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         input_section: None,
     };
     let obj = crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "abs_in_text.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,
@@ -9011,6 +9016,103 @@ fn init_array_stays_strictly_inside_data_at_bss_boundary() {
             start + size,
             merged.data.len(),
         );
+    }
+}
+
+#[test]
+fn init_and_fini_fragments_form_one_function_each_around_the_arrays() {
+    // gABI, Initialization and Termination Functions: each input's `.init`
+    // (`.fini`) is a fragment of one function that crti.o opens and crtn.o
+    // closes, in input order. DT_INIT runs before the init array and
+    // DT_FINI after the fini array. A `.section .init` without flags is
+    // placed by name, as GNU ld places it.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::link::MergedTarget;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let x64: (&[u8], &[u8]) = (&[0x48, 0x83, 0xec, 0x08], &[0x48, 0x83, 0xc4, 0x08, 0xc3]);
+    let a64: (&[u8], &[u8]) = (
+        &[0xfd, 0x7b, 0xbf, 0xa9, 0xfd, 0x03, 0x00, 0x91],
+        &[0xfd, 0x7b, 0xc1, 0xa8, 0xc0, 0x03, 0x5f, 0xd6],
+    );
+    for (target, call, (prologue, epilogue)) in [
+        (Target::LinuxX64, "call", x64),
+        (Target::LinuxAarch64, "bl", a64),
+    ] {
+        let unit = |src: String| {
+            let options = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(src, target, options)
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse")
+        };
+        let a = unit(alloc::format!(
+            "void step_a(void) {{}}\n\
+             __attribute__((constructor)) static void ctor(void) {{}}\n\
+             __attribute__((destructor)) static void dtor(void) {{}}\n\
+             asm(\".section .init\\n\\t{call} step_a\\n\
+             .section .fini,\\\"ax\\\"\\n\\t{call} step_a\\n.text\\n\");\n"
+        ));
+        let b = unit(alloc::format!(
+            "void step_b(void) {{}}\nint main(void) {{ return 0; }}\n\
+             asm(\".section .init,\\\"ax\\\"\\n\\t{call} step_b\\n.text\\n\");\n"
+        ));
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let at = |name: &str| merged.defined[name].value as usize;
+        // The call at `p` and its target.
+        let callee = |p: usize| -> (usize, usize) {
+            let t = &merged.text;
+            if target == Target::LinuxX64 {
+                assert_eq!(t[p], 0xe8, "{target:?}: a rel32 call at {p:#x}");
+                let rel = i32::from_le_bytes(t[p + 1..p + 5].try_into().unwrap());
+                (p + 5, (p as i64 + 5 + rel as i64) as usize)
+            } else {
+                let w = u32::from_le_bytes(t[p..p + 4].try_into().unwrap());
+                assert_eq!(w >> 26, 0b100101, "{target:?}: a `bl` at {p:#x}");
+                let imm = ((w << 6) as i32 >> 6) as i64 * 4;
+                (p + 4, (p as i64 + imm) as usize)
+            }
+        };
+        let init = at("_init");
+        assert_eq!(
+            &merged.text[init..init + prologue.len()],
+            prologue,
+            "{target:?}"
+        );
+        let (next, first) = callee(init + prologue.len());
+        let (next, second) = callee(next);
+        assert_eq!((first, second), (at("step_a"), at("step_b")), "{target:?}");
+        assert_eq!(
+            &merged.text[next..next + epilogue.len()],
+            epilogue,
+            "{target:?}"
+        );
+        let fini = at("_fini");
+        let (next, only) = callee(fini + prologue.len());
+        assert_eq!(only, at("step_a"), "{target:?}");
+        assert_eq!(
+            &merged.text[next..next + epilogue.len()],
+            epilogue,
+            "{target:?}"
+        );
+        // The first slot of each array: `_init` runs first, `_fini` (walked
+        // backward) last.
+        let slot = |start: u64| {
+            (merged.data_abs_relocs.iter())
+                .find(|r| r.slot_offset == start)
+                .map(|r| r.target)
+        };
+        let arrays = &merged.init_fini_arrays;
+        let (init_start, init_len) = arrays.init.expect("an init array");
+        let (fini_start, fini_len) = arrays.fini.expect("a fini array");
+        assert_eq!((init_len, fini_len), (16, 16), "{target:?}");
+        assert!(matches!(slot(init_start), Some(MergedTarget::Text(t)) if t as usize == init));
+        assert!(matches!(slot(fini_start), Some(MergedTarget::Text(t)) if t as usize == fini));
     }
 }
 
@@ -12106,7 +12208,7 @@ fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let merged = link_native_objects_with(&[unit(1), unit(2)], &[], &opts).expect("link");
@@ -12169,7 +12271,7 @@ fn a_coff_inputs_unwind_entries_join_the_exception_directory() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
@@ -12276,7 +12378,7 @@ fn coff_image_relative_addresses_take_their_rvas() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
@@ -15473,7 +15575,10 @@ asm(".section \".export_symbol\",\"a\"\n"
 int main(void) { return 0; }
 "#;
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let options = crate::c5::compiler::CompileOptions::default();
+        let program = Compiler::with_options(String::from(src), target, options)
+            .compile()
+            .expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()

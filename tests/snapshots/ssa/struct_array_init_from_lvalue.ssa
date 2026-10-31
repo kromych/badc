@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=0
+fn ent_pc=3 n_params=0 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -205,14 +205,215 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v199 Imm(0)                                           -> x0
     v200 Imm(0)                                           -> x0
     v201 Imm(0)                                           -> x0
-    v202 Imm(0)                                           -> x0
-    v203 LifetimeEnd(0)                                   -> -
-    v204 LifetimeEnd(0)                                   -> -
-    v205 LifetimeEnd(0)                                   -> -
-    v206 LifetimeEnd(0)                                   -> -
-    v207 LifetimeEnd(0)                                   -> -
-    v208 LifetimeEnd(0)                                   -> -
-    terminator Return(v202)   (exit_acc=v202)
+    v202 Imm(3)                                           -> x0
+    v203 Imm(3)                                           -> x1
+    v204 Imm(0)                                           -> x0
+    v205 Imm(0)                                           -> x0
+    v206 Imm(0)                                           -> x0
+    v207 Imm(0)                                           -> x0
+    v208 Imm(0)                                           -> x0
+    v209 Imm(0)                                           -> x0
+    v210 Imm(0)                                           -> x2
+    v211 Imm(1)                                           -> x2
+    v212 Imm(8)                                           -> x2
+    v213 Imm(0)                                           -> x6
+    v214 Imm(0)                                           -> x6
+    v215 Imm(0)                                           -> x6
+    v216 Imm(0)                                           -> x6
+    v217 Imm(0)                                           -> x6
+    v218 Imm(0)                                           -> x6
+    v219 Imm(0)                                           -> x6
+    v220 LocalAddr(-6)                                    -> x6
+    v221 Imm(0)                                           -> x7
+    v222 StoreLocal { off=-6, value=v212, kind=I64 }      -> -
+    v223 Imm(0)                                           -> x2
+    v224 StoreLocal { off=-6, disp=8, value=v203, kind=I32 } -> -
+    v225 Imm(0)                                           -> x1
+    v226 StoreLocal { off=-6, disp=12, value=v209, kind=I32 } -> -
+    v227 Imm(0)                                           -> x1
+    v228 Imm(0)                                           -> x1
+    v229 LocalAddr(-6)                                    -> x1
+    v230 Imm(0)                                           -> x1
+    v231 Imm(0)                                           -> x1
+    v232 Imm(5)                                           -> x1
+    v233 Imm(5)                                           -> x1
+    v234 Imm(0)                                           -> x1
+    v235 Imm(0)                                           -> x1
+    v236 Imm(1)                                           -> x1
+    v237 Imm(32)                                          -> x1
+    v238 Imm(0)                                           -> x1
+    v239 Imm(0)                                           -> x1
+    v240 Imm(0)                                           -> x1
+    v241 Imm(0)                                           -> x1
+    v242 Imm(0)                                           -> x1
+    v243 Imm(0)                                           -> x1
+    v244 Imm(0)                                           -> x1
+    v245 Imm(0)                                           -> x1
+    v246 Imm(0)                                           -> x1
+    v247 Imm(0)                                           -> x1
+    v248 Imm(0)                                           -> x1
+    v249 Imm(0)                                           -> x1
+    v250 Imm(0)                                           -> x1
+    v251 Imm(0)                                           -> x1
+    v252 Imm(1)                                           -> x1
+    v253 Imm(0)                                           -> x1
+    v254 Imm(0)                                           -> x1
+    v255 Imm(0)                                           -> x1
+    v256 Imm(0)                                           -> x1
+    v257 Imm(3)                                           -> x1
+    v258 Imm(0)                                           -> x1
+    v259 Imm(0)                                           -> x1
+    v260 Imm(0)                                           -> x1
+    v261 Imm(0)                                           -> x1
+    v262 Imm(0)                                           -> x1
+    v263 Imm(1)                                           -> x1
+    v264 Imm(0)                                           -> x1
+    v265 Imm(0)                                           -> x1
+    v266 Imm(16)                                          -> x1
+    v267 Imm(0)                                           -> x1
+    v268 Imm(0)                                           -> x1
+    v269 Imm(0)                                           -> x1
+    v270 Imm(0)                                           -> x1
+    v271 Imm(0)                                           -> x1
+    v272 Imm(0)                                           -> x1
+    v273 Imm(0)                                           -> x1
+    v274 Imm(0)                                           -> x1
+    v275 Imm(0)                                           -> x1
+    v276 Imm(0)                                           -> x1
+    v277 Imm(16)                                          -> x1
+    v278 Imm(0)                                           -> x1
+    v279 Imm(0)                                           -> x1
+    v280 Imm(5)                                           -> x1
+    v281 Imm(0)                                           -> x1
+    v282 Imm(0)                                           -> x1
+    v283 Imm(0)                                           -> x1
+    v284 Imm(0)                                           -> x1
+    v285 Imm(2)                                           -> x1
+    v286 LocalAddr(-4)                                    -> x2
+    v287 Mzero { dst=v286, size=32, align=8 }             -> -
+    v288 Imm(1)                                           -> x1
+    v289 Imm(1)                                           -> x1
+    v290 Imm(0)                                           -> x7
+    v291 Imm(0)                                           -> x7
+    v292 Imm(0)                                           -> x7
+    v293 Imm(0)                                           -> x7
+    v294 Imm(0)                                           -> x7
+    v295 Imm(0)                                           -> x7
+    v296 Imm(0)                                           -> x7
+    v297 Imm(1)                                           -> x7
+    v298 Imm(2)                                           -> x7
+    v299 Imm(0)                                           -> x8
+    v300 Imm(0)                                           -> x8
+    v301 Imm(0)                                           -> x8
+    v302 Imm(0)                                           -> x8
+    v303 Imm(0)                                           -> x8
+    v304 Imm(0)                                           -> x8
+    v305 Imm(0)                                           -> x8
+    v306 LocalAddr(-4)                                    -> x8
+    v307 Imm(0)                                           -> x8
+    v308 StoreLocal { off=-4, value=v298, kind=I64 }      -> -
+    v309 Imm(0)                                           -> x7
+    v310 StoreLocal { off=-4, disp=8, value=v289, kind=I32 } -> -
+    v311 Imm(0)                                           -> x1
+    v312 StoreLocal { off=-4, disp=12, value=v209, kind=I32 } -> -
+    v313 LocalAddr(-6)                                    -> x0
+    v314 LocalAddr(-4)                                    -> x0
+    v315 BinopI { op=add, lhs=v286, rhs_imm=16 }          -> x0
+    v316 Mcpy { dst=v315, src=v220, size=16, align=8 }    -> -
+    v317 LocalAddr(-4)                                    -> x0
+    v318 Imm(2)                                           -> x0
+    v319 Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v319)
+  block 1  start_pc=0
+    v473 BinopI { op=and, lhs=v468, rhs_imm=4294967295 }  -> x6
+    v474 BinopI { op=shl, lhs=v468, rhs_imm=4 }           -> x6
+    v475 Binop { op=add, lhs=v286, rhs=v474 }             -> x6
+    v476 Load { addr=v475, disp=0, kind=I64 }             -> x6
+    v477 Binop { op=or, lhs=v469, rhs=v476 }              -> x1
+    v478 BinopI { op=and, lhs=v468, rhs_imm=4294967295 }  -> x6
+    v479 BinopI { op=add, lhs=v468, rhs_imm=1 }           -> x0
+    terminator Jmp(b2)   (exit_acc=v479)
+  block 2  start_pc=0
+    v468 Phi { incoming=[b0:v319, b1:v479], kind=I64 }    -> x0
+    v469 Phi { incoming=[b0:v319, b1:v477], kind=I64 }    -> x1
+    v470 BinopI { op=and, lhs=v468, rhs_imm=4294967295 }  -> x6
+    v471 Imm(2)                                           -> x6
+    v472 BinopI { op=ult, lhs=v468, rhs_imm=2 }           -> x6
+    terminator Bz { cond=v472, target=b3, fall=b1 }   (exit_acc=v472)
+  block 3  start_pc=0
+    v390 BinopI { op=ne, lhs=v469, rhs_imm=10 }           -> x0
+    terminator Bz { cond=v390, target=b5, fall=b4 }   (exit_acc=v390)
+  block 4  start_pc=0
+    v391 Imm(8)                                           -> x0
+    v392 LifetimeEnd(0)                                   -> -
+    v393 LifetimeEnd(0)                                   -> -
+    v394 LifetimeEnd(-6)                                  -> -
+    v395 LifetimeEnd(0)                                   -> -
+    v396 LifetimeEnd(0)                                   -> -
+    v397 LifetimeEnd(0)                                   -> -
+    v398 LifetimeEnd(0)                                   -> -
+    v399 LifetimeEnd(0)                                   -> -
+    v400 LifetimeEnd(0)                                   -> -
+    terminator Return(v391)   (exit_acc=v391)
+  block 5  start_pc=0
+    v401 Imm(0)                                           -> x0
+    v402 Imm(0)                                           -> x0
+    v403 Imm(4)                                           -> x0
+    v404 Imm(0)                                           -> x0
+    v405 Imm(5)                                           -> x0
+    v406 Imm(0)                                           -> x0
+    v407 Imm(6)                                           -> x0
+    v408 Imm(0)                                           -> x0
+    v409 Imm(7)                                           -> x0
+    v410 Imm(0)                                           -> x0
+    v411 Imm(0)                                           -> x0
+    v412 Imm(0)                                           -> x0
+    v413 Imm(0)                                           -> x0
+    v414 Imm(0)                                           -> x0
+    v415 Imm(1)                                           -> x0
+    v416 Imm(0)                                           -> x0
+    v417 Imm(0)                                           -> x0
+    v418 Imm(0)                                           -> x0
+    v419 Imm(0)                                           -> x0
+    v420 Imm(5)                                           -> x0
+    v421 Imm(0)                                           -> x0
+    v422 Imm(0)                                           -> x0
+    v423 Imm(0)                                           -> x0
+    v424 Imm(0)                                           -> x0
+    v425 Imm(0)                                           -> x0
+    v426 Imm(1)                                           -> x0
+    v427 Imm(0)                                           -> x0
+    v428 Imm(0)                                           -> x0
+    v429 Imm(16)                                          -> x0
+    v430 Imm(0)                                           -> x0
+    v431 Imm(0)                                           -> x0
+    v432 Imm(0)                                           -> x0
+    v433 Imm(0)                                           -> x0
+    v434 Imm(0)                                           -> x0
+    v435 Imm(0)                                           -> x0
+    v436 Imm(0)                                           -> x0
+    v437 Imm(0)                                           -> x0
+    v438 Imm(0)                                           -> x0
+    v439 Imm(0)                                           -> x0
+    v440 Imm(16)                                          -> x0
+    v441 Imm(0)                                           -> x0
+    v442 Imm(0)                                           -> x0
+    v443 Imm(7)                                           -> x0
+    v444 Imm(0)                                           -> x0
+    v445 Imm(0)                                           -> x0
+    v446 Imm(0)                                           -> x0
+    v447 Imm(0)                                           -> x0
+    v448 Imm(0)                                           -> x0
+    v449 LifetimeEnd(0)                                   -> -
+    v450 LifetimeEnd(0)                                   -> -
+    v451 LifetimeEnd(-6)                                  -> -
+    v452 LifetimeEnd(0)                                   -> -
+    v453 LifetimeEnd(0)                                   -> -
+    v454 LifetimeEnd(0)                                   -> -
+    v455 LifetimeEnd(0)                                   -> -
+    v456 LifetimeEnd(0)                                   -> -
+    v457 LifetimeEnd(0)                                   -> -
+    terminator Return(v448)   (exit_acc=v448)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

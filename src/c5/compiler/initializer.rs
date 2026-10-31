@@ -3800,11 +3800,21 @@ impl Compiler {
     }
 
     /// Whether a measuring fill took the next value whole as an expression
-    /// of structure `sid` (C99 6.7.8p13): one begun by a name, `*` or a `(`
-    /// that does not open a compound literal, which the fill parses itself.
+    /// of structure `sid`, which the fill parses itself.
     fn measured_struct_value(&mut self, sid: usize) -> Result<bool, C5Error> {
+        if !self.measuring_init || !self.next_is_struct_value(sid)? {
+            return Ok(false);
+        }
+        self.skip_init_element_value()?;
+        Ok(true)
+    }
+
+    /// Whether the next initializer is an expression of structure `sid`
+    /// (C99 6.7.8p13): one begun by a name, `*` or a `(` that does not
+    /// open a compound literal.
+    fn next_is_struct_value(&mut self, sid: usize) -> Result<bool, C5Error> {
         let starts = self.lex.tk == Token::Id || self.lex.tk == '(' || self.lex.tk == Token::MulOp;
-        if !self.measuring_init || !starts {
+        if !starts {
             return Ok(false);
         }
         if self.lex.tk == '(' {
@@ -3817,11 +3827,7 @@ impl Compiler {
             }
         }
         let ty = self.peek_expr_type().unwrap_or(0);
-        let whole = is_struct_value_ty(ty) && struct_id_of(ty) == sid;
-        if whole {
-            self.skip_init_element_value()?;
-        }
-        Ok(whole)
+        Ok(is_struct_value_ty(ty) && struct_id_of(ty) == sid)
     }
 
     /// The runtime twin of `init_struct_array_element`: fill one struct array
@@ -4607,7 +4613,13 @@ impl Compiler {
         // value parses like any scalar); the element it records is tagged
         // with the bitfield descriptor so the walker emits a
         // read-modify-write of the storage unit instead of a full store.
-        if field.array_size > 0 {
+        // At a brace-elided first array field, a value of the enclosing
+        // structure's type is the whole object's, which the leaf copies.
+        let whole = first_elided
+            && field.array_size > 0
+            && self.lex.tk != '{'
+            && self.next_is_struct_value(struct_id)?;
+        if field.array_size > 0 && !whole {
             // C99 6.7.8p14: a string fills a one-dimensional member, a store each.
             if field.inner_array_size == 0
                 && let Some(lit) = self.take_string_init(field.ty)?

@@ -1392,6 +1392,31 @@ fn in_process_runs_join_the_on_demand_sources() {
         .expect("run badc");
     let err = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(0), "--jit: {err}");
+    // The interpreter runs the C library of the target it interprets, its
+    // own printf and, where that library lacks them, `string_ext.c`'s.
+    let sc = dir.join("sc.c");
+    std::fs::write(
+        &sc,
+        "#include <stdio.h>\n#include <string.h>\n\
+         int main(void) {\n\
+           const char *s = \"abc\";\n\
+           char *p = strchrnul(s, 'z'), *q = memrchr(s, 'a', 3);\n\
+           printf(\"%d %d\\n\", (int)(p - s), (int)(q - s));\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for target in ["--target=macos-aarch64", "--target=windows-x64"] {
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(target)
+            .arg(&sc)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {target}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "3 0\n", "{target}");
+    }
 }
 
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.

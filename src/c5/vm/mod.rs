@@ -7,6 +7,7 @@ use super::ir::FunctionSsa;
 use super::program::Program;
 
 pub(crate) mod eval;
+mod link;
 mod ssa;
 
 /// Whether the VM should emit a per-instruction trace to the host's
@@ -57,21 +58,6 @@ pub struct Vm<H: Host> {
     /// (walker compile errors, etc.) are deferred to `run`
     /// because `with_host` doesn't return `Result`.
     ssa_funcs: Result<Vec<FunctionSsa>, C5Error>,
-    /// Cross-TU placeholder ent_pc -> symbol name for every
-    /// declared-but-undefined extern function that is not weak. `run`
-    /// refuses any reference to these, mirroring the linker.
-    extern_fn_names: alloc::collections::BTreeMap<usize, String>,
-    /// `(name, defined_here)` per parser symbol, indexed by the
-    /// sym idx the `FunctionSsa::extern_*_refs` tables carry.
-    symbol_defs: Vec<(String, bool, bool)>,
-    /// Local names bound to host data (`#pragma binding(data ...)`).
-    data_binding_locals: alloc::collections::BTreeSet<String>,
-    /// `target_ent_pc` of every static-initializer function
-    /// pointer, checked against `extern_fn_names` at `run`.
-    code_reloc_pcs: Vec<usize>,
-    /// The objects static initializers name that nothing defines and
-    /// that are not weak, refused at `run`.
-    extern_slot_names: Vec<String>,
     /// Constructor entry pcs (`__attribute__((constructor))`), ordered as
     /// they run before the entry: prioritized ascending, then
     /// unprioritized. The native path runs these through `.init_array`;
@@ -178,244 +164,56 @@ impl<H: Host> Vm<H> {
     /// Construct a `Vm` with an explicit `Host`. Required in `no_std`
     /// where there's no default; convenient in `std` for tests that
     /// want to stub IO. Trace defaults to off.
-    pub fn with_host(mut program: Program, host: H) -> Self {
-        // Lift the program to SSA up front so `Vm::run` can
-        // dispatch into the interpreter directly. Failures here
-        // (walker compile errors, etc.) are deferred to `run`
-        // because `with_host` doesn't return `Result`.
-        // Execution is the link step: bind import placeholders a
-        // function alias of the unit resolves, in the lifted bodies
-        // and in the data-slot function addresses.
-        // A weak function nothing defines is the null address, as a link
-        // resolves it; only a call to it, when made, fails.
-        let weak: alloc::collections::BTreeSet<String> = (program.weak_link_names().into_iter())
-            .map(String::from)
-            .collect();
-        let weak_fn_pcs: alloc::collections::BTreeSet<usize> = (program.extern_function_imports)
-            .iter()
-            .filter(|(_, name)| weak.contains(name.as_str()))
-            .map(|&(pc, _)| pc)
-            .collect();
-        let ssa_funcs =
-            super::codegen::ssa::shadow::produce_ssa_funcs(&program, program.target, false, true)
-                .map(|mut funcs| {
-                    super::codegen::ssa::shadow::bind_alias_imports(&program, &mut funcs);
-                    for inst in funcs.iter_mut().flat_map(|f| f.insts.iter_mut()) {
-                        if matches!(inst, super::ir::Inst::ImmCode(pc) if weak_fn_pcs.contains(pc))
-                        {
-                            *inst = super::ir::Inst::Imm(0);
-                        }
-                    }
-                    funcs
-                });
-        let mut code_relocs = core::mem::take(&mut program.code_relocs);
-        super::codegen::bind_code_reloc_aliases(&program, &mut code_relocs);
-        program.code_relocs = code_relocs;
-        let mut tls_code_relocs = core::mem::take(&mut program.tls_code_relocs);
-        super::codegen::bind_code_reloc_aliases(&program, &mut tls_code_relocs);
-        program.tls_code_relocs = tls_code_relocs;
-        let mut binding_names: Vec<String> = program
-            .dylibs
-            .iter()
-            .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
-            .collect();
-        let mut ssa_funcs = ssa_funcs;
-        if let Ok(funcs) = &mut ssa_funcs {
-            bind_interpreter_library(&program, funcs, &weak_fn_pcs, &mut binding_names);
+    /// The target's on-demand sources join as [`Vm::with_sources`] joins them.
+    pub fn with_host(program: Program, host: H) -> Self {
+        #[cfg(feature = "full")]
+        {
+            let sources = crate::c5::linker::OnDemandSources::new(
+                program.target,
+                crate::c5::compiler::CompileOptions::default(),
+            );
+            Self::linked(program, host, Some(&sources))
         }
-        let extern_fn_names = program
-            .extern_function_imports
-            .iter()
-            .filter(|(pc, _)| !weak_fn_pcs.contains(pc))
-            .map(|(pc, name)| (*pc, name.clone()))
-            .collect();
-        let symbol_defs = program
-            .symbols
-            .iter()
-            .map(|s| (s.name.clone(), s.defined_here, s.is_weak))
-            .collect();
-        let data_binding_locals = program
-            .dylibs
-            .iter()
-            .flat_map(|d| d.bindings.iter())
-            .filter(|b| b.is_data)
-            .map(|b| b.local_name.clone())
-            .collect();
-        let code_reloc_pcs = program
-            .code_relocs
-            .iter()
-            .chain(&program.tls_code_relocs)
-            .map(|r| r.target_ent_pc as usize)
-            .collect();
-        // Constructors / destructors, ordered as the native `.init_array`
-        // path runs them: prioritized ascending, then unprioritized (a
-        // stable sort keeps source order within a priority).
-        let order_init = |dtor: bool| -> Vec<usize> {
-            let mut v: Vec<&crate::c5::program::InitFunc> = program
-                .init_funcs
-                .iter()
-                .filter(|f| f.is_destructor == dtor)
-                .collect();
-            v.sort_by_key(|f| (f.priority.is_none(), f.priority.unwrap_or(0)));
-            v.into_iter().map(|f| f.ent_pc).collect()
+        #[cfg(not(feature = "full"))]
+        Self::linked(program, host, None)
+    }
+
+    /// [`Vm::with_host`] joining `sources` as a native link joins them, for
+    /// the names the interpreter's own library does not supply.
+    #[cfg(feature = "full")]
+    pub fn with_sources(
+        program: Program,
+        host: H,
+        sources: &crate::c5::linker::OnDemandSources,
+    ) -> Self {
+        Self::linked(program, host, Some(sources))
+    }
+
+    /// Execution is the link step: lift the program and its members, join them.
+    fn linked(program: Program, host: H, sources: link::Sources<'_>) -> Self {
+        let target = program.target;
+        let linked = link::VmUnit::lift(program).and_then(|unit| {
+            let units = link::join_on_demand(unit, sources)?;
+            link::link(units)
+        });
+        let (ssa_funcs, linked) = match linked {
+            Ok(mut l) => (Ok(core::mem::take(&mut l.funcs)), l),
+            Err(e) => (Err(e), link::Linked::default()),
         };
-        let init_pcs = order_init(false);
-        let fini_pcs = order_init(true);
-        // Concatenate the TLS block onto the data segment so
-        // `Inst::TlsAddr` resolutions ride the existing data-side
-        // access checks. The starting offset is captured before
-        // the TLS bytes are appended.
-        let mut data = program.data;
-        // A slot naming a C-library binding holds `Inst::ImmExtCode`'s value.
-        let slot_value = |r: &crate::c5::program::CodeReloc| {
-            let binding = program
-                .sys_trampolines
-                .iter()
-                .find(|t| t.0 == r.target_ent_pc);
-            let raw = match binding {
-                Some(&(_, b)) => (ssa::IMPORT_ADDR_TAG | b) as u64,
-                None if weak_fn_pcs.contains(&(r.target_ent_pc as usize)) => 0,
-                None => ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc,
-            };
-            raw.wrapping_add_signed(r.addend)
-        };
-        // Apply CodeReloc entries: a function-pointer initializer in
-        // the data segment is patched to `CODE_ADDR_TAG | ent_pc` --
-        // the same encoding an `Inst::ImmCode` materializes and a
-        // runtime store of a function reference writes -- so a value
-        // loaded from the slot compares equal to the function symbol
-        // and the indirect-call dispatch recognises it as a code
-        // address. The compiler emits a placeholder plus a CodeReloc
-        // because the tag constant lives in this crate; we patch each
-        // slot here at VM construction time.
-        for r in &program.code_relocs {
-            let off = r.data_offset as usize;
-            data[off..off + 8].copy_from_slice(&slot_value(r).to_le_bytes());
-        }
-        // A slot naming a weak object nothing defines holds the null
-        // address plus its offset, as a link fills it.
-        let mut extern_slot_names = Vec::new();
-        for r in &program.extern_data_relocs {
-            if weak.contains(r.symbol_name.as_str()) {
-                let off = r.data_offset as usize;
-                data[off..off + 8].copy_from_slice(&r.addend.to_le_bytes());
-            } else {
-                extern_slot_names.push(r.symbol_name.clone());
-            }
-        }
-        // A `&&label` initializer slot holds the value a runtime label
-        // address has: the code position `Inst::BlockAddr` materializes
-        // for the label's block, which `GotoIndirect` decodes.
-        if let Ok(funcs) = &ssa_funcs {
-            for (func_idx, f) in funcs.iter().enumerate() {
-                for r in &f.label_data_relocs {
-                    let off = r.data_offset as usize;
-                    let runtime = ssa::code_position(func_idx, r.block as usize, 0) as u64;
-                    data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
-                }
-            }
-        }
-        // The block starts on the boundary the object writers give
-        // `.tdata` / `.tbss`, so an object's offset within it is also its
-        // alignment against the VM's address space.
-        let tls_base = data
-            .len()
-            .next_multiple_of(crate::c5::layout::tls_image_align(program.tls_align).max(16));
-        data.resize(tls_base, 0);
-        data.extend_from_slice(&program.tls_data);
-        // The same patch for a function-pointer slot in the
-        // `_Thread_local` template, which the VM keeps as one shared copy
-        // at `tls_base`. Data-pointer slots there already hold a `data`
-        // offset, which is the VM's pointer representation.
-        for r in &program.tls_code_relocs {
-            let off = tls_base + r.data_offset as usize;
-            data[off..off + 8].copy_from_slice(&slot_value(r).to_le_bytes());
-        }
         Self {
-            data,
-            entry_pc: program.entry_pc,
+            data: linked.data,
+            entry_pc: linked.entry_pc,
             host,
             trace: Trace::Off,
             args: Vec::new(),
-            binding_names,
+            binding_names: linked.binding_names,
             track_pointers: false,
-            tls_base,
+            tls_base: linked.tls_base,
             ssa_funcs,
-            extern_fn_names,
-            symbol_defs,
-            data_binding_locals,
-            code_reloc_pcs,
-            extern_slot_names,
-            init_pcs,
-            fini_pcs,
-            target: program.target,
+            init_pcs: linked.init_pcs,
+            fini_pcs: linked.fini_pcs,
+            target,
         }
-    }
-
-    /// Refuse any reference to a symbol with no definition in
-    /// this unit before execution starts, mirroring the linker's
-    /// undefined-symbol diagnosis. Without this, a call whose
-    /// placeholder pc collides with a real `ent_pc` dispatches to
-    /// the wrong function and an extern object reads a zero slot.
-    fn check_extern_refs(&self, funcs: &[FunctionSsa]) -> Result<(), C5Error> {
-        use super::ir::Inst;
-        let undef =
-            |name: &str| C5Error::Runtime(alloc::format!("undefined reference to `{name}`"));
-        for f in funcs {
-            for inst in &f.insts {
-                let pc = match inst {
-                    Inst::Call { target_pc, .. } => *target_pc,
-                    Inst::ImmCode(pc) => *pc,
-                    _ => continue,
-                };
-                if let Some(name) = self.extern_fn_names.get(&pc) {
-                    return Err(undef(name));
-                }
-            }
-            // `target_pc == 0` call / code-address sites record the
-            // parser sym; the sentinel is ambiguous (the first
-            // function's ent_pc is also 0), so consult the symbol.
-            for &(_, sym) in f.extern_call_refs.iter().chain(&f.extern_imm_code_refs) {
-                if let Some((name, defined, weak)) = self.symbol_defs.get(sym as usize)
-                    && !defined
-                    && !weak
-                {
-                    return Err(undef(name));
-                }
-            }
-            for &(_, sym) in f.extern_imm_data_refs.iter().chain(&f.extern_tls_refs) {
-                let Some((name, defined, weak)) = self.symbol_defs.get(sym as usize) else {
-                    continue;
-                };
-                // A weak reference with no definition is not an undefined
-                // symbol: the link resolves it to a null address.
-                if *defined || *weak {
-                    continue;
-                }
-                return Err(self.unreachable_object(name));
-            }
-        }
-        for pc in &self.code_reloc_pcs {
-            if let Some(name) = self.extern_fn_names.get(pc) {
-                return Err(undef(name));
-            }
-        }
-        match self.extern_slot_names.first() {
-            Some(name) => Err(self.unreachable_object(name)),
-            None => Ok(()),
-        }
-    }
-
-    /// An object nothing in the unit defines: host data the interpreter
-    /// cannot reach, or an undefined reference.
-    fn unreachable_object(&self, name: &str) -> C5Error {
-        if self.data_binding_locals.contains(name) {
-            return C5Error::Runtime(alloc::format!(
-                "`{name}` is bound to host data; the interpreter cannot \
-                 reach host memory (use --jit or compile natively)"
-            ));
-        }
-        C5Error::Runtime(alloc::format!("undefined reference to `{name}`"))
     }
 
     /// Enable per-instruction trace output. Mirrors
@@ -464,7 +262,6 @@ impl<H: Host> Vm<H> {
         if funcs.is_empty() {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
-        self.check_extern_refs(funcs)?;
         ssa::run_program_with_args_tracked(
             funcs,
             &self.data,

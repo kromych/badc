@@ -8,7 +8,7 @@ use super::inputs::{Inputs, StdinSource};
 use super::options::Mode;
 
 /// `--jit` / `--interp` run one translation unit in-process: the first
-/// `.c` is the unit and must define `main`; `--jit` joins the on-demand
+/// `.c` is the unit and must define `main`; both join the on-demand
 /// sources to it. Either exits with the program's status.
 pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) -> ! {
     let Inputs {
@@ -100,7 +100,9 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             }
         }
     }
-    let mut vm = Vm::new(program).with_args(c_args);
+    let front = super::native_link::embedded_compile_options(cli, "on-demand.c");
+    let sources = OnDemandSources::new(program.target, front);
+    let mut vm = Vm::with_sources(program, badc::StdHost::default(), &sources).with_args(c_args);
     if cli.track_pointers {
         vm = vm.with_pointer_tracking();
     }

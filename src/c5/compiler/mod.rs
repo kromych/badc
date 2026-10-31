@@ -2740,7 +2740,7 @@ impl Compiler {
         this.ingest_file_scope_asm(&text, false).map_err(|errors| {
             let diagnostic = |e: crate::c5::asm::AsmError| {
                 let text = crate::c5::asm::source_message(&e.text);
-                match lines.loc(e.line) {
+                let d = match lines.loc(e.line) {
                     Some(loc) => Diagnostic::new(Code::ASSEMBLER, Level::Error, Some(loc), text),
                     None => Diagnostic::new(
                         Code::ASSEMBLER,
@@ -2748,7 +2748,10 @@ impl Compiler {
                         None,
                         alloc::format!("{label}: {text}"),
                     ),
-                }
+                };
+                e.invoked_at.iter().fold(d, |d, &line| {
+                    d.with_note(lines.loc(line), "macro invoked from here")
+                })
             };
             C5Error::Compile(errors.0.into_iter().map(diagnostic).collect())
         })?;

@@ -1373,7 +1373,7 @@ fn measure_round_inner(
     // still needs a second round: aborting here would discard the label
     // offsets that round measures from. It is reported once the layout has
     // settled, or straight away when nothing is pending.
-    let mut set_err = None;
+    let mut set_errs = alloc::vec::Vec::new();
     for (name, expr, key, at, line) in &sets {
         match eval_section_set_expr(
             name, expr, key, *at, &map, &syms, &aliases, &sections, const_of,
@@ -1394,13 +1394,11 @@ fn measure_round_inner(
                 map.remove(name);
                 syms.remove(name);
             }
-            Err(e) => set_err = set_err.or(Some(AsmErrors::at(*line, e))),
+            Err(e) => set_errs.push(AsmError::at(*line, e)),
         }
     }
-    if let Some(e) = set_err
-        && (prev.is_some() || !*unresolved_fill)
-    {
-        return Err(e);
+    if prev.is_some() || !*unresolved_fill {
+        AsmErrors::check(set_errs)?;
     }
     Ok(SectionLabelOffsets {
         map,
@@ -2601,7 +2599,7 @@ pub(crate) fn materialize_asm_sections(
                 Ok(())
             };
             if let Err(text) = lay_item() {
-                errors.push(AsmError { line, text });
+                errors.push(AsmError::at(line, text));
                 if let Some(next) = measured.place((bi, ii + 1)) {
                     let next = usize::try_from(next).unwrap_or(0);
                     if sec.bytes.len() < next {
@@ -2766,7 +2764,7 @@ pub(crate) fn prepare_file_asm_text(text: &str, comments: AsmComments) -> AsmPre
     let text = stripped.as_deref().unwrap_or(text);
     let mut prepared = expand_file_asm_gas_macros(text, 4).unwrap_or_else(|| AsmPrepared {
         text: alloc::string::String::from(text),
-        origin: (1..=text.split('\n').count() as u32).collect(),
+        origin: AsmOrigin::identity(text.split('\n').count()),
         errors: alloc::vec::Vec::new(),
     });
     if let Some(renamed) = rewrite_multidef_local_labels(&prepared.text) {

@@ -598,14 +598,12 @@ fn extract_asm_sections_impl(
             Ok(())
         };
         if let Err(text) = statement() {
-            errors.push(AsmError { line, text });
+            errors.push(AsmError::at(line, text));
         }
     }
     if let Some(&(line, ..)) = rept_stack.first() {
-        errors.push(AsmError {
-            line,
-            text: alloc::string::String::from("inline asm: `.rept` without `.endr`"),
-        });
+        let text = alloc::string::String::from("inline asm: `.rept` without `.endr`");
+        errors.push(AsmError::at(line, text));
     }
     Some(AsmExtract {
         code,

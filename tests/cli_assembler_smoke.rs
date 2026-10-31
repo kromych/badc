@@ -3593,7 +3593,7 @@ fn relocation_operators_outside_their_forms_are_refused() {
     );
 }
 
-/// The error lines of `name` (`body`, beside `extra`), which must fail.
+/// The error and note lines of `name` (`body`, beside `extra`), which fails.
 fn assembly_errors(target: &str, name: &str, body: &str, extra: &[(&str, &str)]) -> Vec<String> {
     let d = dir(&format!("errors-{target}-{name}"));
     write(&d, name, body);
@@ -3611,15 +3611,15 @@ fn assembly_errors(target: &str, name: &str, body: &str, extra: &[(&str, &str)])
     );
     assert!(!text.contains("inline asm"), "{target}: {text}");
     text.lines()
-        .filter(|l| l.contains(" error: "))
+        .filter(|l| l.contains(" error: ") || l.contains(" note: "))
         .map(String::from)
         .collect()
 }
 
-fn error_positions(errors: &[String]) -> Vec<&str> {
+fn error_positions(errors: &[String]) -> Vec<String> {
     errors
         .iter()
-        .map(|e| &e[..e.find(" error: ").unwrap()])
+        .map(|e| e.splitn(3, ": ").take(2).collect::<Vec<_>>().join(": "))
         .collect()
 }
 
@@ -3638,7 +3638,7 @@ fn every_bad_statement_is_reported_at_its_line() {
         let errors = assembly_errors(target, "bad.s", &body, &[]);
         assert_eq!(
             error_positions(&errors),
-            ["bad.s:5:", "bad.s:8:", "bad.s:10:"],
+            ["bad.s:5: error", "bad.s:8: error", "bad.s:10: error"],
             "{target}: {errors:#?}"
         );
         assert!(
@@ -3667,30 +3667,51 @@ fn a_preprocessed_unit_reports_the_line_of_the_original_file() {
         let errors = assembly_errors(target, "unit.S", &body, &[("defs.h", &header)]);
         assert_eq!(
             error_positions(&errors),
-            ["defs.h:4:", "unit.S:7:"],
+            ["defs.h:4: error", "unit.S:7: error"],
             "{target}: {errors:#?}"
         );
     }
 }
 
-/// gas reports an error in a macro expansion at the invoking line.
+/// gas reports an expansion's error at its body line, a macro's with a note
+/// per invocation, innermost first; markers apply as of the definition.
 #[test]
-fn an_error_in_a_macro_expansion_is_reported_at_the_invoking_line() {
-    for (target, reg1, reg2) in [("linux-x64", "%rax", "%rcx"), ("linux-aarch64", "x0", "x1")] {
-        let body = format!(
-            "\t.macro twice reg\n\tfrob \\reg\n\tnop\n\tfrob \\reg\n\t.endm\n\t.text\nf:\n\
-             \ttwice {reg1}\n\tnop\n\ttwice {reg2}\n\tret\n"
-        );
-        let errors = assembly_errors(target, "mac.s", &body, &[]);
+fn an_error_in_an_expansion_is_reported_at_its_body_line() {
+    let body = ".macro inner\n\tbogus_in\n.endm\n.macro outer\n\tnop\n\tinner\n.endm\n\touter\n\
+                .rept 2\n\tbogus_rept\n.endr\n.irp r, a, b\n\tbogus_\\r\n.endr\n";
+    let marked = "# 1 \"orig.S\"\n# 1 \"<built-in>\"\n# 1 \"orig.S\"\n\n\n.macro m\n\tbogus_m\n\
+                  .endm\n# 10 \"orig.S\"\n\tm\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let errors = assembly_errors(target, "n.s", body, &[]);
         assert_eq!(
             error_positions(&errors),
-            ["mac.s:8:", "mac.s:8:", "mac.s:10:", "mac.s:10:"],
+            [
+                "n.s:2: error",
+                "n.s:6: note",
+                "n.s:8: note",
+                "n.s:10: error",
+                "n.s:10: error",
+                "n.s:13: error",
+                "n.s:13: error"
+            ],
             "{target}: {errors:#?}"
         );
         assert!(
-            errors[2].contains(&format!("(instruction `frob {reg2}`)")),
-            "{target}: {}",
-            errors[2]
+            errors[0].contains("(instruction `bogus_in`)"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[1].ends_with("note: macro invoked from here"),
+            "{}",
+            errors[1]
+        );
+        assert!(errors[6].contains("`bogus_b`"), "{}", errors[6]);
+        let errors = assembly_errors(target, "m.s", marked, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["orig.S:4: error", "orig.S:10: note"],
+            "{target}: {errors:#?}"
         );
     }
 }
@@ -3704,13 +3725,20 @@ fn every_layout_error_is_reported_at_its_line() {
         let errors = assembly_errors(target, "lay.s", body, &[]);
         assert_eq!(
             error_positions(&errors),
-            ["lay.s:4:", "lay.s:6:", "lay.s:10:"],
+            ["lay.s:4: error", "lay.s:6: error", "lay.s:10: error"],
             "{target}: {errors:#?}"
         );
         assert!(
             errors[0].contains("`.org` moves backwards"),
             "{}",
             errors[0]
+        );
+        let sets = "\t.data\nx:\n\t.byte 1\n\t.set a, x * 2\n\t.byte 2\n\t.set b, . * 3\n";
+        let errors = assembly_errors(target, "sets.s", sets, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["sets.s:4: error", "sets.s:6: error"],
+            "{target}: {errors:#?}"
         );
     }
 }

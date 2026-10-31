@@ -268,10 +268,10 @@ pub(crate) fn encode_code_item(
         return;
     };
     let encoded = encode(text).unwrap_or_else(|m| {
-        errors.push(AsmError {
+        errors.push(AsmError::at(
             line,
-            text: alloc::format!("{m} (instruction `{text}`)"),
-        });
+            alloc::format!("{m} (instruction `{text}`)"),
+        ));
         AsmSectionItem::CodeBytes {
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),

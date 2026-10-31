@@ -297,12 +297,12 @@ impl Compiler {
                             matches!(v, crate::c5::asm::AsmSectionValue::OperandConst(_))
                         }) =>
                     {
-                        later.push(AsmError {
-                            line: li.line,
-                            text: String::from(
+                        later.push(AsmError::at(
+                            li.line,
+                            String::from(
                                 "operand reference in file-scope asm (no operands at file scope)",
                             ),
-                        });
+                        ));
                     }
                     // Unit-level symbol directives: `.weak name` binds the
                     // symbol weak wherever it is defined; `.set name, target`
@@ -373,10 +373,14 @@ impl Compiler {
         {
             later.extend(e.0);
         }
-        crate::c5::asm::remap_lines(&mut later, &origin);
-        errors.extend(later);
-        errors.sort_by_key(|e| (e.line == 0, e.line));
-        AsmErrors::check(errors)?;
+        // In the order gas reads the statements; an expansion error first on a tie.
+        for mut e in later {
+            let read = e.line.checked_sub(1).unwrap_or(u32::MAX);
+            origin.place(&mut e);
+            errors.push((read, e));
+        }
+        errors.sort_by_key(|&(read, _)| read);
+        AsmErrors::check(errors.into_iter().map(|(_, e)| e).collect())?;
         self.file_asm.push(prepared);
         Ok(())
     }

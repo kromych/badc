@@ -2778,22 +2778,31 @@ fn a_block_comment_keeps_the_lines_after_it_in_place() {
     }
 }
 
-/// An expansion takes the invoking line and goes on past a bad statement.
+/// An expanded line is at its body line with the macro invocations,
+/// innermost first; `.rept` and `.irp` add none.
 #[test]
-fn a_macro_expansion_takes_the_invoking_line() {
-    let text = ".macro m\nnop\nnop\n.endm\nm\n.purgem none\nret\nm\n";
+fn an_expansion_takes_the_body_line_and_its_invocations() {
+    let text = ".macro inner\n.error \"in\"\nnop\n.endm\n.macro outer\ninner\n.endm\nouter\n\
+                .rept 2\n.error \"rept\"\n.endr\n.irp r, a\n\\r: ret\n.endr\n.purgem none\n";
     let p = prepare_file_asm_text(text, AsmComments::X86);
-    let lines: Vec<(u32, &str)> = p
-        .text
-        .split('\n')
-        .zip(&p.origin)
-        .filter(|(s, _)| !s.is_empty())
-        .map(|(s, &o)| (o, s))
+    let errors: Vec<(u32, Vec<u32>)> = (p.errors.iter())
+        .map(|(_, e)| (e.line, e.invoked_at.clone()))
         .collect();
     assert_eq!(
-        lines,
-        [(5, "nop"), (5, "nop"), (7, "ret"), (8, "nop"), (8, "nop")]
+        errors,
+        [
+            (2, alloc::vec![6, 8]),
+            (10, alloc::vec![]),
+            (10, alloc::vec![]),
+            (15, alloc::vec![])
+        ]
     );
-    assert_eq!(p.errors.len(), 1, "{:?}", p.errors);
-    assert_eq!(p.errors[0].line, 6);
+    let at = |want: &str| {
+        let k = p.text.split('\n').position(|s| s == want).unwrap();
+        let mut e = AsmError::at(k as u32 + 1, alloc::string::String::new());
+        p.origin.place(&mut e);
+        (e.line, e.invoked_at)
+    };
+    assert_eq!(at("nop"), (3, alloc::vec![6, 8]));
+    assert_eq!(at("ret"), (13, alloc::vec![]));
 }

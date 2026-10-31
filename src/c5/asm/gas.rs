@@ -102,7 +102,11 @@ type GasParams = alloc::vec::Vec<GasParam>;
 struct GasMacro {
     params: GasParams,
     body: alloc::vec::Vec<alloc::string::String>,
+    lines: alloc::vec::Vec<u32>,
 }
+
+/// An error that ends the expansion, recorded in the state's list.
+struct GasStop;
 
 const GAS_MACRO_DEPTH_LIMIT: usize = 64;
 
@@ -130,7 +134,7 @@ pub(crate) fn expand_asm_gas_macros(
     let Some(ex) = expand_gas_macros(text, inst_width, subst, false) else {
         return Ok(None);
     };
-    AsmErrors::check(ex.errors)?;
+    AsmErrors::check(ex.errors.into_iter().map(|(_, e)| e).collect())?;
     Ok(Some(ex.text))
 }
 
@@ -177,10 +181,7 @@ fn expand_gas_macros(
         ..Default::default()
     };
     let mut out = alloc::string::String::with_capacity(text.len());
-    if let Err(text) = expand_gas_statements(&stmts, Some(&lines), &mut st, &mut out, inst_width, 0)
-    {
-        st.error(text);
-    }
+    let _ = expand_gas_statements(&stmts, &lines, &mut st, &mut out, inst_width, 0);
     st.note_line(&out, 0);
     Some(AsmPrepared {
         text: out,
@@ -216,20 +217,28 @@ struct GasExpandState {
     /// in any section, taken only from branches that emit. A declaration
     /// (`.globl`) or a reference to an undefined name defines nothing.
     defined: alloc::collections::BTreeSet<alloc::string::String>,
-    /// The input line of the statement being expanded, which owns its errors.
+    /// The input line and macro context of the statement being expanded.
     line: u32,
-    /// The input line of each output line up to output offset `origin_at`.
-    origin: alloc::vec::Vec<u32>,
+    ctx: u32,
+    /// Where each output line up to output offset `origin_at` came from.
+    origin: AsmOrigin,
     origin_at: usize,
-    errors: alloc::vec::Vec<AsmError>,
+    errors: alloc::vec::Vec<(u32, AsmError)>,
 }
 
 impl GasExpandState {
     fn error(&mut self, text: alloc::string::String) {
-        self.errors.push(AsmError {
+        let e = AsmError {
             line: self.line,
+            invoked_at: self.origin.invoked_at(self.ctx),
             text,
-        });
+        };
+        self.errors.push((self.origin.len() as u32, e));
+    }
+
+    fn fatal(&mut self, text: alloc::string::String) -> GasStop {
+        self.error(text);
+        GasStop
     }
 
     /// Attribute the lines written since the last call to `self.line`; go on to `line`.
@@ -238,7 +247,7 @@ impl GasExpandState {
             .bytes()
             .filter(|&b| b == b'\n')
             .count();
-        self.origin.extend(core::iter::repeat_n(self.line, written));
+        self.origin.push(self.line, self.ctx, written);
         self.origin_at = out.len();
         self.line = line;
     }
@@ -303,21 +312,43 @@ fn gas_exported_names(
     out
 }
 
-/// `lines` numbers `stmts` when they are the input rather than a body. A bad
-/// statement's error goes to `st`; an `Err` ends the whole expansion.
-fn expand_gas_statements(
+/// Expand a macro, `.rept` or `.irp` body one level down; a macro body
+/// (`invoked`) runs in a context naming the invoking line.
+#[allow(clippy::too_many_arguments)]
+fn expand_gas_body(
     stmts: &[alloc::string::String],
-    lines: Option<&[u32]>,
+    lines: &[u32],
+    invoked: bool,
     st: &mut GasExpandState,
     out: &mut alloc::string::String,
     inst_width: usize,
     depth: usize,
-) -> Result<(), alloc::string::String> {
+) -> Result<(), GasStop> {
     if depth > GAS_MACRO_DEPTH_LIMIT {
-        return Err(alloc::string::String::from(
-            "inline asm: macro expansion nested too deep",
-        ));
+        let m = alloc::string::String::from("inline asm: macro expansion nested too deep");
+        return Err(st.fatal(m));
     }
+    let (line, outer) = (st.line, st.ctx);
+    st.note_line(out, line);
+    if invoked {
+        st.ctx = st.origin.enter(line, outer);
+    }
+    let r = expand_gas_statements(stmts, lines, st, out, inst_width, depth);
+    st.note_line(out, line);
+    st.ctx = outer;
+    r
+}
+
+/// `lines` gives each statement's input line. A bad statement's error goes
+/// to `st`; an `Err` ends the whole expansion.
+fn expand_gas_statements(
+    stmts: &[alloc::string::String],
+    lines: &[u32],
+    st: &mut GasExpandState,
+    out: &mut alloc::string::String,
+    inst_width: usize,
+    depth: usize,
+) -> Result<(), GasStop> {
     // Conditional-assembly stack, evaluated as the macro expands so a `.ifc` /
     // `.if` can test a `.set` symbol or a substituted operand: each frame is
     // (this branch emits, some branch already taken, the `.if` line).
@@ -325,9 +356,7 @@ fn expand_gas_statements(
     let emitting = |c: &[(bool, bool, u32)]| c.iter().all(|&(on, ..)| on);
     let mut i = 0usize;
     while i < stmts.len() {
-        if let Some(lines) = lines {
-            st.note_line(out, lines[i]);
-        }
+        st.note_line(out, lines[i]);
         let s = stmts[i].as_str();
         i += 1;
         if s.is_empty() {
@@ -383,9 +412,7 @@ fn expand_gas_statements(
                     && let Some(next) = gas_cond_region_is_diagnostic_only(stmts, i)
                 {
                     for k in i - 1..next {
-                        if let Some(lines) = lines {
-                            st.note_line(out, lines[k]);
-                        }
+                        st.note_line(out, lines[k]);
                         out.push_str(&stmts[k]);
                         out.push('\n');
                     }
@@ -474,11 +501,12 @@ fn expand_gas_statements(
         if !emitting(&cond) {
             // A dead branch: skip it, but consume any macro / repeat body so its
             // `.endm` / `.endr` does not leak into the enclosing stream.
-            match tok {
-                ".macro" => i = collect_gas_body(stmts, i, ".macro", ".endm")?.1,
-                ".irp" | ".irpc" | ".rept" | ".rep" => i = collect_gas_repeat_body(stmts, i)?.1,
-                _ => {}
-            }
+            let skipped = match tok {
+                ".macro" => collect_gas_body(stmts, i, ".macro", ".endm"),
+                ".irp" | ".irpc" | ".rept" | ".rep" => collect_gas_repeat_body(stmts, i),
+                _ => continue,
+            };
+            i = skipped.map_err(|m| st.fatal(m))?.1;
             continue;
         }
         match tok {
@@ -488,10 +516,19 @@ fn expand_gas_statements(
             }
             ".macro" => {
                 let header = parse_gas_macro_header(rest);
-                let (body, next) = collect_gas_body(stmts, i, ".macro", ".endm")?;
+                let (body, next) =
+                    collect_gas_body(stmts, i, ".macro", ".endm").map_err(|m| st.fatal(m))?;
+                let lines = lines[i..next - 1].to_vec();
                 match header {
                     Ok((name, params)) => {
-                        st.macros.insert(name, GasMacro { params, body });
+                        st.macros.insert(
+                            name,
+                            GasMacro {
+                                params,
+                                body,
+                                lines,
+                            },
+                        );
                     }
                     Err(m) => st.error(m),
                 }
@@ -514,7 +551,8 @@ fn expand_gas_statements(
             ".altmacro" | ".noaltmacro" => st.altmacro = tok == ".altmacro",
             ".irp" | ".irpc" => {
                 let header = parse_gas_irp_header(rest, tok == ".irpc");
-                let (body, next) = collect_gas_repeat_body(stmts, i)?;
+                let (body, next) = collect_gas_repeat_body(stmts, i).map_err(|m| st.fatal(m))?;
+                let body_lines = &lines[i..next - 1];
                 i = next;
                 let (var, values) = match header {
                     Ok(h) => h,
@@ -526,18 +564,20 @@ fn expand_gas_statements(
                 for val in &values {
                     let mut map = alloc::collections::BTreeMap::new();
                     map.insert(var.clone(), val.clone());
-                    let expanded = subst_gas_body(&body, &map, None);
-                    expand_gas_statements(&expanded, None, st, out, inst_width, depth + 1)?;
+                    let (lines, expanded) = subst_gas_body(&body, body_lines, &map, None);
+                    expand_gas_body(&expanded, &lines, false, st, out, inst_width, depth + 1)?;
                 }
             }
             ".rept" | ".rep" => {
-                let table = &st.equ;
-                let (body, next) = collect_gas_repeat_body(stmts, i)?;
+                let (body, next) = collect_gas_repeat_body(stmts, i).map_err(|m| st.fatal(m))?;
+                let body_lines = &lines[i..next - 1];
                 i = next;
+                let table = &st.equ;
                 match eval_asm_expr_with_labels(rest, &|t| table.get(t).copied()) {
                     Some(n) => {
                         for _ in 0..n.max(0) {
-                            expand_gas_statements(&body, None, st, out, inst_width, depth + 1)?;
+                            let d = depth + 1;
+                            expand_gas_body(&body, body_lines, false, st, out, inst_width, d)?;
                         }
                     }
                     // A count over labels (`(662b-661b) / 4`) defers to the
@@ -547,7 +587,7 @@ fn expand_gas_statements(
                         out.push_str(".rept ");
                         out.push_str(rest);
                         out.push('\n');
-                        expand_gas_statements(&body, None, st, out, inst_width, depth + 1)?;
+                        expand_gas_body(&body, body_lines, false, st, out, inst_width, depth + 1)?;
                         out.push_str(".endr\n");
                     }
                 }
@@ -649,12 +689,10 @@ fn expand_gas_statements(
                     // the body (which may define, invoke, or purge st.macros).
                     // Each invocation takes a fresh `\@` instance number.
                     let def = &st.macros[tok];
-                    let params = def.params.clone();
-                    let body = def.body.clone();
-                    let map = bind_gas_macro_args(&params, rest, st.altmacro);
+                    let map = bind_gas_macro_args(&def.params, rest, st.altmacro);
                     let inst = next_asm_instance();
-                    let expanded = subst_gas_body(&body, &map, Some(inst));
-                    expand_gas_statements(&expanded, None, st, out, inst_width, depth + 1)?;
+                    let (lines, expanded) = subst_gas_body(&def.body, &def.lines, &map, Some(inst));
+                    expand_gas_body(&expanded, &lines, true, st, out, inst_width, depth + 1)?;
                 } else {
                     // A pass-through line. Resolve any `.equ` symbol and
                     // register alias so a `.short`/`.long` value (the
@@ -683,10 +721,10 @@ fn expand_gas_statements(
         }
     }
     if let Some(&(.., line)) = cond.first() {
-        st.errors.push(AsmError {
-            line,
-            text: alloc::string::String::from("inline asm: unterminated `.if` in macro expansion"),
-        });
+        st.line = line;
+        st.error(alloc::string::String::from(
+            "inline asm: unterminated `.if` in macro expansion",
+        ));
     }
     Ok(())
 }
@@ -1062,25 +1100,26 @@ fn parse_gas_irp_header(
 }
 
 /// Substitute a macro / `.irp` body's parameters and re-split the result into
-/// statements. An argument may itself hold `;`-separated statements (a
+/// statements, each on its body line. An argument may hold `;`-separated statements (a
 /// whole instruction sequence passed as one argument), and GNU as re-scans
 /// the expansion, so a separator that arrives through a parameter separates.
 fn subst_gas_body(
     body: &[alloc::string::String],
+    lines: &[u32],
     map: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     instance: Option<u32>,
-) -> alloc::vec::Vec<alloc::string::String> {
-    let mut out = alloc::vec::Vec::with_capacity(body.len());
-    for line in body {
-        let line = subst_gas_params(line, map, instance);
-        if line.contains(';') {
-            out.extend(
-                split_asm_statements(&line)
-                    .into_iter()
-                    .map(|s| alloc::string::String::from(s.trim())),
-            );
+) -> (alloc::vec::Vec<u32>, alloc::vec::Vec<alloc::string::String>) {
+    let mut out = (alloc::vec::Vec::new(), alloc::vec::Vec::new());
+    for (&at, stmt) in lines.iter().zip(body) {
+        let stmt = subst_gas_params(stmt, map, instance);
+        if stmt.contains(';') {
+            for s in split_asm_statements(&stmt) {
+                out.0.push(at);
+                out.1.push(alloc::string::String::from(s.trim()));
+            }
         } else {
-            out.push(line);
+            out.0.push(at);
+            out.1.push(stmt);
         }
     }
     out

@@ -352,6 +352,17 @@ pub(crate) const VOL_LVL_MASK: i64 = ((1 << QUAL_LVL_BITS) - 1) << VOL_LVL_SHIFT
 pub(crate) const QUAL_PTR_LVL_MASK: i64 =
     (CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT)) | (VOL_LVL_MASK & !(1 << VOL_LVL_SHIFT));
 
+/// The qualifiers of the pointer derivations `ty` adds over an array
+/// element of `elem_depth` levels, numbered from level 1 as the
+/// aggregate-backed pointer-to-array tag counts them; the element's own
+/// levels stay in the aggregate.
+pub(crate) fn ptr_quals_over_array(ty: i64, elem_depth: i64) -> i64 {
+    let rebase = |mask: i64, shift: i64| ((((ty & mask) >> shift) >> elem_depth) << shift) & mask;
+    (ty & VOLATILE_BIT)
+        | (rebase(CONST_LVL_MASK, CONST_LVL_SHIFT) | rebase(VOL_LVL_MASK, VOL_LVL_SHIFT))
+            & QUAL_PTR_LVL_MASK
+}
+
 /// The request `Compiler::lex_qualifier_bits` returns for `const`:
 /// [`apply_qual_bits`] records it at the tag's current depth in
 /// [`CONST_LVL_MASK`] and clears it, so no stored tag carries it.

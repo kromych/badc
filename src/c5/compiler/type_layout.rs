@@ -764,7 +764,8 @@ impl Compiler {
     ) -> i64 {
         let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK))
+        (agg + ptr_levels * (Ty::Ptr as i64))
+            | super::types::ptr_quals_over_array(ty, super::types::ptr_depth_of(elem_ty))
     }
 
     /// True when the current lexer position starts a type. The free

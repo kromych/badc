@@ -6347,6 +6347,52 @@ fn an_assignment_to_a_read_only_object_is_an_error() {
     }
 }
 
+/// C99 6.7.3, 6.7.5.1: in `char *const (*p)[2]` the `const` qualifies the
+/// array's element pointers and `p` itself is modifiable, while
+/// `char *(*const p)[2]` qualifies `p`. A pointer to an array of pointers
+/// keeps each qualifier at its own derivation, spelled with parentheses,
+/// through an array typedef, and as a member.
+#[test]
+fn a_pointer_to_an_array_of_pointers_keeps_each_qualifier_at_its_level() {
+    use crate::{Compiler, Target};
+    let pre = "typedef char *const A[2];\n\
+               struct M { const char *const (*names)[2]; };\n";
+    let compile = |body: &str| {
+        let src =
+            format!("{pre}void f(struct M *m) {{ {body} }}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for body in [
+        "char *const (*p)[2]; p = 0;",
+        "char *const *(*p)[2]; p = 0;",
+        "char *const (**pp)[2]; *pp = 0; pp = 0;",
+        "A *p; p = 0;",
+        "m->names = 0;",
+    ] {
+        compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
+    }
+    for (body, ty) in [
+        ("char *(*const p)[2] = 0; p = 0;", "char* (* const)[2]"),
+        (
+            "char *const (*const p)[2] = 0; p = 0;",
+            "char* const (* const)[2]",
+        ),
+        (
+            "char *const (*const *pp)[2] = 0; *pp = 0;",
+            "char* const (* const)[2]",
+        ),
+        ("A *const p = 0; p = 0;", "char* const (* const)[2]"),
+        ("char *const (*p)[2] = 0; (*p)[0] = 0;", "char* const"),
+    ] {
+        let msg = compile(body)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let text = format!("assignment of a read-only object of type `{ty}`");
+        assert!(msg.contains(&text), "`{body}`: {msg}");
+    }
+}
+
 /// C99 6.3.1.3: an integer converted to an integer type that cannot
 /// represent it changes value. For an integer constant converted
 /// implicitly -- in an initializer, an assignment, an argument or a

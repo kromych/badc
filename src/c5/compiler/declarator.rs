@@ -1051,7 +1051,10 @@ impl Compiler {
                     self.param_sizes.push(size);
                 }
                 inner_ty = (pointee + inner_ptr_levels * (Ty::Ptr as i64))
-                    | (inner_ty & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK));
+                    | super::types::ptr_quals_over_array(
+                        inner_ty,
+                        super::types::ptr_depth_of(outer_ty_before_inner),
+                    );
             }
             return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
         }

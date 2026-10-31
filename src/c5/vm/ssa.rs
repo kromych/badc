@@ -2695,6 +2695,8 @@ fn run_inline_asm(
             | Mnemonic::SseRmImm { .. }
             | Mnemonic::SseShiftImm { .. }
             | Mnemonic::SseSignMask { .. }
+            | Mnemonic::SseRegPair { .. }
+            | Mnemonic::VexSignMask { .. }
             | Mnemonic::SseCvt { .. }
             | Mnemonic::Vex { .. }
             | Mnemonic::VexMov { .. }

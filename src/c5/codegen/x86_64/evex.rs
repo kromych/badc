@@ -348,6 +348,11 @@ const TABLE: &[(&str, Form)] = {
     ("vpsubb",  rvm(1, 1, false, 0xF8, FullMem)), ("vpsubw",  rvm(1, 1, false, 0xF9, FullMem)),
     ("vpshufb", rvm(1, 2, false, 0x00, FullMem)),
     ("vpmullw", rvm(1, 1, false, 0xD5, FullMem)), ("vpmaddwd", rvm(1, 1, false, 0xF5, FullMem)),
+    // AVX512-IFMA: the 52-bit multiply-adds of qword elements.
+    ("vpmadd52luq", rvm(1, 2, true, 0xB4, Full)), ("vpmadd52huq", rvm(1, 2, true, 0xB5, Full)),
+    // Blends under the write mask; the byte and word forms take no broadcast.
+    ("vpblendmd", rvm(1, 2, false, 0x64, Full)), ("vpblendmq", rvm(1, 2, true, 0x64, Full)),
+    ("vpblendmb", rvm(1, 2, false, 0x66, FullMem)), ("vpblendmw", rvm(1, 2, true, 0x66, FullMem)),
     // The vector AES rounds (VAES): a whole vector of memory, no broadcast.
     ("vaesenc",     rvm(1, 2, false, 0xDC, FullMem)),
     ("vaesenclast", rvm(1, 2, false, 0xDD, FullMem)),
@@ -363,6 +368,8 @@ const TABLE: &[(&str, Form)] = {
     // 3-operand with a trailing immediate.
     ("vpternlogd", rvmi(1, 3, false, 0x25, Full)), ("vpternlogq", rvmi(1, 3, true, 0x25, Full)),
     ("vpclmulqdq", rvmi(1, 3, false, 0x44, FullMem)),
+    // Element-wise right shift of the two sources' concatenation.
+    ("valignd", rvmi(1, 3, false, 0x03, Full)), ("valignq", rvmi(1, 3, true, 0x03, Full)),
     // GFNI: qword elements, so W is set and a broadcast reads one qword.
     ("vgf2p8affineqb",    rvmi(1, 3, true, 0xCE, Full)),
     ("vgf2p8affineinvqb", rvmi(1, 3, true, 0xCF, Full)),

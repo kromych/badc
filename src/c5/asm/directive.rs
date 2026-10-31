@@ -948,7 +948,11 @@ pub(crate) fn parse_section_item(
             short: None,
         });
     }
-    if let Some(w) = data_directive_width(tok) {
+    let width = match is_aarch64 {
+        true => data_directive_width(tok),
+        false => x86_data_directive_width(tok),
+    };
+    if let Some(w) = width {
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
         let w = if tok == ".word" && is_aarch64 { 4 } else { w };
         let mut values = alloc::vec::Vec::new();

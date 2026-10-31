@@ -105,6 +105,17 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
 }
 
 #[test]
+fn value_is_an_x86_two_byte_element() {
+    // GNU as defines `.value` on x86 alone, as `.word` there; the AArch64
+    // assembler reports an unknown pseudo-op.
+    match parse_section_item(".value", "0x1234, 7", false) {
+        Ok(AsmSectionItem::Data { width: 2, values }) => assert_eq!(values.len(), 2),
+        other => panic!("{other:?}"),
+    }
+    assert!(parse_section_item(".value", "1", true).is_err());
+}
+
+#[test]
 fn mach_o_names_lose_one_leading_underscore() {
     // Apple's `_g` is the C name `g`; a string, a comment, a named operand
     // reference and a `.section`'s segment and section names are not

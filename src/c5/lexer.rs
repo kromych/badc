@@ -221,11 +221,9 @@ pub(crate) struct LineMarker {
 ///   * `# N "file" 1 2 3 4`    -> same; of the trailing flags only 2
 ///     (`returning`) is recorded
 ///
-/// Filenames go through C99-style escape decoding (`\\` -> `\`,
-/// `\"` -> `"`, `\n` -> LF, `\t` -> tab) so a path with a
-/// space or quote round-trips. Anything malformed (missing
-/// digits, unterminated quote) returns `None` and falls
-/// through to the historical `#`-line skip.
+/// The filename is the string literal's value ([`decode_string_body`]).
+/// Anything malformed (missing digits, unterminated quote) returns
+/// `None` and falls through to the historical `#`-line skip.
 pub(crate) fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
     let mut i = 0;
     while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
@@ -255,30 +253,15 @@ pub(crate) fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
     // Optional `"file"` part.
     let file = if i < body.len() && body[i] == b'"' {
         i += 1;
-        let mut decoded = alloc::string::String::new();
+        let start = i;
         while i < body.len() && body[i] != b'"' {
-            if body[i] == b'\\' && i + 1 < body.len() {
-                let esc = body[i + 1];
-                let ch = match esc {
-                    b'\\' => '\\',
-                    b'"' => '"',
-                    b'n' => '\n',
-                    b't' => '\t',
-                    b'r' => '\r',
-                    other => other as char,
-                };
-                decoded.push(ch);
-                i += 2;
-            } else {
-                decoded.push(body[i] as char);
-                i += 1;
-            }
+            i += if body[i] == b'\\' { 2 } else { 1 };
         }
         // Unterminated string -- bail rather than partially update.
         if i >= body.len() {
             return None;
         }
-        Some(decoded)
+        Some(decode_string_body(&body[start..i]))
     } else {
         None
     };
@@ -293,6 +276,62 @@ pub(crate) fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
         file,
         returning,
     })
+}
+
+/// The value of a narrow string literal's body (C99 6.4.5, escapes as
+/// 6.4.4.4 and universal character names as 6.4.3 give them), read as
+/// UTF-8: a line marker's or `#line`'s file name, whose non-ASCII bytes
+/// gcc writes as octal escapes. An unknown escape stands for its character.
+pub(crate) fn decode_string_body(body: &[u8]) -> alloc::string::String {
+    let mut out = alloc::vec::Vec::with_capacity(body.len());
+    let mut i = 0;
+    let digits = |from: usize, max: usize, radix: u32| {
+        let n = (body[from..].iter().take(max))
+            .take_while(|b| (**b as char).is_digit(radix))
+            .count();
+        let v = (body[from..from + n].iter()).fold(0u32, |v, b| {
+            v.wrapping_mul(radix) + (*b as char).to_digit(radix).unwrap_or(0)
+        });
+        (v, n)
+    };
+    while i < body.len() {
+        if body[i] != b'\\' || i + 1 == body.len() {
+            out.push(body[i]);
+            i += 1;
+            continue;
+        }
+        let esc = body[i + 1];
+        i += 2;
+        match esc {
+            b'0'..=b'7' => {
+                let (v, n) = digits(i - 1, 3, 8);
+                out.push(v as u8);
+                i += n - 1;
+            }
+            b'x' => {
+                let (v, n) = digits(i, usize::MAX, 16);
+                out.push(if n == 0 { b'x' } else { v as u8 });
+                i += n;
+            }
+            b'u' | b'U' => {
+                let (v, n) = digits(i, if esc == b'u' { 4 } else { 8 }, 16);
+                let ch = char::from_u32(v).unwrap_or(char::REPLACEMENT_CHARACTER);
+                out.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
+                i += n;
+            }
+            _ => out.push(match esc {
+                b'a' => 7,
+                b'b' => 8,
+                b'f' => 12,
+                b'n' => b'\n',
+                b'r' => b'\r',
+                b't' => b'\t',
+                b'v' => 11,
+                other => other,
+            }),
+        }
+    }
+    alloc::string::String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.

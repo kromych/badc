@@ -323,6 +323,27 @@ fn line_text_by_number_honours_line_markers() {
     assert_eq!(lex.line_index_entries(), 3);
 }
 
+/// A line marker's file name is a narrow string literal's value, read as
+/// UTF-8: raw UTF-8 bytes, gcc's octal escapes for them, a hexadecimal
+/// escape, a universal character name and the simple escapes all spell
+/// the name they encode (C99 6.4.4.4, 6.4.3).
+#[test]
+fn a_line_marker_names_the_file_its_literal_spells() {
+    use crate::c5::lexer::parse_line_marker;
+    for (marker, file) in [
+        (" 1 \"caf\u{e9}.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\303\\251.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\xc3\\xa9.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\u00e9.c\"", "caf\u{e9}.c"),
+        (" 1 \"a\\\\b \\\"c\\\".c\" 2", "a\\b \"c\".c"),
+        ("line 3 \"x\\ty.c\"", "x\ty.c"),
+    ] {
+        let m = parse_line_marker(marker.as_bytes()).unwrap_or_else(|| panic!("{marker}"));
+        assert_eq!(m.file.as_deref(), Some(file), "{marker}");
+    }
+    assert!(parse_line_marker(b" 1 \"open\\\"").is_none());
+}
+
 #[test]
 fn line_index_is_sized_by_markers_and_the_runs_it_answers_from() {
     // A preprocessed unit can run to hundreds of thousands of lines:

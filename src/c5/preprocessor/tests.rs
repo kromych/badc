@@ -1959,6 +1959,21 @@ fn line_directive_retargets_file_and_line() {
     assert!(out.contains("int x;"));
 }
 
+/// C99 6.10.4: `#line`'s file name is the string literal's value, and it
+/// becomes the presumed name `__FILE__` gives (6.10.8): the escapes are
+/// decoded once, then written back escaped in the marker and the literal.
+#[test]
+fn line_directive_names_the_presumed_file_by_its_literal_value() {
+    let out = process("#line 10 \"C:\\\\dir\\\\x.c\"\nconst char *f = __FILE__;\n");
+    assert!(out.contains("# 10 \"C:\\\\dir\\\\x.c\""), "{out}");
+    assert!(
+        out.contains("const char *f = \"C:\\\\dir\\\\x.c\";"),
+        "{out}"
+    );
+    let out = process("#line 5 \"caf\\303\\251.c\"\nconst char *f = __FILE__;\n");
+    assert!(out.contains("const char *f = \"caf\u{e9}.c\";"), "{out}");
+}
+
 #[test]
 fn line_directive_without_filename_keeps_current_file() {
     // C99 6.10.4: bare `#line N` retargets the line counter

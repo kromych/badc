@@ -2567,7 +2567,7 @@ impl<'p, 's> LinePass<'p, 's> {
             return Emitted::No;
         }
         if let Some(f) = file {
-            self.current_file = f.into();
+            self.current_file = crate::c5::lexer::decode_string_body(f.as_bytes());
         }
         self.marker(line);
         self.presumed = line;
@@ -2591,7 +2591,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 let t = tail.trim();
                 t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
             }) {
-                self.current_file = f.into();
+                self.current_file = crate::c5::lexer::decode_string_body(f.as_bytes());
             }
             self.marker(line);
             self.presumed = line;
@@ -2646,11 +2646,12 @@ impl<'p, 's> LinePass<'p, 's> {
             // expanded again, from the state the first expansion found.
             let counter = self.pp.counter.get();
             let had_error = self.pp.pending_error.borrow().is_some();
-            // `__LINE__` reflects the presumed line, which a `#line` can
-            // retarget (C99 6.10.4); absent one it is the physical line.
+            // `__LINE__` and `__FILE__` give the presumed position, which a
+            // `#line` can retarget (C99 6.10.4, 6.10.8); absent one it is the
+            // physical one.
             let (substituted, tail) =
                 self.pp
-                    .substitute_line(&buffer, self.filename, self.presumed);
+                    .substitute_line(&buffer, &self.current_file, self.presumed);
             let more = match tail {
                 Tail::FnName => self
                     .paren_line(consumed)

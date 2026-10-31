@@ -1273,20 +1273,51 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // field (bits 22..16) encodes both element size and amount: left shifts use
     // esize+shift, right shifts use 2*esize-shift. U at bit 29 selects ushr; the
     // .1d arrangement is reserved (only .2d exists for vectors).
-    if let Some((base, u, left)) = match mnemonic {
+    let shift_imm = match mnemonic {
         "shl" => Some((0x0F00_5400u32, 0u32, true)),
         "sshr" => Some((0x0F00_0400, 0, false)),
         "ushr" => Some((0x0F00_0400, 1, false)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-        Opnd::Imm(shift),
-    ] = *ops
+    };
+    // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set) exists for the
+    // 64-bit element only.
+    if let Some((base, u, left)) = shift_imm
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        let immhb = match left {
+            true if (0..64).contains(&shift) => 64 + shift,
+            false if (1..=64).contains(&shift) => 128 - shift,
+            _ => {
+                return Err(String::from("inline asm: scalar shift amount out of range"));
+            }
+        };
+        return Ok(base
+            | 0x5000_0000
+            | (u << 29)
+            | ((immhb as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    if let Some((base, u, left)) = shift_imm
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from("inline asm: vector shift arrangements differ"));
@@ -1366,6 +1397,62 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (1u32 << 10)
             | (if upper { 1u32 << 30 } else { 0 })
             | (((2 * esize - shift) as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD shift left long `<sshll|ushll>{2} Vd.<Ta>, Vn.<Tb>, #shift` and its
+    // `<sxtl|uxtl>{2} Vd.<Ta>, Vn.<Tb>` alias (shift 0): immh:immb is
+    // esize+shift over the source element size, the destination one size
+    // wider and 128-bit; the `2` form reads the source's upper half.
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((u, alias)) = match wmnem {
+            "sshll" => Some((0u32, false)),
+            "ushll" => Some((1, false)),
+            "sxtl" => Some((0, true)),
+            "uxtl" => Some((1, true)),
+            _ => None,
+        }
+        && let Some((rd, ds, dq, rn, ss, sq, shift)) = match *ops {
+            [
+                Opnd::VecReg { num, size, q },
+                Opnd::VecReg {
+                    num: n,
+                    size: s,
+                    q: sq,
+                },
+                Opnd::Imm(shift),
+            ] if !alias => Some((num, size, q, n, s, sq, shift)),
+            [
+                Opnd::VecReg { num, size, q },
+                Opnd::VecReg {
+                    num: n,
+                    size: s,
+                    q: sq,
+                },
+            ] if alias => Some((num, size, q, n, s, sq, 0)),
+            _ => None,
+        }
+    {
+        if ds != ss + 1 || ss > 2 || !dq {
+            return Err(String::from(
+                "inline asm: widening shift destination must be one element size wider and 128-bit",
+            ));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads a 128-bit source; the base form a 64-bit one",
+            ));
+        }
+        let esize = 8i64 << ss;
+        if !(0..esize).contains(&shift) {
+            return Err(String::from(
+                "inline asm: widening shift amount out of range",
+            ));
+        }
+        return Ok(0x0F00_A400
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (((esize + shift) as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
     }

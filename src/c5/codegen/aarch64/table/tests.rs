@@ -911,6 +911,31 @@ fn fp_vector() {
 }
 
 #[test]
+fn scalar_shift_and_shift_left_long() {
+    // The AdvSIMD scalar shifts by immediate take the 64-bit element only;
+    // sshll/ushll take esize + shift over the source element size, and
+    // sxtl/uxtl are their shift-0 aliases. Words match GNU as 2.46.1.
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("shl", &[d(8), d(8), Opnd::Imm(56)]), 0x5F78_5508);
+    assert_eq!(enc("ushr", &[d(29), d(22), Opnd::Imm(26)]), 0x7F66_06DD);
+    assert_eq!(enc("ushr", &[d(0), d(1), Opnd::Imm(64)]), 0x7F40_0420);
+    assert_eq!(enc("sshr", &[d(2), d(3), Opnd::Imm(1)]), 0x5F7F_0462);
+    assert!(encode("shl", &[d(0), d(1), Opnd::Imm(64)]).is_err());
+    assert!(encode("ushr", &[d(0), d(1), Opnd::Imm(0)]).is_err());
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    assert_eq!(enc("uxtl", &[v(28, 2, true), v(28, 1, false)]), 0x2F10_A79C);
+    assert_eq!(enc("uxtl2", &[v(1, 1, true), v(2, 0, true)]), 0x6F08_A441);
+    assert_eq!(enc("sxtl", &[v(0, 3, true), v(1, 2, false)]), 0x0F20_A420);
+    let ushll = [v(0, 1, true), v(1, 0, false), Opnd::Imm(7)];
+    assert_eq!(enc("ushll", &ushll), 0x2F0F_A420);
+    let sshll2 = [v(3, 3, true), v(4, 2, true), Opnd::Imm(31)];
+    assert_eq!(enc("sshll2", &sshll2), 0x4F3F_A483);
+    assert!(encode("uxtl", &[v(0, 2, true), v(1, 2, true)]).is_err());
+    assert!(encode("uxtl2", &[v(0, 2, true), v(1, 1, false)]).is_err());
+    assert!(encode("ushll", &[v(0, 1, true), v(1, 0, false), Opnd::Imm(8)]).is_err());
+}
+
+#[test]
 fn vector_shift() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
     let sh = |m: &str, size: u8, q: bool, amt: i64| {

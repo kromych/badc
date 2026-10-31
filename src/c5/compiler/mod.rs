@@ -3326,7 +3326,7 @@ impl Compiler {
     }
 
     fn failed(&mut self, e: C5Error) -> C5Error {
-        e.after(self.sink.take())
+        self.with_echoes(e).after(self.sink.take())
     }
 
     /// Recover the function name from a compile error whose
@@ -3469,7 +3469,7 @@ impl Compiler {
     /// retry branch inside the same method.
     fn compile_one_pass(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
-            return Err(e);
+            return Err(self.with_echoes(e));
         }
         // A hard error leaves with the diagnostics reported before it,
         // which the sink would otherwise keep for a caller that never

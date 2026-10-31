@@ -54,6 +54,10 @@ pub struct Diagnostic {
     /// message the way gcc prints the offending line.
     pub source_line: Option<String>,
     pub notes: Vec<(Option<Loc>, String)>,
+    /// `source_line` is still to be read from the unit: an error is built
+    /// on paths a trial parse discards, so the compiler reads the line only
+    /// when the diagnostic leaves it.
+    pub(crate) echo_pending: bool,
 }
 
 impl Diagnostic {
@@ -65,7 +69,14 @@ impl Diagnostic {
             text: text.into(),
             source_line: None,
             notes: Vec::new(),
+            echo_pending: false,
         }
+    }
+
+    /// Mark `source_line` as the line `loc` points at, read later.
+    pub(crate) fn with_pending_echo(mut self) -> Self {
+        self.echo_pending = true;
+        self
     }
 
     pub fn with_source_line(mut self, line: Option<String>) -> Self {

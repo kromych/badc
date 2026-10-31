@@ -569,16 +569,31 @@ impl Compiler {
     /// The position `line` of `file` reports at -- with the unit offset
     /// the diagnostic pragmas resolve on -- and the source text it echoes.
     fn locate(&self, file: &str, line: usize) -> (Loc, Option<alloc::string::String>) {
-        let loc = match self.lex.line_offset(file, line) {
+        (self.loc_at(file, line), self.echo_of(file, line))
+    }
+
+    fn loc_at(&self, file: &str, line: usize) -> Loc {
+        match self.lex.line_offset(file, line) {
             Some(offset) => Loc::in_unit(alloc::string::String::from(file), line as u32, offset),
             None => Loc::new(alloc::string::String::from(file), line as u32),
-        };
-        let source = self
-            .lex
-            .line_text_by_number(file, line)
+        }
+    }
+
+    fn echo_of(&self, file: &str, line: usize) -> Option<alloc::string::String> {
+        (self.lex.line_text_by_number(file, line))
             .filter(|s| !s.is_empty())
-            .map(alloc::string::ToString::to_string);
-        (loc, source)
+            .map(alloc::string::ToString::to_string)
+    }
+
+    /// Read the source line of each of `e`'s diagnostics that left it to
+    /// be read ([`Diagnostic::with_pending_echo`]).
+    pub(super) fn with_echoes(&self, e: C5Error) -> C5Error {
+        e.map_diagnostics(|d| {
+            if core::mem::take(&mut d.echo_pending) {
+                d.source_line =
+                    (d.loc.as_ref()).and_then(|l| self.echo_of(&l.file, l.line as usize));
+            }
+        })
     }
 
     /// Whether the lexer's current file is the unit's own: the primary
@@ -752,14 +767,13 @@ impl Compiler {
     }
 
     fn compile_err_line(&self, code: Code, line: usize, message: &str) -> C5Error {
-        let (loc, source) = self.locate(&self.lex.file, line);
         let diagnostic = super::super::diag::Diagnostic::new(
             code,
             super::super::diag::Level::Error,
-            Some(loc),
+            Some(self.loc_at(&self.lex.file, line)),
             message,
         )
-        .with_source_line(source);
+        .with_pending_echo();
         C5Error::of(diagnostic)
     }
 

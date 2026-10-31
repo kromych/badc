@@ -344,6 +344,24 @@ fn a_line_marker_names_the_file_its_literal_spells() {
     assert!(parse_line_marker(b" 1 \"open\\\"").is_none());
 }
 
+/// A line's text ends where the next line of its run starts, at the
+/// run's last newline, or at the buffer's end: the lookup reads no part
+/// of the line to find its end.
+#[test]
+fn a_line_lookup_ends_each_line_at_the_next_one() {
+    use crate::c5::lexer::Lexer;
+    let long = "x".repeat(100_000);
+    let src = format!("# 1 \"a.c\"\n{long};\nint b;\n# 9 \"h.h\"\nint h;\n# 3 \"a.c\"\nint c;");
+    let mut lex = Lexer::new(src);
+    lex.file = "a.c".into();
+    let first = format!("{long};");
+    assert_eq!(lex.line_text_by_number("a.c", 1), Some(first.as_str()));
+    assert_eq!(lex.line_text_by_number("a.c", 2), Some("int b;"));
+    assert_eq!(lex.line_text_by_number("h.h", 9), Some("int h;"));
+    assert_eq!(lex.line_text_by_number("a.c", 3), Some("int c;"));
+    assert_eq!(lex.line_text_by_number("a.c", 4), None);
+}
+
 #[test]
 fn line_index_is_sized_by_markers_and_the_runs_it_answers_from() {
     // A preprocessed unit can run to hundreds of thousands of lines:

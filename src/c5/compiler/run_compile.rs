@@ -2560,7 +2560,7 @@ impl Compiler {
                 "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
                 format.name()
             );
-            let error = self.compile_err_at(Code::LIMIT, line, message);
+            let error = self.with_echoes(self.compile_err_at(Code::LIMIT, line, message));
             self.image_align_error = error.into_diagnostics().pop();
         }
     }

@@ -488,15 +488,17 @@ impl LineRun {
 struct LineIndex {
     files: Vec<String>,
     runs: Vec<LineRun>,
+    /// Each file's runs, in buffer order.
+    by_file: Vec<Vec<u32>>,
 }
 
 impl LineIndex {
     /// Byte span of `line` in `files[file_id]`, or `None` when no run
     /// holds it.
     fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
-        let run = self.runs.iter().find(|r| {
-            r.file_id == file_id && line.checked_sub(r.first_line).is_some_and(|k| k < r.lines)
-        })?;
+        let run = (self.by_file.get(file_id as usize)?.iter())
+            .map(|&r| &self.runs[r as usize])
+            .find(|r| line.checked_sub(r.first_line).is_some_and(|k| k < r.lines))?;
         let text = &src[run.start as usize..run.end as usize];
         let starts = run.starts.get_or_init(|| {
             let after_newline = text
@@ -507,12 +509,15 @@ impl LineIndex {
                 .chain(after_newline.map(|(k, _)| run.start + k as u32 + 1))
                 .collect()
         });
-        let pos = starts[(line - run.first_line) as usize];
-        let stop = text[(pos - run.start) as usize..]
-            .iter()
-            .position(|&b| b == b'\n')
-            .map_or(run.end, |k| pos + k as u32);
-        Some((pos, stop))
+        // The line ends where the next one starts, so a lookup costs the
+        // same however long the line is.
+        let k = (line - run.first_line) as usize;
+        let stop = match starts.get(k + 1) {
+            Some(&next) => next - 1,
+            None if text.last() == Some(&b'\n') => run.end - 1,
+            None => run.end,
+        };
+        Some((starts[k], stop))
     }
 }
 
@@ -1935,7 +1940,15 @@ impl Lexer {
             if start < n {
                 runs.push(LineRun::new(file_id, first_line, lines, start, n));
             }
-            LineIndex { files, runs }
+            let mut by_file = alloc::vec![Vec::new(); files.len()];
+            for (r, run) in runs.iter().enumerate() {
+                by_file[run.file_id as usize].push(r as u32);
+            }
+            LineIndex {
+                files,
+                runs,
+                by_file,
+            }
         });
         let file_id = index.files.iter().position(|f| f == file)? as u32;
         index.span_of(&self.src, file_id, u32::try_from(target).ok()?)

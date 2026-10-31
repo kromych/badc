@@ -15,9 +15,21 @@ static const char *direct(void)    { return __func__; }
 static struct nm   compound(void)   { return (struct nm){ .f = __func__, .k = 1 }; }
 static const char *local_aggr(void) { struct nm s = { .f = __func__ }; return s.f; }
 
+// A static initializer takes it inside a constant expression too, as the
+// address constant the array decays to (C99 6.6p9): a `?:` arm, an offset,
+// an element's address.
+struct pi { const char *fmt, *rest, *third; };
+static const struct pi *in_const(void) {
+    static const struct pi e = { .fmt = 1 ? __func__ : (void *)0,
+                                 .rest = __func__ + 1, .third = &__func__[2] };
+    return &e;
+}
+
 int main(void) {
     if (!streq(direct(), "direct"))         return 1;
     if (!streq(compound().f, "compound"))   return 2;
     if (!streq(local_aggr(), "local_aggr")) return 3;
+    const struct pi *p = in_const();
+    if (!streq(p->fmt, "in_const") || p->rest != p->fmt + 1 || !streq(p->third, "_const")) return 4;
     return 0;
 }

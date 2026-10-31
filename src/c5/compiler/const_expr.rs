@@ -2612,6 +2612,19 @@ impl Compiler {
                 }),
             };
         }
+        // `__func__` is an array lvalue of static storage duration too.
+        if self.is_func_name_ident() {
+            let (off, sym, bytes) = self.intern_func_name_object();
+            self.next()?;
+            let elem_ty = super::types::pointee_ty(self.func_name_ptr_ty());
+            return Ok(ConstDesig {
+                value: off,
+                ty: self.array_desig_ty(elem_ty, &[], bytes),
+                is_lvalue: true,
+                root: ConstRoot::Data(sym),
+                function: false,
+            });
+        }
         // A string literal is an unnamed array lvalue of static storage
         // duration, so `&"..."` and `"..."[i]` are address constants.
         if self.lex.tk == '"' {
@@ -3222,6 +3235,21 @@ impl Compiler {
             // staged: an enclosing checkpoint may span them.
             let (off, elem_ty, bytes) = self.stage_const_string()?;
             return Ok(ConstVal::Addr(self.const_string_addr(off, elem_ty, bytes)));
+        }
+        // C99 6.4.2.2: `__func__` names a `static const char` array, which
+        // decays the same way.
+        if self.is_func_name_ident() {
+            let (off, sym, _) = self.intern_func_name_object();
+            self.next()?;
+            let ty = self.func_name_ptr_ty();
+            return Ok(ConstVal::Addr(ConstAddr {
+                value: off,
+                root: ConstRoot::Data(sym),
+                elem_size: 1,
+                pointee: Some(super::types::pointee_ty(ty)),
+                ty,
+                function: false,
+            }));
         }
         if self.lex.tk == Token::FloatNum {
             // Floating literal -- the lexer staged the f64 bit

@@ -825,6 +825,15 @@ impl Compiler {
         offset
     }
 
+    /// [`Self::intern_func_name`] with the storage's symbol, which roots
+    /// its address as an address constant (C99 6.6p9), and its size.
+    pub(super) fn intern_func_name_object(&mut self) -> (i64, usize, i64) {
+        let off = self.intern_func_name();
+        let at = self.staged_literal_syms.partition_point(|&(v, _)| v < off);
+        let sym = self.staged_literal_syms[at].1;
+        (off, sym, self.symbols[sym].data_byte_size)
+    }
+
     /// The type `__func__` decays to: a pointer to `const char`.
     pub(super) fn func_name_ptr_ty(&self) -> i64 {
         let c = super::types::plain_char_ty(self.lex.char_signed);
@@ -2526,13 +2535,11 @@ impl Compiler {
         let idx = self.lex.curr_id_idx;
         let class = self.symbols[idx].class;
         // C99 6.4.2.2: __func__ / __FUNCTION__ / __PRETTY_FUNCTION__
-        // decay to a pointer to the enclosing function's name; resolve
-        // them here so the undeclared name is not taken as a forward fn.
+        // decay to a pointer to the enclosing function's name, an address
+        // constant the evaluator folds with what follows (`__func__ + 1`),
+        // so the undeclared name is not taken as a forward fn.
         if self.is_func_name_ident() {
-            let off = self.intern_func_name();
-            self.next()?;
-            let ty = self.func_name_ptr_ty();
-            return Ok(InitLeaf::of(off as i128, InitElemReloc::Data(None), ty));
+            return self.parse_constant_init_scalar();
         }
         // A name with no declaration is either a builtin the constant
         // evaluator folds (C99 6.6p10) or undeclared; the evaluator

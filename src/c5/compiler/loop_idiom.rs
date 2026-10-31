@@ -400,7 +400,7 @@ impl Compiler {
 
     /// `v` as the type converts it (C99 6.3.1.3). `None` for a type no
     /// integer conversion applies to.
-    fn narrow_to(&self, ty: i64, v: i64) -> Option<i64> {
+    pub(super) fn narrow_to(&self, ty: i64, v: i64) -> Option<i64> {
         if is_floating_ty(ty) || is_struct_value_ty(ty) {
             return None;
         }

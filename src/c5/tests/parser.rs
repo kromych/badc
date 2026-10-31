@@ -5218,6 +5218,41 @@ fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
     }
 }
 
+/// A condition whose known operands decide it leaves the other branch
+/// dead for the fall-off analysis, as gcc 16.2.1 folds it for
+/// -Wreturn-type at -O0 and -O2: `x || 1`, `x | 1`, `!(x && 0)`,
+/// `(x & 0) == 0`, `!(x * 0)`, `x | ~0u`, `(x ^ x) == 0`, `x - x + 1` and
+/// `(x, 1)` are true whatever `x`; `x && 0` and `x * 0` false; `x || 0`,
+/// `x | 0` and `!x` undecided. The warnings match gcc's.
+#[test]
+fn fall_off_end_folds_conditions_their_known_operands_decide() {
+    let quiet = [
+        "x || 1",
+        "0 == 0 || x < 4",
+        "x | 1",
+        "!(0 && x)",
+        "(x & 0) == 0",
+        "!(x * 0)",
+        "x | 0xffffffff",
+        "(x ^ x) == 0",
+        "(x - x) + 1",
+        "(x, 1)",
+    ];
+    let warned = ["x && 0", "x * 0", "x || 0", "x | 0", "!x"];
+    for (cond, warns) in (quiet.iter().map(|s| (s, false))).chain(warned.iter().map(|s| (s, true)))
+    {
+        let src = alloc::format!(
+            "int f(unsigned x) {{ if ({cond}) return 0; }}\nint main(void) {{ return 0; }}"
+        );
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        let fell = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("control reaches end of non-void function `f`")
+        });
+        assert_eq!(fell, warns, "{cond}: {:?}", prog.warnings);
+    }
+}
+
 #[test]
 fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
     // C99 6.7.2p2: a typedef-name does not combine with `unsigned` /

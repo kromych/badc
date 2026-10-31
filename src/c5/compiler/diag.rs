@@ -9,7 +9,7 @@
 //! at their site.
 
 use super::super::ast::expr_ty;
-use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
+use super::super::ast::{BlockItem, Expr, ExprId, ShortCircuitOp, Stmt, StmtId, UnOp};
 use super::super::diag::{Code, Loc};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
@@ -153,6 +153,22 @@ fn sign_only_difference(structs: &[super::StructDef], a: i64, b: i64) -> bool {
             .any(|&t| pointee == t as i64)
 }
 
+/// What the AST integer folder admits.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Fold {
+    /// An integer constant expression (C99 6.6p6): a cast converts an
+    /// integer or the floating constant it is applied to, and no pointer.
+    Ice,
+    /// Any integer value the constant operands fix.
+    Value,
+    /// [`Fold::Value`] plus the operands that decide an operation alone:
+    /// `x && 0`, `x || 1`, `x & 0`, `x * 0`, `x | ~0`, `x - x`, `x ^ x`
+    /// and a comma expression's right operand (C99 6.5.17). The value
+    /// does not make an operand constant; it answers which way control
+    /// goes.
+    Flow,
+}
+
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
@@ -233,9 +249,9 @@ impl Compiler {
                 // No else: the false branch reaches the continuation.
                 let else_ft = || else_s.is_none_or(|e| self.stmt_may_fall_through(e));
                 // A constant condition leaves the other branch dead.
-                match self.expr_const_int(*cond) {
-                    Some(0) => else_ft(),
-                    Some(_) => then_ft(),
+                match self.expr_truth(*cond) {
+                    Some(false) => else_ft(),
+                    Some(true) => then_ft(),
                     None => then_ft() || else_ft(),
                 }
             }
@@ -243,7 +259,7 @@ impl Compiler {
             // whenever the condition is not a non-zero constant, or a
             // `break` targets it.
             Stmt::While { cond, body } => {
-                !self.expr_is_nonzero_const(*cond) || self.stmt_has_loop_break(*body)
+                self.expr_truth(*cond) != Some(true) || self.stmt_has_loop_break(*body)
             }
             // A `do`/`while` runs its body before the condition, so it
             // reaches the exit test only if the body falls through to it.
@@ -251,11 +267,11 @@ impl Compiler {
             // the loop falls through only via a targeting `break`. This is
             // the `do { ...; return; } while (0)` macro idiom.
             Stmt::DoWhile { body, cond } => {
-                (self.stmt_may_fall_through(*body) && !self.expr_is_nonzero_const(*cond))
+                (self.stmt_may_fall_through(*body) && self.expr_truth(*cond) != Some(true))
                     || self.stmt_has_loop_break(*body)
             }
             Stmt::For { cond, body, .. } => {
-                let infinite = cond.is_none_or(|c| self.expr_is_nonzero_const(c));
+                let infinite = cond.is_none_or(|c| self.expr_truth(c) == Some(true));
                 !infinite || self.stmt_has_loop_break(*body)
             }
             // Switch / Labeled / Case / Default: control flow not
@@ -283,6 +299,32 @@ impl Compiler {
         }
     }
 
+    /// The truth value of the controlling expression `e` when its known
+    /// operands decide it, as gcc and clang fold it for -Wreturn-type
+    /// ([`Fold::Flow`]).
+    fn expr_truth(&self, e: ExprId) -> Option<bool> {
+        if let Some(v) = self.const_int(e, Fold::Flow) {
+            return Some(v != 0);
+        }
+        match self.ast.expr(e) {
+            // A set bit survives `|` whatever the other operand holds.
+            Expr::Binary {
+                op: BinOp::Or,
+                lhs,
+                rhs,
+                ty,
+            } => [*lhs, *rhs]
+                .into_iter()
+                .any(|x| {
+                    (self.const_int(x, Fold::Flow))
+                        .and_then(|v| self.narrow_to(*ty, v))
+                        .is_some_and(|v| v != 0)
+                })
+                .then_some(true),
+            _ => self.expr_is_nonzero_const(e).then_some(true),
+        }
+    }
+
     /// True when `e` is a non-zero integer constant -- an always-taken
     /// loop condition. Looks through a cast (`while ((Bool)1)`, the
     /// common boolean-macro spelling): a cast of a constant is still a
@@ -307,7 +349,7 @@ impl Compiler {
             _ => e,
         };
         expr_ty(self.ast.expr(e)).is_some_and(|t| !is_pointer_ty(t) && !is_floating_scalar(t))
-            && self.const_int(e, true) == Some(0)
+            && self.const_int(e, Fold::Ice) == Some(0)
     }
 
     /// [`Self::expr_is_null_pointer_constant`] for the value in hand, which
@@ -321,13 +363,12 @@ impl Compiler {
     /// Fold a literal-rooted integer constant expression, each value in its
     /// own type: a cast to an integer type converts (C99 6.3.1.3).
     pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
-        self.const_int(e, false)
+        self.const_int(e, Fold::Value)
     }
 
-    /// [`Self::expr_const_int`]; `ice` holds the operands to C99 6.6p6: a
-    /// cast converts an integer or the floating constant it is applied to,
-    /// and no pointer.
-    fn const_int(&self, e: ExprId, ice: bool) -> Option<i64> {
+    /// [`Self::expr_const_int`] under `mode`.
+    fn const_int(&self, e: ExprId, mode: Fold) -> Option<i64> {
+        let ice = mode == Fold::Ice;
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
             Expr::Sizeof(s) => Some(s.size_bytes),
@@ -337,15 +378,15 @@ impl Compiler {
                 let v = match self.ast.expr(*child) {
                     Expr::FloatLit { bits, .. } if ice => f64::from_bits(*bits) as i64,
                     c if ice && expr_ty(c).is_none_or(is_pointer_ty) => return None,
-                    _ => self.const_int(*child, ice)?,
+                    _ => self.const_int(*child, mode)?,
                 };
                 let (bytes, is_bool) = (self.size_of_type(*to_ty), is_bool_ty(*to_ty));
                 Some(narrow_const_int(bytes, is_unsigned_ty(*to_ty), is_bool, v as i128) as i64)
             }
             Expr::Cast { .. } if ice => None,
-            Expr::Cast { child, .. } => self.const_int(*child, ice),
+            Expr::Cast { child, .. } => self.const_int(*child, mode),
             Expr::Unary { op, child, ty } => {
-                let v = self.const_int(*child, ice)?;
+                let v = self.const_int(*child, mode)?;
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
@@ -366,10 +407,55 @@ impl Compiler {
                 if !imm_safe_binop(*op) && !divmod {
                     return None;
                 }
-                let l = self.const_int(*lhs, ice)?;
-                let r = self.const_int(*rhs, ice)?;
-                fold_const_int_binop(&self.ast, self.target, *op, *ty, (*lhs, l), (*rhs, r))
+                let (l, r) = (self.const_int(*lhs, mode), self.const_int(*rhs, mode));
+                if let (Some(l), Some(r)) = (l, r) {
+                    return fold_const_int_binop(
+                        &self.ast,
+                        self.target,
+                        *op,
+                        *ty,
+                        (*lhs, l),
+                        (*rhs, r),
+                    );
+                }
+                if mode != Fold::Flow {
+                    return None;
+                }
+                match op {
+                    // Constant whatever the other operand iff its two
+                    // extremes agree: `x & 0`, `x * 0`, `x | ~0`.
+                    BinOp::And | BinOp::Or | BinOp::Mul => {
+                        let k = l.or(r)?;
+                        let at = |x| {
+                            let v = fold_const_int_binop(
+                                &self.ast,
+                                self.target,
+                                *op,
+                                *ty,
+                                (*lhs, x),
+                                (*rhs, k),
+                            );
+                            v.and_then(|v| self.narrow_to(*ty, v))
+                        };
+                        let v = at(0)?;
+                        (at(-1)? == v).then_some(v)
+                    }
+                    BinOp::Sub | BinOp::Xor if self.same_object(*lhs, *rhs) => Some(0),
+                    _ => None,
+                }
             }
+            Expr::ShortCircuit { op, lhs, rhs, .. } => {
+                let decides = *op == ShortCircuitOp::Lor;
+                let truth = |x| self.const_int(x, mode).map(|v| v != 0);
+                let (l, r) = (truth(*lhs), truth(*rhs));
+                let decided = l == Some(decides) || mode == Fold::Flow && r == Some(decides);
+                if decided {
+                    Some(decides as i64)
+                } else {
+                    l.and(r).map(|_| (!decides) as i64)
+                }
+            }
+            Expr::Comma { rhs, .. } if mode == Fold::Flow => self.const_int(*rhs, mode),
             // A conditional with a constant condition folds to its selected
             // arm (C99 6.6p3 exempts the unevaluated arm), so the
             // `__builtin_choose_expr`-style constant max/min idioms remain
@@ -380,10 +466,21 @@ impl Compiler {
                 else_e,
                 ..
             } => {
-                let c = self.const_int(*cond, ice)?;
-                self.const_int(if c != 0 { *then_e } else { *else_e }, ice)
+                let c = self.const_int(*cond, mode)?;
+                self.const_int(if c != 0 { *then_e } else { *else_e }, mode)
             }
             _ => None,
+        }
+    }
+
+    /// Whether `a` and `b` read one non-volatile object, so `a - b` and
+    /// `a ^ b` are 0.
+    fn same_object(&self, a: ExprId, b: ExprId) -> bool {
+        match (self.ast.expr(a), self.ast.expr(b)) {
+            (Expr::Ident { sym: x, ty, .. }, Expr::Ident { sym: y, .. }) => {
+                x == y && !super::types::is_volatile_object_ty(*ty)
+            }
+            _ => false,
         }
     }
 

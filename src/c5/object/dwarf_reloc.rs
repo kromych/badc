@@ -1854,21 +1854,25 @@ fn member_plan(structs: &[StructDef], sd: &StructDef) -> Vec<MemberPlan> {
 
 /// The offset `inner`'s promoted members sit at in `sd`, when
 /// `sd.fields[at..]` reproduces `inner.fields` member for member at a
-/// constant displacement.
+/// constant displacement. A bit-field is compared by the bit it starts at:
+/// a packed aggregate records it against its own first byte, the
+/// anonymous member against its storage unit's.
 fn anon_run_offset(sd: &StructDef, at: usize, inner: &StructDef) -> Option<usize> {
     let n = inner.fields.len();
     if n == 0 || at + n > sd.fields.len() {
         return None;
     }
-    let base = sd.fields[at].offset.checked_sub(inner.fields[0].offset)?;
+    let bit = |f: &StructField| f.offset * 8 + f.bit_offset as usize;
+    let base_bits = bit(&sd.fields[at]).checked_sub(bit(&inner.fields[0]))?;
+    if base_bits % 8 != 0 {
+        return None;
+    }
+    let base = base_bits / 8;
     let placed = sd.fields[at..at + n]
         .iter()
         .zip(inner.fields.iter())
         .all(|(o, i)| {
-            o.name == i.name
-                && o.offset == base + i.offset
-                && o.bit_offset == i.bit_offset
-                && o.bit_width == i.bit_width
+            o.name == i.name && bit(o) == base_bits + bit(i) && o.bit_width == i.bit_width
         });
     placed.then_some(base)
 }

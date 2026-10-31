@@ -45,6 +45,7 @@ const DW_AT_TYPE: u64 = 0x49;
 const DW_AT_DATA_MEMBER_LOCATION: u64 = 0x38;
 const DW_AT_PROTOTYPED: u64 = 0x27;
 const DW_AT_DECL_LINE: u64 = 0x3b;
+const DW_AT_DATA_BIT_OFFSET: u64 = 0x6b;
 const DW_AT_ENCODING: u64 = 0x3e;
 
 const DW_ATE_SIGNED_CHAR: u64 = 0x06;
@@ -1052,6 +1053,48 @@ fn anonymous_members_nest_under_an_unnamed_member() {
         })
         .collect();
     assert_eq!(placed, [("c", 0), ("d", 4)]);
+}
+
+/// A packed union records a promoted bit-field against its own first
+/// byte, the anonymous struct against its storage unit; both name the
+/// same bit, so the nesting is kept for bit-fields past the first byte
+/// too, and the members stay under the anonymous struct. A union whose
+/// members sat at nonzero bit offsets is what BTF refuses.
+#[test]
+fn a_packed_union_keeps_its_anonymous_bit_field_struct() {
+    let u = compile_unit(
+        "anon-packed-bits",
+        "union info {\n\
+           struct { unsigned lo:3; unsigned mid:5; unsigned hi:10; unsigned word; };\n\
+           unsigned long long all;\n\
+         } __attribute__((packed));\n\
+         union info g_info;\n\
+         int use(void) { return g_info.hi + (int)g_info.word; }\n",
+    );
+    let members = u.members(u.named(DW_TAG_UNION_TYPE, "info"));
+    let names: Vec<Option<&str>> = members.iter().map(|m| m.name()).collect();
+    assert_eq!(names, [None, Some("all")]);
+    let inner = u.type_of(members[0]);
+    assert_eq!(inner.tag, DW_TAG_STRUCTURE_TYPE);
+    let bits: Vec<(&str, Option<u64>)> = u
+        .members(inner)
+        .iter()
+        .map(|m| {
+            (
+                m.name().unwrap(),
+                m.at(DW_AT_DATA_BIT_OFFSET).map(|a| a.as_uint()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        bits,
+        [
+            ("lo", Some(0)),
+            ("mid", Some(3)),
+            ("hi", Some(8)),
+            ("word", None)
+        ]
+    );
 }
 
 /// One anonymous aggregate nested in another keeps both levels, in

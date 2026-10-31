@@ -3773,16 +3773,13 @@ fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
             "int main(int c, char **v) { (void)v; return _Generic(0, int[c]: 1, default: 0); }",
             "a generic association type may not be variably modified",
         ),
-        (
-            "int main(int c, char **v) { (void)v; return (int)sizeof(int[3][c]); }",
-            "a non-constant inner array dimension is not supported",
-        ),
     ] {
         expect_compile_error(src, needle);
     }
     Compiler::new(
         "int main(int c, char **v) { (void)v; int b[4];\n\
-         return (int)(sizeof(int[c]) + sizeof(int (*)[c])) + ((int (*)[c])b)[0][0] * 0; }"
+         return (int)(sizeof(int[c]) + sizeof(int (*)[c]) + sizeof(int[3][c])) \
+         + ((int (*)[c])b)[0][0] * 0; }"
             .to_string(),
     )
     .compile()

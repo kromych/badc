@@ -68,12 +68,16 @@ pub(super) struct ParamSize {
     pub(super) vm: Option<VmParam>,
 }
 
-/// A variably modified parameter: its symbol, the element type of the
-/// array it points to, and the pointer levels above that array.
-#[derive(Clone, Copy)]
+/// A variably modified parameter: its symbol, the type below the bounds of
+/// the array it points to, those bounds (outermost first, `None` for one
+/// evaluated on entry), where each variable bound after the first is
+/// written, and the pointer levels above that array.
+#[derive(Clone)]
 pub(super) struct VmParam {
     pub(super) sym: usize,
-    pub(super) elem: i64,
+    pub(super) base: i64,
+    pub(super) dims: Vec<Option<i64>>,
+    pub(super) more: Vec<crate::c5::lexer::LexerSnapshot>,
     pub(super) levels: i64,
 }
 
@@ -451,6 +455,29 @@ impl Compiler {
             // (`gf *`) absorbed them above.
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
                 let mut dims = self.parse_unnamed_param_bounds()?;
+                if dims.contains(&super::VLA_ARRAY_SIZE) {
+                    // The adjusted parameter points to a row of unspecified size.
+                    let variable: Vec<bool> = dims[1..]
+                        .iter()
+                        .map(|&d| d == super::VLA_ARRAY_SIZE)
+                        .collect();
+                    let row = self.unspecified_vla_type(ty, &dims[1..], &variable)?;
+                    ty = add_ptr_level(row);
+                    let carriers = self.take_param_fn_ptr_carriers()?;
+                    if let Some((f, depth)) = param_fn_type(carriers, true) {
+                        fn_types.push((types.len(), f, depth));
+                    }
+                    if implicit_int {
+                        self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                    }
+                    self.ty = ty;
+                    enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
+                    types.push(ty);
+                    if !self.parameter_separator()? {
+                        break;
+                    }
+                    continue;
+                }
                 self.require_complete_elements(ty, &dims)?;
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
                     if !dims.is_empty() && self.typedef_base_incomplete() {
@@ -650,12 +677,12 @@ impl Compiler {
             } else {
                 let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
                 else {
-                    let ty = self.peek_expr_type()?;
-                    self.require_integer_size(ty)?;
-                    return Err(self.compile_err(
-                        Code::UNSUPPORTED,
-                        "a non-constant inner array dimension is not supported",
-                    ));
+                    // A variable bound, unspecified in a prototype (C99
+                    // 6.7.5.2p4): only a definition evaluates one.
+                    self.skip_param_array_size()?;
+                    dims.push(super::VLA_ARRAY_SIZE);
+                    self.consume(b']', "close bracket expected in array declarator")?;
+                    continue;
                 };
                 if n < 0 {
                     return Err(self.compile_err(

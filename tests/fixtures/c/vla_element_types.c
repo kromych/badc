@@ -50,5 +50,9 @@ int main(void) {
     if (d[1][1] != -11 || e[1][m - 1] != 77 || w[2][3] != 24) return 7;
     if (&a[1][2] - &a[0][0] != m + 2 || &c[1][0][0] - &c[0][0][0] != m * k) return 8;
     if (sum(n, m, a) != 138 || sum(3, m, b) != 276) return 9;
+    // A pointer to such an array, and type names of them.
+    int (*r)[n][m] = &a;
+    if (sizeof *r != sizeof a || (*r)[2][3] != 23 || (int (*)[m][k])c != (void *)c) return 10;
+    if (sizeof(int[3][m]) != 3 * m * sizeof(int) || sizeof(long[n][m][k]) != sizeof c) return 11;
     return 0;
 }

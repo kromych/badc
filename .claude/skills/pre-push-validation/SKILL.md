@@ -36,8 +36,10 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     runs the lane's set concurrently. An entry `path@config` runs a smoke in a
     configuration the runner's `DEMO_ENV` defines; the configurations of one
     smoke share its cache, so they run back to back in one slot, each with its
-    own verdict. `--demo-jobs` bounds how many run at a time, never which ones
-    run; the runner prints its roster and its width.
+    own verdict. tcl runs as `tcl@untimed` in the pool and `tcl@timed`, its
+    timer-bound tests, after the pool drains (the runner's `AFTER_POOL`), with
+    the host to itself. `--demo-jobs` bounds how many run at a time, never
+    which ones run; the runner prints its roster and its width.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
     median one. Both are ratios taken within the run, so the lane's own

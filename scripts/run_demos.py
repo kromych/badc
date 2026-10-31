@@ -11,7 +11,8 @@ width.
 An entry `path@config` runs the smoke under that configuration's
 environment in `DEMO_ENV`. The configurations of one smoke share its
 cache, so they run one after another in one pool slot, each with its own
-verdict.
+verdict. An entry in `AFTER_POOL` runs once the pool has drained, one at a
+time, with the host to itself.
 
 Exit status is non-zero if any demo failed.
 """
@@ -47,10 +48,11 @@ def name(entry: str) -> str:
 
 def slots(entries: list[str]) -> list[list[str]]:
     """The roster as pool tasks: one per smoke, holding its entries in
-    roster order."""
+    roster order, without the `AFTER_POOL` ones."""
     by_script: dict[str, list[str]] = {}
     for e in entries:
-        by_script.setdefault(script(e), []).append(e)
+        if e not in AFTER_POOL:
+            by_script.setdefault(script(e), []).append(e)
     return list(by_script.values())
 
 
@@ -79,10 +81,15 @@ QEMU_BOOT = {
     "BADC_QEMU_BOOT_TIMEOUT": "90",
     "BADC_QEMU_REQUIRE_FIRMWARE": "1",
 }
+# The tcl suite without its timer-bound tests, which the pool's load
+# decides, and those tests alone once the pool has drained.
 DEMO_ENV = {
     "demos/qemu/smoke.py": {**QEMU_BOOT, "BADC_QEMU_OPT": "0", "BADC_QEMU_VERIFY_SSA": "0"},
     "demos/qemu/smoke.py@O": {**QEMU_BOOT, "BADC_QEMU_OPT": "1", "BADC_QEMU_VERIFY_SSA": "1"},
+    "demos/tcl/smoke.py@untimed": {"BADC_TCL_TESTS": "untimed"},
+    "demos/tcl/smoke.py@timed": {"BADC_TCL_TESTS": "timed"},
 }
+AFTER_POOL = {"demos/tcl/smoke.py@timed"}
 
 
 def main() -> int:
@@ -115,6 +122,9 @@ def main() -> int:
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         for fut in [pool.submit(run_slot, t) for t in tasks]:
             fut.result()
+    for entry in args.demos:
+        if entry in AFTER_POOL:
+            run_slot([entry])
 
     for entry, rc, out in failures:
         print(f"--- {entry} FAILED (rc={rc}), last {FAIL_TAIL_LINES} lines:")

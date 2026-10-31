@@ -106,7 +106,9 @@ GATING_DEMOS = (
     # Makefile's own compile lines through badc, and the only one
     # running an upstream suite (tests/all.tcl) against a zero-failure
     # baseline. The longest demo in the roster, so it sets the floor.
-    ("demos/tcl/smoke.py", POSIX),
+    # Its timer-bound tests run after the pool (run_demos.AFTER_POOL).
+    ("demos/tcl/smoke.py@untimed", POSIX),
+    ("demos/tcl/smoke.py@timed", POSIX),
     # PE32+ EFI applications for both Windows targets, --freestanding,
     # badc's own linker, no GenFw: the EFIAPI ABI surface and the
     # subsystem-10 header, which no hosted demo reaches. Boots the
@@ -756,7 +758,9 @@ def self_test() -> int:
         assert (REPO_ROOT / run_demos.script(d)).is_file(), d
         assert "@" not in d or d in run_demos.DEMO_ENV, d
     slots = run_demos.slots(roster)
-    assert qemu in slots and sum(map(len, slots)) == len(roster), slots
+    after = [d for d in roster if d in run_demos.AFTER_POOL]
+    assert after == ["demos/tcl/smoke.py@timed"], after
+    assert qemu in slots and sum(map(len, slots)) + len(after) == len(roster), slots
     assert all(len({run_demos.script(e) for e in s}) == 1 for s in slots), slots
     assert " ".join(qemu) in demo_command(boxes[0], DEMO_JOBS, "python3")
 

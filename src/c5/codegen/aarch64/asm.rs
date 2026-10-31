@@ -568,9 +568,10 @@ fn parse_fp_imm(s: &str) -> Option<u8> {
     None
 }
 
-/// A vector arrangement name to (element-size log2, 128-bit flag).
+/// A vector arrangement name, in either case, to (element-size log2, 128-bit
+/// flag).
 fn arrangement(arr: &str) -> Option<(u8, bool)> {
-    Some(match arr {
+    Some(match arr.to_ascii_lowercase().as_str() {
         "8b" => (0, false),
         "16b" => (0, true),
         "4h" => (1, false),
@@ -586,9 +587,9 @@ fn arrangement(arr: &str) -> Option<(u8, bool)> {
     })
 }
 
-/// The element-size log2 of a lane suffix (`b`/`h`/`s`/`d`).
+/// The element-size log2 of a lane suffix (`b`/`h`/`s`/`d`, either case).
 fn element_size(letter: &str) -> Option<u8> {
-    Some(match letter {
+    Some(match letter.to_ascii_lowercase().as_str() {
         "b" => 0,
         "h" => 1,
         "s" => 2,
@@ -909,6 +910,7 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
 /// The keyword resolves to the 3-bit option and must match the index width:
 /// `uxtw`/`sxtw` take a 32-bit index, `lsl`/`uxtx`/`sxtx` a 64-bit one.
 fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> {
+    let spec = spec.to_ascii_lowercase();
     let mut it = spec.split_ascii_whitespace();
     let kw = it.next().unwrap_or("");
     let option = match kw {
@@ -993,6 +995,13 @@ fn sve_count_operand(tok: &str) -> Result<Option<AsmOpndA64>, String> {
         _ => return Ok(None),
     };
     Ok(Some(AsmOpndA64::SvePattern(pattern)))
+}
+
+/// The text after the keyword `kw` that starts `tok`, when the keyword is a
+/// whole word: a shift or extend keyword, not a symbol spelled from one.
+fn keyword_rest<'a>(tok: &'a str, kw: &str) -> Option<&'a str> {
+    let rest = tok.strip_prefix(kw)?;
+    (rest.is_empty() || rest.starts_with([' ', '\t', '#'])).then_some(rest)
 }
 
 /// Parse one operand token (already trimmed).
@@ -1132,20 +1141,24 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
         return Ok(AsmOpndA64::Ref { idx, is64 });
     }
+    // GNU as reads register names, arrangements, shift and extend keywords and
+    // condition codes in either case; labels and symbols keep their spelling.
+    let symbolic = tok;
+    let folded = tok.to_ascii_lowercase();
+    let tok = folded.as_str();
     // `lsl #n` shift modifier: the move-wide `hw` amount, the shifted-register
     // LSL kind, and the extended-register identity extend all spell it this
     // way, so it keeps its own operand kind.
-    if let Some(rest) = tok.strip_prefix("lsl") {
+    if let Some(rest) = keyword_rest(tok, "lsl") {
         let amt = shift_amount(rest).ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
         return Ok(AsmOpndA64::Lsl(amt as u32));
     }
     // The remaining shifted-register kinds `<lsr|asr|ror> #n`.
-    if let Some(kind) = match tok.get(..3) {
-        Some("lsr") => Some(1u8),
-        Some("asr") => Some(2),
-        Some("ror") => Some(3),
-        _ => None,
-    } {
+    if let Some(kind) = ["lsr", "asr", "ror"]
+        .iter()
+        .position(|kw| keyword_rest(tok, kw).is_some())
+    {
+        let kind = kind as u8 + 1;
         let amt = shift_amount(&tok[3..])
             .filter(|v| (0..64).contains(v))
             .ok_or_else(|| format!("inline asm: bad shift `{tok}`"))?;
@@ -1155,7 +1168,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
         });
     }
     // An extended-register `<extend> {#n}` group; the amount defaults to 0.
-    if let Some(option) = tok.get(..4).and_then(extend_option) {
+    if let Some(option) = tok.get(..4).and_then(extend_option)
+        && keyword_rest(tok, &tok[..4]).is_some()
+    {
         let rest = tok[4..].trim();
         let amount = if rest.is_empty() {
             0
@@ -1245,7 +1260,9 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some(field) = sysreg_field(tok) {
         return Ok(AsmOpndA64::SysReg(field));
     }
-    // A condition code (for csel and other conditional forms).
+    // A condition code (for csel and other conditional forms). gas reads one
+    // only where the instruction takes it, so another case stays a symbol.
+    let tok = symbolic;
     if let Some(c) = cond_code(tok) {
         return Ok(AsmOpndA64::Cond(c));
     }
@@ -1546,6 +1563,8 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             Some(p) => (&piece[..p], piece[p..].trim()),
             None => (piece, ""),
         };
+        // GNU as reads a mnemonic in either case.
+        let mnem = &mnem.to_ascii_lowercase()[..];
         // `mov Rd, sp` / `mov sp, Rn` is `add Rd, Rn, #0`, distinct from the
         // register move `mov Rd, Rm` (`orr Rd, xzr, Rm`). Rewrite the
         // stack-pointer forms here; a plain register / immediate `mov` stays and
@@ -3146,6 +3165,40 @@ mod tests {
         assert!(matches!(insns[2].operands[3], AsmOpndA64::Cond(0))); // eq == invert(ne)
         // al/nv have no inverse.
         assert!(parse_template(b"cinc x0, x1, al").is_err());
+    }
+
+    #[test]
+    fn mnemonics_registers_and_keywords_read_in_either_case() {
+        // GNU as reads mnemonics, register names, arrangements, lane letters
+        // and shift / extend keywords in either case.
+        let parsed = |t: &str| {
+            (parse_template(t.as_bytes()).unwrap().into_iter())
+                .map(|i| (i.mnemonic, i.operands))
+                .collect::<Vec<_>>()
+        };
+        for (upper, lower) in [
+            ("MOV X0, X1", "mov x0, x1"),
+            ("rev64 v16.4S, v16.4S", "rev64 v16.4s, v16.4s"),
+            ("MOV V0.16B, v17.16b", "mov v0.16b, v17.16b"),
+            ("ld1 {V0.16B-V3.16B}, [X0]", "ld1 {v0.16b-v3.16b}, [x0]"),
+            ("ins V0.S[1], W1", "ins v0.s[1], w1"),
+            ("ld1 {v0.S}[1], [x0]", "ld1 {v0.s}[1], [x0]"),
+            ("ldr w0, [x1, W2, UXTW #2]", "ldr w0, [x1, w2, uxtw #2]"),
+            ("add x0, x1, X2, LSL #3", "add x0, x1, x2, lsl #3"),
+            ("fadd S0, S1, S2", "fadd s0, s1, s2"),
+            ("LDR Q0, [SP]", "ldr q0, [sp]"),
+        ] {
+            assert_eq!(parsed(upper), parsed(lower), "{upper}");
+        }
+        // A symbol spelled from a keyword or a register name keeps its own.
+        for name in ["Lsl_tab", "Uxtw4", "X0_base"] {
+            let insns = parse_template(format!("adrp x0, {name}").as_bytes()).unwrap();
+            assert!(
+                matches!(&insns[0].operands[1], AsmOpndA64::Sym { expr, .. } if expr == name),
+                "{name}: {:?}",
+                insns[0].operands[1]
+            );
+        }
     }
 
     #[test]

@@ -1559,6 +1559,9 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        let unique: hashbrown::HashSet<&str> = (self.objs.iter())
+            .flat_map(|o| o.unique.iter().map(String::as_str))
+            .collect();
         for (name, sym) in &self.defined {
             let place = match sym.section {
                 NativeSymSection::Text => SymbolPlace::Text(sym.value),
@@ -1566,7 +1569,11 @@ impl<'a> Link<'a> {
                 NativeSymSection::Bss => SymbolPlace::Bss(sym.value),
                 _ => continue,
             };
-            let binding = if sym.weak { 2 } else { 1 };
+            let binding = match () {
+                _ if unique.contains(name.as_ref()) => super::object::STB_GNU_UNIQUE,
+                _ if sym.weak => 2,
+                _ => 1,
+            };
             globals.push(row(
                 name,
                 place,
@@ -6259,6 +6266,7 @@ mod tests {
     /// An object carrying nothing, for a test that fills in one aspect.
     fn blank_object(machine: NativeMachine) -> NativeObject {
         NativeObject {
+            unique: Default::default(),
             source: String::new(),
             sections: Vec::new(),
             discarded: Vec::new(),
@@ -7311,6 +7319,7 @@ mod tests {
     #[test]
     fn common_symbols_coalesce_to_single_bss_slot() {
         let mk_unit = |size: u64, align: u64| NativeObject {
+            unique: Default::default(),
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -7368,6 +7377,7 @@ mod tests {
             .chain([1, 0, 1, 0x78])
             .collect();
         let unit = || NativeObject {
+            unique: Default::default(),
             relro: cie.clone(),
             relro_align: 8,
             sections: alloc::vec![super::super::object::InputSection {
@@ -7478,6 +7488,7 @@ mod tests {
     #[test]
     fn common_symbol_reloc_is_biased_past_merged_data() {
         let mk_unit = |data: alloc::vec::Vec<u8>, with_reloc: bool| NativeObject {
+            unique: Default::default(),
             text: alloc::vec![0u8; 16],
             data,
             symbols: alloc::vec![
@@ -7544,6 +7555,7 @@ mod tests {
     #[test]
     fn common_yields_to_strong_definition() {
         let unit_common = NativeObject {
+            unique: Default::default(),
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -7569,6 +7581,7 @@ mod tests {
             ..blank_object(NativeMachine::X86_64)
         };
         let unit_strong = NativeObject {
+            unique: Default::default(),
             data: alloc::vec![0u8; 4],
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -7627,6 +7640,7 @@ mod tests {
                   text_relocs: alloc::vec::Vec<NativeReloc>|
          -> NativeObject {
             NativeObject {
+                unique: Default::default(),
                 source: alloc::string::String::new(),
                 sections: alloc::vec::Vec::new(),
                 discarded: alloc::vec::Vec::new(),
@@ -7822,6 +7836,7 @@ mod tests {
         // `call f` (R_X86_64_PC32) against an UNDEF `f`: the reference
         // is what puts the routed name in the image.
         let mk = |dylib: &str| NativeObject {
+            unique: Default::default(),
             dylibs: alloc::vec![dylib.to_string()],
             import_dylib_map: alloc::vec![("f".to_string(), 0u32)],
             text: alloc::vec![0xE8, 0, 0, 0, 0],
@@ -7983,6 +7998,7 @@ mod tests {
         // may abort the link.
         use super::super::object::{NativeReloc, NativeSymbol};
         let base = || NativeObject {
+            unique: Default::default(),
             ..blank_object(NativeMachine::X86_64)
         };
         let sym = |name: &str, section| NativeSymbol {

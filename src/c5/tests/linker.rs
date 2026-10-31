@@ -7238,6 +7238,7 @@ fn minimal_native_object(
     data_relocs: Vec<crate::c5::linker::object::NativeReloc>,
 ) -> crate::c5::linker::NativeObject {
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7567,6 +7568,7 @@ fn aarch64_data_ref_object_ex(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7832,6 +7834,7 @@ fn aarch64_lo12_relocations_link_through_the_elf64_image_writer() {
 fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
     use crate::c5::linker::NativeMachine;
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7906,6 +7909,7 @@ fn aarch64_pcrel_object(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "reloc_ref.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,
@@ -8012,6 +8016,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         input_section: None,
     };
     let obj = crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "abs_in_text.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,

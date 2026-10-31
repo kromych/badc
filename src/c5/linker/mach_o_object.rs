@@ -488,6 +488,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     relocs.data.sort_by_key(|r: &NativeReloc| r.offset);
 
     Ok(NativeObject {
+        unique: Default::default(),
         source: String::new(),
         sections: blobs.sections,
         discarded: blobs.discarded,

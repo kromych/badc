@@ -29,6 +29,7 @@ const ELFCLASS64: u8 = 2;
 const ELFDATA2LSB: u8 = 1;
 const EV_CURRENT: u8 = 1;
 const ELFOSABI_SYSV: u8 = 0;
+const ELFOSABI_GNU: u8 = 3;
 
 const ET_EXEC: u16 = 2;
 const ET_DYN: u16 = 3;
@@ -86,6 +87,7 @@ const VER_NDX_FIRST: u16 = 2;
 
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
+const STB_GNU_UNIQUE: u8 = 10;
 const STB_WEAK: u8 = 2;
 const STT_FUNC: u8 = 2;
 const STT_OBJECT: u8 = 1;
@@ -2950,7 +2952,11 @@ impl<'a> ElfImageWriter<'a> {
         e_ident[4] = ELFCLASS64;
         e_ident[5] = ELFDATA2LSB;
         e_ident[6] = EV_CURRENT;
-        e_ident[7] = ELFOSABI_SYSV;
+        // bfd marks an image defining an `STB_GNU_UNIQUE` symbol GNU.
+        e_ident[7] = match self.build.unique_symbols.is_empty() {
+            true => ELFOSABI_SYSV,
+            false => ELFOSABI_GNU,
+        };
         write_struct(
             &mut out,
             &Elf64Ehdr {
@@ -3145,7 +3151,11 @@ impl<'a> ElfImageWriter<'a> {
                 (e.offset, plan.index_of(sec))
             }
         };
-        let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
+        let binding = match () {
+            _ if self.build.unique_symbols.contains(&e.name) => STB_GNU_UNIQUE,
+            _ if e.weak => STB_WEAK,
+            _ => STB_GLOBAL,
+        };
         let st_type = match e.section {
             super::DynamicExportSection::Tls => STT_TLS,
             _ if e.is_object => STT_OBJECT,

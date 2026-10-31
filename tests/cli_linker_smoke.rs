@@ -7684,6 +7684,12 @@ type SymtabRow = (String, u8, u64, u64, u16);
 
 /// `SHT_SYMTAB` entries of an ELF64 image and the table's `sh_info`.
 fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
+    elf_symbol_table(bytes, 2)
+}
+
+/// The entries of an ELF64 image's symbol table of type `sh_type`
+/// (`SHT_SYMTAB` 2, `SHT_DYNSYM` 11) and the table's `sh_info`.
+fn elf_symbol_table(bytes: &[u8], sh_type: u32) -> (Vec<SymtabRow>, u32) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -7692,8 +7698,8 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     let e_shnum = rd16(0x3c) as usize;
     let sh = |i: usize| e_shoff + i * e_shentsize;
     let symtab = (0..e_shnum)
-        .find(|&i| rd32(sh(i) + 4) == 2)
-        .expect("no .symtab");
+        .find(|&i| rd32(sh(i) + 4) == sh_type)
+        .expect("no symbol table of the type");
     let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
     let off = rd64(sh(symtab) + 24) as usize;
     let count = rd64(sh(symtab) + 32) as usize / 24;
@@ -7747,6 +7753,83 @@ fn an_image_without_imports_lists_its_definitions() {
             }
         }
     }
+}
+
+/// A definition the assembler binds `STB_GNU_UNIQUE` keeps the binding in
+/// the image's symbol tables, `.dynsym` included, and the image is marked
+/// `ELFOSABI_GNU`, as GNU ld 2.46.1 writes both; through either link.
+#[test]
+fn a_unique_definition_keeps_its_binding_in_the_image() {
+    const STB_GNU_UNIQUE: u8 = 10;
+    let dir = tempdir("unique-binding");
+    write_source(
+        &dir,
+        "uv.s",
+        ".data\n.globl uv\n.type uv, @gnu_unique_object\n.size uv, 4\nuv: .long 7\n",
+    );
+    write_source(
+        &dir,
+        "m.c",
+        "extern int uv;\nint main(void) { return uv - 7; }\n",
+    );
+    let badc_in = |args: &[&str], what: &str| {
+        run(Command::new(badc()).args(args).current_dir(&dir), what);
+    };
+    badc_in(
+        &["-q", "-c", "--target=linux-x64", "uv.s", "-o", "uv.o"],
+        "assemble",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "uv.o", "-o", "prog"],
+        "link",
+    );
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "uv.o",
+            "-o",
+            "lib.so",
+        ],
+        "shared",
+    );
+    badc_in(
+        &["--ld", "-m", "elf_x86_64", "-shared", "uv.o", "-o", "ld.so"],
+        "--ld",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "-c", "-o", "m.o"],
+        "compile",
+    );
+    for (image, dynamic) in [("prog", false), ("lib.so", true), ("ld.so", true)] {
+        let bytes = std::fs::read(dir.join(image)).expect("image");
+        assert_eq!(bytes[7], 3, "{image}: EI_OSABI");
+        let mut tables = vec![("symtab", elf_symbol_table(&bytes, 2).0)];
+        if dynamic {
+            tables.push(("dynsym", elf_symbol_table(&bytes, 11).0));
+        }
+        for (table, rows) in tables {
+            let uv = rows.iter().find(|r| r.0 == "uv").expect("uv");
+            assert_eq!(uv.1 >> 4, STB_GNU_UNIQUE, "{image} {table}");
+        }
+    }
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "m.o",
+            "-o",
+            "plain.so",
+        ],
+        "plain",
+    );
+    let plain = std::fs::read(dir.join("plain.so")).expect("image");
+    assert_eq!(
+        plain[7], 0,
+        "an image with no unique definition stays System V"
+    );
 }
 
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.

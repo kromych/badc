@@ -273,6 +273,10 @@ fn synth_program_and_build(
             .filter(|(_, sym)| sym.visibility == super::object::STV_PROTECTED)
             .map(|(name, _)| name.clone())
             .collect(),
+        unique_symbols: (merged.symbols.iter())
+            .filter(|s| s.info >> 4 == super::object::STB_GNU_UNIQUE)
+            .map(|s| s.name.clone())
+            .collect(),
         image_symbols: (merged.symbols.iter())
             .filter(|s| {
                 !(opts.discard_temporaries

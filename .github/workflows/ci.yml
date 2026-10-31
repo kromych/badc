@@ -1279,16 +1279,19 @@ jobs:
   # OpenSSL 4.1.0: Configure with a badc target, make, and OpenSSL's own
   # suite (make test, every recipe) at -O0 and -O. The smoke takes 442 s on
   # an 8-core aarch64 box and 517 s on a 12-core x86-64 one; a 4-vCPU runner
-  # runs the suite's recipes about half as wide.
+  # runs the suite's recipes about half as wide. `asm` configures without
+  # no-asm, so the perlasm modules are assembled and linked by badc and the
+  # CPU-feature dispatch runs them; `c` builds the C implementations only.
   openssl:
     needs: build
-    name: openssl suite (${{ matrix.os }})
+    name: openssl suite (${{ matrix.os }}, ${{ matrix.impl }})
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-latest
           - ubuntu-24.04-arm
+        impl: [c, asm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -1305,7 +1308,7 @@ jobs:
         shell: bash
         run: chmod +x target/release/badc*
       - name: openssl smoke (build + make test, -O0 and -O)
-        run: python demos/openssl/smoke.py
+        run: python demos/openssl/smoke.py ${{ matrix.impl == 'asm' && '--asm' || '' }}
 
   # Cooperative-concurrency demos: each library's context switch leans
   # on constructs the fixtures cover only piecemeal -- the upstream asm

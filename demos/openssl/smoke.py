@@ -3,7 +3,8 @@
 
 Pipeline, once per optimization level (-O0, then -O):
   - ``setup.py`` fetches + extracts the release under ``.cache/openssl-4.1.0``.
-  - ``Configure`` runs out of tree in ``.cache/build-<level>`` with a target
+  - ``Configure`` runs out of tree in ``.cache/build-<level>`` (with ``--asm``,
+    ``.cache/build-<level>-asm``) with a target
     from ``badc.conf``, which inherits the stock target of the host and
     names badc as the compiler, so every object and executable --
     libcrypto, libssl, the ``openssl`` application and the test programs --
@@ -12,6 +13,10 @@ Pipeline, once per optimization level (-O0, then -O):
   - ``make build_sw`` builds it; ``make test`` runs ``test/run_tests.pl``
     over every recipe but ``SERIAL_RECIPES``, ``HARNESS_JOBS`` at a time,
     then over those alone; the harness's summaries decide the verdict.
+
+``--asm`` configures without ``no-asm``: the perlasm modules are generated
+for the host and assembled, through badc, alongside the C units, and the
+CPU-feature dispatch selects them at run time.
 
 The build directory is removed first: make does not track the compiler
 binary, so objects from an earlier badc would otherwise survive.
@@ -47,9 +52,9 @@ TARGETS = {
 
 # no-asm: the subject is badc's C compilation; the perlasm modules are
 # assembler sources and their C implementations are what this builds
-# instead. no-shared: libcrypto and libssl are archives the programs link
-# statically. no-module: the legacy provider is linked into libcrypto
-# rather than loaded as a module.
+# instead (`--asm` drops it). no-shared: libcrypto and libssl are archives
+# the programs link statically. no-module: the legacy provider is linked
+# into libcrypto rather than loaded as a module.
 CONFIGURE_OPTIONS = ("no-asm", "no-shared", "no-module")
 
 LEVELS = {"O0": "-O0", "O": "-O"}
@@ -106,13 +111,15 @@ def run_logged(cmd: list[str], cwd: Path, log: Path, timeout: int, env=None) -> 
     return r.returncode
 
 
-def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, log) -> Path:
-    bld = CACHE / f"build-{level}"
+def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, asm: bool,
+          log) -> Path:
+    bld = CACHE / f"build-{level}{'-asm' if asm else ''}"
     if bld.exists():
         shutil.rmtree(bld)
     bld.mkdir(parents=True)
     cmd = ["perl", str(SRC / "Configure"), f"--config={DEMO_DIR / 'badc.conf'}", target,
-           f"CC={badc}", f"CFLAGS={LEVELS[level]}", *CONFIGURE_OPTIONS]
+           f"CC={badc}", f"CFLAGS={LEVELS[level]}",
+           *(o for o in CONFIGURE_OPTIONS if not (asm and o == "no-asm"))]
     if sys.platform == "darwin":
         # The host's ar keeps badc's ELF members, but its ranlib rewrites the
         # archive with an index of Mach-O symbols only and drops them.
@@ -169,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--level", choices=("O0", "O", "both"), default="both")
     ap.add_argument("--tests", help="the TESTS= selection passed to `make test`")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
+    ap.add_argument("--asm", action="store_true",
+                    help="configure without no-asm, assembling the perlasm modules")
     ap.add_argument("--keep-going", action="store_true",
                     help="pass -k to make, so every unit that fails is reported")
     args = ap.parse_args(argv)
@@ -188,9 +197,9 @@ def main(argv: list[str] | None = None) -> int:
         fail("setup.py")
     levels = ("O0", "O") if args.level == "both" else (args.level,)
     for level in levels:
-        bld = build(badc, target, level, args.jobs, args.keep_going, log)
+        bld = build(badc, target, level, args.jobs, args.keep_going, args.asm, log)
         run_tests(bld, level, args.jobs, args.tests)
-    print(f"openssl smoke OK ({time.monotonic() - start:.0f}s)")
+    print(f"openssl smoke{' (asm)' if args.asm else ''} OK ({time.monotonic() - start:.0f}s)")
     return 0
 
 

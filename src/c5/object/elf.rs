@@ -2496,8 +2496,10 @@ impl<'a> ElfImageWriter<'a> {
             .collect();
         let has_rela_text = !tail.er_text.is_empty();
         let has_rela_data = !tail.er_data.is_empty();
-        tail.emit_symtab =
-            !build.plt_trampoline_offsets.is_empty() || has_rela_text || has_rela_data;
+        tail.emit_symtab = !build.plt_trampoline_offsets.is_empty()
+            || has_rela_text
+            || has_rela_data
+            || !build.image_symbols.is_empty();
         tail.has_relro = seg.relro_size > 0;
         tail.has_data = seg.data_size > 0;
         tail.has_tdata = seg.has_tls && seg.tdata_size > 0;

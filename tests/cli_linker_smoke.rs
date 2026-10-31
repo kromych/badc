@@ -7714,6 +7714,41 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     (rows, rd32(sh(symtab) + 44))
 }
 
+/// An image with no import and no emitted relocation still lists its
+/// definitions in `.symtab`, as GNU ld writes one for every image.
+#[test]
+fn an_image_without_imports_lists_its_definitions() {
+    let dir = tempdir("symtab-no-imports");
+    write_source(&dir, "f.c", "int f(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "e.c",
+        "int g = 3;\nvoid __c5_entry(void) { for (;;); }\n",
+    );
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        let shared = ["-q", target, "--shared", "f.c", "-o", "f.so"];
+        run(
+            Command::new(badc()).args(shared).current_dir(&dir),
+            "shared",
+        );
+        let bare = ["-q", target, "--freestanding", "e.c", "-o", "e"];
+        run(
+            Command::new(badc()).args(bare).current_dir(&dir),
+            "freestanding",
+        );
+        for (image, names) in [("f.so", &["f"][..]), ("e", &["g", "__c5_entry"][..])] {
+            let rows = elf_symtab(&std::fs::read(dir.join(image)).expect("image")).0;
+            for name in names {
+                let row = rows.iter().find(|r| r.0 == *name);
+                assert!(
+                    row.is_some_and(|r| r.1 >> 4 == 1),
+                    "{target} {image}: {name}"
+                );
+            }
+        }
+    }
+}
+
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
 fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;

@@ -45,32 +45,36 @@ pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
             std::process::exit(1);
         }
     };
-    println!("MergedNative:");
-    println!("  machine     = {:?}", merged.machine);
-    println!("  .text size  = {}", merged.text.len());
-    println!("  .data size  = {}", merged.data.len());
-    println!("  .bss size   = {}", merged.bss_size);
-    println!("  defined     = {}", merged.defined.len());
+    outln!("MergedNative:");
+    outln!("  machine     = {:?}", merged.machine);
+    outln!("  .text size  = {}", merged.text.len());
+    outln!("  .data size  = {}", merged.data.len());
+    outln!("  .bss size   = {}", merged.bss_size);
+    outln!("  defined     = {}", merged.defined.len());
     for (name, sym) in &merged.defined {
-        println!(
+        outln!(
             "    {name} @ {:?} +{:#x} size={:#x}",
-            sym.section, sym.value, sym.size
+            sym.section,
+            sym.value,
+            sym.size
         );
     }
-    println!("  imports     = {}", merged.imports.len());
+    outln!("  imports     = {}", merged.imports.len());
     for (i, name) in merged.imports.iter().enumerate() {
-        println!("    [{i}] {name}");
+        outln!("    [{i}] {name}");
     }
-    println!("  pending     = {} reloc(s)", merged.pending_imports.len());
+    outln!("  pending     = {} reloc(s)", merged.pending_imports.len());
     for r in &merged.pending_imports {
         let name = if r.import_index == usize::MAX {
             "<data-ref>"
         } else {
             merged.imports[r.import_index].as_str()
         };
-        println!(
+        outln!(
             "    text[{:#x}] -> {name} (rtype={:#x}, addend={})",
-            r.text_offset, r.rtype, r.addend
+            r.text_offset,
+            r.rtype,
+            r.addend
         );
     }
     // Per-arch PLT lowering pass. The trampoline shape differs
@@ -81,12 +85,12 @@ pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
     let plt_result = badc::emit_plt_for(&mut merged, target, false);
     match plt_result {
         Ok(tramps) => {
-            println!("  PLT tramps  = {} entry(ies)", tramps.len());
+            outln!("  PLT tramps  = {} entry(ies)", tramps.len());
             for t in &tramps {
                 let name = &merged.imports[t.import_index];
-                println!("    text[{:#x}] -> {name}", t.text_offset);
+                outln!("    text[{:#x}] -> {name}", t.text_offset);
             }
-            println!("  post-PLT .text size = {}", merged.text.len());
+            outln!("  post-PLT .text size = {}", merged.text.len());
         }
         Err(e) => {
             eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
@@ -103,13 +107,13 @@ pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
 /// override the embedded copy).
 pub(crate) fn dump_bundled_headers() {
     for (name, _, body) in badc::embedded_headers() {
-        println!("// ===== {name} =====");
+        outln!("// ===== {name} =====");
         // Bodies already end with `\n`; `print!` rather than
         // `println!` so we don't add a stray blank line between
         // the last byte and the next separator.
-        print!("{body}");
+        out!("{body}");
         if !body.ends_with('\n') {
-            println!();
+            outln!();
         }
     }
 }
@@ -127,9 +131,9 @@ pub(crate) fn print_predefined_symbols() {
         .map(|s| s.name)
         .collect();
     names.sort_unstable();
-    println!("Keywords:");
+    outln!("Keywords:");
     for name in names {
-        println!("  {name}");
+        outln!("  {name}");
     }
 
     let mut names: Vec<&str> = symbols
@@ -138,9 +142,9 @@ pub(crate) fn print_predefined_symbols() {
         .map(|s| s.name)
         .collect();
     names.sort_unstable();
-    println!("\nLibrary calls:");
+    outln!("\nLibrary calls:");
     for name in names {
-        println!("  {name}");
+        outln!("  {name}");
     }
 
     let mut consts: Vec<(&str, i64)> = symbols
@@ -150,8 +154,8 @@ pub(crate) fn print_predefined_symbols() {
         .collect();
     consts.sort_unstable_by_key(|(n, _)| *n);
     let max_name_width = consts.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
-    println!("\nConstants:");
+    outln!("\nConstants:");
     for (name, value) in consts {
-        println!("  {name:<max_name_width$} = {value}");
+        outln!("  {name:<max_name_width$} = {value}");
     }
 }

@@ -7,6 +7,19 @@ use super::diag::eprint_diagnostic;
 #[cfg(target_os = "macos")]
 const CODESIGN: &str = "/usr/bin/codesign";
 
+/// Write to standard output for [`out!`] / [`outln!`]. A closed pipe ends
+/// the run with a failure status and no message, as gcc's driver reports a
+/// compiler a closed pipe stopped; any other write error is reported.
+pub(crate) fn write_stdout(args: core::fmt::Arguments) {
+    use std::io::Write;
+    if let Err(e) = std::io::stdout().lock().write_fmt(args) {
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            eprint_diagnostic(format!("badc: error: failed to write standard output: {e}"));
+        }
+        std::process::exit(1);
+    }
+}
+
 /// Write `bytes` to `out`, exit on failure, log
 /// `info: wrote file <path>` on success unless `quiet` is set.
 /// Used by every output path -- object emit, archive emit, JIT

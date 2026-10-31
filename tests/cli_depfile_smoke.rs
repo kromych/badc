@@ -539,3 +539,33 @@ fn show_includes_names_the_resolved_path() {
     );
     assert!(!lines.contains(&". deep/d.h"), "{err}");
 }
+
+/// A reader that closes the pipe early ends the run as it ends a C
+/// program and gcc: by `SIGPIPE`, or, where the failed write returns
+/// before the signal is taken (macOS, other hosts), with a failure status
+/// and no message; never with a panic report.
+#[test]
+fn a_closed_output_pipe_ends_the_run_without_a_panic() {
+    let dir = fixture("closed-pipe");
+    // Far more text than a pipe buffers once its reader is gone.
+    write(&dir, "big.c", &"int x;\n".repeat(200_000));
+    let mut child = Command::new(badc())
+        .args(["-E", "big.c"])
+        .current_dir(&dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn badc");
+    drop(child.stdout.take());
+    let out = child.wait_with_output().expect("wait for badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    #[cfg(unix)]
+    let by_signal = std::os::unix::process::ExitStatusExt::signal(&out.status) == Some(13);
+    #[cfg(not(unix))]
+    let by_signal = false;
+    assert!(
+        by_signal || out.status.code() == Some(1) && err.is_empty(),
+        "{} {err}",
+        out.status
+    );
+}

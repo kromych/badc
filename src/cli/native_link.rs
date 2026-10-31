@@ -1204,7 +1204,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             std::process::exit(1);
         }
         if cli.link.print_map {
-            print!("{map}");
+            out!("{map}");
         }
     }
     stats.mark("write");

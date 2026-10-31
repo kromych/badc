@@ -1,6 +1,23 @@
 //! The `badc` command-line driver: argument parsing, the output
 //! modes, and the diagnostics they print.
 
+/// `print!` for the driver's standard output ([`output::write_stdout`]).
+macro_rules! out {
+    ($($t:tt)*) => {
+        $crate::cli::output::write_stdout(format_args!($($t)*))
+    };
+}
+
+/// `println!` for the driver's standard output ([`output::write_stdout`]).
+macro_rules! outln {
+    () => {
+        out!("\n")
+    };
+    ($($t:tt)*) => {
+        $crate::cli::output::write_stdout(format_args!("{}\n", format_args!($($t)*)))
+    };
+}
+
 mod ar;
 mod args;
 mod compile;

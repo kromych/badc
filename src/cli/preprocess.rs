@@ -161,7 +161,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                             std::process::exit(1);
                         }
                     }
-                    None => print!("{s}"),
+                    None => out!("{s}"),
                 }
                 if let Some(d) = dump_deps {
                     let mut log = TuLog::default();

@@ -44,11 +44,11 @@ pub(crate) fn run() {
     let mut cli = match parse_args(raw) {
         Ok(Parsed::Run(cli)) => cli,
         Ok(Parsed::Print(text)) => {
-            println!("{text}");
+            outln!("{text}");
             return;
         }
         Ok(Parsed::Diagnostics(text)) => {
-            print!("{text}");
+            out!("{text}");
             return;
         }
         Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
@@ -189,7 +189,7 @@ fn dispatch(cli: Cli) {
 
     if cli.mode == Mode::DumpBindings {
         for (soname, symbol) in badc::library_bindings(cli.target) {
-            println!("{soname} {symbol}");
+            outln!("{soname} {symbol}");
         }
         return;
     }

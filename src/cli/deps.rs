@@ -111,7 +111,7 @@ pub(crate) fn emit_deps(
             );
         }),
         None => {
-            print!("{text}");
+            out!("{text}");
             Ok(())
         }
     }

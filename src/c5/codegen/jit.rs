@@ -35,6 +35,9 @@
 //! use. There's no `_start` libc-exit fixup -- Rust catches `main`'s
 //! return value directly via the `extern "C"` transmute call.
 //!
+//! The on-demand C-library sources join the run as further units, as a
+//! native link joins them, binding ahead of the loaded libraries.
+//!
 //! macOS/aarch64 needs the `MAP_JIT` + `pthread_jit_write_protect_np`
 //! toggle to satisfy the hardware-enforced W^X on Apple Silicon.
 //! Works with cargo's ad-hoc-signed binaries; a hardened-runtime
@@ -81,7 +84,15 @@ pub fn jit_run_with_options(
         ),
     ))]
     {
-        jit_impl::jit_run(program, args, options, report)
+        #[cfg(feature = "full")]
+        {
+            let front =
+                crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize);
+            let sources = crate::c5::linker::OnDemandSources::new(Target::host(), front);
+            jit_impl::jit_run(program, args, options, Some(&sources), report)
+        }
+        #[cfg(not(feature = "full"))]
+        jit_impl::jit_run(program, args, options, None, report)
     }
     #[cfg(not(all(
         feature = "std",
@@ -97,6 +108,40 @@ pub fn jit_run_with_options(
             "JIT: requires the `std` feature on Linux (any arch), \
              macOS/aarch64, or Windows (x86_64 / aarch64)",
         ))
+    }
+}
+
+/// [`jit_run_with_options`] joining `sources` as a native link joins them.
+#[cfg(feature = "full")]
+pub fn jit_run_with_sources(
+    program: &Program,
+    args: &[String],
+    options: NativeOptions,
+    sources: &crate::c5::linker::OnDemandSources,
+    report: &mut dyn FnMut(&Diagnostic),
+) -> Result<i32, C5Error> {
+    #[cfg(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    ))]
+    {
+        jit_impl::jit_run(program, args, options, Some(sources), report)
+    }
+    #[cfg(not(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    )))]
+    {
+        let _ = sources;
+        jit_run_with_options(program, args, options, report)
     }
 }
 
@@ -136,10 +181,11 @@ mod jit_impl {
     use super::super::super::program::Program;
     use super::super::Target;
     use super::super::ssa::shadow;
-    use super::super::{AddrPart, Build, NativeOptions, ResolvedImports};
+    use super::super::{AddrPart, Build, NativeOptions, ResolvedImports, UnitDef, UnitDefs};
     use super::super::{aarch64, x86_64};
     use super::host_target;
     use crate::c5::object::weak_undef;
+    use alloc::collections::{BTreeMap, BTreeSet};
     use alloc::format;
     use alloc::string::String;
     // Only the POSIX bind_imports path uses `to_string` (for the
@@ -558,10 +604,17 @@ mod jit_impl {
         JIT_QUICK_EXIT_CHAIN.with(|chain| *chain.borrow_mut() = quick);
     }
 
+    /// The on-demand sources a run may join; none without the linker.
+    #[cfg(feature = "full")]
+    pub(super) type Sources<'a> = Option<&'a crate::c5::linker::OnDemandSources>;
+    #[cfg(not(feature = "full"))]
+    pub(super) type Sources<'a> = Option<&'a core::convert::Infallible>;
+
     pub fn jit_run(
         program: &Program,
         args: &[String],
         options: NativeOptions,
+        sources: Sources<'_>,
         report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
         // Reset the per-thread atexit chain so this invocation's
@@ -569,72 +622,249 @@ mod jit_impl {
         // entries (from a nested `jit_run` further up the stack on
         // this thread) are saved here and restored after the drain.
         let prior_atexit = take_prior_jit_atexit_chain();
-        let result = jit_run_inner(program, args, options, report);
+        let result = jit_run_inner(program, args, options, sources, report);
         restore_jit_atexit_chain(prior_atexit);
         result
     }
 
-    fn jit_run_inner(
+    /// A unit of the run, lowered and bound to its own definitions.
+    struct JitUnit {
+        program: Program,
+        build: Build,
+        defs: UnitDefs,
+        weak: BTreeSet<String>,
+    }
+
+    /// A definition in one of the run's units.
+    #[derive(Clone, Copy)]
+    struct Remote {
+        unit: usize,
+        def: UnitDef,
+    }
+
+    /// Each external name's definition: the first strong one in unit order,
+    /// else the first weak one; the program's yields to no member's.
+    type LinkTable = BTreeMap<String, (Remote, bool)>;
+
+    fn prepare_unit(
         program: &Program,
-        args: &[String],
-        options: NativeOptions,
+        target: Target,
+        options: &NativeOptions,
         report: &mut dyn FnMut(&Diagnostic),
-    ) -> Result<i32, C5Error> {
-        let target = host_target()?;
+    ) -> Result<JitUnit, C5Error> {
         // Lower the compacted image, as every other lowering consumer
         // does: the static DCE drops functions only a dead data object
         // reaches, so an uncompacted `.data` keeps relocations against
         // functions this build never emits. `segregate` is false --
         // the data region is one flat mapping with no zero-fill tail.
         let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
-        let program = &compacted.program;
-        let mut build = lower_for_jit(program, target, options)?;
+        let program = compacted.program;
+        let mut build = lower_for_jit(&program, target, options.clone())?;
         for d in &build.diagnostics {
             report(d);
         }
-
         // A thread-pointer-relative access has no block to reach here: the
-        // executing thread's TLS belongs to the host runtime, and the
-        // fixups the backends record need the link step the JIT has not.
+        // executing thread's TLS belongs to the host runtime.
         if !build.elf_tpoff_fixups.is_empty()
             || !build.macho_tlv_fixups.is_empty()
             || !build.tls_index_fixups.is_empty()
         {
-            return Err(unsupported_thread_local(program));
+            return Err(unsupported_thread_local(&program));
         }
         // The asm the unit holds is placed with its code, and a name it
         // defines binds ahead of the unit's C definitions, as in an image.
         use super::super::asm_fold::{bind_label_calls, fold_asm_sections};
-        let mut defs = super::super::unit_definitions(program, &build);
-        let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
+        let mut defs = super::super::unit_definitions(&program, &build);
+        let labels = fold_asm_sections(&program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
-        let weak = program.weak_link_names();
-        let machine = if target.is_aarch64() {
-            super::super::Machine::Aarch64
-        } else {
-            super::super::Machine::X86_64
-        };
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
-        route_jit_data_imports(&mut build, &weak, machine)?;
+        let weak = (program.weak_link_names().into_iter())
+            .map(String::from)
+            .collect();
+        Ok(JitUnit {
+            program,
+            build,
+            defs,
+            weak,
+        })
+    }
 
-        // One slot per import, holding what dlsym finds, read as a loader's GOT.
-        let mut got_region = GotRegion::new(build.imports.imports.len())?;
-        got_region.bind_imports(&build.imports)?;
+    /// Names no other unit's definition binds (C99 6.2.2p2).
+    fn internal_names(program: &Program) -> BTreeSet<&str> {
+        (program.symbols.iter())
+            .filter(|s| s.linkage == crate::c5::symbol::Linkage::Internal)
+            .map(|s| s.link_name())
+            .collect()
+    }
+
+    impl JitUnit {
+        #[cfg(feature = "full")]
+        fn data_bound(&self, name: &str) -> bool {
+            (self.build.imports.data_bindings.iter()).any(|(local, ..)| local == name)
+        }
+
+        /// The strong external names referenced, neither defined nor bound.
+        #[cfg(feature = "full")]
+        fn undefined(&self) -> BTreeSet<String> {
+            use crate::c5::asm::AsmSectionTarget;
+            let build = &self.build;
+            let extern_fns: BTreeMap<u64, &str> = (self.program.extern_function_imports.iter())
+                .map(|(pc, name)| (*pc as u64, name.as_str()))
+                .collect();
+            let names: BTreeSet<&str> = (build.user_extern_call_sites.iter())
+                .map(|s| s.symbol_name.as_str())
+                .chain(
+                    build
+                        .user_extern_data_refs
+                        .iter()
+                        .map(|r| r.symbol_name.as_str()),
+                )
+                .chain(
+                    build
+                        .extern_data_relocs
+                        .iter()
+                        .map(|r| r.symbol_name.as_str()),
+                )
+                .chain(
+                    (build.code_relocs.iter())
+                        .filter_map(|r| extern_fns.get(&r.target_ent_pc).copied()),
+                )
+                .chain(build.asm_sym_fixups.iter().filter_map(|f| match &f.target {
+                    AsmSectionTarget::Symbol(n) => Some(n.as_str()),
+                    _ => None,
+                }))
+                .collect();
+            let internal = internal_names(&self.program);
+            (names.into_iter())
+                .filter(|n| {
+                    !self.defs.contains_key(*n)
+                        && !self.weak.contains(*n)
+                        && !self.data_bound(n)
+                        && !internal.contains(n)
+                })
+                .map(String::from)
+                .collect()
+        }
+    }
+
+    /// The program, then the members a native link would pull for it: the
+    /// pool is offered once a name stays undefined that the C library lacks.
+    #[cfg(feature = "full")]
+    fn join_on_demand(
+        user: JitUnit,
+        sources: Sources<'_>,
+        target: Target,
+        options: &NativeOptions,
+    ) -> Result<Vec<JitUnit>, C5Error> {
+        let mut undefined = user.undefined();
+        let mut libc = crate::c5::linker::TargetCLibrary::new(target);
+        let stalled = undefined.iter().any(|n| {
+            !(n.starts_with("__imp_")
+                || crate::c5::linker::link_resolves_symbol(n)
+                || libc.admit(n))
+        });
+        let mut units = alloc::vec![user];
+        let Some(sources) = sources.filter(|_| stalled) else {
+            return Ok(units);
+        };
+        let (strong, weak) = units[0].program.external_definitions();
+        let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
+        let members = sources.members()?;
+        let mut options = options.clone().for_embedded_sources();
+        options.dump_ssa = false;
+        crate::c5::linker::on_demand::select(members, &mut defined, &mut undefined, |i| {
+            let unit = prepare_unit(&members[i].program, target, &options, &mut |_| {})?;
+            let refs = unit.undefined().into_iter().collect();
+            units.push(unit);
+            Ok(refs)
+        })?;
+        Ok(units)
+    }
+
+    fn link_table(units: &[JitUnit]) -> LinkTable {
+        let mut table = LinkTable::new();
+        for (unit, u) in units.iter().enumerate() {
+            let (strong, weak) = u.program.external_definitions();
+            let named = (strong.iter().map(|n| (n, false))).chain(weak.iter().map(|n| (n, true)));
+            for (name, is_weak) in named {
+                let Some(&def) = u.defs.get(name.as_str()) else {
+                    continue;
+                };
+                let replace = match table.get(name) {
+                    None => true,
+                    Some(&(held, held_weak)) => held_weak && !is_weak && held.unit != 0,
+                };
+                if replace {
+                    table.insert(name.clone(), (Remote { unit, def }, is_weak));
+                }
+            }
+        }
+        table
+    }
+
+    /// A unit bound to the others, whose addresses are patched in once placed.
+    struct BoundUnit {
+        program: Program,
+        build: Build,
+        got: GotRegion,
+        /// GOT slots past the imports, veneer address fields, data slots.
+        remote_slots: Vec<(usize, Remote)>,
+        remote_veneers: Vec<(usize, Remote)>,
+        remote_data: Vec<(usize, Remote, i64)>,
+    }
+
+    /// Bind unit `index` to the others' definitions (C99 6.9p5), else the host's.
+    fn bind_unit(
+        index: usize,
+        unit: JitUnit,
+        table: &LinkTable,
+        machine: super::super::Machine,
+    ) -> Result<BoundUnit, C5Error> {
+        let JitUnit {
+            program,
+            mut build,
+            defs,
+            weak,
+        } = unit;
+        let internal = internal_names(&program);
+        let remote = |name: &str| {
+            let &(r, _) = table.get(name)?;
+            (r.unit != index && !internal.contains(name)).then_some(r)
+        };
+        let mut remote_refs = Vec::new();
+        route_jit_data_imports(&mut build, &weak, machine, &mut |r| {
+            let to = remote(&r.symbol_name).filter(|_| r.direct_pcrel.is_none());
+            if let Some(to) = to {
+                remote_refs.push((r.instr_offset, to));
+            }
+            to.is_some()
+        })?;
+
+        // One slot per import, then one per data reference to another unit.
+        let n_imports = build.imports.imports.len();
+        let mut got = GotRegion::new(n_imports + remote_refs.len())?;
+        got.bind_imports(&build.imports)?;
         // A call to a function the unit declares and neither defines nor
-        // binds takes the loaded C library's export of that name, as a
-        // dynamic linker's lookup would; the JIT has no link step to join
-        // the C-library sources a native link offers. A weak name nothing
-        // exports is the null address; any other is refused.
+        // binds takes another unit's definition, else the loaded C library's
+        // export of that name, as a dynamic linker's lookup would. A weak
+        // name nothing exports is the null address; any other is refused.
+        let mut remote_veneers = Vec::new();
         for site in core::mem::take(&mut build.user_extern_call_sites) {
             let name = site.symbol_name.as_str();
-            let addr = match atexit_thunk_addr(name) {
-                0 => got_region.resolve_symbol(name),
-                a => a,
+            let to = remote(name);
+            let addr = match (to, atexit_thunk_addr(name)) {
+                (Some(_), _) => 0,
+                (None, 0) => got.resolve_symbol(name),
+                (None, a) => a,
             };
-            let bound = if addr != 0 {
-                branch_to_veneer(machine, &mut build.text, site.instr_offset, addr)
+            let bound = if to.is_some() || addr != 0 {
+                let field = branch_to_veneer(machine, &mut build.text, site.instr_offset, addr);
+                if let (Some(field), Some(to)) = (field, to) {
+                    remote_veneers.push((field, to));
+                }
+                field.is_some()
             } else if weak.contains(name) {
                 weak_undef::branch_to_nop(machine, &mut build.text, site.instr_offset)
             } else {
@@ -648,18 +878,31 @@ mod jit_impl {
         }
         // A data import's slot must resolve, as the code dereferences it.
         for fx in &build.got_fixups {
-            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
+            if fx.is_data_load && got.slot_value(fx.import_index) == 0 {
                 let name = &build.imports.imports[fx.import_index].real_symbol;
                 return Err(undefined_reference(name));
             }
         }
-        let got_vmaddr = got_region.as_ptr() as u64;
-        // The named slots bind as in an image, a library object through dlsym.
-        crate::c5::codegen::bind_named_slots(program, &mut build, &defs, &mut |build, r| {
-            let host = (build.imports.data_bindings.iter())
-                .find(|(local, ..)| *local == r.symbol_name)
-                .map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
-            let addr = got_region.resolve_symbol(host);
+        for (k, &(instr_offset, _)) in remote_refs.iter().enumerate() {
+            build.got_fixups.push(super::super::GotFixup {
+                instr_offset,
+                part: AddrPart::Whole,
+                import_index: n_imports + k,
+                is_data_load: true,
+            });
+        }
+        // The named slots bind as in an image.
+        let mut remote_data = Vec::new();
+        crate::c5::codegen::bind_named_slots(&program, &mut build, &defs, &mut |build, r| {
+            let bound =
+                (build.imports.data_bindings.iter()).find(|(local, ..)| *local == r.symbol_name);
+            let to = remote(&r.symbol_name).filter(|_| bound.is_none());
+            if let Some(to) = to {
+                remote_data.push((r.data_offset as usize, to, r.addend));
+                return Ok(true);
+            }
+            let host = bound.map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
+            let addr = got.resolve_symbol(host);
             let at = r.data_offset as usize;
             match build.data.get_mut(at..at + 8) {
                 _ if addr == 0 => Ok(false),
@@ -672,17 +915,190 @@ mod jit_impl {
                 ))),
             }
         })?;
+        Ok(BoundUnit {
+            program,
+            build,
+            got,
+            remote_slots: (remote_refs.into_iter().enumerate())
+                .map(|(k, (_, to))| (n_imports + k, to))
+                .collect(),
+            remote_veneers,
+            remote_data,
+        })
+    }
 
-        // Allocate a writable data region, copy `build.data` in. The
-        // page is RW (no exec permission); an attempt to execute
+    struct PlacedUnit {
+        data: Option<DataRegion>,
+        data_vmaddr: u64,
+        code: JitRegion,
+        code_vmaddr: u64,
+    }
+
+    /// Map `unit`'s data, and its code with the read-only blob at its tail.
+    fn place_unit(unit: &BoundUnit) -> Result<PlacedUnit, C5Error> {
+        let build = &unit.build;
+        // The data page is RW (no exec permission); an attempt to execute
         // through it faults with the expected SIGSEGV / EXCEPTION.
-        let mut data_region = if !build.data.is_empty() {
+        let data = if !build.data.is_empty() {
             Some(DataRegion::new(&build.data, build.data_align)?)
         } else {
             None
         };
-        let data_vmaddr = data_region.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+        let data_vmaddr = data.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+        let code = if build.rodata.bytes.is_empty() {
+            JitRegion::new(&build.text)?
+        } else {
+            let mut blob = Vec::with_capacity(rodata_offset(build) + build.rodata.bytes.len());
+            blob.extend_from_slice(&build.text);
+            blob.resize(rodata_offset(build), 0);
+            blob.extend_from_slice(&build.rodata.bytes);
+            JitRegion::new(&blob)?
+        };
+        let code_vmaddr = code.as_ptr() as u64;
+        Ok(PlacedUnit {
+            data,
+            data_vmaddr,
+            code,
+            code_vmaddr,
+        })
+    }
 
+    fn rodata_offset(build: &Build) -> usize {
+        (build.text.len() + 7) & !7
+    }
+
+    fn jit_run_inner(
+        program: &Program,
+        args: &[String],
+        options: NativeOptions,
+        sources: Sources<'_>,
+        report: &mut dyn FnMut(&Diagnostic),
+    ) -> Result<i32, C5Error> {
+        let target = host_target()?;
+        let machine = if target.is_aarch64() {
+            super::super::Machine::Aarch64
+        } else {
+            super::super::Machine::X86_64
+        };
+        let user = prepare_unit(program, target, &options, report)?;
+        #[cfg(feature = "full")]
+        let units = join_on_demand(user, sources, target, &options)?;
+        #[cfg(not(feature = "full"))]
+        let units = {
+            let _ = sources;
+            alloc::vec![user]
+        };
+        let table = link_table(&units);
+        let bound = (units.into_iter().enumerate())
+            .map(|(i, u)| bind_unit(i, u, &table, machine))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut placed = bound
+            .iter()
+            .map(place_unit)
+            .collect::<Result<Vec<_>, _>>()?;
+        let bases: Vec<(u64, u64)> = (placed.iter())
+            .map(|p| (p.code_vmaddr, p.data_vmaddr))
+            .collect();
+        let address = |r: Remote| match r.def {
+            UnitDef::Text(off) => bases[r.unit].0 + off as u64,
+            UnitDef::Data(off) => bases[r.unit].1 + off,
+        };
+        for (unit, at) in bound.iter().zip(&mut placed) {
+            patch_unit(target, unit, at)?;
+            let code =
+                unsafe { core::slice::from_raw_parts_mut(at.code.as_mut_ptr(), at.code.len()) };
+            for &(field, to) in &unit.remote_veneers {
+                code[field..field + 8].copy_from_slice(&address(to).to_le_bytes());
+            }
+            for &(slot, to) in &unit.remote_slots {
+                unit.got.set_slot(slot, address(to));
+            }
+            if let Some(region) = &mut at.data {
+                let bytes = region.as_mut_slice(unit.build.data.len());
+                for &(slot, to, addend) in &unit.remote_data {
+                    let value = address(to).wrapping_add_signed(addend);
+                    bytes[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
+                }
+            }
+        }
+        for at in &placed {
+            at.code.make_executable()?;
+            flush_icache(at.code.as_ptr(), at.code.len());
+        }
+
+        // Build a System V argv: a NULL-terminated array of `char *`
+        // pointers. The CStrings live for the duration of the call;
+        // the function pointer table only needs to outlive the
+        // single `main_fn(...)` invocation.
+        let argv_cstrings: Vec<CString> = args
+            .iter()
+            .map(|s| CString::new(s.as_str()).unwrap_or_default())
+            .collect();
+        let mut argv_ptrs: Vec<*const c_char> =
+            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
+        argv_ptrs.push(std::ptr::null());
+
+        // Constructor / destructor addresses in `.init_array` layout
+        // order (prioritized ascending, then unprioritized). Resolved
+        // through `pc_to_native`; DCE keeps these functions (they are
+        // roots), so a present entry is expected.
+        let ordered_addrs = |dtor: bool| -> Vec<usize> {
+            let mut v: Vec<(Option<u32>, usize)> = Vec::new();
+            for (unit, at) in bound.iter().zip(&placed) {
+                let funcs = unit
+                    .program
+                    .init_funcs
+                    .iter()
+                    .filter(|f| f.is_destructor == dtor);
+                for f in funcs {
+                    if let Some(&off) = unit.build.pc_to_native.get(f.ent_pc)
+                        && off != usize::MAX
+                    {
+                        v.push((f.priority, at.code.as_ptr() as usize + off));
+                    }
+                }
+            }
+            v.sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+            v.into_iter().map(|(_, addr)| addr).collect()
+        };
+        let init_addrs = ordered_addrs(false);
+        let fini_addrs = ordered_addrs(true);
+
+        let entry_ptr = unsafe { placed[0].code.as_ptr().add(bound[0].build.entry_offset) };
+        // SAFETY: the JIT'd main was lowered with extern "C" / System V
+        // ABI conventions and reachable via a normal `call`-equivalent
+        // (transmuting + invoking is the same as the call instruction
+        // a parent function would make). main reads argc/argv from
+        // the System V argument registers and returns its exit code
+        // in rax / x0.
+        //
+        // Dispatch through a fresh `pthread_create` worker on POSIX
+        // hosts. The cargo test harness's parallel scheduler runs
+        // each lib test on a thread it owns; calling the JIT'd code
+        // directly on that thread exposes it to whatever signal mask,
+        // stack guard size, alternate-stack setup, and TLS the
+        // harness has installed for itself. A pthread worker has the
+        // kernel-defaulted register state, signal mask, and TLS, so
+        // the JIT'd code observes the environment a freshly-launched
+        // native binary would. Windows keeps the in-thread call: it
+        // has no concurrent native-fixture parity harness pressuring
+        // the same thread.
+        let exit_code = run_main_threaded(
+            entry_ptr,
+            args.len() as c_int,
+            argv_ptrs.as_ptr(),
+            argv_cstrings,
+            init_addrs,
+            fini_addrs,
+        )?;
+        Ok(exit_code)
+    }
+
+    /// Patch `unit`'s own fixups against its mapped addresses.
+    fn patch_unit(target: Target, unit: &BoundUnit, at: &mut PlacedUnit) -> Result<(), C5Error> {
+        let build = &unit.build;
+        let (code_vmaddr, data_vmaddr) = (at.code_vmaddr, at.data_vmaddr);
+        let got_vmaddr = unit.got.as_ptr() as u64;
         // Apply pointer-to-global initializers (`int *p = &x;`)
         // against the runtime data_vmaddr. The Build's
         // `data_relocs` lists each 8-byte slot whose contents
@@ -690,7 +1106,7 @@ mod jit_impl {
         // global. The lowering wrote `target_offset` (or the
         // preferred VA) into those slots; the JIT resolves
         // them in place against the mmap'd page's address.
-        if let Some(region) = &mut data_region {
+        if let Some(region) = &mut at.data {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.data_relocs {
                 let absolute = data_vmaddr + r.target_offset;
@@ -704,30 +1120,6 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
-        // Function-pointer initializers (`static const VTable v = {
-        // .xClose = my_close };`). Patched after the data slots are
-        // flipped to data_vmaddr but before the code region's
-        // address is known -- so we defer this loop and run it
-        // again once code_vmaddr is computed.
-
-        // Allocate the code region. Patch fixups against the mmap'd
-        // addresses *before* flipping to RX -- the writes need to
-        // hit RW pages. Once exec is enabled the page is read-only
-        // for the lifetime of the run.
-        // The read-only blob (switch dispatch tables) rides at an
-        // 8-aligned tail of the same mapping; reads from RX pages
-        // are fine and the region sizing covers the whole blob.
-        let rodata_blob_off = (build.text.len() + 7) & !7;
-        let region = if build.rodata.bytes.is_empty() {
-            JitRegion::new(&build.text)?
-        } else {
-            let mut blob = Vec::with_capacity(rodata_blob_off + build.rodata.bytes.len());
-            blob.extend_from_slice(&build.text);
-            blob.resize(rodata_blob_off, 0);
-            blob.extend_from_slice(&build.rodata.bytes);
-            JitRegion::new(&blob)?
-        };
-        let code_vmaddr = region.as_ptr() as u64;
         // Resolve the blob's address fixups and entry slots against
         // the mapped base: each table entry holds `target -
         // table_base`, both inside this mapping.
@@ -736,6 +1128,7 @@ mod jit_impl {
                 "JIT: absolute address fields reached an in-memory build",
             ));
         }
+        let rodata_blob_off = rodata_offset(build);
         if !build.rodata.bytes.is_empty() {
             // The absolute-slot form is relocatable-only.
             if !build.rodata.abs64.is_empty() {
@@ -744,7 +1137,7 @@ mod jit_impl {
                 ));
             }
             let full_len = rodata_blob_off + build.rodata.bytes.len();
-            let bytes = unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), full_len) };
+            let bytes = unsafe { core::slice::from_raw_parts_mut(at.code.as_mut_ptr(), full_len) };
             for fx in &build.rodata.addr_fixups {
                 patch_addr_load(
                     target,
@@ -774,7 +1167,7 @@ mod jit_impl {
         // per-format writers' code-reloc handling but uses the
         // mmap'd region pointer directly.
         if !build.code_relocs.is_empty()
-            && let Some(region) = &mut data_region
+            && let Some(region) = &mut at.data
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
@@ -798,7 +1191,7 @@ mod jit_impl {
         // A pc-relative word of the data image holds the distance to its
         // target, in the data image or the code.
         if !build.data_pcrel_relocs.is_empty()
-            && let Some(region) = &mut data_region
+            && let Some(region) = &mut at.data
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.data_pcrel_relocs {
@@ -828,7 +1221,7 @@ mod jit_impl {
         // label to a text offset, so only the code region's runtime
         // address has to be added.
         if !build.label_relocs.is_empty()
-            && let Some(region) = &mut data_region
+            && let Some(region) = &mut at.data
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.label_relocs {
@@ -845,76 +1238,12 @@ mod jit_impl {
         }
         apply_jit_fixups(
             target,
-            unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },
+            unsafe { core::slice::from_raw_parts_mut(at.code.as_mut_ptr(), build.text.len()) },
             code_vmaddr,
             data_vmaddr,
             got_vmaddr,
-            &build,
-        )?;
-        region.make_executable()?;
-        flush_icache(region.as_ptr(), region.len());
-
-        // Build a System V argv: a NULL-terminated array of `char *`
-        // pointers. The CStrings live for the duration of the call;
-        // the function pointer table only needs to outlive the
-        // single `main_fn(...)` invocation.
-        let argv_cstrings: Vec<CString> = args
-            .iter()
-            .map(|s| CString::new(s.as_str()).unwrap_or_default())
-            .collect();
-        let mut argv_ptrs: Vec<*const c_char> =
-            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
-        argv_ptrs.push(std::ptr::null());
-
-        // Constructor / destructor addresses in `.init_array` layout
-        // order (prioritized ascending, then unprioritized). Resolved
-        // through `pc_to_native`; DCE keeps these functions (they are
-        // roots), so a present entry is expected.
-        let region_base = region.as_ptr() as usize;
-        let ordered_addrs = |dtor: bool| -> Vec<usize> {
-            let mut v: Vec<&crate::c5::program::InitFunc> = program
-                .init_funcs
-                .iter()
-                .filter(|f| f.is_destructor == dtor)
-                .collect();
-            v.sort_by_key(|f| (f.priority.is_none(), f.priority.unwrap_or(0)));
-            v.iter()
-                .filter_map(|f| build.pc_to_native.get(f.ent_pc).copied())
-                .filter(|&off| off != usize::MAX)
-                .map(|off| region_base + off)
-                .collect()
-        };
-        let init_addrs = ordered_addrs(false);
-        let fini_addrs = ordered_addrs(true);
-
-        let entry_ptr = unsafe { region.as_ptr().add(build.entry_offset) };
-        // SAFETY: the JIT'd main was lowered with extern "C" / System V
-        // ABI conventions and reachable via a normal `call`-equivalent
-        // (transmuting + invoking is the same as the call instruction
-        // a parent function would make). main reads argc/argv from
-        // the System V argument registers and returns its exit code
-        // in rax / x0.
-        //
-        // Dispatch through a fresh `pthread_create` worker on POSIX
-        // hosts. The cargo test harness's parallel scheduler runs
-        // each lib test on a thread it owns; calling the JIT'd code
-        // directly on that thread exposes it to whatever signal mask,
-        // stack guard size, alternate-stack setup, and TLS the
-        // harness has installed for itself. A pthread worker has the
-        // kernel-defaulted register state, signal mask, and TLS, so
-        // the JIT'd code observes the environment a freshly-launched
-        // native binary would. Windows keeps the in-thread call: it
-        // has no concurrent native-fixture parity harness pressuring
-        // the same thread.
-        let exit_code = run_main_threaded(
-            entry_ptr,
-            args.len() as c_int,
-            argv_ptrs.as_ptr(),
-            argv_cstrings,
-            init_addrs,
-            fini_addrs,
-        )?;
-        Ok(exit_code)
+            build,
+        )
     }
 
     /// Stack bytes for the worker thread running the guest's `main`,
@@ -1140,44 +1469,41 @@ mod jit_impl {
     /// Point the call or tail branch at `offset` to a veneer appended to
     /// `text` that jumps to the absolute `addr`: `jmp [rip+0]` and the
     /// address on x86-64, `ldr x16, #8; br x16` and the address on AArch64.
+    /// The address field's offset; `None` when no such branch reaches it.
     fn branch_to_veneer(
         machine: super::super::Machine,
         text: &mut Vec<u8>,
         offset: usize,
         addr: u64,
-    ) -> bool {
+    ) -> Option<usize> {
         use super::super::Machine;
         match machine {
             Machine::X86_64 => {
                 let at = text.len();
-                let Ok(rel) = i32::try_from(at as i64 - (offset as i64 + 5)) else {
-                    return false;
-                };
+                let rel = i32::try_from(at as i64 - (offset as i64 + 5)).ok()?;
                 if !matches!(text.get(offset), Some(0xE8 | 0xE9)) {
-                    return false;
+                    return None;
                 }
                 text[offset + 1..offset + 5].copy_from_slice(&rel.to_le_bytes());
                 text.extend_from_slice(&[0xFF, 0x25, 0, 0, 0, 0]);
                 text.extend_from_slice(&addr.to_le_bytes());
-                true
+                Some(text.len() - 8)
             }
             Machine::Aarch64 => {
                 text.resize((text.len() + 7) & !7, 0);
                 let at = text.len();
-                let Some(insn) = text.get(offset..offset + 4) else {
-                    return false;
-                };
+                let insn = text.get(offset..offset + 4)?;
                 let insn = u32::from_le_bytes([insn[0], insn[1], insn[2], insn[3]]);
                 let delta = (at as i64 - offset as i64) / 4;
                 if !matches!(insn & 0x7C00_0000, 0x1400_0000) || delta >= 1 << 25 {
-                    return false;
+                    return None;
                 }
                 let patched = (insn & 0xFC00_0000) | (delta as u32 & 0x03FF_FFFF);
                 text[offset..offset + 4].copy_from_slice(&patched.to_le_bytes());
                 text.extend_from_slice(&0x5800_0050u32.to_le_bytes());
                 text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
                 text.extend_from_slice(&addr.to_le_bytes());
-                true
+                Some(text.len() - 8)
             }
         }
     }
@@ -1207,17 +1533,20 @@ mod jit_impl {
     /// Route `#pragma binding(data ...)` references, asm operands included,
     /// through flat-lookup imports in the fake GOT. A leftover reference has
     /// no binding and no definition anywhere: it is the null address if the
-    /// name is weak, and refused like the linker would otherwise.
+    /// name is weak, and refused like the linker would otherwise. `remote`
+    /// takes the ones another unit defines.
     fn route_jit_data_imports(
         build: &mut Build,
-        weak: &alloc::collections::BTreeSet<&str>,
+        weak: &BTreeSet<String>,
         machine: super::super::Machine,
+        remote: &mut dyn FnMut(&super::super::UserExternDataRef) -> bool,
     ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmSectionTarget;
         let mut slots = super::super::DataImportSlots::new(build, true, "the JIT");
         for r in core::mem::take(&mut build.user_extern_data_refs) {
             if slots.binds(&r.symbol_name) {
                 slots.route_ref(build, &r)?;
+            } else if remote(&r) {
             } else if !weak.contains(r.symbol_name.as_str()) {
                 return Err(undefined_reference(&r.symbol_name));
             } else if !weak_undef::address_to_zero(machine, &mut build.text, r.instr_offset) {
@@ -1352,7 +1681,7 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let len = round_up_to_page(code.len());
+            let len = round_up_to_page(code.len().max(1));
 
             // Linux: ask for RW now, mprotect to RX once we're
             // done writing. macOS arm64: ask for RWX with MAP_JIT,
@@ -1401,7 +1730,7 @@ mod jit_impl {
         /// per-access W^X toggle; VirtualProtect is a one-shot.
         #[cfg(target_os = "windows")]
         fn new(code: &[u8]) -> Result<Self, C5Error> {
-            let len = round_up_to_page(code.len());
+            let len = round_up_to_page(code.len().max(1));
             let ptr = unsafe {
                 VirtualAlloc(
                     std::ptr::null_mut(),
@@ -1703,7 +2032,6 @@ mod jit_impl {
         ptr: *mut u8,
         // POSIX munmap takes the length back; Windows VirtualFree
         // with MEM_RELEASE requires size = 0.
-        #[cfg_attr(target_os = "windows", allow(dead_code))]
         len: usize,
         /// Loader handles for both import binding and extern-data
         /// resolution, paired with whether Drop must release the handle.
@@ -1937,6 +2265,12 @@ mod jit_impl {
             self.ptr
         }
 
+        fn set_slot(&self, idx: usize, addr: u64) {
+            assert!(idx * 8 < self.len, "JIT: GOT slot {idx} past the region");
+            // SAFETY: the slot lies within the writable region.
+            unsafe { std::ptr::write_unaligned(self.ptr.add(idx * 8) as *mut u64, addr) }
+        }
+
         /// Read back the resolved address in slot `idx`; 0 means
         /// `bind_imports` could not resolve the symbol.
         fn slot_value(&self, idx: usize) -> u64 {
@@ -2104,8 +2438,8 @@ mod jit_impl {
     }
 
     /// Rewrite each inline-asm symbol-operand record naming a definition of
-    /// this unit to its offset: with no link step to interpose the name, the
-    /// unit's definition is its resolution.
+    /// this unit to its offset: the unit's definition is its resolution, as
+    /// in a single-file image.
     fn resolve_jit_asm_sym_targets(defs: &super::super::UnitDefs, build: &mut Build) {
         use super::super::UnitDef;
         use crate::c5::asm::AsmSectionTarget;
@@ -2122,8 +2456,8 @@ mod jit_impl {
 
     /// Patch function-body inline-asm symbol-operand sites (aarch64): the
     /// target resolves to a runtime address (this unit's data or one of its
-    /// functions) and the field kind selects the patch. An extern name has
-    /// no link step to bind it, so it is refused like an extern call site.
+    /// functions) and the field kind selects the patch. A name the unit does
+    /// not define is refused.
     fn apply_jit_asm_sym_fixups(
         code: &mut [u8],
         code_vmaddr: u64,

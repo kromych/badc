@@ -63,6 +63,8 @@ mod native_pe_arm64;
 #[cfg(feature = "full")]
 mod native_pe_x64;
 #[cfg(feature = "full")]
+mod on_demand;
+#[cfg(feature = "full")]
 mod overflow;
 mod parser;
 #[cfg(feature = "full")]

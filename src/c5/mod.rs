@@ -70,6 +70,8 @@ pub use host::StdHost;
 #[cfg(feature = "std")]
 pub use output_file::write_output_file;
 
+#[cfg(feature = "full")]
+pub use codegen::jit_run_with_sources;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::read_archive_at;
@@ -78,12 +80,12 @@ pub use linker::read_archive_at;
 pub use linker::{
     ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
     LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
-    NativeReloc, NativeSymSection, NativeSymbol, OrphanHandling, PendingImportReloc, PltTrampoline,
-    Preemption, SectionContribution, SectionMap, SharedLibrary, TargetCLibrary, ZKeyword,
-    ZKeywords, ZSupport, copy_candidates, detect_binary_format, emit_aarch64_plt, emit_plt_for,
-    emit_x86_64_plt, import_libraries, is_arm64x_native_member, is_coff_import_member,
-    is_coff_object, is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object,
-    is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
+    NativeReloc, NativeSymSection, NativeSymbol, OnDemandSources, OrphanHandling,
+    PendingImportReloc, PltTrampoline, Preemption, SectionContribution, SectionMap, SharedLibrary,
+    TargetCLibrary, ZKeyword, ZKeywords, ZSupport, copy_candidates, detect_binary_format,
+    emit_aarch64_plt, emit_plt_for, emit_x86_64_plt, import_libraries, is_arm64x_native_member,
+    is_coff_import_member, is_coff_object, is_elf_object, is_mach_o_dylib, is_mach_o_fat,
+    is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
     link_native_objects_with, link_native_objects_with_options,
     link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script, mach_o_fat_slice,
     parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,

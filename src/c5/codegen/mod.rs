@@ -73,6 +73,8 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     )))
 }
 
+#[cfg(feature = "full")]
+pub use jit::jit_run_with_sources;
 pub use jit::{jit_run, jit_run_with_options};
 
 pub use crate::c5::object::elf_class::ElfClass;
@@ -4571,6 +4573,16 @@ impl NativeOptions {
             && self.elf_class == ElfClass::Elf64
     }
 
+    /// As a toolchain builds its C library: no canary (its handler would
+    /// recurse), `-pg` call, patchable entry, or `-W` row.
+    pub fn for_embedded_sources(mut self) -> Self {
+        self.stack_protect = StackProtect::OFF;
+        self.profiling = Profiling::OFF;
+        self.patchable_function_entry = PatchableEntry::NONE;
+        self.diag = crate::c5::diag::Config::new();
+        self
+    }
+
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {
@@ -5035,8 +5047,8 @@ pub(crate) fn bind_code_reloc_aliases(
 }
 
 /// Bind each final-image slot naming what the unit's C does not define as a
-/// link does (C99 6.7.8p4): to the definition `defs` holds, an object's else
-/// to what `import` binds; an undefined weak name holds 0 plus the offset.
+/// link does (C99 6.7.8p4): to the definition `defs` holds, else to what
+/// `import` binds; an undefined weak name holds 0 plus the offset.
 pub(crate) fn bind_named_slots(
     program: &Program,
     build: &mut Build,
@@ -5107,11 +5119,17 @@ pub(crate) fn bind_named_slots(
                 continue;
             };
             let at = r.data_offset as usize;
+            let slot = || program::ExternDataReloc {
+                data_offset: r.data_offset,
+                symbol_name: name.into(),
+                addend: r.addend,
+            };
             match label_of(name) {
                 Some(off) if !tls => build.label_relocs.push(LabelReloc {
                     data_offset: r.data_offset,
                     text_offset: off.wrapping_add_signed(r.addend),
                 }),
+                None if !tls && import(build, &slot())? => {}
                 Some(_) => {
                     return Err(C5Error::hard(
                         Code::UNSUPPORTED,

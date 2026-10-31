@@ -5739,10 +5739,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("dirent_readdir.c", 0),
     ("ftw_walk.c", 0),
     ("pattern_match_posix.c", 0),
+    // On macOS the run joins `string_ext.c` and `unistd_ext.c` on demand.
+    ("string_gnu_ext.c", 0),
+    ("copy_file_range_posix.c", 0),
     // memmem / getline / getdelim / dprintf, bound on every host this
-    // module runs on. `copy_file_range_posix.c` is absent for the same
-    // reason `string_gnu_ext.c` is: on a macOS host it needs the
-    // bundled definition, and the JIT has no link step to join it.
+    // module runs on.
     ("stdio_line_input.c", 0),
     ("string_memmem.c", 0),
     ("stat_timespec.c", 0),

@@ -1,3 +1,4 @@
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -552,6 +553,47 @@ impl Program {
             .filter(|s| s.is_weak && s.is_link_entity())
             .map(|s| s.link_name())
             .collect()
+    }
+
+    /// The names the unit defines with external linkage, strong and weak, its
+    /// aliases and file-scope asm's included.
+    pub(crate) fn external_definitions(&self) -> (BTreeSet<String>, BTreeSet<String>) {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let (mut strong, mut weak) = (BTreeSet::new(), BTreeSet::new());
+        let mut add = |name: &str, is_weak: bool| {
+            if is_weak {
+                weak.insert(String::from(name));
+            } else {
+                strong.insert(String::from(name));
+            }
+        };
+        for s in &self.symbols {
+            if s.defined_here
+                && s.linkage == Linkage::External
+                && !s.name.is_empty()
+                && (s.is_fun_entity() || s.class == Token::Glo as i64)
+            {
+                add(s.link_name(), s.is_weak);
+            }
+        }
+        let asm_weak = |n: &str| self.asm_weak_names.iter().any(|w| w == n);
+        let asm_global = |n: &str| self.asm_global_names.iter().any(|g| g == n);
+        for a in &self.function_aliases {
+            match a.bind {
+                AliasBind::Global => add(&a.name, false),
+                AliasBind::Weak => add(&a.name, true),
+                AliasBind::Assigned if asm_weak(&a.name) || asm_global(&a.name) => {
+                    add(&a.name, asm_weak(&a.name))
+                }
+                AliasBind::Assigned | AliasBind::Local => {}
+            }
+        }
+        for n in self.asm_global_names.iter().chain(&self.asm_weak_names) {
+            add(n, asm_weak(n));
+        }
+        strong.retain(|n| !weak.contains(n));
+        (strong, weak)
     }
 
     /// Data slots holding a `&&label` address, each paired with the

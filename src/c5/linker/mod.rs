@@ -67,6 +67,8 @@ pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
 #[cfg(feature = "std")]
+pub(crate) mod on_demand;
+#[cfg(feature = "std")]
 pub(crate) mod relocatable;
 #[cfg(feature = "std")]
 mod synth_build;
@@ -150,6 +152,8 @@ pub use object::{
     detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
     parse_native_object_for, parse_shared_library,
 };
+#[cfg(feature = "std")]
+pub use on_demand::OnDemandSources;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use relocatable::{

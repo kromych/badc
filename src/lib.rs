@@ -164,21 +164,21 @@ pub use c5::{StdHost, write_output_file};
 #[cfg(feature = "full")]
 pub use c5::{
     ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, elf_archive_symbols,
-    embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, read_archive,
-    write_archive,
+    embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, jit_run_with_sources,
+    read_archive, write_archive,
 };
 
 #[cfg(all(feature = "full", feature = "std"))]
 pub use c5::{
     ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
     LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
-    NativeReloc, NativeSymSection, NativeSymbol, OrphanHandling, PendingImportReloc, PltTrampoline,
-    Preemption, SectionContribution, SectionMap, SharedLibrary, TargetCLibrary, ZKeyword,
-    ZKeywords, ZSupport, copy_candidates, detect_binary_format, emit_aarch64_plt, emit_plt_for,
-    emit_x86_64_plt, import_libraries, is_arm64x_native_member, is_coff_import_member,
-    is_coff_object, is_elf_object, is_ld_invocation, is_mach_o_dylib, is_mach_o_fat,
-    is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
-    link_native_objects_with, link_native_objects_with_options,
+    NativeReloc, NativeSymSection, NativeSymbol, OnDemandSources, OrphanHandling,
+    PendingImportReloc, PltTrampoline, Preemption, SectionContribution, SectionMap, SharedLibrary,
+    TargetCLibrary, ZKeyword, ZKeywords, ZSupport, copy_candidates, detect_binary_format,
+    emit_aarch64_plt, emit_plt_for, emit_x86_64_plt, import_libraries, is_arm64x_native_member,
+    is_coff_import_member, is_coff_object, is_elf_object, is_ld_invocation, is_mach_o_dylib,
+    is_mach_o_fat, is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings,
+    link_native_objects, link_native_objects_with, link_native_objects_with_options,
     link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script, mach_o_fat_slice,
     os_error_text, parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
     parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,

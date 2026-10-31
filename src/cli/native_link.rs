@@ -231,6 +231,19 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     );
 }
 
+/// The front end the driver's own sources compile under, as a C library is
+/// built: no user `-I`, `-D`, `-include` or language option.
+pub(crate) fn embedded_compile_options(cli: &Cli, label: &str) -> badc::CompileOptions {
+    let front = super::args::FrontEnd {
+        optimize: cli.front.optimize,
+        system_include_paths: cli.front.system_include_paths.clone(),
+        own_header_roots: cli.front.own_header_roots.clone(),
+        translation_time: cli.front.translation_time,
+        ..Default::default()
+    };
+    front.compile_options(label)
+}
+
 /// The sources the driver compiles itself: the startup runtime, and the
 /// compiler-runtime + libc pool a link pulls only when its own inputs
 /// leave symbols undefined.
@@ -253,40 +266,18 @@ impl EmbeddedSources<'_> {
         dump: bool,
     ) -> Result<Vec<u8>, badc::C5Error> {
         let cli = self.cli;
-        let reloc_opts = self.reloc_opts.clone();
         // The embedded runtime gates its sections on macros the
         // driver sets per image: `__BADC_C5_START__`
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
         // `wmain` / `wWinMain` entry).
-        // As a C library is built: no user `-I`, `-D`, `-include` or language option.
-        let front = super::args::FrontEnd {
-            optimize: cli.front.optimize,
-            system_include_paths: cli.front.system_include_paths.clone(),
-            own_header_roots: cli.front.own_header_roots.clone(),
-            translation_time: cli.front.translation_time,
-            ..Default::default()
-        };
         let defines = (extra.iter()).map(|(k, v)| (k.to_string(), v.to_string()));
-        let copts = (front.compile_options(label))
+        let copts = (embedded_compile_options(cli, label))
             .with_defines(defines.collect())
             .with_no_entry_point(true);
         let program = Compiler::with_options(src, cli.target, copts).compile()?;
-        let mut opts = reloc_opts;
+        let mut opts = self.reloc_opts.clone().for_embedded_sources();
         opts.dump_ssa &= dump;
-        // The runtime and the on-demand pool carry the stack-protector
-        // handler and the entry stub the canary check would otherwise
-        // guard; every toolchain builds them unprotected, and a canary
-        // inside the handler would recurse on a real check failure.
-        opts.stack_protect = badc::StackProtect::OFF;
-        // Nor the user's `-pg` call or patchable entries: the crt objects
-        // a toolchain links are built without them.
-        opts.profiling = badc::Profiling::OFF;
-        opts.patchable_function_entry = badc::PatchableEntry::NONE;
-        // Nor the `-W` family: these sources are badc's own, so a
-        // report about one names no code the user wrote. The front
-        // end's warnings on them are dropped for the same reason.
-        opts.diag = badc::diag::Config::new();
         badc::emit_native_with_options_owned(program, cli.target, opts)
     }
 

@@ -1346,6 +1346,54 @@ fn jit_exits_with_the_status_exit_was_given() {
     }
 }
 
+// A program run in process takes the C-library sources its image links:
+// `strchrnul`, `memrchr`, and on Windows libc/lib's printf and strtod.
+#[test]
+fn in_process_runs_join_the_on_demand_sources() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-on-demand");
+    let src = dir.join("od.c");
+    std::fs::write(
+        &src,
+        "#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+         int main(void) {\n\
+           const char *s = \"abc\";\n\
+           char buf[64];\n\
+           if (strchrnul(s, 'z') != s + 3 || memrchr(s, 'a', 3) != s) return 1;\n\
+           snprintf(buf, sizeof buf, \"%hhd %.1f %g\", 300, INFINITY, strtod(\"0x1p3\", NULL));\n\
+           if (strcmp(buf, \"44 inf 8\") != 0) { fputs(buf, stderr); return 2; }\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let exe = dir.join(format!("od{}", std::env::consts::EXE_SUFFIX));
+    let out = Command::new(badc)
+        .arg(&src)
+        .arg("-o")
+        .arg(&exe)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let run = Command::new(&exe).output().expect("run image");
+    assert_eq!(
+        run.status.code(),
+        Some(0),
+        "image: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let out = Command::new(badc)
+        .arg("--jit")
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "--jit: {err}");
+}
+
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
 #[test]
 fn in_process_runs_keep_a_64k_alignment() {

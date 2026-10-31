@@ -3095,27 +3095,28 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             &mut st.user_extern_data_refs,
         );
     }
-    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
-        // Relocatable objects carry no entry point; the linker picks it once
-        // every TU is merged. `entry_pc` may legitimately be 0 here
-        // (`--no-entry-point` / `-c` on a TU without `main`) and need not
-        // land on a real instruction.
-        st.pc_to_native
-            .get(program.entry_pc)
-            .copied()
-            .filter(|&n| n != usize::MAX)
-            .unwrap_or(0)
-    } else {
-        let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
-        if off == usize::MAX {
-            return Err(C5Error::internal(alloc::format!(
-                "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
-                tag = B::ERR_TAG,
-                pc = program.entry_pc,
-            )));
-        }
-        off
-    };
+    let entry_offset =
+        if native.output_kind == super::OutputKind::Relocatable || program.entry_name.is_none() {
+            // Relocatable objects carry no entry point; the linker picks it once
+            // every TU is merged. Nor does a unit compiled without one. `entry_pc`
+            // may legitimately be 0 here (`--no-entry-point` / `-c` on a TU
+            // without `main`) and need not land on a real instruction.
+            st.pc_to_native
+                .get(program.entry_pc)
+                .copied()
+                .filter(|&n| n != usize::MAX)
+                .unwrap_or(0)
+        } else {
+            let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
+            if off == usize::MAX {
+                return Err(C5Error::internal(alloc::format!(
+                    "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
+                    tag = B::ERR_TAG,
+                    pc = program.entry_pc,
+                )));
+            }
+            off
+        };
 
     st.asm_sections
         .emit_cfi_sections(B::cfi_target(&native))

@@ -196,14 +196,17 @@ impl StrPrefix {
 /// stripped by the lexer's `#`-line handler, so we see the
 /// body bytes only.
 #[derive(Debug)]
-struct LineMarker {
+pub(crate) struct LineMarker {
     /// 1-based line number to attribute to the *next* source
     /// line. The lexer subtracts 1 (so the trailing `\n` of the
     /// marker bumps the counter to exactly this value).
-    line: usize,
+    pub(crate) line: usize,
     /// Filename, if the marker carries one. `None` for bare
     /// `#line N` (C99 6.10.4 says: keep the existing file).
-    file: Option<alloc::string::String>,
+    pub(crate) file: Option<alloc::string::String>,
+    /// GNU flag 2 follows the file name: the text returns to a file
+    /// after an inclusion.
+    pub(crate) returning: bool,
 }
 
 /// Parse a `#`-prefix-stripped line as a GNU line marker
@@ -215,14 +218,15 @@ struct LineMarker {
 ///   * `#line N`               -> `LineMarker { line: N, file: None }`
 ///   * `#line N "file"`        -> `LineMarker { line: N, file: Some("file") }`
 ///   * `# N "file"`            -> same (GNU shape, no `line` keyword)
-///   * `# N "file" 1 2 3 4`    -> same; trailing flag digits are ignored
+///   * `# N "file" 1 2 3 4`    -> same; of the trailing flags only 2
+///     (`returning`) is recorded
 ///
 /// Filenames go through C99-style escape decoding (`\\` -> `\`,
 /// `\"` -> `"`, `\n` -> LF, `\t` -> tab) so a path with a
 /// space or quote round-trips. Anything malformed (missing
 /// digits, unterminated quote) returns `None` and falls
 /// through to the historical `#`-line skip.
-fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
+pub(crate) fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
     let mut i = 0;
     while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
         i += 1;
@@ -274,14 +278,21 @@ fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
         if i >= body.len() {
             return None;
         }
-        // Closing `"` consumed implicitly; trailing GNU flag digits
-        // (`1 2 3 4`) are ignored -- they tag enter/leave/system but
-        // the (file, line) state is what we care about.
         Some(decoded)
     } else {
         None
     };
-    Some(LineMarker { line, file })
+    // The flags (1 enter, 2 return, 3 system header, 4 extern "C")
+    // follow the closing quote.
+    let returning = file.is_some()
+        && body[i + 1..]
+            .split(|b| b.is_ascii_whitespace())
+            .any(|f| f == b"2");
+    Some(LineMarker {
+        line,
+        file,
+        returning,
+    })
 }
 
 /// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.

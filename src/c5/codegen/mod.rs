@@ -4837,7 +4837,7 @@ pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
-) -> Result<(), alloc::string::String> {
+) -> Result<(), crate::c5::asm::AsmErrors> {
     match target {
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::emit::encode_x86_file_asm_section_code(blocks, class)

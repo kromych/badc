@@ -3592,3 +3592,125 @@ fn relocation_operators_outside_their_forms_are_refused() {
         "{text}"
     );
 }
+
+/// The error lines of `name` (`body`, beside `extra`), which must fail.
+fn assembly_errors(target: &str, name: &str, body: &str, extra: &[(&str, &str)]) -> Vec<String> {
+    let d = dir(&format!("errors-{target}-{name}"));
+    write(&d, name, body);
+    for (file, text) in extra {
+        write(&d, file, text);
+    }
+    let (ok, text) = run(
+        &d,
+        &["-q", "-c", &format!("--target={target}"), name, "-o", "u.o"],
+    );
+    assert!(!ok, "{target}: a unit with errors must fail: {text}");
+    assert!(
+        !d.join("u.o").exists(),
+        "{target}: no object on a failed unit"
+    );
+    assert!(!text.contains("inline asm"), "{target}: {text}");
+    text.lines()
+        .filter(|l| l.contains(" error: "))
+        .map(String::from)
+        .collect()
+}
+
+fn error_positions(errors: &[String]) -> Vec<&str> {
+    errors
+        .iter()
+        .map(|e| &e[..e.find(" error: ").unwrap()])
+        .collect()
+}
+
+/// gas reports every error of a unit, each at `file:line`; a block comment
+/// over several lines leaves the lines after it in place.
+#[test]
+fn every_bad_statement_is_reported_at_its_line() {
+    for (target, insn1, insn2) in [
+        ("linux-x64", "frob %rax", "movq %rax, %zz"),
+        ("linux-aarch64", "frob x0", "bogus x1, x2"),
+    ] {
+        let body = format!(
+            "\t.text\n\t.globl f\nf:\n\tnop\n\t{insn1}\n\t/* a comment\n\t   over two lines */\n\
+             \t.bogus 1\n\tnop\n\t{insn2}\n\tret\n"
+        );
+        let errors = assembly_errors(target, "bad.s", &body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["bad.s:5:", "bad.s:8:", "bad.s:10:"],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[0].ends_with(&format!("(instruction `{insn1}`) [B5002] [assembler]")),
+            "{target}: {}",
+            errors[0]
+        );
+        assert!(errors[1].contains("`.bogus`"), "{target}: {}", errors[1]);
+        assert!(
+            errors[2].contains(&format!("(instruction `{insn2}`)")),
+            "{target}: {}",
+            errors[2]
+        );
+    }
+}
+
+/// gas follows the preprocessor's line markers back to each line's file.
+#[test]
+fn a_preprocessed_unit_reports_the_line_of_the_original_file() {
+    for (target, mov, bad, bad_in_header) in [
+        ("linux-x64", "movq $ONE, %rax", "frob %rax", "frobh %rcx"),
+        ("linux-aarch64", "mov x0, #ONE", "frob x0", "frobh x1"),
+    ] {
+        let header = format!("/* constants\n   of the unit */\n#define ONE 1\n\t{bad_in_header}\n");
+        let body = format!("#include \"defs.h\"\n\n\n\t.text\nf:\n\t{mov}\n\t{bad}\n\tret\n");
+        let errors = assembly_errors(target, "unit.S", &body, &[("defs.h", &header)]);
+        assert_eq!(
+            error_positions(&errors),
+            ["defs.h:4:", "unit.S:7:"],
+            "{target}: {errors:#?}"
+        );
+    }
+}
+
+/// gas reports an error in a macro expansion at the invoking line.
+#[test]
+fn an_error_in_a_macro_expansion_is_reported_at_the_invoking_line() {
+    for (target, reg1, reg2) in [("linux-x64", "%rax", "%rcx"), ("linux-aarch64", "x0", "x1")] {
+        let body = format!(
+            "\t.macro twice reg\n\tfrob \\reg\n\tnop\n\tfrob \\reg\n\t.endm\n\t.text\nf:\n\
+             \ttwice {reg1}\n\tnop\n\ttwice {reg2}\n\tret\n"
+        );
+        let errors = assembly_errors(target, "mac.s", &body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["mac.s:8:", "mac.s:8:", "mac.s:10:", "mac.s:10:"],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[2].contains(&format!("(instruction `frob {reg2}`)")),
+            "{target}: {}",
+            errors[2]
+        );
+    }
+}
+
+/// The layout's errors are each reported at their lines too.
+#[test]
+fn every_layout_error_is_reported_at_its_line() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let body = "\t.data\na:\n\t.byte 1\n\t.org 0\n\t.byte 2\n\t.size a, 1 / 0\n1:\t.byte 3\n2:\n\
+                    \t.if (2b - 1b) != 0\n\t.error \"one byte\"\n\t.endif\n";
+        let errors = assembly_errors(target, "lay.s", body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["lay.s:4:", "lay.s:6:", "lay.s:10:"],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[0].contains("`.org` moves backwards"),
+            "{}",
+            errors[0]
+        );
+    }
+}

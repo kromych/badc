@@ -973,7 +973,9 @@ fn file_scope_a64_subsection_org_rept_match_gnu_as() {
                 661:\nnop\n662:\n.subsection 1\n663:\n.rept (662b-661b) / 4\nnop\n.endr\n664:\n\
                 .previous\n.org . - (664b-663b) + (662b-661b)\n\
                 .org . - (662b-661b) + (664b-663b)\nret\n";
-    let text = prepare_file_asm_text(text, AsmComments::A64).unwrap();
+    let text = prepare_file_asm_text(text, AsmComments::A64)
+        .checked()
+        .unwrap();
     let mut blocks = extract_file_scope_asm_sections(&text, true).unwrap();
     encode_a64_file_asm_section_code(&mut blocks).unwrap();
     let mut sink = AsmSectionSink::default();
@@ -1016,7 +1018,7 @@ fn a64_file_asm_sink_result(text: &str) -> Result<AsmSectionSink, alloc::string:
     use crate::c5::asm::AsmComments;
     use crate::c5::asm::extract_file_scope_asm_sections;
     use crate::c5::asm::{materialize_asm_sections, prepare_file_asm_text};
-    let text = prepare_file_asm_text(text, AsmComments::A64)?;
+    let text = prepare_file_asm_text(text, AsmComments::A64).checked()?;
     let mut blocks = extract_file_scope_asm_sections(&text, true)?;
     encode_a64_file_asm_section_code(&mut blocks)?;
     let mut sink = AsmSectionSink::default();

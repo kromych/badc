@@ -12,7 +12,7 @@ fn block_of(blocks: &[AsmSectionBlock], label: &str) -> alloc::string::String {
         .find(|b| {
             b.items
                 .iter()
-                .any(|i| matches!(i, AsmSectionItem::Label(n) if n == label))
+                .any(|i| matches!(&i.item, AsmSectionItem::Label(n) if n == label))
         })
         .map(|b| b.name.clone())
         .unwrap_or_else(|| alloc::string::String::from("<none>"))
@@ -77,7 +77,9 @@ fn globl_binds_a_label_defined_in_another_section() {
 #[test]
 fn an_exported_constant_assignment_defines_an_absolute_symbol() {
     let text = ".globl len\n.section .rodata,\"a\"\nlen = 12345\nblob:\n.long len\n";
-    let prepared = prepare_file_asm_text(text, AsmComments::X86).unwrap();
+    let prepared = prepare_file_asm_text(text, AsmComments::X86)
+        .checked()
+        .unwrap();
     let blocks = extract_file_scope_asm_sections(&prepared, false).unwrap();
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
@@ -1161,6 +1163,7 @@ fn section_operand_constant_expression() {
         false,
         &mut sink2,
     )
+    .map_err(alloc::string::String::from)
     .unwrap_err();
     assert!(err.contains("non-constant"), "{err}");
 }
@@ -1251,7 +1254,7 @@ fn word_directive_width_is_target_dependent() {
             extract_asm_sections(".pushsection .x,\"a\"\n.word 0x1234\n.popsection\n", is_a64)
                 .unwrap()
                 .unwrap();
-        match &blocks[0].items[0] {
+        match &blocks[0].items[0].item {
             AsmSectionItem::Data { width, .. } => *width,
             _ => panic!("expected data"),
         }
@@ -1360,6 +1363,7 @@ fn cross_section_label_difference_across_sections_is_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("cross-section difference is not a constant");
     assert!(err.contains("crosses sections"), "{err}");
 }
@@ -1423,6 +1427,7 @@ fn section_label_difference_overflow_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("256 does not fit a byte");
     assert!(err.contains("does not fit"), "{err}");
 }
@@ -1559,7 +1564,7 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
     assert!(
         repl.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "call foo")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "call foo")),
         "instruction kept as Code: {:?}",
         repl.items
     );
@@ -1574,7 +1579,7 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "wrmsr")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "wrmsr")),
         "instruction in a non-executable section is kept as Code: {:?}",
         sec.items
     );
@@ -1596,21 +1601,21 @@ fn label_without_whitespace_peels_from_following_instruction() {
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Label(n) if n == "wrapper")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Label(n) if n == "wrapper")),
         "label peeled as its own item: {:?}",
         sec.items
     );
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "push %rcx")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "push %rcx")),
         "the instruction after the label is a single-instruction Code item: {:?}",
         sec.items
     );
     assert!(
         !sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t.contains(':'))),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t.contains(':'))),
         "no Code item retains the label colon: {:?}",
         sec.items
     );
@@ -1828,6 +1833,7 @@ fn duplicate_section_label_is_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("duplicate label must be rejected");
     assert!(err.contains("duplicate label"), "{err}");
 }
@@ -2718,6 +2724,7 @@ fn section_arguments_carry_the_group() {
     assert_eq!(group(".nogroup", 0), ("a", 0, None));
     assert_eq!(group(".text.t", 1), ("axG", 0, Some(("t2", false))));
     let err = extract_file_scope_asm_sections(".section .x,\"aG\",@progbits,g,unique\n", false)
+        .map_err(alloc::string::String::from)
         .unwrap_err();
     assert!(err.contains("bad section argument `unique`"), "{err}");
     let mut sink = AsmSectionSink::default();
@@ -2735,4 +2742,58 @@ fn section_arguments_carry_the_group() {
         .map(|s| s.group.as_ref().map(|g| g.name.as_str()))
         .collect();
     assert_eq!(groups, [Some("t"), Some("t2")]);
+}
+
+/// A marker numbers the lines after it and is blanked; `# 0 "" 2` returns to
+/// the physical position, and a `#` comment naming no file moves nothing.
+#[test]
+fn line_markers_give_each_line_its_file_and_line() {
+    let text =
+        "# 1 \"u.S\"\na\n# 7 \"h.h\" 1\nb\nc\n# 3 \"u.S\" 2\nd\n# 0 \"\" 2\ne\n# 16 bytes\nf";
+    let (out, map) = AsmSourceMap::read(text, "u.s");
+    assert_eq!(out, "\na\n\nb\nc\n\nd\n\ne\n# 16 bytes\nf");
+    let at = |line: u32| {
+        map.loc(line)
+            .map(|l| alloc::format!("{}:{}", l.file, l.line))
+    };
+    assert_eq!(at(2).as_deref(), Some("u.S:1"));
+    assert_eq!(at(4).as_deref(), Some("h.h:7"));
+    assert_eq!(at(5).as_deref(), Some("h.h:8"));
+    assert_eq!(at(7).as_deref(), Some("u.S:3"));
+    assert_eq!(at(9).as_deref(), Some("u.s:9"));
+    assert_eq!(at(11).as_deref(), Some("u.s:11"));
+    assert_eq!(at(0), None);
+    let (_, plain) = AsmSourceMap::read("nop\nnop\n", "p.s");
+    assert_eq!(plain.loc(2).map(|l| l.line), Some(2));
+}
+
+/// A statement after a block comment over lines stays on its line.
+#[test]
+fn a_block_comment_keeps_the_lines_after_it_in_place() {
+    let text = "nop /* one\ntwo\nthree */ nop\nbad\n";
+    for syntax in [AsmComments::X86, AsmComments::A64] {
+        let out = strip_asm_comments(text, syntax).unwrap();
+        let lines = split_asm_statement_lines(&out);
+        assert!(lines.contains(&(4, "bad")), "{lines:?}");
+    }
+}
+
+/// An expansion takes the invoking line and goes on past a bad statement.
+#[test]
+fn a_macro_expansion_takes_the_invoking_line() {
+    let text = ".macro m\nnop\nnop\n.endm\nm\n.purgem none\nret\nm\n";
+    let p = prepare_file_asm_text(text, AsmComments::X86);
+    let lines: Vec<(u32, &str)> = p
+        .text
+        .split('\n')
+        .zip(&p.origin)
+        .filter(|(s, _)| !s.is_empty())
+        .map(|(s, &o)| (o, s))
+        .collect();
+    assert_eq!(
+        lines,
+        [(5, "nop"), (5, "nop"), (7, "ret"), (8, "nop"), (8, "nop")]
+    );
+    assert_eq!(p.errors.len(), 1, "{:?}", p.errors);
+    assert_eq!(p.errors[0].line, 6);
 }

@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::codegen::Target;
-use super::diag::Code;
+use super::diag::{Code, Diagnostic, Level};
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
 use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
@@ -2729,14 +2729,29 @@ impl Compiler {
     /// Assemble one GNU-as source unit for `target`, yielding the program the
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two
-    /// accept the same constructs and diagnose the rest identically.
+    /// accept the same constructs and diagnose the rest identically, each
+    /// error at its source line as gas reports it.
     pub fn assemble(text: &str, target: Target, opts: CompileOptions) -> Result<Program, C5Error> {
         let label = opts.source_label.clone();
+        let (text, lines) = crate::c5::asm::AsmSourceMap::read(text, &label);
         // No C source and no retry state: the auto-include retry rebuilds
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
-        this.ingest_file_scope_asm(text, false)
-            .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("{label}: {m}")))?;
+        this.ingest_file_scope_asm(&text, false).map_err(|errors| {
+            let diagnostic = |e: crate::c5::asm::AsmError| {
+                let text = crate::c5::asm::source_message(&e.text);
+                match lines.loc(e.line) {
+                    Some(loc) => Diagnostic::new(Code::ASSEMBLER, Level::Error, Some(loc), text),
+                    None => Diagnostic::new(
+                        Code::ASSEMBLER,
+                        Level::Error,
+                        None,
+                        alloc::format!("{label}: {text}"),
+                    ),
+                }
+            };
+            C5Error::Compile(errors.0.into_iter().map(diagnostic).collect())
+        })?;
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5

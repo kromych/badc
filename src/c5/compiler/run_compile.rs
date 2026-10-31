@@ -226,7 +226,7 @@ impl Compiler {
             )
         })?;
         self.ingest_file_scope_asm(text, true)
-            .map_err(|m| self.compile_err(Code::ASSEMBLER, m))
+            .map_err(|e| self.compile_err(Code::ASSEMBLER, String::from(e)))
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
@@ -244,12 +244,14 @@ impl Compiler {
     /// nothing but `.globl` at C symbols, which only a translation unit has.
     ///
     /// Shared by the file-scope `asm("...")` parse and the assembler driver so
-    /// both accept the same constructs and reject the rest identically.
+    /// both accept the same constructs and reject the rest identically,
+    /// every bad statement at its line of `text`.
     pub(super) fn ingest_file_scope_asm(
         &mut self,
         text: &str,
         globl_shortcut: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::c5::asm::AsmErrors> {
+        use crate::c5::asm::{AsmError, AsmErrors, AsmSectionItem};
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
         // prepared form so the codegen materialization sees the same
@@ -260,11 +262,17 @@ impl Compiler {
         } else {
             crate::c5::asm::AsmComments::X86
         };
-        let mut prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        let crate::c5::asm::AsmPrepared {
+            text: mut prepared,
+            origin,
+            mut errors,
+        } = crate::c5::asm::prepare_file_asm_text(text, comments);
         if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
             prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
         }
         let text = prepared.as_str();
+        // Errors at lines of the prepared text.
+        let mut later = Vec::new();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
         // instructions in the default `.text` section). The first routes through
@@ -279,55 +287,57 @@ impl Compiler {
                 }
                 ex.blocks
             }
-            _ => crate::c5::asm::extract_file_scope_asm_sections(text, aarch64)?,
+            _ => crate::c5::asm::extract_file_scope_asm_sections_noting(text, aarch64, &mut later),
         };
         for b in &blocks {
-            for item in &b.items {
-                match item {
-                    crate::c5::asm::AsmSectionItem::Data { values, .. }
+            for li in &b.items {
+                match &li.item {
+                    AsmSectionItem::Data { values, .. }
                         if values.iter().any(|v| {
                             matches!(v, crate::c5::asm::AsmSectionValue::OperandConst(_))
                         }) =>
                     {
-                        return Err(
-                            "operand reference in file-scope asm (no operands at file scope)"
-                                .into(),
-                        );
+                        later.push(AsmError {
+                            line: li.line,
+                            text: String::from(
+                                "operand reference in file-scope asm (no operands at file scope)",
+                            ),
+                        });
                     }
                     // Unit-level symbol directives: `.weak name` binds the
                     // symbol weak wherever it is defined; `.set name, target`
                     // is an object-level alias emitted at the target's
                     // definition.
-                    crate::c5::asm::AsmSectionItem::Weak(name) => {
+                    AsmSectionItem::Weak(name) => {
                         if !self.asm_weak_names.contains(name) {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::Global(name) => {
+                    AsmSectionItem::Global(name) => {
                         if !self.asm_global_names.contains(name) {
                             self.asm_global_names.push(name.clone());
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::Visibility { name, vis } => {
+                    AsmSectionItem::Visibility { name, vis } => {
                         match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
                             Some(e) => e.1 = *vis,
                             None => self.asm_visibility.push((name.clone(), *vis)),
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::File(name) => {
+                    AsmSectionItem::File(name) => {
                         self.asm_file_names.push(name.clone());
                     }
-                    crate::c5::asm::AsmSectionItem::Ident(s) => {
+                    AsmSectionItem::Ident(s) => {
                         self.asm_idents.push(s.clone());
                     }
-                    crate::c5::asm::AsmSectionItem::SymSet { name, target } => {
+                    AsmSectionItem::SymSet { name, target } => {
                         Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
                     }
                     // `.set name, sym + k` names the same alias at an offset.
                     // A target this unit's layout places defines the name as
                     // a label of the owning section instead; the object
                     // writer drops the alias record there.
-                    crate::c5::asm::AsmSectionItem::SetExpr { name, expr } => {
+                    AsmSectionItem::SetExpr { name, expr } => {
                         if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
                             Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }
@@ -342,15 +352,31 @@ impl Compiler {
         // sections under the emit target's conventions. The sink spans the unit
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
-        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
-        crate::c5::asm::materialize_asm_sections(
-            &blocks,
-            &crate::c5::asm::AsmOperandResolver::NONE,
-            &|_| None,
-            &|_| None,
-            aarch64,
-            &mut self.asm_validate_sink,
-        )?;
+        if let Err(e) = crate::c5::codegen::encode_file_asm_section_code(
+            &mut blocks,
+            self.target,
+            self.elf_class,
+        ) {
+            later.extend(e.0);
+        }
+        // The layout reads every statement's size: it needs all of them.
+        if errors.is_empty()
+            && later.is_empty()
+            && let Err(e) = crate::c5::asm::materialize_asm_sections(
+                &blocks,
+                &crate::c5::asm::AsmOperandResolver::NONE,
+                &|_| None,
+                &|_| None,
+                aarch64,
+                &mut self.asm_validate_sink,
+            )
+        {
+            later.extend(e.0);
+        }
+        crate::c5::asm::remap_lines(&mut later, &origin);
+        errors.extend(later);
+        errors.sort_by_key(|e| (e.line == 0, e.line));
+        AsmErrors::check(errors)?;
         self.file_asm.push(prepared);
         Ok(())
     }

@@ -824,7 +824,7 @@ pub(crate) fn measure_asm_section_offsets(
     const_of: &dyn Fn(u8) -> Option<i64>,
     align_is_p2: bool,
     sink: &AsmSectionSink,
-) -> Result<SectionLabelOffsets, alloc::string::String> {
+) -> Result<SectionLabelOffsets, AsmErrors> {
     let mut long = AsmRelaxSet::new();
     let mut sites = alloc::vec::Vec::new();
     let mut m = measure_fill_rounds(blocks, const_of, align_is_p2, sink, &long, &mut sites)?;
@@ -866,7 +866,7 @@ fn short_form_fits(
 ) -> bool {
     let Some(AsmSectionItem::CodeBytes {
         short: Some(short), ..
-    }) = blocks[s.site.0].items.get(s.site.1)
+    }) = blocks[s.site.0].items.get(s.site.1).map(|i| &i.item)
     else {
         return false;
     };
@@ -968,7 +968,7 @@ fn stmt_binding_names(
 ) -> alloc::collections::BTreeSet<&str> {
     blocks
         .iter()
-        .flat_map(|b| &b.items)
+        .flat_map(|b| b.items.iter().map(|i| &i.item))
         .filter_map(|it| match it {
             AsmSectionItem::Weak(n) => Some(n.as_str()),
             AsmSectionItem::Global(n) if global => Some(n.as_str()),
@@ -1002,7 +1002,7 @@ fn measure_fill_rounds(
     sink: &AsmSectionSink,
     long: &AsmRelaxSet,
     sites: &mut alloc::vec::Vec<AsmRelaxSite>,
-) -> Result<SectionLabelOffsets, alloc::string::String> {
+) -> Result<SectionLabelOffsets, AsmErrors> {
     match measure_round(blocks, const_of, align_is_p2, sink, None, long, sites) {
         (Ok(m), false) => Ok(m),
         // A fill count referenced a label: re-measure with the offsets the
@@ -1023,7 +1023,7 @@ fn measure_fill_rounds(
             ) {
                 (Ok(m), false) => Ok(m),
                 (Err(e), _) => Err(e),
-                _ => Err(alloc::string::String::from(
+                _ => Err(AsmErrors::from(
                     "inline asm: fill count does not settle against the section layout",
                 )),
             }
@@ -1044,7 +1044,7 @@ fn measure_round(
     prev: Option<&SectionLabelOffsets>,
     long: &AsmRelaxSet,
     sites: &mut alloc::vec::Vec<AsmRelaxSite>,
-) -> (Result<SectionLabelOffsets, alloc::string::String>, bool) {
+) -> (Result<SectionLabelOffsets, AsmErrors>, bool) {
     let mut unresolved_fill = false;
     let r = measure_round_inner(
         blocks,
@@ -1069,19 +1069,20 @@ fn measure_round_inner(
     unresolved_fill: &mut bool,
     long: &AsmRelaxSet,
     sites: &mut alloc::vec::Vec<AsmRelaxSite>,
-) -> Result<SectionLabelOffsets, alloc::string::String> {
+) -> Result<SectionLabelOffsets, AsmErrors> {
     let mut map: alloc::collections::BTreeMap<alloc::string::String, (alloc::string::String, i64)> =
         alloc::collections::BTreeMap::new();
     let mut lens: alloc::collections::BTreeMap<alloc::string::String, i64> =
         alloc::collections::BTreeMap::new();
-    // `.set` assignments in source order with the offset each was written at;
-    // evaluated below, once every label offset is known, so a value may name a
-    // label defined later in the section.
+    // `.set` assignments in source order with the offset each was written at
+    // and its line; evaluated below, once every label offset is known, so a
+    // value may name a label defined later in the section.
     let mut sets: alloc::vec::Vec<(
         alloc::string::String,
         alloc::string::String,
         alloc::string::String,
         i64,
+        u32,
     )> = alloc::vec::Vec::new();
     // `.set name, symbol` aliases: an expression over one reads the target's
     // location, as GNU as resolves the chain.
@@ -1109,237 +1110,253 @@ fn measure_round_inner(
         let mut state = *states
             .entry(key.clone())
             .or_insert_with(|| sink.index_of(b).and_then(|i| sink.section(i).map_state));
-        for (ii, item) in b.items.iter().enumerate() {
-            if matches!(item, AsmSectionItem::CodeBytes { .. }) {
-                at += insn_align_gap(at, state, exec, align_is_p2);
-            }
-            places.insert((bi, ii), at);
-            // An alignment operand over labels reads the offsets this round
-            // has already recorded, so every later reader of the item sees
-            // one byte count. A first round measures an unresolved fill count
-            // as zero length, which moves the offsets an operand reads, so it
-            // defers a failure to the round that has them; the second round
-            // reports it.
-            let resolved = match resolve_align_item(item, &|t| {
-                if t.bytes().all(|c| c.is_ascii_digit()) {
-                    return None;
+        for (ii, li) in b.items.iter().enumerate() {
+            let mut measure_item = || -> Result<(), alloc::string::String> {
+                let item = &li.item;
+                if matches!(item, AsmSectionItem::CodeBytes { .. }) {
+                    at += insn_align_gap(at, state, exec, align_is_p2);
                 }
-                map.get(numeric_label_digits(t).unwrap_or(t))
-                    .map(|(_, off)| *off)
-            }) {
-                Ok(r) => r,
-                Err(e) if prev.is_some() => return Err(e),
-                Err(_) => {
-                    *unresolved_fill = true;
-                    Some(AsmSectionItem::Align {
-                        spec: AlignSpec::Bytes(1),
-                        fill: None,
-                        max: None,
-                        nops: AlignNops::default(),
-                    })
-                }
-            };
-            if let Some(AsmSectionItem::Align {
-                spec: AlignSpec::Bytes(n),
-                ..
-            }) = resolved
-            {
-                aligns.insert((bi, ii), n);
-            }
-            let item = resolved.as_ref().unwrap_or(item);
-            match item {
-                AsmSectionItem::Label(name) => {
-                    let digits = numeric_label_digits(name).unwrap_or(name);
-                    map.insert(alloc::string::String::from(digits), (key.clone(), at));
-                }
-                // Symbol attributes, not layout: no bytes.
-                AsmSectionItem::Global(_)
-                | AsmSectionItem::Type { .. }
-                | AsmSectionItem::Size { .. }
-                | AsmSectionItem::Weak(_)
-                | AsmSectionItem::Common { .. }
-                | AsmSectionItem::Local(_)
-                | AsmSectionItem::Visibility { .. }
-                | AsmSectionItem::CondDiag(_)
-                | AsmSectionItem::Cfi(_)
-                | AsmSectionItem::File(_)
-                | AsmSectionItem::Ident(_)
-                | AsmSectionItem::Reloc { .. } => {}
-                AsmSectionItem::SymSet { name, target } => {
-                    aliases.insert(name.clone(), target.clone());
-                }
-                AsmSectionItem::SetExpr { name, expr } => {
-                    sets.push((name.clone(), expr.clone(), key.clone(), at));
-                }
-                // An absolute value, so its reads resolve like any other
-                // assignment without depending on the layout.
-                AsmSectionItem::AbsSet { name, value } => {
-                    sets.push((name.clone(), alloc::format!("{value}"), key.clone(), at));
-                }
-                AsmSectionItem::LiteralPool(entries) => {
-                    let (offs, end) = literal_pool_layout(entries, at);
-                    for (e, off) in entries.iter().zip(&offs) {
-                        map.insert(e.label.clone(), (key.clone(), *off));
+                places.insert((bi, ii), at);
+                // An alignment operand over labels reads the offsets this round
+                // has already recorded, so every later reader of the item sees
+                // one byte count. A first round measures an unresolved fill count
+                // as zero length, which moves the offsets an operand reads, so it
+                // defers a failure to the round that has them; the second round
+                // reports it.
+                let resolved = match resolve_align_item(item, &|t| {
+                    if t.bytes().all(|c| c.is_ascii_digit()) {
+                        return None;
                     }
-                    at = end;
+                    map.get(numeric_label_digits(t).unwrap_or(t))
+                        .map(|(_, off)| *off)
+                }) {
+                    Ok(r) => r,
+                    Err(e) if prev.is_some() => return Err(e),
+                    Err(_) => {
+                        *unresolved_fill = true;
+                        Some(AsmSectionItem::Align {
+                            spec: AlignSpec::Bytes(1),
+                            fill: None,
+                            max: None,
+                            nops: AlignNops::default(),
+                        })
+                    }
+                };
+                if let Some(AsmSectionItem::Align {
+                    spec: AlignSpec::Bytes(n),
+                    ..
+                }) = resolved
+                {
+                    aligns.insert((bi, ii), n);
                 }
-                AsmSectionItem::Data { width, values } => {
-                    at += *width as i64 * values.len() as i64;
-                }
-                AsmSectionItem::Fill { count, unit, .. } => {
-                    // The count may reference labels (`744f - 743f`); resolve
-                    // them from this round's map, the prior round's, or fail
-                    // the round so a second one runs with full offsets.
-                    let resolve = |t: &str| -> Option<i64> {
-                        if t.bytes().all(|c| c.is_ascii_digit()) {
-                            return None;
+                let item = resolved.as_ref().unwrap_or(item);
+                match item {
+                    AsmSectionItem::Label(name) => {
+                        let digits = numeric_label_digits(name).unwrap_or(name);
+                        map.insert(alloc::string::String::from(digits), (key.clone(), at));
+                    }
+                    // Symbol attributes, not layout: no bytes.
+                    AsmSectionItem::Global(_)
+                    | AsmSectionItem::Type { .. }
+                    | AsmSectionItem::Size { .. }
+                    | AsmSectionItem::Weak(_)
+                    | AsmSectionItem::Common { .. }
+                    | AsmSectionItem::Local(_)
+                    | AsmSectionItem::Visibility { .. }
+                    | AsmSectionItem::CondDiag(_)
+                    | AsmSectionItem::Cfi(_)
+                    | AsmSectionItem::File(_)
+                    | AsmSectionItem::Ident(_)
+                    | AsmSectionItem::Reloc { .. } => {}
+                    AsmSectionItem::SymSet { name, target } => {
+                        aliases.insert(name.clone(), target.clone());
+                    }
+                    AsmSectionItem::SetExpr { name, expr } => {
+                        sets.push((name.clone(), expr.clone(), key.clone(), at, li.line));
+                    }
+                    // An absolute value, so its reads resolve like any other
+                    // assignment without depending on the layout.
+                    AsmSectionItem::AbsSet { name, value } => {
+                        sets.push((
+                            name.clone(),
+                            alloc::format!("{value}"),
+                            key.clone(),
+                            at,
+                            li.line,
+                        ));
+                    }
+                    AsmSectionItem::LiteralPool(entries) => {
+                        let (offs, end) = literal_pool_layout(entries, at);
+                        for (e, off) in entries.iter().zip(&offs) {
+                            map.insert(e.label.clone(), (key.clone(), *off));
                         }
-                        map.get(numeric_label_digits(t).unwrap_or(t))
-                            .map(|(_, off)| *off)
-                            .or_else(|| prev.and_then(|p| p.offset(t)))
-                            .or_else(|| prev.and_then(|p| p.symbol(t)))
-                    };
-                    let n = match eval_fill_count_with(count, at, const_of, &resolve) {
-                        Some(n) => n,
-                        None => {
-                            *unresolved_fill = true;
-                            if prev.is_some() {
-                                return Err(alloc::format!(
-                                    "inline asm: fill count `{count}` is not a constant expression"
-                                ));
+                        at = end;
+                    }
+                    AsmSectionItem::Data { width, values } => {
+                        at += *width as i64 * values.len() as i64;
+                    }
+                    AsmSectionItem::Fill { count, unit, .. } => {
+                        // The count may reference labels (`744f - 743f`); resolve
+                        // them from this round's map, the prior round's, or fail
+                        // the round so a second one runs with full offsets.
+                        let resolve = |t: &str| -> Option<i64> {
+                            if t.bytes().all(|c| c.is_ascii_digit()) {
+                                return None;
                             }
-                            0
-                        }
-                    };
-                    at += n.max(0) * *unit as i64;
-                }
-                AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
-                AsmSectionItem::CodeBytes { bytes, short, .. } => {
-                    at += match short {
-                        None => bytes.len() as i64,
-                        Some(s) => {
-                            sites.push(AsmRelaxSite { site: (bi, ii), at });
-                            if long.contains(&(bi, ii)) {
-                                bytes.len() as i64
-                            } else {
-                                s.bytes.len() as i64
-                            }
-                        }
-                    };
-                }
-                AsmSectionItem::Code(text) => {
-                    return Err(alloc::format!(
-                        "inline asm: replacement instruction `{text}` in a named section is not \
-                         assembled for this target"
-                    ));
-                }
-                AsmSectionItem::Align { spec, max, .. } => {
-                    at += align_gap(at, spec.bytes(&|_| None)? as i64, *max);
-                }
-                AsmSectionItem::Org(n, _) => at = at.max(*n as i64),
-                AsmSectionItem::OrgLabel { label, addend, .. } => {
-                    let digits = numeric_label_digits(label).unwrap_or(label);
-                    let base = map
-                        .get(digits)
-                        .filter(|(sk, _)| *sk == key)
-                        .map(|(_, o)| *o)
-                        .ok_or_else(|| {
-                            alloc::format!(
-                                "inline asm: `.org` label `{label}` is not defined above"
-                            )
-                        })?;
-                    let add = eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(|| {
-                        alloc::string::String::from("inline asm: non-constant `.org` addend")
-                    })?;
-                    at = (base + add).max(at);
-                }
-                AsmSectionItem::OrgExpr(expr, _) => {
-                    // A target referencing labels of a later subsection (an
-                    // `.org` padding a sequence to its replacement's length)
-                    // resolves in round two, like a fill count.
-                    let resolve = |t: &str| -> Option<AsmExprLeaf> {
-                        let loc = |k: &str, off: i64| {
-                            AsmExprLeaf::Loc(AsmExprTerm {
-                                space: Some((
-                                    AsmSpace::Section(alloc::string::String::from(k)),
-                                    off,
-                                )),
-                                target: AsmSectionTarget::Symbol(alloc::string::String::from(t)),
-                            })
+                            map.get(numeric_label_digits(t).unwrap_or(t))
+                                .map(|(_, off)| *off)
+                                .or_else(|| prev.and_then(|p| p.offset(t)))
+                                .or_else(|| prev.and_then(|p| p.symbol(t)))
                         };
-                        map.get(numeric_label_digits(t).unwrap_or(t))
-                            .map(|(k, off)| loc(k, *off))
-                            .or_else(|| {
-                                let p = prev?;
-                                Some(loc(p.section(t)?, p.offset(t)?))
-                            })
-                            .or_else(|| prev.and_then(|p| p.symbol(t).map(AsmExprLeaf::Abs)))
-                    };
-                    match eval_org_target(expr, &key, at, &resolve, const_of) {
-                        Ok(target) => at = target.max(at),
-                        Err(e) => {
-                            *unresolved_fill = true;
-                            if prev.is_some() {
-                                return Err(e);
-                            }
-                        }
-                    }
-                }
-                AsmSectionItem::Rept { count, items } => {
-                    let resolve = |t: &str| -> Option<i64> {
-                        if t.bytes().all(|c| c.is_ascii_digit()) {
-                            return None;
-                        }
-                        map.get(numeric_label_digits(t).unwrap_or(t))
-                            .map(|(_, off)| *off)
-                            .or_else(|| prev.and_then(|p| p.offset(t)))
-                            .or_else(|| prev.and_then(|p| p.symbol(t)))
-                    };
-                    let n = match eval_fill_count_with(count, at, const_of, &resolve) {
-                        Some(n) => n,
-                        None => {
-                            *unresolved_fill = true;
-                            if prev.is_some() {
-                                return Err(alloc::format!(
-                                    "inline asm: `.rept` count `{count}` is not constant"
-                                ));
-                            }
-                            0
-                        }
-                    };
-                    // Padding before an instruction depends on the offset the
-                    // iteration starts at, so the body is measured per
-                    // repetition where it can pad at all.
-                    if items
-                        .iter()
-                        .any(|it| matches!(it, AsmSectionItem::CodeBytes { .. }))
-                        && align_is_p2
-                        && exec
-                    {
-                        for _ in 0..n.max(0) {
-                            for it in items {
-                                if matches!(it, AsmSectionItem::CodeBytes { .. }) {
-                                    at += insn_align_gap(at, state, exec, align_is_p2);
+                        let n = match eval_fill_count_with(count, at, const_of, &resolve) {
+                            Some(n) => n,
+                            None => {
+                                *unresolved_fill = true;
+                                if prev.is_some() {
+                                    return Err(alloc::format!(
+                                        "inline asm: fill count `{count}` is not a constant expression"
+                                    ));
                                 }
-                                at += rept_item_len(it, const_of)?;
-                                state = step_map_state(it, state, exec);
+                                0
+                            }
+                        };
+                        at += n.max(0) * *unit as i64;
+                    }
+                    AsmSectionItem::Bytes(bs) => at += bs.len() as i64,
+                    AsmSectionItem::CodeBytes { bytes, short, .. } => {
+                        at += match short {
+                            None => bytes.len() as i64,
+                            Some(s) => {
+                                sites.push(AsmRelaxSite { site: (bi, ii), at });
+                                if long.contains(&(bi, ii)) {
+                                    bytes.len() as i64
+                                } else {
+                                    s.bytes.len() as i64
+                                }
+                            }
+                        };
+                    }
+                    AsmSectionItem::Code(text) => {
+                        return Err(alloc::format!(
+                            "inline asm: replacement instruction `{text}` in a named section is not \
+                             assembled for this target"
+                        ));
+                    }
+                    AsmSectionItem::Align { spec, max, .. } => {
+                        at += align_gap(at, spec.bytes(&|_| None)? as i64, *max);
+                    }
+                    AsmSectionItem::Org(n, _) => at = at.max(*n as i64),
+                    AsmSectionItem::OrgLabel { label, addend, .. } => {
+                        let digits = numeric_label_digits(label).unwrap_or(label);
+                        let base = map
+                            .get(digits)
+                            .filter(|(sk, _)| *sk == key)
+                            .map(|(_, o)| *o)
+                            .ok_or_else(|| {
+                                alloc::format!(
+                                    "inline asm: `.org` label `{label}` is not defined above"
+                                )
+                            })?;
+                        let add =
+                            eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(|| {
+                                alloc::string::String::from(
+                                    "inline asm: non-constant `.org` addend",
+                                )
+                            })?;
+                        at = (base + add).max(at);
+                    }
+                    AsmSectionItem::OrgExpr(expr, _) => {
+                        // A target referencing labels of a later subsection (an
+                        // `.org` padding a sequence to its replacement's length)
+                        // resolves in round two, like a fill count.
+                        let resolve = |t: &str| -> Option<AsmExprLeaf> {
+                            let loc = |k: &str, off: i64| {
+                                AsmExprLeaf::Loc(AsmExprTerm {
+                                    space: Some((
+                                        AsmSpace::Section(alloc::string::String::from(k)),
+                                        off,
+                                    )),
+                                    target: AsmSectionTarget::Symbol(alloc::string::String::from(
+                                        t,
+                                    )),
+                                })
+                            };
+                            map.get(numeric_label_digits(t).unwrap_or(t))
+                                .map(|(k, off)| loc(k, *off))
+                                .or_else(|| {
+                                    let p = prev?;
+                                    Some(loc(p.section(t)?, p.offset(t)?))
+                                })
+                                .or_else(|| prev.and_then(|p| p.symbol(t).map(AsmExprLeaf::Abs)))
+                        };
+                        match eval_org_target(expr, &key, at, &resolve, const_of) {
+                            Ok(target) => at = target.max(at),
+                            Err(e) => {
+                                *unresolved_fill = true;
+                                if prev.is_some() {
+                                    return Err(e);
+                                }
                             }
                         }
-                    } else {
-                        let mut unit_len = 0i64;
-                        for it in items {
-                            unit_len += rept_item_len(it, const_of)?;
-                        }
-                        at += n.max(0) * unit_len;
-                        if n > 0 {
-                            state = step_map_state(item, state, exec);
+                    }
+                    AsmSectionItem::Rept { count, items } => {
+                        let resolve = |t: &str| -> Option<i64> {
+                            if t.bytes().all(|c| c.is_ascii_digit()) {
+                                return None;
+                            }
+                            map.get(numeric_label_digits(t).unwrap_or(t))
+                                .map(|(_, off)| *off)
+                                .or_else(|| prev.and_then(|p| p.offset(t)))
+                                .or_else(|| prev.and_then(|p| p.symbol(t)))
+                        };
+                        let n = match eval_fill_count_with(count, at, const_of, &resolve) {
+                            Some(n) => n,
+                            None => {
+                                *unresolved_fill = true;
+                                if prev.is_some() {
+                                    return Err(alloc::format!(
+                                        "inline asm: `.rept` count `{count}` is not constant"
+                                    ));
+                                }
+                                0
+                            }
+                        };
+                        // Padding before an instruction depends on the offset the
+                        // iteration starts at, so the body is measured per
+                        // repetition where it can pad at all.
+                        if items
+                            .iter()
+                            .any(|it| matches!(it, AsmSectionItem::CodeBytes { .. }))
+                            && align_is_p2
+                            && exec
+                        {
+                            for _ in 0..n.max(0) {
+                                for it in items {
+                                    if matches!(it, AsmSectionItem::CodeBytes { .. }) {
+                                        at += insn_align_gap(at, state, exec, align_is_p2);
+                                    }
+                                    at += rept_item_len(it, const_of)?;
+                                    state = step_map_state(it, state, exec);
+                                }
+                            }
+                        } else {
+                            let mut unit_len = 0i64;
+                            for it in items {
+                                unit_len += rept_item_len(it, const_of)?;
+                            }
+                            at += n.max(0) * unit_len;
+                            if n > 0 {
+                                state = step_map_state(item, state, exec);
+                            }
                         }
                     }
                 }
-            }
-            if !matches!(item, AsmSectionItem::Rept { .. }) {
-                state = step_map_state(item, state, exec);
-            }
+                if !matches!(item, AsmSectionItem::Rept { .. }) {
+                    state = step_map_state(item, state, exec);
+                }
+                Ok(())
+            };
+            measure_item().map_err(|text| AsmErrors::at(li.line, text))?;
         }
         lens.insert(key.clone(), at);
         states.insert(key, state);
@@ -1357,7 +1374,7 @@ fn measure_round_inner(
     // offsets that round measures from. It is reported once the layout has
     // settled, or straight away when nothing is pending.
     let mut set_err = None;
-    for (name, expr, key, at) in &sets {
+    for (name, expr, key, at, line) in &sets {
         match eval_section_set_expr(
             name, expr, key, *at, &map, &syms, &aliases, &sections, const_of,
         ) {
@@ -1377,7 +1394,7 @@ fn measure_round_inner(
                 map.remove(name);
                 syms.remove(name);
             }
-            Err(e) => set_err = set_err.or(Some(e)),
+            Err(e) => set_err = set_err.or(Some(AsmErrors::at(*line, e))),
         }
     }
     if let Some(e) = set_err
@@ -1426,7 +1443,7 @@ pub(crate) fn materialize_asm_sections(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     align_is_p2: bool,
     sink: &mut AsmSectionSink,
-) -> Result<alloc::vec::Vec<MaterializedLabel>, alloc::string::String> {
+) -> Result<alloc::vec::Vec<MaterializedLabel>, AsmErrors> {
     let (const_of, operand_sym) = (operands.const_of, operands.symbol_of);
     // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
     // the same digits recur across every expansion of a macro that emits a
@@ -1437,11 +1454,11 @@ pub(crate) fn materialize_asm_sections(
     let uniq = next_asm_instance();
     let mut num_unique: alloc::collections::BTreeMap<&str, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    for name in blocks
+    for (line, name) in blocks
         .iter()
         .flat_map(|b| &b.items)
-        .filter_map(|it| match it {
-            AsmSectionItem::Label(n) if is_numeric_label(n) => Some(n.as_str()),
+        .filter_map(|it| match &it.item {
+            AsmSectionItem::Label(n) if is_numeric_label(n) => Some((it.line, n.as_str())),
             _ => None,
         })
     {
@@ -1449,8 +1466,11 @@ pub(crate) fn materialize_asm_sections(
             .insert(name, alloc::format!("{ASMSEC_LABEL_PREFIX}{uniq}_{name}"))
             .is_some()
         {
-            return Err(alloc::format!(
-                "inline asm: numeric label `{name}` defined twice in one asm instance"
+            return Err(AsmErrors::at(
+                line,
+                alloc::format!(
+                    "inline asm: numeric label `{name}` defined twice in one asm instance"
+                ),
             ));
         }
     }
@@ -1475,6 +1495,7 @@ pub(crate) fn materialize_asm_sections(
     // first touch. Pending entries never outlive a call, so this is also
     // the exact set the settle pass below has to inspect.
     let mut touched: alloc::vec::Vec<(usize, usize)> = alloc::vec::Vec::new();
+    let mut errors = alloc::vec::Vec::new();
     for &bi in &subsection_order(blocks) {
         let b = &blocks[bi];
         let sec_idx = sink.get_or_insert(b);
@@ -1504,585 +1525,904 @@ pub(crate) fn materialize_asm_sections(
         let counted = published[sec_idx];
         let block_key = section_key(b);
         let sec = sections.at_mut(sec_idx);
-        for (ii, item) in b.items.iter().enumerate() {
-            // An expression-valued alignment takes the byte count the measure
-            // pass settled where the directive stands, so the gap laid down
-            // here is the gap the offsets were measured under.
-            let resolved;
-            let item = match item {
-                AsmSectionItem::Align {
-                    spec: AlignSpec::Expr { text, .. },
-                    fill,
-                    max,
-                    nops,
-                } => {
-                    let n = measured.align_of((bi, ii)).ok_or_else(|| {
-                        alloc::format!("inline asm: alignment `{text}` was not measured")
-                    })?;
-                    resolved = AsmSectionItem::Align {
+        for (ii, li) in b.items.iter().enumerate() {
+            // A bad item is reported and the layout goes on, with the items
+            // after it at the offsets the measure gave them.
+            let mut line = li.line;
+            let mut lay_item = || -> Result<(), alloc::string::String> {
+                let item = &li.item;
+                // An expression-valued alignment takes the byte count the measure
+                // pass settled where the directive stands, so the gap laid down
+                // here is the gap the offsets were measured under.
+                let resolved;
+                let item = match item {
+                    AsmSectionItem::Align {
+                        spec: AlignSpec::Expr { text, .. },
+                        fill,
+                        max,
+                        nops,
+                    } => {
+                        let n = measured.align_of((bi, ii)).ok_or_else(|| {
+                            alloc::format!("inline asm: alignment `{text}` was not measured")
+                        })?;
+                        resolved = AsmSectionItem::Align {
+                            spec: AlignSpec::Bytes(n),
+                            fill: *fill,
+                            max: *max,
+                            nops: *nops,
+                        };
+                        &resolved
+                    }
+                    other => other,
+                };
+                if matches!(item, AsmSectionItem::CodeBytes { .. }) {
+                    let pad = insn_align_gap(
+                        sec.bytes.len() as i64,
+                        sec.map_state,
+                        b.flags.contains('x'),
+                        align_is_p2,
+                    ) as usize;
+                    if pad > 0 {
+                        sec.map.content(sec.bytes.len(), pad, MapClass::Data);
+                        sec.bytes.resize(sec.bytes.len() + pad, 0);
+                    }
+                }
+                let map_at = sec.bytes.len();
+                match item {
+                    // An alignment of one moves nothing, and GNU as builds no
+                    // frag for it: no padding, no section alignment, no run.
+                    AsmSectionItem::Align {
                         spec: AlignSpec::Bytes(n),
-                        fill: *fill,
-                        max: *max,
-                        nops: *nops,
-                    };
-                    &resolved
-                }
-                other => other,
-            };
-            if matches!(item, AsmSectionItem::CodeBytes { .. }) {
-                let pad = insn_align_gap(
-                    sec.bytes.len() as i64,
-                    sec.map_state,
-                    b.flags.contains('x'),
-                    align_is_p2,
-                ) as usize;
-                if pad > 0 {
-                    sec.map.content(sec.bytes.len(), pad, MapClass::Data);
-                    sec.bytes.resize(sec.bytes.len() + pad, 0);
-                }
-            }
-            let map_at = sec.bytes.len();
-            match item {
-                // An alignment of one moves nothing, and GNU as builds no
-                // frag for it: no padding, no section alignment, no run.
-                AsmSectionItem::Align {
-                    spec: AlignSpec::Bytes(n),
-                    ..
-                } if *n <= 1 => {}
-                AsmSectionItem::Align {
-                    spec,
-                    fill,
-                    max,
-                    nops,
-                } => {
-                    let n = spec.bytes(&|_| None)?;
-                    let gap = align_gap(sec.bytes.len() as i64, n as i64, None) as usize;
-                    // GNU as records the requested alignment on the section
-                    // even where a max skip drops the padding.
-                    sec.align = sec.align.max(n);
-                    let exec = b.flags.contains('x');
-                    if max.is_none_or(|m| gap <= m as usize) {
-                        let (lead, class) = push_align_fill(
-                            &mut sec.bytes,
-                            gap,
-                            *fill,
-                            exec,
-                            *nops,
-                            sec.after_insn,
-                        )?;
-                        if lead > 0 {
-                            sec.map.align(map_at, MapClass::Data);
-                        }
-                        sec.map.align(map_at + lead, class);
-                    }
-                }
-                AsmSectionItem::OrgLabel {
-                    label,
-                    addend,
-                    fill,
-                } => {
-                    // Resolve the label's offset within this section (defined
-                    // above), then pad to that plus the constant addend.
-                    let lname = numeric_label_digits(label)
-                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
-                        .unwrap_or(label);
-                    let base = sec
-                        .labels
-                        .iter()
-                        .find(|l| l.name == lname && l.offset != PENDING_LABEL)
-                        .map(|l| l.offset)
-                        .ok_or_else(|| {
-                            alloc::format!(
-                                "inline asm: `.org` label `{label}` is not defined above"
-                            )
-                        })?;
-                    let add =
-                        eval_const_expr_ops(addend, &|idx| const_of(idx)).ok_or_else(|| {
-                            alloc::string::String::from("inline asm: non-constant `.org` addend")
-                        })?;
-                    let target = base as i64 + add;
-                    if target < sec.bytes.len() as i64 {
-                        return Err(alloc::string::String::from(
-                            "inline asm: `.org` moves backwards",
-                        ));
-                    }
-                    sec.bytes.resize(target as usize, *fill);
-                }
-                AsmSectionItem::Org(n, fill) => {
-                    if (*n as usize) < sec.bytes.len() {
-                        return Err(alloc::string::String::from(
-                            "inline asm: `.org` moves backwards",
-                        ));
-                    }
-                    sec.bytes.resize(*n as usize, *fill);
-                }
-                AsmSectionItem::OrgExpr(expr, fill) => {
-                    let key = section_key(b);
-                    let here = sec.bytes.len() as i64;
-                    let resolve = |t: &str| {
-                        section_expr_leaf(
-                            t,
-                            &key,
-                            here,
-                            &measured,
-                            sink_labels,
-                            &num_unique,
-                            label_off,
-                        )
-                    };
-                    let target = eval_org_target(expr, &key, here, &resolve, const_of)?;
-                    if target < here {
-                        return Err(alloc::string::String::from(
-                            "inline asm: `.org` moves backwards",
-                        ));
-                    }
-                    sec.bytes.resize(target as usize, *fill);
-                }
-                AsmSectionItem::Rept { count, items } => {
-                    let n = eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
-                        if t.bytes().all(|c| c.is_ascii_digit()) {
-                            return None;
-                        }
-                        measured.offset(t).or_else(|| measured.symbol(t))
-                    })
-                    .ok_or_else(|| {
-                        alloc::format!("inline asm: `.rept` count `{count}` is not constant")
-                    })?;
-                    for _ in 0..n.max(0) {
-                        for it in items {
-                            if matches!(it, AsmSectionItem::CodeBytes { .. }) {
-                                let pad = insn_align_gap(
-                                    sec.bytes.len() as i64,
-                                    sec.map_state,
-                                    b.flags.contains('x'),
-                                    align_is_p2,
-                                ) as usize;
-                                if pad > 0 {
-                                    sec.map.content(sec.bytes.len(), pad, MapClass::Data);
-                                    sec.bytes.resize(sec.bytes.len() + pad, 0);
-                                }
+                        ..
+                    } if *n <= 1 => {}
+                    AsmSectionItem::Align {
+                        spec,
+                        fill,
+                        max,
+                        nops,
+                    } => {
+                        let n = spec.bytes(&|_| None)?;
+                        let gap = align_gap(sec.bytes.len() as i64, n as i64, None) as usize;
+                        // GNU as records the requested alignment on the section
+                        // even where a max skip drops the padding.
+                        sec.align = sec.align.max(n);
+                        let exec = b.flags.contains('x');
+                        if max.is_none_or(|m| gap <= m as usize) {
+                            let (lead, class) = push_align_fill(
+                                &mut sec.bytes,
+                                gap,
+                                *fill,
+                                exec,
+                                *nops,
+                                sec.after_insn,
+                            )?;
+                            if lead > 0 {
+                                sec.map.align(map_at, MapClass::Data);
                             }
-                            let rept_at = sec.bytes.len();
-                            match it {
-                                AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
-                                AsmSectionItem::CodeBytes { bytes, relocs, .. }
-                                    if relocs.is_empty() =>
-                                {
-                                    sec.bytes.extend_from_slice(bytes);
+                            sec.map.align(map_at + lead, class);
+                        }
+                    }
+                    AsmSectionItem::OrgLabel {
+                        label,
+                        addend,
+                        fill,
+                    } => {
+                        // Resolve the label's offset within this section (defined
+                        // above), then pad to that plus the constant addend.
+                        let lname = numeric_label_digits(label)
+                            .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                            .unwrap_or(label);
+                        let base = sec
+                            .labels
+                            .iter()
+                            .find(|l| l.name == lname && l.offset != PENDING_LABEL)
+                            .map(|l| l.offset)
+                            .ok_or_else(|| {
+                                alloc::format!(
+                                    "inline asm: `.org` label `{label}` is not defined above"
+                                )
+                            })?;
+                        let add =
+                            eval_const_expr_ops(addend, &|idx| const_of(idx)).ok_or_else(|| {
+                                alloc::string::String::from(
+                                    "inline asm: non-constant `.org` addend",
+                                )
+                            })?;
+                        let target = base as i64 + add;
+                        if target < sec.bytes.len() as i64 {
+                            return Err(alloc::string::String::from(
+                                "inline asm: `.org` moves backwards",
+                            ));
+                        }
+                        sec.bytes.resize(target as usize, *fill);
+                    }
+                    AsmSectionItem::Org(n, fill) => {
+                        if (*n as usize) < sec.bytes.len() {
+                            return Err(alloc::string::String::from(
+                                "inline asm: `.org` moves backwards",
+                            ));
+                        }
+                        sec.bytes.resize(*n as usize, *fill);
+                    }
+                    AsmSectionItem::OrgExpr(expr, fill) => {
+                        let key = section_key(b);
+                        let here = sec.bytes.len() as i64;
+                        let resolve = |t: &str| {
+                            section_expr_leaf(
+                                t,
+                                &key,
+                                here,
+                                &measured,
+                                sink_labels,
+                                &num_unique,
+                                label_off,
+                            )
+                        };
+                        let target = eval_org_target(expr, &key, here, &resolve, const_of)?;
+                        if target < here {
+                            return Err(alloc::string::String::from(
+                                "inline asm: `.org` moves backwards",
+                            ));
+                        }
+                        sec.bytes.resize(target as usize, *fill);
+                    }
+                    AsmSectionItem::Rept { count, items } => {
+                        let n =
+                            eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
+                                if t.bytes().all(|c| c.is_ascii_digit()) {
+                                    return None;
                                 }
-                                AsmSectionItem::Data { width, values } => {
-                                    for v in values {
-                                        let AsmSectionValue::Const(c) = v else {
-                                            return Err(alloc::string::String::from(
-                                                "inline asm: unsupported item inside `.rept`",
-                                            ));
-                                        };
-                                        push_le(&mut sec.bytes, *c, *width as usize);
+                                measured.offset(t).or_else(|| measured.symbol(t))
+                            })
+                            .ok_or_else(|| {
+                                alloc::format!(
+                                    "inline asm: `.rept` count `{count}` is not constant"
+                                )
+                            })?;
+                        for _ in 0..n.max(0) {
+                            for it in items {
+                                if matches!(it, AsmSectionItem::CodeBytes { .. }) {
+                                    let pad = insn_align_gap(
+                                        sec.bytes.len() as i64,
+                                        sec.map_state,
+                                        b.flags.contains('x'),
+                                        align_is_p2,
+                                    ) as usize;
+                                    if pad > 0 {
+                                        sec.map.content(sec.bytes.len(), pad, MapClass::Data);
+                                        sec.bytes.resize(sec.bytes.len() + pad, 0);
                                     }
                                 }
-                                AsmSectionItem::Fill { count, unit, value } => {
-                                    let n = eval_fill_count(count, const_of)?;
-                                    push_fill(&mut sec.bytes, n, *unit, *value);
-                                }
-                                _ => {
-                                    return Err(alloc::string::String::from(
-                                        "inline asm: unsupported item inside `.rept`",
-                                    ));
-                                }
-                            }
-                            let laid = sec.bytes.len() - rept_at;
-                            sec.map.content(
-                                rept_at,
-                                laid,
+                                let rept_at = sec.bytes.len();
                                 match it {
-                                    AsmSectionItem::CodeBytes { .. } => MapClass::Code,
-                                    _ => MapClass::Data,
-                                },
-                            );
-                            sec.map_state =
-                                step_map_state(it, sec.map_state, b.flags.contains('x'));
+                                    AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
+                                    AsmSectionItem::CodeBytes { bytes, relocs, .. }
+                                        if relocs.is_empty() =>
+                                    {
+                                        sec.bytes.extend_from_slice(bytes);
+                                    }
+                                    AsmSectionItem::Data { width, values } => {
+                                        for v in values {
+                                            let AsmSectionValue::Const(c) = v else {
+                                                return Err(alloc::string::String::from(
+                                                    "inline asm: unsupported item inside `.rept`",
+                                                ));
+                                            };
+                                            push_le(&mut sec.bytes, *c, *width as usize);
+                                        }
+                                    }
+                                    AsmSectionItem::Fill { count, unit, value } => {
+                                        let n = eval_fill_count(count, const_of)?;
+                                        push_fill(&mut sec.bytes, n, *unit, *value);
+                                    }
+                                    _ => {
+                                        return Err(alloc::string::String::from(
+                                            "inline asm: unsupported item inside `.rept`",
+                                        ));
+                                    }
+                                }
+                                let laid = sec.bytes.len() - rept_at;
+                                sec.map.content(
+                                    rept_at,
+                                    laid,
+                                    match it {
+                                        AsmSectionItem::CodeBytes { .. } => MapClass::Code,
+                                        _ => MapClass::Data,
+                                    },
+                                );
+                                sec.map_state =
+                                    step_map_state(it, sec.map_state, b.flags.contains('x'));
+                            }
                         }
                     }
-                }
-                AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
-                AsmSectionItem::Fill { count, unit, value } => {
-                    // The count may reference section labels; the measured
-                    // offsets are final here.
-                    let n = eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
-                        if t.bytes().all(|c| c.is_ascii_digit()) {
-                            return None;
+                    AsmSectionItem::Bytes(bs) => sec.bytes.extend_from_slice(bs),
+                    AsmSectionItem::Fill { count, unit, value } => {
+                        // The count may reference section labels; the measured
+                        // offsets are final here.
+                        let n =
+                            eval_fill_count_with(count, sec.bytes.len() as i64, const_of, &|t| {
+                                if t.bytes().all(|c| c.is_ascii_digit()) {
+                                    return None;
+                                }
+                                measured.offset(t).or_else(|| measured.symbol(t))
+                            })
+                            .ok_or_else(|| {
+                                alloc::format!(
+                                    "inline asm: fill count `{count}` is not a constant expression"
+                                )
+                            })?;
+                        push_fill(&mut sec.bytes, n.max(0), *unit, *value);
+                    }
+                    AsmSectionItem::Label(name) => {
+                        // A numeric label carries its per-instance-unique symbol.
+                        let orig = name.clone();
+                        let name = num_unique
+                            .get(name.as_str())
+                            .map(alloc::string::String::as_str)
+                            .unwrap_or(name);
+                        let at = sec.bytes.len() as u32;
+                        // Only this call's entries can be pending; a definition
+                        // an earlier call made in this section is a duplicate,
+                        // which the label index answers without a walk.
+                        match sec.labels[counted..].iter_mut().find(|l| l.name == *name) {
+                            // A pending `.globl` entry is the definition site.
+                            Some(l) if l.offset == PENDING_LABEL => l.offset = at,
+                            Some(_) => {
+                                return Err(alloc::format!(
+                                    "inline asm: duplicate label `{name}` in a named section"
+                                ));
+                            }
+                            None if sink_labels
+                                .label(name)
+                                .is_some_and(|(k, _)| *k == block_key) =>
+                            {
+                                return Err(alloc::format!(
+                                    "inline asm: duplicate label `{name}` in a named section"
+                                ));
+                            }
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: alloc::string::String::from(name),
+                                offset: at,
+                                global: false,
+                                weak: false,
+                                sym_type: AsmSymType::NoType,
+                                size: None,
+                                absolute: None,
+                            }),
                         }
-                        measured.offset(t).or_else(|| measured.symbol(t))
-                    })
-                    .ok_or_else(|| {
-                        alloc::format!(
-                            "inline asm: fill count `{count}` is not a constant expression"
-                        )
-                    })?;
-                    push_fill(&mut sec.bytes, n.max(0), *unit, *value);
-                }
-                AsmSectionItem::Label(name) => {
-                    // A numeric label carries its per-instance-unique symbol.
-                    let orig = name.clone();
-                    let name = num_unique
-                        .get(name.as_str())
-                        .map(alloc::string::String::as_str)
-                        .unwrap_or(name);
-                    let at = sec.bytes.len() as u32;
-                    // Only this call's entries can be pending; a definition
-                    // an earlier call made in this section is a duplicate,
-                    // which the label index answers without a walk.
-                    match sec.labels[counted..].iter_mut().find(|l| l.name == *name) {
-                        // A pending `.globl` entry is the definition site.
-                        Some(l) if l.offset == PENDING_LABEL => l.offset = at,
-                        Some(_) => {
-                            return Err(alloc::format!(
-                                "inline asm: duplicate label `{name}` in a named section"
-                            ));
-                        }
-                        None if sink_labels
-                            .label(name)
-                            .is_some_and(|(k, _)| *k == block_key) =>
-                        {
-                            return Err(alloc::format!(
-                                "inline asm: duplicate label `{name}` in a named section"
-                            ));
-                        }
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: alloc::string::String::from(name),
+                        defined.push(MaterializedLabel {
+                            name: orig,
+                            section_index: sec_idx,
                             offset: at,
-                            global: false,
-                            weak: false,
-                            sym_type: AsmSymType::NoType,
-                            size: None,
-                            absolute: None,
-                        }),
-                    }
-                    defined.push(MaterializedLabel {
-                        name: orig,
-                        section_index: sec_idx,
-                        offset: at,
-                    });
-                }
-                AsmSectionItem::CondDiag(arms) => {
-                    let key = section_key(b);
-                    let here = sec.bytes.len() as i64;
-                    let resolve = |t: &str| {
-                        section_expr_leaf(
-                            t,
-                            &key,
-                            here,
-                            &measured,
-                            sink_labels,
-                            &num_unique,
-                            label_off,
-                        )
-                    };
-                    for arm in arms {
-                        let taken = if arm.tok.is_empty() {
-                            true
-                        } else {
-                            let ctx = AsmExprCtx {
-                                resolve: &resolve,
-                                const_of,
-                                lax_div: false,
-                            };
-                            let v = eval_asm_value(&arm.cond, &ctx)
-                                .ok()
-                                .and_then(|v| v.to_abs())
-                                .ok_or_else(|| {
-                                    alloc::format!(
-                                        "inline asm: non-constant `{}` condition `{}`",
-                                        arm.tok,
-                                        arm.cond
-                                    )
-                                })?;
-                            gas_if_relation(&arm.tok, v)?
-                        };
-                        if taken {
-                            if let Some(msg) = &arm.error {
-                                return Err(alloc::format!("inline asm: `.error` {msg}"));
-                            }
-                            break;
-                        }
-                    }
-                }
-                AsmSectionItem::LiteralPool(entries) => {
-                    let (offs, end) = literal_pool_layout(entries, sec.bytes.len() as i64);
-                    sec.bytes.resize(end as usize, 0);
-                    for (e, &off) in entries.iter().zip(&offs) {
-                        sec.align = sec.align.max(e.size as u32);
-                        sec.labels.push(AsmSectionLabel {
-                            name: e.label.clone(),
-                            offset: off as u32,
-                            global: false,
-                            weak: false,
-                            sym_type: AsmSymType::NoType,
-                            size: None,
-                            absolute: None,
                         });
-                        match &e.value {
-                            AsmPoolValue::Const(v) => {
-                                let at = off as usize;
-                                let n = e.size as usize;
-                                sec.bytes[at..at + n].copy_from_slice(&v.to_le_bytes()[..n]);
-                            }
-                            AsmPoolValue::Sym { name, addend } => {
-                                sec.relocs.push(AsmSectionReloc {
-                                    offset: off as u32,
-                                    width: e.size,
-                                    kind: AsmRelocKind::Data,
-                                    pcrel: false,
-                                    branch: false,
-                                    signed: false,
-                                    target: AsmSectionTarget::Symbol(name.clone()),
-                                    addend: *addend,
-                                })
-                            }
-                        }
                     }
-                    sec.after_insn = false;
-                }
-                // `.weak` binding applies to whatever definition the name has
-                // (a section label here, or a symbol defined elsewhere in the
-                // unit); resolved against the sink once all blocks are laid
-                // out. `.set name, sym` is a unit-level alias; the file-scope
-                // parse records both, the operand emit paths reject them.
-                AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
-                AsmSectionItem::Common { name, size, align } => {
-                    commons.push((name.clone(), *size, *align))
-                }
-                // Visibility is carried by name to the object writer, which
-                // sets `st_other` wherever the symbol is emitted.
-                AsmSectionItem::Visibility { .. } => {}
-                // Unit-level records: the file-scope parse collects them.
-                AsmSectionItem::File(_) | AsmSectionItem::Ident(_) => {}
-                // The rule takes effect at the location counter the directive
-                // was written at, which is this section's current length.
-                AsmSectionItem::Cfi(op) => sink_cfi.push(cfi::CfiRecord {
-                    key: section_key(b),
-                    offset: sec.bytes.len() as u32,
-                    op: op.clone(),
-                }),
-                // `.reloc`: the offset is section-relative and independent of
-                // the location counter, and no field is deposited.
-                AsmSectionItem::Reloc {
-                    offset,
-                    rtype,
-                    target,
-                    addend,
-                } => sec.relocs.push(AsmSectionReloc {
-                    offset: *offset,
-                    width: 0,
-                    kind: AsmRelocKind::Explicit(*rtype),
-                    pcrel: false,
-                    branch: false,
-                    signed: false,
-                    target: if target.is_empty() {
-                        AsmSectionTarget::OwnSection(0)
-                    } else {
-                        AsmSectionTarget::Symbol(target.clone())
-                    },
-                    addend: *addend,
-                }),
-                // `.set name, sym` is a unit-level alias; a `.set` over
-                // section-local locations was valued during measurement.
-                AsmSectionItem::SymSet { .. } => {}
-                AsmSectionItem::SetExpr { .. } => {}
-                // `.set name, <constant>` defines an absolute symbol, as in
-                // GNU as. A later assignment to the same name wins.
-                AsmSectionItem::AbsSet { name, value } => {
-                    match sec.labels.iter_mut().find(|l| l.name == *name) {
-                        Some(l) => {
-                            l.offset = 0;
-                            l.absolute = Some(*value);
-                        }
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: name.clone(),
-                            absolute: Some(*value),
-                            ..Default::default()
-                        }),
-                    }
-                }
-                // A section label is local unless `.globl` marked it; record a
-                // pending entry so the definition below keeps that binding.
-                AsmSectionItem::Local(name) => {
-                    match sec
-                        .labels
-                        .iter_mut()
-                        .enumerate()
-                        .find(|(_, l)| l.name == *name)
-                    {
-                        Some((i, l)) => {
-                            rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
-                                l.global = false
-                            })
-                        }
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: name.clone(),
-                            offset: PENDING_LABEL,
-                            global: false,
-                            weak: false,
-                            sym_type: AsmSymType::NoType,
-                            size: None,
-                            absolute: None,
-                        }),
-                    }
-                }
-                AsmSectionItem::Global(name) => {
-                    global_names.push(name.clone());
-                    match sec
-                        .labels
-                        .iter_mut()
-                        .enumerate()
-                        .find(|(_, l)| l.name == *name)
-                    {
-                        // `.globl` may precede its label; record the pending name
-                        // as a zero-length forward entry the definition fills in.
-                        Some((i, l)) => {
-                            rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
-                                l.global = true
-                            })
-                        }
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: name.clone(),
-                            offset: PENDING_LABEL,
-                            global: true,
-                            weak: false,
-                            sym_type: AsmSymType::NoType,
-                            size: None,
-                            absolute: None,
-                        }),
-                    }
-                }
-                AsmSectionItem::Type { name, sym_type } => {
-                    let lname = numeric_label_digits(name)
-                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
-                        .unwrap_or(name);
-                    match sec.labels.iter_mut().find(|l| l.name == *lname) {
-                        // `.type` may precede its label (as `.globl` may): record
-                        // it on a pending forward entry the definition fills in.
-                        Some(l) => l.sym_type = *sym_type,
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: alloc::string::String::from(lname),
-                            offset: PENDING_LABEL,
-                            global: false,
-                            weak: false,
-                            sym_type: *sym_type,
-                            size: None,
-                            absolute: None,
-                        }),
-                    }
-                }
-                AsmSectionItem::Size { name, expr } => {
-                    // `.` is the offset at the directive; an identifier is a
-                    // section label, a `.set` symbol, or an operand constant.
-                    // The expression must fold to an absolute byte count.
-                    let key = section_key(b);
-                    let cur = sec.bytes.len() as i64;
-                    let resolve = |t: &str| {
-                        section_expr_leaf(
-                            t,
-                            &key,
-                            cur,
-                            &measured,
-                            sink_labels,
-                            &num_unique,
-                            label_off,
-                        )
-                    };
-                    let ctx = AsmExprCtx {
-                        resolve: &resolve,
-                        const_of,
-                        lax_div: false,
-                    };
-                    let val = eval_asm_value(expr, &ctx)
-                        .ok()
-                        .and_then(|v| v.to_abs())
-                        .ok_or_else(|| {
-                            alloc::format!("inline asm: bad `.size` expression `{expr}`")
-                        })?;
-                    if val < 0 {
-                        return Err(alloc::format!(
-                            "inline asm: `.size` expression `{expr}` is negative"
-                        ));
-                    }
-                    let tname = numeric_label_digits(name)
-                        .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
-                        .unwrap_or(name);
-                    // `.size` may precede its label, as `.globl` and `.type`
-                    // may; carry the size on a pending entry until then.
-                    match sec.labels.iter_mut().find(|l| l.name == *tname) {
-                        Some(l) => l.size = Some(val as u64),
-                        None => sec.labels.push(AsmSectionLabel {
-                            name: alloc::string::String::from(tname),
-                            offset: PENDING_LABEL,
-                            global: false,
-                            weak: false,
-                            sym_type: AsmSymType::NoType,
-                            size: Some(val as u64),
-                            absolute: None,
-                        }),
-                    }
-                }
-                AsmSectionItem::Data { width, values } => {
-                    for v in values {
-                        match v {
-                            AsmSectionValue::Const(c) => {
-                                push_le(&mut sec.bytes, *c, *width as usize)
-                            }
-                            AsmSectionValue::OperandConst(idx) => match const_of(*idx) {
-                                Some(c) => sec.bytes.extend_from_slice(
-                                    &(c as u64).to_le_bytes()[..*width as usize],
-                                ),
-                                // An `i`-class operand that is not an integer
-                                // constant names a link-time address, as it
-                                // does in the `%cN - .` form: the field takes
-                                // an absolute relocation against it.
-                                None => {
-                                    let (target, add) = operand_sym(*idx).ok_or_else(|| {
+                    AsmSectionItem::CondDiag(arms) => {
+                        let key = section_key(b);
+                        let here = sec.bytes.len() as i64;
+                        let resolve = |t: &str| {
+                            section_expr_leaf(
+                                t,
+                                &key,
+                                here,
+                                &measured,
+                                sink_labels,
+                                &num_unique,
+                                label_off,
+                            )
+                        };
+                        for arm in arms {
+                            let taken = if arm.tok.is_empty() {
+                                true
+                            } else {
+                                let ctx = AsmExprCtx {
+                                    resolve: &resolve,
+                                    const_of,
+                                    lax_div: false,
+                                };
+                                let v = eval_asm_value(&arm.cond, &ctx)
+                                    .ok()
+                                    .and_then(|v| v.to_abs())
+                                    .ok_or_else(|| {
                                         alloc::format!(
-                                            "inline asm: section data value `%c{idx}` is neither \
-                                             a constant nor a link-time address: the operand is {}",
-                                            (operands.form)(*idx)
+                                            "inline asm: non-constant `{}` condition `{}`",
+                                            arm.tok,
+                                            arm.cond
                                         )
                                     })?;
+                                gas_if_relation(&arm.tok, v)?
+                            };
+                            if taken {
+                                if let Some((at, msg)) = &arm.error {
+                                    line = *at;
+                                    return Err(alloc::format!("inline asm: `.error` {msg}"));
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    AsmSectionItem::LiteralPool(entries) => {
+                        let (offs, end) = literal_pool_layout(entries, sec.bytes.len() as i64);
+                        sec.bytes.resize(end as usize, 0);
+                        for (e, &off) in entries.iter().zip(&offs) {
+                            sec.align = sec.align.max(e.size as u32);
+                            sec.labels.push(AsmSectionLabel {
+                                name: e.label.clone(),
+                                offset: off as u32,
+                                global: false,
+                                weak: false,
+                                sym_type: AsmSymType::NoType,
+                                size: None,
+                                absolute: None,
+                            });
+                            match &e.value {
+                                AsmPoolValue::Const(v) => {
+                                    let at = off as usize;
+                                    let n = e.size as usize;
+                                    sec.bytes[at..at + n].copy_from_slice(&v.to_le_bytes()[..n]);
+                                }
+                                AsmPoolValue::Sym { name, addend } => {
+                                    sec.relocs.push(AsmSectionReloc {
+                                        offset: off as u32,
+                                        width: e.size,
+                                        kind: AsmRelocKind::Data,
+                                        pcrel: false,
+                                        branch: false,
+                                        signed: false,
+                                        target: AsmSectionTarget::Symbol(name.clone()),
+                                        addend: *addend,
+                                    })
+                                }
+                            }
+                        }
+                        sec.after_insn = false;
+                    }
+                    // `.weak` binding applies to whatever definition the name has
+                    // (a section label here, or a symbol defined elsewhere in the
+                    // unit); resolved against the sink once all blocks are laid
+                    // out. `.set name, sym` is a unit-level alias; the file-scope
+                    // parse records both, the operand emit paths reject them.
+                    AsmSectionItem::Weak(name) => weak_names.push(name.clone()),
+                    AsmSectionItem::Common { name, size, align } => {
+                        commons.push((name.clone(), *size, *align))
+                    }
+                    // Visibility is carried by name to the object writer, which
+                    // sets `st_other` wherever the symbol is emitted.
+                    AsmSectionItem::Visibility { .. } => {}
+                    // Unit-level records: the file-scope parse collects them.
+                    AsmSectionItem::File(_) | AsmSectionItem::Ident(_) => {}
+                    // The rule takes effect at the location counter the directive
+                    // was written at, which is this section's current length.
+                    AsmSectionItem::Cfi(op) => sink_cfi.push(cfi::CfiRecord {
+                        key: section_key(b),
+                        offset: sec.bytes.len() as u32,
+                        op: op.clone(),
+                    }),
+                    // `.reloc`: the offset is section-relative and independent of
+                    // the location counter, and no field is deposited.
+                    AsmSectionItem::Reloc {
+                        offset,
+                        rtype,
+                        target,
+                        addend,
+                    } => sec.relocs.push(AsmSectionReloc {
+                        offset: *offset,
+                        width: 0,
+                        kind: AsmRelocKind::Explicit(*rtype),
+                        pcrel: false,
+                        branch: false,
+                        signed: false,
+                        target: if target.is_empty() {
+                            AsmSectionTarget::OwnSection(0)
+                        } else {
+                            AsmSectionTarget::Symbol(target.clone())
+                        },
+                        addend: *addend,
+                    }),
+                    // `.set name, sym` is a unit-level alias; a `.set` over
+                    // section-local locations was valued during measurement.
+                    AsmSectionItem::SymSet { .. } => {}
+                    AsmSectionItem::SetExpr { .. } => {}
+                    // `.set name, <constant>` defines an absolute symbol, as in
+                    // GNU as. A later assignment to the same name wins.
+                    AsmSectionItem::AbsSet { name, value } => {
+                        match sec.labels.iter_mut().find(|l| l.name == *name) {
+                            Some(l) => {
+                                l.offset = 0;
+                                l.absolute = Some(*value);
+                            }
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: name.clone(),
+                                absolute: Some(*value),
+                                ..Default::default()
+                            }),
+                        }
+                    }
+                    // A section label is local unless `.globl` marked it; record a
+                    // pending entry so the definition below keeps that binding.
+                    AsmSectionItem::Local(name) => {
+                        match sec
+                            .labels
+                            .iter_mut()
+                            .enumerate()
+                            .find(|(_, l)| l.name == *name)
+                        {
+                            Some((i, l)) => {
+                                rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
+                                    l.global = false
+                                })
+                            }
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: name.clone(),
+                                offset: PENDING_LABEL,
+                                global: false,
+                                weak: false,
+                                sym_type: AsmSymType::NoType,
+                                size: None,
+                                absolute: None,
+                            }),
+                        }
+                    }
+                    AsmSectionItem::Global(name) => {
+                        global_names.push(name.clone());
+                        match sec
+                            .labels
+                            .iter_mut()
+                            .enumerate()
+                            .find(|(_, l)| l.name == *name)
+                        {
+                            // `.globl` may precede its label; record the pending name
+                            // as a zero-length forward entry the definition fills in.
+                            Some((i, l)) => {
+                                rebind_label(l, i < counted, sink_non_local, sink_weak, |l| {
+                                    l.global = true
+                                })
+                            }
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: name.clone(),
+                                offset: PENDING_LABEL,
+                                global: true,
+                                weak: false,
+                                sym_type: AsmSymType::NoType,
+                                size: None,
+                                absolute: None,
+                            }),
+                        }
+                    }
+                    AsmSectionItem::Type { name, sym_type } => {
+                        let lname = numeric_label_digits(name)
+                            .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                            .unwrap_or(name);
+                        match sec.labels.iter_mut().find(|l| l.name == *lname) {
+                            // `.type` may precede its label (as `.globl` may): record
+                            // it on a pending forward entry the definition fills in.
+                            Some(l) => l.sym_type = *sym_type,
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: alloc::string::String::from(lname),
+                                offset: PENDING_LABEL,
+                                global: false,
+                                weak: false,
+                                sym_type: *sym_type,
+                                size: None,
+                                absolute: None,
+                            }),
+                        }
+                    }
+                    AsmSectionItem::Size { name, expr } => {
+                        // `.` is the offset at the directive; an identifier is a
+                        // section label, a `.set` symbol, or an operand constant.
+                        // The expression must fold to an absolute byte count.
+                        let key = section_key(b);
+                        let cur = sec.bytes.len() as i64;
+                        let resolve = |t: &str| {
+                            section_expr_leaf(
+                                t,
+                                &key,
+                                cur,
+                                &measured,
+                                sink_labels,
+                                &num_unique,
+                                label_off,
+                            )
+                        };
+                        let ctx = AsmExprCtx {
+                            resolve: &resolve,
+                            const_of,
+                            lax_div: false,
+                        };
+                        let val = eval_asm_value(expr, &ctx)
+                            .ok()
+                            .and_then(|v| v.to_abs())
+                            .ok_or_else(|| {
+                                alloc::format!("inline asm: bad `.size` expression `{expr}`")
+                            })?;
+                        if val < 0 {
+                            return Err(alloc::format!(
+                                "inline asm: `.size` expression `{expr}` is negative"
+                            ));
+                        }
+                        let tname = numeric_label_digits(name)
+                            .and_then(|d| num_unique.get(d).map(alloc::string::String::as_str))
+                            .unwrap_or(name);
+                        // `.size` may precede its label, as `.globl` and `.type`
+                        // may; carry the size on a pending entry until then.
+                        match sec.labels.iter_mut().find(|l| l.name == *tname) {
+                            Some(l) => l.size = Some(val as u64),
+                            None => sec.labels.push(AsmSectionLabel {
+                                name: alloc::string::String::from(tname),
+                                offset: PENDING_LABEL,
+                                global: false,
+                                weak: false,
+                                sym_type: AsmSymType::NoType,
+                                size: Some(val as u64),
+                                absolute: None,
+                            }),
+                        }
+                    }
+                    AsmSectionItem::Data { width, values } => {
+                        for v in values {
+                            match v {
+                                AsmSectionValue::Const(c) => {
+                                    push_le(&mut sec.bytes, *c, *width as usize)
+                                }
+                                AsmSectionValue::OperandConst(idx) => match const_of(*idx) {
+                                    Some(c) => sec.bytes.extend_from_slice(
+                                        &(c as u64).to_le_bytes()[..*width as usize],
+                                    ),
+                                    // An `i`-class operand that is not an integer
+                                    // constant names a link-time address, as it
+                                    // does in the `%cN - .` form: the field takes
+                                    // an absolute relocation against it.
+                                    None => {
+                                        let (target, add) = operand_sym(*idx).ok_or_else(|| {
+                                            alloc::format!(
+                                                "inline asm: section data value `%c{idx}` is neither \
+                                                 a constant nor a link-time address: the operand is {}",
+                                                (operands.form)(*idx)
+                                            )
+                                        })?;
+                                        if !matches!(width, 1 | 2 | 4 | 8) {
+                                            return Err(alloc::string::String::from(
+                                                "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
+                                            ));
+                                        }
+                                        sec.relocs.push(AsmSectionReloc {
+                                            offset: sec.bytes.len() as u32,
+                                            width: *width,
+                                            kind: AsmRelocKind::Data,
+                                            pcrel: false,
+                                            branch: false,
+                                            signed: false,
+                                            target,
+                                            addend: add,
+                                        });
+                                        sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                                    }
+                                },
+                                AsmSectionValue::Expr(text) => {
+                                    let text = subst_asm_idents(text, &|t| measured.symbol(t));
+                                    let c = eval_const_expr_ops(&text, &|idx| const_of(idx))
+                                        .ok_or_else(|| {
+                                            alloc::string::String::from(
+                                                "inline asm: non-constant section data value",
+                                            )
+                                        })?;
+                                    push_le(&mut sec.bytes, c as i128, *width as usize);
+                                }
+                                AsmSectionValue::LocExpr(text) => {
+                                    let key = section_key(b);
+                                    let here = sec.bytes.len() as i64;
+                                    let resolve = |t: &str| {
+                                        section_expr_leaf(
+                                            t,
+                                            &key,
+                                            here,
+                                            &measured,
+                                            sink_labels,
+                                            &num_unique,
+                                            label_off,
+                                        )
+                                    };
+                                    let ctx = AsmExprCtx {
+                                        resolve: &resolve,
+                                        const_of,
+                                        lax_div: false,
+                                    };
+                                    let space = AsmSpace::Section(key.clone());
+                                    let v = eval_asm_value(text, &ctx)
+                                        .and_then(|v| resolve_asm_value(v, Some((&space, here))))
+                                        .map_err(|e| alloc::format!("inline asm: `{text}`: {e}"))?;
+                                    match v {
+                                        AsmResolved::Abs(c) => {
+                                            if !value_fits_width(c, *width) {
+                                                return Err(alloc::format!(
+                                                    "inline asm: `{text}` = {c} does not fit a {width}-byte field"
+                                                ));
+                                            }
+                                            push_le(&mut sec.bytes, c as i128, *width as usize);
+                                        }
+                                        AsmResolved::Reloc {
+                                            target,
+                                            addend,
+                                            pcrel,
+                                        } => {
+                                            if !matches!(width, 1 | 2 | 4 | 8) {
+                                                return Err(alloc::string::String::from(
+                                                    "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
+                                                ));
+                                            }
+                                            sec.relocs.push(AsmSectionReloc {
+                                                offset: sec.bytes.len() as u32,
+                                                width: *width,
+                                                kind: AsmRelocKind::Data,
+                                                pcrel,
+                                                branch: false,
+                                                signed: false,
+                                                target,
+                                                addend,
+                                            });
+                                            sec.bytes
+                                                .extend_from_slice(&[0u8; 8][..*width as usize]);
+                                        }
+                                    }
+                                }
+                                // A reference (`sym + 8`, `1b - .`) or a label
+                                // difference (`775f - 774f`) evaluates under the
+                                // location-value rules: a same-space result folds
+                                // (gas folds `a - .` with `a` in this section), a
+                                // symbolic one relocates.
+                                AsmSectionValue::Ref { .. } | AsmSectionValue::LabelDiff { .. } => {
+                                    let key = section_key(b);
+                                    let here = sec.bytes.len() as i64;
+                                    let leaf = |n: &str| -> AsmExprValue {
+                                        match section_expr_leaf(
+                                            n,
+                                            &key,
+                                            here,
+                                            &measured,
+                                            sink_labels,
+                                            &num_unique,
+                                            label_off,
+                                        ) {
+                                            Some(AsmExprLeaf::Abs(c)) => AsmExprValue::abs(c),
+                                            Some(AsmExprLeaf::Loc(t)) => AsmExprValue::from_term(t),
+                                            None => AsmExprValue::from_term(AsmExprTerm {
+                                                space: None,
+                                                target: AsmSectionTarget::Symbol(
+                                                    alloc::string::String::from(n),
+                                                ),
+                                            }),
+                                        }
+                                    };
+                                    let val = match v {
+                                        AsmSectionValue::Ref {
+                                            name,
+                                            pcrel,
+                                            addend,
+                                        } => {
+                                            let add = if addend.is_empty() {
+                                                0
+                                            } else {
+                                                eval_const_expr_ops(addend, &|i| const_of(i))
+                                                    .ok_or_else(|| {
+                                                        alloc::string::String::from(
+                                                            "inline asm: non-constant section reloc addend",
+                                                        )
+                                                    })?
+                                            };
+                                            let mut val = leaf(name)
+                                                .combine(AsmExprValue::abs(add), false)
+                                                .map_err(|e| alloc::format!("inline asm: {e}"))?;
+                                            if *pcrel {
+                                                val =
+                                                    val.combine(leaf("."), true).map_err(|e| {
+                                                        alloc::format!("inline asm: {e}")
+                                                    })?;
+                                            }
+                                            val
+                                        }
+                                        AsmSectionValue::LabelDiff {
+                                            minuend,
+                                            subtrahend,
+                                        } => leaf(minuend)
+                                            .combine(leaf(subtrahend), true)
+                                            .map_err(|e| alloc::format!("inline asm: {e}"))?,
+                                        _ => unreachable!("outer arm admits Ref and LabelDiff"),
+                                    };
+                                    let space = AsmSpace::Section(key.clone());
+                                    match resolve_asm_value(val, Some((&space, here)))
+                                        .map_err(|e| alloc::format!("inline asm: {e}"))?
+                                    {
+                                        AsmResolved::Abs(c) => {
+                                            if !value_fits_width(c, *width) {
+                                                return Err(alloc::format!(
+                                                    "inline asm: value {c} does not fit a {width}-byte field"
+                                                ));
+                                            }
+                                            push_le(&mut sec.bytes, c as i128, *width as usize);
+                                        }
+                                        AsmResolved::Reloc {
+                                            target,
+                                            addend,
+                                            pcrel,
+                                        } => {
+                                            if !matches!(width, 1 | 2 | 4 | 8) {
+                                                return Err(alloc::string::String::from(
+                                                    "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
+                                                ));
+                                            }
+                                            sec.relocs.push(AsmSectionReloc {
+                                                offset: sec.bytes.len() as u32,
+                                                width: *width,
+                                                kind: AsmRelocKind::Data,
+                                                pcrel,
+                                                branch: false,
+                                                signed: false,
+                                                target,
+                                                addend,
+                                            });
+                                            sec.bytes
+                                                .extend_from_slice(&[0u8; 8][..*width as usize]);
+                                        }
+                                    }
+                                }
+                                AsmSectionValue::RelocOp { name, addend, op } => {
+                                    sec.relocs.push(AsmSectionReloc {
+                                        offset: sec.bytes.len() as u32,
+                                        width: *width,
+                                        kind: AsmRelocKind::Op {
+                                            op: *op,
+                                            relax: AsmGotRelax::No,
+                                        },
+                                        pcrel: false,
+                                        branch: false,
+                                        signed: false,
+                                        target: AsmSectionTarget::Symbol(name.clone()),
+                                        addend: *addend,
+                                    });
+                                    sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
+                                }
+                                AsmSectionValue::OperandReloc {
+                                    idx,
+                                    goto,
+                                    addend,
+                                    minus,
+                                } => {
                                     if !matches!(width, 1 | 2 | 4 | 8) {
                                         return Err(alloc::string::String::from(
                                             "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
                                         ));
                                     }
+                                    let (target, base_add) = if *goto {
+                                        let bid = goto_block(*idx).ok_or_else(|| {
+                                            alloc::format!(
+                                                "inline asm: `%l{idx}` names no `asm goto` label"
+                                            )
+                                        })?;
+                                        (AsmSectionTarget::TextBlock(bid), 0)
+                                    } else {
+                                        operand_sym(*idx).ok_or_else(|| {
+                                            alloc::format!(
+                                                "inline asm: operand `%c{idx}` does not name a link-time \
+                                                 address: the operand is {}",
+                                                (operands.form)(*idx)
+                                            )
+                                        })?
+                                    };
+                                    let add = base_add
+                                        + if addend.is_empty() {
+                                            0
+                                        } else {
+                                            eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
+                                                || {
+                                                    alloc::string::String::from(
+                                                        "inline asm: non-constant section reloc addend",
+                                                    )
+                                                },
+                                            )?
+                                        };
+                                    // The operand's address minus a location: PC-relative
+                                    // when the location is in this section, as GNU as has it.
+                                    let key = section_key(b);
+                                    let here = sec.bytes.len() as i64;
+                                    let mut val = AsmExprValue::from_term(AsmExprTerm {
+                                        space: None,
+                                        target,
+                                    })
+                                    .combine(AsmExprValue::abs(add), false)
+                                    .map_err(|e| alloc::format!("inline asm: {e}"))?;
+                                    if let Some(loc) = minus {
+                                        let leaf = match section_expr_leaf(
+                                            loc,
+                                            &key,
+                                            here,
+                                            &measured,
+                                            sink_labels,
+                                            &num_unique,
+                                            label_off,
+                                        ) {
+                                            Some(AsmExprLeaf::Loc(t)) => AsmExprValue::from_term(t),
+                                            _ => {
+                                                return Err(alloc::format!(
+                                                    "inline asm: `{loc}` is no location of the section \
+                                                     being assembled"
+                                                ));
+                                            }
+                                        };
+                                        val = val
+                                            .combine(leaf, true)
+                                            .map_err(|e| alloc::format!("inline asm: {e}"))?;
+                                    }
+                                    let space = AsmSpace::Section(key.clone());
+                                    let AsmResolved::Reloc {
+                                        target,
+                                        addend,
+                                        pcrel,
+                                    } = resolve_asm_value(val, Some((&space, here)))
+                                        .map_err(|e| alloc::format!("inline asm: {e}"))?
+                                    else {
+                                        return Err(alloc::format!(
+                                            "inline asm: operand `%{idx}` folded to a constant"
+                                        ));
+                                    };
                                     sec.relocs.push(AsmSectionReloc {
                                         offset: sec.bytes.len() as u32,
                                         width: *width,
                                         kind: AsmRelocKind::Data,
-                                        pcrel: false,
+                                        pcrel,
                                         branch: false,
                                         signed: false,
                                         target,
-                                        addend: add,
+                                        addend,
                                     });
                                     sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                                 }
-                            },
-                            AsmSectionValue::Expr(text) => {
-                                let text = subst_asm_idents(text, &|t| measured.symbol(t));
-                                let c = eval_const_expr_ops(&text, &|idx| const_of(idx))
-                                    .ok_or_else(|| {
-                                        alloc::string::String::from(
-                                            "inline asm: non-constant section data value",
-                                        )
-                                    })?;
-                                push_le(&mut sec.bytes, c as i128, *width as usize);
                             }
-                            AsmSectionValue::LocExpr(text) => {
-                                let key = section_key(b);
-                                let here = sec.bytes.len() as i64;
+                        }
+                    }
+                    AsmSectionItem::CodeBytes {
+                        bytes,
+                        relocs,
+                        short,
+                    } => {
+                        // A replacement instruction's relocs are at offsets within
+                        // its own bytes; rebase each to the section offset the
+                        // instruction lands at, then append the machine bytes. A
+                        // PC-relative reference to a label of this section
+                        // resolves here -- GNU as emits no relocation for it --
+                        // by patching the instruction field; other targets keep
+                        // their relocation (a numeric label's name rewritten to
+                        // its per-instance symbol).
+                        let base = sec.bytes.len() as u32;
+                        let key = section_key(b);
+                        // A relaxable branch takes the form the measurement
+                        // settled on; anything else has one encoding.
+                        let short = short.as_ref().filter(|_| !measured.long_form((bi, ii)));
+                        let (bytes, relocs) = match short {
+                            Some(s) => (&s.bytes, core::slice::from_ref(&s.reloc)),
+                            None => (bytes, relocs.as_slice()),
+                        };
+                        let mut buf = bytes.clone();
+                        for r in relocs {
+                            let mut r = r.clone();
+                            // An operand expression resolves against the layout
+                            // here: what folds lands in the field, what keeps a
+                            // symbol relocates against it.
+                            // A relaxable branch binds any same-section name the
+                            // link cannot rebind; every other field binds only a
+                            // local one.
+                            let rebindable = match r.kind {
+                                AsmRelocKind::JumpRel => &weak_only,
+                                _ => &non_local,
+                            };
+                            if let AsmSectionTarget::Expr(text) = &r.target {
+                                let place = base as i64 + r.offset as i64;
+                                // `.` in an operand is the instruction's own
+                                // address, which is where this item starts.
                                 let resolve = |t: &str| {
                                     section_expr_leaf(
                                         t,
                                         &key,
-                                        here,
+                                        base as i64,
                                         &measured,
                                         sink_labels,
                                         &num_unique,
@@ -2095,471 +2435,183 @@ pub(crate) fn materialize_asm_sections(
                                     lax_div: false,
                                 };
                                 let space = AsmSpace::Section(key.clone());
-                                let v = eval_asm_value(text, &ctx)
-                                    .and_then(|v| resolve_asm_value(v, Some((&space, here))))
-                                    .map_err(|e| alloc::format!("inline asm: `{text}`: {e}"))?;
-                                match v {
-                                    AsmResolved::Abs(c) => {
-                                        if !value_fits_width(c, *width) {
-                                            return Err(alloc::format!(
-                                                "inline asm: `{text}` = {c} does not fit a {width}-byte field"
-                                            ));
-                                        }
-                                        push_le(&mut sec.bytes, c as i128, *width as usize);
+                                match resolve_asm_field_expr(
+                                    text,
+                                    &ctx,
+                                    &space,
+                                    place,
+                                    r.addend,
+                                    r.pcrel || r.kind.self_relative(),
+                                    rebindable,
+                                )? {
+                                    AsmFieldTarget::Abs(c) => {
+                                        store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
+                                            .map_err(|e| {
+                                                alloc::format!("inline asm: `{text}`: {e}")
+                                            })?;
+                                        continue;
                                     }
-                                    AsmResolved::Reloc {
+                                    AsmFieldTarget::Reloc {
                                         target,
                                         addend,
                                         pcrel,
                                     } => {
-                                        if !matches!(width, 1 | 2 | 4 | 8) {
-                                            return Err(alloc::string::String::from(
-                                                "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
-                                            ));
+                                        r.target = target;
+                                        r.addend = addend;
+                                        // A data field's PC-relativity rides the
+                                        // relocation; an instruction field's is
+                                        // its kind's and stays as encoded.
+                                        if let Some(p) = pcrel
+                                            && matches!(
+                                                r.kind,
+                                                AsmRelocKind::Data | AsmRelocKind::JumpRel
+                                            )
+                                        {
+                                            r.pcrel = p;
                                         }
-                                        sec.relocs.push(AsmSectionReloc {
-                                            offset: sec.bytes.len() as u32,
-                                            width: *width,
-                                            kind: AsmRelocKind::Data,
-                                            pcrel,
-                                            branch: false,
-                                            signed: false,
-                                            target,
-                                            addend,
-                                        });
-                                        sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
                                     }
                                 }
                             }
-                            // A reference (`sym + 8`, `1b - .`) or a label
-                            // difference (`775f - 774f`) evaluates under the
-                            // location-value rules: a same-space result folds
-                            // (gas folds `a - .` with `a` in this section), a
-                            // symbolic one relocates.
-                            AsmSectionValue::Ref { .. } | AsmSectionValue::LabelDiff { .. } => {
-                                let key = section_key(b);
-                                let here = sec.bytes.len() as i64;
-                                let leaf = |n: &str| -> AsmExprValue {
-                                    match section_expr_leaf(
-                                        n,
+                            let (leaf, local) = match &r.target {
+                                // An instruction field resolves at the location
+                                // its `.set` chain ends at, and binds as the name
+                                // written does: an assignment gives the alias its
+                                // own binding, and that is what decides whether
+                                // the link may rebind the reference. A data
+                                // directive's field keeps the name written.
+                                AsmSectionTarget::Symbol(n) => (
+                                    section_expr_leaf(
+                                        measured.alias_target(n.as_str()),
                                         &key,
-                                        here,
+                                        0,
                                         &measured,
                                         sink_labels,
                                         &num_unique,
                                         label_off,
-                                    ) {
-                                        Some(AsmExprLeaf::Abs(c)) => AsmExprValue::abs(c),
-                                        Some(AsmExprLeaf::Loc(t)) => AsmExprValue::from_term(t),
-                                        None => AsmExprValue::from_term(AsmExprTerm {
-                                            space: None,
-                                            target: AsmSectionTarget::Symbol(
-                                                alloc::string::String::from(n),
-                                            ),
-                                        }),
-                                    }
-                                };
-                                let val = match v {
-                                    AsmSectionValue::Ref {
-                                        name,
-                                        pcrel,
-                                        addend,
-                                    } => {
-                                        let add = if addend.is_empty() {
-                                            0
-                                        } else {
-                                            eval_const_expr_ops(addend, &|i| const_of(i))
-                                                .ok_or_else(|| {
-                                                    alloc::string::String::from(
-                                                        "inline asm: non-constant section reloc addend",
-                                                    )
-                                                })?
-                                        };
-                                        let mut val = leaf(name)
-                                            .combine(AsmExprValue::abs(add), false)
-                                            .map_err(|e| alloc::format!("inline asm: {e}"))?;
-                                        if *pcrel {
-                                            val = val
-                                                .combine(leaf("."), true)
-                                                .map_err(|e| alloc::format!("inline asm: {e}"))?;
-                                        }
-                                        val
-                                    }
-                                    AsmSectionValue::LabelDiff {
-                                        minuend,
-                                        subtrahend,
-                                    } => leaf(minuend)
-                                        .combine(leaf(subtrahend), true)
-                                        .map_err(|e| alloc::format!("inline asm: {e}"))?,
-                                    _ => unreachable!("outer arm admits Ref and LabelDiff"),
-                                };
-                                let space = AsmSpace::Section(key.clone());
-                                match resolve_asm_value(val, Some((&space, here)))
-                                    .map_err(|e| alloc::format!("inline asm: {e}"))?
-                                {
-                                    AsmResolved::Abs(c) => {
-                                        if !value_fits_width(c, *width) {
-                                            return Err(alloc::format!(
-                                                "inline asm: value {c} does not fit a {width}-byte field"
-                                            ));
-                                        }
-                                        push_le(&mut sec.bytes, c as i128, *width as usize);
-                                    }
-                                    AsmResolved::Reloc {
-                                        target,
-                                        addend,
-                                        pcrel,
-                                    } => {
-                                        if !matches!(width, 1 | 2 | 4 | 8) {
-                                            return Err(alloc::string::String::from(
-                                                "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
-                                            ));
-                                        }
-                                        sec.relocs.push(AsmSectionReloc {
-                                            offset: sec.bytes.len() as u32,
-                                            width: *width,
-                                            kind: AsmRelocKind::Data,
-                                            pcrel,
-                                            branch: false,
-                                            signed: false,
-                                            target,
-                                            addend,
-                                        });
-                                        sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
-                                    }
-                                }
-                            }
-                            AsmSectionValue::RelocOp { name, addend, op } => {
-                                sec.relocs.push(AsmSectionReloc {
-                                    offset: sec.bytes.len() as u32,
-                                    width: *width,
-                                    kind: AsmRelocKind::Op {
-                                        op: *op,
-                                        relax: AsmGotRelax::No,
-                                    },
-                                    pcrel: false,
-                                    branch: false,
-                                    signed: false,
-                                    target: AsmSectionTarget::Symbol(name.clone()),
-                                    addend: *addend,
-                                });
-                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
-                            }
-                            AsmSectionValue::OperandReloc {
-                                idx,
-                                goto,
-                                addend,
-                                minus,
-                            } => {
-                                if !matches!(width, 1 | 2 | 4 | 8) {
-                                    return Err(alloc::string::String::from(
-                                        "inline asm: section reference needs a 1-, 2-, 4-, or 8-byte field",
-                                    ));
-                                }
-                                let (target, base_add) = if *goto {
-                                    let bid = goto_block(*idx).ok_or_else(|| {
-                                        alloc::format!(
-                                            "inline asm: `%l{idx}` names no `asm goto` label"
-                                        )
-                                    })?;
-                                    (AsmSectionTarget::TextBlock(bid), 0)
-                                } else {
-                                    operand_sym(*idx).ok_or_else(|| {
-                                        alloc::format!(
-                                            "inline asm: operand `%c{idx}` does not name a link-time \
-                                             address: the operand is {}",
-                                            (operands.form)(*idx)
-                                        )
-                                    })?
-                                };
-                                let add = base_add
-                                    + if addend.is_empty() {
-                                        0
-                                    } else {
-                                        eval_const_expr_ops(addend, &|i| const_of(i)).ok_or_else(
-                                            || {
-                                                alloc::string::String::from(
-                                                    "inline asm: non-constant section reloc addend",
-                                                )
-                                            },
-                                        )?
-                                    };
-                                // The operand's address minus a location: PC-relative
-                                // when the location is in this section, as GNU as has it.
-                                let key = section_key(b);
-                                let here = sec.bytes.len() as i64;
-                                let mut val = AsmExprValue::from_term(AsmExprTerm {
-                                    space: None,
-                                    target,
-                                })
-                                .combine(AsmExprValue::abs(add), false)
-                                .map_err(|e| alloc::format!("inline asm: {e}"))?;
-                                if let Some(loc) = minus {
-                                    let leaf = match section_expr_leaf(
-                                        loc,
-                                        &key,
-                                        here,
-                                        &measured,
-                                        sink_labels,
-                                        &num_unique,
-                                        label_off,
-                                    ) {
-                                        Some(AsmExprLeaf::Loc(t)) => AsmExprValue::from_term(t),
-                                        _ => {
-                                            return Err(alloc::format!(
-                                                "inline asm: `{loc}` is no location of the section \
-                                                 being assembled"
-                                            ));
-                                        }
-                                    };
-                                    val = val
-                                        .combine(leaf, true)
-                                        .map_err(|e| alloc::format!("inline asm: {e}"))?;
-                                }
-                                let space = AsmSpace::Section(key.clone());
-                                let AsmResolved::Reloc {
-                                    target,
-                                    addend,
-                                    pcrel,
-                                } = resolve_asm_value(val, Some((&space, here)))
-                                    .map_err(|e| alloc::format!("inline asm: {e}"))?
-                                else {
-                                    return Err(alloc::format!(
-                                        "inline asm: operand `%{idx}` folded to a constant"
-                                    ));
-                                };
-                                sec.relocs.push(AsmSectionReloc {
-                                    offset: sec.bytes.len() as u32,
-                                    width: *width,
-                                    kind: AsmRelocKind::Data,
-                                    pcrel,
-                                    branch: false,
-                                    signed: false,
-                                    target,
-                                    addend,
-                                });
-                                sec.bytes.extend_from_slice(&[0u8; 8][..*width as usize]);
-                            }
-                        }
-                    }
-                }
-                AsmSectionItem::CodeBytes {
-                    bytes,
-                    relocs,
-                    short,
-                } => {
-                    // A replacement instruction's relocs are at offsets within
-                    // its own bytes; rebase each to the section offset the
-                    // instruction lands at, then append the machine bytes. A
-                    // PC-relative reference to a label of this section
-                    // resolves here -- GNU as emits no relocation for it --
-                    // by patching the instruction field; other targets keep
-                    // their relocation (a numeric label's name rewritten to
-                    // its per-instance symbol).
-                    let base = sec.bytes.len() as u32;
-                    let key = section_key(b);
-                    // A relaxable branch takes the form the measurement
-                    // settled on; anything else has one encoding.
-                    let short = short.as_ref().filter(|_| !measured.long_form((bi, ii)));
-                    let (bytes, relocs) = match short {
-                        Some(s) => (&s.bytes, core::slice::from_ref(&s.reloc)),
-                        None => (bytes, relocs.as_slice()),
-                    };
-                    let mut buf = bytes.clone();
-                    for r in relocs {
-                        let mut r = r.clone();
-                        // An operand expression resolves against the layout
-                        // here: what folds lands in the field, what keeps a
-                        // symbol relocates against it.
-                        // A relaxable branch binds any same-section name the
-                        // link cannot rebind; every other field binds only a
-                        // local one.
-                        let rebindable = match r.kind {
-                            AsmRelocKind::JumpRel => &weak_only,
-                            _ => &non_local,
-                        };
-                        if let AsmSectionTarget::Expr(text) = &r.target {
-                            let place = base as i64 + r.offset as i64;
-                            // `.` in an operand is the instruction's own
-                            // address, which is where this item starts.
-                            let resolve = |t: &str| {
-                                section_expr_leaf(
-                                    t,
-                                    &key,
-                                    base as i64,
-                                    &measured,
-                                    sink_labels,
-                                    &num_unique,
-                                    label_off,
-                                )
-                            };
-                            let ctx = AsmExprCtx {
-                                resolve: &resolve,
-                                const_of,
-                                lax_div: false,
-                            };
-                            let space = AsmSpace::Section(key.clone());
-                            match resolve_asm_field_expr(
-                                text,
-                                &ctx,
-                                &space,
-                                place,
-                                r.addend,
-                                r.pcrel || r.kind.self_relative(),
-                                rebindable,
-                            )? {
-                                AsmFieldTarget::Abs(c) => {
-                                    store_asm_insn_const(&mut buf, r.offset as usize, &r, c)
-                                        .map_err(|e| alloc::format!("inline asm: `{text}`: {e}"))?;
-                                    continue;
-                                }
-                                AsmFieldTarget::Reloc {
-                                    target,
-                                    addend,
-                                    pcrel,
-                                } => {
-                                    r.target = target;
-                                    r.addend = addend;
-                                    // A data field's PC-relativity rides the
-                                    // relocation; an instruction field's is
-                                    // its kind's and stays as encoded.
-                                    if let Some(p) = pcrel
-                                        && matches!(
-                                            r.kind,
-                                            AsmRelocKind::Data | AsmRelocKind::JumpRel
-                                        )
-                                    {
-                                        r.pcrel = p;
-                                    }
-                                }
-                            }
-                        }
-                        let (leaf, local) = match &r.target {
-                            // An instruction field resolves at the location
-                            // its `.set` chain ends at, and binds as the name
-                            // written does: an assignment gives the alias its
-                            // own binding, and that is what decides whether
-                            // the link may rebind the reference. A data
-                            // directive's field keeps the name written.
-                            AsmSectionTarget::Symbol(n) => (
-                                section_expr_leaf(
-                                    measured.alias_target(n.as_str()),
-                                    &key,
-                                    0,
-                                    &measured,
-                                    sink_labels,
-                                    &num_unique,
-                                    label_off,
+                                    ),
+                                    !rebindable.contains(n.as_str()),
                                 ),
-                                !rebindable.contains(n.as_str()),
-                            ),
-                            _ => (None, true),
-                        };
-                        match leaf {
-                            Some(AsmExprLeaf::Loc(t)) => {
-                                let same = matches!(
-                                    &t.space,
-                                    Some((AsmSpace::Section(k), _)) if *k == key
-                                );
-                                let off = match t.space {
-                                    Some((_, off)) => off,
-                                    None => 0,
-                                };
-                                let place = base as i64 + r.offset as i64;
-                                if same
-                                    && local
-                                    && patch_asm_insn_field(
-                                        &mut buf,
-                                        r.offset as usize,
-                                        r.kind,
-                                        r.pcrel,
-                                        r.width,
-                                        off + r.addend - place,
-                                    )?
-                                {
-                                    continue;
+                                _ => (None, true),
+                            };
+                            match leaf {
+                                Some(AsmExprLeaf::Loc(t)) => {
+                                    let same = matches!(
+                                        &t.space,
+                                        Some((AsmSpace::Section(k), _)) if *k == key
+                                    );
+                                    let off = match t.space {
+                                        Some((_, off)) => off,
+                                        None => 0,
+                                    };
+                                    let place = base as i64 + r.offset as i64;
+                                    if same
+                                        && local
+                                        && patch_asm_insn_field(
+                                            &mut buf,
+                                            r.offset as usize,
+                                            r.kind,
+                                            r.pcrel,
+                                            r.width,
+                                            off + r.addend - place,
+                                        )?
+                                    {
+                                        continue;
+                                    }
+                                    // The chain end replaces the name written
+                                    // where the link cannot rebind the reference,
+                                    // or where the end is a name the link binds
+                                    // too. Reducing a rebindable reference to a
+                                    // location pins it to this unit's definition.
+                                    let end_binds = matches!(
+                                        &t.target,
+                                        AsmSectionTarget::Symbol(e) if non_local.contains(e.as_str())
+                                    );
+                                    if local || end_binds {
+                                        r.target = t.target;
+                                    }
                                 }
-                                // The chain end replaces the name written
-                                // where the link cannot rebind the reference,
-                                // or where the end is a name the link binds
-                                // too. Reducing a rebindable reference to a
-                                // location pins it to this unit's definition.
-                                let end_binds = matches!(
-                                    &t.target,
-                                    AsmSectionTarget::Symbol(e) if non_local.contains(e.as_str())
-                                );
-                                if local || end_binds {
-                                    r.target = t.target;
+                                Some(AsmExprLeaf::Abs(_)) => {
+                                    return Err(alloc::string::String::from(
+                                        "inline asm: instruction relocates against an absolute symbol",
+                                    ));
                                 }
+                                None => {}
                             }
-                            Some(AsmExprLeaf::Abs(_)) => {
-                                return Err(alloc::string::String::from(
-                                    "inline asm: instruction relocates against an absolute symbol",
+                            // The short form was chosen because the target is a
+                            // label of this section the field reaches. A
+                            // reference that instead needs a relocation would
+                            // hand the link a field too narrow to fill.
+                            if short.is_some() {
+                                return Err(alloc::format!(
+                                    "inline asm: short branch to `{:?}` needs a relocation",
+                                    r.target
                                 ));
                             }
-                            None => {}
+                            r.offset += base;
+                            sec.relocs.push(r);
                         }
-                        // The short form was chosen because the target is a
-                        // label of this section the field reaches. A
-                        // reference that instead needs a relocation would
-                        // hand the link a field too narrow to fill.
-                        if short.is_some() {
-                            return Err(alloc::format!(
-                                "inline asm: short branch to `{:?}` needs a relocation",
-                                r.target
-                            ));
-                        }
-                        r.offset += base;
-                        sec.relocs.push(r);
+                        sec.bytes.extend_from_slice(&buf);
                     }
-                    sec.bytes.extend_from_slice(&buf);
-                }
-                AsmSectionItem::Code(text) => {
-                    return Err(alloc::format!(
-                        "inline asm: replacement instruction `{text}` in a named section is not \
-                         assembled for this target"
-                    ));
-                }
-            }
-            // Alignment padding follows the instruction boundary the last
-            // byte-emitting item left; the padding itself sets none.
-            match item {
-                AsmSectionItem::CodeBytes { .. } => {
-                    sec.after_insn = true;
-                    // gas gives a section holding instructions at least the
-                    // architecture's instruction alignment (4 on AArch64,
-                    // where `align_is_p2` holds; 1 on x86).
-                    if align_is_p2 {
-                        sec.align = sec.align.max(4);
+                    AsmSectionItem::Code(text) => {
+                        return Err(alloc::format!(
+                            "inline asm: replacement instruction `{text}` in a named section is not \
+                             assembled for this target"
+                        ));
                     }
                 }
-                AsmSectionItem::Data { .. }
-                | AsmSectionItem::Fill { .. }
-                | AsmSectionItem::Bytes(_)
-                | AsmSectionItem::Org(..)
-                | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
-                _ => {}
-            }
-            if !matches!(item, AsmSectionItem::Rept { .. }) {
-                sec.map_state = step_map_state(item, sec.map_state, b.flags.contains('x'));
-            }
-            // Everything an item lays down other than an instruction is
-            // data. `.align` recorded its own class above and `.rept` each
-            // repetition's. A `.org` moves the location counter without
-            // recording a run, as in GNU as, so the surrounding run covers
-            // the gap.
-            let laid = sec.bytes.len().saturating_sub(map_at);
-            match item {
-                AsmSectionItem::CodeBytes { .. } => sec.map.content(map_at, laid, MapClass::Code),
-                AsmSectionItem::Align { .. }
-                | AsmSectionItem::Rept { .. }
-                | AsmSectionItem::Org(..)
-                | AsmSectionItem::OrgLabel { .. }
-                | AsmSectionItem::OrgExpr(..) => {}
-                _ => sec.map.content(map_at, laid, MapClass::Data),
+                // Alignment padding follows the instruction boundary the last
+                // byte-emitting item left; the padding itself sets none.
+                match item {
+                    AsmSectionItem::CodeBytes { .. } => {
+                        sec.after_insn = true;
+                        // gas gives a section holding instructions at least the
+                        // architecture's instruction alignment (4 on AArch64,
+                        // where `align_is_p2` holds; 1 on x86).
+                        if align_is_p2 {
+                            sec.align = sec.align.max(4);
+                        }
+                    }
+                    AsmSectionItem::Data { .. }
+                    | AsmSectionItem::Fill { .. }
+                    | AsmSectionItem::Bytes(_)
+                    | AsmSectionItem::Org(..)
+                    | AsmSectionItem::OrgLabel { .. } => sec.after_insn = false,
+                    _ => {}
+                }
+                if !matches!(item, AsmSectionItem::Rept { .. }) {
+                    sec.map_state = step_map_state(item, sec.map_state, b.flags.contains('x'));
+                }
+                // Everything an item lays down other than an instruction is
+                // data. `.align` recorded its own class above and `.rept` each
+                // repetition's. A `.org` moves the location counter without
+                // recording a run, as in GNU as, so the surrounding run covers
+                // the gap.
+                let laid = sec.bytes.len().saturating_sub(map_at);
+                match item {
+                    AsmSectionItem::CodeBytes { .. } => {
+                        sec.map.content(map_at, laid, MapClass::Code)
+                    }
+                    AsmSectionItem::Align { .. }
+                    | AsmSectionItem::Rept { .. }
+                    | AsmSectionItem::Org(..)
+                    | AsmSectionItem::OrgLabel { .. }
+                    | AsmSectionItem::OrgExpr(..) => {}
+                    _ => sec.map.content(map_at, laid, MapClass::Data),
+                }
+                Ok(())
+            };
+            if let Err(text) = lay_item() {
+                errors.push(AsmError { line, text });
+                if let Some(next) = measured.place((bi, ii + 1)) {
+                    let next = usize::try_from(next).unwrap_or(0);
+                    if sec.bytes.len() < next {
+                        sec.bytes.resize(next, 0);
+                    }
+                }
             }
         }
     }
+    AsmErrors::check(errors)?;
     // `.weak` binds a matching section label weak; a name defined in no
     // section is a unit-level weak symbol the file-scope parse records.
     // TODO: this stays a whole-sink scan. The label index cannot serve it as
@@ -2621,7 +2673,7 @@ pub(crate) fn materialize_asm_sections(
     // it relocates against a definition.
     for name in blocks
         .iter()
-        .flat_map(|b| &b.items)
+        .flat_map(|b| b.items.iter().map(|i| &i.item))
         .filter_map(|it| match it {
             AsmSectionItem::SetExpr { name, .. } => Some(name.as_str()),
             _ => None,
@@ -2683,7 +2735,7 @@ pub(crate) fn materialize_asm_sections(
 pub(crate) fn reject_unit_symbol_items(
     blocks: &[AsmSectionBlock],
 ) -> Result<(), alloc::string::String> {
-    for item in blocks.iter().flat_map(|b| &b.items) {
+    for item in blocks.iter().flat_map(|b| b.items.iter().map(|i| &i.item)) {
         match item {
             AsmSectionItem::Weak(n) => {
                 return Err(alloc::format!(
@@ -2707,17 +2759,20 @@ pub(crate) fn reject_unit_symbol_items(
 /// per-definition unique names, each `Nb` / `Nf` reference binding to the
 /// nearest definition in its direction (GNU as redefinable local labels).
 /// The parse stores the prepared text, so the codegen materialization and
-/// the parse-time validation see identical statements.
-pub(crate) fn prepare_file_asm_text(
-    text: &str,
-    comments: AsmComments,
-) -> Result<alloc::string::String, alloc::string::String> {
+/// the parse-time validation see identical statements. Stripping and
+/// renaming keep every line where it is; the expansion maps its own.
+pub(crate) fn prepare_file_asm_text(text: &str, comments: AsmComments) -> AsmPrepared {
     let stripped = strip_asm_comments(text, comments);
     let text = stripped.as_deref().unwrap_or(text);
-    let expanded = expand_file_asm_gas_macros(text, 4)?;
-    let text = expanded.as_deref().unwrap_or(text);
-    let renamed = rewrite_multidef_local_labels(text);
-    Ok(renamed.unwrap_or_else(|| alloc::string::String::from(text)))
+    let mut prepared = expand_file_asm_gas_macros(text, 4).unwrap_or_else(|| AsmPrepared {
+        text: alloc::string::String::from(text),
+        origin: (1..=text.split('\n').count() as u32).collect(),
+        errors: alloc::vec::Vec::new(),
+    });
+    if let Some(renamed) = rewrite_multidef_local_labels(&prepared.text) {
+        prepared.text = renamed;
+    }
+    prepared
 }
 
 /// Materialize a unit's file-scope `asm("...")` templates into `sink`.
@@ -2728,7 +2783,7 @@ pub(crate) fn materialize_file_asm(
     templates: &[alloc::string::String],
     align_is_p2: bool,
     comments: AsmComments,
-    encode_code: &dyn Fn(&mut [AsmSectionBlock]) -> Result<(), alloc::string::String>,
+    encode_code: &dyn Fn(&mut [AsmSectionBlock]) -> Result<(), AsmErrors>,
     sink: &mut AsmSectionSink,
 ) -> Result<(), alloc::string::String> {
     for text in templates {
@@ -2746,7 +2801,7 @@ pub(crate) fn materialize_file_asm(
                 // parse already applied it to.
                 if let Some(first) = blocks.first_mut() {
                     for name in ex.sym_items {
-                        first.items.push(name);
+                        first.push(0, name);
                     }
                 }
                 blocks

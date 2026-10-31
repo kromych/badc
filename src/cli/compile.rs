@@ -236,33 +236,10 @@ pub(crate) fn tu_compile_options(
         .with_code_model(cfg.reloc_opts.code_model)
 }
 
-/// GNU line markers (`# <line> "<file>" [flags]`) blanked in place. gas reads
-/// them as line directives rather than as content, and on AArch64 `#` is not
-/// a comment introducer, so they cannot be left for the comment stripper.
-/// Blanking rather than deleting keeps every statement's line number.
-pub(crate) fn blank_line_markers(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for (i, line) in text.split('\n').enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        let t = line.trim_start();
-        let is_marker = t.strip_prefix('#').is_some_and(|r| {
-            let r = r.trim_start();
-            r.starts_with(|c: char| c.is_ascii_digit())
-                || r.strip_prefix("line")
-                    .is_some_and(|r| r.starts_with(char::is_whitespace))
-        });
-        if !is_marker {
-            out.push_str(line);
-        }
-    }
-    out
-}
-
 /// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
 /// writing its dependency rule on the way. `.S` runs through the preprocessor
-/// first, as gcc's driver does; `.s` is taken verbatim.
+/// first, as gcc's driver does, and the assembler follows its line markers
+/// back to the original lines; `.s` is taken verbatim.
 pub(crate) fn assemble_tu(
     src_path: &str,
     cfg: &CompileCfg,
@@ -292,7 +269,7 @@ pub(crate) fn assemble_tu(
         {
             return Err(());
         }
-        blank_line_markers(&text)
+        text
     } else {
         // A `.s` unit opens no header, so its rule names only the source.
         if let Some(d) = cfg.deps

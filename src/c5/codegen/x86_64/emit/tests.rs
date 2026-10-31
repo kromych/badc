@@ -1516,7 +1516,9 @@ mod code_mode_tests {
         use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
-        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let text = prepare_file_asm_text(text, AsmComments::X86)
+            .checked()
+            .expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(
             &[text],
@@ -1552,7 +1554,9 @@ mod code_mode_tests {
         use crate::c5::asm::AsmComments;
         use crate::c5::asm::AsmSectionSink;
         use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
-        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let text = prepare_file_asm_text(text, AsmComments::X86)
+            .checked()
+            .expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(
             &[text],

@@ -25,46 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<fill>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	$0x0, (%rax)
-               	movq	$0x1, 0x8(%rax)
-               	movq	$-0x1, 0x10(%rax)
-               	movq	$0x2, 0x18(%rax)
-               	movq	$-0x2, 0x20(%rax)
-               	movq	$0x7fffffff, 0x28(%rax) # imm = 0x7FFFFFFF
-               	movq	$-0x80000000, 0x30(%rax) # imm = 0x80000000
-               	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%rcx, 0x38(%rax)
-               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
-               	movq	%rcx, 0x40(%rax)
-               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
-               	movq	%rcx, 0x48(%rax)
-               	movq	$0x7f, 0x50(%rax)
-               	movq	$-0x80, 0x58(%rax)
-               	movq	$0xff, 0x60(%rax)
-               	movq	$0x7fff, 0x68(%rax)     # imm = 0x7FFF
-               	movq	$-0x8000, 0x70(%rax)    # imm = 0x8000
-               	movq	$0xffff, 0x78(%rax)     # imm = 0xFFFF
-               	movabsq	$0x2ceaee21bf46bc00, %rcx # imm = 0x2CEAEE21BF46BC00
-               	movq	%rcx, 0x80(%rax)
-               	movabsq	$-0x557f8ab2e5e572b1, %rcx # imm = 0xAA80754D1A1A8D4F
-               	movq	%rcx, 0x88(%rax)
-               	movabsq	$-0x4c3b6fb592d876ce, %rcx # imm = 0xB3C4904A6D278932
-               	movq	%rcx, 0x90(%rax)
-               	movabsq	$-0x439630bd897b92e7, %rcx # imm = 0xBC69CF4276846D19
-               	movq	%rcx, 0x98(%rax)
-               	movabsq	$0x377b2fd56a5b15b4, %rcx # imm = 0x377B2FD56A5B15B4
-               	movq	%rcx, 0xa0(%rax)
-               	movabsq	$0x64d815deeaf29df3, %rcx # imm = 0x64D815DEEAF29DF3
-               	movq	%rcx, 0xa8(%rax)
-               	movabsq	$-0x991eff24d282dfa, %rcx # imm = 0xF66E100DB2D7D206
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rcx, 0xb0(%rax)
-               	movabsq	$0x1069e6a57e06665d, %rcx # imm = 0x1069E6A57E06665D
-               	movq	%rcx, 0xb8(%rax)
-               	retq
-
 <plain>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -2301,10 +2261,57 @@ Disassembly of section .text:
                	leave
                	retq
 
-<places>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
+               	leaq	<rip>, %rax # <addr>
+               	movq	$0x0, (%rax)
+               	movq	$0x1, 0x8(%rax)
+               	movq	$-0x1, 0x10(%rax)
+               	movq	$0x2, 0x18(%rax)
+               	movq	$-0x2, 0x20(%rax)
+               	movq	$0x7fffffff, 0x28(%rax) # imm = 0x7FFFFFFF
+               	movq	$-0x80000000, 0x30(%rax) # imm = 0x80000000
+               	movabsq	$0x7fffffffffffffff, %rcx # imm = 0x7FFFFFFFFFFFFFFF
+               	movq	%rcx, 0x38(%rax)
+               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
+               	movq	%rcx, 0x40(%rax)
+               	movl	$0xffffffff, %ecx       # imm = 0xFFFFFFFF
+               	movq	%rcx, 0x48(%rax)
+               	movq	$0x7f, 0x50(%rax)
+               	movq	$-0x80, 0x58(%rax)
+               	movq	$0xff, 0x60(%rax)
+               	movq	$0x7fff, 0x68(%rax)     # imm = 0x7FFF
+               	movq	$-0x8000, 0x70(%rax)    # imm = 0x8000
+               	movq	$0xffff, 0x78(%rax)     # imm = 0xFFFF
+               	movabsq	$0x2ceaee21bf46bc00, %rcx # imm = 0x2CEAEE21BF46BC00
+               	movq	%rcx, 0x80(%rax)
+               	movabsq	$-0x557f8ab2e5e572b1, %rcx # imm = 0xAA80754D1A1A8D4F
+               	movq	%rcx, 0x88(%rax)
+               	movabsq	$-0x4c3b6fb592d876ce, %rcx # imm = 0xB3C4904A6D278932
+               	movq	%rcx, 0x90(%rax)
+               	movabsq	$-0x439630bd897b92e7, %rcx # imm = 0xBC69CF4276846D19
+               	movq	%rcx, 0x98(%rax)
+               	movabsq	$0x377b2fd56a5b15b4, %rcx # imm = 0x377B2FD56A5B15B4
+               	movq	%rcx, 0xa0(%rax)
+               	movabsq	$0x64d815deeaf29df3, %rcx # imm = 0x64D815DEEAF29DF3
+               	movq	%rcx, 0xa8(%rax)
+               	movabsq	$-0x991eff24d282dfa, %rcx # imm = 0xF66E100DB2D7D206
+               	leaq	<rip>, %rax # <addr>
+               	movq	%rcx, 0xb0(%rax)
+               	movabsq	$0x1069e6a57e06665d, %rcx # imm = 0x1069E6A57E06665D
+               	movq	%rcx, 0xb8(%rax)
+               	callq	<addr>
+               	testl	%eax, %eax
+               	je	<addr>
+               	leave
+               	retq
+               	callq	<addr>
+               	testl	%eax, %eax
+               	je	<addr>
+               	leave
+               	retq
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
@@ -2323,10 +2330,10 @@ Disassembly of section .text:
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
                	movl	%eax, -0x28(%rbp)
-               	movl	-0x20(%rbp), %eax
-               	movl	-0x18(%rbp), %edi
-               	cltd
-               	idivl	%edi
+               	movslq	-0x20(%rbp), %rax
+               	movslq	-0x18(%rbp), %rdi
+               	cqto
+               	idivq	%rdi
                	movl	%eax, -0x20(%rbp)
                	movl	-0x28(%rbp), %eax
                	movl	-0x20(%rbp), %edx
@@ -2345,11 +2352,11 @@ Disassembly of section .text:
                	imulq	$0xa, %rdx, %rdx
                	subq	%rdx, %rax
                	movl	%eax, -0x28(%rbp)
-               	movl	-0x20(%rbp), %esi
-               	movl	-0x18(%rbp), %edi
-               	movl	%esi, %eax
-               	cltd
-               	idivl	%edi
+               	movslq	-0x20(%rbp), %rsi
+               	movslq	-0x18(%rbp), %rdi
+               	movq	%rsi, %rax
+               	cqto
+               	idivq	%rdi
                	movl	%edx, -0x20(%rbp)
                	movl	-0x28(%rbp), %eax
                	movl	-0x20(%rbp), %edx
@@ -2377,7 +2384,7 @@ Disassembly of section .text:
                	movl	-0x10(%rbp), %esi
                	cltd
                	idivl	%esi
-               	movq	%rax, %rdi
+               	movslq	%eax, %rdi
                	leaq	-0x88(%rbp), %rsi
                	movslq	(%rsi,%rcx,4), %rax
                	imulq	$0x38e38e39, %rax, %rax # imm = 0x38E38E39
@@ -2392,10 +2399,10 @@ Disassembly of section .text:
                	movl	(%rsi,%rcx,4), %eax
                	cmpl	%edi, %eax
                	jne	<addr>
-               	movl	-0x10(%rbp), %r8d
-               	movl	%edi, %eax
-               	cltd
-               	idivl	%r8d
+               	movslq	-0x10(%rbp), %r8
+               	movq	%rdi, %rax
+               	cqto
+               	idivq	%r8
                	movslq	(%rsi,%rcx,4), %rax
                	imulq	$0x38e38e39, %rax, %rdi # imm = 0x38E38E39
                	sarq	$0x21, %rdi
@@ -2706,48 +2713,24 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	addq	$0x64, %rax
-               	leave
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
-               	leave
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
-               	leave
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	addq	$0x64, %rax
-               	leave
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
-               	leave
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	popq	%rbp
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	movl	(%rax), %eax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	movl	(%rax), %eax
+               	addq	$0x64, %rax
+               	jmp	<addr>
+               	leaq	<rip>, %rax # <addr>
+               	movl	(%rax), %eax
                	jmp	<addr>

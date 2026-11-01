@@ -25,15 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<runtime3d>:
+<main>:
                	xorl	%eax, %eax
                	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x2, %edi
-               	movl	$0x1000, %esi           # imm = 0x1000
-               	movl	$0x9000, %edx           # imm = 0x9000
-               	popq	%rbp
-               	jmp	<addr>

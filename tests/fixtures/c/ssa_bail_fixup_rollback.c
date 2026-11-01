@@ -23,7 +23,7 @@ static u32 ld32(const u8 *x) {
     return (u<<8)|x[0];
 }
 
-static void core(u8 *out, const u8 *in, const u8 *k, const u8 *c) {
+__attribute__((noinline)) static void core(u8 *out, const u8 *in, const u8 *k, const u8 *c) {
     u32 x[16];
     int i;
     for (i = 0; i < 4; i++) {
@@ -37,7 +37,7 @@ static void core(u8 *out, const u8 *in, const u8 *k, const u8 *c) {
 
 static const u8 sigma[16] = "expand 32-byte k";
 
-static int stream_xor(u8 *c, const u8 *m, u64 b, const u8 *n, const u8 *k) {
+__attribute__((noinline)) static int stream_xor(u8 *c, const u8 *m, u64 b, const u8 *n, const u8 *k) {
     u8 z[16], x[64];
     u32 i;
     if (!b) return 0;

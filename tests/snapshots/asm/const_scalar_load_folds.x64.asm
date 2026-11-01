@@ -25,34 +25,19 @@ Disassembly of section .text:
                	int3
                	int3
 
-<scoped_cond_guard>:
-               	movl	$0x3, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	cmpl	$0x3, %eax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
                	retq
                	movq	$0x63, (%rax)
                	xorl	%eax, %eax
-               	popq	%rbp
                	retq

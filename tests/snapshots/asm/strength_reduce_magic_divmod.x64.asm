@@ -25,7 +25,10 @@ Disassembly of section .text:
                	int3
                	int3
 
-<fill>:
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x1b0, %rsp            # imm = 0x1B0
                	leaq	<rip>, %rax # <addr>
                	movq	$0x0, (%rax)
                	movq	$0x1, 0x8(%rax)
@@ -61,28 +64,21 @@ Disassembly of section .text:
                	movq	%rax, 0x98(%rcx)
                	xorl	%eax, %eax
                	leaq	<rip>, %rsi # <addr>
-               	leaq	<rip>, %rdi # <addr>
-               	leaq	<rip>, %r8 # <addr>
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
-               	leaq	(%rsi,%rdx), %r9
+               	addq	%rdx, %rsi
                	addq	%rcx, %rdx
                	movq	(%rdx), %rdx
-               	movq	%rdx, (%r9)
-               	movq	(%rcx,%rax,8), %rdx
-               	movl	%edx, (%rdi,%rax,4)
-               	movq	(%rcx,%rax,8), %rdx
-               	movl	%edx, (%r8,%rax,4)
+               	movq	%rdx, (%rsi)
+               	leaq	<rip>, %rdx # <addr>
+               	movq	(%rcx,%rax,8), %rsi
+               	movl	%esi, (%rdx,%rax,4)
+               	leaq	<rip>, %rdx # <addr>
+               	movq	(%rcx,%rax,8), %rsi
+               	movl	%esi, (%rdx,%rax,4)
                	incq	%rax
                	cmpl	$0x14, %eax
                	jl	<addr>
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x1b0, %rsp            # imm = 0x1B0
-               	callq	<addr>
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
@@ -1695,19 +1691,18 @@ Disassembly of section .text:
                	movl	$0xffffcfc7, -0x10(%rbp) # imm = 0xFFFFCFC7
                	movabsq	$-0x11f71fb04cb, %rax   # imm = 0xFFFFFEE08E04FB35
                	movq	%rax, -0x8(%rbp)
-               	movl	-0x10(%rbp), %eax
-               	xorl	%ecx, %ecx
-               	negq	%rax
-               	cmpl	$0x3039, %eax           # imm = 0x3039
+               	movl	-0x10(%rbp), %ecx
+               	xorl	%eax, %eax
+               	negq	%rcx
+               	cmpl	$0x3039, %ecx           # imm = 0x3039
                	jne	<addr>
-               	movl	-0x10(%rbp), %eax
-               	movq	-0x8(%rbp), %rax
-               	negq	%rax
+               	movl	-0x10(%rbp), %ecx
+               	movq	-0x8(%rbp), %rcx
+               	negq	%rcx
                	movabsq	$0x11f71fb04cb, %r11    # imm = 0x11F71FB04CB
-               	cmpq	%r11, %rax
+               	cmpq	%r11, %rcx
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	movq	%rcx, %rax
+               	movq	-0x8(%rbp), %rcx
                	leave
                	retq
                	movl	$0x5b, %eax

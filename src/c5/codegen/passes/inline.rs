@@ -100,6 +100,14 @@ fn body_cap(func: &FunctionSsa, cap: u32) -> usize {
 /// gcc's large-function-growth limit.
 const CALLER_INST_BUDGET: usize = 2048;
 
+/// Body-size bound for a function only one call site reaches. Its
+/// out-of-line copy is dead once that site is spliced, so the unit shrinks
+/// by it, as with gcc's `-finline-functions-called-once`; gcc bounds the
+/// caller's growth (`large-function-growth`), and this bound keeps the
+/// kernel's count of functions over 4 KiB at gcc's for the same
+/// configuration (`demos/linux/verify.py`'s TEXT_BUDGETS).
+const CALLED_ONCE_CAP: u32 = 512;
+
 /// Local-slot count past which a *self-recursive* caller stops absorbing
 /// size-driven candidates. A recursive frame is paid once per recursion
 /// level, so inlining that inflates it multiplies stack use by the depth
@@ -1929,7 +1937,8 @@ fn emitted_inst_count(func: &FunctionSsa) -> usize {
 /// within the target's own [`body_cap`]. A call inside a component
 /// counts as one -- a cycle cannot expand away, and the splice declines
 /// it. Components come in ascending id order, which visits callees
-/// first, so one pass settles every count.
+/// first, so one pass settles every count. A body `shape` rejects is
+/// neither admitted nor counted, and its entry stays 0.
 fn inlined_inst_counts(
     funcs: &[FunctionSsa],
     shape: &[bool],
@@ -1946,6 +1955,9 @@ fn inlined_inst_counts(
     let mut est = vec![0usize; funcs.len()];
     let mut admitted = vec![false; funcs.len()];
     for i in order {
+        if !shape[i] {
+            continue;
+        }
         let mut n = emitted_inst_count(&funcs[i]);
         for inst in &funcs[i].insts {
             let Inst::Call { target_pc, .. } = inst else {
@@ -4230,13 +4242,15 @@ fn inline_caller(
 /// callee is eligible per `is_inline_candidate`; `cap == 0` disables
 /// the splicing but not the devirtualization sweep. `code_syms` maps
 /// each parser-symbol index defined here as a function to its ent_pc
-/// (see `devirtualize_indirect_calls`).
+/// (see `devirtualize_indirect_calls`). `escaping` names the functions
+/// reachable other than through the `Inst::Call` sites in `funcs`.
 pub(crate) fn run(
     funcs: &mut [FunctionSsa],
     cap: u32,
     abi: Abi,
     code_syms: &BTreeMap<u32, usize>,
     extern_fns: &BTreeMap<usize, ExternFnTarget>,
+    escaping: &BTreeSet<usize>,
     sink: &mut Sink,
 ) {
     #[cfg(feature = "codegen_test")]
@@ -4269,146 +4283,173 @@ pub(crate) fn run(
     let sccs = call_graph_sccs(funcs);
     let cyclic = &sccs.cyclic;
     let mut regions: BTreeMap<usize, CallerRegions> = BTreeMap::new();
-    // Iterate to a fixed point: each pass re-evaluates candidacy on
-    // the now-substituted function bodies, so a helper that became a
-    // leaf after its own sub-calls were inlined becomes eligible on
-    // the next round. `INLINE_FIXPOINT_ITERS` bounds the depth.
-    for iter in 0..INLINE_FIXPOINT_ITERS {
-        // Pair up `CallIndirect` sites the previous round's splices put
-        // next to an `ImmCode` argument, so the devirtualized call is an
-        // inline candidate this round.
-        if iter > 0 {
-            devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
-        }
-        // The splice reads each callee's pre-iteration body while the
-        // callers are rewritten in place, so the candidates -- and only
-        // they -- are copied; a body no call site can splice is never
-        // read.
-        // Shape and own-size verdict first; the expanded-size estimate
-        // then declines a body whose own calls this pass will splice
-        // into it, which the caller would pay once per site.
-        let shape: Vec<bool> = funcs
-            .iter()
-            .map(|f| is_inline_candidate(f, cap, abi, None))
-            .collect();
-        let est = inlined_inst_counts(funcs, &shape, &sccs, cap);
-        let bodies: Vec<FunctionSsa> = funcs
-            .iter()
-            .enumerate()
-            .filter(|(i, f)| shape[*i] && est[*i] <= body_cap(f, cap))
-            .map(|(_, f)| f.clone())
-            .collect();
-        if bodies.is_empty() {
+    // The size-driven rounds, then the rounds for the functions one call
+    // site reaches (`CALLED_ONCE_CAP`). Those run last so that no other
+    // splice copies the one site into a second caller.
+    let size_cap = cap;
+    for once in [false, true] {
+        let cap = if once {
+            size_cap.max(CALLED_ONCE_CAP)
+        } else {
+            size_cap
+        };
+        if once && size_cap == 0 {
             break;
         }
-        // The candidate bodies are fixed for this iteration, so their
-        // splice facts are derived once here rather than per caller and
-        // per call site.
-        let facts: FactsMap = bodies.iter().map(|c| (c.ent_pc, callee_facts(c))).collect();
-        // The two caller gates below are predicates over the candidate
-        // body alone, so each combination they select is one shared pool
-        // rather than a per-caller copy of the candidate map.
-        let marked = |c: &FunctionSsa| c.is_inline;
-        let frame_free = |c: &FunctionSsa| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0;
-        let pools = [
-            CandidatePool::build(&bodies, |_| true),
-            CandidatePool::build(&bodies, marked),
-            CandidatePool::build(&bodies, frame_free),
-            CandidatePool::build(&bodies, |c| marked(c) && frame_free(c)),
-        ];
-        #[cfg(feature = "codegen_test")]
-        if trace {
-            eprintln!(
-                "[inline] iter={iter} cap={cap} funcs={n} candidates={c}",
-                n = funcs.len(),
-                c = pools[0].map.len(),
-            );
-            for (pc, f) in &pools[0].map {
-                eprintln!(
-                    "[inline] candidate ent_pc={pc} name={n} insts={i}",
-                    n = f.name,
-                    i = f.insts.len()
-                );
+        // Iterate to a fixed point: each pass re-evaluates candidacy on
+        // the now-substituted function bodies, so a helper that became a
+        // leaf after its own sub-calls were inlined becomes eligible on
+        // the next round. `INLINE_FIXPOINT_ITERS` bounds the depth.
+        for iter in 0..INLINE_FIXPOINT_ITERS {
+            // Pair up `CallIndirect` sites the previous round's splices put
+            // next to an `ImmCode` argument, so the devirtualized call is an
+            // inline candidate this round.
+            if iter > 0 || once {
+                devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
             }
-        }
-        let mut changed = false;
-        for (fi, caller) in funcs.iter_mut().enumerate() {
-            // A self-recursive caller's frame is paid once per recursion
-            // level, so inlining that inflates it costs stack in proportion
-            // to the depth -- a per-callee body cap is not enough. Once such
-            // a caller's frame has grown past RECURSIVE_FRAME_SLOTS, keep
-            // only callees the source explicitly marked `inline`; a shallow
-            // recursion that only absorbs a leaf-sized helper stays under
-            // the threshold and is unaffected. A non-recursive caller is
-            // bounded by the cumulative code-growth budget instead, so small
-            // fragments cannot compound across the fixpoint into a function
-            // whose frame overflows a small stack. Both budgets are runtime
-            // stack / code-size heuristics, not a codegen bound: a marked
-            // callee is admitted at any caller size, and the frame it grows
-            // is representable up to the backends' addressable maximum,
-            // which the per-function emit checks and reports.
-            let recursive = caller
-                .insts
+            let sites = if once {
+                call_site_counts(funcs)
+            } else {
+                BTreeMap::new()
+            };
+            // The splice reads each callee's pre-iteration body while the
+            // callers are rewritten in place, so the candidates -- and only
+            // they -- are copied; a body no call site can splice is never
+            // read.
+            // Shape and own-size verdict first; the expanded-size estimate
+            // then declines a body whose own calls this pass will splice
+            // into it, which the caller would pay once per site.
+            let shape: Vec<bool> = funcs
                 .iter()
-                .any(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc));
-            let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
-                || (caller.insts.len() + caller.blocks.len() > orig_insts[fi] + CALLER_INST_BUDGET
-                    && emitted_inst_count(caller) > orig_insts[fi] + CALLER_INST_BUDGET);
-            // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
-            // multiplied its pre-inline size, keep a mandatory request and
-            // any candidate whose splice relocates no frame slots -- the
-            // gate bounds frame growth, and such a candidate causes none.
-            // The absolute bound is enforced per splice (see
-            // `inline_caller_multi_block`), where the growth is known
-            // exactly.
-            let only_frame_free = caller.locals > CALLER_FRAME_SLOTS
-                && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
-            // Splicing a self-recursive call would expand indefinitely,
-            // so the caller's own entry is excluded from its view.
-            let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
-                .view(caller.ent_pc, caller.section.clone());
-            if local.is_empty() {
-                continue;
+                .map(|f| {
+                    (!once
+                        || f.is_internal
+                            && sites.get(&f.ent_pc) == Some(&1)
+                            && !escaping.contains(&f.ent_pc)
+                            && !cyclic.contains(&f.ent_pc))
+                        && is_inline_candidate(f, cap, abi, None)
+                })
+                .collect();
+            let est = inlined_inst_counts(funcs, &shape, &sccs, cap);
+            let bodies: Vec<FunctionSsa> = funcs
+                .iter()
+                .enumerate()
+                .filter(|(i, f)| shape[*i] && est[*i] <= body_cap(f, cap))
+                .map(|(_, f)| f.clone())
+                .collect();
+            if bodies.is_empty() {
+                break;
             }
-            // A caller with phis can inline single-block callees. The
-            // flat splice keeps block ids fixed, so a phi's incoming.0
-            // (a block id) stays valid, and the value-remap fixpoint
-            // converges every phi's incoming value -- including a loop
-            // back-edge whose definition follows the phi in array order.
-            // A computed-goto caller is handled the same way: the flat
-            // splice rebuilds the block array one-to-one, leaving every
-            // block id, `Inst::BlockAddr`, and `computed_goto_targets`
-            // entry valid. Multi-block splicing shifts block ids and
-            // carries each of those reference sets across the shift.
-            let spliced = inline_caller(
-                caller,
-                &local,
-                &facts,
-                &mut SlotPlacement {
-                    regions: regions.entry(caller.ent_pc).or_default(),
-                    cyclic,
-                    sp_tainted: &sp_tainted,
-                    orig_locals: orig_locals[fi],
-                },
-            );
-            if spliced {
-                changed = true;
-                // The splice relocated the callee's own local slots into
-                // this caller's frame; mark it so the post-inline mem2reg
-                // re-run promotes any now-address-free single-width slot.
-                caller.did_inline = true;
-                // A spliced callee whose loops were unrolled carries
-                // constant-offset array accesses into the caller; mark
-                // the caller so the post-inline scalar promotion scans it.
-                if local.any_unrolled() {
-                    caller.did_unroll = true;
+            // The candidate bodies are fixed for this iteration, so their
+            // splice facts are derived once here rather than per caller and
+            // per call site.
+            let facts: FactsMap = bodies.iter().map(|c| (c.ent_pc, callee_facts(c))).collect();
+            // The two caller gates below are predicates over the candidate
+            // body alone, so each combination they select is one shared pool
+            // rather than a per-caller copy of the candidate map.
+            let marked = |c: &FunctionSsa| c.is_inline;
+            let frame_free =
+                |c: &FunctionSsa| c.is_always_inline || facts[&c.ent_pc].frame_cost == 0;
+            let pools = [
+                CandidatePool::build(&bodies, |_| true),
+                CandidatePool::build(&bodies, marked),
+                CandidatePool::build(&bodies, frame_free),
+                CandidatePool::build(&bodies, |c| marked(c) && frame_free(c)),
+            ];
+            #[cfg(feature = "codegen_test")]
+            if trace {
+                eprintln!(
+                    "[inline] iter={iter} cap={cap} funcs={n} candidates={c}",
+                    n = funcs.len(),
+                    c = pools[0].map.len(),
+                );
+                for (pc, f) in &pools[0].map {
+                    eprintln!(
+                        "[inline] candidate ent_pc={pc} name={n} insts={i}",
+                        n = f.name,
+                        i = f.insts.len()
+                    );
                 }
             }
+            let mut changed = false;
+            for (fi, caller) in funcs.iter_mut().enumerate() {
+                // A self-recursive caller's frame is paid once per recursion
+                // level, so inlining that inflates it costs stack in proportion
+                // to the depth -- a per-callee body cap is not enough. Once such
+                // a caller's frame has grown past RECURSIVE_FRAME_SLOTS, keep
+                // only callees the source explicitly marked `inline`; a shallow
+                // recursion that only absorbs a leaf-sized helper stays under
+                // the threshold and is unaffected. A non-recursive caller is
+                // bounded by the cumulative code-growth budget instead, so small
+                // fragments cannot compound across the fixpoint into a function
+                // whose frame overflows a small stack. Both budgets are runtime
+                // stack / code-size heuristics, not a codegen bound: a marked
+                // callee is admitted at any caller size, and the frame it grows
+                // is representable up to the backends' addressable maximum,
+                // which the per-function emit checks and reports.
+                let recursive = caller.insts.iter().any(
+                    |i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == caller.ent_pc),
+                );
+                let only_marked = (recursive && caller.locals > RECURSIVE_FRAME_SLOTS)
+                    || (caller.insts.len() + caller.blocks.len()
+                        > orig_insts[fi] + CALLER_INST_BUDGET
+                        && emitted_inst_count(caller) > orig_insts[fi] + CALLER_INST_BUDGET);
+                // Once a caller's frame has grown past CALLER_FRAME_SLOTS and
+                // multiplied its pre-inline size, keep a mandatory request and
+                // any candidate whose splice relocates no frame slots -- the
+                // gate bounds frame growth, and such a candidate causes none.
+                // The absolute bound is enforced per splice (see
+                // `inline_caller_multi_block`), where the growth is known
+                // exactly.
+                let only_frame_free = caller.locals > CALLER_FRAME_SLOTS
+                    && caller.locals > orig_locals[fi].saturating_mul(FRAME_GROWTH_FACTOR);
+                // Splicing a self-recursive call would expand indefinitely,
+                // so the caller's own entry is excluded from its view.
+                let local = pools[usize::from(only_marked) | (usize::from(only_frame_free) << 1)]
+                    .view(caller.ent_pc, caller.section.clone());
+                if local.is_empty() {
+                    continue;
+                }
+                // A caller with phis can inline single-block callees. The
+                // flat splice keeps block ids fixed, so a phi's incoming.0
+                // (a block id) stays valid, and the value-remap fixpoint
+                // converges every phi's incoming value -- including a loop
+                // back-edge whose definition follows the phi in array order.
+                // A computed-goto caller is handled the same way: the flat
+                // splice rebuilds the block array one-to-one, leaving every
+                // block id, `Inst::BlockAddr`, and `computed_goto_targets`
+                // entry valid. Multi-block splicing shifts block ids and
+                // carries each of those reference sets across the shift.
+                let spliced = inline_caller(
+                    caller,
+                    &local,
+                    &facts,
+                    &mut SlotPlacement {
+                        regions: regions.entry(caller.ent_pc).or_default(),
+                        cyclic,
+                        sp_tainted: &sp_tainted,
+                        orig_locals: orig_locals[fi],
+                    },
+                );
+                if spliced {
+                    changed = true;
+                    // The splice relocated the callee's own local slots into
+                    // this caller's frame; mark it so the post-inline mem2reg
+                    // re-run promotes any now-address-free single-width slot.
+                    caller.did_inline = true;
+                    // A spliced callee whose loops were unrolled carries
+                    // constant-offset array accesses into the caller; mark
+                    // the caller so the post-inline scalar promotion scans it.
+                    if local.any_unrolled() {
+                        caller.did_unroll = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+            let _ = iter;
         }
-        if !changed {
-            break;
-        }
-        let _ = iter;
     }
     // Pairs the final round's splices created have had no sweep yet.
     devirtualize_indirect_calls(funcs, &sp_tainted, &regions, code_syms, extern_fns);
@@ -4431,6 +4472,19 @@ pub(crate) fn run(
             );
         }
     }
+}
+
+/// The number of `Inst::Call` sites in `funcs`' blocks per target entry PC.
+fn call_site_counts(funcs: &[FunctionSsa]) -> BTreeMap<usize, usize> {
+    let mut sites: BTreeMap<usize, usize> = BTreeMap::new();
+    for f in funcs {
+        for v in f.blocks.iter().flat_map(|b| b.inst_range.clone()) {
+            if let Inst::Call { target_pc, .. } = f.insts[v as usize] {
+                *sites.entry(target_pc).or_default() += 1;
+            }
+        }
+    }
+    sites
 }
 
 /// Standalone devirtualization sweep for after the inline run: the
@@ -6868,6 +6922,7 @@ mod tests {
             abi,
             code_syms,
             &BTreeMap::new(),
+            &BTreeSet::new(),
             &mut Sink::default(),
         );
     }

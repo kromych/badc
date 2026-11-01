@@ -25,14 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<check_runtime>:
+<main>:
                	xorl	%eax, %eax
                	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x14, %edi
-               	movl	$0x16, %esi
-               	popq	%rbp
-               	jmp	<addr>

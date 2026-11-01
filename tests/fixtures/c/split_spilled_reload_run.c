@@ -57,7 +57,7 @@ static void (*volatile cold_p)(unsigned long long) = cold;
     acc += (c) * 3u;         \
     acc -= (c) ^ (acc >> 3);
 
-static unsigned long long hot(const unsigned long long *a, unsigned n) {
+__attribute__((noinline)) static unsigned long long hot(const unsigned long long *a, unsigned n) {
     DECLS(a)
     unsigned long long acc = 0u;
     unsigned i;

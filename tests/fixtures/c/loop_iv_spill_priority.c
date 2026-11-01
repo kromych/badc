@@ -9,7 +9,7 @@
    the spill candidates and keeps `i` / `acc` in registers. Unsigned
    arithmetic keeps the wraparound defined (C99 6.2.5p9). */
 
-static unsigned hot(const unsigned *a, unsigned n) {
+__attribute__((noinline)) static unsigned hot(const unsigned *a, unsigned n) {
     unsigned c0 = a[0] + 1u;
     unsigned c1 = a[1] + 2u;
     unsigned c2 = a[2] + 3u;

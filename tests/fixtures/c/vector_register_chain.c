@@ -80,7 +80,7 @@ __attribute__((noinline)) static unsigned block_sum(const unsigned char *p) {
 }
 
 #if defined(__aarch64__) || defined(__x86_64__)
-static unsigned syndrome(int disks, int len, unsigned char **dptr,
+__attribute__((noinline)) static unsigned syndrome(int disks, int len, unsigned char **dptr,
                          unsigned char *p, unsigned char *q) {
     vec x1d = v_dup(0x1d);
     unsigned acc = 0;

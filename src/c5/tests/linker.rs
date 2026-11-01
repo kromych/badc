@@ -1874,6 +1874,45 @@ fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec:
     emit_native_with_options(&program, target, opts).expect("emit")
 }
 
+/// At -O a static function whose one call site is the only way to reach it
+/// is spliced into its caller past the size cap, and its out-of-line copy
+/// goes (gcc's `-finline-functions-called-once`). A second call site, a
+/// taken address or external linkage keeps the copy, so those are not.
+#[test]
+fn a_static_function_called_once_is_spliced_past_the_size_cap() {
+    let body = "{ int s = 0; for (int i = 0; i < n; i++) { s += sink(s + i) * 3; \
+        s ^= sink(s & 7) + sink(s | 1) + sink(s - 2) + sink(s + 5) + sink(s * 7); \
+        s += sink(s ^ 9) + sink(s << 1) + sink(s >> 2) + sink(s + 11) + sink(s - 13); \
+        if (s > 1000) s -= sink(s); } return s; }";
+    let src = alloc::format!(
+        "extern int sink(int);\n\
+         static int once_big(int n) {body}\n\
+         static int twice_big(int n) {body}\n\
+         static int taken_big(int n) {body}\n\
+         int extern_big(int n) {body}\n\
+         int (*taken)(int) = taken_big;\n\
+         int api(int n) {{ return once_big(n) + twice_big(n) + twice_big(n + 1) \
+             + extern_big(n) + taken(n); }}\n"
+    );
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let has =
+            |bytes: &[u8], name: &str| bytes.windows(name.len()).any(|w| w == name.as_bytes());
+        let unoptimized = reloc_tu(&src, target, false);
+        assert!(
+            has(&unoptimized, "once_big"),
+            "{target:?}: -O0 keeps the call"
+        );
+        let bytes = reloc_tu(&src, target, true);
+        assert!(
+            !has(&bytes, "once_big"),
+            "{target:?}: the called-once copy is spliced"
+        );
+        for kept in ["twice_big", "taken_big", "extern_big"] {
+            assert!(has(&bytes, kept), "{target:?}: {kept} keeps its copy");
+        }
+    }
+}
+
 #[test]
 fn dead_static_data_with_extern_relocs_drops_reloc_and_undef() {
     // A static pointer table holding extern-symbol addresses, itself

@@ -13,29 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<file_scope_values>:
-               	mov	x0, #0x0                // =0
-               	ret
-
-<block_static_values>:
-               	mov	x0, #0x0                // =0
-               	ret
-
-<block_auto_values>:
-               	mov	x0, #0x0                // =0
-               	ret
-
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	cbz	w0, <addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	bl	<addr>
-               	cbz	w0, <addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
                	ret

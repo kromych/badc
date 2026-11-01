@@ -19,7 +19,7 @@ static int sink(int a, int b, int c, int d) {
     return a * 1 + b * 2 + c * 3 + d * 4;
 }
 
-static int forward(int seed) {
+__attribute__((noinline)) static int forward(int seed) {
     // Sixteen locals force the allocator to spill at least some
     // candidates into stack slots; the tail call below then has to
     // source its argument values from those spill slots, exercising

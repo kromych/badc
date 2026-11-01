@@ -74,7 +74,7 @@ op_halt:
 #undef DISPATCH
 }
 
-static long run_switch(const long *code, long *stack) {
+__attribute__((noinline)) static long run_switch(const long *code, long *stack) {
     long pc = 0, acc = 0, steps = 0, *sp = stack;
     for (;;) {
         long op = code[pc++];
@@ -130,7 +130,7 @@ op_end:
            10 * a9 + 11 * a10 + 12 * a11 + pc;
 }
 
-static long pressure_switch(const unsigned char *code, int n) {
+__attribute__((noinline)) static long pressure_switch(const unsigned char *code, int n) {
     long a0 = 1, a1 = 2, a2 = 3, a3 = 4, a4 = 5, a5 = 6;
     long a6 = 7, a7 = 8, a8 = 9, a9 = 10, a10 = 11, a11 = 12;
     int pc = 0;

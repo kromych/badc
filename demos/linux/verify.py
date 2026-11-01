@@ -219,12 +219,14 @@ SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
 # figure and is reported only.
 UNPACK_BOUNDS = {"aarch64": 7.5}
 # Budgets over the linked image's functions, per architecture: the largest
-# `STT_FUNC` size and the count over 4 KiB. The boxes' badc-built 7.1.10
-# defconfig images measure 22680 and 89 (aarch64, of 88394 functions) and
-# 44352 and 115 (x86_64, of 158838); the budgets clear those by about 30%
-# and 15%.
-TEXT_BUDGETS = {"aarch64": {"largest": 29696, "over_4k": 103},
-                "x86_64": {"largest": 57344, "over_4k": 133}}
+# `STT_FUNC` size and the count over 4 KiB. The boxes' badc-built 7.2.9
+# defconfig images, with a static function one call site reaches inlined,
+# measure 21104 and 139 (aarch64, of 73488 functions) and 49252 and 189
+# (x86_64, of 139955); gcc 16.2.1 builds the same configuration at 20584
+# and 135, and 20860 and 194. The counts' budgets clear badc's by about
+# 15%; the largest-function budgets stand as set for 7.1.10.
+TEXT_BUDGETS = {"aarch64": {"largest": 29696, "over_4k": 160},
+                "x86_64": {"largest": 57344, "over_4k": 218}}
 
 # objtool's own verdict on the objects the build produced, one line per
 # site. A kernel build does not fail on them unless CONFIG_OBJTOOL_WERROR

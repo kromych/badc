@@ -13,23 +13,7 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<check_local>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x64
-               	b.ne	<addr>
-               	ldrsw	x0, [x0, #0x8]
-               	cmp	w0, #0x12c
-               	b.eq	<addr>
-               	mov	x0, #0x23               // =35
-               	ret
-               	mov	x0, #0x0                // =0
-               	ret
-
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
@@ -41,7 +25,6 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -57,15 +40,22 @@ Disassembly of section .text:
                	cmp	w0, #0x12
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	cbz	x0, <addr>
                	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x1, [x0]
+               	cmp	w1, #0x64
+               	b.ne	<addr>
+               	ldrsw	x0, [x0, #0x8]
+               	cmp	w0, #0x12c
+               	b.eq	<addr>
+               	mov	x0, #0x23               // =35
                	ret
+               	mov	x0, #0x0                // =0
+               	b	<addr>

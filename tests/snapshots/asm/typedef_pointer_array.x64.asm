@@ -25,22 +25,7 @@ Disassembly of section .text:
                	int3
                	int3
 
-<check_local>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x64, %ecx
-               	jne	<addr>
-               	movl	0x8(%rax), %eax
-               	cmpl	$0x12c, %eax            # imm = 0x12C
-               	je	<addr>
-               	movl	$0x23, %eax
-               	retq
-               	xorl	%eax, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	leaq	<rip>, %rax # <addr>
                	leaq	<rip>, %rcx # <addr>
                	movl	(%rax), %eax
@@ -50,7 +35,6 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
@@ -63,13 +47,20 @@ Disassembly of section .text:
                	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
                	cmpq	$0x0, (%rax)
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
                	retq
-               	popq	%rbp
+               	leaq	<rip>, %rax # <addr>
+               	movl	(%rax), %ecx
+               	cmpl	$0x64, %ecx
+               	jne	<addr>
+               	movl	0x8(%rax), %eax
+               	cmpl	$0x12c, %eax            # imm = 0x12C
+               	je	<addr>
+               	movl	$0x23, %eax
+               	retq
+               	xorl	%eax, %eax
                	jmp	<addr>

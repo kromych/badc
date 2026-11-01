@@ -25,30 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<file_scope_values>:
-               	xorl	%eax, %eax
-               	retq
-
-<block_static_values>:
-               	xorl	%eax, %eax
-               	retq
-
-<block_auto_values>:
-               	xorl	%eax, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	popq	%rbp
+               	xorl	%eax, %eax
                	retq
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	popq	%rbp
-               	jmp	<addr>

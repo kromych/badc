@@ -25,7 +25,7 @@ Disassembly of section .text:
                	int3
                	int3
 
-<relational>:
+<main>:
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rsi
@@ -79,16 +79,9 @@ Disassembly of section .text:
                	cmpq	$0x9, %rcx
                	jb	<addr>
                	incq	%rax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
                	retq
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
@@ -120,7 +113,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rdx
@@ -138,7 +130,6 @@ Disassembly of section .text:
                	cmpl	$0x2, %edx
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
                	retq
                	movq	(%rax), %rdx
                	movq	(%rcx), %rsi
@@ -153,8 +144,6 @@ Disassembly of section .text:
                	cmpl	$0xe, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
                	retq

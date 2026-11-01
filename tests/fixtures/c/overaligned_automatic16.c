@@ -9,7 +9,7 @@ struct wrap { __int128 v; };
 
 static int fails;
 
-static void probe_even(int depth) {
+__attribute__((noinline)) static void probe_even(int depth) {
     __int128 x = depth;
     struct pair p;
     struct wrap w;
@@ -23,7 +23,7 @@ static void probe_even(int depth) {
         fails |= 2;
 }
 
-static void probe_odd(int depth) {
+__attribute__((noinline)) static void probe_odd(int depth) {
     volatile long skew = depth;
     __int128 x = skew;
     struct pair p;

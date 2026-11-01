@@ -59,7 +59,7 @@ static unsigned long long fnv(const unsigned char *b, int n, unsigned long long 
 
 /* Sixteen loop-carried vectors and three temporaries per lane: past the
  * SIMD register file, so values spill and reload around the operands. */
-static void neon8_gen_syndrome(int disks, unsigned long bytes, unsigned char **dptr) {
+__attribute__((noinline)) static void neon8_gen_syndrome(int disks, unsigned long bytes, unsigned char **dptr) {
     int z0 = disks - 3;
     unsigned char *p = dptr[z0 + 1], *q = dptr[z0 + 2];
     const uint8x16_t x1d = vdupq_n_u8(0x1d);

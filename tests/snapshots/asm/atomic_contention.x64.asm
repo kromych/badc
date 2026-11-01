@@ -180,7 +180,7 @@ Disassembly of section .text:
                	leave
                	retq
 
-<contended>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
@@ -194,54 +194,40 @@ Disassembly of section .text:
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x67, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x68, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	cmpq	$0x0, (%rax)
                	je	<addr>
                	movl	$0x69, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movswq	(%rax), %rax
                	cmpl	$0xffff9c40, %eax       # imm = 0xFFFF9C40
                	je	<addr>
                	movl	$0x6a, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x6b, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x6c, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x6d, %eax
-               	popq	%rbp
-               	retq
+               	jmp	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	popq	%rbp
                	jmp	<addr>

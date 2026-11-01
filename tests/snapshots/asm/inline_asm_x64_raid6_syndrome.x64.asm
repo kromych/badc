@@ -25,390 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<ref_syndrome>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	xorl	%edx, %edx
-               	movq	%rdx, %rax
-               	leaq	<rip>, %r8 # <addr>
-               	leaq	0x300(%r8), %rcx
-               	movzbq	(%rcx,%rax), %rcx
-               	addq	$0x200, %r8             # imm = 0x200
-               	movzbq	(%r8,%rax), %r9
-               	xorq	%rcx, %r9
-               	movq	%rcx, %rbx
-               	shlq	%rbx
-               	testb	$-0x80, %cl
-               	je	<addr>
-               	movl	$0x1d, %ecx
-               	xorq	%rbx, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%r8,%rax), %r8
-               	xorq	%r8, %rcx
-               	leaq	<rip>, %r8 # <addr>
-               	addq	$0x100, %r8             # imm = 0x100
-               	movzbq	(%r8,%rax), %rbx
-               	xorq	%rbx, %r9
-               	movq	%rcx, %rbx
-               	shlq	%rbx
-               	testb	$-0x80, %cl
-               	je	<addr>
-               	movl	$0x1d, %ecx
-               	xorq	%rbx, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%r8,%rax), %r8
-               	xorq	%r8, %rcx
-               	leaq	<rip>, %r8 # <addr>
-               	movzbq	(%r8,%rax), %rbx
-               	xorq	%rbx, %r9
-               	movq	%rcx, %rbx
-               	shlq	%rbx
-               	testb	$-0x80, %cl
-               	je	<addr>
-               	movl	$0x1d, %ecx
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	movq	%rdx, %rcx
-               	jmp	<addr>
-               	xorq	%rbx, %rcx
-               	andq	$0xff, %rcx
-               	movzbq	(%r8,%rax), %r8
-               	xorq	%r8, %rcx
-               	movb	%r9b, (%rdi,%rax)
-               	movb	%cl, (%rsi,%rax)
-               	incq	%rax
-               	cmpl	$0x100, %eax            # imm = 0x100
-               	jb	<addr>
-               	popq	%rbx
-               	leave
-               	retq
-
-<avx2_syndrome>:
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x400(%rax), %rdi
-               	leaq	0x500(%rax), %r8
-               	xorl	%ecx, %ecx
-               	vmovdqa	<rip>, %ymm0 # <addr>
-               	vpxor	%ymm3, %ymm3, %ymm3
-               	leaq	<rip>, %rdx # <addr>
-               	leaq	0x300(%rdx), %rsi
-               	leaq	(%rsi,%rcx), %rax
-               	prefetchnta	(%rax)
-               	leaq	(%rsi,%rcx), %rax
-               	vmovdqa	(%rax), %ymm2
-               	vmovdqa	%ymm2, %ymm4
-               	leaq	0x200(%rdx), %rax
-               	addq	%rcx, %rax
-               	vmovdqa	(%rax), %ymm6
-               	leaq	0x100(%rdx), %rax
-               	addq	%rcx, %rax
-               	prefetchnta	(%rax)
-               	vpcmpgtb	%ymm4, %ymm3, %ymm5
-               	vpaddb	%ymm4, %ymm4, %ymm4
-               	vpand	%ymm0, %ymm5, %ymm5
-               	vpxor	%ymm5, %ymm4, %ymm4
-               	vpxor	%ymm6, %ymm2, %ymm2
-               	vpxor	%ymm6, %ymm4, %ymm4
-               	leaq	0x100(%rdx), %rax
-               	addq	%rcx, %rax
-               	vmovdqa	(%rax), %ymm6
-               	leaq	(%rdx,%rcx), %rax
-               	prefetchnta	(%rax)
-               	vpcmpgtb	%ymm4, %ymm3, %ymm5
-               	vpaddb	%ymm4, %ymm4, %ymm4
-               	vpand	%ymm0, %ymm5, %ymm5
-               	vpxor	%ymm5, %ymm4, %ymm4
-               	vpxor	%ymm6, %ymm2, %ymm2
-               	vpxor	%ymm6, %ymm4, %ymm4
-               	leaq	(%rdx,%rcx), %rax
-               	vmovdqa	(%rax), %ymm6
-               	vpcmpgtb	%ymm4, %ymm3, %ymm5
-               	vpaddb	%ymm4, %ymm4, %ymm4
-               	vpand	%ymm0, %ymm5, %ymm5
-               	vpxor	%ymm5, %ymm4, %ymm4
-               	vpxor	%ymm6, %ymm2, %ymm2
-               	vpxor	%ymm6, %ymm4, %ymm4
-               	leaq	(%rdi,%rcx), %rax
-               	vmovntdq	%ymm2, (%rax)
-               	leaq	(%r8,%rcx), %rax
-               	vmovntdq	%ymm4, (%rax)
-               	addq	$0x20, %rcx
-               	cmpl	$0x100, %ecx            # imm = 0x100
-               	jb	<addr>
-               	sfence
-               	vzeroupper
-               	retq
-
-<avx2_table_mul>:
-               	vpbroadcastb	<rip>, %ymm7 # <addr>
-               	vbroadcasti128	<rip>, %ymm4 # ymm4 = mem[0,1,0,1]
-                                                # <addr>
-               	vbroadcasti128	<rip>, %ymm5 # ymm5 = mem[0,1,0,1]
-                                                # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vmovdqa	<rip>, %ymm1 # <addr>
-               	vpsraw	$0x4, %ymm1, %ymm3
-               	vpand	%ymm7, %ymm1, %ymm1
-               	vpand	%ymm7, %ymm3, %ymm3
-               	vpshufb	%ymm1, %ymm4, %ymm1
-               	vpshufb	%ymm3, %ymm5, %ymm3
-               	vpxor	%ymm1, %ymm3, %ymm3
-               	vmovdqa	%ymm3, <rip> # <addr>
-               	vzeroupper
-               	retq
-
-<avx512_syndrome>:
-               	vmovdqa64	<rip>, %zmm0 # <addr>
-               	vpxorq	%zmm1, %zmm1, %zmm1
-               	prefetchnta	<rip> # <addr>
-               	vmovdqa64	<rip>, %zmm2 # <addr>
-               	vmovdqa64	%zmm2, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovntdq	%zmm2, <rip> # <addr>
-               	vmovntdq	%zmm4, <rip> # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vmovdqa64	<rip>, %zmm2 # <addr>
-               	vmovdqa64	%zmm2, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovntdq	%zmm2, <rip> # <addr>
-               	vmovntdq	%zmm4, <rip> # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vmovdqa64	<rip>, %zmm2 # <addr>
-               	vmovdqa64	%zmm2, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovntdq	%zmm2, <rip> # <addr>
-               	vmovntdq	%zmm4, <rip> # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vmovdqa64	<rip>, %zmm2 # <addr>
-               	vmovdqa64	%zmm2, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	prefetchnta	<rip> # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovdqa64	<rip>, %zmm6 # <addr>
-               	vpcmpgtb	%zmm4, %zmm1, %k1
-               	vpmovm2b	%k1, %zmm5
-               	vpaddb	%zmm4, %zmm4, %zmm4
-               	vpandq	%zmm0, %zmm5, %zmm5
-               	vpxorq	%zmm5, %zmm4, %zmm4
-               	vpxorq	%zmm6, %zmm2, %zmm2
-               	vpxorq	%zmm6, %zmm4, %zmm4
-               	vmovntdq	%zmm2, <rip> # <addr>
-               	vmovntdq	%zmm4, <rip> # <addr>
-               	sfence
-               	vzeroupper
-               	retq
-
-<vector_level>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	xorl	%eax, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	cmpl	$0x7, %eax
-               	jae	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	testl	$0x8000000, %ecx        # imm = 0x8000000
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	xorl	%ecx, %ecx
-               	xgetbv
-               	movq	%rax, %rsi
-               	movq	%rsi, %rax
-               	andq	$0x6, %rax
-               	xorq	$0x6, %rax
-               	testl	%eax, %eax
-               	je	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	$0x7, %eax
-               	xorl	%ecx, %ecx
-               	cpuid
-               	testb	$0x20, %bl
-               	jne	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	testl	$0x10000, %ebx          # imm = 0x10000
-               	je	<addr>
-               	testl	$0x40000000, %ebx       # imm = 0x40000000
-               	je	<addr>
-               	andq	$0xe0, %rsi
-               	xorq	$0xe0, %rsi
-               	testl	%esi, %esi
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -1064,24 +680,135 @@ Disassembly of section .text:
                	jne	<addr>
                	movb	%cl, 0xf(%r8)
                	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %r8 # <addr>
+               	xorl	%edx, %edx
+               	movq	%rdx, %rax
                	leaq	<rip>, %rsi # <addr>
-               	callq	<addr>
-               	callq	<addr>
-               	movq	%rax, %rbx
+               	leaq	0x300(%rsi), %rcx
+               	movzbq	(%rcx,%rax), %rcx
+               	addq	$0x200, %rsi            # imm = 0x200
+               	movzbq	(%rsi,%rax), %r9
+               	xorq	%rcx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
+               	testb	$-0x80, %cl
+               	je	<addr>
+               	movl	$0x1d, %ecx
+               	xorq	%rbx, %rcx
+               	andq	$0xff, %rcx
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	leaq	<rip>, %rsi # <addr>
+               	addq	$0x100, %rsi            # imm = 0x100
+               	movzbq	(%rsi,%rax), %rbx
+               	xorq	%rbx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
+               	testb	$-0x80, %cl
+               	je	<addr>
+               	movl	$0x1d, %ecx
+               	xorq	%rbx, %rcx
+               	andq	$0xff, %rcx
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	leaq	<rip>, %rsi # <addr>
+               	movzbq	(%rsi,%rax), %rbx
+               	xorq	%rbx, %r9
+               	movq	%rcx, %rbx
+               	shlq	%rbx
+               	testb	$-0x80, %cl
+               	je	<addr>
+               	movl	$0x1d, %ecx
+               	jmp	<addr>
+               	xorl	%ecx, %ecx
+               	jmp	<addr>
+               	xorl	%ecx, %ecx
+               	jmp	<addr>
+               	movq	%rdx, %rcx
+               	jmp	<addr>
+               	xorq	%rbx, %rcx
+               	andq	$0xff, %rcx
+               	movzbq	(%rsi,%rax), %rsi
+               	xorq	%rsi, %rcx
+               	movb	%r9b, (%rdi,%rax)
+               	movb	%cl, (%r8,%rax)
+               	incq	%rax
+               	cmpl	$0x100, %eax            # imm = 0x100
+               	jb	<addr>
+               	xorl	%eax, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	cmpl	$0x7, %eax
+               	jae	<addr>
+               	xorl	%ebx, %ebx
                	cmpl	$0x1, %ebx
                	jge	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
                	leave
                	retq
-               	callq	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x400(%rax), %rcx
+               	leaq	0x400(%rax), %rdi
+               	leaq	0x500(%rax), %r8
+               	xorl	%ecx, %ecx
+               	vmovdqa	<rip>, %ymm0 # <addr>
+               	vpxor	%ymm3, %ymm3, %ymm3
                	leaq	<rip>, %rdx # <addr>
+               	leaq	0x300(%rdx), %rsi
+               	leaq	(%rsi,%rcx), %rax
+               	prefetchnta	(%rax)
+               	leaq	(%rsi,%rcx), %rax
+               	vmovdqa	(%rax), %ymm2
+               	vmovdqa	%ymm2, %ymm4
+               	leaq	0x200(%rdx), %rax
+               	addq	%rcx, %rax
+               	vmovdqa	(%rax), %ymm6
+               	leaq	<rip>, %rdx # <addr>
+               	leaq	0x100(%rdx), %rax
+               	addq	%rcx, %rax
+               	prefetchnta	(%rax)
+               	vpcmpgtb	%ymm4, %ymm3, %ymm5
+               	vpaddb	%ymm4, %ymm4, %ymm4
+               	vpand	%ymm0, %ymm5, %ymm5
+               	vpxor	%ymm5, %ymm4, %ymm4
+               	vpxor	%ymm6, %ymm2, %ymm2
+               	vpxor	%ymm6, %ymm4, %ymm4
+               	leaq	0x100(%rdx), %rax
+               	addq	%rcx, %rax
+               	vmovdqa	(%rax), %ymm6
+               	leaq	<rip>, %rdx # <addr>
+               	leaq	(%rdx,%rcx), %rax
+               	prefetchnta	(%rax)
+               	vpcmpgtb	%ymm4, %ymm3, %ymm5
+               	vpaddb	%ymm4, %ymm4, %ymm4
+               	vpand	%ymm0, %ymm5, %ymm5
+               	vpxor	%ymm5, %ymm4, %ymm4
+               	vpxor	%ymm6, %ymm2, %ymm2
+               	vpxor	%ymm6, %ymm4, %ymm4
+               	leaq	(%rdx,%rcx), %rax
+               	vmovdqa	(%rax), %ymm6
+               	vpcmpgtb	%ymm4, %ymm3, %ymm5
+               	vpaddb	%ymm4, %ymm4, %ymm4
+               	vpand	%ymm0, %ymm5, %ymm5
+               	vpxor	%ymm5, %ymm4, %ymm4
+               	vpxor	%ymm6, %ymm2, %ymm2
+               	vpxor	%ymm6, %ymm4, %ymm4
+               	leaq	(%rdi,%rcx), %rax
+               	vmovntdq	%ymm2, (%rax)
+               	leaq	(%r8,%rcx), %rax
+               	vmovntdq	%ymm4, (%rax)
+               	addq	$0x20, %rcx
+               	cmpl	$0x100, %ecx            # imm = 0x100
+               	jb	<addr>
+               	sfence
+               	vzeroupper
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x400(%rax), %rsi
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %rdi
-               	cmpl	%edi, %esi
+               	movzbq	(%rsi,%rax), %rcx
+               	movzbq	(%rdi,%rax), %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
@@ -1097,7 +824,76 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jb	<addr>
-               	callq	<addr>
+               	vpbroadcastb	<rip>, %ymm7 # <addr>
+               	vbroadcasti128	<rip>, %ymm4 # ymm4 = mem[0,1,0,1]
+                                                # <addr>
+               	vbroadcasti128	<rip>, %ymm5 # ymm5 = mem[0,1,0,1]
+                                                # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vmovdqa	<rip>, %ymm1 # <addr>
+               	vpsraw	$0x4, %ymm1, %ymm3
+               	vpand	%ymm7, %ymm1, %ymm1
+               	vpand	%ymm7, %ymm3, %ymm3
+               	vpshufb	%ymm1, %ymm4, %ymm1
+               	vpshufb	%ymm3, %ymm5, %ymm3
+               	vpxor	%ymm1, %ymm3, %ymm3
+               	vmovdqa	%ymm3, <rip> # <addr>
+               	vzeroupper
                	xorl	%r8d, %r8d
                	leaq	<rip>, %rax # <addr>
                	movzbq	(%rax,%r8), %r9
@@ -1144,14 +940,141 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jb	<addr>
-               	callq	<addr>
+               	vmovdqa64	<rip>, %zmm0 # <addr>
+               	vpxorq	%zmm1, %zmm1, %zmm1
+               	prefetchnta	<rip> # <addr>
+               	vmovdqa64	<rip>, %zmm2 # <addr>
+               	vmovdqa64	%zmm2, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovntdq	%zmm2, <rip> # <addr>
+               	vmovntdq	%zmm4, <rip> # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vmovdqa64	<rip>, %zmm2 # <addr>
+               	vmovdqa64	%zmm2, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovntdq	%zmm2, <rip> # <addr>
+               	vmovntdq	%zmm4, <rip> # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vmovdqa64	<rip>, %zmm2 # <addr>
+               	vmovdqa64	%zmm2, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovntdq	%zmm2, <rip> # <addr>
+               	vmovntdq	%zmm4, <rip> # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vmovdqa64	<rip>, %zmm2 # <addr>
+               	vmovdqa64	%zmm2, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	prefetchnta	<rip> # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovdqa64	<rip>, %zmm6 # <addr>
+               	vpcmpgtb	%zmm4, %zmm1, %k1
+               	vpmovm2b	%k1, %zmm5
+               	vpaddb	%zmm4, %zmm4, %zmm4
+               	vpandq	%zmm0, %zmm5, %zmm5
+               	vpxorq	%zmm5, %zmm4, %zmm4
+               	vpxorq	%zmm6, %zmm2, %zmm2
+               	vpxorq	%zmm6, %zmm4, %zmm4
+               	vmovntdq	%zmm2, <rip> # <addr>
+               	vmovntdq	%zmm4, <rip> # <addr>
+               	sfence
+               	vzeroupper
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x400(%rax), %rcx
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	0x400(%rax), %rsi
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rsi
-               	movzbq	(%rdx,%rax), %rdi
-               	cmpl	%edi, %esi
+               	movzbq	(%rsi,%rax), %rcx
+               	movzbq	(%rdi,%rax), %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
@@ -1261,3 +1184,39 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
+               	movl	$0x1, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	testl	$0x8000000, %ecx        # imm = 0x8000000
+               	jne	<addr>
+               	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	xorl	%ecx, %ecx
+               	xgetbv
+               	movq	%rax, %rsi
+               	movq	%rsi, %rax
+               	andq	$0x6, %rax
+               	xorq	$0x6, %rax
+               	testl	%eax, %eax
+               	je	<addr>
+               	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	movl	$0x7, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	testb	$0x20, %bl
+               	jne	<addr>
+               	xorl	%ebx, %ebx
+               	jmp	<addr>
+               	testl	$0x10000, %ebx          # imm = 0x10000
+               	je	<addr>
+               	testl	$0x40000000, %ebx       # imm = 0x40000000
+               	je	<addr>
+               	andq	$0xe0, %rsi
+               	xorq	$0xe0, %rsi
+               	testl	%esi, %esi
+               	jne	<addr>
+               	movl	$0x2, %ebx
+               	jmp	<addr>
+               	movl	$0x1, %ebx
+               	jmp	<addr>

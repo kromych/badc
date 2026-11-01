@@ -22,7 +22,7 @@ static long g_sum;
 // Five aggregates of mixed size plus three scalars interleaved, so the
 // register/stack split differs per ABI and the by-reference vs by-value
 // vs by-stack paths all run in one call.
-static void take_many(struct p2 a, int s0, struct p3 b, struct p1 c,
+__attribute__((noinline)) static void take_many(struct p2 a, int s0, struct p3 b, struct p1 c,
                       struct p4 d, int s1, struct p6 e, int s2) {
     g_sum = a.a + a.b
           + s0

@@ -13,7 +13,10 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<fill>:
+<main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x1b0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
@@ -100,13 +103,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x14
                	b.lt	<addr>
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x1b0
-               	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -1653,22 +1649,21 @@ Disassembly of section .text:
                	movk	x0, #0x8e04, lsl #16
                	movk	x0, #0xfee0, lsl #32
                	stur	x0, [x29, #-0x8]
-               	ldursw	x0, [x29, #-0x10]
-               	mov	x1, #0x0                // =0
-               	neg	x0, x0
+               	ldursw	x1, [x29, #-0x10]
+               	mov	x0, #0x0                // =0
+               	neg	x1, x1
                	mov	x17, #0x3039            // =12345
-               	cmp	w0, w17
+               	cmp	w1, w17
                	b.ne	<addr>
-               	ldursw	x0, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x8]
-               	neg	x0, x0
+               	ldursw	x1, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x8]
+               	neg	x1, x1
                	mov	x17, #0x4cb             // =1227
                	movk	x17, #0x71fb, lsl #16
                	movk	x17, #0x11f, lsl #32
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.ne	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	mov	x0, x1
+               	ldur	x1, [x29, #-0x8]
                	add	sp, sp, #0x1b0
                	ldp	x29, x30, [sp], #0x10
                	ret

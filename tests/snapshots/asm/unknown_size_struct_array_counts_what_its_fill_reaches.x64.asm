@@ -190,11 +190,18 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<block_scope>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x48, %rsp
                	pushq	%rbx
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	popq	%rbx
+               	leave
+               	retq
                	leaq	-0x40(%rbp), %rax
                	leaq	<rip>, %rdx
                	movups	(%rdx), %xmm14
@@ -251,9 +258,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xb, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	jmp	<addr>
                	leaq	-0x40(%rbp), %rax
                	leaq	0x8(%rax), %rdi
                	leaq	<rip>, %rsi
@@ -288,35 +293,12 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xe, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	jmp	<addr>
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	jmp	<addr>
                	movl	$0xd, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	jmp	<addr>
                	movl	$0xc, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	jmp	<addr>
                	movl	$0xa, %eax
-               	popq	%rbx
-               	leave
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %edi
-               	callq	<addr>
                	jmp	<addr>

@@ -2339,6 +2339,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 target.abi(),
                 &code_syms,
                 &extern_fns,
+                &alloc::collections::BTreeSet::new(),
                 &mut sink,
             );
         });
@@ -2445,12 +2446,15 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         let code_syms = defined_fn_syms(program);
         let extern_fns = extern_fn_targets(program);
         pipeline.run("passes::inline::run", &mut ssa_funcs, |funcs| {
+            let escaping =
+                super::super::passes::ipa_const_param::escaping_functions(funcs, program);
             super::super::passes::inline::run(
                 funcs,
                 native.inline_cap,
                 target.abi(),
                 &code_syms,
                 &extern_fns,
+                &escaping,
                 &mut sink,
             );
         });

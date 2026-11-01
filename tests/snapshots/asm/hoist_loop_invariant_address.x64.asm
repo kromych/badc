@@ -25,16 +25,21 @@ Disassembly of section .text:
                	int3
                	int3
 
-<setup>:
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x8, %rsp
+               	pushq	%rbx
+               	xorl	%r9d, %r9d
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x0, (%rax)
+               	movl	%r9d, (%rax)
                	movl	$0x1, 0x4(%rax)
                	movl	$0x4, 0x8(%rax)
                	movl	$0x9, 0xc(%rax)
                	movl	$0x10, 0x10(%rax)
+               	leaq	<rip>, %rax # <addr>
                	movl	$0x19, 0x14(%rax)
                	movl	$0x24, 0x18(%rax)
-               	leaq	<rip>, %rax # <addr>
                	movl	$0x31, 0x1c(%rax)
                	movl	$0x40, 0x20(%rax)
                	movl	$0x51, 0x24(%rax)
@@ -48,38 +53,30 @@ Disassembly of section .text:
                	movq	%rcx, 0x20(%rax)
                	movabsq	$0x12a05f223, %rcx      # imm = 0x12A05F223
                	movq	%rcx, 0x28(%rax)
+               	leaq	<rip>, %rax # <addr>
                	movabsq	$0x165a0bc2a, %rcx      # imm = 0x165A0BC2A
                	movq	%rcx, 0x30(%rax)
-               	leaq	<rip>, %rax # <addr>
                	movabsq	$0x1a13b8631, %rcx      # imm = 0x1A13B8631
                	movq	%rcx, 0x38(%rax)
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx # <addr>
-               	movq	%rax, %rcx
-               	shlq	$0x4, %rcx
-               	leaq	(%rdx,%rcx), %rsi
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	addq	%rcx, %rdx
                	incq	%rax
-               	movl	%eax, (%rsi)
+               	movl	%eax, (%rdx)
                	cmpl	$0x18, %eax
                	jge	<addr>
-               	movq	%rax, %rcx
-               	shlq	$0x4, %rcx
-               	addq	%rdx, %rcx
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rax, %rsi
+               	shlq	$0x4, %rsi
+               	addq	%rsi, %rcx
                	jmp	<addr>
                	xorl	%ecx, %ecx
-               	movq	%rcx, 0x8(%rsi)
+               	movq	%rcx, 0x8(%rdx)
                	cmpl	$0x18, %eax
                	jl	<addr>
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	callq	<addr>
                	xorl	%esi, %esi
-               	xorl	%r9d, %r9d
                	xorl	%eax, %eax
                	movq	%rsi, %rcx
                	testl	%ecx, %ecx

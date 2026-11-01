@@ -13,7 +13,7 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<relational>:
+<main>:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -69,16 +69,9 @@ Disassembly of section .text:
                	cmp	x1, #0x9
                	b.lo	<addr>
                	add	x0, x0, #0x1
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
@@ -106,7 +99,6 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -125,7 +117,6 @@ Disassembly of section .text:
                	cmp	w2, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x2, [x0]
                	ldr	x3, [x1]
@@ -137,8 +128,6 @@ Disassembly of section .text:
                	cmp	w0, #0xe
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
                	ret

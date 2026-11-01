@@ -25,19 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<st4_lane_words>:
-               	movl	$0x1, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
                	movl	$0x2a, %eax
-               	popq	%rbp
-               	retq
-               	xorl	%eax, %eax
-               	popq	%rbp
                	retq

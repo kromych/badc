@@ -42,8 +42,8 @@ static struct pair add(struct pair a, struct pair b) {
     return r;
 }
 
-static struct pair times5(struct pair i) { return add(shl(i, 2), i); }
-static struct pair times9(struct pair i) { return add(shl(i, 3), i); }
+__attribute__((noinline)) static struct pair times5(struct pair i) { return add(shl(i, 2), i); }
+__attribute__((noinline)) static struct pair times9(struct pair i) { return add(shl(i, 3), i); }
 
 static struct pair rot(struct pair i, int n) {
     return pack((i.h << n) | (i.l >> (32 - n)), (i.h >> (32 - n)) | (i.l << n));

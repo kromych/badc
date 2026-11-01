@@ -6412,6 +6412,35 @@ fn implicit_fallthrough_reports_where_gcc_does() {
                int e(int x) { switch (x) { int c = 3; case 1: return c; } return 0; }\n",
             &[],
         ),
+        // A `return` that leaves `cleanup` scopes runs their calls and
+        // leaves; gcc 16.2.1 reports none of these.
+        (
+            "void unlock(int *p);\n\
+               int g(int);\n\
+               int f(int x) {\n\
+               int m __attribute__((cleanup(unlock))) = 0;\n\
+               switch (x) {\n\
+               case 0:\n\
+               if (g(x)) return 1;\n\
+               return 3;\n\
+               case 1:\n\
+               return 2;\n\
+               default:\n\
+               break;\n\
+               }\n\
+               return 0;\n\
+               }\n\
+               int h(int x) {\n\
+               switch (x) {\n\
+               case 0: { int m __attribute__((cleanup(unlock))) = 0; return g(m); }\n\
+               case 1: { int m __attribute__((cleanup(unlock))) = 0; (void)m; return 5; }\n\
+               case 2:\n\
+               return 2;\n\
+               }\n\
+               return 0;\n\
+               }\n",
+            &[],
+        ),
     ];
     for (src, want) in units {
         let lines = |selectors: &[&str]| -> Vec<u32> {

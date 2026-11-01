@@ -183,6 +183,8 @@ impl Compiler {
                 self.exit_of(*body)
             }
             Stmt::Break | Stmt::Continue | Stmt::Return(_) | Stmt::Goto(_) => Exit::Leaves,
+            // A `return` leaving `cleanup` scopes runs their calls and jumps.
+            Stmt::CleanupJump { jump, .. } => self.exit_of(*jump),
             Stmt::GotoIndirect(_) => Exit::Leaves,
             _ => Exit::Falls,
         }

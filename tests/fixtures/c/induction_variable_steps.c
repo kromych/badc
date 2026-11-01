@@ -98,6 +98,50 @@ NOINLINE static long last_index(const int *v, int n, int x) {
     return i;
 }
 
+// A counter only some paths step, as a partition's store index.
+NOINLINE static int partition(int *a, int lo, int hi) {
+    int p = a[hi], i = lo - 1;
+    for (int j = lo; j < hi; j++)
+        if (a[j] < p) {
+            i++;
+            int t = a[i];
+            a[i] = a[j];
+            a[j] = t;
+        }
+    int t = a[i + 1];
+    a[i + 1] = a[hi];
+    a[hi] = t;
+    return i + 1;
+}
+
+// Each path steps the counter by its own amount.
+NOINLINE static long zigzag(const int *v, int n) {
+    long s = 0;
+    int k = 10;
+    for (int i = 0; i < n; i++) {
+        if (v[i] & 1)
+            k -= 1;
+        else
+            k += 2;
+        s += v[k];
+    }
+    return s;
+}
+
+// A path that resets the counter: no step, so the index keeps its extension.
+NOINLINE static long reset(const int *v, int n, int x) {
+    long s = 0;
+    int k = 0;
+    for (int i = 0; i < n; i++) {
+        if (v[i] > x)
+            k = i >> 1;
+        else
+            k++;
+        s += v[k];
+    }
+    return s;
+}
+
 // An accumulator keeps its renormalization.
 NOINLINE static long hash(const unsigned char *c, int n) {
     int h = 7;
@@ -107,6 +151,7 @@ NOINLINE static long hash(const unsigned char *c, int n) {
 }
 
 static int v[64];
+static int w[64];
 static unsigned char code[40];
 
 int main(void) {
@@ -129,5 +174,14 @@ int main(void) {
     if (down3(v, n64) != 3751) return 10;
     if (last_index(v, n64, 90) != 20 || last_index(v, n64, 91) != 64) return 11;
     if (hash(code, 5) != 205589112) return 12;
+    for (int i = 0; i < 64; i++)
+        w[i] = (i * 37) % 64 - 20;
+    unsigned long long order = 0;
+    int at = partition(w, 0, 63);
+    for (int i = 0; i < 64; i++)
+        order = order * 3 + w[i];
+    if (at != 27 || order != 3202084290696601612ULL) return 13;
+    if (zigzag(v, 40) != 3880) return 14;
+    if (reset(v, n64, 100) != 4745) return 15;
     return 0;
 }

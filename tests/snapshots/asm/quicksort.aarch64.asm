@@ -30,9 +30,9 @@ Disassembly of section .text:
                	cmp	w5, w4
                	b.gt	<addr>
                	add	x3, x3, #0x1
-               	ldrsw	x5, [x0, w3, sxtw #2]
+               	ldrsw	x5, [x0, x3, lsl #2]
                	ldrsw	x6, [x0, x1, lsl #2]
-               	str	w6, [x0, w3, sxtw #2]
+               	str	w6, [x0, x3, lsl #2]
                	str	w5, [x0, x1, lsl #2]
                	add	x1, x1, #0x1
                	cmp	w1, w2
@@ -64,9 +64,9 @@ Disassembly of section .text:
                	cmp	w4, w2
                	b.gt	<addr>
                	add	x3, x3, #0x1
-               	ldrsw	x4, [x20, w3, sxtw #2]
+               	ldrsw	x4, [x20, x3, lsl #2]
                	ldrsw	x5, [x20, x1, lsl #2]
-               	str	w5, [x20, w3, sxtw #2]
+               	str	w5, [x20, x3, lsl #2]
                	str	w4, [x20, x1, lsl #2]
                	add	x1, x1, #0x1
                	cmp	w1, w21

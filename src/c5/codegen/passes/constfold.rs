@@ -34,7 +34,9 @@
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
+};
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
@@ -817,6 +819,40 @@ fn masked_before_shl(func: &FunctionSsa, v: ValueId, k: i64) -> Option<ValueId> 
     ((1..64).contains(&k) && rhs_imm as u64 & kept == kept).then_some(lhs)
 }
 
+/// The bits a conversion of the constant `k` gives (C99 6.3.1.4, 6.3.1.5),
+/// rounded once to nearest as the default floating environment does.
+/// `src_f32` / `dst_f32` say the operand / result is a `float`, held in the
+/// low word. A NaN keeps its runtime conversion, which quiets a signaling
+/// one, and so does a value out of the integer range, whose conversion is
+/// undefined.
+fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Option<i64> {
+    const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+    let real = || {
+        let x = if src_f32 {
+            f64::from(f32::from_bits(k as u32))
+        } else {
+            f64::from_bits(k as u64)
+        };
+        (!x.is_nan()).then_some(x)
+    };
+    let float = |x: f32| i64::from(x.to_bits());
+    let double = |x: f64| x.to_bits() as i64;
+    Some(match kind {
+        FpCastKind::F32ToF64 if src_f32 && !dst_f32 => double(real()?),
+        FpCastKind::F64ToF32 if !src_f32 && dst_f32 => float(real()? as f32),
+        FpCastKind::IntToFp if !src_f32 && dst_f32 => float(k as f32),
+        FpCastKind::IntToFp if !src_f32 => double(k as f64),
+        FpCastKind::UIntToFp if !src_f32 && dst_f32 => float(k as u64 as f32),
+        FpCastKind::UIntToFp if !src_f32 => double(k as u64 as f64),
+        // `as` truncates toward zero, which in range is the C conversion.
+        FpCastKind::FpToInt if !dst_f32 => real().filter(|x| (-TWO_63..TWO_63).contains(x))? as i64,
+        FpCastKind::UFpToInt if !dst_f32 => {
+            real().filter(|&x| x > -1.0 && x < 2.0 * TWO_63)? as u64 as i64
+        }
+        _ => return None,
+    })
+}
+
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
@@ -836,6 +872,14 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             && f32(idx) == f32(src as usize)
         {
             func.insts[idx] = Inst::Imm(k ^ if f32(idx) { 0x8000_0000 } else { i64::MIN });
+            changed = true;
+            continue;
+        }
+        if let Inst::FpCast { kind, value } = func.insts[idx]
+            && let Some(&Inst::Imm(k)) = func.insts.get(value as usize)
+            && let Some(folded) = eval_fp_cast(kind, k, f32(value as usize), f32(idx))
+        {
+            func.insts[idx] = Inst::Imm(folded);
             changed = true;
             continue;
         }
@@ -1841,6 +1885,80 @@ mod tests {
             let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
             run_one(&mut f);
             assert!(matches!(f.insts[1], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn a_conversion_of_a_constant_folds_in_range() {
+        let f64b = |x: f64| x.to_bits() as i64;
+        let f32b = |x: f32| i64::from(x.to_bits());
+        let folds = [
+            (
+                FpCastKind::F32ToF64,
+                f32b(1.5),
+                (true, false),
+                Some(f64b(1.5)),
+            ),
+            (
+                FpCastKind::F64ToF32,
+                f64b(0.1),
+                (false, true),
+                Some(f32b(0.1)),
+            ),
+            (FpCastKind::IntToFp, -7, (false, false), Some(f64b(-7.0))),
+            // One rounding to `float`, not two through `double`.
+            (
+                FpCastKind::IntToFp,
+                0x20_0000_2000_0001,
+                (false, true),
+                Some(0x5a00_0001),
+            ),
+            (
+                FpCastKind::UIntToFp,
+                -1,
+                (false, false),
+                Some(f64b(18_446_744_073_709_551_616.0)),
+            ),
+            (
+                FpCastKind::UIntToFp,
+                -1,
+                (false, true),
+                Some(f32b(18_446_744_073_709_551_616.0)),
+            ),
+            (FpCastKind::FpToInt, f64b(-2.75), (false, false), Some(-2)),
+            (FpCastKind::FpToInt, f32b(-2.75), (true, false), Some(-2)),
+            (
+                FpCastKind::FpToInt,
+                f64b(-9_223_372_036_854_775_808.0),
+                (false, false),
+                Some(i64::MIN),
+            ),
+            (
+                FpCastKind::UFpToInt,
+                f64b(3e9),
+                (false, false),
+                Some(3_000_000_000),
+            ),
+            (FpCastKind::UFpToInt, f64b(-0.5), (false, false), Some(0)),
+            // Out of range, a NaN, or an operand of the other width.
+            (
+                FpCastKind::FpToInt,
+                f64b(9_223_372_036_854_775_808.0),
+                (false, false),
+                None,
+            ),
+            (FpCastKind::UFpToInt, f64b(-1.0), (false, false), None),
+            (FpCastKind::F32ToF64, f32b(f32::NAN), (true, false), None),
+            (FpCastKind::F64ToF32, f64b(f64::NAN), (false, true), None),
+            (FpCastKind::F32ToF64, f64b(1.5), (false, false), None),
+            (FpCastKind::IntToFp, f32b(1.5), (true, false), None),
+        ];
+        for (kind, k, (src_f32, dst_f32), want) in folds {
+            assert_eq!(
+                eval_fp_cast(kind, k, src_f32, dst_f32),
+                want,
+                "{kind:?} {k:#x}"
+            );
         }
     }
 

@@ -156,10 +156,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movsd	(%rax), %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm14
-               	cvtss2sd	%xmm14, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movabsq	$0x3fb99999a0000000, %rax # imm = 0x3FB99999A0000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x17, %eax

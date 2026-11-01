@@ -77,11 +77,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movl	$0x2, %eax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movq	%rax, %xmm1
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000

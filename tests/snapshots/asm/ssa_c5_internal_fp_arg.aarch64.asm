@@ -21,8 +21,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	mov	x1, #0x0                // =0
-               	scvtf	d1, x1
+               	movi	d1, #0000000000000000
                	fadd	d1, d0, d1
                	scvtf	d0, x0
                	fcmp	d1, d0

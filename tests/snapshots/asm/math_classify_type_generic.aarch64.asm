@@ -118,13 +118,12 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]
-               	mov	x16, #0x7f800000        // =2139095040
-               	fmov	s1, w16
-               	fcvt	d2, s1
+               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
+               	fmov	d1, x16
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
-               	fmov	x9, d2
+               	fmov	x9, d1
                	lsr	x10, x9, #63
                	lsl	x10, x10, #63
                	lsl	x11, x9, #1
@@ -161,8 +160,8 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]
-               	ldur	d2, [x29, #-0x8]
-               	stur	d2, [x29, #-0x40]
+               	ldur	d1, [x29, #-0x8]
+               	stur	d1, [x29, #-0x40]
                	ldur	x1, [x29, #-0x40]
                	ubfx	x1, x1, #52, #11
                	cbnz	w1, <addr>
@@ -173,11 +172,13 @@ Disassembly of section .text:
                	cmp	w1, #0x7ff
                	b.eq	<addr>
                	stur	x0, [x29, #-0x40]
-               	ldur	d2, [x29, #-0x10]
-               	stur	d2, [x29, #-0x40]
+               	ldur	d1, [x29, #-0x10]
+               	stur	d1, [x29, #-0x40]
                	ldur	x1, [x29, #-0x40]
                	ubfx	x1, x1, #52, #11
                	cbnz	w1, <addr>
+               	mov	x16, #0x7f800000        // =2139095040
+               	fmov	s1, w16
                	stur	s1, [x29, #-0x38]
                	ldur	w1, [x29, #-0x38]
                	ubfx	x1, x1, #23, #8

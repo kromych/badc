@@ -160,8 +160,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x8]
-               	fcvt	d1, s1
+               	ldr	d1, [x16, #0x8]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x17               // =23

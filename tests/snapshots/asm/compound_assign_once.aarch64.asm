@@ -247,9 +247,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x1                // =1
-               	movk	x1, #0x100, lsl #16
-               	scvtf	s3, x1
+               	mov	x16, #0x4b800000        // =1266679808
+               	fmov	s3, w16
                	movi	d4, #0000000000000000
                	fadd	s3, s3, s4
                	fcvtzs	x1, s3
@@ -260,8 +259,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #-0x4000000000000000 // =-4611686018427387904
-               	ucvtf	d4, x1
+               	mov	x16, #0x43e8000000000000 // =4893160995138043904
+               	fmov	d4, x16
                	fmov	d3, #2.00000000
                	fdiv	d4, d4, d3
                	fcvtzu	x1, d4
@@ -272,8 +271,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	scvtf	d4, x0
-               	fadd	d1, d4, d1
+               	fmov	d16, x0
+               	fadd	d1, d16, d1
                	fmov	d17, x0
                	fcmp	d1, d17
                	cset	x1, ne
@@ -285,12 +284,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x5, #0x3f               // =63
-               	mov	x1, #0x1                // =1
-               	ucvtf	d1, x1
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	stur	x1, [x29, #-0x8]
-               	ldur	d4, [x29, #-0x8]
-               	fmul	d1, d1, d4
+               	ldur	d1, [x29, #-0x8]
+               	fmov	d16, x1
+               	fmul	d1, d16, d1
                	fsub	d1, d1, d2
                	stur	d1, [x29, #-0x8]
                	ldur	x2, [x29, #-0x8]
@@ -362,8 +360,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x7                // =7
-               	ucvtf	d1, x1
+               	fmov	d1, #7.00000000
                	mov	x1, #-0x4010000000000000 // =-4616189618054758400
                	stur	x1, [x29, #-0x8]
                	ldur	d2, [x29, #-0x8]

@@ -89,12 +89,12 @@ fn ent_pc=4 n_params=4 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
-    v2   Imm(0)                                           -> x1
+    v2   Imm(0)                                           -> x0
     v3   ParamRef(2, kind=F64)                            -> d0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
-    v6   FpCast { kind=IntToFp, value=v1 }                -> d1
-    v7   LoadLocal { off=-6, kind=F80 }                   -> d2
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Imm(4607182418800017408)                         -> x0
+    v7   LoadLocal { off=-6, kind=F80 }                   -> d1
     v8   Binop { op=fadd, lhs=v6, rhs=v7 }                -> d1
     v9   Imm(0)                                           -> x0
     v10  Binop { op=fadd, lhs=v8, rhs=v3 }                -> d0

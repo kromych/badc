@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <main>:
                	fmov	d0, #1.50000000
-               	mov	x0, #0x2                // =2
-               	scvtf	d1, x0
+               	fmov	d1, #2.00000000
                	fmul	d1, d0, d1
                	fmov	d0, #2.25000000
                	fmov	d2, #3.00000000
@@ -31,4 +30,5 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ret
+               	mov	x0, #0x2                // =2
                	ret

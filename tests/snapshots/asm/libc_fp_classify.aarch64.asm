@@ -51,10 +51,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s1, #2.00000000
-               	fmov	s3, #-5.00000000
-               	fcvt	d1, s1
-               	fcvt	d3, s3
+               	fmov	d1, #2.00000000
+               	fmov	d3, #-5.00000000
                	stur	d1, [x29, #-0x10]
                	stur	d3, [x29, #-0x8]
                	ldur	x0, [x29, #-0x10]

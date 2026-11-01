@@ -359,8 +359,7 @@ Disassembly of section .text:
                	cmp	x0, #0x6
                	b.eq	<addr>
                	orr	x20, x20, #0x1000
-               	fmov	s0, #1.50000000
-               	fcvt	d1, s0
+               	fmov	d1, #1.50000000
                	fmov	d0, #2.00000000
                	fmul	d2, d1, d0
                	fmov	d1, #3.00000000

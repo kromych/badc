@@ -84,21 +84,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
-               	movl	$0x3f000000, %ecx       # imm = 0x3F000000
-               	movabsq	$0x4011000000000000, %rdx # imm = 0x4011000000000000
-               	movl	$0x1, %esi
-               	movl	$0x3, %edi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rsi, %xmm0
+               	movabsq	$0x4011000000000000, %rcx # imm = 0x4011000000000000
+               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
+               	movq	%rdx, %xmm14
+               	movq	%rax, %xmm15
+               	vaddsd	%xmm15, %xmm14, %xmm0
+               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movq	%rcx, %xmm14
-               	cvtss2sd	%xmm14, %xmm1
-               	addsd	%xmm1, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdi, %xmm1
-               	addsd	%xmm1, %xmm0
-               	movq	%rdx, %xmm15
+               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
                	movabsq	$0x4026800000000000, %rax # imm = 0x4026800000000000
                	movq	%rax, %xmm15
@@ -110,6 +107,7 @@ Disassembly of section .text:
                	retq
                	movq	$0x29, -0x8(%rbp)
                	movq	$0x2a, -0x8(%rbp)
+               	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
                	movl	$0x1e, %ecx

@@ -57,35 +57,33 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x80(%rbp)
-               	movl	$0x7f800000, %edx       # imm = 0x7F800000
+               	movabsq	$0x7ff0000000000000, %rdx # imm = 0x7FF0000000000000
                	movq	%rdx, %xmm14
-               	cvtss2sd	%xmm14, %xmm0
-               	movsd	%xmm0, -0x8(%rsp)
+               	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x70(%rbp)
                	movsd	-0x8(%rbp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rsi
-               	shrq	$0x34, %rsi
-               	andq	$0x7ff, %rsi            # imm = 0x7FF
-               	testl	%esi, %esi
+               	movq	-0x40(%rbp), %rdx
+               	shrq	$0x34, %rdx
+               	andq	$0x7ff, %rdx            # imm = 0x7FF
+               	testl	%edx, %edx
                	jne	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpl	$0x7ff, %esi            # imm = 0x7FF
+               	cmpl	$0x7ff, %edx            # imm = 0x7FF
                	je	<addr>
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x40(%rbp)
                	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rsi
-               	shrq	$0x34, %rsi
-               	andq	$0x7ff, %rsi            # imm = 0x7FF
-               	testl	%esi, %esi
+               	movq	-0x40(%rbp), %rdx
+               	shrq	$0x34, %rdx
+               	andq	$0x7ff, %rdx            # imm = 0x7FF
+               	testl	%edx, %edx
                	jne	<addr>
-               	movq	%rdx, %xmm14
-               	movss	%xmm14, -0x38(%rbp)
+               	movl	$0x7f800000, -0x38(%rbp) # imm = 0x7F800000
                	movl	-0x38(%rbp), %edx
                	shrq	$0x17, %rdx
                	andq	$0xff, %rdx
@@ -609,6 +607,6 @@ Disassembly of section .text:
                	testl	%edx, %edx
                	jne	<addr>
                	jmp	<addr>
-               	cmpl	$0x7ff, %esi            # imm = 0x7FF
+               	cmpl	$0x7ff, %edx            # imm = 0x7FF
                	jne	<addr>
                	jmp	<addr>

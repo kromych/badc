@@ -603,8 +603,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x60
                	stur	q0, [x29, #-0x20]
                	stur	q2, [x29, #-0x10]
-               	mov	x0, #0x1                // =1
-               	scvtf	d0, x0
+               	fmov	d0, #1.00000000
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]

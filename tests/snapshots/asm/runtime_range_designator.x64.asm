@@ -111,66 +111,62 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movl	$0xc, %edx
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
                	movl	$0x1, (%rax)
-               	movl	(%rax), %esi
-               	incq	%rsi
-               	movl	%esi, (%rax)
-               	movl	(%rax), %esi
-               	incq	%rsi
-               	movl	%esi, (%rax)
+               	movl	(%rax), %edx
+               	incq	%rdx
+               	movl	%edx, (%rax)
+               	movl	(%rax), %edx
+               	incq	%rdx
+               	movl	%edx, (%rax)
                	movq	%rcx, -0x18(%rbp)
-               	xorl	%esi, %esi
-               	movq	%rsi, -0x10(%rbp)
+               	movq	%rcx, -0x10(%rbp)
+               	xorl	%edx, %edx
                	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %edi
-               	incq	%rdi
-               	movl	%edi, (%rax)
-               	movl	$0xc, %edi
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdi, %xmm0
-               	movabsq	$0x4000000000000000, %r8 # imm = 0x4000000000000000
-               	movq	%r8, %xmm15
-               	divsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x18(%rbp)
-               	movq	-0x18(%rbp), %r8
-               	movq	%r8, -0x10(%rbp)
-               	leaq	-0x30(%rbp), %r8
-               	movq	$0x0, (%r8)
-               	movl	$0x0, 0x8(%r8)
-               	movl	(%rax), %r8d
-               	incq	%r8
-               	movl	%r8d, (%rax)
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rdi, %xmm0
-               	movl	$0x40800000, %edi       # imm = 0x40800000
+               	movl	(%rax), %esi
+               	incq	%rsi
+               	movl	%esi, (%rax)
+               	movabsq	$0x4028000000000000, %rsi # imm = 0x4028000000000000
+               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
+               	movq	%rsi, %xmm14
                	movq	%rdi, %xmm15
-               	divss	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
+               	movsd	%xmm0, -0x18(%rbp)
+               	movq	-0x18(%rbp), %rsi
+               	movq	%rsi, -0x10(%rbp)
+               	leaq	-0x30(%rbp), %rsi
+               	movq	$0x0, (%rsi)
+               	movl	$0x0, 0x8(%rsi)
+               	movl	(%rax), %esi
+               	incq	%rsi
+               	movl	%esi, (%rax)
+               	movl	$0x41400000, %esi       # imm = 0x41400000
+               	movl	$0x40800000, %edi       # imm = 0x40800000
+               	movq	%rsi, %xmm14
+               	movq	%rdi, %xmm15
+               	vdivss	%xmm15, %xmm14, %xmm0
                	movss	%xmm0, -0x30(%rbp)
-               	movl	-0x30(%rbp), %eax
-               	movl	%eax, -0x28(%rbp)
-               	leaq	<rip>, %rax # <addr>
+               	movl	-0x30(%rbp), %esi
+               	movl	%esi, -0x28(%rbp)
                	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x67, %eax
                	leave
                	retq
-               	xorl	%eax, %eax
                	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
+               	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
                	movsd	-0x18(%rbp), %xmm1
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdx, %xmm0
+               	movabsq	$0x4028000000000000, %rax # imm = 0x4028000000000000
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
@@ -178,7 +174,8 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movq	%rsi, %xmm14
+               	xorl	%eax, %eax
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
@@ -187,10 +184,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movss	-0x30(%rbp), %xmm1
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rdx, %xmm0
-               	movq	%rdi, %xmm15
-               	divss	%xmm15, %xmm0
+               	movl	$0x41400000, %ecx       # imm = 0x41400000
+               	movl	$0x40800000, %edx       # imm = 0x40800000
+               	movq	%rcx, %xmm14
+               	movq	%rdx, %xmm15
+               	vdivss	%xmm15, %xmm14, %xmm0
                	ucomiss	%xmm0, %xmm1
                	jp	<addr>
                	jne	<addr>

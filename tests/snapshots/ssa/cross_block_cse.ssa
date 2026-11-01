@@ -481,12 +481,12 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v389 Imm(12)                                          -> x0
     v390 Imm(-9223372036854775808)                        -> x0
     v391 Imm(12)                                          -> x0
-    v392 Imm(-9223372036854775808)                        -> x1
-    v393 FpCast { kind=IntToFp, value=v391 }              -> d0
-    v394 Imm(4611686018427387904)                         -> x2
+    v392 Imm(-9223372036854775808)                        -> x0
+    v393 Imm(4622945017495814144)                         -> x0
+    v394 Imm(4611686018427387904)                         -> x1
     v395 Binop { op=fdiv, lhs=v393, rhs=v394 }            -> d0
-    v396 Imm(4618441417868443648)                         -> x2
-    v397 Binop { op=fne, lhs=v395, rhs=v396 }             -> x2
+    v396 Imm(4618441417868443648)                         -> x0
+    v397 Binop { op=fne, lhs=v395, rhs=v396 }             -> x0
     terminator Bz { cond=v397, target=b21, fall=b19 }   (exit_acc=v397)
   block 19  start_pc=0
     v523 Imm(1)                                           -> x0
@@ -498,8 +498,8 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v401 LifetimeEnd(-5)                                  -> -
     terminator Return(v398)   (exit_acc=v398)
   block 21  start_pc=0
-    v524 FpCast { kind=IntToFp, value=v391 }              -> d0 [f32]
-    v525 Imm(1082130432)                                  -> x0 [f32]
+    v524 Imm(1094713344)                                  -> x0 [f32]
+    v525 Imm(1082130432)                                  -> x1 [f32]
     v526 Binop { op=fdiv, lhs=v524, rhs=v525 }            -> d0 [f32]
     v527 Imm(1077936128)                                  -> x0 [f32]
     v528 Binop { op=fne, lhs=v526, rhs=v527 }             -> x0
@@ -508,17 +508,17 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v529 Imm(2)                                           -> x0
     terminator Jmp(b20)   (exit_acc=v529)
   block 23  start_pc=0
-    v530 FpCast { kind=UIntToFp, value=v392 }             -> d0
-    v531 Imm(4890909195324358656)                         -> x0
-    v532 Binop { op=fne, lhs=v530, rhs=v531 }             -> x0
+    v530 Imm(4890909195324358656)                         -> x0
+    v531 Imm(4890909195324358656)                         -> x1
+    v532 Binop { op=fne, lhs=v530, rhs=v530 }             -> x0
     terminator Bz { cond=v532, target=b25, fall=b24 }   (exit_acc=v532)
   block 24  start_pc=0
     v533 Imm(3)                                           -> x0
     terminator Jmp(b20)   (exit_acc=v533)
   block 25  start_pc=0
-    v534 FpCast { kind=UIntToFp, value=v392 }             -> d0 [f32]
-    v535 Imm(1593835520)                                  -> x0 [f32]
-    v536 Binop { op=fne, lhs=v534, rhs=v535 }             -> x0
+    v534 Imm(1593835520)                                  -> x0 [f32]
+    v535 Imm(1593835520)                                  -> x1 [f32]
+    v536 Binop { op=fne, lhs=v534, rhs=v534 }             -> x0
     terminator Bz { cond=v536, target=b27, fall=b26 }   (exit_acc=v536)
   block 26  start_pc=0
     v537 Imm(4)                                           -> x0

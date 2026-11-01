@@ -409,10 +409,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Return(v150)   (exit_acc=v150)
   block 10  start_pc=0
     v152 Imm(16777217)                                    -> x0
-    v153 Imm(0)                                           -> x7
-    v154 Imm(0)                                           -> x7
-    v155 FpCast { kind=IntToFp, value=v152 }              -> d0 [f32]
-    v156 Imm(0)                                           -> x0 [f32]
+    v153 Imm(0)                                           -> x0
+    v154 Imm(0)                                           -> x0
+    v155 Imm(1266679808)                                  -> x0 [f32]
+    v156 Imm(0)                                           -> x7 [f32]
     v157 Binop { op=fadd, lhs=v155, rhs=v156 }            -> d0 [f32]
     v158 FpCast { kind=FpToInt, value=v157 }              -> x0
     v159 Imm(0)                                           -> x7
@@ -425,10 +425,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     terminator Return(v162)   (exit_acc=v162)
   block 12  start_pc=0
     v164 Imm(-4611686018427387904)                        -> x0
-    v165 Imm(0)                                           -> x7
-    v166 Imm(0)                                           -> x7
-    v167 FpCast { kind=UIntToFp, value=v164 }             -> d0
-    v168 Imm(4611686018427387904)                         -> x0
+    v165 Imm(0)                                           -> x0
+    v166 Imm(0)                                           -> x0
+    v167 Imm(4893160995138043904)                         -> x0
+    v168 Imm(4611686018427387904)                         -> x7
     v169 Binop { op=fdiv, lhs=v167, rhs=v168 }            -> d0
     v170 FpCast { kind=UFpToInt, value=v169 }             -> x0
     v171 Imm(0)                                           -> x7
@@ -443,9 +443,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v176 Imm(0)                                           -> x0
     v177 Imm(0)                                           -> x0
     v178 Imm(0)                                           -> x0
-    v179 FpCast { kind=IntToFp, value=v98 }               -> d0
+    v179 Imm(0)                                           -> x0
     v180 Imm(4598175219545276416)                         -> x0
-    v181 Binop { op=fadd, lhs=v179, rhs=v108 }            -> d0
+    v181 Binop { op=fadd, lhs=v98, rhs=v108 }             -> d0
     v182 Binop { op=fne, lhs=v181, rhs=v98 }              -> x0
     v183 Imm(0)                                           -> x2
     v184 BinopI { op=and, lhs=v182, rhs_imm=255 }         -> x0
@@ -535,13 +535,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v264 Imm(0)                                           -> x0
     v265 Imm(0)                                           -> x0
     v266 Imm(1)                                           -> x0
-    v267 FpCast { kind=UIntToFp, value=v266 }             -> d0
-    v268 Imm(1023)                                        -> x0
-    v269 Imm(4607182418800017408)                         -> x0
-    v270 Imm(4607182418800017408)                         -> x0
+    v267 Imm(4607182418800017408)                         -> x0
+    v268 Imm(1023)                                        -> x2
+    v269 Imm(4607182418800017408)                         -> x2
+    v270 Imm(4607182418800017408)                         -> x2
     v271 Imm(0)                                           -> x2
-    v272 StoreLocal { off=-1, value=v270, kind=I64 }      -> -
-    v273 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v272 StoreLocal { off=-1, value=v267, kind=I64 }      -> -
+    v273 LoadLocal { off=-1, kind=F64 }                   -> d0
     v274 Binop { op=fmul, lhs=v267, rhs=v273 }            -> d0
     v275 Imm(4602678819172646912)                         -> x0
     v276 Binop { op=fsub, lhs=v274, rhs=v137 }            -> d0
@@ -710,13 +710,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v435 Imm(0)                                           -> x0
     v436 Imm(0)                                           -> x0
     v437 Imm(7)                                           -> x0
-    v438 FpCast { kind=UIntToFp, value=v437 }             -> d0
-    v439 Imm(1023)                                        -> x0
-    v440 Imm(4607182418800017408)                         -> x0
-    v441 Imm(-4616189618054758400)                        -> x0
-    v442 Imm(0)                                           -> x1
+    v438 Imm(4619567317775286272)                         -> x0
+    v439 Imm(1023)                                        -> x1
+    v440 Imm(4607182418800017408)                         -> x1
+    v441 Imm(-4616189618054758400)                        -> x1
+    v442 Imm(0)                                           -> x2
     v443 StoreLocal { off=-1, value=v441, kind=I64 }      -> -
-    v444 LoadLocal { off=-1, kind=F64 }                   -> d1
+    v444 LoadLocal { off=-1, kind=F64 }                   -> d0
     v445 Binop { op=fmul, lhs=v438, rhs=v444 }            -> d0
     v446 Imm(4611686018427387904)                         -> x0
     v447 Binop { op=fdiv, lhs=v445, rhs=v446 }            -> d0

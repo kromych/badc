@@ -117,10 +117,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #5.00000000
-               	fmov	s1, #3.00000000
-               	fcvt	d0, s0
-               	fcvt	d1, s1
+               	fmov	d0, #5.00000000
+               	fmov	d1, #3.00000000
                	fcmp	d0, d1
                	b.gt	<addr>
                	fcmp	d0, d0

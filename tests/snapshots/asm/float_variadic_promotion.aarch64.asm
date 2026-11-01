@@ -85,20 +85,19 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x16, <page>
-               	ldr	s0, [x16, #0x20]
                	mov	x0, #0x1                // =1
-               	fcvt	d0, s0
+               	adrp	x16, <page>
+               	ldr	d0, [x16]
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16]
+               	ldr	d1, [x16, #0x8]
                	fsub	d0, d0, d1
                	movi	d1, #0000000000000000
                	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
+               	ldr	d1, [x16, #0x10]
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x1                // =1
@@ -106,8 +105,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	fmov	d0, #2.50000000
-               	fcvt	s0, d0
-               	fcvt	d0, s0
                	bl	<addr>
                	fmov	d1, #2.50000000
                	fsub	d0, d0, d1
@@ -116,7 +113,7 @@ Disassembly of section .text:
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
+               	ldr	d1, [x16, #0x10]
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x2                // =2
@@ -124,20 +121,18 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x20]
-               	fcvt	d0, s0
-               	fmov	s1, #1.50000000
-               	fcvt	d1, s1
+               	ldr	d0, [x16]
+               	fmov	d1, #1.50000000
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
+               	ldr	d1, [x16, #0x18]
                	fsub	d0, d0, d1
                	movi	d1, #0000000000000000
                	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
+               	ldr	d1, [x16, #0x10]
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x3                // =3
@@ -146,13 +141,11 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	fmov	d0, #10.00000000
                	adrp	x16, <page>
-               	ldr	s1, [x16, #0x20]
-               	fcvt	d1, s1
-               	fmov	s2, #1.50000000
-               	fcvt	d2, s2
+               	ldr	d1, [x16]
+               	fmov	d2, #1.50000000
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x18]
+               	ldr	d1, [x16, #0x20]
                	fsub	d0, d0, d1
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
@@ -160,7 +153,7 @@ Disassembly of section .text:
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
-               	ldr	d1, [x16, #0x8]
+               	ldr	d1, [x16, #0x10]
                	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x4                // =4

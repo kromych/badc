@@ -80,10 +80,9 @@ Disassembly of section .text:
                	movq	%rdx, %xmm2
                	movb	$0x3, %al
                	callq	<addr>
-               	movl	$0x7, %eax
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	addsd	%xmm1, %xmm0
+               	movabsq	$0x401c000000000000, %rax # imm = 0x401C000000000000
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm0
                	popq	%rbp
                	retq
 
@@ -95,17 +94,16 @@ Disassembly of section .text:
                	retq
 
 <outer_block_double>:
-               	movl	$0x1, %eax
-               	leaq	<rip>, %rcx # <addr>
-               	movslq	(%rcx), %rcx
+               	leaq	<rip>, %rax # <addr>
+               	movslq	(%rax), %rax
                	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rcx, %xmm0
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movq	%rcx, %xmm15
+               	cvtsi2sd	%rax, %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rax, %xmm15
                	divsd	%xmm15, %xmm0
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
-               	addsd	%xmm1, %xmm0
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm0
                	retq
 
 <outer_block_pointer>:

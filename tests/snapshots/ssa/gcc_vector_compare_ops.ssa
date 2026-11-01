@@ -5290,39 +5290,39 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v5907 Imm(0)                                           -> x0
     v5908 LocalAddr(-641)                                  -> x7
     v5909 Imm(4611686018427387904)                         -> x0
-    v5910 FpCast { kind=F64ToF32, value=v5909 }            -> d0 [f32]
+    v5910 Imm(1073741824)                                  -> x1 [f32]
     v5911 Imm(0)                                           -> x0
-    v5912 LoadLocal { off=-641, kind=F32 }                 -> d1 [f32]
-    v5913 Binop { op=fgt, lhs=v5912, rhs=v5910 }           -> x1
+    v5912 LoadLocal { off=-641, kind=F32 }                 -> d0 [f32]
+    v5913 Binop { op=fgt, lhs=v5912, rhs=v5910 }           -> x6
     v5914 Imm(0)                                           -> x0
-    v5915 Neg(v5913)                                       -> x1
-    v5916 Imm(0)                                           -> x6
-    v5917 BinopI { op=add, lhs=v5908, rhs_imm=4 }          -> x6
-    v5918 LoadLocal { off=-641, disp=4, kind=F32 }         -> d1 [f32]
-    v5919 Binop { op=fgt, lhs=v5918, rhs=v5910 }           -> x6
-    v5920 Neg(v5919)                                       -> x6
-    v5921 Imm(0)                                           -> x8
-    v5922 Imm(0)                                           -> x8
-    v5923 BinopI { op=add, lhs=v5908, rhs_imm=8 }          -> x8
-    v5924 LoadLocal { off=-641, disp=8, kind=F32 }         -> d1 [f32]
-    v5925 Binop { op=fgt, lhs=v5924, rhs=v5910 }           -> x8
-    v5926 Neg(v5925)                                       -> x8
-    v5927 Imm(0)                                           -> x9
-    v5928 Imm(0)                                           -> x9
-    v5929 BinopI { op=add, lhs=v5908, rhs_imm=12 }         -> x9
-    v5930 LoadLocal { off=-641, disp=12, kind=F32 }        -> d1 [f32]
-    v5931 Binop { op=fgt, lhs=v5930, rhs=v5910 }           -> x9
-    v5932 Neg(v5931)                                       -> x9
+    v5915 Neg(v5913)                                       -> x6
+    v5916 Imm(0)                                           -> x8
+    v5917 BinopI { op=add, lhs=v5908, rhs_imm=4 }          -> x8
+    v5918 LoadLocal { off=-641, disp=4, kind=F32 }         -> d0 [f32]
+    v5919 Binop { op=fgt, lhs=v5918, rhs=v5910 }           -> x8
+    v5920 Neg(v5919)                                       -> x8
+    v5921 Imm(0)                                           -> x9
+    v5922 Imm(0)                                           -> x9
+    v5923 BinopI { op=add, lhs=v5908, rhs_imm=8 }          -> x9
+    v5924 LoadLocal { off=-641, disp=8, kind=F32 }         -> d0 [f32]
+    v5925 Binop { op=fgt, lhs=v5924, rhs=v5910 }           -> x9
+    v5926 Neg(v5925)                                       -> x9
+    v5927 Imm(0)                                           -> x3
+    v5928 Imm(0)                                           -> x3
+    v5929 BinopI { op=add, lhs=v5908, rhs_imm=12 }         -> x3
+    v5930 LoadLocal { off=-641, disp=12, kind=F32 }        -> d0 [f32]
+    v5931 Binop { op=fgt, lhs=v5930, rhs=v5910 }           -> x1
+    v5932 Neg(v5931)                                       -> x1
     v5933 Imm(0)                                           -> x3
     v5934 Imm(0)                                           -> x3
     v5935 LocalAddr(-649)                                  -> x3
     v5936 BinopI { op=and, lhs=v5915, rhs_imm=4294967295 } -> x3
     v5937 StoreLocal { off=-649, value=v5915, kind=I32 }   -> -
-    v5938 BinopI { op=and, lhs=v5920, rhs_imm=4294967295 } -> x1
+    v5938 BinopI { op=and, lhs=v5920, rhs_imm=4294967295 } -> x6
     v5939 StoreLocal { off=-649, disp=4, value=v5920, kind=I32 } -> -
-    v5940 BinopI { op=and, lhs=v5926, rhs_imm=4294967295 } -> x1
+    v5940 BinopI { op=and, lhs=v5926, rhs_imm=4294967295 } -> x6
     v5941 StoreLocal { off=-649, disp=8, value=v5926, kind=I32 } -> -
-    v5942 BinopI { op=and, lhs=v5932, rhs_imm=4294967295 } -> x1
+    v5942 BinopI { op=and, lhs=v5932, rhs_imm=4294967295 } -> x6
     v5943 StoreLocal { off=-649, disp=12, value=v5932, kind=I32 } -> -
     v5944 LocalAddr(-641)                                  -> x1
     v5945 Imm(0)                                           -> x1
@@ -5337,7 +5337,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v1463 Binop { op=add, lhs=v5908, rhs=v1460 }           -> x1
     v1464 Load { addr=v1463, disp=0, kind=F32 }            -> d0 [f32]
     v1465 Imm(4611686018427387904)                         -> x1
-    v1466 FpCast { kind=F64ToF32, value=v1465 }            -> d1 [f32]
+    v1466 Imm(1073741824)                                  -> x1 [f32]
     v1467 Binop { op=fgt, lhs=v1464, rhs=v1466 }           -> x1
     terminator Bz { cond=v1467, target=b347, fall=b346 }   (exit_acc=v1467)
   block 346  start_pc=0

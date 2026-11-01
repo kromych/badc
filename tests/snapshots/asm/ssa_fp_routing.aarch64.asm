@@ -113,45 +113,26 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	mov	x0, #0x2a               // =42
-               	scvtf	d1, x0
                	mov	x16, #0x4045000000000000 // =4631107791820423168
-               	fmov	d2, x16
-               	fcmp	d1, d2
+               	fmov	d1, x16
+               	fcmp	d1, d1
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ret
-               	mov	x0, #-0x3               // =-3
-               	scvtf	d1, x0
-               	fmov	d2, #-3.00000000
-               	fcmp	d1, d2
+               	fmov	d1, #-3.00000000
+               	fcmp	d1, d1
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	ret
-               	fmov	d1, #3.75000000
-               	fcvtzs	x0, d1
-               	cmp	w0, #0x3
-               	b.eq	<addr>
-               	mov	x0, #0x17               // =23
-               	ret
-               	fmov	d1, #-3.75000000
-               	fcvtzs	x0, d1
-               	mov	x17, #-0x3              // =-3
-               	cmp	w0, w17
-               	b.eq	<addr>
-               	mov	x0, #0x18               // =24
-               	ret
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcvt	s2, d1
-               	fcvt	d2, s2
-               	fcmp	d2, d1
+               	adrp	x16, <page>
+               	ldr	d2, [x16, #0x8]
+               	fcmp	d1, d2
                	b.ne	<addr>
                	mov	x0, #0x19               // =25
                	ret
-               	fcvt	s1, d0
-               	fcvt	d1, s1
-               	fcmp	d1, d0
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	ret

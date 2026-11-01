@@ -224,13 +224,11 @@ Disassembly of section .text:
                	str	d8, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x5                // =5
-               	scvtf	d0, x0
-               	scvtf	d1, x1
+               	fmov	d0, #3.00000000
+               	fmov	d1, #5.00000000
                	bl	<addr>
-               	mov	x0, #0x5cc              // =1484
-               	scvtf	d1, x0
+               	adrp	x16, <page>
+               	ldr	d1, [x16]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x0                // =0
@@ -239,10 +237,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	d8, [sp], #0x20
                	ret
-               	mov	x0, #0x3                // =3
-               	scvtf	d0, x0
-               	mov	x0, #0x5                // =5
-               	scvtf	d1, x0
+               	fmov	d0, #3.00000000
+               	fmov	d1, #5.00000000
                	bl	<addr>
                	fmov	d8, d0
                	mov	x0, #0x3                // =3
@@ -257,21 +253,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	d8, [sp], #0x20
                	ret
-               	mov	x0, #-0x4               // =-4
-               	mov	x1, #0x9                // =9
-               	scvtf	d0, x0
-               	scvtf	d1, x1
+               	fmov	d0, #-4.00000000
+               	fmov	d1, #9.00000000
                	bl	<addr>
-               	mov	x0, #-0x6fb             // =-1787
-               	scvtf	d1, x0
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x8]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
-               	mov	x0, #-0x4               // =-4
-               	scvtf	d0, x0
-               	mov	x0, #0x9                // =9
-               	scvtf	d1, x0
+               	fmov	d0, #-4.00000000
+               	fmov	d1, #9.00000000
                	bl	<addr>
                	fmov	d8, d0
                	mov	x0, #-0x4               // =-4
@@ -282,22 +274,21 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
-               	mov	x0, #0x3e8              // =1000
-               	mov	x1, #-0x4d              // =-77
-               	scvtf	d0, x0
-               	scvtf	d1, x1
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x10]
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x18]
                	bl	<addr>
-               	mov	x0, #-0x62fb            // =-25339
-               	movk	x0, #0xfac2, lsl #16
-               	scvtf	d1, x0
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x20]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x0, #0x3e8              // =1000
-               	scvtf	d0, x0
-               	mov	x0, #-0x4d              // =-77
-               	scvtf	d1, x0
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x10]
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x18]
                	bl	<addr>
                	fmov	d8, d0
                	mov	x0, #0x3e8              // =1000
@@ -308,21 +299,17 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
-               	scvtf	d0, x0
-               	scvtf	d1, x1
+               	movi	d0, #0000000000000000
+               	fmov	d1, #1.00000000
                	bl	<addr>
-               	mov	x0, #0x81               // =129
-               	scvtf	d1, x0
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x28]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	scvtf	d0, x0
-               	mov	x0, #0x1                // =1
-               	scvtf	d1, x0
+               	movi	d0, #0000000000000000
+               	fmov	d1, #1.00000000
                	bl	<addr>
                	fmov	d8, d0
                	mov	x0, #0x0                // =0

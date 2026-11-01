@@ -22,8 +22,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	mov	x0, #0x3                // =3
-               	scvtf	d0, x0
+               	fmov	d0, #3.00000000
                	ldur	d1, [x29, #-0x8]
                	fmov	d2, #2.00000000
                	fmadd	d0, d1, d2, d0

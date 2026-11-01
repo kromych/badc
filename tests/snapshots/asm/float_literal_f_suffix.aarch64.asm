@@ -102,37 +102,29 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x20]
-               	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcvt	d0, s0
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x10]
                	fcmp	d0, d1
                	b.ne	<addr>
                	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x10]
-               	fcmp	d0, d1
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x24]
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x18]
-               	fcvt	d0, s0
-               	fcmp	d0, d1
+               	ldr	d0, [x16, #0x18]
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x2                // =2
-               	fmov	s0, #1.50000000
-               	fcvt	d0, s0
-               	fmov	s1, #0.25000000
-               	fcvt	d1, s1
+               	fmov	d0, #1.50000000
+               	fmov	d1, #0.25000000
                	bl	<addr>
                	fmov	d1, #1.75000000
                	fcmp	d0, d1
@@ -142,8 +134,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x20]
-               	fcvt	d0, s0
+               	ldr	d0, [x16, #0x10]
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
@@ -153,7 +144,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x16, <page>
-               	ldr	s0, [x16, #0x28]
+               	ldr	s0, [x16, #0x20]
                	fcmp	s0, s0
                	b.eq	<addr>
                	mov	x0, #0xf                // =15

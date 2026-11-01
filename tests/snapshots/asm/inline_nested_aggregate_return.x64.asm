@@ -110,17 +110,16 @@ Disassembly of section .text:
                	cmpq	$0x1a, %rax
                	je	<addr>
                	orq	$0x10, %rbx
-               	movl	$0x6, %eax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
-               	vdivsd	%xmm15, %xmm0, %xmm1
-               	vaddsd	%xmm0, %xmm1, %xmm0
-               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movabsq	$0x4018000000000000, %rcx # imm = 0x4018000000000000
+               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
+               	vdivsd	%xmm15, %xmm14, %xmm0
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm0
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
+               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm15
                	vaddsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>

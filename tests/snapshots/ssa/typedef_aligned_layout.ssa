@@ -202,16 +202,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
-    v3   Imm(4611686018427387904)                         -> x1
-    v4   Imm(0)                                           -> x2
-    v5   Imm(4613937818241073152)                         -> x2
+    v3   Imm(4611686018427387904)                         -> x0
+    v4   Imm(0)                                           -> x1
+    v5   Imm(4613937818241073152)                         -> x1
     v6   StoreLocal { off=-6, value=v5, kind=F64 }        -> -
-    v7   LocalAddr(-1)                                    -> x2
-    v8   Imm(0)                                           -> x2
-    v9   LocalAddr(-6)                                    -> x2
-    v10  Imm(16)                                          -> x6
-    v11  BinopI { op=and, lhs=v9, rhs_imm=15 }            -> x2
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x6
+    v7   LocalAddr(-1)                                    -> x1
+    v8   Imm(0)                                           -> x1
+    v9   LocalAddr(-6)                                    -> x1
+    v10  Imm(16)                                          -> x2
+    v11  BinopI { op=and, lhs=v9, rhs_imm=15 }            -> x1
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=0 }             -> x2
     terminator Bz { cond=v11, target=b2, fall=b1 }   (low word)   (exit_acc=v12)
   block 1  start_pc=0
     v13  Imm(53)                                          -> x0
@@ -219,9 +219,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v15  LifetimeEnd(-1)                                  -> -
     terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
-    v16  Imm(1)                                           -> x2
-    v17  FpCast { kind=IntToFp, value=v1 }                -> d0
-    v18  Imm(0)                                           -> x0
+    v16  Imm(1)                                           -> x1
+    v17  Imm(4607182418800017408)                         -> x1
+    v18  Imm(0)                                           -> x2
     v19  Binop { op=fadd, lhs=v17, rhs=v3 }               -> d0
     v20  LoadLocal { off=-6, kind=F64 }                   -> d1
     v21  Binop { op=fadd, lhs=v19, rhs=v20 }              -> d0

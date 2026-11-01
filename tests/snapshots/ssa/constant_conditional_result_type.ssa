@@ -193,7 +193,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v119 ImmData(176)                                     -> x0
     v120 Load { addr=v119, disp=0, kind=F64 }             -> d0
     v121 Imm(1036831949)                                  -> x0 [f32]
-    v122 FpCast { kind=F32ToF64, value=v121 }             -> d1
+    v122 Imm(4591870180174331904)                         -> x0
     v123 Binop { op=fne, lhs=v120, rhs=v122 }             -> x0
     terminator Bz { cond=v123, target=b38, fall=b37 }   (exit_acc=v123)
   block 37  start_pc=0

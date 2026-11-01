@@ -33,10 +33,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
                	xorl	%edx, %edx
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdx, %xmm0
                	movq	%rcx, %xmm14
-               	vaddsd	%xmm0, %xmm14, %xmm1
+               	movq	%rdx, %xmm15
+               	vaddsd	%xmm15, %xmm14, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	ucomisd	%xmm0, %xmm1

@@ -19,7 +19,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v13  Imm(4632304060471443456)                         -> x1
     v14  Imm(0)                                           -> x2
     v15  Imm(0)                                           -> x2
-    v16  FpCast { kind=IntToFp, value=v15 }               -> d0
+    v16  Imm(0)                                           -> x2
     v17  Binop { op=fadd, lhs=v13, rhs=v16 }              -> d1
     v18  Imm(0)                                           -> x1
     v19  Imm(0)                                           -> x1

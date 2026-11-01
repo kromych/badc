@@ -48,9 +48,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	fmov	s2, #1.00000000
-               	fcvt	d2, s2
-               	fcmp	d2, d0
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret

@@ -15,47 +15,35 @@ Disassembly of section .text:
 
 <main>:
                	movi	d2, #0000000000000000
-               	mov	x0, #0x0                // =0
-               	scvtf	s1, x0
-               	fmov	s0, #0.50000000
-               	fmul	s3, s1, s0
-               	fmov	s1, #2.00000000
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x1                // =1
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x2                // =2
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x3                // =3
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x4                // =4
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x5                // =5
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x6                // =6
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x7                // =7
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x8                // =8
-               	scvtf	s3, x0
-               	fmul	s3, s3, s0
-               	fmadd	s2, s3, s1, s2
-               	mov	x0, #0x9                // =9
-               	scvtf	s3, x0
-               	fmul	s0, s3, s0
-               	fmadd	s0, s0, s1, s2
+               	fmov	s1, #0.50000000
+               	fmul	s3, s2, s1
+               	fmov	s0, #2.00000000
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #1.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmul	s3, s0, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #3.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #4.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #5.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #6.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #7.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #8.00000000
+               	fmul	s3, s3, s1
+               	fmadd	s2, s3, s0, s2
+               	fmov	s3, #9.00000000
+               	fmul	s1, s3, s1
+               	fmadd	s0, s1, s0, s2
                	fcvtzs	x0, s0
                	ret

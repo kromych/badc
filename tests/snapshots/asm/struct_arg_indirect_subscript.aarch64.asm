@@ -77,21 +77,19 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	mov	x1, #0x1                // =1
                	ldur	d2, [x29, #-0x98]
                	fmov	d0, #4.00000000
                	ldur	d3, [x29, #-0x90]
                	fmov	d1, #2.00000000
                	fmul	d3, d3, d1
                	fmadd	d3, d2, d0, d3
-               	scvtf	d2, x1
+               	fmov	d2, #1.00000000
                	fadd	d4, d3, d2
                	fmov	d3, #1.50000000
                	fmov	d5, #2.25000000
                	fmul	d5, d5, d1
                	fmadd	d3, d3, d0, d5
-               	fmov	d5, #1.00000000
-               	fadd	d3, d3, d5
+               	fadd	d3, d3, d2
                	fcmp	d4, d3
                	b.eq	<addr>
                	mov	x0, x2

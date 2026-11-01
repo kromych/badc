@@ -52,12 +52,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #2.50000000
-               	fcvtzs	x1, d0
-               	and	x1, x1, #0x7
-               	ldur	w3, [x29, #-0x8]
-               	and	x3, x3, #0xffffffffffffffe3
-               	orr	x1, x3, x1, lsl #2
+               	ldur	w1, [x29, #-0x8]
+               	and	x1, x1, #0xffffffffffffffe3
+               	orr	x1, x1, #0x8
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	ubfx	x3, x3, #2, #3
@@ -67,11 +64,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d0, #1.50000000
-               	fcvtzs	x3, d0
-               	and	x3, x3, #0xf
                	and	x1, x1, #0xfffffffffffffe1f
-               	orr	x1, x1, x3, lsl #5
+               	orr	x1, x1, #0x20
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	sbfx	x3, x3, #5, #4

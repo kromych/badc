@@ -62,39 +62,39 @@ Disassembly of section .text:
                	movss	-0x4(%rbp), %xmm1
                	addss	%xmm1, %xmm0
                	movq	%rax, %xmm15
-               	vaddss	%xmm15, %xmm0, %xmm1
-               	movl	$0xa, %eax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2ss	%rax, %xmm0
-               	addss	%xmm0, %xmm1
+               	addss	%xmm15, %xmm0
+               	movl	$0x41200000, %ecx       # imm = 0x41200000
+               	movq	%rcx, %xmm15
+               	addss	%xmm15, %xmm0
                	movl	$0x425e0000, %eax       # imm = 0x425E0000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm1
+               	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	xorl	%eax, %eax
-               	movl	$0x3e800000, %ecx       # imm = 0x3E800000
+               	movl	$0x3e800000, %edx       # imm = 0x3E800000
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	vaddss	%xmm15, %xmm14, %xmm1
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	addss	%xmm15, %xmm1
+               	addss	%xmm15, %xmm0
+               	movq	%rdx, %xmm15
+               	addss	%xmm15, %xmm0
                	movq	%rcx, %xmm15
-               	addss	%xmm15, %xmm1
-               	vaddss	%xmm0, %xmm1, %xmm0
+               	addss	%xmm15, %xmm0
                	movl	$0x41240000, %eax       # imm = 0x41240000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

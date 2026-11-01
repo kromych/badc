@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0 [f32]
     v4   Imm(4607182418800017408)                         -> x0
-    v5   FpCast { kind=F32ToF64, value=v1 }               -> d0
+    v5   Imm(4609434218613702656)                         -> x2
     v6   Binop { op=fadd, lhs=v5, rhs=v4 }                -> d0
     v7   FpCast { kind=F64ToF32, value=v6 }               -> d0 [f32]
     v8   Imm(0)                                           -> x2
@@ -36,7 +36,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v24  Imm(0)                                           -> x2
     v25  Imm(0)                                           -> x2 [f32]
     v26  Imm(4607182418800017408)                         -> x2
-    v27  FpCast { kind=F32ToF64, value=v1 }               -> d1
+    v27  Imm(4609434218613702656)                         -> x2
     v28  Binop { op=fadd, lhs=v5, rhs=v4 }                -> d1
     v29  FpCast { kind=F64ToF32, value=v6 }               -> d1 [f32]
     v30  Imm(0)                                           -> x2
@@ -246,7 +246,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v196 Imm(0)                                           -> x2
     v197 Imm(0)                                           -> x2 [f32]
     v198 Imm(4607182418800017408)                         -> x2
-    v199 FpCast { kind=F32ToF64, value=v195 }             -> d0
+    v199 Imm(4715268809856909312)                         -> x2
     v200 Binop { op=fadd, lhs=v199, rhs=v186 }            -> d0
     v201 FpCast { kind=F64ToF32, value=v200 }             -> d0 [f32]
     v202 Imm(0)                                           -> x0

@@ -120,9 +120,8 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	leaq	<rip>, %rax # <addr>
                	testb	$0x3f, %al
                	je	<addr>

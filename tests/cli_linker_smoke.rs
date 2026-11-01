@@ -11831,7 +11831,10 @@ fn a_stack_walk_crosses_a_coff_objects_frame() {
          int main(void)\n\
          { if (function_of((char *)peer_walk + 4) != (char *)peer_walk) return 1;\n\
            if (function_of((char *)main + 8) != (char *)main) return 2;\n\
-           return peer_walk(callback); }\n",
+           // Stored, the call is not in return position: no sibling call\n\
+           // takes `main`'s frame off the stack the walk ends at.\n\
+           volatile int r = peer_walk(callback);\n\
+           return r; }\n",
     );
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64"

@@ -121,8 +121,7 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rsi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	popq	%r12

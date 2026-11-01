@@ -1722,6 +1722,32 @@ pub(crate) fn defined_fn_syms(
         .collect()
 }
 
+/// The return type of each direct call target: a definition's, and a
+/// prototyped declaration's for a function another unit defines. A
+/// declaration without a prototype states no return contract.
+pub(crate) fn callee_return_tags(
+    program: &crate::c5::program::Program,
+    funcs: &[super::super::ir::FunctionSsa],
+) -> alloc::collections::BTreeMap<usize, i64> {
+    let imports: alloc::collections::BTreeSet<usize> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .collect();
+    let mut tags: alloc::collections::BTreeMap<usize, i64> =
+        funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
+    for sym in &program.symbols {
+        if sym.is_fun_entity()
+            && !sym.defined_here
+            && sym.prototyped()
+            && imports.contains(&(sym.val as usize))
+        {
+            tags.insert(sym.val as usize, sym.type_);
+        }
+    }
+    tags
+}
+
 /// A function this unit calls but does not define, keyed by the
 /// placeholder ent_pc the parser assigned it. `sym` is its parser-symbol
 /// index, against which an `extern_imm_code_refs` entry identifies the
@@ -2723,6 +2749,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let code_syms = defined_fn_syms(program);
             let extern_fns = extern_fn_targets(program);
             super::super::passes::inline::devirtualize(funcs, &code_syms, &extern_fns);
+        });
+        // A returned call result whose callee has this function's return
+        // contract needs no renormalization, which a sibling call needs gone.
+        pipeline.run("passes::return_call::run", &mut ssa_funcs, |funcs| {
+            let tags = callee_return_tags(program, funcs);
+            super::super::passes::return_call::run(funcs, &tags, target);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test. Reorders blocks and remaps block ids only, so it

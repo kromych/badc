@@ -40,9 +40,8 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	xorl	%esi, %esi
-               	callq	<addr>
                	leave
-               	retq
+               	jmp	<addr>
                	movq	$-0x16, %rax
                	leave
                	retq

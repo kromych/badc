@@ -803,7 +803,6 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>

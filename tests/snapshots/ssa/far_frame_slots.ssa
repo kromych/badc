@@ -984,36 +984,36 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Extend { value=v2, kind=I32 }                    -> x0
     v5   Call { target_pc=5, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6   Extend { value=v5, kind=I32 }                    -> x0
+    v6   Extend { value=v5, kind=I32 }                    -> x1
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
-    terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
+    terminator Bz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
   block 1  start_pc=0
     v9   Imm(0)                                           -> x1
     v10  Extend { value=v6, kind=I32 }                    -> x1
-    terminator Return(v6)   (exit_acc=v6)
+    terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v11  Extend { value=v2, kind=I32 }                    -> x0
     v12  Call { target_pc=6, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v13  Extend { value=v12, kind=I32 }                   -> x0
+    v13  Extend { value=v12, kind=I32 }                   -> x1
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
-    terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
+    terminator Bz { cond=v12, target=b4, fall=b3 }   (low word)   (exit_acc=v13)
   block 3  start_pc=0
     v16  Imm(0)                                           -> x1
     v17  Extend { value=v13, kind=I32 }                   -> x1
-    terminator Return(v13)   (exit_acc=v13)
+    terminator Return(v12)   (exit_acc=v12)
   block 4  start_pc=0
     v18  Extend { value=v2, kind=I32 }                    -> x0
     v19  Call { target_pc=7, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  Extend { value=v19, kind=I32 }                   -> x0
+    v20  Extend { value=v19, kind=I32 }                   -> x1
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
-    terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
+    terminator Bz { cond=v19, target=b6, fall=b5 }   (low word)   (exit_acc=v20)
   block 5  start_pc=0
     v23  Imm(0)                                           -> x1
     v24  Extend { value=v20, kind=I32 }                   -> x1
-    terminator Return(v20)   (exit_acc=v20)
+    terminator Return(v19)   (exit_acc=v19)
   block 6  start_pc=0
     v25  Extend { value=v2, kind=I32 }                    -> x0
     v26  Call { target_pc=8, args=[v2], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0

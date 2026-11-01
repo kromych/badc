@@ -13649,6 +13649,59 @@ fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
     assert_eq!(opcode(&emit(false), "ext"), 0xE8, "the flag keeps the call");
 }
 
+/// A function returning a narrow integer returns a callee of its own
+/// return type with a jump: the callee leaves the register under the
+/// contract the caller's return states, so its result needs no extension
+/// first (System V AMD64 3.2.3 leaves the bits past the type unspecified).
+/// A return that converts to another type keeps the call and the
+/// extension.
+#[test]
+fn x64_a_returned_call_of_the_same_narrow_type_is_a_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "unsigned char uc(void); unsigned char r_uc(void) { return uc(); }\n\
+        signed char sc(void); signed char r_sc(void) { return sc(); }\n\
+        short sh(void); short r_sh(void) { return sh(); }\n\
+        unsigned short us(void); unsigned short r_us(void) { return us(); }\n\
+        _Bool bo(void); _Bool r_bo(void) { return bo(); }\n\
+        int in(int); int r_in(int x) { return in(x + 1); }\n\
+        unsigned char uc2(void); int r_widened(void) { return uc2(); }\n\
+        short sh2(void); signed char r_narrowed(void) { return sh2(); }\n";
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(SRC),
+        crate::Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let text = elf_text(&obj);
+    let relocs = x64_branch_relocs(&obj);
+    let opcode = |callee: &str| {
+        let (off, _, _) = relocs
+            .iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[*off as usize - 1]
+    };
+    for callee in ["uc", "sc", "sh", "us", "bo", "in"] {
+        assert_eq!(opcode(callee), 0xE9, "the call of {callee} is a jump");
+    }
+    for callee in ["uc2", "sh2"] {
+        assert_eq!(
+            opcode(callee),
+            0xE8,
+            "{callee}'s result converts, so it keeps its call"
+        );
+    }
+}
+
 /// A function that calls a returns-twice function keeps its returned call:
 /// `longjmp` back to the `setjmp` resumes in this function's frame (C99
 /// 7.13.2.1), which a sibling call would have torn down. gcc and clang

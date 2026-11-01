@@ -1063,7 +1063,7 @@ fn emit_va_arg_eightbytes(
 }
 
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of
-/// its last instruction, a direct `Inst::Call` the epilogue can replace by
+/// its last instruction that emits code, a direct `Inst::Call` the epilogue can replace by
 /// a jump (a sibling call, which `-fno-optimize-sibling-calls` turns off):
 /// the arguments fit the host argument-register window, this function is
 /// not variadic, the callee -- defined in this unit or declared with a
@@ -1074,6 +1074,7 @@ fn emit_va_arg_eightbytes(
 /// ones the epilogue restores.
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
+    alloc: &Allocation,
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -1089,9 +1090,12 @@ pub(super) fn detect_tail_call<'a>(
         return None;
     }
     // The call ends the block but for lifetime markers, which the frame
-    // teardown makes moot.
+    // teardown makes moot, and values that emit no code.
     if !block.inst_range.contains(&v)
-        || !(v + 1..block.inst_range.end).all(|p| func.insts[p as usize].is_lifetime_marker())
+        || !(v + 1..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            inst.is_lifetime_marker() || super::ssa::emit_common::inst_emits_nothing(inst, p, alloc)
+        })
     {
         return None;
     }
@@ -1145,8 +1149,8 @@ pub(super) fn detect_tail_call<'a>(
     // The callee's return extension replaces this function's, so the two
     // contracts must agree; an unknown callee has no recorded contract.
     let &callee_tag = ret_tags.get(&target_pc)?;
-    if super::return_extension(callee_tag, target)
-        != super::return_extension(func.ret_type_tag, target)
+    if super::declared_return_extension(callee_tag, target)
+        != super::declared_return_extension(func.ret_type_tag, target)
     {
         return None;
     }

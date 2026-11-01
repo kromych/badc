@@ -77,13 +77,11 @@ Disassembly of section .text:
                	cmpq	%rax, %rsi
                	jge	<addr>
                	movq	0x8(%rdi), %rdi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	movq	0x10(%rdi), %rdi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	xorl	%eax, %eax
                	retq
 

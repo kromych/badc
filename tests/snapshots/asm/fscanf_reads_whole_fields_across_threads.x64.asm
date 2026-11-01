@@ -204,8 +204,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	xorl	%edi, %edi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	popq	%r12

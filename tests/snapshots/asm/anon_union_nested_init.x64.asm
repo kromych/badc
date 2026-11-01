@@ -108,8 +108,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	leave
                	retq
@@ -117,6 +116,5 @@ Disassembly of section .text:
                	movl	$0x5, -0x8(%rbp)
                	movl	-0x10(%rbp), %edi
                	movl	-0x8(%rbp), %esi
-               	callq	<addr>
                	leave
-               	retq
+               	jmp	<addr>

@@ -669,30 +669,26 @@ Disassembly of section .text:
                	movl	(%rax), %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	leave
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	leave
                	retq
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	leave
                	retq
                	movq	%rbx, %rdi
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>

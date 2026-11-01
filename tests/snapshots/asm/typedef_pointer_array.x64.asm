@@ -71,6 +71,5 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

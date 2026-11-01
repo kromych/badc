@@ -29,9 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x5, %edi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <run_text>:
                	pushq	%rbp
@@ -63,6 +62,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 		...
+               	addb	%bh, 0xb(%rax)
 
 <boot_offset>:
                	movl	$0xb, %eax

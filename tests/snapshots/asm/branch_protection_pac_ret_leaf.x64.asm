@@ -35,6 +35,5 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x14, %edi
                	movl	$0x2, %esi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

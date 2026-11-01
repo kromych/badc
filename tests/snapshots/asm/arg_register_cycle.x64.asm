@@ -32,9 +32,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	decq	%rdx
                	xchgq	%rsi, %rdi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	movslq	%edi, %rax
                	movslq	%esi, %r10
                	subq	%r10, %rax

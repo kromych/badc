@@ -362,20 +362,17 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x90
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

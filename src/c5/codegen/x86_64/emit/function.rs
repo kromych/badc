@@ -682,7 +682,15 @@ impl FnEmit<'_, '_> {
         }
         // A direct call whose result the block returns lowers as `marshal;
         // epilogue; jmp` in the terminator; see `detect_tail_call`.
-        let tail_call = detect_tail_call(func, block, abi, variadic_targets, self.ret_tags, target);
+        let tail_call = detect_tail_call(
+            func,
+            alloc,
+            block,
+            abi,
+            variadic_targets,
+            self.ret_tags,
+            target,
+        );
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;

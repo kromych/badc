@@ -1209,8 +1209,6 @@ pub(crate) fn plan_param_regs_aggs(
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
 /// -- 4 bytes, extend per the unsigned bit.
 pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
-    use crate::c5::compiler::types as ty_helpers;
-    use crate::c5::token::Ty;
     if return_type_tag == 0 {
         // No prototype on file -- assume the binding's caller
         // already produced a sane 64-bit value (legacy headers
@@ -1219,6 +1217,14 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         // prototype.
         return ReturnExt::None;
     }
+    declared_return_extension(return_type_tag, target)
+}
+
+/// [`return_extension`] of a return type on record, a definition's or a
+/// prototype's, where tag 0 is `signed char`.
+pub(crate) fn declared_return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
+    use crate::c5::compiler::types as ty_helpers;
+    use crate::c5::token::Ty;
     // `void` shares `unsigned char`'s band; the call leaves no value.
     if ty_helpers::is_void_ty(return_type_tag) {
         return ReturnExt::None;

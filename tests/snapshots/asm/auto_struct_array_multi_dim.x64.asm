@@ -35,6 +35,5 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movl	$0x1000, %esi           # imm = 0x1000
                	movl	$0x9000, %edx           # imm = 0x9000
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

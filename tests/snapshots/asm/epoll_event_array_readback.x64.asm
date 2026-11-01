@@ -206,6 +206,5 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

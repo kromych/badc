@@ -308,8 +308,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	mov	x1, #0x3                // =3
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4

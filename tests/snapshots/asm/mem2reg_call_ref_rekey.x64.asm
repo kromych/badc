@@ -36,9 +36,8 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1, %edi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	movl	$0x2, %edi
                	jmp	<addr>
 

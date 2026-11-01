@@ -325,14 +325,12 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	leaq	0x4(%rbx), %rdi
                	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	popq	%rbx
                	leave
                	retq
                	leaq	0x2(%rbx), %rdi
-               	callq	<addr>
                	popq	%rbx
                	leave
-               	retq
+               	jmp	<addr>

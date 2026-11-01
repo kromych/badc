@@ -71,9 +71,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	testq	%rsi, %rsi
                	je	<addr>
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
                	xorl	%esi, %esi
                	jmp	<addr>
                	xorl	%edi, %edi

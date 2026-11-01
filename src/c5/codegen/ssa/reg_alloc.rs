@@ -710,7 +710,7 @@ fn x86_preferences(
     liveness: &super::liveness::Liveness,
     node_of: &[ValueId],
     hints: &mut [Option<u8>],
-) -> (Vec<Vec<ValueId>>, Vec<u64>) {
+) -> (Vec<Vec<ValueId>>, Vec<u64>, Vec<u64>) {
     let n = func.insts.len();
     let binop = |inst: &Inst| match *inst {
         Inst::Binop { op, lhs, rhs } if (lhs as usize) < n && (rhs as usize) < n => {
@@ -789,13 +789,22 @@ fn x86_preferences(
         }
     }
     let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+    let depth = crate::c5::codegen::passes::layout::loop_depths(func);
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    let mut in_loop: Vec<u64> = vec![0; n];
     for (site, live) in liveness.values_live_after(func, &writes) {
         let regs = u64::from(x86_implicit_writes(&func.insts[site as usize]));
+        let looped = (block_of.get(site as usize))
+            .and_then(|&b| depth.get(b as usize))
+            .is_some_and(|&d| d > 0);
         for u in live {
             keep_out(u, regs);
+            if looped && !produces_fp_result(&func.insts[u as usize]) {
+                in_loop[u as usize] |= regs;
+            }
         }
     }
-    (apart, avoid)
+    (apart, avoid, in_loop)
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -1340,10 +1349,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let (mut apart, avoid) = if target.is_x86_64() {
+    let (mut apart, avoid, loop_avoid) = if target.is_x86_64() {
         x86_preferences(func, &liveness, &node_of, &mut hints)
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     atomic_apart(func, target, &node_of, &mut apart);
     if target.is_x86_64() {
@@ -1376,6 +1385,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             hint: None,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide: false,
             follow: [None; 3],
         });
@@ -1387,6 +1397,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
+        entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
         for &(gpr, fpr) in asm_forbid
             .get(root)
             .into_iter()
@@ -2688,6 +2699,10 @@ pub(crate) struct NodeConstraints {
     /// Registers (in this node's bank) the colorer passes over, the hint
     /// included, for another free caller-saved one ([`x86_preferences`]).
     pub avoid: u64,
+    /// The part of `avoid` an instruction in a loop writes while the node
+    /// is live: the emit saves and restores it around that instruction at
+    /// every iteration, so a callee-saved register is taken first.
+    pub loop_avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
     /// Nodes whose register, or hint while uncolored, this one prefers next.
@@ -2941,6 +2956,12 @@ pub(crate) fn color_graph(
                 let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
                 (!c.must_callee)
                     .then(|| caller.iter().copied().find(kept))
+                    .flatten()
+            })
+            .or_else(|| {
+                let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
+                (c.loop_avoid != 0)
+                    .then(|| callee.iter().copied().find(kept))
                     .flatten()
             })
             .or(hint)
@@ -4424,6 +4445,7 @@ mod tests {
             hint,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide: false,
             follow: [None; 3],
         })
@@ -4436,6 +4458,7 @@ mod tests {
             hint: None,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide,
             follow: [None; 3],
         })
@@ -6625,6 +6648,26 @@ int main(void) { return 0; }
         ];
         let apart = vec![vec![], vec![2], vec![1]];
         assert_eq!(color_nodes(&g, &free, &[], &apart), [r0, r1, r1]);
+    }
+
+    /// With no other caller-saved register free, a node avoiding a register
+    /// takes it rather than a callee-saved one, unless an instruction in a
+    /// loop writes it while the node is live: its save and restore would
+    /// run at every iteration, a callee-saved register's once per call.
+    #[test]
+    fn a_register_a_loop_writes_yields_to_a_callee_saved_one() {
+        // Node 0 holds r1 and interferes with node 1, which avoids r0.
+        let g = Interference::from_edges(2, &[(0, 1)]);
+        let avoiding = |looped: bool| {
+            let mut node = int_node(false, Some(0));
+            if let Some(c) = node.as_mut() {
+                c.avoid = 1;
+                c.loop_avoid = if looped { 1 } else { 0 };
+            }
+            color_nodes(&g, &[int_node(false, Some(1)), node], &[], &[])[1]
+        };
+        assert_eq!(avoiding(false), Place::IntReg(0));
+        assert_eq!(avoiding(true), Place::IntReg(20));
     }
 
     /// A node's own avoid set outranks its hint: the hint is taken only

@@ -457,7 +457,7 @@ pub(super) fn edge_truth(
 /// `block_of[inst] = owning block id`, for the edge lookup above.
 /// `BlockId::MAX` marks an instruction no block contains -- what a
 /// folded-away arm leaves behind in the flat array.
-pub(super) fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
+pub(crate) fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
     let mut of = alloc::vec![BlockId::MAX; func.insts.len()];
     for (b, blk) in func.blocks.iter().enumerate() {
         for i in blk.inst_range.clone() {

@@ -88,7 +88,7 @@ fn ent_pc=2 n_params=4 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=main
 fn ent_pc=7 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x1
@@ -105,14 +105,14 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v19  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x2
     v20  Load { addr=v15, disp=8, kind=I32 }              -> x9
     v21  BinopI { op=add, lhs=v15, rhs_imm=12 }           -> x2
-    v22  Load { addr=v15, disp=12, kind=I32 }             -> x0
-    v23  Extend { value=v16, kind=I32 }                   -> x2
-    v24  Extend { value=v18, kind=I32 }                   -> x2
-    v25  Extend { value=v20, kind=I32 }                   -> x2
-    v26  Extend { value=v22, kind=I32 }                   -> x2
+    v22  Load { addr=v15, disp=12, kind=I32 }             -> x3
+    v23  Extend { value=v16, kind=I32 }                   -> x0
+    v24  Extend { value=v18, kind=I32 }                   -> x0
+    v25  Extend { value=v20, kind=I32 }                   -> x0
+    v26  Extend { value=v22, kind=I32 }                   -> x0
     v27  Binop { op=div, lhs=v16, rhs=v18 }               -> x7
-    v28  Extend { value=v27, kind=I32, nsw }              -> x2
-    v29  Binop { op=ne, lhs=v27, rhs=v20 }                -> x2
+    v28  Extend { value=v27, kind=I32, nsw }              -> x0
+    v29  Binop { op=ne, lhs=v27, rhs=v20 }                -> x0
     terminator Bz { cond=v29, target=b4, fall=b2 }   (exit_acc=v29)
   block 2  start_pc=0
     v741 Imm(1)                                           -> x0
@@ -124,25 +124,25 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v784 Imm(0)                                           -> x2
     terminator Bz { cond=v781, target=b13, fall=b32 }   (exit_acc=v781)
   block 4  start_pc=0
-    v742 Binop { op=div, lhs=v16, rhs=v18 }               -> x2
-    v743 Binop { op=mul, lhs=v27, rhs=v18 }               -> x2
-    v744 Binop { op=sub, lhs=v16, rhs=v743 }              -> x2
-    v745 Extend { value=v744, kind=I32, nsw }             -> x3
-    v746 Binop { op=ne, lhs=v744, rhs=v22 }               -> x3
+    v742 Binop { op=div, lhs=v16, rhs=v18 }               -> x0
+    v743 Binop { op=mul, lhs=v27, rhs=v18 }               -> x0
+    v744 Binop { op=sub, lhs=v16, rhs=v743 }              -> x12
+    v745 Extend { value=v744, kind=I32, nsw }             -> x0
+    v746 Binop { op=ne, lhs=v744, rhs=v22 }               -> x0
     terminator Bz { cond=v746, target=b6, fall=b5 }   (exit_acc=v746)
   block 5  start_pc=0
     v747 Imm(2)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v747)
   block 6  start_pc=0
-    v748 Binop { op=div, lhs=v16, rhs=v18 }               -> x3
-    v749 Extend { value=v27, kind=I32, nsw }              -> x3
-    v750 Binop { op=mul, lhs=v27, rhs=v18 }               -> x3
-    v751 Binop { op=sub, lhs=v16, rhs=v743 }              -> x3
-    v752 Extend { value=v744, kind=I32, nsw }             -> x3
-    v753 Binop { op=add, lhs=v27, rhs=v744 }              -> x2
-    v754 Extend { value=v753, kind=I32, nsw }             -> x3
+    v748 Binop { op=div, lhs=v16, rhs=v18 }               -> x0
+    v749 Extend { value=v27, kind=I32, nsw }              -> x0
+    v750 Binop { op=mul, lhs=v27, rhs=v18 }               -> x0
+    v751 Binop { op=sub, lhs=v16, rhs=v743 }              -> x2
+    v752 Extend { value=v744, kind=I32, nsw }             -> x0
+    v753 Binop { op=add, lhs=v27, rhs=v744 }              -> x0
+    v754 Extend { value=v753, kind=I32, nsw }             -> x2
     v755 Binop { op=add, lhs=v20, rhs=v22 }               -> x9
-    v756 Extend { value=v755, kind=I32, nsw }             -> x0
+    v756 Extend { value=v755, kind=I32, nsw }             -> x2
     v757 Binop { op=ne, lhs=v753, rhs=v755 }              -> x0
     terminator Bz { cond=v757, target=b8, fall=b7 }   (exit_acc=v757)
   block 7  start_pc=0

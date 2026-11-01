@@ -190,3 +190,67 @@ fn split_is_opt_in() {
     let func = b.finish();
     assert_eq!(divmod_counts(&func), (1, 1, 0, 0));
 }
+
+/// `f(a, b)` with every division marked for the 32-bit form, as the
+/// narrowing leaves it after dropping the operands' extensions, returned
+/// as `ret` reads it.
+fn build_narrow<F>(ret: Option<i64>, body: F) -> FunctionSsa
+where
+    F: FnOnce(&mut SsaBuilder, ValueId, ValueId) -> ValueId,
+{
+    let mut b = SsaBuilder::new(0, 2, false);
+    b.set_split_modulo(true);
+    let a = b.load_local(2, LoadKind::I32);
+    let d = b.load_local(3, LoadKind::I32);
+    let out = body(&mut b, a, d);
+    b.return_(out);
+    let mut func = b.finish();
+    func.ret_type_tag = ret;
+    func.div32 = (func.insts.iter())
+        .map(|i| matches!(i, Inst::Binop { op, .. } if crate::c5::ir::is_divmod_op(*op)))
+        .collect();
+    run_one(&mut func);
+    func
+}
+
+/// The value block 0 returns.
+fn returned(func: &FunctionSsa) -> ValueId {
+    match func.blocks[0].terminator {
+        crate::c5::ir::Terminator::Return(v) => v,
+        ref t => panic!("{t:?}"),
+    }
+}
+
+/// A remainder rebuilt from a 32-bit division takes the 32-bit form: its
+/// operands may hold anything above bit 31, which a 64-bit remainder would
+/// read. The unsigned one does so whoever reads its upper half; the signed
+/// one only where nothing does, and otherwise keeps the subtract.
+#[test]
+fn a_remainder_of_a_narrow_division_stays_narrow() {
+    use crate::c5::token::Ty;
+    let unsigned = build_narrow(None, |b, a, d| b.binop(BinOp::Modu, a, d));
+    let v = returned(&unsigned);
+    assert!(matches!(
+        unsigned.insts[v as usize],
+        Inst::Binop {
+            op: BinOp::Modu,
+            ..
+        }
+    ));
+    assert!(unsigned.div32[v as usize], "the rebuilt Modu is 32-bit");
+
+    let read_wide = build_narrow(None, |b, a, d| b.binop(BinOp::Mod, a, d));
+    let v = returned(&read_wide);
+    assert!(matches!(
+        read_wide.insts[v as usize],
+        Inst::Binop { op: BinOp::Sub, .. }
+    ));
+
+    let int = build_narrow(Some(Ty::Int as i64), |b, a, d| b.binop(BinOp::Mod, a, d));
+    let v = returned(&int);
+    assert!(matches!(
+        int.insts[v as usize],
+        Inst::Binop { op: BinOp::Mod, .. }
+    ));
+    assert!(int.div32[v as usize], "the rebuilt Mod is 32-bit");
+}

@@ -72,8 +72,12 @@ fn run_one(func: &mut FunctionSsa) {
     let single_use = |v: ValueId| counts.get(v as usize).copied() == Some(1);
     let ranges: alloc::vec::Vec<core::ops::Range<u32>> =
         func.blocks.iter().map(|b| b.inst_range.clone()).collect();
-    // A rebuilt modulo keeps the 32-bit form where the subtract's upper
-    // half is unread.
+    // A 32-bit division may have lost its operands' extensions (the
+    // narrowing reads the low words only), so its remainder is rebuilt in
+    // the 32-bit form: always for the unsigned one, whose zero-extended
+    // result is the value, and for the signed one where the subtract's upper
+    // half is unread; a signed one whose upper half is read keeps the
+    // subtract.
     let hi = func
         .div32
         .iter()
@@ -104,16 +108,22 @@ fn run_one(func: &mut FunctionSsa) {
             if dividend != n || !same_divisor(func, &want, d) {
                 continue;
             }
-            if let Some(op) = remainder_op(div) {
-                func.insts[v as usize] = Inst::Binop { op, lhs: n, rhs: d };
-                if super::narrow::is_div32(&func.div32, q)
-                    && hi
-                        .as_ref()
-                        .is_some_and(|h| !h.get(v as usize).copied().unwrap_or(true))
-                    && let Some(slot) = func.div32.get_mut(v as usize)
-                {
-                    *slot = true;
+            let Some(op) = remainder_op(div) else {
+                continue;
+            };
+            let narrow = super::narrow::is_div32(&func.div32, q);
+            let upper_unread = hi
+                .as_ref()
+                .is_some_and(|h| !h.get(v as usize).copied().unwrap_or(true));
+            if narrow && op == BinOp::Mod && !upper_unread {
+                continue;
+            }
+            func.insts[v as usize] = Inst::Binop { op, lhs: n, rhs: d };
+            if narrow {
+                if func.div32.len() <= v as usize {
+                    func.div32.resize(func.insts.len(), false);
                 }
+                func.div32[v as usize] = true;
             }
         }
     }

@@ -2516,6 +2516,9 @@ pub struct Compiler {
     /// an inner scope shadows the name, and an exit emitted inside such a
     /// scope must address the registered binding, not the current one.
     cleanup_scopes: Vec<jumps::CleanupScope>,
+    /// Per cleanup list a `return` runs, what the function's returns
+    /// running it share.
+    return_exits: alloc::collections::BTreeMap<stmt::ReturnExitKey, stmt::ReturnExit>,
     /// The function's scopes, labels and jumps; see [`jumps`].
     jumps: jumps::Jumps,
     /// `cleanup_scopes` depth at each enclosing `break` target (loop or
@@ -3164,6 +3167,7 @@ impl Compiler {
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
             cleanup_scopes: Vec::new(),
+            return_exits: alloc::collections::BTreeMap::new(),
             jumps: jumps::Jumps::default(),
             break_cleanup_depths: Vec::new(),
             continue_cleanup_depths: Vec::new(),

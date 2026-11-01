@@ -6,6 +6,10 @@ use super::types::{is_floating_scalar, type_size_bytes};
 use super::*;
 use crate::c5::ast::expr_ty;
 
+/// The label key of the exit returning `return` statements share; no label
+/// of a function takes it.
+const RETURN_EXIT: LabelId = LabelId::MAX;
+
 impl<'a> Walker<'a> {
     /// Walk a statement. Returns `true` when the statement
     /// terminates the current block (an unconditional return /
@@ -155,6 +159,21 @@ impl<'a> Walker<'a> {
                         self.walk_stmt(b, c)?;
                     }
                     self.goto_indirect(b, v);
+                    Ok(true)
+                }
+                // The returns running one cleanup list from the same scopes
+                // share one exit, which runs the calls and returns the
+                // temporary each of them assigned.
+                Stmt::Return(_) => {
+                    let (exit, new) = self.cleanup_exit(b, RETURN_EXIT, 0, cleanups);
+                    b.jmp(exit);
+                    if new {
+                        b.switch_to(exit);
+                        for &c in cleanups {
+                            self.walk_stmt(b, c)?;
+                        }
+                        self.walk_stmt(b, *jump)?;
+                    }
                     Ok(true)
                 }
                 _ => Err(WalkError::InvalidStmt {

@@ -14434,6 +14434,49 @@ fn a_goto_chain_reserves_one_block_per_label() {
 
 /// The gotos and `asm goto` edges to one label leaving the same scopes and
 /// running the same cleanup functions share one exit block and its calls.
+/// Returns running one cleanup list from the same scopes share one exit,
+/// which runs the calls once and returns the value each assigned.
+#[test]
+fn returns_leaving_the_same_scopes_share_their_cleanup_calls() {
+    use crate::c5::ir::Inst;
+    const SRC: &str = "void end(int *p);\n\
+        #define CL __attribute__((cleanup(end)))\n\
+        int one_list(int a, int b) {\n\
+            int m CL = 0;\n\
+            if (a) return 1;\n\
+            if (b) return 2;\n\
+            if (a + b > 3) return 3;\n\
+            return 0;\n\
+        }\n\
+        int two_lists(int k) {\n\
+            int a CL = 0;\n\
+            if (k == 0) return 1;\n\
+            if (k == 1) return 2;\n\
+            int b CL = 0;\n\
+            if (k == 2) return 3;\n\
+            return 4;\n\
+        }\n\
+        void no_value(int k) {\n\
+            int m CL = 0;\n\
+            if (k) return;\n\
+            if (k + 1) return;\n\
+        }\n";
+    let calls = |name: &str| {
+        ssa_func_named(SRC, name)
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { .. } | Inst::CallExt { .. }))
+            .count()
+    };
+    assert_eq!(calls("one_list"), 1, "one exit for the four returns");
+    assert_eq!(
+        calls("two_lists"),
+        3,
+        "`a` for two returns, `b` `a` for two"
+    );
+    assert_eq!(calls("no_value"), 2, "one exit for the returns, one end");
+}
+
 #[test]
 fn jumps_leaving_the_same_scopes_share_their_cleanup_calls() {
     use crate::c5::ir::Inst;

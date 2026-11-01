@@ -56,6 +56,18 @@ pub(super) struct CleanupVar {
     fn_binding: super::emit::CalleeBinding,
 }
 
+/// The cleanup list a `return` runs, and whether it returns a value.
+pub(super) type ReturnExitKey = (alloc::vec::Vec<CleanupVar>, bool);
+
+/// What the returns running one cleanup list share: the call statements,
+/// the value's temporary (symbol, slot), and the returns' `CleanupJump`s.
+#[derive(Default)]
+pub(super) struct ReturnExit {
+    calls: alloc::vec::Vec<super::super::ast::StmtId>,
+    temp: Option<(usize, i64)>,
+    sites: alloc::vec::Vec<super::super::ast::StmtId>,
+}
+
 /// The case labels of one `switch` body.
 pub(super) struct SwitchLabels {
     /// The type of the controlling expression, before promotion.
@@ -1059,6 +1071,68 @@ impl Compiler {
         }
     }
 
+    /// The variables a jump out of the scopes at index `from` and above
+    /// cleans, in the order [`Self::emit_cleanups_above`] calls them.
+    fn cleanups_from(&self, from: usize) -> alloc::vec::Vec<CleanupVar> {
+        let scopes = self.cleanup_scopes[from..].iter().rev();
+        scopes.flat_map(|s| s.vars.iter().rev().cloned()).collect()
+    }
+
+    /// The call statements every `return` running `key`'s cleanup list
+    /// shares, built on the first.
+    fn return_cleanup_calls(
+        &mut self,
+        key: ReturnExitKey,
+    ) -> alloc::vec::Vec<super::super::ast::StmtId> {
+        if let Some(exit) = self.return_exits.get(&key)
+            && !exit.calls.is_empty()
+        {
+            return exit.calls.clone();
+        }
+        let mut calls = alloc::vec::Vec::with_capacity(key.0.len());
+        for cv in &key.0 {
+            self.push_cleanup_call(cv);
+            calls.push((self.ast.stmts.len() - 1) as super::super::ast::StmtId);
+        }
+        self.return_exits.entry(key).or_default().calls = calls.clone();
+        calls
+    }
+
+    /// Run the calls of a cleanup list only one `return` takes at that
+    /// return: an exit block of its own would only add a jump.
+    pub(super) fn inline_unshared_return_exits(&mut self) {
+        for exit in core::mem::take(&mut self.return_exits).into_values() {
+            let [site] = exit.sites[..] else {
+                continue;
+            };
+            let calls = exit.calls;
+            let super::super::ast::Stmt::CleanupJump { jump, .. } = self.ast.stmts[site as usize]
+            else {
+                continue;
+            };
+            let items = calls.iter().chain([&jump]);
+            self.ast.stmts[site as usize] = super::super::ast::Stmt::Compound(
+                items
+                    .map(|&id| super::super::ast::BlockItem::Stmt(id))
+                    .collect(),
+            );
+        }
+    }
+
+    /// Assign `value` to the temporary the returns running `key`'s cleanup
+    /// list share, and read it back: the assignment and the read.
+    fn spill_to_return_temp(
+        &mut self,
+        key: &ReturnExitKey,
+        value: super::super::ast::ExprId,
+        ty: i64,
+    ) -> (super::super::ast::StmtId, super::super::ast::ExprId) {
+        let temp = self.return_exits.get(key).and_then(|e| e.temp);
+        let (sym, slot) = temp.unwrap_or_else(|| self.new_temp(ty));
+        self.return_exits.entry(key.clone()).or_default().temp = Some((sym, slot));
+        self.assign_to_temp(sym, slot, ty, value)
+    }
+
     /// True when any cleanup scope at index `from` and above holds a
     /// variable, i.e. a `return` / `break` / `continue` here must run
     /// cleanup functions.
@@ -1083,17 +1157,8 @@ impl Compiler {
         }
     }
 
-    /// Spill `value` (already converted to `ty`) into a fresh unnamed
-    /// stack temporary and return an lvalue-ident that reloads it. Used
-    /// so a `return <expr>;` under an active cleanup evaluates the value
-    /// before the cleanup functions run (C's scope-exit order): e.g.
-    /// `return dup(s)` copies before a scope-guarded local `s` is freed.
-    fn spill_expr_to_temp(
-        &mut self,
-        value: super::super::ast::ExprId,
-        ty: i64,
-    ) -> super::super::ast::ExprId {
-        use super::super::ast::{Expr, Stmt};
+    /// A fresh unnamed stack temporary of type `ty`: its symbol and slot.
+    fn new_temp(&mut self, ty: i64) -> (usize, i64) {
         let slot = self.reserve_slots(self.local_storage_slots(ty, 1));
         let sym_idx = self.symbols.len();
         // The shadow fields mirror the live ones so the function-exit
@@ -1113,11 +1178,28 @@ impl Compiler {
         // interned identifier lands at the wrong index. The empty name is
         // never the target of a source-level lookup.
         self.symbol_index.record(crate::c5::lexer::hash_name(b""));
+        (sym_idx, slot)
+    }
+
+    /// Assign `value` (already converted to `ty`) to the temporary `sym` at
+    /// `slot`: the assignment statement and an lvalue-ident that reloads it.
+    /// A `return <expr>;` under an active cleanup spills its value so the
+    /// value is evaluated before the cleanup functions run (C's scope-exit
+    /// order): `return dup(s)` copies before a scope-guarded local `s` is
+    /// freed.
+    fn assign_to_temp(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+        value: super::super::ast::ExprId,
+    ) -> (super::super::ast::StmtId, super::super::ast::ExprId) {
+        use super::super::ast::{Expr, Stmt};
         let pos = self.ast_src_pos();
         let mk_ident = |c: &mut Self| {
             c.ast.push_expr(
                 Expr::Ident {
-                    sym: sym_idx as u32,
+                    sym: sym as u32,
                     ty,
                     class: Token::Loc as i64,
                     val: slot,
@@ -1136,8 +1218,8 @@ impl Compiler {
             },
             pos,
         );
-        self.ast.push_stmt(Stmt::Expr(assign), pos);
-        mk_ident(self)
+        let stmt = self.ast.push_stmt(Stmt::Expr(assign), pos);
+        (stmt, mk_ident(self))
     }
 
     /// `{ ... }`. C99 block-scope: declarations may appear anywhere a
@@ -3745,21 +3827,39 @@ impl Compiler {
             // to a temporary and run the cleanups between its evaluation
             // and the return; a void return's expression is evaluated for
             // side effects first, then discarded.
-            let start = self.ast.stmts.len();
             if self.has_cleanups_above(0) {
-                if returns_void {
-                    if let Some(v) = return_value {
-                        let pos = self.ast_src_pos();
-                        self.ast.push_stmt(super::super::ast::Stmt::Expr(v), pos);
-                        return_value = None;
-                    }
-                } else if let Some(v) = return_value {
-                    return_value = Some(self.spill_expr_to_temp(v, ret_ty));
+                let mut items = alloc::vec::Vec::new();
+                if returns_void && let Some(v) = return_value.take() {
+                    let pos = self.ast_src_pos();
+                    items.push(self.ast.push_stmt(super::super::ast::Stmt::Expr(v), pos));
                 }
-                self.emit_cleanups_above(0);
+                // The returns running one cleanup list share its calls and
+                // the value's temporary, so the walker builds one exit.
+                let key = (self.cleanups_from(0), return_value.is_some());
+                if let Some(v) = return_value {
+                    let (assign, value) = self.spill_to_return_temp(&key, v, ret_ty);
+                    items.push(assign);
+                    return_value = Some(value);
+                }
+                let key_of_site = key.clone();
+                let calls = self.return_cleanup_calls(key);
+                let jump = self.ast_emit_return(return_value);
+                let pos = self.ast_src_pos();
+                let cleanup_jump = super::super::ast::Stmt::CleanupJump {
+                    cleanups: calls,
+                    jump,
+                };
+                let site = self.ast.push_stmt(cleanup_jump, pos);
+                if let Some(exit) = self.return_exits.get_mut(&key_of_site) {
+                    exit.sites.push(site);
+                }
+                items.push(site);
+                self.ast_wrap_block_items(&items);
+            } else {
+                let start = self.ast.stmts.len();
+                self.ast_emit_return(return_value);
+                self.coalesce_exit_since(start);
             }
-            self.ast_emit_return(return_value);
-            self.coalesce_exit_since(start);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
             self.parse_block_stmt(false)?;

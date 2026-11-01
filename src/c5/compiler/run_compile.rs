@@ -1901,6 +1901,7 @@ impl Compiler {
             }
         }
         self.resolve_jumps()?;
+        self.inline_unshared_return_exits();
         self.cleanup_scopes.pop();
         self.local_label_scopes.close();
         // The body's own objects end with it, as a nested block's do.

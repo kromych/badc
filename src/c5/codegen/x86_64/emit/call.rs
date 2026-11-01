@@ -698,16 +698,13 @@ pub(super) fn emit_call_ext(
     }
     // A sub-word integer return is extended into rax; an FP return arrives
     // in xmm0 and routes to the allocated place.
-    use crate::c5::compiler::types as ty_helpers;
-    let return_type_tag = imp.return_type_tag;
-    let bare = ty_helpers::strip_unsigned(return_type_tag);
-    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+    if imp.returns_fp() {
         // An f32 result is the single in the low 32 bits of xmm0, the form the
         // FP casts and `StoreLocal F32` consume, so it routes without widening.
         xmm0_result_to_dst(code, dst, frame);
         return Ok(());
     }
-    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    let ext = super::call_result_extension(imp.return_type_tag, target, alloc, v);
     super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
     Ok(())
@@ -1147,10 +1144,10 @@ pub(super) fn detect_tail_call<'a>(
         return None;
     }
     // The callee's return extension replaces this function's, so the two
-    // contracts must agree; an unknown callee has no recorded contract.
+    // contracts must agree; a function without a recorded type has none.
     let &callee_tag = ret_tags.get(&target_pc)?;
-    if super::declared_return_extension(callee_tag, target)
-        != super::declared_return_extension(func.ret_type_tag, target)
+    if super::return_extension(callee_tag, target)
+        != super::return_extension(func.ret_type_tag?, target)
     {
         return None;
     }

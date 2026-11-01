@@ -207,7 +207,7 @@ impl SsaBuilder {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -437,7 +437,7 @@ impl SsaBuilder {
     /// Record the declared return type. See
     /// [`FunctionSsa::ret_type_tag`].
     pub(crate) fn set_ret_type_tag(&mut self, tag: i64) {
-        self.func.ret_type_tag = tag;
+        self.func.ret_type_tag = Some(tag);
     }
 
     /// The accumulated per-parameter FP mask. See

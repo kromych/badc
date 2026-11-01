@@ -1000,7 +1000,7 @@ impl Preprocessor {
         self.dylibs[at].bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),

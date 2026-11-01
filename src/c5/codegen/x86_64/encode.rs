@@ -1951,7 +1951,9 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
-        self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
+        self.ret_tags = (funcs.iter())
+            .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+            .collect();
     }
 
     /// A cross-TU callee's return type comes off its declaration in this

@@ -355,7 +355,7 @@ fn compute_high_observed_through(
     // declared type is narrower than the return register, which carries
     // the result in its low word alone. `Block::exit_acc` names a value
     // and reads none.
-    let ret_low_word = crate::c5::codegen::return_is_low_word(func.ret_type_tag);
+    let ret_low_word = (func.ret_type_tag).is_some_and(crate::c5::codegen::return_is_low_word);
     for (b, block) in func.blocks.iter().enumerate() {
         if func.low_word_tests.get(b).copied().unwrap_or(false)
             || addressing
@@ -1126,7 +1126,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),

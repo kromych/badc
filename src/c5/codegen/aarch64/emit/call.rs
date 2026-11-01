@@ -548,18 +548,14 @@ pub(super) fn emit_call_ext(
         );
         return Ok(());
     }
-    use crate::c5::compiler::types as ty_helpers;
-    let return_type_tag = imp.return_type_tag;
-    let bare = ty_helpers::strip_unsigned(return_type_tag);
-    let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
-    if returns_fp {
+    if imp.returns_fp() {
         // A float / double result is FP-classed and already in d0 / s0; an f32
         // stays the single in s0, the form the F32 stores and casts consume.
         move_call_result(code, dst, frame, true);
         return Ok(());
     }
     // A sub-word integer return takes the pool path's extension.
-    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    let ext = super::call_result_extension(imp.return_type_tag, target, alloc, v);
     emit_extend_x0_for_return(code, ext);
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {

@@ -1734,8 +1734,9 @@ pub(crate) fn callee_return_tags(
         .iter()
         .map(|(pc, _)| *pc)
         .collect();
-    let mut tags: alloc::collections::BTreeMap<usize, i64> =
-        funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
+    let mut tags: alloc::collections::BTreeMap<usize, i64> = (funcs.iter())
+        .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+        .collect();
     for sym in &program.symbols {
         if sym.is_fun_entity()
             && !sym.defined_here

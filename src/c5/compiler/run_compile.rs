@@ -1209,7 +1209,7 @@ impl Compiler {
                 if binding.local_name == name {
                     binding.is_variadic = variadic;
                     binding.fixed_args = fixed;
-                    binding.return_type_tag = ret_ty;
+                    binding.return_type_tag = Some(ret_ty);
                     // Per-param types for the
                     // DWARF subprogram DIE the codegen
                     // emits over each PLT trampoline.

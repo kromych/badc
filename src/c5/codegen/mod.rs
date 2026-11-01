@@ -518,15 +518,16 @@ impl ReturnExt {
 }
 
 /// The extension a call site applies to `v`, the result of an import
-/// returning `return_type_tag`: none for a result nothing reads, and none
-/// for a 32-bit widening whose high word nothing reads.
+/// returning `return_type_tag`: none for a result nothing reads, none for
+/// a 32-bit widening whose high word nothing reads, and none without a
+/// prototype on record.
 pub(crate) fn call_result_extension(
-    return_type_tag: i64,
+    return_type_tag: Option<i64>,
     target: Target,
     alloc: &ssa::reg_alloc::Allocation,
     v: crate::c5::ir::ValueId,
 ) -> ReturnExt {
-    let ext = return_extension(return_type_tag, target);
+    let ext = return_type_tag.map_or(ReturnExt::None, |tag| return_extension(tag, target));
     if alloc.is_unread(v) || (ext.high_word_only() && alloc.high_dead(v)) {
         return ReturnExt::None;
     }
@@ -1204,25 +1205,11 @@ pub(crate) fn plan_param_regs_aggs(
     plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false, widths)
 }
 
-/// Decide how to extend a libc return value into the c5
-/// accumulator. `target` is needed to decide the `long` width:
+/// Decide how to extend a return value of type `return_type_tag` into the
+/// c5 accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
 /// -- 4 bytes, extend per the unsigned bit.
 pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
-    if return_type_tag == 0 {
-        // No prototype on file -- assume the binding's caller
-        // already produced a sane 64-bit value (legacy headers
-        // that haven't grown a `int foo(...);` declaration). The
-        // sites that need extension are the ones with a real
-        // prototype.
-        return ReturnExt::None;
-    }
-    declared_return_extension(return_type_tag, target)
-}
-
-/// [`return_extension`] of a return type on record, a definition's or a
-/// prototype's, where tag 0 is `signed char`.
-pub(crate) fn declared_return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
     use crate::c5::compiler::types as ty_helpers;
     use crate::c5::token::Ty;
     // `void` shares `unsigned char`'s band; the call leaves no value.
@@ -1290,20 +1277,20 @@ pub(crate) fn declared_return_extension(return_type_tag: i64, target: Target) ->
 /// extends it itself.
 ///
 /// `long` is excluded because its width is per-target (4 bytes on LLP64,
-/// 8 on LP64) and the mid-end asks this before the target is fixed. Tag
-/// 0 -- no recorded prototype, which `Ty::Char` also encodes -- is
-/// excluded for the same reason [`return_extension`] excludes it.
+/// 8 on LP64) and the mid-end asks this before the target is fixed.
 pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
     use crate::c5::compiler::types as ty_helpers;
     use crate::c5::token::Ty;
-    if return_type_tag == 0 || ty_helpers::is_void_ty(return_type_tag) {
+    if ty_helpers::is_void_ty(return_type_tag) {
         return false;
     }
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     if ty_helpers::is_pointer_ty(bare) {
         return false;
     }
-    bare == Ty::Bool as i64 || bare == Ty::Short as i64 || bare == Ty::Int as i64
+    [Ty::Bool, Ty::Char, Ty::Short, Ty::Int]
+        .iter()
+        .any(|&t| bare == t as i64)
 }
 
 /// One resolved external import: a binding the program reaches
@@ -1357,16 +1344,14 @@ pub(crate) struct ResolvedImport {
     pub fixed_args: usize,
     /// Return type tag (`Symbol::type_` encoding -- bare `Ty::Char`
     /// / `Ty::Int` / `Ty::Long` / ... possibly OR'd with the
-    /// unsigned bit). The codegen reads it after the call to decide
-    /// whether the host's return register holds a sub-word value
-    /// that needs sign- or zero-extension before becoming the c5
-    /// accumulator. Without the extension, msvcrt's `int` returns
-    /// (atoi, fclose, ...) leave the upper 32 bits of RAX
-    /// undefined, and a downstream 64-bit comparison against a
-    /// negative literal sees garbage. `0` (= `Ty::Char` = "no
-    /// prototype seen") falls through with no extension, as does
-    /// `void`, which the tag's void bit names.
-    pub return_type_tag: i64,
+    /// unsigned bit), `None` without a prototype on record. The codegen
+    /// reads it after the call to decide whether the host's return
+    /// register holds a sub-word value that needs sign- or zero-extension
+    /// before becoming the c5 accumulator. Without the extension, msvcrt's
+    /// `int` returns (atoi, fclose, ...) leave the upper 32 bits of RAX
+    /// undefined, and a downstream 64-bit comparison against a negative
+    /// literal sees garbage.
+    pub return_type_tag: Option<i64>,
     /// Per-fixed-parameter type tags from the prototype. Carried
     /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
@@ -1375,6 +1360,18 @@ pub(crate) struct ResolvedImport {
     /// signature in `bt`. Empty when the parser hasn't seen the
     /// prototype.
     pub param_types: Vec<i64>,
+}
+
+impl ResolvedImport {
+    /// True when the prototype on record returns `float` or `double`, which
+    /// arrive in the FP return register.
+    pub(crate) fn returns_fp(&self) -> bool {
+        use crate::c5::compiler::types as ty_helpers;
+        self.return_type_tag.is_some_and(|tag| {
+            let bare = ty_helpers::strip_unsigned(tag);
+            ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare)
+        })
+    }
 }
 
 /// What an import names.
@@ -1615,7 +1612,7 @@ impl ResolvedImports {
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
             fixed_args: 1,
-            return_type_tag: 0,
+            return_type_tag: Some(crate::c5::compiler::types::void_ty()),
             param_types: alloc::vec![super::token::Ty::Int as i64],
         });
     }
@@ -3599,7 +3596,7 @@ impl DataImportSlots {
             },
             is_variadic: false,
             fixed_args: 0,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
         });
         self.slots.insert(name.into(), i);

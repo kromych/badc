@@ -673,7 +673,10 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
     if c.ret_agg.is_some() || c.blocks.len() != 1 {
         return None;
     }
-    if !is_struct_ty(c.ret_type_tag) || struct_ptr_depth(c.ret_type_tag) != 0 {
+    if !c
+        .ret_type_tag
+        .is_some_and(|t| is_struct_ty(t) && struct_ptr_depth(t) == 0)
+    {
         return None;
     }
     let block = &c.blocks[0];
@@ -977,7 +980,8 @@ fn is_inline_candidate(
     // A mandatory request for a body no path returns from splices it
     // as-is, leaving the site's continuation unreachable. It has no value
     // to merge into the call's result, so a void callee only.
-    if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
+    let void = (func.ret_type_tag).is_some_and(crate::c5::compiler::types::is_void_ty);
+    if return_blocks == 0 && !void {
         say(format_args!("no Return block"));
         return false;
     }
@@ -6166,7 +6170,7 @@ mod tests {
             |terminator: Terminator, is_noreturn: bool, is_always_inline: bool| FunctionSsa {
                 is_noreturn,
                 is_always_inline,
-                ret_type_tag: crate::c5::compiler::types::void_ty(),
+                ret_type_tag: Some(crate::c5::compiler::types::void_ty()),
                 insts: alloc::vec![Inst::Imm(0)],
                 inst_src: alloc::vec![(0, 0)],
                 f32_values: alloc::vec![false],

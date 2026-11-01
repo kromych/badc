@@ -2870,7 +2870,7 @@ mod tests {
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
                 fixed_args: 3,
-                return_type_tag: 0,
+                return_type_tag: None,
                 param_types: Vec::new(),
             }],
             dylibs: vec![ResolvedDylib {
@@ -3292,7 +3292,7 @@ mod tests {
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
             fixed_args: 0,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
         }
     }

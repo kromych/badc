@@ -101,12 +101,12 @@ pub struct Binding {
     /// `is_variadic`: AAPCS64 passes those in registers and spills only
     /// the variadic tail.
     pub fixed_args: usize,
-    /// Return type, encoded as `Symbol::type_` is. The codegen reads it
-    /// to decide whether a libc return needs sign- or zero-extension --
-    /// the Win64 ABI leaves the upper 32 bits of RAX undefined for an
-    /// `int` return, which a 64-bit comparison would then read. `0`
-    /// (= `Ty::Char`) means no prototype yet, and no extension.
-    pub return_type_tag: i64,
+    /// Return type, encoded as `Symbol::type_` is, or `None` before a
+    /// prototype. The codegen reads it to decide whether a libc return needs
+    /// sign- or zero-extension -- the Win64 ABI leaves the upper 32 bits of
+    /// RAX undefined for an `int` return, which a 64-bit comparison would
+    /// then read.
+    pub return_type_tag: Option<i64>,
     /// Per-fixed-parameter type tags, encoded as `return_type_tag` is.
     /// Carried into `ResolvedImport` so the DWARF emitter can type each
     /// PLT trampoline's `DW_TAG_formal_parameter` children.

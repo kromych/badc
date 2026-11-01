@@ -1,17 +1,19 @@
 //! A returned call result skips its renormalization when the callee has
-//! this function's return contract (`codegen::declared_return_extension`):
+//! this function's return contract (`codegen::return_extension`):
 //! readers of a narrow result extend it themselves, or the callee did, so
 //! the return reads the call, the shape a sibling call takes.
 
 use crate::Target;
-use crate::c5::codegen::{ReturnExt, declared_return_extension};
+use crate::c5::codegen::{ReturnExt, return_extension};
 use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 use alloc::collections::BTreeMap;
 
 /// `callee_tags` maps a direct call's target to its callee's return type.
 pub(crate) fn run(funcs: &mut [FunctionSsa], callee_tags: &BTreeMap<usize, i64>, target: Target) {
     for func in funcs {
-        let ext = declared_return_extension(func.ret_type_tag, target);
+        let Some(ext) = (func.ret_type_tag).map(|tag| return_extension(tag, target)) else {
+            continue;
+        };
         if ext == ReturnExt::None {
             continue;
         }
@@ -27,7 +29,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], callee_tags: &BTreeMap<usize, i64>,
             };
             if callee_tags
                 .get(&target_pc)
-                .is_some_and(|&tag| declared_return_extension(tag, target) == ext)
+                .is_some_and(|&tag| return_extension(tag, target) == ext)
             {
                 let block = &mut func.blocks[b];
                 block.terminator = Terminator::Return(call);

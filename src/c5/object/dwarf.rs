@@ -541,7 +541,8 @@ fn collect_plt_subprograms(
                 name_off: strs.intern(&imp.local_name),
                 low_pc: code_vmaddr + off as u64,
                 high_pc: code_vmaddr + off as u64 + stub_size,
-                return_type_tag: imp.return_type_tag,
+                // Without a prototype, the C90 implicit declaration's `int`.
+                return_type_tag: imp.return_type_tag.unwrap_or(Ty::Int as i64),
                 param_types: imp.param_types.clone(),
                 param_name_offs,
                 is_variadic: imp.is_variadic,
@@ -3031,7 +3032,7 @@ mod tests {
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
                     fixed_args: 1,
-                    return_type_tag: 0,
+                    return_type_tag: None,
                     param_types: alloc::vec![1], // int
                 },
                 super::super::ResolvedImport {
@@ -3044,7 +3045,7 @@ mod tests {
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
                     fixed_args: 1,
-                    return_type_tag: 0,
+                    return_type_tag: None,
                     param_types: alloc::vec![1],
                 },
             ],

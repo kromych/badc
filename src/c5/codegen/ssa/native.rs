@@ -47,7 +47,9 @@ pub(crate) fn compile_function_to_bytes(
     // Single-function compile: no same-image callees are resolvable,
     // so the tail-call conversion sees no known return contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> =
-        core::iter::once((func.ent_pc, func.ret_type_tag)).collect();
+        (func.ret_type_tag.map(|tag| (func.ent_pc, tag)))
+            .into_iter()
+            .collect();
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; func.end_pc + 1];
     let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();

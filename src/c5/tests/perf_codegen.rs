@@ -1445,6 +1445,7 @@ fn void_binding_asks_for_no_extension() {
             .find(|b| b.local_name == name)
             .unwrap_or_else(|| panic!("binding {name}"))
             .return_type_tag
+            .expect("prototype on record")
     };
     assert!(is_void_ty(tag("ext_void")));
     assert!(!is_void_ty(tag("ext_uchar")));
@@ -1460,16 +1461,49 @@ fn void_binding_asks_for_no_extension() {
     }
 }
 
+/// A binding's `signed char` prototype is recorded as that type and asks for
+/// a sign extension; a binding with no prototype records none.
+#[test]
+fn a_signed_char_binding_is_told_from_one_without_a_prototype() {
+    use crate::c5::codegen::{ReturnExt, return_extension};
+    use crate::c5::token::Ty;
+    let program = crate::Compiler::with_target(
+        "#pragma dylib(libc, \"libc.so.6\")\n\
+         #pragma binding(libc::ext_schar, \"ext_schar\")\n\
+         #pragma binding(libc::ext_unseen, \"ext_unseen\")\n\
+         signed char ext_schar(void);\n\
+         int main(void) { return ext_schar(); }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let tag = |name: &str| {
+        program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter())
+            .find(|b| b.local_name == name)
+            .unwrap_or_else(|| panic!("binding {name}"))
+            .return_type_tag
+    };
+    assert_eq!(tag("ext_schar"), Some(Ty::Char as i64));
+    assert_eq!(tag("ext_unseen"), None);
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::LinuxAarch64] {
+        assert_eq!(return_extension(Ty::Char as i64, target), ReturnExt::Sign8);
+    }
+}
+
 /// `long` is 4 bytes on LLP64 and 8 on LP64, and `return_is_low_word` is
 /// asked before the target is fixed, so it answers for the types that are
-/// narrow on every target and for no others. `char` shares tag 0 with "no
-/// prototype recorded", which is why it is out as well.
+/// narrow on every target and for no others.
 #[test]
 fn only_target_independent_narrow_returns_ride_the_low_word() {
     use crate::c5::codegen::return_is_low_word;
-    use crate::c5::compiler::types::{UNSIGNED_BIT, void_ty};
+    use crate::c5::compiler::types::{PLAIN_CHAR_BIT, UNSIGNED_BIT, void_ty};
     use crate::c5::token::Ty;
-    for ty in [Ty::Bool, Ty::Short, Ty::Int] {
+    assert!(return_is_low_word(Ty::Char as i64 | PLAIN_CHAR_BIT), "char");
+    for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
         assert!(return_is_low_word(ty as i64), "{ty:?}");
         assert!(
             return_is_low_word(ty as i64 | UNSIGNED_BIT),
@@ -1477,11 +1511,10 @@ fn only_target_independent_narrow_returns_ride_the_low_word() {
         );
         assert!(!return_is_low_word(ty as i64 + Ty::Ptr as i64), "{ty:?} *");
     }
-    for ty in [Ty::Char, Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
+    for ty in [Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
         assert!(!return_is_low_word(ty as i64), "{ty:?}");
     }
     assert!(!return_is_low_word(void_ty()));
-    assert!(!return_is_low_word(0));
 }
 
 /// Imports returning each narrow integer type, read (`read_*`) and called for

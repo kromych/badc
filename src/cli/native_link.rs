@@ -387,19 +387,31 @@ impl EmbeddedSources<'_> {
     /// The pool joins `slots` as its last archive.
     fn push_pool(&mut self, slots: &mut Vec<Slot>, stats: &mut LinkStats) {
         self.pool_slot = Some(slots.len());
+        let sources: Vec<(String, &str)> = (badc::embedded_compiler_rt().iter())
+            .map(|(name, body)| (format!("<compiler-rt/{name}>"), *body))
+            .chain(
+                (badc::embedded_libc().iter())
+                    .map(|(name, body)| (format!("<libc/{name}>"), *body)),
+            )
+            .collect();
+        // Each source compiles alone; the objects join in source order.
+        let this = &*self;
+        let compiled: Vec<_> = std::thread::scope(|scope| {
+            let jobs: Vec<_> = (sources.iter())
+                .map(|(label, body)| {
+                    scope.spawn(move || this.compile(label, body.to_string(), &[], false))
+                })
+                .collect();
+            (jobs.into_iter())
+                .map(|job| job.join().unwrap_or_else(|p| std::panic::resume_unwind(p)))
+                .collect()
+        });
         let mut members = Vec::new();
-        let on_demand = badc::embedded_compiler_rt()
-            .iter()
-            .map(|e| ("compiler-rt", e))
-            .chain(badc::embedded_libc().iter().map(|e| ("libc", e)));
-        for (dir, (name, body)) in on_demand {
-            let label = format!("<{dir}/{name}>");
-            let bytes = self
-                .compile(&label, body.to_string(), &[], false)
-                .unwrap_or_else(|e| {
-                    eprint_error("", &e);
-                    std::process::exit(1);
-                });
+        for ((label, _), bytes) in sources.into_iter().zip(compiled) {
+            let bytes = bytes.unwrap_or_else(|e| {
+                eprint_error("", &e);
+                std::process::exit(1);
+            });
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label;

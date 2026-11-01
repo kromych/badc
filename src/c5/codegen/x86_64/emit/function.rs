@@ -1481,9 +1481,28 @@ fn emit_struct_stack_param_copy(
             emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
             emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, SCRATCH_R10);
         }
-        for b in (words * 8)..(size as i64) {
-            super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
-            super::encode::emit_mov_mem8_r(code, dst_base, (dst_off + b) as i32, SCRATCH_R10);
+        // The tail in the widest moves that end inside the object.
+        let mut o = words * 8;
+        for width in [4, 2, 1] {
+            if (size as i64) - o < width {
+                continue;
+            }
+            let (src, dst) = ((src_off + o) as i32, (dst_off + o) as i32);
+            match width {
+                4 => {
+                    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem32_r(code, dst_base, dst, SCRATCH_R10);
+                }
+                2 => {
+                    super::encode::emit_movzx_r_mem16(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem16_r(code, dst_base, dst, SCRATCH_R10);
+                }
+                _ => {
+                    super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem8_r(code, dst_base, dst, SCRATCH_R10);
+                }
+            }
+            o += width;
         }
     }
 }

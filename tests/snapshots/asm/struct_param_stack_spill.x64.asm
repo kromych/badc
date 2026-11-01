@@ -56,14 +56,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	0x20(%rbp), %r10
                	movq	%r10, -0x10(%rbp)
-               	movzbq	0x28(%rbp), %r10
-               	movb	%r10b, -0x8(%rbp)
-               	movzbq	0x29(%rbp), %r10
-               	movb	%r10b, -0x7(%rbp)
-               	movzbq	0x2a(%rbp), %r10
-               	movb	%r10b, -0x6(%rbp)
-               	movzbq	0x2b(%rbp), %r10
-               	movb	%r10b, -0x5(%rbp)
+               	movl	0x28(%rbp), %r10d
+               	movl	%r10d, -0x8(%rbp)
                	leaq	(%rdi,%rsi), %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax

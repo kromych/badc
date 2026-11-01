@@ -29,14 +29,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movzbq	0x10(%rbp), %r10
-               	movb	%r10b, -0x8(%rbp)
-               	movzbq	0x11(%rbp), %r10
-               	movb	%r10b, -0x7(%rbp)
-               	movzbq	0x12(%rbp), %r10
-               	movb	%r10b, -0x6(%rbp)
-               	movzbq	0x13(%rbp), %r10
-               	movb	%r10b, -0x5(%rbp)
+               	movl	0x10(%rbp), %r10d
+               	movl	%r10d, -0x8(%rbp)
                	movzbq	0x14(%rbp), %r10
                	movb	%r10b, -0x4(%rbp)
                	imulq	$0x3e8, %rdi, %rax      # imm = 0x3E8
@@ -54,18 +48,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movzbq	0x10(%rbp), %r10
-               	movb	%r10b, -0x8(%rbp)
-               	movzbq	0x11(%rbp), %r10
-               	movb	%r10b, -0x7(%rbp)
-               	movzbq	0x12(%rbp), %r10
-               	movb	%r10b, -0x6(%rbp)
-               	movzbq	0x13(%rbp), %r10
-               	movb	%r10b, -0x5(%rbp)
-               	movzbq	0x14(%rbp), %r10
-               	movb	%r10b, -0x4(%rbp)
-               	movzbq	0x15(%rbp), %r10
-               	movb	%r10b, -0x3(%rbp)
+               	movl	0x10(%rbp), %r10d
+               	movl	%r10d, -0x8(%rbp)
+               	movzwq	0x14(%rbp), %r10
+               	movw	%r10w, -0x4(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movswq	(%rax), %rcx
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
@@ -81,18 +67,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movzbq	0x10(%rbp), %r10
-               	movb	%r10b, -0x8(%rbp)
-               	movzbq	0x11(%rbp), %r10
-               	movb	%r10b, -0x7(%rbp)
-               	movzbq	0x12(%rbp), %r10
-               	movb	%r10b, -0x6(%rbp)
-               	movzbq	0x13(%rbp), %r10
-               	movb	%r10b, -0x5(%rbp)
-               	movzbq	0x14(%rbp), %r10
-               	movb	%r10b, -0x4(%rbp)
-               	movzbq	0x15(%rbp), %r10
-               	movb	%r10b, -0x3(%rbp)
+               	movl	0x10(%rbp), %r10d
+               	movl	%r10d, -0x8(%rbp)
+               	movzwq	0x14(%rbp), %r10
+               	movw	%r10w, -0x4(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movsbq	-0x8(%rbp), %rcx
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8

@@ -1124,6 +1124,12 @@ pub(crate) fn compact_program_data(
     })
 }
 
+/// Whether every byte of `bytes` is zero, tested 64 bytes at a time.
+fn all_zero(bytes: &[u8]) -> bool {
+    let (chunks, rest) = bytes.as_chunks::<64>();
+    chunks.iter().all(|c| c.iter().fold(0, |a, &b| a | b) == 0) && rest.iter().all(|&b| b == 0)
+}
+
 /// Rewrite `out` in place to hold only the data objects `sets` marks live
 /// and only the functions in `live_func_pcs`, packing `.data` and mapping
 /// every offset surface -- symbol values, relocation slots, relocation
@@ -1265,16 +1271,17 @@ pub(crate) fn apply_data_liveness(
     // layout it produces records the answer as a position -- everything
     // at or past the file image is zero-fill -- and the object writer
     // reads it back through that watershed rather than re-deriving it.
-    let is_bss = |i: usize| -> bool {
-        segregate
-            && i != 0
-            && live[i]
-            && !has_reloc_slot[i]
-            && !is_readonly[i]
-            && out.data[starts[i] as usize..obj_end(i) as usize]
-                .iter()
-                .all(|&b| b == 0)
-    };
+    let bss: Vec<bool> = (0..n)
+        .map(|i| {
+            segregate
+                && i != 0
+                && live[i]
+                && !has_reloc_slot[i]
+                && !is_readonly[i]
+                && all_zero(&out.data[starts[i] as usize..obj_end(i) as usize])
+        })
+        .collect();
+    let is_bss = |i: usize| bss[i];
 
     // File-backed objects pack in three regions -- read-only prefix,
     // relro, writable -- the same regions-then-boundary layout the
@@ -1551,6 +1558,19 @@ mod tests {
         Compiler::with_target(with_prelude(src), target)
             .compile()
             .expect("compile")
+    }
+
+    #[test]
+    fn a_nonzero_byte_anywhere_makes_the_span_initialized() {
+        for len in [0usize, 1, 63, 64, 65, 128, 200] {
+            let mut bytes = alloc::vec![0u8; len];
+            assert!(all_zero(&bytes), "{len} zero bytes");
+            for at in 0..len {
+                bytes[at] = 0x80;
+                assert!(!all_zero(&bytes), "byte {at} of {len}");
+                bytes[at] = 0;
+            }
+        }
     }
 
     // A wholly-zero global referenced by a pointer initializer moves to

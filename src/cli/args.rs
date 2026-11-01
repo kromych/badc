@@ -151,6 +151,7 @@ pub(crate) struct Codegen {
     pub(crate) sibling_calls: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
+    pub(crate) align_functions: u32,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
@@ -188,6 +189,7 @@ impl Default for Codegen {
             sibling_calls: true,
             keep_local_labels: false,
             min_function_alignment: 1,
+            align_functions: 1,
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
@@ -1519,6 +1521,23 @@ impl Parser {
                     }
                 };
             }
+            // gcc `-falign-functions=N[:M[:N2[:M2]]]`: function entries on
+            // the power of two at or above N. gcc may leave an entry
+            // unaligned when that pads past M - 1 bytes; badc always aligns,
+            // as clang does, which a reader of the entry addresses (patch
+            // sites aligned for `-fpatchable-function-entry`) relies on.
+            s if s.starts_with("-falign-functions=") => {
+                let spec = &s["-falign-functions=".len()..];
+                code.align_functions = match spec.split(':').next().map(str::parse::<u32>) {
+                    Some(Ok(n)) => n.max(1).next_power_of_two(),
+                    _ => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: `-falign-functions=` takes a byte count, got `{spec}`"
+                        )));
+                    }
+                };
+            }
+            "-falign-functions" | "-fno-align-functions" => code.align_functions = 1,
             // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
             // function entry, M of them ahead of the symbol, recorded per
             // function in `__patchable_function_entries`.
@@ -2624,7 +2643,7 @@ impl Codegen {
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
         opts.sibling_calls = self.sibling_calls;
-        opts.min_function_alignment = self.min_function_alignment;
+        opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
         opts.pic = self.fpic;
@@ -3506,6 +3525,23 @@ mod tests {
         assert_eq!(cli.front.no_builtin_fns, vec!["memcpy".to_string()]);
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);
+        // `-falign-functions=` rounds up to a power of two, and the larger
+        // of it and `-fmin-function-alignment=` is the entry alignment.
+        let entry = |args: &[&str]| {
+            let c = parse(args).codegen;
+            c.min_function_alignment.max(c.align_functions)
+        };
+        assert_eq!(entry(&["-falign-functions=8", "a.c"]), 8);
+        assert_eq!(entry(&["-falign-functions=5:3", "a.c"]), 8);
+        assert_eq!(
+            entry(&["-falign-functions=8", "-fmin-function-alignment=16", "a.c"]),
+            16
+        );
+        assert_eq!(
+            entry(&["-falign-functions=32", "-fno-align-functions", "a.c"]),
+            1
+        );
+        assert_eq!(entry(&["-falign-functions", "a.c"]), 1);
         assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
         // The overflow pair: the last spelling given wins.
         assert!(!parse(&["a.c"]).front.wrapv);

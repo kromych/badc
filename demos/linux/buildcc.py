@@ -208,11 +208,13 @@ FORWARD_PREFIX = (
     # the unit instead of assembling under different rules -- which is what
     # `-Wa,-mrelax-relocations=no` selects for the boot units that pass it.
     "-Wa,",
-    # Function entry alignment. Withheld, functions pack against their
-    # predecessors and CONFIG_FUNCTION_ALIGNMENT does not hold: measured, a
-    # three-function object placed the third at offset 0x61. badc validates
-    # the operand.
-    "-fmin-function-alignment=",
+    # Function entry alignment, under either spelling the kernel picks.
+    # Withheld, functions pack against their predecessors and
+    # CONFIG_FUNCTION_ALIGNMENT does not hold: measured, a three-function
+    # object placed the third at offset 0x61, and an arm64 kernel with
+    # CALL_OPS panicked in ftrace_init on a misaligned patch site. badc
+    # validates the operand.
+    "-fmin-function-alignment=", "-falign-functions=",
     # ftrace patch sites: the NOP area at every function entry and its
     # `__patchable_function_entries` record (CONFIG_CALL_PADDING on x86_64,
     # CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS on arm64). Withheld, the image
@@ -340,10 +342,10 @@ IGNORE_EXACT = {
 IGNORE_PREFIX = (
     "-fdiagnostics-", "-femit-struct-debug-detailed=",
     # Loop / jump / label alignment padding the kernel asks to be dropped,
-    # which badc emits none of. Function alignment it asks to be added
-    # arrives as `-fmin-function-alignment=`, forwarded above; the pinned
-    # defconfig passes no `-falign-functions`.
-    "-falign-",
+    # which badc emits none of. Function alignment is forwarded: a reference
+    # gcc without `-fmin-function-alignment=` (before GCC 14) leaves the
+    # configuration on `-falign-functions=`, which ftrace's patch sites need.
+    "-falign-jumps", "-falign-loops", "-falign-labels",
     # Instruction selection. badc emits its own baseline
     # (doc/native-compilation.md); off the FP/SIMD registers, as a kernel
     # object is, its integer lowering stays in the base architecture these
@@ -700,6 +702,11 @@ def _self_test() -> int:
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
     assert rewrite(["-fmin-function-alignment=16"]).argv == \
         ["-fmin-function-alignment=16"]
+    # So does the spelling a reference gcc before 14 leaves the kernel on;
+    # the loop, jump and label padding badc emits none of is dropped.
+    assert rewrite(["-falign-functions=8"]).argv == ["-falign-functions=8"]
+    for flag in ("-falign-jumps=1", "-falign-loops=1", "-falign-labels=1"):
+        assert rewrite([flag]).argv == [] and not rewrite([flag]).unknown, flag
     # The ftrace patch sites reach badc verbatim on both architectures.
     for flag in ("-fpatchable-function-entry=16,16",
                  "-fpatchable-function-entry=4,2", "-pg", "-mfentry",

@@ -118,10 +118,20 @@ fn is_compare_op(op: BinOp) -> bool {
 /// The operand an instruction reproduces bit for bit, if any: `x != 0`
 /// over a provably 0/1 `x` (`is_bool_value`) -- the short-circuit lowering
 /// re-normalizes an `&&` / `||` operand a comparison or `!` already
-/// normalized -- and an integer operation by its identity constant.
+/// normalized -- an integer operation by its identity constant, and
+/// `x & x` / `x | x`.
 fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     if matches!(func.f32_values.get(idx), Some(true)) {
         return None;
+    }
+    if let Inst::Binop {
+        op: BinOp::And | BinOp::Or,
+        lhs,
+        rhs,
+    } = func.insts[idx]
+        && lhs == rhs
+    {
+        return Some(lhs);
     }
     let (op, lhs, imm) = match &func.insts[idx] {
         Inst::BinopI { op, lhs, rhs_imm } => (*op, *lhs, *rhs_imm),
@@ -768,6 +778,18 @@ fn low_mask_transparent(mask: i64, width: u8) -> bool {
     }
 }
 
+/// The constant an `Or` sets its bits with, when `v` is that `Or`.
+fn or_imm(func: &FunctionSsa, v: ValueId) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::BinopI {
+            op: BinOp::Or,
+            rhs_imm,
+            ..
+        } => Some(*rhs_imm),
+        _ => None,
+    }
+}
+
 /// The value an `And` masks, when `v` is that `And` and its mask keeps
 /// every bit a left shift by `k` keeps (bits `0..=63 - k`).
 fn masked_before_shl(func: &FunctionSsa, v: ValueId, k: i64) -> Option<ValueId> {
@@ -809,9 +831,14 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             continue;
         }
         let new_inst = match &func.insts[idx] {
-            Inst::Extend { value, kind, .. } => {
-                imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
-            }
+            // An extend reads the low bits of its operand, which an `Or`
+            // with all of them set fixes.
+            Inst::Extend { value, kind, .. } => imm_of(func, *value)
+                .or_else(|| {
+                    or_imm(func, *value)
+                        .filter(|&k| eval::eval_extend(k, *kind) == eval::eval_extend(-1, *kind))
+                })
+                .map(|k| Inst::Imm(eval::eval_extend(k, *kind))),
             Inst::Udiv128 { hi, lo, divisor } => {
                 match (imm_of(func, *hi), imm_of(func, *lo), imm_of(func, *divisor)) {
                     (Some(h), Some(l), Some(d)) => eval::udiv128(h, l, d).map(Inst::Imm),
@@ -927,6 +954,31 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
                 Some(Inst::Neg(*rhs))
             }
+            // All ones absorb an `Or`, and an `Or` that sets every bit of
+            // a mask fixes the masked value.
+            Inst::BinopI {
+                op: BinOp::Or,
+                rhs_imm: -1,
+                ..
+            } => Some(Inst::Imm(-1)),
+            Inst::Binop {
+                op: BinOp::Or,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(-1) || imm_of(func, *rhs) == Some(-1) => {
+                Some(Inst::Imm(-1))
+            }
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs,
+                rhs_imm,
+            } if or_imm(func, *lhs).is_some_and(|k| rhs_imm & !k == 0) => Some(Inst::Imm(*rhs_imm)),
+            // A value less itself, or exclusive-ored with itself, is zero.
+            Inst::Binop {
+                op: BinOp::Sub | BinOp::Xor,
+                lhs,
+                rhs,
+            } if lhs == rhs => Some(Inst::Imm(0)),
             // No value is below zero unsigned.
             Inst::BinopI {
                 op: op @ (BinOp::Ult | BinOp::Uge),
@@ -1772,17 +1824,89 @@ mod tests {
                 "{op:?} -> {want}"
             );
         }
-        // Non-compare ops on a shared operand stay put.
-        let mut f = fresh(vec![
-            Inst::LocalAddr(0),
-            Inst::Binop {
-                op: BinOp::Sub,
-                lhs: 0,
-                rhs: 0,
-            },
-        ]);
-        run_one(&mut f);
-        assert!(matches!(f.insts[1], Inst::Binop { .. }));
+        // A shift or a product on a shared operand stays put.
+        for op in [BinOp::Shl, BinOp::Mul] {
+            let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
+            run_one(&mut f);
+            assert!(matches!(f.insts[1], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn same_operand_arithmetic_folds() {
+        for (op, zero) in [
+            (BinOp::Sub, true),
+            (BinOp::Xor, true),
+            (BinOp::And, false),
+            (BinOp::Or, false),
+        ] {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::Binop { op, lhs: 0, rhs: 0 },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8,
+                },
+            ]);
+            run_one(&mut f);
+            if zero {
+                assert!(
+                    matches!(f.insts[1], Inst::Imm(0)),
+                    "{op:?}: {:?}",
+                    f.insts[1]
+                );
+            } else {
+                assert!(
+                    matches!(f.insts[2], Inst::BinopI { lhs: 0, .. }),
+                    "{op:?} forwards its operand: {:?}",
+                    f.insts[2]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn set_bits_absorb_what_reads_only_them() {
+        let or_then = |k: i64, reader: Inst| {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op: BinOp::Or,
+                    lhs: 0,
+                    rhs_imm: k,
+                },
+                reader,
+            ]);
+            run_one(&mut f);
+            f.insts[if k == -1 { 1 } else { 2 }].clone()
+        };
+        let and = |m: i64| Inst::BinopI {
+            op: BinOp::And,
+            lhs: 1,
+            rhs_imm: m,
+        };
+        let extend = |kind: LoadKind| Inst::Extend {
+            value: 1,
+            kind,
+            nsw: false,
+        };
+        assert!(matches!(or_then(-1, and(7)), Inst::Imm(-1)));
+        assert!(matches!(or_then(0xff, and(0x0f)), Inst::Imm(0x0f)));
+        assert!(matches!(or_then(0xff, and(0x1ff)), Inst::BinopI { .. }));
+        assert!(matches!(
+            or_then(0xffff_ffff, and(0xffff_ffff)),
+            Inst::Imm(0xffff_ffff)
+        ));
+        assert!(matches!(
+            or_then(0xffff_ffff, extend(LoadKind::I32)),
+            Inst::Imm(-1)
+        ));
+        assert!(matches!(or_then(0xff, extend(LoadKind::I8)), Inst::Imm(-1)));
+        assert!(matches!(
+            or_then(0x7fff_ffff, extend(LoadKind::I32)),
+            Inst::Extend { .. }
+        ));
     }
 
     fn facts(nonnull_pcs: &[usize]) -> AddrFacts {

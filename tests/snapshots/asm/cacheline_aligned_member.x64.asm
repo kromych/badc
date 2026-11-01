@@ -27,10 +27,6 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax # <addr>
-               	movq	%rax, %rcx
-               	subq	%rax, %rcx
-               	testl	%ecx, %ecx
-               	jne	<addr>
                	leaq	0x40(%rax), %rcx
                	subq	%rax, %rcx
                	cmpl	$0x40, %ecx
@@ -42,10 +38,6 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movq	%rax, %rcx
-               	subq	%rax, %rcx
-               	testl	%ecx, %ecx
-               	jne	<addr>
                	leaq	0x40(%rax), %rcx
                	subq	%rax, %rcx
                	cmpl	$0x40, %ecx

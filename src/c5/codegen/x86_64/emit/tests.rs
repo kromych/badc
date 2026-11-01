@@ -894,7 +894,7 @@ mod two_address_tests {
 
     /// A difference placed in its subtrahend's register negates it in
     /// place and adds the minuend: `neg rax; add rax, rsi`. When the
-    /// minuend is the same register (`a - a`) or spilled, the subtrahend
+    /// minuend is in the same register or spilled, the subtrahend
     /// is copied to r10 first and `sub rax, r10` computes the difference.
     #[test]
     fn subtract_into_the_subtrahend_register() {
@@ -918,9 +918,8 @@ mod two_address_tests {
             emit(two, reg(Reg::RSI), reg(Reg::RAX)),
             [0x48, 0xF7, 0xD8, 0x48, 0x01, 0xF0]
         );
-        let same = "long f(long a){ return a - a; }";
         assert_eq!(
-            emit(same, reg(Reg::RAX), reg(Reg::RAX)),
+            emit(two, reg(Reg::RAX), reg(Reg::RAX)),
             [0x49, 0x89, 0xC2, 0x4C, 0x29, 0xD0]
         );
         let spilled = emit(two, Place::Spill(0), reg(Reg::RAX));

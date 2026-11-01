@@ -32,9 +32,7 @@ Disassembly of section .text:
                	subq	%rdi, %rax
                	movslq	%eax, %rax
                	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
-               	movq	%rdi, %rdx
-               	subq	%rdi, %rdx
-               	movslq	%edx, %rdx
+               	xorl	%edx, %edx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdx, %xmm0
                	movq	%rcx, %xmm14

@@ -17,15 +17,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	add	x1, x0, #0x64
-               	sub	x1, x1, x0
-               	sxtw	x1, w1
+               	sub	x0, x1, x0
+               	sxtw	x0, w0
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x8]
-               	sub	x0, x0, x0
-               	sxtw	x0, w0
-               	scvtf	d1, x0
+               	mov	x1, #0x0                // =0
+               	scvtf	d1, x1
                	fadd	d1, d0, d1
-               	scvtf	d0, x1
+               	scvtf	d0, x0
                	fcmp	d1, d0
                	cset	x0, mi
                	cmp	w0, #0x1

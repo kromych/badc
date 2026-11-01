@@ -325,9 +325,9 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v22  Imm(0)                                           -> x0
     v23  Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
     v24  Imm(0)                                           -> x0
-    v25  Binop { op=sub, lhs=v5, rhs=v5 }                 -> x0
+    v25  Imm(0)                                           -> x0
     v26  Imm(0)                                           -> x0
-    v27  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x0
+    v27  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v25)
   block 3  start_pc=0
     terminator Return

@@ -108,20 +108,20 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	orr	x21, x0, x1
+               	orr	x22, x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x22, [x1]
+               	ldr	x21, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	orr	x23, x0, x1
                	mov	x0, #0x2                // =2
-               	cmp	x22, x20
+               	cmp	x21, x20
                	cset	x1, lo
-               	cmp	x22, x20
+               	cmp	x21, x20
                	cset	x2, eq
-               	cmp	x23, x21
+               	cmp	x23, x22
                	cset	x3, lo
                	and	x2, x2, x3
                	orr	x1, x1, x2
@@ -140,11 +140,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x1, lo
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x2, eq
-               	cmp	x21, x23
+               	cmp	x22, x23
                	cset	x3, lo
                	and	x2, x2, x3
                	orr	x1, x1, x2
@@ -162,11 +162,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
-               	eor	x1, x21, x21
-               	eor	x2, x20, x20
-               	orr	x1, x1, x2
-               	cmp	x1, #0x0
-               	cset	x1, eq
+               	mov	x1, #0x1                // =1
                	mov	x2, #0x4d               // =77
                	bl	<addr>
                	cmp	w0, #0x1
@@ -182,11 +178,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
-               	eor	x1, x21, x21
-               	eor	x2, x20, x20
-               	orr	x1, x1, x2
-               	cmp	x1, #0x0
-               	cset	x1, ne
+               	mov	x1, #0x0                // =0
                	mov	x2, #0x4d               // =77
                	bl	<addr>
                	cbnz	w0, <addr>
@@ -217,11 +209,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x2                // =2
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x1, lo
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x2, eq
-               	cmp	x21, x23
+               	cmp	x22, x23
                	cset	x3, lo
                	and	x2, x2, x3
                	orr	x1, x1, x2
@@ -240,11 +232,11 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	cmp	x22, x20
+               	cmp	x21, x20
                	cset	x1, lo
-               	cmp	x22, x20
+               	cmp	x21, x20
                	cset	x0, eq
-               	cmp	x23, x21
+               	cmp	x23, x22
                	cset	x2, lo
                	and	x2, x0, x2
                	orr	x1, x1, x2
@@ -252,8 +244,8 @@ Disassembly of section .text:
                	mul	x2, x1, x17
                	cmp	w2, #0x3
                	b.ne	<addr>
-               	eor	x2, x21, x23
-               	eor	x3, x20, x22
+               	eor	x2, x22, x23
+               	eor	x3, x20, x21
                	orr	x2, x2, x3
                	cmp	x2, #0x0
                	cset	x3, eq
@@ -265,40 +257,15 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	orr	x3, x21, x20
+               	orr	x3, x22, x20
                	cbz	x3, <addr>
-               	sub	x3, x21, x21
-               	sub	x4, x20, x20
-               	orr	x3, x3, x4
-               	cmp	x3, #0x0
-               	cset	x3, eq
-               	cmp	w3, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x8                // =8
-               	ldp	x29, x30, [sp, #0x30]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
-               	ret
                	cbz	x1, <addr>
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x1, lo
-               	cmp	x21, x23
+               	cmp	x22, x23
                	cset	x3, lo
                	and	x0, x0, x3
                	orr	x0, x1, x0
-               	eor	x0, x21, x21
-               	eor	x1, x20, x20
-               	orr	x0, x0, x1
-               	cmp	x0, #0x0
-               	cset	x1, eq
-               	cmp	w1, #0x1
-               	b.ne	<addr>
-               	cbz	x0, <addr>
-               	mov	x0, #0xa                // =10
-               	ldp	x29, x30, [sp, #0x30]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x40
-               	ret
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -341,11 +308,11 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x0, lo
-               	cmp	x20, x22
+               	cmp	x20, x21
                	cset	x1, eq
-               	cmp	x21, x23
+               	cmp	x22, x23
                	cset	x2, lo
                	and	x1, x1, x2
                	orr	x0, x0, x1
@@ -361,6 +328,11 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	mov	x0, #0x9                // =9
+               	ldp	x29, x30, [sp, #0x30]
+               	ldp	x22, x23, [sp, #0x10]
+               	ldp	x20, x21, [sp], #0x40
+               	ret
+               	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40

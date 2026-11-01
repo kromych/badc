@@ -1083,7 +1083,9 @@ pub(super) fn detect_tail_call<'a>(
     let Terminator::Return(v) = block.terminator else {
         return None;
     };
-    if v == super::super::ir::NO_VALUE || !abi.sibling_calls {
+    // A second return of a returns-twice call (C99 7.13.2.1) resumes in this
+    // frame, which a jump to the callee would already have torn down.
+    if v == super::super::ir::NO_VALUE || !abi.sibling_calls || func.has_returns_twice_call {
         return None;
     }
     // The call ends the block but for lifetime markers, which the frame

@@ -13649,6 +13649,52 @@ fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
     assert_eq!(opcode(&emit(false), "ext"), 0xE8, "the flag keeps the call");
 }
 
+/// A function that calls a returns-twice function keeps its returned call:
+/// `longjmp` back to the `setjmp` resumes in this function's frame (C99
+/// 7.13.2.1), which a sibling call would have torn down. gcc and clang
+/// make no sibling call there either.
+#[test]
+fn x64_a_function_calling_setjmp_makes_no_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "typedef long jmp_buf[8];\n\
+        int setjmp(jmp_buf);\n\
+        extern jmp_buf env;\n\
+        extern long ext(long);\n\
+        extern long ext2(long);\n\
+        long guarded(long x) { if (setjmp(env)) return -1; return ext(x); }\n\
+        long plain(long x) { return ext2(x); }\n";
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(SRC),
+        crate::Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let text = elf_text(&obj);
+    let relocs = x64_branch_relocs(&obj);
+    let opcode = |callee: &str| {
+        let (off, _, _) = relocs
+            .iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[*off as usize - 1]
+    };
+    assert_eq!(
+        opcode("ext"),
+        0xE8,
+        "after setjmp the returned call stays a call"
+    );
+    assert_eq!(opcode("ext2"), 0xE9, "without one it is a jump");
+}
+
 #[test]
 fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
     // A call in tail position becomes a direct `jmp` to the callee: it is

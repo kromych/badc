@@ -41,7 +41,6 @@ Disassembly of section .text:
                	je	<addr>
                	xorl	%esi, %esi
                	callq	<addr>
-               	testq	%rax, %rax
                	leave
                	retq
                	movq	$-0x16, %rax
@@ -63,7 +62,6 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movq	%rsi, %rdx
                	callq	<addr>
-               	testq	%rax, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax

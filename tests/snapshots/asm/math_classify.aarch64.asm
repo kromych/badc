@@ -186,16 +186,14 @@ Disassembly of section .text:
                	fmov	d0, #1.50000000
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	ubfx	x1, x0, #52, #11
-               	and	x0, x0, #0xfffffffffffff
-               	cbnz	w1, <addr>
+               	ubfx	x0, x0, #52, #11
+               	cbnz	w0, <addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w1, #0x7ff
-               	b.ne	<addr>
-               	b	<addr>
+               	cmp	w0, #0x7ff
+               	b.eq	<addr>
                	stur	d2, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	lsr	x0, x0, #63

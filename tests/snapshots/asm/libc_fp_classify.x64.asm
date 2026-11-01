@@ -135,19 +135,15 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x10(%rbp)
                	movq	-0x10(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x34, %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rcx
-               	testl	%edx, %edx
+               	shrq	$0x34, %rcx
+               	andq	$0x7ff, %rcx            # imm = 0x7FF
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
-               	cmpl	$0x7ff, %edx            # imm = 0x7FF
-               	jne	<addr>
-               	jmp	<addr>
+               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	je	<addr>
                	movl	$0x7f800000, -0x8(%rbp) # imm = 0x7F800000
                	movl	-0x8(%rbp), %ecx
                	movq	%rcx, %rdx

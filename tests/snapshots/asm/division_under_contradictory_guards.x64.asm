@@ -26,7 +26,6 @@ Disassembly of section .text:
                	int3
 
 <sdiv_dead>:
-               	cmpl	$0x5, %esi
                	movl	$0x7, %eax
                	retq
 
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	retq
 
 <urem_dead>:
-               	cmpl	$0x5, %esi
                	movl	$0x7, %eax
                	retq
 

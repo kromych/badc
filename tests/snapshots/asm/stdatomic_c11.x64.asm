@@ -59,10 +59,7 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%esi, (%rcx)
                	cmpl	$0xf, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testl	%eax, %eax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq

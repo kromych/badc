@@ -282,17 +282,6 @@ Disassembly of section .text:
                	orq	%rcx, %rax
                	testq	%rax, %rax
                	je	<addr>
-               	cmpq	%r12, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
-               	cmpq	%r12, %rbx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	%r14, %r13
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	orq	%rcx, %rax
                	leaq	-0x10(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14

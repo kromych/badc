@@ -5374,8 +5374,7 @@ Disassembly of section .text:
                	mov	x4, x1
                	casal	x4, x3, [x0]
                	cmp	x4, x1
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	b.ne	<addr>
                	ldapr	x0, [x0]
                	cmp	x0, #0x7
                	b.eq	<addr>

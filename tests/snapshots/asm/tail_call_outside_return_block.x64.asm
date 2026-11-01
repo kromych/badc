@@ -73,7 +73,6 @@ Disassembly of section .text:
                	testb	$0x1, %cl
                	jne	<addr>
                	movq	(%rax), %rcx
-               	testb	$0x40, %cl
                	jmp	<addr>
 
 <main>:

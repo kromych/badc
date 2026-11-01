@@ -47,8 +47,7 @@ Disassembly of section .text:
                	mov	x3, #0x63               // =99
                	casal	w2, w3, [x1]
                	cmp	w2, #0xf
-               	cset	x1, eq
-               	cbnz	w1, <addr>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

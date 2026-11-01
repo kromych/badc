@@ -5860,10 +5860,7 @@ Disassembly of section .text:
                	lock
                	cmpxchgq	%rsi, (%rcx)
                	cmpq	%rdx, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testq	%rax, %rax
-               	je	<addr>
+               	jne	<addr>
                	movq	(%rcx), %rax
                	cmpq	$0x7, %rax
                	je	<addr>

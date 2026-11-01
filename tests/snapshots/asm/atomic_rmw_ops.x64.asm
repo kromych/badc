@@ -116,10 +116,7 @@ Disassembly of section .text:
                	lock
                	cmpxchgq	%rcx, (%r8)
                	cmpq	$0x63, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testl	%eax, %eax
-               	jne	<addr>
+               	je	<addr>
                	movq	%rcx, %rax
                	leave
                	retq
@@ -171,10 +168,7 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%r9d, (%rcx)
                	cmpl	$0x5, %eax
-               	sete	%al
-               	movzbq	%al, %rax
-               	testl	%eax, %eax
-               	jne	<addr>
+               	je	<addr>
                	movl	$0xc, %eax
                	leave
                	retq

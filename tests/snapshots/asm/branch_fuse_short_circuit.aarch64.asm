@@ -38,23 +38,16 @@ Disassembly of section .text:
                	ldr	x3, [x0]
                	ldr	x4, [x1]
                	ldr	w4, [x2]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
                	cmp	x3, #0x64
                	b.ls	<addr>
                	ldr	x3, [x1]
                	ldr	w3, [x2]
                	ldr	x3, [x0]
                	ldr	w2, [x2]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
                	cmp	x3, #0x64
                	b.ls	<addr>
                	ldr	x0, [x0]
                	ldr	x1, [x1]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
-               	b.ne	<addr>
                	cmp	x0, #0x64
                	b.ls	<addr>
                	mov	x0, #0x0                // =0
@@ -65,7 +58,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	x4, #0x64
                	mov	x0, #0x1                // =1
                	ret
                	mov	x3, #0x0                // =0

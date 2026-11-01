@@ -102,16 +102,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	stur	d0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x10]
-               	ubfx	x2, x1, #52, #11
-               	and	x1, x1, #0xfffffffffffff
-               	cbnz	w2, <addr>
+               	ubfx	x1, x1, #52, #11
+               	cbnz	w1, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w2, #0x7ff
-               	b.ne	<addr>
-               	b	<addr>
+               	cmp	w1, #0x7ff
+               	b.eq	<addr>
                	mov	x16, #0x7f800000        // =2139095040
                	fmov	s0, w16
                	stur	s0, [x29, #-0x8]

@@ -233,45 +233,39 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	cmp	x21, x20
-               	cset	x1, lo
+               	cset	x0, lo
                	cmp	x21, x20
-               	cset	x0, eq
+               	cset	x1, eq
                	cmp	x23, x22
                	cset	x2, lo
-               	and	x2, x0, x2
-               	orr	x1, x1, x2
+               	and	x1, x1, x2
+               	orr	x0, x0, x1
                	mov	x17, #0x3               // =3
-               	mul	x2, x1, x17
-               	cmp	w2, #0x3
+               	mul	x1, x0, x17
+               	cmp	w1, #0x3
                	b.ne	<addr>
-               	eor	x2, x22, x23
-               	eor	x3, x20, x21
-               	orr	x2, x2, x3
-               	cmp	x2, #0x0
-               	cset	x3, eq
+               	eor	x1, x22, x23
+               	eor	x2, x20, x21
+               	orr	x1, x1, x2
+               	cmp	x1, #0x0
+               	cset	x2, eq
                	mov	x17, #0x3               // =3
-               	mul	x3, x3, x17
-               	cbz	w3, <addr>
+               	mul	x2, x2, x17
+               	cbz	w2, <addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	orr	x3, x22, x20
-               	cbz	x3, <addr>
-               	cbz	x1, <addr>
-               	cmp	x20, x21
-               	cset	x1, lo
-               	cmp	x22, x23
-               	cset	x3, lo
-               	and	x0, x0, x3
-               	orr	x0, x1, x0
+               	orr	x2, x22, x20
+               	cbz	x2, <addr>
+               	cbz	x0, <addr>
                	sub	x0, x29, #0x10
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x1]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldp	x16, x17, [x2]
                	stp	x16, x17, [x0]
-               	cmp	x2, #0x0
+               	cmp	x1, #0x0
                	cset	x1, ne
                	add	x1, x1, #0x1
                	ldrsw	x0, [x0, x1, lsl #2]

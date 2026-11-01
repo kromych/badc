@@ -36,9 +36,6 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movq	%rdx, 0x8(%rax)
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
-               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

@@ -23,10 +23,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	str	x2, [x0, #0x8]
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	b	<addr>
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

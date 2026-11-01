@@ -230,10 +230,13 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
 }
 
 /// The constant the operation `v` computes from `l` and `r`: a comparison
-/// marked for its 32-bit form reads the low words, as the emitted compare
-/// does, since its operands may have lost the extensions the mark made
-/// redundant.
+/// or a division marked for its 32-bit form reads the low words, as the
+/// emitted compare or division does, since its operands may have lost the
+/// extensions the mark made redundant.
 fn fold_binop_of(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    if super::narrow::is_narrow_div(func, v) {
+        return super::narrow::fold_div32(op, l, r);
+    }
     super::narrow::fold_at_width(op, l, r, super::narrow::is_cmp32(&func.cmp32, v))
 }
 

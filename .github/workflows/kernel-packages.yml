@@ -137,13 +137,15 @@ jobs:
         # emulator ci.yml's kernel lane boots under has a data directory for.
         # `rpm` carries rpmbuild, which the kernel's binrpm-pkg target drives;
         # `dwarves` carries pahole, without which olddefconfig drops the BTF
-        # both distributions configure.
+        # both distributions configure; `libdw-dev` the `dwarf.h` and libdw
+        # headers of gendwarfksyms, the host tool Ubuntu's module versions
+        # select.
         env:
           EMU: ${{ matrix.arch == 'x86_64' && 'qemu-system-x86' || 'qemu-system-arm qemu-efi-aarch64' }}
         run: |
           ./scripts/apt_resilient_install.sh \
             flex bison bc libelf-dev libssl-dev xz-utils cpio kmod rsync \
-            dpkg-dev debhelper rpm genisoimage qemu-utils dwarves zstd $EMU
+            dpkg-dev debhelper rpm genisoimage qemu-utils dwarves libdw-dev zstd $EMU
       - name: free disk for the kernel tree
         # Preinstalled toolchains this job does not use, about 30 GB.
         run: |

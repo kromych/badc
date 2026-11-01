@@ -350,8 +350,15 @@ def tail(path: Path, lines: int = 60) -> str:
         return f"\n  (cannot read {path}: {e})"
     if not text:
         return f"\n  ({path} is empty)"
+    # A parallel make prints the first failure well above its last lines.
+    first = next((i for i, line in enumerate(text)
+                  if "error:" in line or "*** " in line), None)
+    lead = ""
+    if first is not None and first < len(text) - lines:
+        lead = (f"\n--- first error, line {first + 1} of {path} ---\n"
+                + "\n".join(text[max(0, first - 2):first + 3]))
     head = f"\n--- last {min(lines, len(text))} lines of {path} ---\n"
-    return head + "\n".join(text[-lines:])
+    return lead + head + "\n".join(text[-lines:])
 
 
 def host_arch() -> str:

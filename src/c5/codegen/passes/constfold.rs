@@ -1378,6 +1378,8 @@ mod tests {
         };
         assert_eq!(run(0x3f_ffff, 42), 0, "22 bits kept by a shift by 42");
         assert_eq!(run(0xff_ffff_ffff, 24), 0, "40 bits kept by a shift by 24");
+        // `(unsigned long long)hi << 32`: the zero extension of a 32-bit value.
+        assert_eq!(run(0xffff_ffff, 32), 0, "32 bits kept by a shift by 32");
         assert_eq!(run(-2, 63), 1, "bit 0 cleared");
         assert_eq!(run(0x1f_ffff, 42), 1, "bit 21 cleared");
         assert_eq!(run(0x7fff_ffff, 32), 1, "bit 31 cleared");

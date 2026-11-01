@@ -29,9 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rsi # <addr>
-               	leaq	0x18(%rsi), %rax
-               	cmpq	%rax, %rax
-               	jne	<addr>
                	leaq	<rip>, %rcx # <addr>
                	testb	$0x3f, %cl
                	je	<addr>
@@ -72,8 +69,5 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
-               	retq
-               	movl	$0x2, %eax
                	popq	%rbp
                	retq

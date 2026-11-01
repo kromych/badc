@@ -382,23 +382,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x29               // =41
                	stur	w0, [x29, #-0x18]
-               	add	x0, x0, #0x1
+               	mov	x0, #0x2a               // =42
                	stur	w0, [x29, #-0x18]
-               	cmp	w0, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x9                // =9
-               	adrp	x16, <page>
-               	ldr	x16, [x16, <lo12>]
-               	ldr	x16, [x16]
-               	ldur	x17, [x29, #-0x8]
-               	cmp	x16, x17
-               	b.eq	<addr>
-               	bl	<addr>
-               	mov	x16, #0x0               // =0
-               	mov	x17, #0x0               // =0
-               	add	sp, sp, #0x30
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	adrp	x16, <page>
                	ldr	x16, [x16, <lo12>]

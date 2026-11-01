@@ -136,7 +136,8 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mul	x2, x0, x4
                	lsr	x2, x2, #32
-               	msub	x0, x2, x3, x0
+               	mul	x5, x2, x3
+               	sub	x0, x0, x5
                	add	x1, x1, x0
                	mov	x0, x2
                	cmp	w0, #0x0

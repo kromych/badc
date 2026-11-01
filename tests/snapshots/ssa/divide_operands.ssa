@@ -193,7 +193,7 @@ fn ent_pc=10 n_params=3 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
-    v3   Imm(10)                                          -> x9
+    v3   Imm(10)                                          -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(1)                                           -> x6
     v6   Imm(0)                                           -> x0
@@ -206,10 +206,10 @@ fn ent_pc=10 n_params=3 variadic=false locals=0
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  BinopI { op=shru, lhs=v12, rhs_imm=1 }           -> x0
-    v19  Imm(7378697629483820647)                         -> x2
+    v19  Imm(7378697629483820647)                         -> x9
     v20  Binop { op=mulhu, lhs=v18, rhs=v19 }             -> x2
     v21  BinopI { op=shru, lhs=v20, rhs_imm=1 }           -> x2
-    v22  Binop { op=mul, lhs=v21, rhs=v3 }                -> x0
+    v22  BinopI { op=mul, lhs=v21, rhs_imm=10 }           -> x0
     v23  Binop { op=sub, lhs=v12, rhs=v22 }               -> x7
     v24  Imm(0)                                           -> x0
     v25  Binop { op=mul, lhs=v23, rhs=v13 }               -> x7

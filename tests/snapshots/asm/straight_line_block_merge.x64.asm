@@ -485,9 +485,6 @@ Disassembly of section .text:
                	setl	%dl
                	movzbq	%dl, %rdx
                	leaq	0x4(%rax), %rdi
-               	testl	%edx, %edx
-               	setne	%dl
-               	movzbq	%dl, %rdx
                	movq	%rdx, %rsi
                	negq	%rsi
                	andq	%rsi, %rdi

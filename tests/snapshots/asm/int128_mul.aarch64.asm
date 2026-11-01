@@ -49,10 +49,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	x1, x1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
                	mul	x4, x1, x1
                	umulh	x5, x1, x1
                	mul	x3, x1, x2

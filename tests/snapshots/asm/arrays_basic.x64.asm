@@ -69,15 +69,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movb	$0x68, (%rax)
-               	movl	$0x69, %edx
-               	movb	%dl, 0x1(%rax)
+               	movb	$0x69, 0x1(%rax)
                	movb	$0x0, 0x2(%rax)
-               	movsbq	%dl, %rcx
-               	cmpl	$0x69, %ecx
-               	je	<addr>
-               	movl	$0x7, %eax
-               	leave
-               	retq
                	cmpb	$0x0, 0x2(%rax)
                	je	<addr>
                	movl	$0x8, %eax

@@ -136,13 +136,6 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rdi
                	movabsq	$0x807060504030201, %rax # imm = 0x807060504030201
                	movq	%rax, (%rdi)
-               	bswapq	%rax
-               	movabsq	$0x102030405060708, %r11 # imm = 0x102030405060708
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
                	movzbq	-0x80(%rbp), %rax
                	xorq	$0x1, %rax
                	testl	%eax, %eax

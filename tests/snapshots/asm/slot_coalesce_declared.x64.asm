@@ -50,14 +50,9 @@ Disassembly of section .text:
                	cmpl	$0x32, %eax
                	jl	<addr>
                	cmpq	%rdx, %rcx
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	movl	$0x1234abcd, %eax       # imm = 0x1234ABCD
-               	movq	%rax, -0x8(%rbp)
-               	xorq	$0xfeed, %rax           # imm = 0xFEED
-               	movq	%rax, -0x8(%rbp)
-               	testq	%rcx, %rcx
-               	je	<addr>
+               	movq	$0x1234abcd, -0x8(%rbp) # imm = 0x1234ABCD
+               	movq	$0x12345520, -0x8(%rbp) # imm = 0x12345520
+               	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x12345520, %rax       # imm = 0x12345520
                	jne	<addr>

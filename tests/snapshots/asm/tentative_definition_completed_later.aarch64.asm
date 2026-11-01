@@ -180,10 +180,6 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x1, #0xd                // =13
                	str	x1, [x2, #0x10]
-               	cmp	x1, #0xd
-               	b.eq	<addr>
-               	mov	x0, x4
-               	ret
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x3, [x2, #0x8]

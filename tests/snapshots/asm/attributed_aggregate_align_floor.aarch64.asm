@@ -68,12 +68,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x6, [x29, #-0x40]
                	stur	x0, [x29, #-0x38]
-               	cmp	w6, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0xb                // =11
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldr	x1, [x1]
                	cmp	w1, #0x1
                	b.ne	<addr>

@@ -67,7 +67,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v61  Imm(0)                                           -> x0
     v62  Imm(0)                                           -> x0
     v63  Imm(1)                                           -> x0
-    v64  BinopI { op=add, lhs=v24, rhs_imm=1 }            -> x0
+    v64  Imm(1)                                           -> x0
     v65  Imm(107)                                         -> x0
     v66  Imm(0)                                           -> x0
     v67  Imm(0)                                           -> x0
@@ -79,7 +79,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(2)                                           -> x0
-    v76  BinopI { op=add, lhs=v24, rhs_imm=2 }            -> x0
+    v76  Imm(2)                                           -> x0
     v77  Imm(0)                                           -> x0
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0

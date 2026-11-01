@@ -96,9 +96,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
-               	movq	%rax, %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movl	$0x1, (%rcx)
                	movl	(%rcx), %edx
                	incq	%rdx
                	movl	%edx, (%rcx)
@@ -117,9 +115,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
-               	movq	%rcx, %rsi
-               	incq	%rsi
-               	movl	%esi, (%rax)
+               	movl	$0x1, (%rax)
                	movl	(%rax), %esi
                	incq	%rsi
                	movl	%esi, (%rax)

@@ -49,16 +49,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #-0x7               // =-7
                	stur	w0, [x29, #-0x8]
-               	sxtw	x0, w0
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	mov	x17, #-0x15             // =-21
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

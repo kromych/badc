@@ -278,18 +278,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v194 Imm(7)                                           -> x0
     v195 Imm(7)                                           -> x0
     v196 StoreLocal { off=-1, value=v195, kind=I16 }      -> -
-    v197 LocalAddr(-1)                                    -> x1
-    v198 Extend { value=v195, kind=I16 }                  -> x0
-    v199 Extend { value=v198, kind=I32 }                  -> x1
-    v200 Extend { value=v198, kind=I32 }                  -> x1
-    v201 Extend { value=v198, kind=I32 }                  -> x1
-    v202 Extend { value=v198, kind=I32 }                  -> x1
-    v203 BinopI { op=ne, lhs=v198, rhs_imm=7 }            -> x0
-    terminator Bz { cond=v203, target=b27, fall=b26 }   (exit_acc=v203)
+    v197 LocalAddr(-1)                                    -> x0
+    v198 Imm(7)                                           -> x0
+    v199 Imm(7)                                           -> x0
+    v200 Imm(7)                                           -> x0
+    v201 Imm(7)                                           -> x0
+    v202 Imm(7)                                           -> x0
+    v203 Imm(0)                                           -> x0
+    terminator Jmp(b26)   (exit_acc=v203)
   block 26  start_pc=0
-    v204 Imm(14)                                          -> x0
-    terminator Return(v204)   (exit_acc=v204)
-  block 27  start_pc=0
     v205 Imm(0)                                           -> x0
     v206 Imm(2)                                           -> x0
     v207 Imm(2)                                           -> x0

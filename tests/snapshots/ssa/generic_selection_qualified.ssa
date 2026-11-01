@@ -68,16 +68,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v32  Imm(0)                                           -> x2
     v33  Imm(0)                                           -> x2
     v34  LocalAddr(-1)                                    -> x2
-    v35  Binop { op=sub, lhs=v4, rhs=v4 }                 -> x2
-    v36  Imm(4)                                           -> x6
-    v37  BinopI { op=shr, lhs=v35, rhs_imm=63 }           -> x6
-    v38  BinopI { op=shru, lhs=v37, rhs_imm=62 }          -> x6
-    v39  Binop { op=add, lhs=v35, rhs=v38 }               -> x2
-    v40  BinopI { op=shr, lhs=v39, rhs_imm=2 }            -> x2
-    v41  BinopI { op=ne, lhs=v40, rhs_imm=0 }             -> x6
-    v42  Imm(1)                                           -> x6
-    v43  Imm(0)                                           -> x6
-    terminator Bnz { cond=v40, target=b2, fall=b1 }   (exit_acc=v41)
+    v35  Imm(0)                                           -> x2
+    v36  Imm(4)                                           -> x2
+    v37  Imm(0)                                           -> x2
+    v38  Imm(0)                                           -> x2
+    v39  Imm(0)                                           -> x2
+    v40  Imm(0)                                           -> x2
+    v41  Imm(0)                                           -> x2
+    v42  Imm(1)                                           -> x2
+    v43  Imm(0)                                           -> x2
+    terminator Jmp(b1)   (exit_acc=v41)
   block 1  start_pc=0
     v58  LocalAddr(-1)                                    -> x2
     v59  Imm(0)                                           -> x2

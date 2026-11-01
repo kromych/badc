@@ -122,11 +122,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x2000, %rax           # imm = 0x2000
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0xf, %eax
-               	retq
                	xorl	%eax, %eax
                	retq

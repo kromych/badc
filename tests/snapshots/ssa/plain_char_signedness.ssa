@@ -23,19 +23,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v17  Imm(0)                                           -> x0
     v18  Imm(227)                                         -> x0
     v19  StoreLocal { off=-1, value=v18, kind=I8 }        -> -
-    v20  LocalAddr(-1)                                    -> x1
-    v21  Imm(0)                                           -> x1
-    v22  Imm(0)                                           -> x1
-    v23  Extend { value=v18, kind=I8 }                    -> x0
-    v24  BinopI { op=ne, lhs=v23, rhs_imm=-29 }           -> x0
-    terminator Bz { cond=v24, target=b2, fall=b1 }   (exit_acc=v24)
+    v20  LocalAddr(-1)                                    -> x0
+    v21  Imm(0)                                           -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(-29)                                         -> x0
+    v24  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v24)
   block 1  start_pc=0
-    v37  Imm(4)                                           -> x0
-    v38  LifetimeEnd(-1)                                  -> -
-    v39  LifetimeEnd(0)                                   -> -
-    v40  LifetimeEnd(0)                                   -> -
-    terminator Return(v37)   (exit_acc=v37)
-  block 2  start_pc=0
     v41  Imm(-29)                                         -> x0
     v42  Imm(0)                                           -> x0
     v43  Imm(0)                                           -> x0

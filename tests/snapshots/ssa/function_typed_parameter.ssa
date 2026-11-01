@@ -116,17 +116,14 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v25  Imm(3)                                           -> x0
     v26  Imm(3)                                           -> x0
     v27  ImmData(16)                                      -> x0
-    v28  Imm(12)                                          -> x1
+    v28  Imm(12)                                          -> x0
     v29  BinopI { op=add, lhs=v27, rhs_imm=12 }           -> x0
-    v30  ImmData(16)                                      -> x1
-    v31  Imm(12)                                          -> x1
-    v32  BinopI { op=add, lhs=v27, rhs_imm=12 }           -> x1
-    v33  Binop { op=ne, lhs=v29, rhs=v29 }                -> x0
-    terminator Bz { cond=v33, target=b2, fall=b1 }   (exit_acc=v33)
+    v30  ImmData(16)                                      -> x0
+    v31  Imm(12)                                          -> x0
+    v32  BinopI { op=add, lhs=v27, rhs_imm=12 }           -> x0
+    v33  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v33)
   block 1  start_pc=0
-    v36  Imm(3)                                           -> x0
-    terminator Return(v36)   (exit_acc=v36)
-  block 2  start_pc=0
     v37  ImmCode(ent_pc=3)                                -> x0
     v38  Imm(16)                                          -> x0
     v39  Imm(16)                                          -> x0

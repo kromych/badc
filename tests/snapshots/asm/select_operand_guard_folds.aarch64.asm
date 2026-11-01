@@ -48,60 +48,39 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	str	w0, [x1]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x2, #0x1000             // =4096
+               	str	x2, [x1]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x3, #0x1                // =1
+               	str	w3, [x1]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cbz	w0, <addr>
-               	mov	x1, #0x1                // =1
-               	orr	x1, x1, #0x1000
-               	str	x1, [x2]
-               	and	x1, x1, #0x3
-               	cbz	w1, <addr>
-               	mov	x0, #0x3                // =3
-               	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x1, #0x1                // =1
-               	str	w1, [x2]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	cbz	w1, <addr>
-               	mov	x4, x1
-               	orr	x4, x4, #0x1000
-               	str	x4, [x3]
-               	and	x4, x4, #0x3
-               	cmp	w4, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	ret
-               	ldr	x3, [x3]
+               	mov	x4, #0x1001             // =4097
+               	str	x4, [x2]
+               	ldr	x2, [x2]
                	mov	x17, #0x1001            // =4097
-               	cmp	x3, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	w1, [x3]
-               	cbz	w1, <addr>
-               	ldrsw	x1, [x2]
-               	cbz	x1, <addr>
-               	str	w0, [x2]
-               	ldrsw	x1, [x3]
-               	cbz	x1, <addr>
-               	ldrsw	x1, [x2]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	w3, [x2]
+               	ldrsw	x3, [x1]
+               	cbz	x3, <addr>
+               	str	w0, [x1]
+               	ldrsw	x3, [x2]
+               	cbz	x3, <addr>
+               	ldrsw	x1, [x1]
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	ret
-               	str	w0, [x3]
-               	cbz	w0, <addr>
-               	mov	x0, #0x8                // =8
-               	ret
+               	str	w0, [x2]
                	ret
                	mov	x0, #0x6                // =6
                	ret
-               	mov	x4, x0
-               	b	<addr>
-               	mov	x1, x0
-               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret

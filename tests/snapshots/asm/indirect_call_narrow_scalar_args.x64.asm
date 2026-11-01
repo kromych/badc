@@ -34,10 +34,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rdx, %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	cmpl	%eax, %eax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	retq
                	cmpl	$0x6bcd17, %eax         # imm = 0x6BCD17
                	je	<addr>
                	movl	$0x2, %eax

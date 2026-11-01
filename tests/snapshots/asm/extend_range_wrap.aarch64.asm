@@ -82,12 +82,13 @@ Disassembly of section .text:
 <modv>:
                	add	x0, x0, #0x8
                	mov	w0, w0
-               	mov	x1, #0x5                // =5
                	mov	x17, #0xcccd            // =52429
                	movk	x17, #0xcccc, lsl #16
-               	mul	x2, x0, x17
-               	lsr	x2, x2, #34
-               	msub	x0, x2, x1, x0
+               	mul	x1, x0, x17
+               	lsr	x1, x1, #34
+               	mov	x17, #0x5               // =5
+               	mul	x1, x1, x17
+               	sub	x0, x0, x1
                	ret
 
 <less64>:

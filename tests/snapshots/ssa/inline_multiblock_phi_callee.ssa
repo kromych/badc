@@ -590,10 +590,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 22  start_pc=0
     v722 Extend { value=v710, kind=I32 }                  -> x2
     v723 Neg(v710)                                        -> x2
-    v724 Extend { value=v723, kind=I32, nsw }             -> x7
-    terminator Jmp(b23)   (exit_acc=v723)
+    v724 Extend { value=v110, kind=I32, nsw }             -> x2
+    terminator Jmp(b23)   (exit_acc=v110)
   block 23  start_pc=0
-    v725 Phi { incoming=[b74:v710, b22:v723], kind=I64 }  -> x2
+    v725 Phi { incoming=[b74:v710, b22:v110], kind=I64 }  -> x2
     v726 Extend { value=v725, kind=I32 }                  -> x7
     v727 BinopI { op=shl, lhs=v725, rhs_imm=1 }           -> x7
     v728 Extend { value=v727, kind=I32, nsw }             -> x8

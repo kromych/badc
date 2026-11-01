@@ -40,9 +40,6 @@ Disassembly of section .text:
 		R_AARCH64_ADR_GOT_PAGE	ws
                	ldr	x0, [x0]
 		R_AARCH64_LD64_GOT_LO12_NC	ws
-               	add	x1, x0, #0x10
-               	cmp	x1, x1
-               	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x2
                	b.eq	<addr>

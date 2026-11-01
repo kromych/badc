@@ -70,7 +70,6 @@ Disassembly of section .text:
                	sub	x3, x29, #0x8
                	cmp	x3, x1
                	cset	x1, ne
-               	orr	x1, x1, x1
                	cmp	w1, #0x1
                	b.eq	<addr>
                	add	sp, sp, #0x20

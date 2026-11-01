@@ -42,23 +42,20 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v36  Imm(0)                                           -> x1
     v37  Imm(0)                                           -> x1
     v38  Imm(0)                                           -> x1
-    v39  Binop { op=ne, lhs=v16, rhs=v16 }                -> x1
-    terminator Bz { cond=v39, target=b2, fall=b1 }   (exit_acc=v39)
+    v39  Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v39)
   block 1  start_pc=0
-    v40  Imm(1)                                           -> x0
-    terminator Return(v40)   (exit_acc=v40)
-  block 2  start_pc=0
     v41  Imm(0)                                           -> x1
     v42  Imm(6900000)                                     -> x1
     v43  Imm(90290)                                       -> x1
     v44  Imm(6990290)                                     -> x1
     v45  Imm(7064855)                                     -> x1
     v46  BinopI { op=ne, lhs=v16, rhs_imm=7064855 }       -> x0
-    terminator Bz { cond=v46, target=b4, fall=b3 }   (exit_acc=v46)
-  block 3  start_pc=0
+    terminator Bz { cond=v46, target=b3, fall=b2 }   (exit_acc=v46)
+  block 2  start_pc=0
     v47  Imm(2)                                           -> x0
     terminator Return(v47)   (exit_acc=v47)
-  block 4  start_pc=0
+  block 3  start_pc=0
     v48  Imm(0)                                           -> x0
     terminator Return(v48)   (exit_acc=v48)
 ; --- SSA dump (ok=true) ent_pc=0 ---

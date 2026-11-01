@@ -72,16 +72,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v58  Imm(0)                                           -> x0
     v59  Imm(11)                                          -> x0
     v60  StoreLocal { off=-2, value=v59, kind=I32 }       -> -
-    v61  Extend { value=v59, kind=I32 }                   -> x0
-    v62  BinopI { op=ne, lhs=v61, rhs_imm=11 }            -> x0
-    terminator Bz { cond=v62, target=b6, fall=b5 }   (exit_acc=v62)
+    v61  Imm(11)                                          -> x0
+    v62  Imm(0)                                           -> x0
+    terminator Jmp(b5)   (exit_acc=v62)
   block 5  start_pc=0
-    v71  Imm(5)                                           -> x0
-    v72  LifetimeEnd(0)                                   -> -
-    v73  LifetimeEnd(-1)                                  -> -
-    v74  LifetimeEnd(-2)                                  -> -
-    terminator Return(v71)   (exit_acc=v71)
-  block 6  start_pc=0
     v75  Imm(0)                                           -> x0
     v76  LifetimeEnd(0)                                   -> -
     v77  LifetimeEnd(-1)                                  -> -

@@ -53,7 +53,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     terminator Bnz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v15  Imm(0)                                           -> x1
-    v16  BinopI { op=add, lhs=v15, rhs_imm=8 }            -> x1
+    v16  Imm(8)                                           -> x1
     v17  ImmCode(ent_pc=1)                                -> x1
     v18  ImmCode(ent_pc=1)                                -> x1
     v19  Imm(0)                                           -> x1

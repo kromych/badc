@@ -23,7 +23,7 @@ fn ent_pc=10 n_params=1 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  TlsAddr(0)                                       -> x0
     v15  Imm(0)                                           -> x0
-    v16  Extend { value=v10, kind=I32 }                   -> x0
+    v16  Imm(99)                                          -> x0
     terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=second_thread_result

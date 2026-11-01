@@ -31,7 +31,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	movl	$0x2a, (%rax)
                	movl	$0x2a, %eax
-               	movl	%eax, (%rcx)
                	retq

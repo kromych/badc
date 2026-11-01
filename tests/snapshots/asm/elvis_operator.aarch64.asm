@@ -17,47 +17,33 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x10]
+               	stur	wzr, [x29, #-0x10]
                	mov	x0, #0x5                // =5
                	stur	w0, [x29, #-0x8]
-               	ldursw	x2, [x29, #-0x8]
-               	cbz	x2, <addr>
-               	cmp	w2, #0x5
+               	ldursw	x1, [x29, #-0x8]
+               	cbz	x1, <addr>
+               	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x2, [x29, #-0x10]
-               	cbz	x2, <addr>
-               	cmp	w2, #0x63
+               	ldursw	x1, [x29, #-0x10]
+               	cbz	x1, <addr>
+               	cmp	w1, #0x63
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	w1, [x2]
-               	mov	x3, x1
-               	add	x3, x3, #0x1
-               	str	w3, [x2]
-               	cmp	w3, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	str	w1, [x2]
-               	add	x1, x1, #0x1
-               	str	w1, [x2]
-               	cmp	w1, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	wzr, [x1]
+               	mov	x3, #0x1                // =1
+               	str	w3, [x1]
+               	str	wzr, [x1]
+               	mov	x2, #0x1                // =1
+               	str	w2, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cbz	x1, <addr>

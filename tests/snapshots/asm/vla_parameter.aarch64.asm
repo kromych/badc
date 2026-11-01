@@ -15,14 +15,10 @@ Disassembly of section .text:
 
 <rows>:
                	sxtw	x0, w0
-               	cmp	w0, w0
-               	mov	x2, #0x0                // =0
-               	b.ne	<addr>
                	add	x2, x1, x0
                	sub	x1, x2, x1
                	cmp	x1, x0
-               	cset	x2, eq
-               	mov	x0, x2
+               	cset	x0, eq
                	ret
 
 <sum>:

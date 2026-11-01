@@ -108,13 +108,8 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x29               // =41
                	stur	x1, [x29, #-0x8]
-               	add	x1, x1, #0x1
+               	mov	x1, #0x2a               // =42
                	stur	x1, [x29, #-0x8]
-               	cmp	x1, #0x2a
-               	b.eq	<addr>
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20
                	mov	x3, #0x1e               // =30

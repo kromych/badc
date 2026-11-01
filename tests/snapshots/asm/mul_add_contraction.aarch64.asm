@@ -49,12 +49,10 @@ Disassembly of section .text:
                	cmp	x3, x6
                	b.ne	<addr>
                	sub	x0, x2, x0
-               	mul	x3, x1, x5
-               	add	x3, x4, x3
-               	ldrsw	x3, [x3, #0x10]
-               	cmp	w0, w3
-               	b.ne	<addr>
-               	cmp	w2, w2
+               	mul	x2, x1, x5
+               	add	x2, x4, x2
+               	ldrsw	x2, [x2, #0x10]
+               	cmp	w0, w2
                	b.ne	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x7
@@ -79,8 +77,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	ldrsw	x3, [x2, x0, lsl #2]
-               	neg	x3, x3
-               	add	x1, x1, x3
+               	sub	x1, x1, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
                	b.lt	<addr>
@@ -105,8 +102,6 @@ Disassembly of section .text:
                	mov	x0, #0x49               // =73
                	ret
                	mov	x0, #0x0                // =0
-               	ret
-               	mov	x0, #0x10               // =16
                	ret
                	mov	x0, #0xf                // =15
                	ret

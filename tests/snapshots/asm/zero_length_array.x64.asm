@@ -31,11 +31,6 @@ Disassembly of section .text:
                	movb	$0xa, 0x4(%rax)
                	movb	$0x14, 0x5(%rax)
                	movb	$0x1e, 0x6(%rax)
-               	addq	$0x4, %rax
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	retq
                	leaq	<rip>, %rax # <addr>
                	movl	$0x1, (%rax)
                	movb	$-0x55, 0x4(%rax)

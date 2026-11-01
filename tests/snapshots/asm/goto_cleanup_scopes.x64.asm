@@ -945,13 +945,11 @@ Disassembly of section .text:
                	movl	$0x0, (%rax)
                	movb	$0x0, (%rdx)
                	movl	$0x78, -0x10(%rbp)
-               	movl	$0x79, %esi
-               	movl	%esi, -0x8(%rbp)
-               	movq	%rsi, %rdi
+               	movl	$0x79, -0x8(%rbp)
                	movslq	(%rax), %rsi
                	leaq	0x1(%rsi), %r8
                	movl	%r8d, (%rax)
-               	movb	%dil, (%rdx,%rsi)
+               	movb	$0x79, (%rdx,%rsi)
                	movslq	(%rax), %rsi
                	movb	$0x0, (%rdx,%rsi)
                	movslq	(%rax), %rcx

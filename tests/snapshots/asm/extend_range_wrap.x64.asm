@@ -94,11 +94,10 @@ Disassembly of section .text:
 <modv>:
                	leaq	0x8(%rdi), %rax
                	movl	%eax, %eax
-               	movl	$0x5, %ecx
-               	movl	$0xcccccccd, %edx       # imm = 0xCCCCCCCD
-               	imulq	%rax, %rdx
-               	shrq	$0x22, %rdx
-               	imulq	%rdx, %rcx
+               	movl	$0xcccccccd, %ecx       # imm = 0xCCCCCCCD
+               	imulq	%rax, %rcx
+               	shrq	$0x22, %rcx
+               	leaq	(%rcx,%rcx,4), %rcx
                	subq	%rcx, %rax
                	retq
 

@@ -4749,8 +4749,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Bz { cond=v3199, target=b115, fall=b105 }   (exit_acc=v3199)
   block 105  start_pc=0
     v3200 BinopI { op=uge, lhs=v3147, rhs_imm=-1 }         -> x3
-    v3201 BinopI { op=mul, lhs=v3200, rhs_imm=-1 }         -> x7
-    v3202 Binop { op=sub, lhs=v3147, rhs=v3201 }           -> x2
+    v3201 Neg(v3200)                                       -> x7
+    v3202 Binop { op=add, lhs=v3147, rhs=v3200 }           -> x2
     v3203 Imm(0)                                           -> x7
     v3204 Imm(0)                                           -> x7
     terminator Jmp(b106)   (exit_acc=v3202)
@@ -4822,8 +4822,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Bz { cond=v3258, target=b113, fall=b110 }   (exit_acc=v3258)
   block 110  start_pc=0
     v3259 BinopI { op=uge, lhs=v3218, rhs_imm=-1 }         -> x7
-    v3260 BinopI { op=mul, lhs=v3259, rhs_imm=-1 }         -> x0
-    v3261 Binop { op=sub, lhs=v3218, rhs=v3260 }           -> x2
+    v3260 Neg(v3259)                                       -> x0
+    v3261 Binop { op=add, lhs=v3218, rhs=v3259 }           -> x2
     v3262 Imm(0)                                           -> x0
     v3263 Imm(0)                                           -> x0
     terminator Jmp(b111)   (exit_acc=v3261)
@@ -4870,8 +4870,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b111)
   block 114  start_pc=0
     v3222 BinopI { op=uge, lhs=v3216, rhs_imm=-1 }         -> x0
-    v3223 BinopI { op=mul, lhs=v3222, rhs_imm=-1 }         -> x0
-    v3224 Binop { op=sub, lhs=v3216, rhs=v3223 }           -> x1
+    v3223 Neg(v3222)                                       -> x2
+    v3224 Binop { op=add, lhs=v3216, rhs=v3222 }           -> x1
     v3225 Imm(0)                                           -> x2
     v3226 Imm(0)                                           -> x0
     v3227 Imm(0)                                           -> x0
@@ -4882,8 +4882,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=8
     terminator Jmp(b106)
   block 116  start_pc=0
     v3151 BinopI { op=uge, lhs=v3145, rhs_imm=-1 }         -> x13
-    v3152 BinopI { op=mul, lhs=v3151, rhs_imm=-1 }         -> x0
-    v3153 Binop { op=sub, lhs=v3145, rhs=v3152 }           -> x2
+    v3152 Neg(v3151)                                       -> x0
+    v3153 Binop { op=add, lhs=v3145, rhs=v3151 }           -> x2
     v3154 Imm(0)                                           -> x0
     v3155 Imm(0)                                           -> x2
     v3156 Imm(0)                                           -> x2

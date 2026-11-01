@@ -207,9 +207,9 @@ fn ent_pc=8 n_params=3 variadic=false locals=0
     v9   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x0
     v10  BinopI { op=and, lhs=v9, rhs_imm=4294967295 }    -> x0
     v11  Imm(5)                                           -> x1
-    v12  BinopI { op=mul, lhs=v10, rhs_imm=3435973837 }   -> x2
-    v13  BinopI { op=shru, lhs=v12, rhs_imm=34 }          -> x2
-    v14  Binop { op=mul, lhs=v13, rhs=v11 }               -> x1
+    v12  BinopI { op=mul, lhs=v10, rhs_imm=3435973837 }   -> x1
+    v13  BinopI { op=shru, lhs=v12, rhs_imm=34 }          -> x1
+    v14  BinopI { op=mul, lhs=v13, rhs_imm=5 }            -> x1
     v15  Binop { op=sub, lhs=v10, rhs=v14 }               -> x0
     v16  BinopI { op=and, lhs=v15, rhs_imm=4294967295 }   -> x1
     terminator Return(v15)   (exit_acc=v15)

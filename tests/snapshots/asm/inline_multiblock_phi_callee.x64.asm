@@ -128,8 +128,7 @@ Disassembly of section .text:
                	negq	%rcx
                	testl	%ecx, %ecx
                	jge	<addr>
-               	movq	%rcx, %rdx
-               	negq	%rdx
+               	movq	%rax, %rdx
                	movq	%rdx, %rdi
                	shlq	%rdi
                	andq	$0x1, %rdx

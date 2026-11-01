@@ -51,10 +51,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v39  Imm(6)                                           -> x2
     v40  Store { addr=v12, disp=4, value=v39, kind=I32 }  -> -
     v41  ImmData(16)                                      -> x6
-    v42  Extend { value=v37, kind=I32 }                   -> x6
-    v43  BinopI { op=ne, lhs=v42, rhs_imm=5 }             -> x6
-    v44  Imm(0)                                           -> x7
-    terminator Bnz { cond=v43, target=b5, fall=b4 }   (exit_acc=v43)
+    v42  Imm(5)                                           -> x6
+    v43  Imm(0)                                           -> x6
+    v44  Imm(0)                                           -> x6
+    terminator Jmp(b4)   (exit_acc=v43)
   block 4  start_pc=0
     v45  ImmData(16)                                      -> x6
     v46  BinopI { op=add, lhs=v12, rhs_imm=4 }            -> x6

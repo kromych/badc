@@ -206,13 +206,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x7                // =7
                	sturh	w0, [x29, #-0x8]
-               	sxth	x0, w0
-               	cmp	w0, #0x7
-               	b.eq	<addr>
-               	mov	x0, #0xe                // =14
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
-               	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30

@@ -8,13 +8,13 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   ImmData(16)                                      -> x1
-    v6   Imm(5)                                           -> x0
-    v7   Imm(5)                                           -> x0
+    v5   ImmData(16)                                      -> x0
+    v6   Imm(5)                                           -> x1
+    v7   Imm(5)                                           -> x1
     v8   Store { addr=v5, disp=0, value=v7, kind=I32 }    -> -
-    v9   ImmData(16)                                      -> x1
-    v10  Extend { value=v7, kind=I32 }                    -> x0
-    v11  Extend { value=v10, kind=I32 }                   -> x1
+    v9   ImmData(16)                                      -> x0
+    v10  Imm(5)                                           -> x0
+    v11  Imm(5)                                           -> x1
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main

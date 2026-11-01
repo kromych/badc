@@ -48,8 +48,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x9, -0x8(%rbp)
+               	movl	$0xa, -0x8(%rbp)
                	movl	$0xa, %eax
-               	movl	%eax, -0x8(%rbp)
                	jmpq	*%rcx
                	leave
                	retq

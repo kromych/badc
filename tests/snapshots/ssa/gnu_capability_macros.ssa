@@ -254,7 +254,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v202 Imm(0)                                           -> x1
     v203 Imm(0)                                           -> x1
     v204 Imm(2)                                           -> x1
-    v205 BinopI { op=add, lhs=v191, rhs_imm=2 }           -> x1
+    v205 Imm(2)                                           -> x1
     v206 Imm(233)                                         -> x1
     v207 Imm(0)                                           -> x1
     v208 Imm(0)                                           -> x1
@@ -266,7 +266,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v214 Imm(0)                                           -> x1
     v215 Imm(0)                                           -> x1
     v216 Imm(4)                                           -> x1
-    v217 BinopI { op=add, lhs=v191, rhs_imm=4 }           -> x1
+    v217 Imm(4)                                           -> x1
     v218 Imm(0)                                           -> x1
     v219 Imm(0)                                           -> x1
     v220 Imm(0)                                           -> x1
@@ -282,7 +282,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v230 Imm(0)                                           -> x1
     v231 Imm(0)                                           -> x1
     v232 Imm(4)                                           -> x1
-    v233 BinopI { op=add, lhs=v193, rhs_imm=4 }           -> x1
+    v233 Imm(4)                                           -> x1
     v234 Imm(128512)                                      -> x1
     v235 Imm(0)                                           -> x1
     v236 Imm(0)                                           -> x1
@@ -294,7 +294,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v242 Imm(0)                                           -> x1
     v243 Imm(0)                                           -> x1
     v244 Imm(8)                                           -> x1
-    v245 BinopI { op=add, lhs=v193, rhs_imm=8 }           -> x1
+    v245 Imm(8)                                           -> x1
     v246 Imm(0)                                           -> x1
     v247 Imm(0)                                           -> x1
     v248 Imm(0)                                           -> x1

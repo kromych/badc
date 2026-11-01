@@ -183,6 +183,27 @@ pub(crate) fn mark_compares(func: &mut FunctionSsa, with_ranges: bool) {
     func.cmp32 = out;
 }
 
+/// [`crate::c5::vm::eval::fold_binop`] on the low words, under the operator's sign, when `narrow`.
+pub(crate) fn fold_at_width(
+    op: crate::c5::ir::BinOp,
+    lhs: i64,
+    rhs: i64,
+    narrow: bool,
+) -> Option<i64> {
+    use crate::c5::ir::BinOp;
+    let unsigned = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
+    let low = |x: i64| {
+        if !narrow {
+            x
+        } else if unsigned {
+            i64::from(x as u32)
+        } else {
+            i64::from(x as i32)
+        }
+    };
+    crate::c5::vm::eval::fold_binop(op, low(lhs), low(rhs))
+}
+
 /// Whether `v` is a comparison marked for the 32-bit operand form.
 pub(crate) fn is_cmp32(cmp32: &[bool], v: ValueId) -> bool {
     cmp32.get(v as usize).copied().unwrap_or(false)

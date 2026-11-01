@@ -60,12 +60,6 @@ Disassembly of section .text:
                	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
                	movq	%rax, -0x10(%rbp)
                	movq	$-0x3, -0x8(%rbp)
-               	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
-               	cmpq	%r11, %rax
-               	jne	<addr>
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x5, %eax
                	leave
                	retq

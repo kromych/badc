@@ -139,21 +139,21 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     terminator Bz { cond=v98, target=b29, fall=b23 }   (low word)   (exit_acc=v101)
   block 23  start_pc=0
     v19  Imm(0)                                           -> x0
-    v20  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x0
+    v20  Imm(8)                                           -> x0
     v21  ImmData(48)                                      -> x0
     v22  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x1
-    v23  ImmData(48)                                      -> x2
-    v24  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x2
-    v25  Binop { op=ne, lhs=v22, rhs=v22 }                -> x1
-    v26  BinopI { op=ne, lhs=v25, rhs_imm=0 }             -> x2
-    v27  Imm(0)                                           -> x2
-    v28  Imm(0)                                           -> x2
-    v29  Imm(0)                                           -> x2
-    v30  Imm(0)                                           -> x2
-    terminator Bnz { cond=v25, target=b29, fall=b24 }   (exit_acc=v25)
+    v23  ImmData(48)                                      -> x1
+    v24  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x1
+    v25  Imm(0)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Imm(0)                                           -> x1
+    v28  Imm(0)                                           -> x1
+    v29  Imm(0)                                           -> x1
+    v30  Imm(0)                                           -> x1
+    terminator Jmp(b24)   (exit_acc=v25)
   block 24  start_pc=0
     v31  Imm(0)                                           -> x1
-    v32  BinopI { op=add, lhs=v14, rhs_imm=16 }           -> x1
+    v32  Imm(16)                                          -> x1
     v33  ImmData(48)                                      -> x1
     v34  BinopI { op=add, lhs=v21, rhs_imm=2 }            -> x0
     v35  ImmData(93)                                      -> x1

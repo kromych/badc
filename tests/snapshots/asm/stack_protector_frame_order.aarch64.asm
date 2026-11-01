@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x28]
                	sub	x1, x29, #0x20
-               	and	x2, x0, #0xff
+               	mov	x2, #0x3                // =3
                	mov	x0, #0x0                // =0
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1

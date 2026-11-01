@@ -65,15 +65,9 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movl	$0x7, %edi
                	xorl	%eax, %eax
-               	movq	%rdi, -0x40(%rbp)
+               	movq	$0x7, -0x40(%rbp)
                	movq	%rax, -0x38(%rbp)
-               	cmpl	$0x7, %edi
-               	je	<addr>
-               	movl	$0xb, %eax
-               	leave
-               	retq
                	movq	(%rcx), %rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>

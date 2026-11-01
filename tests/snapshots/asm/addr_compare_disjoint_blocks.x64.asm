@@ -81,7 +81,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rsi
                	setne	%cl
                	movzbq	%cl, %rcx
-               	orq	%rcx, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	leave

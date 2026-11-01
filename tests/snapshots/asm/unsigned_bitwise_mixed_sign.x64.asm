@@ -34,54 +34,35 @@ Disassembly of section .text:
                	movl	$0xffffffaa, -0x10(%rbp) # imm = 0xFFFFFFAA
                	movl	$0xffffffaa, -0x8(%rbp) # imm = 0xFFFFFFAA
                	movsbq	-0x20(%rbp), %rax
-               	movswq	-0x18(%rbp), %rsi
+               	movswq	-0x18(%rbp), %rcx
                	movl	-0x10(%rbp), %edx
                	movl	-0x8(%rbp), %ecx
-               	movq	%rcx, %rdi
-               	xorq	%rax, %rdi
-               	testl	%edi, %edi
+               	movq	%rcx, %rsi
+               	xorq	%rax, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	%rcx, %rdi
-               	orq	%rax, %rdi
+               	movq	%rcx, %rsi
+               	orq	%rax, %rsi
                	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %edi
+               	cmpl	%r11d, %esi
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	%rcx, %rdi
-               	andq	%rax, %rdi
+               	movq	%rcx, %rsi
+               	andq	%rax, %rsi
                	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %edi
+               	cmpl	%r11d, %esi
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movq	%rax, %rdi
-               	xorq	%rax, %rdi
-               	testl	%edi, %edi
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
-               	testl	%edi, %edi
-               	je	<addr>
-               	movl	$0x5, %eax
-               	leave
-               	retq
-               	xorq	%rsi, %rsi
-               	testl	%esi, %esi
-               	je	<addr>
-               	movl	$0x6, %eax
-               	leave
-               	retq
-               	movq	%rdx, %rsi
-               	orq	%rdx, %rsi
                	movl	$0xffffffaa, %r11d      # imm = 0xFFFFFFAA
-               	cmpl	%r11d, %esi
+               	movq	%rdx, %rsi
+               	cmpl	%r11d, %edx
                	je	<addr>
                	movl	$0x7, %eax
                	leave

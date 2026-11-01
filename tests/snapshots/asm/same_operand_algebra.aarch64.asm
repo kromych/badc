@@ -55,8 +55,6 @@ Disassembly of section .text:
                	mov	x0, #0x1234             // =4660
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
-               	cmp	w0, w0
-               	b.ne	<addr>
                	orr	x0, x0, #0xf0
                	and	x0, x0, #0x1f0
                	cmp	w0, #0xf0
@@ -66,10 +64,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

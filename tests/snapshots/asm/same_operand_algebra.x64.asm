@@ -69,8 +69,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x1234, -0x8(%rbp)     # imm = 0x1234
                	movl	-0x8(%rbp), %eax
-               	cmpl	%eax, %eax
-               	jne	<addr>
                	orq	$0xf0, %rax
                	andq	$0x1f0, %rax            # imm = 0x1F0
                	cmpl	$0xf0, %eax
@@ -79,8 +77,5 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	leave
-               	retq
-               	movl	$0x2, %eax
                	leave
                	retq

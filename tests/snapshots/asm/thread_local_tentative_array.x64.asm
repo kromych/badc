@@ -32,9 +32,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x63, %ecx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movl	$0x63, (%rax)
+               	movl	$0x63, %eax
                	retq
 
 <second_thread_result>:

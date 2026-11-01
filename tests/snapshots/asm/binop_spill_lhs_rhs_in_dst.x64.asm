@@ -49,16 +49,14 @@ Disassembly of section .text:
                	movl	$0x7, -0x14(%rbp)
                	movl	$0xf, -0x10(%rbp)
                	movl	$0x5, -0xc(%rbp)
-               	movl	$0xa, %ecx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	$0xa, -0x8(%rbp)
                	xorl	%eax, %eax
-               	movq	%rcx, %rdi
                	movq	%rax, %rcx
                	movl	(%rdx,%rcx,4), %esi
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	$0x4, %ecx
                	jle	<addr>
-               	addq	%rdi, %rax
+               	addq	$0xa, %rax
                	leave
                	retq

@@ -2704,6 +2704,15 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
             super::super::passes::store_forward::run(funcs);
         });
+        // The merges above can leave an operation reading one value twice,
+        // or a constant, and a branch it decides.
+        pipeline.run(
+            "passes::simplify_branches::run_late",
+            &mut ssa_funcs,
+            |funcs| {
+                super::super::passes::simplify_branches::run_late(funcs);
+            },
+        );
         b.late_opt_passes(&mut ssa_funcs, pipeline);
         // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
         // inline run exposed -- the post-inline promotions and the

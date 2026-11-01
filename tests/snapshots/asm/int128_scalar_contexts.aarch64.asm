@@ -206,19 +206,6 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	cbz	x1, <addr>
                	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	cmp	x1, x1
-               	cset	x3, lo
-               	sub	x1, x1, x1
-               	sub	x2, x2, x2
-               	sub	x2, x2, x3
-               	orr	x1, x1, x2
-               	cbz	x1, <addr>
-               	mov	x0, #0xb                // =11
-               	mov	sp, x29
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	orr	x2, x1, x0
                	lsr	x1, x1, #1
@@ -254,6 +241,10 @@ Disassembly of section .text:
                	ret
                	mov	sp, x1
                	mov	x0, #0x0                // =0
+               	mov	sp, x29
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0xb                // =11
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

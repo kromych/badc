@@ -114,8 +114,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	andq	$0x7, %rax
-               	negq	%rax
-               	decq	%rax
+               	xorq	$-0x1, %rax
                	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
                	seta	%cl
                	movzbq	%cl, %rcx

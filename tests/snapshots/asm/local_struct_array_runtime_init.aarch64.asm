@@ -37,12 +37,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xb                // =11
                	stur	w0, [x29, #-0x10]
-               	cmp	w0, #0xb
-               	b.eq	<addr>
-               	mov	x0, #0x5                // =5
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

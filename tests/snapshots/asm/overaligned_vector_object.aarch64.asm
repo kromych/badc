@@ -40,13 +40,13 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x8]
                	mov	x1, #0xb                // =11
                	str	w1, [sp, #0x10]
-               	mov	x2, #0xd                // =13
-               	str	w2, [sp, #0x1c]
-               	mov	x2, #0x11               // =17
-               	str	w2, [sp, #0x4]
-               	ldrsw	x3, [sp, #0x1c]
-               	add	x1, x1, x3
-               	add	x1, x1, x2
+               	mov	x1, #0xd                // =13
+               	str	w1, [sp, #0x1c]
+               	mov	x1, #0x11               // =17
+               	str	w1, [sp, #0x4]
+               	ldrsw	x1, [sp, #0x1c]
+               	add	x1, x1, #0xb
+               	add	x1, x1, #0x11
                	cmp	w1, #0x29
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -88,8 +88,7 @@ Disassembly of section .text:
                	mov	x2, #0x17               // =23
                	str	w2, [x1]
                	ldrsw	x0, [x0, #0x8]
-               	mov	x1, x2
-               	add	x0, x0, x1
+               	add	x0, x0, #0x17
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

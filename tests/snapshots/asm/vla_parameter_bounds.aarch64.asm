@@ -50,28 +50,26 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x3, w3
                	sxtw	x1, w1
-               	lsl	x4, x1, #2
-               	mul	x5, x0, x4
+               	lsl	x5, x1, #2
+               	mul	x4, x0, x5
                	mul	x6, x0, x1
                	sxtw	x6, w6
                	lsl	x6, x6, #2
-               	cmp	x5, x6
+               	cmp	x4, x6
                	b.ne	<addr>
-               	cmp	x4, x4
-               	b.eq	<addr>
-               	mov	x0, #-0x1               // =-1
-               	ret
-               	madd	x3, x3, x5, x2
+               	madd	x3, x3, x4, x2
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
-               	madd	x0, x0, x4, x3
+               	madd	x0, x0, x5, x3
                	sub	x1, x1, #0x1
                	ldrsw	x1, [x0, w1, sxtw #2]
-               	add	x0, x2, x5
+               	add	x0, x2, x4
                	sub	x0, x0, x2
                	asr	x2, x0, #63
                	add	x0, x0, x2, lsr #62
                	add	x0, x1, x0, asr #2
+               	ret
+               	mov	x0, #-0x1               // =-1
                	ret
 
 <mixed>:

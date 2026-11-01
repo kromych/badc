@@ -33,9 +33,6 @@ Disassembly of section .text:
                	retq
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	ws-0x4
-               	leaq	0x10(%rax), %rcx
-               	cmpq	%rcx, %rcx
-               	jne	<addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
                	je	<addr>

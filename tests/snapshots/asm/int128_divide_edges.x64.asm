@@ -2420,8 +2420,7 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rdx
                	setae	%bl
                	movzbq	%bl, %rbx
-               	imulq	$-0x1, %rbx, %rdi
-               	subq	%rdi, %rdx
+               	addq	%rbx, %rdx
                	divq	%rcx
                	movq	%rax, %r13
                	leaq	-0x10(%rbp), %rdx
@@ -2451,8 +2450,7 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rdx
                	setae	%dil
                	movzbq	%dil, %rdi
-               	imulq	$-0x1, %rdi, %rax
-               	subq	%rax, %rdx
+               	addq	%rdi, %rdx
                	movq	%rcx, %rax
                	divq	%rsi
                	addq	%rax, %rcx
@@ -2466,8 +2464,7 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rcx
                	setae	%al
                	movzbq	%al, %rax
-               	imulq	$-0x1, %rax, %rax
-               	subq	%rax, %rcx
+               	addq	%rax, %rcx
                	jmp	<addr>
                	cmpq	$-0x1, %rax
                	setae	%r13b

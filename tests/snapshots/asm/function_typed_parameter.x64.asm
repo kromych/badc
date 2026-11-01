@@ -69,11 +69,5 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0xc, %rax
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
                	xorl	%eax, %eax
                	retq

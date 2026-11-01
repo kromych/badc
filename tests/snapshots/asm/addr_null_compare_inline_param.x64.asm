@@ -33,10 +33,9 @@ Disassembly of section .text:
                	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	movl	$0x5, %ecx
-               	movl	%ecx, -0x8(%rbp)
-               	movl	(%rax), %edx
-               	addq	%rdx, %rcx
+               	movl	$0x5, -0x8(%rbp)
+               	movl	(%rax), %ecx
+               	addq	$0x5, %rcx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax
                	cmpl	$0x6, %eax

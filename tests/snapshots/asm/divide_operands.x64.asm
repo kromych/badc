@@ -103,7 +103,6 @@ Disassembly of section .text:
                	retq
 
 <digits>:
-               	movl	$0xa, %r9d
                	movl	$0x1, %esi
                	xorl	%ecx, %ecx
                	movq	%rcx, %r8
@@ -111,12 +110,10 @@ Disassembly of section .text:
                	je	<addr>
                	movq	%rdi, %rax
                	shrq	%rax
-               	movabsq	$0x6666666666666667, %rdx # imm = 0x6666666666666667
-               	movq	%rdx, %r10
-               	mulq	%r10
+               	movabsq	$0x6666666666666667, %r9 # imm = 0x6666666666666667
+               	mulq	%r9
                	shrq	%rdx
-               	movq	%rdx, %rax
-               	imulq	%r9, %rax
+               	imulq	$0xa, %rdx, %rax
                	subq	%rax, %rdi
                	imulq	%rsi, %rdi
                	addq	%rdi, %r8

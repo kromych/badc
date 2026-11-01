@@ -421,9 +421,7 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	cset	x3, lt
                	add	x4, x0, #0x4
-               	cmp	w3, #0x0
-               	cset	x1, ne
-               	neg	x1, x1
+               	neg	x1, x3
                	and	x4, x1, x4
                	add	x2, x2, x4
                	add	x2, x2, #0x4

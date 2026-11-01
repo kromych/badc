@@ -1152,7 +1152,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v440 Imm(0)                                           -> x1
     v441 Imm(1)                                           -> x1
     v442 Imm(4)                                           -> x1
-    v443 BinopI { op=add, lhs=v440, rhs_imm=4 }           -> x1
+    v443 Imm(4)                                           -> x1
     v444 Imm(10)                                          -> x1
     v445 BinopI { op=eq, lhs=v438, rhs_imm=10 }           -> x1
     v446 Extend { value=v445, kind=I32 }                  -> x0
@@ -1245,7 +1245,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v502 Imm(0)                                           -> x1
     v503 Imm(2)                                           -> x1
     v504 Imm(8)                                           -> x1
-    v505 BinopI { op=add, lhs=v502, rhs_imm=8 }           -> x1
+    v505 Imm(8)                                           -> x1
     v506 Imm(13)                                          -> x1
     v507 BinopI { op=eq, lhs=v500, rhs_imm=13 }           -> x1
     v508 Extend { value=v507, kind=I32 }                  -> x0
@@ -1338,7 +1338,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v564 Imm(0)                                           -> x1
     v565 Imm(3)                                           -> x1
     v566 Imm(12)                                          -> x1
-    v567 BinopI { op=add, lhs=v564, rhs_imm=12 }          -> x1
+    v567 Imm(12)                                          -> x1
     v568 Imm(14)                                          -> x1
     v569 BinopI { op=eq, lhs=v562, rhs_imm=14 }           -> x1
     v570 Extend { value=v569, kind=I32 }                  -> x0
@@ -1431,7 +1431,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v626 Imm(0)                                           -> x1
     v627 Imm(4)                                           -> x1
     v628 Imm(16)                                          -> x1
-    v629 BinopI { op=add, lhs=v626, rhs_imm=16 }          -> x1
+    v629 Imm(16)                                          -> x1
     v630 Imm(15)                                          -> x1
     v631 BinopI { op=eq, lhs=v624, rhs_imm=15 }           -> x1
     v632 Extend { value=v631, kind=I32 }                  -> x0

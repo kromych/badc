@@ -242,7 +242,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v193 StoreLocal { off=-2, disp=8, value=v139, kind=I32 } -> -
     v194 LocalAddr(-2)                                    -> x1
     v195 BinopI { op=add, lhs=v194, rhs_imm=8 }           -> x1
-    v196 Extend { value=v139, kind=I32 }                  -> x1
+    v196 Imm(1)                                           -> x1
     v197 Imm(0)                                           -> x1
     v198 Imm(32767)                                       -> x1
     v199 Imm(0)                                           -> x1

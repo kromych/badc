@@ -190,13 +190,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x24a0, %eax           # imm = 0x24A0
-               	movl	$0xa, %esi
                	xorl	%ecx, %ecx
                	imulq	$0x1999999a, %rax, %rdx # imm = 0x1999999A
                	shrq	$0x20, %rdx
-               	movq	%rdx, %rdi
-               	imulq	%rsi, %rdi
-               	subq	%rdi, %rax
+               	imulq	$0xa, %rdx, %rsi
+               	subq	%rsi, %rax
                	addq	%rax, %rcx
                	movq	%rdx, %rax
                	testl	%eax, %eax

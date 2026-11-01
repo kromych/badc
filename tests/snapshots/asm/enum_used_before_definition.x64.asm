@@ -76,13 +76,6 @@ Disassembly of section .text:
                	movq	$0x0, (%rax)
                	movl	$0x80000000, %ecx       # imm = 0x80000000
                	movq	%rcx, (%rax)
-               	movl	$0x80000000, %eax       # imm = 0x80000000
-               	cmpq	%rax, %rcx
-               	je	<addr>
-               	movl	$0x8, %eax
-               	popq	%rbx
-               	leave
-               	retq
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %rbx
                	movl	(%rbx), %eax

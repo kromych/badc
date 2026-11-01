@@ -34,15 +34,13 @@ Disassembly of section .text:
                	strb	w1, [sp, #0x20]
                	mov	x0, sp
                	str	x1, [sp]
-               	mov	x2, #0x2                // =2
-               	str	x2, [sp, #0x8]
-               	mov	x3, #0x3                // =3
-               	str	x3, [sp, #0x10]
-               	mov	x4, #0x4                // =4
-               	str	x4, [sp, #0x18]
-               	add	x1, x1, x2
-               	add	x1, x1, x3
-               	add	x1, x1, x4
+               	mov	x1, #0x2                // =2
+               	str	x1, [sp, #0x8]
+               	mov	x1, #0x3                // =3
+               	str	x1, [sp, #0x10]
+               	mov	x1, #0x4                // =4
+               	str	x1, [sp, #0x18]
+               	mov	x1, #0xa                // =10
                	bl	<addr>
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x8]

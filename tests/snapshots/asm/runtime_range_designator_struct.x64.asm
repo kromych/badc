@@ -203,9 +203,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
-               	movq	%rax, %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movl	$0x1, (%rcx)
                	movl	(%rcx), %ecx
                	cmpl	$0x1, %ecx
                	je	<addr>

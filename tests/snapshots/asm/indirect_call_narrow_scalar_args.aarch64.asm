@@ -26,10 +26,6 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	add	x1, x1, x2
                	add	x0, x1, x0
-               	cmp	w0, w0
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ret
                	mov	x17, #0xcd17            // =52503
                	movk	x17, #0x6b, lsl #16
                	cmp	w0, w17

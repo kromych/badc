@@ -118,6 +118,22 @@ pub(crate) fn run_with_const_data_on(
     }
 }
 
+/// The fold of what the value numbering and the forwarding leave: an
+/// operation reading one value twice or a constant, and a branch it
+/// decides. Blocks are only pruned, never merged or threaded, so the
+/// critical edges split before stay split.
+pub(crate) fn run_late(funcs: &mut [FunctionSsa]) {
+    for func in funcs {
+        for _ in 0..=func.blocks.len() {
+            super::constfold::run_one(func);
+            if !super::constfold_branch::run_one(func) {
+                break;
+            }
+            super::prune_unreachable::run_one(func);
+        }
+    }
+}
+
 fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
     // Each productive round folds at least one conditional terminator,
     // prunes at least one block, or rewrites at least one instruction to

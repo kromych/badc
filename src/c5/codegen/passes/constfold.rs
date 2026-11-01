@@ -227,6 +227,14 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// The constant the operation `v` computes from `l` and `r`: a comparison
+/// marked for its 32-bit form reads the low words, as the emitted compare
+/// does, since its operands may have lost the extensions the mark made
+/// redundant.
+fn fold_binop_of(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    super::narrow::fold_at_width(op, l, r, super::narrow::is_cmp32(&func.cmp32, v))
+}
+
 /// Node budget for one per-incoming evaluation. A shared operand is
 /// re-evaluated per use, so the budget caps a wide expression tree
 /// rather than its depth alone; it also terminates the recursion.
@@ -267,13 +275,17 @@ fn eval_with(
             eval_with(func, value, pivot, bind, budget)?,
             width,
         )),
-        Inst::BinopI { op, lhs, rhs_imm } => {
-            eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
-        }
+        Inst::BinopI { op, lhs, rhs_imm } => fold_binop_of(
+            func,
+            v,
+            op,
+            eval_with(func, lhs, pivot, bind, budget)?,
+            rhs_imm,
+        ),
         Inst::Binop { op, lhs, rhs } => {
             let l = eval_with(func, lhs, pivot, bind, budget)?;
             let r = eval_with(func, rhs, pivot, bind, budget)?;
-            eval::fold_binop(op, l, r)
+            fold_binop_of(func, v, op, l, r)
         }
         _ => None,
     }
@@ -998,13 +1010,13 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 })
             }
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
-                .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
+                .and_then(|l| fold_binop_of(func, idx as ValueId, *op, l, *rhs_imm))
                 .map(Inst::Imm),
             Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
                 same_operand_compare(*op).map(Inst::Imm)
             }
             Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
-                (Some(l), Some(r)) => eval::fold_binop(*op, l, r).map(Inst::Imm),
+                (Some(l), Some(r)) => fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm),
                 (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
                     op: *op,
                     lhs: *lhs,
@@ -1829,6 +1841,29 @@ mod tests {
             let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
             run_one(&mut f);
             assert!(matches!(f.insts[1], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn a_compare_marked_for_32_bits_folds_on_the_low_words() {
+        // The sign extension of 0xFEFE_FEFE against its zero extension:
+        // unequal as 64-bit values, equal in the low word a 32-bit compare
+        // reads.
+        for (marked, want) in [(true, 0), (false, 1)] {
+            let mut f = fresh(vec![
+                Inst::Imm(0xFEFE_FEFE_u32 as i32 as i64),
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 0,
+                    rhs_imm: 0xFEFE_FEFE,
+                },
+            ]);
+            f.cmp32 = vec![false, marked];
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[1], Inst::Imm(k) if k == want),
+                "marked {marked}"
+            );
         }
     }
 

@@ -94,9 +94,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	add	x1, x0, #0x1
-               	cmp	x1, x1
-               	b.ne	<addr>
                	add	x0, x0, #0x2
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>

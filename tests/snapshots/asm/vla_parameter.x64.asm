@@ -27,12 +27,6 @@ Disassembly of section .text:
 
 <rows>:
                	movslq	%edi, %rdi
-               	cmpl	%edi, %edi
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	xorl	%eax, %eax
-               	testq	%rcx, %rcx
-               	je	<addr>
                	leaq	(%rsi,%rdi), %rax
                	subq	%rsi, %rax
                	cmpq	%rdi, %rax

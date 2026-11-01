@@ -44,15 +44,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	subq	%rcx, %rdx
-               	movq	%rdx, %rsi
-               	sarq	$0x3f, %rsi
-               	shrq	$0x3e, %rsi
-               	addq	%rsi, %rdx
-               	sarq	$0x2, %rdx
-               	testq	%rdx, %rdx
-               	jne	<addr>
                	leaq	0x4(%rcx), %rdx
                	subq	%rcx, %rdx
                	movq	%rdx, %rcx

@@ -136,17 +136,6 @@ Disassembly of section .text:
                	movk	x1, #0x605, lsl #32
                	movk	x1, #0x807, lsl #48
                	str	x1, [x0]
-               	rev	x1, x1
-               	mov	x17, #0x708             // =1800
-               	movk	x17, #0x506, lsl #16
-               	movk	x17, #0x304, lsl #32
-               	movk	x17, #0x102, lsl #48
-               	cmp	x1, x17
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp, #0x90]
-               	ldr	x20, [sp], #0xa0
-               	ret
                	ldurb	w1, [x29, #-0x80]
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>

@@ -291,20 +291,17 @@ fn ent_pc=12 n_params=0 variadic=false locals=4
     v93  Imm(41)                                          -> x0
     v94  Imm(41)                                          -> x0
     v95  StoreLocal { off=-1, value=v94, kind=I32 }       -> -
-    v96  LocalAddr(-1)                                    -> x1
-    v97  Extend { value=v94, kind=I32 }                   -> x0
-    v98  BinopI { op=add, lhs=v97, rhs_imm=1 }            -> x0
+    v96  LocalAddr(-1)                                    -> x0
+    v97  Imm(41)                                          -> x0
+    v98  Imm(42)                                          -> x0
     v99  StoreLocal { off=-1, value=v98, kind=I32 }       -> -
-    v100 Extend { value=v98, kind=I32 }                   -> x0
-    v101 Extend { value=v100, kind=I32 }                  -> x1
+    v100 Imm(42)                                          -> x0
+    v101 Imm(42)                                          -> x0
     v102 LifetimeEnd(-1)                                  -> -
-    v103 Extend { value=v100, kind=I32 }                  -> x1
-    v104 BinopI { op=ne, lhs=v100, rhs_imm=42 }           -> x0
-    terminator Bz { cond=v104, target=b18, fall=b17 }   (exit_acc=v104)
+    v103 Imm(42)                                          -> x0
+    v104 Imm(0)                                           -> x0
+    terminator Jmp(b17)   (exit_acc=v104)
   block 17  start_pc=0
-    v105 Imm(9)                                           -> x0
-    terminator Return(v105)   (exit_acc=v105)
-  block 18  start_pc=0
     v106 Imm(0)                                           -> x0
     terminator Return(v106)   (exit_acc=v106)
 ; --- SSA dump (ok=true) ent_pc=0 ---

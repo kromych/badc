@@ -33,10 +33,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v14  Binop { op=fadd, lhs=v12, rhs=v13 }              -> d0
     v15  StoreLocal { off=-2, value=v14, kind=F64, volatile } -> -
     v16  LocalAddr(-2)                                    -> x1
-    v17  Imm(4612811918334230528)                         -> x2
-    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v19  LoadLocal { off=-2, disp=8, kind=I64 }           -> x1
-    v20  BinopI { op=add, lhs=v7, rhs_imm=1 }             -> x1
+    v17  Imm(4612811918334230528)                         -> x1
+    v18  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
+    v19  LoadLocal { off=-2, disp=8, kind=I64 }           -> x2
+    v20  Imm(2)                                           -> x2
     v21  StoreLocal { off=-2, disp=8, value=v20, kind=I64 } -> -
     v22  StoreLocal { off=-3, value=v17, kind=F64 }       -> -
     v23  LoadLocal { off=-2, kind=F64, volatile }         -> d0
@@ -45,11 +45,11 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v26  LoadLocal { off=-3, kind=F64, volatile }         -> d1
     v27  Binop { op=fadd, lhs=v25, rhs=v26 }              -> d0
     v28  StoreLocal { off=-2, value=v27, kind=F64, volatile } -> -
-    v29  LocalAddr(-2)                                    -> x2
-    v30  Imm(4615063718147915776)                         -> x2
-    v31  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
-    v32  LoadLocal { off=-2, disp=8, kind=I64 }           -> x6
-    v33  BinopI { op=add, lhs=v20, rhs_imm=1 }            -> x1
+    v29  LocalAddr(-2)                                    -> x1
+    v30  Imm(4615063718147915776)                         -> x1
+    v31  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
+    v32  LoadLocal { off=-2, disp=8, kind=I64 }           -> x2
+    v33  Imm(3)                                           -> x2
     v34  StoreLocal { off=-2, disp=8, value=v33, kind=I64 } -> -
     v35  StoreLocal { off=-3, value=v30, kind=F64 }       -> -
     v36  LoadLocal { off=-2, kind=F64, volatile }         -> d0

@@ -997,7 +997,7 @@ Disassembly of section .text:
                	stur	w3, [x29, #-0x10]
                	mov	x3, #0x79               // =121
                	stur	w3, [x29, #-0x8]
-               	and	x4, x3, #0xff
+               	mov	x4, #0x79               // =121
                	ldrsw	x3, [x2]
                	add	x5, x3, #0x1
                	str	w5, [x2]

@@ -201,15 +201,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x7, %eax
-               	movw	%ax, -0x8(%rbp)
-               	movswq	%ax, %rax
-               	cmpl	$0x7, %eax
-               	je	<addr>
-               	movl	$0xe, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	movw	$0x7, -0x8(%rbp)
                	xorl	%eax, %eax
                	popq	%rbx
                	leave

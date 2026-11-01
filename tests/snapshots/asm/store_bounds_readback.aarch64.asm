@@ -99,8 +99,7 @@ Disassembly of section .text:
                	ldrsw	x0, [x0]
                	and	x0, x0, #0x1ff
                	and	x0, x0, #0x7
-               	neg	x0, x0
-               	sub	x0, x0, #0x1
+               	mvn	x0, x0
                	mov	x17, #0x7fffffff        // =2147483647
                	cmp	w0, w17
                	cset	x1, hi

@@ -210,9 +210,10 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	stur	x0, [x29, #-0x48]
                	stur	x1, [x29, #-0x38]
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x14               // =20
+               	ldrsw	x0, [x2, #0x5c]
+               	cmp	w0, #0x2a
+               	b.ne	<addr>
+               	mov	x0, #0x0                // =0
                	cbz	x0, <addr>
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -221,16 +222,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x38]
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x15               // =21
-               	b	<addr>
-               	ldrsw	x0, [x2, #0x5c]
-               	cmp	w0, #0x2a
-               	b.ne	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
                	mov	x0, #0x17               // =23
                	b	<addr>
                	mov	x0, #0x1b               // =27

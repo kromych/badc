@@ -1725,10 +1725,10 @@ fn ent_pc=33 n_params=0 variadic=false locals=2
     v577 StoreLocal { off=-2, value=v576, kind=I32 }      -> -
     v578 Imm(121)                                         -> x6
     v579 StoreLocal { off=-1, value=v578, kind=I32 }      -> -
-    v580 LocalAddr(-1)                                    -> x7
-    v581 Extend { value=v578, kind=I32 }                  -> x7
-    v582 Extend { value=v581, kind=I8 }                   -> x6
-    v583 Extend { value=v582, kind=I8 }                   -> x6
+    v580 LocalAddr(-1)                                    -> x6
+    v581 Imm(121)                                         -> x7
+    v582 Imm(121)                                         -> x6
+    v583 Imm(121)                                         -> x6
     v584 ImmData(160)                                     -> x6
     v585 ImmData(224)                                     -> x6
     v586 Load { addr=v571, disp=0, kind=I32 }             -> x6

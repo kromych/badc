@@ -33,10 +33,8 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x1, %rcx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	movq	%rcx, %rsi
-               	orq	%rcx, %rsi
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	leaq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rdi
                	xorl	%edx, %edx
@@ -56,7 +54,6 @@ Disassembly of section .text:
                	cmpq	$0x2, %rsi
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rax
                	orq	%rax, %rdx
                	movq	(%rcx), %rcx
                	xorl	%eax, %eax
@@ -79,7 +76,6 @@ Disassembly of section .text:
                	cmpq	$0x4, %rsi
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rax
                	orq	%rax, %rdx
                	movq	(%rcx), %rcx
                	xorl	%eax, %eax
@@ -102,7 +98,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rsi
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rax
                	orq	%rax, %rdx
                	movq	(%rcx), %rcx
                	xorl	%eax, %eax
@@ -125,7 +120,6 @@ Disassembly of section .text:
                	cmpq	$0x10, %rsi
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rax
                	orq	%rax, %rdx
                	movq	(%rcx), %rcx
                	xorl	%eax, %eax

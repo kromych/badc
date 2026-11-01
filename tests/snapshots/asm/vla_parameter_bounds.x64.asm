@@ -74,30 +74,26 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%ecx, %rcx
                	movslq	%esi, %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	movq	%rdi, %r8
-               	imulq	%rax, %r8
+               	movq	%rsi, %r8
+               	shlq	$0x2, %r8
+               	movq	%rdi, %rax
+               	imulq	%r8, %rax
                	movq	%rdi, %r9
                	imulq	%rsi, %r9
                	movslq	%r9d, %r9
                	shlq	$0x2, %r9
-               	cmpq	%r9, %r8
+               	cmpq	%r9, %rax
                	jne	<addr>
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movq	$-0x1, %rax
-               	retq
-               	imulq	%r8, %rcx
+               	imulq	%rax, %rcx
                	addq	%rdx, %rcx
                	decq	%rdi
                	movslq	%edi, %rdi
-               	imulq	%rdi, %rax
-               	addq	%rcx, %rax
-               	leaq	-0x1(%rsi), %rcx
-               	movslq	%ecx, %rcx
-               	movl	(%rax,%rcx,4), %ecx
-               	leaq	(%rdx,%r8), %rax
+               	imulq	%r8, %rdi
+               	addq	%rdi, %rcx
+               	decq	%rsi
+               	movslq	%esi, %rsi
+               	movl	(%rcx,%rsi,4), %ecx
+               	addq	%rdx, %rax
                	subq	%rdx, %rax
                	movq	%rax, %rdx
                	sarq	$0x3f, %rdx
@@ -105,6 +101,8 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	sarq	$0x2, %rax
                	addq	%rcx, %rax
+               	retq
+               	movq	$-0x1, %rax
                	retq
 
 <mixed>:

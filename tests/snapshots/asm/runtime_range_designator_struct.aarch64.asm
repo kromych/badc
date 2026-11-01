@@ -206,8 +206,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
                	str	w0, [x1]
-               	mov	x2, x0
-               	add	x2, x2, #0x1
+               	mov	x2, #0x1                // =1
                	str	w2, [x1]
                	ldrsw	x1, [x1]
                	cmp	w1, #0x1

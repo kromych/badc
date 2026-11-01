@@ -196,9 +196,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v7   StoreLocal { off=-2, value=v6, kind=I32 }        -> -
     v8   Imm(3)                                           -> x1
     v9   StoreLocal { off=-1, value=v8, kind=I32 }        -> -
-    v10  LocalAddr(-1)                                    -> x2
-    v11  Extend { value=v8, kind=I32 }                    -> x6
-    v12  Extend { value=v11, kind=I32 }                   -> x1
+    v10  LocalAddr(-1)                                    -> x1
+    v11  Imm(3)                                           -> x6
+    v12  Imm(3)                                           -> x1
     v13  ImmData(16)                                      -> x1
     v14  ImmData(272)                                     -> x2
     v15  Load { addr=v1, disp=0, kind=I32 }               -> x2
@@ -501,9 +501,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v250 StoreLocal { off=-2, value=v249, kind=I32 }      -> -
     v251 Imm(41)                                          -> x6
     v252 StoreLocal { off=-1, value=v251, kind=I32 }      -> -
-    v253 LocalAddr(-1)                                    -> x7
-    v254 Extend { value=v251, kind=I32 }                  -> x7
-    v255 Extend { value=v254, kind=I32 }                  -> x6
+    v253 LocalAddr(-1)                                    -> x6
+    v254 Imm(41)                                          -> x7
+    v255 Imm(41)                                          -> x6
     v256 ImmData(16)                                      -> x6
     v257 ImmData(272)                                     -> x6
     v258 Load { addr=v210, disp=0, kind=I32 }             -> x6
@@ -563,9 +563,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v305 StoreLocal { off=-2, value=v304, kind=I32 }      -> -
     v306 Imm(41)                                          -> x2
     v307 StoreLocal { off=-1, value=v306, kind=I32 }      -> -
-    v308 LocalAddr(-1)                                    -> x6
-    v309 Extend { value=v306, kind=I32 }                  -> x6
-    v310 Extend { value=v309, kind=I32 }                  -> x2
+    v308 LocalAddr(-1)                                    -> x2
+    v309 Imm(41)                                          -> x6
+    v310 Imm(41)                                          -> x2
     v311 ImmData(16)                                      -> x2
     v312 ImmData(272)                                     -> x2
     v313 Load { addr=v276, disp=0, kind=I32 }             -> x2
@@ -627,10 +627,10 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v362 Imm(1)                                           -> x0
     v363 Imm(21)                                          -> x0
     v364 StoreLocal { off=-1, value=v363, kind=I32 }      -> -
-    v365 Imm(1)                                           -> x2
-    v366 LocalAddr(-1)                                    -> x2
-    v367 Extend { value=v363, kind=I32 }                  -> x6
-    v368 Extend { value=v367, kind=I32 }                  -> x0
+    v365 Imm(1)                                           -> x0
+    v366 LocalAddr(-1)                                    -> x0
+    v367 Imm(21)                                          -> x6
+    v368 Imm(21)                                          -> x0
     v369 ImmData(16)                                      -> x0
     v370 ImmData(272)                                     -> x0
     v371 Load { addr=v370, disp=0, kind=I32 }             -> x2
@@ -691,10 +691,10 @@ fn ent_pc=9 n_params=0 variadic=false locals=3
     v419 Imm(1)                                           -> x2
     v420 Imm(21)                                          -> x2
     v421 StoreLocal { off=-1, value=v420, kind=I32 }      -> -
-    v422 Imm(1)                                           -> x6
-    v423 LocalAddr(-1)                                    -> x6
-    v424 Extend { value=v420, kind=I32 }                  -> x6
-    v425 Extend { value=v424, kind=I32 }                  -> x2
+    v422 Imm(1)                                           -> x2
+    v423 LocalAddr(-1)                                    -> x2
+    v424 Imm(21)                                          -> x6
+    v425 Imm(21)                                          -> x2
     v426 ImmData(16)                                      -> x2
     v427 ImmData(272)                                     -> x2
     v428 Load { addr=v413, disp=0, kind=I32 }             -> x2

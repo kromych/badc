@@ -69,13 +69,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x7, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	cmpl	$0x7, %ecx
-               	je	<addr>
-               	movl	$0x4, %eax
-               	popq	%rbp
-               	retq
+               	movl	$0x7, 0x4(%rax)
                	movl	0x4(%rax), %ecx
                	cmpl	$0x7, %ecx
                	je	<addr>

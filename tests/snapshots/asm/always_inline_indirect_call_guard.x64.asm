@@ -100,14 +100,7 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdx
-               	movl	$0xf, %eax
-               	movq	%rax, -0x8(%rbp)
-               	cmpq	$0xf, %rax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	movq	$0xf, -0x8(%rbp)
                	movq	%rdi, -0x8(%rbp)
                	movl	$0x5, %esi
                	callq	<addr>

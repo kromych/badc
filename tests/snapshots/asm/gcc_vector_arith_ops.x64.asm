@@ -7431,22 +7431,18 @@ Disassembly of section .text:
                	shrq	$0x3f, %rdi
                	addq	%rax, %rdi
                	xorl	%eax, %eax
-               	negq	%rcx
-               	negq	%rdx
-               	negq	%rsi
-               	negq	%rdi
                	movl	0x110(%rsp), %r9d
-               	addq	%r9, %rcx
-               	movl	0x114(%rsp), %r9d
-               	addq	%r9, %rdx
-               	movl	0x118(%rsp), %r9d
-               	addq	%r9, %rsi
-               	movl	0x11c(%rsp), %r9d
-               	addq	%r9, %rdi
-               	movl	%ecx, 0x160(%rsp)
-               	movl	%edx, 0x164(%rsp)
-               	movl	%esi, 0x168(%rsp)
-               	movl	%edi, 0x16c(%rsp)
+               	subq	%rcx, %r9
+               	movl	0x114(%rsp), %ecx
+               	subq	%rdx, %rcx
+               	movl	0x118(%rsp), %edx
+               	subq	%rsi, %rdx
+               	movl	0x11c(%rsp), %esi
+               	subq	%rdi, %rsi
+               	movl	%r9d, 0x160(%rsp)
+               	movl	%ecx, 0x164(%rsp)
+               	movl	%edx, 0x168(%rsp)
+               	movl	%esi, 0x16c(%rsp)
                	leaq	0x110(%rsp), %r9
                	leaq	-0x10(%rbp), %rdx
                	movq	%rax, %rcx
@@ -7459,10 +7455,9 @@ Disassembly of section .text:
                	movq	%rdx, %rdi
                	shrq	$0x3f, %rdi
                	addq	%rdi, %rdx
-               	negq	%rdx
                	addq	%r9, %rcx
                	movl	(%rcx), %ecx
-               	addq	%rdx, %rcx
+               	subq	%rdx, %rcx
                	movl	%ecx, (%rsi)
                	incq	%rax
                	cmpl	$0x4, %eax

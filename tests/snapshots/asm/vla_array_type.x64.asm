@@ -78,11 +78,6 @@ Disassembly of section .text:
                	idivq	%rsi
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	cmpq	%r8, %r8
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
                	movl	0xc(%rcx), %eax
                	cmpl	$0x1e, %eax
                	jne	<addr>
@@ -117,6 +112,9 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x5, %eax
+               	leave
+               	retq
+               	movl	$0x4, %eax
                	leave
                	retq
                	movl	$0x1, %eax

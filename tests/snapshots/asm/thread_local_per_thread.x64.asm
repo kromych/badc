@@ -32,9 +32,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
                	retq
-               	movl	$0x63, %ecx
-               	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movl	$0x63, (%rax)
+               	movl	$0x63, %eax
                	retq
 
 <main>:

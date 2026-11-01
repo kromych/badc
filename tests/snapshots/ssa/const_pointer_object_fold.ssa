@@ -295,7 +295,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     terminator Bz { cond=v277, target=b47, fall=b42 }   (low word)   (exit_acc=v280)
   block 42  start_pc=0
     v90  Imm(0)                                           -> x0
-    v91  BinopI { op=add, lhs=v90, rhs_imm=8 }            -> x0
+    v91  Imm(8)                                           -> x0
     v92  Imm(7)                                           -> x0
     v93  Imm(0)                                           -> x0
     v94  Imm(0)                                           -> x0

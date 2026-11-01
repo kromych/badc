@@ -27,30 +27,25 @@ Disassembly of section .text:
 
 <once_through_pointers>:
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x18(%rax), %rcx
-               	movl	0x8(%rax), %edx
-               	movq	%rdx, %rsi
-               	shlq	$0x39, %rsi
-               	sarq	$0x39, %rsi
-               	incq	%rsi
-               	andq	$0x7f, %rsi
-               	andq	$-0x80, %rdx
-               	orq	%rsi, %rdx
-               	movl	%edx, 0x8(%rax)
-               	cmpq	%rcx, %rcx
-               	jne	<addr>
-               	movl	0x8(%rax), %edx
+               	movl	0x8(%rax), %ecx
+               	movq	%rcx, %rdx
                	shlq	$0x39, %rdx
                	sarq	$0x39, %rdx
-               	cmpl	$0x1, %edx
+               	incq	%rdx
+               	andq	$0x7f, %rdx
+               	andq	$-0x80, %rcx
+               	orq	%rdx, %rcx
+               	movl	%ecx, 0x8(%rax)
+               	movl	0x8(%rax), %ecx
+               	shlq	$0x39, %rcx
+               	sarq	$0x39, %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	(%rax), %edx
-               	addq	$0x5, %rdx
-               	movl	%edx, (%rax)
-               	cmpq	%rcx, %rcx
-               	jne	<addr>
+               	movl	(%rax), %ecx
+               	addq	$0x5, %rcx
+               	movl	%ecx, (%rax)
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %ecx
                	cmpl	$0x5, %ecx
@@ -72,8 +67,6 @@ Disassembly of section .text:
                	shlq	$0x7, %rdx
                	orq	%rsi, %rdx
                	movl	%edx, 0x8(%rax)
-               	cmpq	%rcx, %rcx
-               	jne	<addr>
                	movl	0x8(%rax), %eax
                	sarq	$0x7, %rax
                	andq	$0x1f, %rax
@@ -82,10 +75,8 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	leaq	<rip>, %rax # <addr>
-               	xorl	%edx, %edx
-               	movl	%edx, (%rax)
-               	incq	%rdx
-               	movl	%edx, (%rax)
+               	movl	$0x0, (%rax)
+               	movl	$0x1, (%rax)
                	movl	0x8(%rcx), %edx
                	movq	%rdx, %rsi
                	shlq	$0x39, %rsi

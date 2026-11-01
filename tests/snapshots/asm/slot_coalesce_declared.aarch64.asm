@@ -40,12 +40,12 @@ Disassembly of section .text:
                	cmp	w0, #0x32
                	b.lt	<addr>
                	cmp	x1, x2
-               	mov	x0, #0xabcd             // =43981
-               	movk	x0, #0x1234, lsl #16
-               	stur	x0, [x29, #-0x8]
-               	mov	x17, #0xfeed            // =65261
-               	eor	x0, x0, x17
-               	stur	x0, [x29, #-0x8]
+               	mov	x1, #0xabcd             // =43981
+               	movk	x1, #0x1234, lsl #16
+               	stur	x1, [x29, #-0x8]
+               	mov	x1, #0x5520             // =21792
+               	movk	x1, #0x1234, lsl #16
+               	stur	x1, [x29, #-0x8]
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]
                	mov	x17, #0x5520            // =21792

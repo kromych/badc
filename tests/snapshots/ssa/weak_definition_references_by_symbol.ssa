@@ -35,13 +35,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v9   ImmData(8)                                       -> x0
     v10  ImmData(0)                                       -> x0
     v11  BinopI { op=add, lhs=v10, rhs_imm=16 }           -> x1
-    v12  ImmData(0)                                       -> x2
-    v13  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x2
-    v14  Imm(8)                                           -> x2
-    v15  BinopI { op=add, lhs=v10, rhs_imm=16 }           -> x2
-    v16  Binop { op=ne, lhs=v11, rhs=v11 }                -> x1
-    v17  Imm(0)                                           -> x2
-    terminator Bnz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
+    v12  ImmData(0)                                       -> x1
+    v13  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x1
+    v14  Imm(8)                                           -> x1
+    v15  BinopI { op=add, lhs=v10, rhs_imm=16 }           -> x1
+    v16  Imm(0)                                           -> x1
+    v17  Imm(0)                                           -> x1
+    terminator Jmp(b3)   (exit_acc=v16)
   block 3  start_pc=0
     v18  ImmData(0)                                       -> x1
     v19  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x1

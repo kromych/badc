@@ -40,23 +40,23 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     v407 BinopI { op=lt, lhs=v405, rhs_imm=50 }           -> x6
     terminator Bz { cond=v407, target=b6, fall=b4 }   (exit_acc=v407)
   block 6  start_pc=0
-    v7   Binop { op=eq, lhs=v395, rhs=v406 }              -> x1
-    v8   Imm(0)                                           -> x0
-    v9   Imm(305441741)                                   -> x0
+    v7   Binop { op=eq, lhs=v395, rhs=v406 }              -> x0
+    v8   Imm(0)                                           -> x1
+    v9   Imm(305441741)                                   -> x1
     v10  StoreLocal { off=-1, value=v9, kind=I64 }        -> -
-    v11  Imm(0)                                           -> x2
-    v12  LocalAddr(-1)                                    -> x2
-    v13  Imm(0)                                           -> x2
-    v14  Imm(0)                                           -> x2
-    v15  LoadLocal { off=-1, kind=I64 }                   -> x2
-    v16  BinopI { op=xor, lhs=v9, rhs_imm=65261 }         -> x0
+    v11  Imm(0)                                           -> x1
+    v12  LocalAddr(-1)                                    -> x1
+    v13  Imm(0)                                           -> x1
+    v14  Imm(0)                                           -> x1
+    v15  LoadLocal { off=-1, kind=I64 }                   -> x1
+    v16  Imm(305419552)                                   -> x1
     v17  StoreLocal { off=-1, value=v16, kind=I64 }       -> -
-    v18  Imm(0)                                           -> x0
-    v19  Imm(305419552)                                   -> x0
-    v20  Imm(0)                                           -> x0
-    v21  Extend { value=v7, kind=I32 }                    -> x0
-    v22  Imm(0)                                           -> x0
-    v23  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x1
+    v19  Imm(305419552)                                   -> x1
+    v20  Imm(0)                                           -> x1
+    v21  Extend { value=v7, kind=I32 }                    -> x1
+    v22  Imm(0)                                           -> x1
+    v23  Imm(0)                                           -> x1
     terminator Bz { cond=v7, target=b9, fall=b7 }   (exit_acc=v7)
   block 7  start_pc=0
     v24  LoadLocal { off=-1, kind=I64 }                   -> x0

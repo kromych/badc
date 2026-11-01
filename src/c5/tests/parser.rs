@@ -2132,6 +2132,40 @@ fn deep_expression_nesting_is_diagnosed() {
 }
 
 #[test]
+fn a_parenthesized_constant_initializer_is_parsed_once_per_level() {
+    // Tokens advanced over, rewinds included, grow with the depth of the
+    // parentheses rather than with a power of it.
+    on_big_stack(|| {
+        let advanced = |shape: &str, depth: usize| {
+            let nest = format!("{}1{}", "(".repeat(depth), ")".repeat(depth));
+            let src = format!(
+                "{}\nint main(void) {{ return 0; }}",
+                shape.replace('@', &nest)
+            );
+            crate::c5::compiler::TOKENS_ADVANCED.with(|c| c.set(0));
+            super::compile_str_bare(&src);
+            crate::c5::compiler::TOKENS_ADVANCED.with(|c| c.get())
+        };
+        for shape in [
+            "int x = @;",
+            "int x = @ + 2;",
+            "double d = @ * 2.5;",
+            "int a[] = { 3, @, 4 };",
+            "struct s { int a; long b; } v = { .b = @ };",
+            "int f(void) { static int x = @; return x; }",
+            "int g; int *p = @ ? &g : 0;",
+        ] {
+            let (small, large) = (advanced(shape, 30), advanced(shape, 480));
+            assert!(
+                large < small * 32,
+                "`{shape}`: 16x the depth advanced {:.1}x the tokens ({small} -> {large})",
+                large as f64 / small as f64
+            );
+        }
+    });
+}
+
+#[test]
 fn deep_global_initializer_expression_nesting_is_diagnosed() {
     let n = 2000;
     let src = format!("int x = {}1{};", "(".repeat(n), ")".repeat(n));

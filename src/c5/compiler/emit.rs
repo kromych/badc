@@ -36,6 +36,12 @@ thread_local! {
 }
 
 #[cfg(test)]
+thread_local! {
+    /// Tokens the parser advanced over, rewound re-reads included.
+    pub(crate) static TOKENS_ADVANCED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
 fn note_scope_unwind(examined: usize, table: usize) {
     SCOPE_UNWIND.with(|c| {
         let (a, b) = c.get();
@@ -72,6 +78,8 @@ impl Compiler {
     pub(super) fn next(&mut self) -> Result<(), C5Error> {
         let prev_tk = self.lex.tk;
         let pre_len = self.data.len() as i64;
+        #[cfg(test)]
+        TOKENS_ADVANCED.with(|c| c.set(c.get() + 1));
         self.lex
             .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)?;
         // Every string literal interns its bytes at lex time (expression

@@ -152,7 +152,7 @@ impl InitLeaf {
     }
 
     /// The arithmetic constant a leaf without a relocation holds.
-    fn arith(&self) -> Option<ConstVal> {
+    pub(super) fn arith(&self) -> Option<ConstVal> {
         match self.reloc {
             InitElemReloc::None => Some(ConstVal::Int {
                 val: self.value,
@@ -1639,6 +1639,7 @@ impl Compiler {
     /// offset accumulates the array-index strides and field offsets.
     pub(super) fn parse_const_address(&mut self) -> Result<Option<ConstAddress>, C5Error> {
         let snap = self.lex.snapshot();
+        let snap_start = self.lex.tok_start();
         // The speculative scan may lex a string literal (whose bytes are
         // appended to the data segment) before deciding this is not an
         // address constant; the lexer snapshot does not cover the data
@@ -1741,15 +1742,13 @@ impl Compiler {
                 break;
             }
         }
-        if self.lex.tk != Token::Id {
+        if self.lex.tk != Token::Id || self.symbols[self.lex.curr_id_idx].class != Token::Glo as i64
+        {
+            self.address_probe_miss = Some((snap_start, self.lex.tok_start()));
             self.rewind_speculation(snap, data_snap);
             return Ok(None);
         }
         let sym_idx = self.lex.curr_id_idx;
-        if self.symbols[sym_idx].class != Token::Glo as i64 {
-            self.rewind_speculation(snap, data_snap);
-            return Ok(None);
-        }
         let mut off = self.symbols[sym_idx].val;
         let mut cur_ty = self.symbols[sym_idx].type_;
         let base_zero_len = self.symbols[sym_idx].is_zero_len_array;
@@ -2116,7 +2115,13 @@ impl Compiler {
         // `g.array_field`, `(&buf[i])->field`. Takes priority over the
         // integer / `&global` leaves below, which only handle a whole
         // symbol with no member or index chain.
-        if self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(' {
+        let at = self.lex.tok_start();
+        let known_miss = self
+            .address_probe_miss
+            .is_some_and(|(lo, hi)| lo <= at && at < hi);
+        if (self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(')
+            && !known_miss
+        {
             let snap = self.lex.snapshot();
             // A `:` or `)` terminator appears when this value is a
             // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
@@ -2332,17 +2337,21 @@ impl Compiler {
             }
             return Ok(leaf);
         }
-        // A parenthesised relocation-bearing leaf -- `(func)`,
-        // `(&global)`, possibly multiply parenthesised, as produced
-        // by the `(method_fn)(((void(*)(void))((fn))))` method-table
-        // idiom. Recurse on the inner value and consume the matching
-        // `)` when it carries a relocation; a parenthesised arithmetic
-        // constant rewinds and falls through to the folders below,
-        // which must start outside the parens to absorb trailing
-        // operators.
+        // The inner value, recursively: a relocation-bearing leaf --
+        // `(func)`, `(&global)`, possibly multiply parenthesised, as
+        // produced by the `(method_fn)(((void(*)(void))((fn))))`
+        // method-table idiom -- or an arithmetic constant, which seeds
+        // the operator chain past the `)`.
         {
             let inner_snap = self.lex.snapshot();
             let leaf = self.parse_constant_init_value()?;
+            if self.lex.tk == ')'
+                && let Some(seed) = leaf.arith()
+            {
+                self.next()?; // consume the matching `)`
+                let v = self.parse_const_expr_cond_from(seed)?;
+                return self.init_scalar_of(v);
+            }
             if !matches!(leaf.reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                 && self.lex.tk == ')'
             {

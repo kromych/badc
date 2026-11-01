@@ -395,6 +395,7 @@ impl Compiler {
         // `+ n` (6.5.6p8). Anything else rewinds to the arithmetic paths
         // below. Thread storage duration takes the same forms (6.7.8p4)
         // with the relocation on the initialization template.
+        let mut arithmetic = false;
         {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
@@ -419,12 +420,18 @@ impl Compiler {
                     }
                     return Ok(());
                 }
-                _ => self.restore_init_checkpoint(cp),
+                Ok(leaf) => {
+                    arithmetic = leaf.arith().is_some() && self.at_initializer_end();
+                    self.restore_init_checkpoint(cp);
+                }
+                Err(_) => self.restore_init_checkpoint(cp),
             }
         }
         // A leading `(` is a cast prefix, a compound literal or a
-        // parenthesized constant expression.
+        // parenthesized constant expression; an arithmetic one takes the
+        // scalar tail.
         if self.lex.tk == '('
+            && !arithmetic
             && self.write_global_paren_initializer(
                 var_ty,
                 var_offset,

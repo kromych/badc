@@ -43,6 +43,8 @@ mod value_builtin;
 mod vla_bound;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
+#[cfg(test)]
+pub(crate) use emit::TOKENS_ADVANCED;
 #[cfg(all(test, not(debug_assertions)))]
 pub(crate) use initializer::INIT_BOOKKEEPING;
 pub(crate) use initializer::PendingLabelReloc;
@@ -2016,6 +2018,11 @@ pub struct Compiler {
     /// the folding contexts raise this depth.
     const_object_fold: u32,
 
+    /// The source span, from its first token to its leaf, of the last
+    /// address-constant probe that failed at the leaf: a probe started
+    /// inside it reaches the same leaf and fails the same way.
+    address_probe_miss: Option<(usize, usize)>,
+
     /// Nesting depth of initializers for an object with static storage
     /// duration declared inside a function body. C99 6.7.8p4 requires
     /// those to be constant expressions; an automatic object's
@@ -3057,6 +3064,7 @@ impl Compiler {
             unprototyped_lists: Vec::new(),
             file_scope_fn_decls: hashbrown::HashMap::new(),
             const_object_fold: 0,
+            address_probe_miss: None,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,

@@ -2138,7 +2138,7 @@ impl Preprocessor {
         body: &str,
         site: Site<'_>,
     ) {
-        if self.include_stack.last().is_some_and(|f| !f.user()) {
+        if self.in_system_header() {
             return;
         }
         let key = ident::key(name);
@@ -2158,6 +2158,12 @@ impl Preprocessor {
         if !same {
             self.warn(MACRO_REDEFINED, site, format!("`{name}` redefined"));
         }
+    }
+
+    /// Whether the line being read belongs to a system header, where gcc
+    /// and clang suppress their warnings.
+    pub(super) fn in_system_header(&self) -> bool {
+        self.include_stack.last().is_some_and(|f| !f.user())
     }
 
     /// Remove a macro definition of either kind.
@@ -2216,6 +2222,7 @@ pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
 pub(crate) const DATE_TIME: Code = Code::new(1008);
 pub(crate) const UNDEF: Code = Code::new(1009);
 pub(crate) const MACRO_REDEFINED: Code = Code::new(1015);
+pub(crate) const EXPANSION_TO_DEFINED: Code = Code::new(1016);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the

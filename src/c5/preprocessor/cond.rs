@@ -12,33 +12,22 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 impl Preprocessor {
-    /// Pre-pass for `#if` evaluation: protect every `defined(NAME)`
-    /// (and `defined NAME`) by replacing it with `1` or `0` *before*
-    /// macro substitution. Otherwise `substitute` would expand the
-    /// argument and lose the original name. Returns a fully
-    /// macro-substituted string suitable for the `#if` expression
-    /// parser.
+    /// The `#if` expression `expr` macro-substituted for the expression
+    /// parser. The `__has_*` operators take an unexpanded operand, so
+    /// they resolve before substitution: `substitute` would expand a name
+    /// away, and for `__has_include` (C23 6.10.1) it would insert re-lex
+    /// separators into the header name. A `defined` operand passes
+    /// through the substitution unexpanded for the parser.
     pub(super) fn expand_for_if(&self, expr: &str, line_no: usize, filename: &str) -> String {
         let out = scan_operators(expr, |s, i, out| {
-            // `defined(NAME)` / `defined NAME` (C99 6.10.1p1) and the
-            // `__has_*` operators take an unexpanded operand, so they
-            // resolve before substitution: `substitute` would expand a
-            // name away, and for `__has_include` (C23 6.10.1) it would
-            // insert re-lex separators into the header name.
-            let dollar = self.dollar();
-            if let Some((name, next)) = operator_operand(s, i, "defined", Parens::Optional, dollar)
-            {
-                out.push_str(if self.is_defined_name(name) { "1" } else { "0" });
-                return Some(next);
-            }
-            resolve_has_operator(s, i, self.target, dollar, out)
+            resolve_has_operator(s, i, self.target, self.dollar(), out)
                 .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
         });
         // Expand the remaining identifiers, then strip comments from the
         // result: driver-predefined bodies never went through phase 3
         // and can carry comments the expression tokenizer would trip on.
         // `strip_c_comments` keeps string and char literals intact.
-        let substituted = self.substitute(&out, "<#if>", line_no);
+        let substituted = self.substitute_condition(&out, filename, line_no);
         // Resolve any `__has_builtin` / `__has_attribute` that a macro
         // alias expanded into; the pre-pass above handled the literal ones.
         replace_has_operators(&strip_c_comments(&substituted), self.target, self.dollar())
@@ -115,9 +104,8 @@ impl Preprocessor {
         // function-like macros (`__has_attribute(x)`) and chained
         // object-like macros (a config-version constant defined
         // via several layers of `#define`) expand before the
-        // parser sees them. `defined(X)` is protected by a
-        // pre-pass that converts it to a literal 0/1 since
-        // substitute would otherwise expand X away.
+        // parser sees them; the substitution leaves a `defined`
+        // operand as written.
         let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
         let mut p = IfExprParser::new(&prepared, self, filename, line_no);
@@ -1179,15 +1167,6 @@ fn scan_operators(
     out
 }
 
-/// Whether the operator's identifier operand must be parenthesised.
-/// `defined` accepts both forms (C99 6.10.1p1); `__has_builtin` and
-/// `__has_attribute` require the parentheses.
-#[derive(Clone, Copy, PartialEq)]
-enum Parens {
-    Required,
-    Optional,
-}
-
 /// Index just past `kw` when it sits at `at` as a whole preprocessing
 /// token (C99 6.10), else `None`.
 fn keyword_end(bytes: &[u8], at: usize, kw: &str, dollar: Dollar) -> Option<usize> {
@@ -1210,42 +1189,29 @@ fn skip_ws(bytes: &[u8], mut from: usize) -> usize {
 
 /// Parse `kw ( NAME )` at `at`: the keyword, optional white space, the
 /// operand, and the closing `)`. Returns the operand and the index just
-/// past the call. `Parens::Optional` also accepts the bare `kw NAME`
-/// form and tolerates a missing `)`.
+/// past the call.
 fn operator_operand<'a>(
     s: &'a str,
     at: usize,
     kw: &str,
-    parens: Parens,
     dollar: Dollar,
 ) -> Option<(&'a str, usize)> {
     let bytes = s.as_bytes();
     let after = keyword_end(bytes, at, kw, dollar)?;
     let skip_ws = |j: usize| skip_ws(bytes, j);
     let mut j = skip_ws(after);
-    let open = bytes.get(j) == Some(&b'(');
-    if open {
-        j = skip_ws(j + 1);
-    } else if parens == Parens::Required {
+    if bytes.get(j) != Some(&b'(') {
         return None;
     }
+    j = skip_ws(j + 1);
     let name_start = j;
     j += ident::ident_len(bytes, j, dollar);
     let name = &s[name_start..j];
     if name.is_empty() {
         return None;
     }
-    if open {
-        j = skip_ws(j);
-        match bytes.get(j) {
-            Some(&b')') => j += 1,
-            // A required-paren operator with no `)` is not a call; the
-            // optional-paren form tolerates the omission.
-            _ if parens == Parens::Required => return None,
-            _ => {}
-        }
-    }
-    Some((name, j))
+    j = skip_ws(j);
+    (bytes.get(j) == Some(&b')')).then_some((name, j + 1))
 }
 
 /// Match `kw ( operand )` at `at`, the operand running to the balancing
@@ -1305,7 +1271,7 @@ fn resolve_has_operator(
     out: &mut String,
 ) -> Option<usize> {
     for (op, is_known) in HAS_OPERATORS {
-        if let Some((name, next)) = operator_operand(s, i, op, Parens::Required, dollar) {
+        if let Some((name, next)) = operator_operand(s, i, op, dollar) {
             out.push_str(if is_known(name, target) { "1" } else { "0" });
             return Some(next);
         }

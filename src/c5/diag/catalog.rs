@@ -98,6 +98,9 @@ catalog! {
     1015, "macro-redefined", ["C4005"], Warning, Controllable,
         [DEFAULT], Live,
         "a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old";
+    1016, "expansion-to-defined", [], Ignore, Controllable,
+        [EXTRA, PEDANTIC], Live,
+        "a `defined` in an `#if` expression that a macro replacement produced (C99 6.10.1p4 leaves it undefined), outside a system header; its operand is taken as written";
     2001, "unused-variable", ["C4101", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";

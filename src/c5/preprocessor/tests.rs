@@ -2152,6 +2152,98 @@ fn defined_form_works_in_if() {
 }
 
 #[test]
+fn a_defined_a_replacement_produces_takes_its_operand_as_written() {
+    // C99 6.10.1p4 leaves it undefined; gcc and clang test the operand
+    // as the rescan meets it, pasted or not, from the replacement or from
+    // the source after it. A parameter's argument is expanded before it
+    // is substituted (6.10.3.1), so its operand is the expansion.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define PROLOG(name) (!defined(DONE_ ## name) && !defined DONE_ ## name)\n\
+             #define DONE_foo\n\
+             #define ALIAS NOT_DEFINED\n\
+             #define IS_DEF(x) defined(x)\n\
+             #define D defined\n\
+             #define BOTH defined(ALIAS) && defined ALIAS\n\
+             #define OUTER BOTH\n\
+             #if PROLOG(foo)\n\
+             foo_wrong;\n\
+             #endif\n\
+             #if PROLOG(bar)\n\
+             bar_right;\n\
+             #endif\n\
+             #if IS_DEF(ALIAS)\n\
+             argument_wrong;\n\
+             #endif\n\
+             #if D(ALIAS) && D ALIAS && OUTER\n\
+             produced_right;\n\
+             #endif\n\
+             #if defined ALIAS && defined(OUTER)\n\
+             written_right;\n\
+             #endif\n",
+        )
+        .expect("preprocessor failed");
+    for (arm, taken) in [
+        ("foo_wrong", false),
+        ("bar_right", true),
+        ("argument_wrong", false),
+        ("produced_right", true),
+        ("written_right", true),
+    ] {
+        assert_eq!(out.contains(arm), taken, "{arm}: {out:?}");
+    }
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_defined_inside_a_macro_argument_takes_the_expanded_operand() {
+    // The argument is expanded before substitution as any other, so a
+    // `defined` there meets the operand's expansion, as gcc and clang
+    // have it: an alias of an undefined name tests false, a name defined
+    // as a number leaves no identifier.
+    let src = "#define F(x) x\n\
+               #define ALIAS NOT_DEFINED\n\
+               #if F(defined(ALIAS))\n\
+               alias_wrong;\n\
+               #endif\n";
+    assert!(!process(src).contains("alias_wrong"));
+    let err = process_err("#define F(x) x\n#define ONE 1\n#if F(defined(ONE))\n#endif\n");
+    assert!(err.contains("identifier expected after `defined`"), "{err}");
+}
+
+#[test]
+fn a_produced_defined_is_reported_under_wextra_outside_a_system_header() {
+    // gcc puts -Wexpansion-to-defined under -Wextra and -Wpedantic, and
+    // reports nothing of a system header.
+    let text = "#define P(n) defined(D_ ## n)\n#if P(x)\n#endif\n#if defined(D_x)\n#endif\n";
+    let dir = std::env::temp_dir().join(format!("badc_pp_produced_defined_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("produced_defined.h");
+    std::fs::write(&hdr, text).unwrap();
+    let run = |src: &str, extra: bool| {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_isystem_path(dir.to_str().unwrap());
+        if extra {
+            let mut config = Config::new();
+            config.enable_group(crate::c5::diag::Groups::EXTRA);
+            pp.sink.set_config(config);
+        }
+        pp.process(src).expect("preprocessor failed");
+        codes(&pp)
+    };
+    assert_eq!(run(text, false), vec![]);
+    assert_eq!(run(text, true), vec![EXPANSION_TO_DEFINED]);
+    assert_eq!(run("#include <produced_defined.h>\n", true), vec![]);
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
+}
+
+#[test]
 fn wide_char_constant_in_if() {
     // C11 6.4.4.4: a character constant in a `#if` controlling
     // expression may carry an `L` / `u` / `U` encoding prefix.
@@ -5272,6 +5364,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         DATE_TIME,
         UNDEF,
         super::MACRO_REDEFINED,
+        super::EXPANSION_TO_DEFINED,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {

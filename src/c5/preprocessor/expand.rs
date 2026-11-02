@@ -219,10 +219,23 @@ struct Exp<'a> {
     /// it, not from a replacement: a line joined for an invocation spans
     /// several source lines.
     src_pos: u32,
+    /// The line is an `#if` / `#elif` expression, where `defined` is an
+    /// operator (C99 6.10.1p1).
+    condition: bool,
 }
 
 /// Arena id of the line [`Exp`] substitutes, the first buffer it adds.
 const LINE_BUF: u32 = 0;
+
+/// What a substituted line is: program text, a header name, whose
+/// spellings join as the source spaced them, or an `#if` / `#elif`
+/// expression.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LineUse {
+    Text,
+    HeaderName,
+    Condition,
+}
 
 /// How the rescan of a line ends: complete, or at an invocation the
 /// following lines may supply -- a function-like macro name nothing
@@ -240,6 +253,7 @@ impl<'a> Exp<'a> {
         filename: &'a str,
         line_no: usize,
         ar: &'a mut ExpScratch,
+        condition: bool,
     ) -> Self {
         ar.bufs.clear();
         ar.hs_spans.clear();
@@ -251,6 +265,7 @@ impl<'a> Exp<'a> {
             ar,
             tail: Tail::Complete,
             src_pos: 0,
+            condition,
         }
     }
 
@@ -678,6 +693,8 @@ impl<'a> Exp<'a> {
         out.reserve(rest.len());
         // `rest[replaced..]` holds the replacements pushed for rescanning.
         let mut replaced = usize::MAX;
+        // Tokens of a `defined` operand still to pass through unexpanded.
+        let mut operand = 0usize;
         while let Some(tok) = rest.pop() {
             if rest.len() < replaced {
                 replaced = usize::MAX;
@@ -685,7 +702,20 @@ impl<'a> Exp<'a> {
                     self.src_pos = tok.start;
                 }
             }
+            if operand > 0 {
+                operand -= 1;
+                out.push(tok);
+                continue;
+            }
             if tok.kind != TokKind::Ident {
+                out.push(tok);
+                continue;
+            }
+            if self.condition && depth == 0 && self.text(tok) == "defined" {
+                operand = self.defined_operand_len(&rest);
+                if operand > 0 && replaced != usize::MAX {
+                    self.note_produced_defined();
+                }
                 out.push(tok);
                 continue;
             }
@@ -772,6 +802,41 @@ impl<'a> Exp<'a> {
         }
         self.put_vec(rest);
         out
+    }
+
+    /// How many of the next tokens form the operand, `NAME` or `( NAME )`,
+    /// of a `defined` the outermost scan of an `#if` expression met. They
+    /// pass through unexpanded, also when a replacement produced the
+    /// `defined`, which C99 6.10.1p4 leaves undefined and gcc and clang
+    /// read so; a macro argument's own scan expands them, as theirs does.
+    /// 0 when no identifier follows.
+    fn defined_operand_len(&self, rest: &[Tok]) -> usize {
+        let at = |k: usize| rest.len().checked_sub(k).map(|i| rest[i]);
+        let paren = at(1).is_some_and(|t| self.is_punct(t, "("));
+        if !paren {
+            return usize::from(at(1).is_some_and(|t| t.kind == TokKind::Ident));
+        }
+        if !at(2).is_some_and(|t| t.kind == TokKind::Ident) {
+            return 0;
+        }
+        if at(3).is_some_and(|t| self.is_punct(t, ")")) {
+            3
+        } else {
+            2
+        }
+    }
+
+    /// `-Wexpansion-to-defined`, which gcc and clang raise outside a
+    /// system header for a `defined` a replacement produced.
+    fn note_produced_defined(&self) {
+        if !self.pp.in_system_header() {
+            let text = "`defined` produced by macro replacement; its behavior is \
+                        undefined (C99 6.10.1p4)"
+                .to_string();
+            let line = self.src_line();
+            self.pp
+                .park_warning(super::EXPANSION_TO_DEFINED, self.filename, line, text);
+        }
     }
 
     /// C99 6.10.8 dynamic predefines (plus the `__COUNTER__`
@@ -1195,7 +1260,20 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, true).0
+        self.substitute_serialized(line, filename, line_no, LineUse::Text)
+            .0
+    }
+
+    /// [`Self::substitute`] for an `#if` / `#elif` expression, whose
+    /// `defined` operands pass through unexpanded.
+    pub(super) fn substitute_condition<'l>(
+        &self,
+        line: &'l str,
+        filename: &str,
+        line_no: usize,
+    ) -> Cow<'l, str> {
+        self.substitute_serialized(line, filename, line_no, LineUse::Condition)
+            .0
     }
 
     /// [`Self::substitute`] for a content line, and how its rescan ended:
@@ -1208,7 +1286,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> (Cow<'l, str>, Tail) {
-        self.substitute_serialized(line, filename, line_no, true)
+        self.substitute_serialized(line, filename, line_no, LineUse::Text)
     }
 
     /// [`Self::substitute`] for a header-name operand (`#include` /
@@ -1224,7 +1302,8 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, false).0
+        self.substitute_serialized(line, filename, line_no, LineUse::HeaderName)
+            .0
     }
 
     fn substitute_serialized<'l>(
@@ -1232,13 +1311,20 @@ impl Preprocessor {
         line: &'l str,
         filename: &str,
         line_no: usize,
-        relex_safe: bool,
+        what: LineUse,
     ) -> (Cow<'l, str>, Tail) {
         if !self.line_mentions_macro(line) {
             return (Cow::Borrowed(line), Tail::Complete);
         }
+        let relex_safe = what != LineUse::HeaderName;
         let mut scratch = self.exp_scratch.borrow_mut();
-        let mut ex = Exp::new(self, filename, line_no, &mut scratch);
+        let mut ex = Exp::new(
+            self,
+            filename,
+            line_no,
+            &mut scratch,
+            what == LineUse::Condition,
+        );
         let bid = ex.add_buf(Rc::from(line));
         debug_assert_eq!(bid, LINE_BUF);
         let mut toks = ex.take_vec();

@@ -23,12 +23,11 @@ typedef char __v16qi __attribute__((__vector_size__(16)));
 typedef double __v2df __attribute__((__vector_size__(16)));
 
 /* The `_u` types are what an unaligned access dereferences: the same
-** width with no alignment requirement. The 8-byte one carries the
-** quadword transfers, which move half a vector. */
+** width with no alignment requirement. <mmintrin.h>'s 8-byte one carries
+** the quadword transfers, which move half a vector. */
 typedef long long __m128i_u
     __attribute__((__vector_size__(16), __may_alias__, __aligned__(1)));
 typedef double __m128d_u __attribute__((__vector_size__(16), __may_alias__, __aligned__(1)));
-typedef long long __m64_u __attribute__((__may_alias__, __aligned__(1)));
 
 /* Composition over the vector extension, as gcc does. `_mm_set_*` takes
 ** its lanes from the highest down, `_mm_setr_*` from lane zero up; the
@@ -139,11 +138,11 @@ static inline void _mm_storeu_si128(__m128i *__P, __m128i __B) {
 }
 
 static inline __m128i _mm_loadl_epi64(__m128i const *__P) {
-    return (__m128i)(__v2di){*(__m64_u const *)__P, 0};
+    return (__m128i)(__v2di){(long long)*(__m64_u const *)__P, 0};
 }
 
 static inline void _mm_storel_epi64(__m128i *__P, __m128i __B) {
-    *(__m64_u *)__P = ((__v2di)__B)[0];
+    *(__m64_u *)__P = (__m64)((__v2di)__B)[0];
 }
 
 /* Packed integer arithmetic. */

@@ -392,6 +392,45 @@ fn the_interpreter_runs_the_builtins() {
     );
 }
 
+/// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
+/// operation the result the SDM defines for its instruction, saturation,
+/// out-of-range shift counts and the pair-sum wrap included, as the
+/// interpreter runs them on any host; the `mmx_sse3_and_mm_malloc_intrinsics`
+/// fixture runs them natively with EMMS, MXCSR and the allocator.
+#[test]
+fn mmx_and_sse3_operations_follow_the_sdm() {
+    let src = "#include <pmmintrin.h>\n\
+        #define Q(m) ((unsigned long long)_mm_cvtm64_si64(m))\n\
+        int main(void) {\n\
+            if (Q(_mm_packs_pi16(_mm_setr_pi16(300, -300, 5, -5), \
+                                 _mm_setr_pi16(127, -128, 32767, -32768))) != 0x807F807FFB05807FULL) return 1;\n\
+            if (Q(_mm_packs_pu16(_mm_setr_pi16(300, -300, 5, 255), _mm_setr_pi16(256, 0, 128, -1))) \
+                != 0x008000FFFF0500FFULL) return 2;\n\
+            if (Q(_mm_unpackhi_pi8(_mm_setr_pi8(1, 2, 3, 4, 5, 6, 7, 8), \
+                                   _mm_setr_pi8(11, 12, 13, 14, 15, 16, 17, 18))) != 0x1208110710060F05ULL) return 3;\n\
+            if (Q(_mm_adds_pi8(_mm_set1_pi8(100), _mm_set1_pi8(100))) != 0x7F7F7F7F7F7F7F7FULL) return 4;\n\
+            if (Q(_mm_subs_pu16(_mm_set1_pi16(5), _mm_set1_pi16(7))) != 0) return 5;\n\
+            if (Q(_mm_madd_pi16(_mm_set1_pi16(-32768), _mm_set1_pi16(-32768))) != 0x8000000080000000ULL) return 6;\n\
+            if (Q(_mm_mullo_pi16(_mm_set1_pi16(300), _mm_set1_pi16(300))) != 0x5F905F905F905F90ULL) return 7;\n\
+            if (Q(_mm_slli_pi16(_mm_set1_pi16(1), 16)) != 0 || \
+                Q(_mm_srai_pi16(_mm_set1_pi16(-32768), 20)) != 0xFFFFFFFFFFFFFFFFULL) return 8;\n\
+            if (Q(_mm_sll_si64(_mm_cvtsi64_m64(1), _mm_cvtsi64_m64(63))) != 0x8000000000000000ULL) return 9;\n\
+            if (Q(_mm_cmpgt_pi32(_mm_set_pi32(-1, 5), _mm_set_pi32(0, 4))) != 0x00000000FFFFFFFFULL) return 10;\n\
+            __m128 r = _mm_hadd_ps((__m128){1, 2, 3, 4}, (__m128){5, 6, 7, 8});\n\
+            if (r[0] != 3 || r[1] != 7 || r[2] != 11 || r[3] != 15) return 11;\n\
+            r = _mm_addsub_ps((__m128){1, 2, 3, 4}, (__m128){0.5f, 0.5f, 0.5f, 0.5f});\n\
+            if (r[0] != 0.5f || r[1] != 2.5f || r[2] != 2.5f || r[3] != 4.5f) return 12;\n\
+            __m128d d = _mm_hsub_pd((__m128d){1, 2}, (__m128d){3, 5});\n\
+            return d[0] == -1 && d[1] == -2 ? 0 : 13;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the MMX and SSE3 operations must give the instruction's result"
+    );
+}
+
 // ------------------------------------------------------------------
 // Operand rules.
 // ------------------------------------------------------------------

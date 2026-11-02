@@ -20,11 +20,14 @@
 arm_neon.h	y	y	-	-	y
 x86intrin.h	f	-	y	y	f
 immintrin.h	f	-	y	y	f
+mmintrin.h	f	-	y	y	f
 xmmintrin.h	f	-	y	y	f
 emmintrin.h	f	-	y	y	f
+pmmintrin.h	f	-	y	y	f
 tmmintrin.h	f	-	y	y	f
 smmintrin.h	f	-	y	y	f
 wmmintrin.h	f	-	y	y	f
+mm_malloc.h	y	-	y	y	y
 stdalign.h	y	y	y	y	y
 stddef.h	y	y	y	y	y
 stdint.h	y	y	y	y	y

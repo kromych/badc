@@ -54,6 +54,9 @@ pub(crate) enum Op {
     Assume,
     /// `__noop(...)`: the arguments are unevaluated and the value is 0.
     Noop,
+    /// `__va_start(&ap, ...)`: `__builtin_va_start` on the `va_list` the
+    /// first argument addresses; the rest are unevaluated.
+    VaStart,
     /// No instruction; no memory access moves across it.
     CompilerBarrier,
     ReturnAddress,
@@ -239,6 +242,7 @@ type Row = (&'static str, Arch, Op, Option<Scalar>, &'static [Param]);
 const FIXED: &[Row] = &[
     ("__assume", Both, Op::Assume, None, &[]),
     ("__noop", Both, Op::Noop, Some(Int), &[]),
+    ("__va_start", Both, Op::VaStart, None, &[]),
     ("_ReadWriteBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_ReadBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_WriteBarrier", Both, Op::CompilerBarrier, None, &[]),

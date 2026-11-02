@@ -341,6 +341,7 @@ impl<'a> Walker<'a> {
             }
             Op::Assume
             | Op::Noop
+            | Op::VaStart
             | Op::CompilerBarrier
             | Op::ReturnAddress
             | Op::AddressOfReturnAddress

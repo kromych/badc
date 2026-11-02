@@ -1532,6 +1532,31 @@ fn msvc_intrinsics_lower_at_the_call_site() {
     }
 }
 
+/// MSVC's `__va_start`, which <vadefs.h> calls for `va_start`, lowers as
+/// `__builtin_va_start` on both PE targets, as clang lowers it: x64's
+/// `(&ap, last)` and arm64's `(&ap, &last, size, alignment, &last)` leave no
+/// call for the link, and the arguments read back. Off the PE targets the
+/// name is an ordinary function.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_va_start_lowers_as_the_builtin() {
+    use crate::{CompileOptions, Target};
+    let unit = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
+                int f(int n, ...) { va_list ap; __va_start(&ap, n, 4, 4, &n);\n\
+                return *(int *)ap; }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let dump = super::perf_codegen::ssa_dump_for(unit, "f", t, false);
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_va_start.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+    let dump = super::perf_codegen::ssa_dump_for(unit, "f", Target::LinuxX64, false);
+    assert!(dump.contains("Call"), "LinuxX64:\n{dump}");
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {

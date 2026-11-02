@@ -99,6 +99,14 @@ const REFUSED: &[(&str, &str)] = &[
         "a `__try` statement in an `__except` filter",
     ),
     (
+        "void f(int n) { __try { g = ext(); } __except (((char *)__builtin_alloca(n))[0] = 1) { g = 2; } }",
+        "`_alloca` or a variable-length array cannot be used in a filter expression",
+    ),
+    (
+        "void f(int n) { __try { g = ext(); } __except (({ char v[n]; v[0] = 1; })) { g = 2; } }",
+        "`_alloca` or a variable-length array cannot be used in a filter expression",
+    ),
+    (
         "void f(void) { __try { g = ext(); } __except (f()) { g = 2; } }",
         "`void` expression used as a value",
     ),
@@ -204,42 +212,61 @@ fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
         .map(|e| e.to_string())
 }
 
-/// What the walker does not lower is a diagnostic, not a crash: a funclet
-/// inside a `__finally` block, and a funclet that allocates on its stack.
+/// Funclets inside a `__finally` block, and a `__finally` block that
+/// allocates on its stack, lower to objects on both PE targets.
 #[cfg(feature = "full")]
 #[test]
-fn the_forms_later_steps_lower_are_refused() {
+fn nested_and_allocating_funclets_compile() {
     let rows = [
-        (
-            "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __finally { g = 2; } } }",
-            "SEH filter or `__finally` inside a `__finally` block not implemented yet",
-        ),
-        (
-            "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __except (g) { g = 2; } } }",
-            "SEH filter or `__finally` inside a `__finally` block not implemented yet",
-        ),
-        (
-            "void f(int n) { __try { g = ext(); } __finally { char v[n]; v[0] = 1; g = v[0]; } }",
-            "stack allocation in a `__finally` block",
-        ),
-        (
-            "void f(int n) { __try { g = ext(); } __except (((char *)__builtin_alloca(n))[0] = 1) { g = 2; } }",
-            "stack allocation in an `__except` filter",
-        ),
-        (
-            "void f(int n) { __try { g = ext(); } __except (({ char v[n]; v[0] = 1; })) { g = 2; } }",
-            "stack allocation in an `__except` filter",
-        ),
+        "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __finally { g = 2; } } }",
+        "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __except (g) { g = 2; } } }",
+        "void f(int n) { __try { g = ext(); } __finally { char v[n]; v[0] = 1; g = v[0]; } }",
+        "void f(int n) { __try { g = ext(); } __finally { g = ((char *)__builtin_alloca(n))[0] = 1; } }",
     ];
     for target in WINDOWS {
         assert_eq!(object_error(CAUGHT, target), None, "{target:?}");
-        for (body, needle) in rows {
-            let msg = object_error(body, target).expect("refused");
-            assert!(msg.contains(needle), "{target:?} {body}: {msg}");
-            assert!(
-                !msg.contains("internal compiler error"),
-                "{target:?}: {msg}"
-            );
+        for body in rows {
+            assert_eq!(object_error(body, target), None, "{target:?} {body}");
+        }
+    }
+}
+
+/// A `__try` statement inside a `__finally` block gives the block's funclet
+/// a scope table of its own, whose row names a filter funclet of its own;
+/// on x64 the function's record carries UNW_FLAG_UHANDLER and the funclet's
+/// UNW_FLAG_EHANDLER.
+#[cfg(feature = "full")]
+#[test]
+fn a_try_inside_a_finally_block_gives_its_funclet_a_scope_table() {
+    let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
+        int f(int n) { int r = 0; __try { r = ext(); } __finally { char v[n]; v[0] = (char)r; \
+        __try { g = ext() + v[0]; } __except (g == r) { g = 2; } } return r; }\n\
+        int main(void) { return f(3); }\n";
+    for target in WINDOWS {
+        let program = Compiler::with_target(src.into(), target)
+            .compile()
+            .expect("front end");
+        let pe = super::link_executable_with_runtime(&program, target, crate::NativeOptions::new())
+            .expect("link");
+        let x64 = target == Target::WindowsX64;
+        let tables = pe_scope_tables(&pe, x64);
+        let starts = pe_function_starts(&pe, x64);
+        assert_eq!(tables.len(), 2, "{target:?}: {tables:?}");
+        let fin = (tables.iter())
+            .find_map(|(_, _, rows)| (rows[0][3] == 0).then_some(rows[0][2]))
+            .expect("finally row");
+        let (_, _, rows) = (tables.iter())
+            .find(|(begin, _, _)| *begin == fin)
+            .expect("the funclet's scope table");
+        let [_, _, filter, jump] = rows[0];
+        assert!(
+            starts.contains(&filter) && filter != fin && jump != 0,
+            "{target:?}: {tables:?}"
+        );
+        if x64 {
+            let mut flags = pe_handler_flags(&pe);
+            flags.sort();
+            assert_eq!(flags, [0x09, 0x11], "{target:?}");
         }
     }
 }

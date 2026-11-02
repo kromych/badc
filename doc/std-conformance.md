@@ -617,6 +617,16 @@ registers under either compiler.
   line only. `N` is a diagnostic's `B` code or one of the MSVC numbers
   carried as aliases. Plus the Borland / Watcom `#pragma warn -N` form.
 - `__pragma(...)`, the MSVC counterpart of `_Pragma`.
+- Structured exception handling on the PE targets: `__try` / `__except` /
+  `__finally`, `__leave` and the three intrinsics, with cl's placement rules.
+  A linked image carries scope tables for `__C_specific_handler`; a filter
+  other than the constant `EXCEPTION_EXECUTE_HANDLER` and a `__finally`
+  block are funclets reaching the function's objects through the frame the
+  handler passes them, nested in a `__finally` block to any depth. A
+  `__finally` block may allocate on its stack; a filter may not (cl's
+  C2494). `longjmp` unwinds, running the `__finally` blocks it passes. The
+  tables interoperate with cl's objects. Unlike cl for ARM64 (C2702), an
+  `__except` inside a `__finally` block is accepted there too.
 - `__COUNTER__` (also recognized by GCC), `__BASE_FILE__`.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is
@@ -713,13 +723,5 @@ registers under either compiler.
 
 1. Volatile-marked whole-aggregate copies (scalar volatile accesses are
    enforced; a volatile struct assignment's block copy is not marked).
-2. Structured exception handling on the PE targets: `__try` / `__except` /
-   `__finally`, `__leave` and the three intrinsics are lowered into scope
-   tables for `__C_specific_handler` in a linked image, a filter other than
-   the constant `EXCEPTION_EXECUTE_HANDLER` and a `__finally` block into
-   funclets that reach the function's objects through the frame the handler
-   passes them, as cl compiles them, and `longjmp` unwinds, running the
-   `__finally` blocks it passes; a filter or `__finally` inside a `__finally`
-   block and a funclet that allocates on the stack are refused at lowering,
-   as is a region under `--interp`, `--jit` or an image written without a
-   link.
+2. Structured exception handling under `--interp` and `--jit`, and in an
+   image written without a link: a `__try` region is refused there.

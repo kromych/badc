@@ -3,14 +3,15 @@
 //! whose exceptions enter the `__except` body at a block no edge reaches.
 //! A filter other than `EXCEPTION_EXECUTE_HANDLER` and a `__finally` block
 //! are funclets of their own, which reach the function's objects through
-//! the frame value the language handler passes. Every exit from a
+//! the frame value the language handler passes; inside a `__finally`
+//! block, through the frame values each enclosing funclet holds in turn.
+//! A `__finally` funclet allocates on its own stack. Every exit from a
 //! `__finally` region calls its funclet: normally with 0, for a jump with
 //! 1, from a block outside the region.
 
 use super::*;
 use crate::c5::ast::{SehFunclet, SehHandler};
-use crate::c5::codegen::ssa::build::ParentFrame;
-use crate::c5::ir::{Inst, ScopeHandler};
+use crate::c5::ir::ScopeHandler;
 
 /// An open `__try` body, `__except` body, filter or `__finally` block.
 pub(super) enum SehCtx {
@@ -180,15 +181,6 @@ impl<'a> Walker<'a> {
     ) -> Result<usize, WalkError> {
         let fun = self.fun;
         let pc = fun.funclet_pcs[f.index as usize];
-        if self
-            .seh
-            .iter()
-            .any(|c| matches!(c, SehCtx::Filter { .. } | SehCtx::Finally { .. }))
-        {
-            return Err(WalkError::Unsupported(
-                "SEH filter or `__finally` inside a `__finally` block not implemented yet",
-            ));
-        }
         if self.funclets.iter().any(|g| g.ent_pc == pc) {
             let kind = "a funclet lowered twice";
             return Err(match body {
@@ -196,12 +188,16 @@ impl<'a> Walker<'a> {
                 FuncletBody::Finally(id) => WalkError::InvalidStmt { id, kind },
             });
         }
+        // This function's over-aligned objects in scope, a funclet's own
+        // when this is one.
         let over_aligned = (fun.over_aligned_slots.iter())
             .map(|&(slot, _, _)| slot)
             .filter(|&slot| -slot <= f.slot_base)
+            .filter_map(|slot| b.own_slot(slot))
             .collect();
-        let frame = ParentFrame::new(fun.ent_pc, f.slot_base, b.funclet_slots(), over_aligned);
-        let (mut fb, first) = SsaBuilder::new_funclet(pc, frame, f.slot_end - f.slot_base);
+        let frame = b.child_frame(f.slot_base, over_aligned);
+        let own_slots = f.slot_end - f.slot_base;
+        let (mut fb, first) = SsaBuilder::new_funclet(pc, frame, own_slots, f.allocates);
         fb.set_end_pc(pc + 1);
         for &(base, cells) in &fun.multi_cell_slots {
             fb.add_multi_cell(base, cells);
@@ -234,7 +230,7 @@ impl<'a> Walker<'a> {
             loop_ctx: alloc::vec::Vec::new(),
             scopes: alloc::vec::Vec::new(),
             seh: alloc::vec![ctx],
-            dynamic_sp: false,
+            dynamic_sp: f.allocates,
             label_scopes: self.label_scopes.clone(),
             label_blocks: alloc::vec![None; self.ast.goto_targets.len()],
             cleanup_exits: alloc::collections::BTreeMap::new(),
@@ -264,27 +260,10 @@ impl<'a> Walker<'a> {
         }
         fb.close_dead_blocks();
         fb.place_region_members();
-        let (funclet, mut frame) = fb.finish_funclet();
-        let moves_sp = funclet.insts.iter().any(|i| {
-            matches!(i, Inst::Intrinsic { kind, .. }
-                if *kind == Intrinsic::Alloca as i64 || *kind == Intrinsic::AllocaSave as i64)
-        });
-        if moves_sp {
-            return Err(WalkError::Unsupported(match body {
-                FuncletBody::Filter(_) => "stack allocation in an `__except` filter",
-                FuncletBody::Finally(_) => "stack allocation in a `__finally` block",
-            }));
-        }
-        for slot in frame.slots.iter_mut() {
-            if frame.reached.remove(slot) {
-                let object = *slot;
-                *slot = b.alloc_synthetic_local();
-                let addr = b.local_addr(object);
-                b.store_local(*slot, addr, StoreKind::I64);
-            }
-        }
-        b.set_funclet_slots(frame.slots);
+        let (funclet, levels) = fb.finish_funclet();
+        b.adopt_child_frame(levels);
         self.funclets.push(funclet);
+        self.funclets.extend(w.funclets);
         Ok(pc)
     }
 

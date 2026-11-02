@@ -51,41 +51,45 @@ struct LocalCacheEntry {
     value: ValueId,
 }
 
-/// A filter funclet's view of the frame of the function it filters for.
-/// The slot numbers the walker passes are the parent's: the parameters and
-/// the slots up to `slot_base` name the parent's objects, reached through
-/// [`Inst::ParentLocalAddr`]; past it lie the filter's own temporaries.
+/// A funclet's view of the frames enclosing it: the function a filter or
+/// `__finally` block belongs to and, for a funclet inside a `__finally`
+/// block, that block's funclet first. The slot numbers the walker passes are
+/// the outermost function's: past `slot_base` lie the funclet's own
+/// temporaries, below it each level's objects, reached through
+/// [`Inst::ParentLocalAddr`] from the frame value the handler passes.
 pub(crate) struct ParentFrame {
-    pub parent: usize,
+    /// Innermost first.
+    pub levels: Vec<FrameLevel>,
     pub slot_base: i64,
-    /// The parent's `funclet_slots`, which this funclet extends.
-    pub slots: Vec<i64>,
-    /// Parent objects reached through a slot holding their address: an
-    /// entry of `slots` names the object until the parent replaces it with
-    /// that slot.
-    pub indirect: alloc::collections::BTreeSet<i64>,
-    /// The members of `indirect` this funclet reached.
-    pub reached: alloc::collections::BTreeSet<i64>,
     /// The slot holding the frame value the handler passes.
     frame_slot: i64,
 }
 
-impl ParentFrame {
-    pub(crate) fn new(
-        parent: usize,
-        slot_base: i64,
-        slots: Vec<i64>,
-        indirect: alloc::collections::BTreeSet<i64>,
-    ) -> Self {
-        Self {
-            parent,
-            slot_base,
-            slots,
-            indirect,
-            reached: alloc::collections::BTreeSet::new(),
-            frame_slot: 0,
-        }
-    }
+/// An enclosing function: the slots the parser numbered past `slot_base` are
+/// its own, as `off + slot_base`; the outermost one, at 0, also owns the
+/// parameters.
+pub(crate) struct FrameLevel {
+    pub parent: usize,
+    pub slot_base: i64,
+    /// Its `funclet_slots`, which the funclet extends.
+    pub slots: Vec<i64>,
+    /// Its objects reached through a slot holding their address: an entry
+    /// of `slots` names the object until the level replaces it with that
+    /// slot.
+    pub indirect: alloc::collections::BTreeSet<i64>,
+    /// The members of `indirect` reached.
+    pub reached: alloc::collections::BTreeSet<i64>,
+    /// The slot of its frame holding the next level's frame value, none for
+    /// the outermost.
+    pub frame_slot: Option<i64>,
+}
+
+/// `slot`'s index in `slots`, appended where absent.
+fn index_of(slots: &mut Vec<i64>, slot: i64) -> u32 {
+    (slots.iter().position(|&s| s == slot)).unwrap_or_else(|| {
+        slots.push(slot);
+        slots.len() - 1
+    }) as u32
 }
 
 /// Where a slot number the walker passes lies.
@@ -294,29 +298,37 @@ impl SsaBuilder {
         b
     }
 
-    /// A filter funclet at `ent_pc`, `long (EXCEPTION_POINTERS *, void
-    /// *frame)`, whose own slots start with the `own_slots` the parser
-    /// numbered past `frame.slot_base`. Returns the builder and the slot
-    /// holding the exception pointers.
-    pub(crate) fn new_funclet(ent_pc: usize, frame: ParentFrame, own_slots: i64) -> (Self, i64) {
+    /// A funclet at `ent_pc` with two parameters, a filter's `long
+    /// (EXCEPTION_POINTERS *, void *frame)` or a `__finally` block's `void
+    /// (unsigned char abnormal, void *frame)`, whose own slots start with the
+    /// `own_slots` the parser numbered past `frame.slot_base`; one that
+    /// `allocates` keeps its own alloca arena. Returns the builder and the
+    /// slot holding the first argument.
+    pub(crate) fn new_funclet(
+        ent_pc: usize,
+        frame: ParentFrame,
+        own_slots: i64,
+        allocates: bool,
+    ) -> (Self, i64) {
         let mut b = Self::new(ent_pc, 2, false);
         b.set_locals(own_slots);
         b.parent_frame = Some(frame);
-        b.alloca_init(0);
-        let pointers = b.alloc_synthetic_local();
+        let top = allocates.then(|| b.alloc_synthetic_local());
+        b.alloca_init(top.and_then(|t| b.own_slot(t)).unwrap_or(0));
+        let first = b.alloc_synthetic_local();
         let frame_slot = b.alloc_synthetic_local();
         let p = b.param_ref(0, LoadKind::I64);
-        b.store_local(pointers, p, StoreKind::I64);
+        b.store_local(first, p, StoreKind::I64);
         let e = b.param_ref(1, LoadKind::I64);
         b.store_local(frame_slot, e, StoreKind::I64);
         if let Some(f) = b.parent_frame.as_mut() {
             f.frame_slot = frame_slot;
         }
-        (b, pointers)
+        (b, first)
     }
 
     /// Where slot `off` lies: in a funclet, a parameter or a slot up to
-    /// `slot_base` is the parent's, a later one the funclet's own.
+    /// `slot_base` is an enclosing function's, a later one the funclet's own.
     fn frame_slot(&self, off: i64) -> FrameSlot {
         match &self.parent_frame {
             Some(p) if off >= 0 || -off <= p.slot_base => FrameSlot::Parent(off),
@@ -325,7 +337,7 @@ impl SsaBuilder {
         }
     }
 
-    /// The function's own slot `off` names, `None` for a parent's.
+    /// The function's own slot `off` names, `None` for an enclosing one's.
     pub(crate) fn own_slot(&self, off: i64) -> Option<i64> {
         match self.frame_slot(off) {
             FrameSlot::Own(o) => Some(o),
@@ -333,23 +345,41 @@ impl SsaBuilder {
         }
     }
 
-    /// The address of the parent's object at slot `off`, loaded from the slot
-    /// holding it for an object [`ParentFrame::indirect`] names.
+    /// The address of an enclosing function's object at slot `off`: from
+    /// the frame value the handler passes, through the frame value each
+    /// enclosing funclet holds out to the level that owns the slot, and
+    /// loaded from the slot holding it for an object
+    /// [`FrameLevel::indirect`] names.
     fn parent_addr(&mut self, off: i64) -> ValueId {
-        let p = (self.parent_frame.as_mut()).expect("a parent slot outside a filter funclet");
-        let indirect = p.indirect.contains(&off);
-        if indirect {
-            p.reached.insert(off);
+        let p = (self.parent_frame.as_mut()).expect("a parent slot outside a funclet");
+        let last = p.levels.len() - 1;
+        let k = (p.levels.iter())
+            .position(|l| off < 0 && -off > l.slot_base)
+            .unwrap_or(last);
+        let mut hops = Vec::with_capacity(k);
+        for level in &mut p.levels[..k] {
+            let held = level
+                .frame_slot
+                .expect("an enclosing funclet holds its frame value");
+            hops.push((level.parent, index_of(&mut level.slots, held)));
         }
-        let index = match p.slots.iter().position(|&s| s == off) {
-            Some(i) => i,
-            None => {
-                p.slots.push(off);
-                p.slots.len() - 1
-            }
-        } as u32;
-        let (parent, frame_slot) = (p.parent, p.frame_slot);
-        let establisher = self.load_local(frame_slot, LoadKind::I64);
+        let level = &mut p.levels[k];
+        let slot = off + level.slot_base;
+        let indirect = level.indirect.contains(&slot);
+        if indirect {
+            level.reached.insert(slot);
+        }
+        let (parent, index) = (level.parent, index_of(&mut level.slots, slot));
+        let frame_slot = p.frame_slot;
+        let mut establisher = self.load_local(frame_slot, LoadKind::I64);
+        for (parent, index) in hops {
+            let held = self.push(Inst::ParentLocalAddr {
+                establisher,
+                parent,
+                index,
+            });
+            establisher = self.load(held, LoadKind::I64);
+        }
         let addr = self.push(Inst::ParentLocalAddr {
             establisher,
             parent,
@@ -362,20 +392,67 @@ impl SsaBuilder {
         }
     }
 
-    /// The funclet and what it reached of the parent's frame.
-    pub(crate) fn finish_funclet(mut self) -> (FunctionSsa, ParentFrame) {
-        let frame = (self.parent_frame.take()).expect("a funclet builder");
-        (self.finish(), frame)
+    /// The frames a funclet of this function encloses in, its own slots
+    /// starting past `slot_base`: this function, whose objects `indirect`
+    /// names reached through a slot holding their address, then the levels
+    /// enclosing it, which the funclet takes until
+    /// [`Self::adopt_child_frame`] returns them.
+    pub(crate) fn child_frame(
+        &mut self,
+        slot_base: i64,
+        indirect: alloc::collections::BTreeSet<i64>,
+    ) -> ParentFrame {
+        let (base, held, outer) = match self.parent_frame.as_mut() {
+            Some(p) => (
+                p.slot_base,
+                Some(p.frame_slot + p.slot_base),
+                core::mem::take(&mut p.levels),
+            ),
+            None => (0, None, Vec::new()),
+        };
+        let mut levels = alloc::vec![FrameLevel {
+            parent: self.func.ent_pc,
+            slot_base: base,
+            slots: self.func.funclet_slots.clone(),
+            indirect,
+            reached: alloc::collections::BTreeSet::new(),
+            frame_slot: held,
+        }];
+        levels.extend(outer);
+        ParentFrame {
+            levels,
+            slot_base,
+            frame_slot: 0,
+        }
     }
 
-    /// The slots the function's filter funclets reach.
-    pub(crate) fn set_funclet_slots(&mut self, slots: Vec<i64>) {
+    /// Take back what a funclet reached of the frames [`Self::child_frame`]
+    /// gave it: this function's slots, each object reached through a slot
+    /// holding its address stored there here, ahead of the funclet's
+    /// region, and the levels enclosing it.
+    pub(crate) fn adopt_child_frame(&mut self, mut levels: Vec<FrameLevel>) {
+        let own = levels.remove(0);
+        let base = self.parent_frame.as_ref().map_or(0, |p| p.slot_base);
+        let mut slots = own.slots;
+        for slot in &mut slots {
+            if own.reached.contains(slot) {
+                let object = *slot - base;
+                let held = self.alloc_synthetic_local();
+                let addr = self.local_addr(object);
+                self.store_local(held, addr, StoreKind::I64);
+                *slot = held + base;
+            }
+        }
         self.func.funclet_slots = slots;
+        if let Some(p) = self.parent_frame.as_mut() {
+            p.levels = levels;
+        }
     }
 
-    /// [`FunctionSsa::funclet_slots`] so far.
-    pub(crate) fn funclet_slots(&self) -> Vec<i64> {
-        self.func.funclet_slots.clone()
+    /// The funclet and what it reached of the frames enclosing it.
+    pub(crate) fn finish_funclet(mut self) -> (FunctionSsa, Vec<FrameLevel>) {
+        let frame = (self.parent_frame.take()).expect("a funclet builder");
+        (self.finish(), frame.levels)
     }
 
     /// Record that the function reserves `n` natural-width local

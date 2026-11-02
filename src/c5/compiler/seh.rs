@@ -73,11 +73,19 @@ impl Compiler {
             self.enter_seh_part(SehPart::Filter);
             // The slots the filter reserves are its funclet's own.
             let (slot_base, outer_max) = (self.loc_offs, self.max_loc_offs);
+            let outer_alloca = core::mem::take(&mut self.uses_alloca_in_current_fn);
             self.max_loc_offs = slot_base;
             self.parse_full_expr()?;
             let slot_end = self.max_loc_offs;
             self.max_loc_offs = outer_max.max(slot_end);
             self.seh_contexts.pop();
+            // cl's C2494: the filter runs on the dispatcher's stack.
+            if core::mem::replace(&mut self.uses_alloca_in_current_fn, outer_alloca) {
+                return Err(self.compile_err(
+                    Code::INVALID_STATEMENT,
+                    "`_alloca` or a variable-length array cannot be used in a filter expression",
+                ));
+            }
             let filter = self.ast_acc;
             let what = "filter expression of `__except`";
             self.require_category(
@@ -101,13 +109,17 @@ impl Compiler {
             })
         } else if self.lex.tk == Token::SehFinally {
             self.next()?;
-            // The block is a funclet; the slots it reserves are its own.
+            // The block is a funclet; the slots it reserves and the stack it
+            // allocates are its own.
             let (slot_base, outer_max) = (self.loc_offs, self.max_loc_offs);
+            let outer_alloca = core::mem::take(&mut self.uses_alloca_in_current_fn);
             let mut funclet = self.seh_funclet(slot_base, slot_base);
             self.max_loc_offs = slot_base;
             let body = self.parse_seh_block(SehPart::Finally, None)?;
             funclet.slot_end = self.max_loc_offs;
             self.max_loc_offs = outer_max.max(funclet.slot_end);
+            funclet.allocates =
+                core::mem::replace(&mut self.uses_alloca_in_current_fn, outer_alloca);
             Some(SehHandler::Finally { body, funclet })
         } else {
             return Err(self.compile_err(
@@ -134,6 +146,7 @@ impl Compiler {
             index: self.seh_funclets - 1,
             slot_base,
             slot_end,
+            allocates: false,
         }
     }
 

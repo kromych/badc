@@ -682,12 +682,13 @@ pub(crate) enum SehHandler {
 /// The function a filter expression or a `__finally` block compiles to, as
 /// cl's `<f>$filt$<index>` or `<f>$fin$<index>`: the frame slots the parser
 /// numbered past `slot_base` while parsing it, up to `slot_end`, are its
-/// own.
+/// own, and it `allocates` on its stack (`alloca`, a VLA).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SehFunclet {
     pub index: u32,
     pub slot_base: i64,
     pub slot_end: i64,
+    pub allocates: bool,
 }
 
 /// Value source of one runtime-initializer element: an expression to

@@ -375,18 +375,6 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_wrename,       "_wrename")
 #pragma binding(msvcrt::_wremove,       "_wremove")
 #pragma binding(msvcrt::_wtoi,          "_wtoi")
-#pragma binding(msvcrt::wcslen,         "wcslen")
-#pragma binding(msvcrt::wcscmp,         "wcscmp")
-#pragma binding(msvcrt::wcsncmp,        "wcsncmp")
-#pragma binding(msvcrt::wcschr,         "wcschr")
-#pragma binding(msvcrt::wcsrchr,        "wcsrchr")
-#pragma binding(msvcrt::wcsstr,         "wcsstr")
-#pragma binding(msvcrt::wcscpy,         "wcscpy")
-#pragma binding(msvcrt::wcsncpy,        "wcsncpy")
-#pragma binding(msvcrt::wcscat,         "wcscat")
-#pragma binding(msvcrt::wcsncat,        "wcsncat")
-#pragma binding(msvcrt::wcsdup,         "_wcsdup")
-#pragma binding(msvcrt::_wcsicmp,       "_wcsicmp")
 // MSVC "safe" CRT variants (`_s` suffix). MSVC-only sources
 // reach for these under `_MSC_VER`; the `_s` form is the
 // bounded-buffer rewrite of the legacy entry point and behaves
@@ -626,18 +614,6 @@ int   _wchdir(unsigned short *path);
 int   _wrename(unsigned short *old, unsigned short *new_);
 int   _wremove(unsigned short *path);
 int   _wtoi(unsigned short *s);
-unsigned long long wcslen(const unsigned short *s);
-int   wcscmp(const unsigned short *a, const unsigned short *b);
-int   wcsncmp(const unsigned short *a, const unsigned short *b, unsigned long long n);
-unsigned short *wcschr(const unsigned short *s, unsigned short c);
-unsigned short *wcsrchr(const unsigned short *s, unsigned short c);
-unsigned short *wcsstr(const unsigned short *hay, const unsigned short *needle);
-unsigned short *wcscpy(unsigned short *dst, const unsigned short *src);
-unsigned short *wcsncpy(unsigned short *dst, const unsigned short *src, unsigned long long n);
-unsigned short *wcscat(unsigned short *dst, const unsigned short *src);
-unsigned short *wcsncat(unsigned short *dst, const unsigned short *src, unsigned long long n);
-unsigned short *wcsdup(const unsigned short *s);
-int   _wcsicmp(const unsigned short *a, const unsigned short *b);
 // The Windows SDK's prototypes: `errno_t` is `int`, and `time_t` the
 // 64-bit `long long` the CRT's `_*64_s` entries take.
 struct tm;

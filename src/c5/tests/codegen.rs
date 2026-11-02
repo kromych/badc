@@ -2068,6 +2068,152 @@ fn windows_tchar_bounds_checked_names_reach_msvcrt() {
     }
 }
 
+/// On the Windows targets `<string.h>` declares the wide-string functions the
+/// UCRT's declares through corecrt_wstring.h and vcruntime_string.h, with its
+/// prototypes, alone and beside `<wchar.h>`; each imports msvcrt.dll's entry
+/// point, the POSIX-style names the underscored one. The undeclared names
+/// take the hint of a header declaring them there.
+#[test]
+fn windows_string_h_declares_the_ucrt_wide_string_functions() {
+    const M: &str = "msvcrt.dll";
+    const S: &str = "size_t (*)(const wchar_t *, const wchar_t *)";
+    const CMP: &str = "int (*)(const wchar_t *, const wchar_t *)";
+    const NCMP: &str = "int (*)(const wchar_t *, const wchar_t *, size_t)";
+    const CMP_L: &str = "int (*)(const wchar_t *, const wchar_t *, _locale_t)";
+    const NCMP_L: &str = "int (*)(const wchar_t *, const wchar_t *, size_t, _locale_t)";
+    const CAT: &str = "wchar_t *(*)(wchar_t *, const wchar_t *)";
+    const NCAT: &str = "wchar_t *(*)(wchar_t *, const wchar_t *, size_t)";
+    const CAT_S: &str = "int (*)(wchar_t *, size_t, const wchar_t *)";
+    const NCAT_S: &str = "int (*)(wchar_t *, size_t, const wchar_t *, size_t)";
+    const FIND: &str = "wchar_t *(*)(const wchar_t *, const wchar_t *)";
+    const CHR: &str = "wchar_t *(*)(const wchar_t *, wchar_t)";
+    const TOK: &str = "wchar_t *(*)(wchar_t *, const wchar_t *, wchar_t **)";
+    const DUP: &str = "wchar_t *(*)(const wchar_t *)";
+    const MAP: &str = "wchar_t *(*)(wchar_t *)";
+    const MAP_L: &str = "wchar_t *(*)(wchar_t *, _locale_t)";
+    const MAP_S: &str = "int (*)(wchar_t *, size_t)";
+    const MAP_S_L: &str = "int (*)(wchar_t *, size_t, _locale_t)";
+    const XFRM: &str = "size_t (*)(wchar_t *, const wchar_t *, size_t)";
+    // (name, type, imported symbol)
+    const DECLS: &[(&str, &str, &str)] = &[
+        ("wcscat_s", CAT_S, "wcscat_s"),
+        ("wcscpy_s", CAT_S, "wcscpy_s"),
+        ("wcsncat_s", NCAT_S, "wcsncat_s"),
+        ("wcsncpy_s", NCAT_S, "wcsncpy_s"),
+        ("wcstok_s", TOK, "wcstok_s"),
+        ("_wcsdup", DUP, "_wcsdup"),
+        ("wcscat", CAT, "wcscat"),
+        ("wcscmp", CMP, "wcscmp"),
+        ("wcscpy", CAT, "wcscpy"),
+        ("wcscspn", S, "wcscspn"),
+        ("wcslen", "size_t (*)(const wchar_t *)", "wcslen"),
+        ("wcsnlen", "size_t (*)(const wchar_t *, size_t)", "wcsnlen"),
+        ("wcsncat", NCAT, "wcsncat"),
+        ("wcsncmp", NCMP, "wcsncmp"),
+        ("wcsncpy", NCAT, "wcsncpy"),
+        ("wcspbrk", FIND, "wcspbrk"),
+        ("wcsspn", S, "wcsspn"),
+        ("wcstok", TOK, "wcstok"),
+        ("_wcstok", CAT, "wcstok"),
+        ("_wcserror", "wchar_t *(*)(int)", "_wcserror"),
+        (
+            "_wcserror_s",
+            "int (*)(wchar_t *, size_t, int)",
+            "_wcserror_s",
+        ),
+        ("__wcserror", DUP, "__wcserror"),
+        ("__wcserror_s", CAT_S, "__wcserror_s"),
+        ("_wcsicmp", CMP, "_wcsicmp"),
+        ("_wcsicmp_l", CMP_L, "_wcsicmp_l"),
+        ("_wcsnicmp", NCMP, "_wcsnicmp"),
+        ("_wcsnicmp_l", NCMP_L, "_wcsnicmp_l"),
+        (
+            "_wcsnset_s",
+            "int (*)(wchar_t *, size_t, wchar_t, size_t)",
+            "_wcsnset_s",
+        ),
+        (
+            "_wcsnset",
+            "wchar_t *(*)(wchar_t *, wchar_t, size_t)",
+            "_wcsnset",
+        ),
+        ("_wcsrev", MAP, "_wcsrev"),
+        (
+            "_wcsset_s",
+            "int (*)(wchar_t *, size_t, wchar_t)",
+            "_wcsset_s",
+        ),
+        ("_wcsset", "wchar_t *(*)(wchar_t *, wchar_t)", "_wcsset"),
+        ("_wcslwr_s", MAP_S, "_wcslwr_s"),
+        ("_wcslwr", MAP, "_wcslwr"),
+        ("_wcslwr_s_l", MAP_S_L, "_wcslwr_s_l"),
+        ("_wcslwr_l", MAP_L, "_wcslwr_l"),
+        ("_wcsupr_s", MAP_S, "_wcsupr_s"),
+        ("_wcsupr", MAP, "_wcsupr"),
+        ("_wcsupr_s_l", MAP_S_L, "_wcsupr_s_l"),
+        ("_wcsupr_l", MAP_L, "_wcsupr_l"),
+        ("wcsxfrm", XFRM, "wcsxfrm"),
+        (
+            "_wcsxfrm_l",
+            "size_t (*)(wchar_t *, const wchar_t *, size_t, _locale_t)",
+            "_wcsxfrm_l",
+        ),
+        ("wcscoll", CMP, "wcscoll"),
+        ("_wcscoll_l", CMP_L, "_wcscoll_l"),
+        ("_wcsicoll", CMP, "_wcsicoll"),
+        ("_wcsicoll_l", CMP_L, "_wcsicoll_l"),
+        ("_wcsncoll", NCMP, "_wcsncoll"),
+        ("_wcsncoll_l", NCMP_L, "_wcsncoll_l"),
+        ("_wcsnicoll", NCMP, "_wcsnicoll"),
+        ("_wcsnicoll_l", NCMP_L, "_wcsnicoll_l"),
+        ("wcschr", CHR, "wcschr"),
+        ("wcsrchr", CHR, "wcsrchr"),
+        ("wcsstr", FIND, "wcsstr"),
+        ("wcsdup", DUP, "_wcsdup"),
+        ("wcswcs", FIND, "wcsstr"),
+        ("wcsicmp", CMP, "_wcsicmp"),
+        ("wcsnicmp", NCMP, "_wcsnicmp"),
+        (
+            "wcsnset",
+            "wchar_t *(*)(wchar_t *, wchar_t, size_t)",
+            "_wcsnset",
+        ),
+        ("wcsrev", MAP, "_wcsrev"),
+        ("wcsset", "wchar_t *(*)(wchar_t *, wchar_t)", "_wcsset"),
+        ("wcslwr", MAP, "_wcslwr"),
+        ("wcsupr", MAP, "_wcsupr"),
+        ("wcsicoll", CMP, "_wcsicoll"),
+    ];
+    let mut types = alloc::string::String::from(
+        "_Static_assert(_Generic(&wcsnlen_s, size_t (*)(const wchar_t *, size_t): 1, \
+         default: 0), \"wcsnlen_s\");\n",
+    );
+    for (name, ty, _) in DECLS {
+        types += &alloc::format!(
+            "_Static_assert(_Generic(&{name}, {ty}: 1, default: 0), \"{name}\");\n"
+        );
+    }
+    let imports: alloc::vec::Vec<_> = DECLS.iter().map(|&(n, _, s)| (n, s, M)).collect();
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <string.h>\n",
+            "#include <string.h>\n#include <wchar.h>\n",
+            "#include <wchar.h>\n#include <string.h>\n",
+        ] {
+            assert_windows_imports(target, &alloc::format!("{headers}{types}"), &imports);
+        }
+        for name in ["wcslen", "wcschr", "_wcsdup", "_wcsrev", "wcsicmp"] {
+            assert!(
+                matches!(
+                    crate::c5::headers::header_declaring(name, target),
+                    Some("string.h" | "wchar.h")
+                ),
+                "{target:?}: {name}"
+            );
+        }
+    }
+}
+
 /// C99 logb, lgamma, remquo and nexttoward in their three precisions import
 /// ucrtbase.dll's entry points (`long double` is `double` on Windows), and
 /// asctime msvcrt.dll's; asctime_r links from the C-library sources.

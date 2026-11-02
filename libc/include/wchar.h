@@ -353,9 +353,13 @@ errno_t _wsplitpath_s(const wchar_t *_FullPath, wchar_t *_Drive, size_t _DriveSi
 // mingw-w64 binds _wctime_s to _wctime64_s, time_t being 64-bit.
 #pragma binding(msvcrt::_wctime_s, "_wctime64_s")
 errno_t _wctime_s(wchar_t *_Buffer, size_t _SizeInWords, const __time64_t *_Time);
+// <string.h> defines it too.
+#ifndef __BADC_WCSNLEN_S
+#define __BADC_WCSNLEN_S
 static inline size_t wcsnlen_s(const wchar_t *s, size_t n) {
     return s ? wcsnlen(s, n) : 0;
 }
+#endif
 static inline wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n) {
     for (; n; --n, ++s)
         if (*s == c)

@@ -509,6 +509,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("forward_enum_tag_redeclaration.c", 0),
     ("seh_context_record.c", 0),
     ("unwind_restores_callee_saved.c", 0),
+    ("seh_except_constant_filter.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),

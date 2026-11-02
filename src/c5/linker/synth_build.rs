@@ -248,6 +248,14 @@ fn synth_program_and_build(
     };
     let build = Build {
         diagnostics: Vec::new(),
+        seh_rows: (merged.seh_rows.iter())
+            .map(|&[func, begin, end, target]| crate::c5::codegen::SehRow {
+                func,
+                begin,
+                end,
+                target,
+            })
+            .collect(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
         compact_unwind: merged.compact_unwind.clone(),
@@ -1868,6 +1876,7 @@ mod tests {
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
             early_returns: hashbrown::HashMap::new(),
+            seh_rows: alloc::vec::Vec::new(),
             local_funcs: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],

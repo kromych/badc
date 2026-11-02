@@ -146,7 +146,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("intarith", "linux-arm64", 0xae1f2f8b4773e0e4, 1336),
     ("intarith", "macos-arm64", 0xae1f2f8b4773e0e4, 1336),
     ("intarith", "win-x64", 0x7b683997e9f62653, 1152),
-    ("intarith", "win-arm64", 0xd915217711a96955, 1344),
+    ("intarith", "win-arm64", 0x0cd51d636784c519, 1360),
     ("fparith", "linux-x64", 0x40c635a94b23af7a, 1096),
     ("fparith", "linux-arm64", 0x64a91f538ce76acc, 1264),
     ("fparith", "macos-arm64", 0x64a91f538ce76acc, 1264),

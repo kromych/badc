@@ -141,6 +141,7 @@ fn compute_high_observed_through(
         match inst {
             Inst::Imm(_)
             | Inst::Undef
+            | Inst::ExceptionCode
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1092,6 +1093,8 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

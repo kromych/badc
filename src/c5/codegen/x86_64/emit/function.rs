@@ -326,6 +326,7 @@ pub(crate) fn emit_function(
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
+        seh_placed: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
     };
@@ -377,6 +378,9 @@ struct FnEmit<'a, 'b> {
     /// or, under `abs32_addrs`, the load's displacement field; each table is
     /// materialized into the read-only blob once the layout is final.
     jump_table_fixups: Vec<(usize, u32)>,
+    /// `(block, start)` of each block placed, in order, in a function with
+    /// a `__try` region.
+    seh_placed: Vec<(super::super::ir::BlockId, usize)>,
 }
 
 impl FnEmit<'_, '_> {
@@ -406,6 +410,16 @@ impl FnEmit<'_, '_> {
         );
         self.place_entry_params()?;
         let body = self.emit_body()?;
+        if func.has_seh() {
+            let rows = super::ssa::emit_common::seh_rows(
+                func,
+                self.start,
+                &self.seh_placed,
+                self.out.cx.code.len(),
+                &self.block_offsets,
+            );
+            self.out.cx.seh_rows.extend(rows);
+        }
         self.emit_early_return();
         self.patch_block_addrs()?;
         for r in &func.label_data_relocs {
@@ -586,6 +600,7 @@ impl FnEmit<'_, '_> {
         loop {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
+            self.seh_placed.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
                 if self.plan.is_skipped(block_idx) {
                     #[cfg(debug_assertions)]
@@ -593,6 +608,7 @@ impl FnEmit<'_, '_> {
                     continue;
                 }
                 if !self.plan.is_dead(block_idx) {
+                    self.place_in_seh_region(block_idx);
                     self.emit_block(block_idx)?;
                 }
             }
@@ -628,6 +644,26 @@ impl FnEmit<'_, '_> {
             self.branch_fixups.clear();
         }
         Ok(body)
+    }
+
+    /// Record where block `block_idx` starts for the scope table. Where the
+    /// region changes, a `nop` keeps the return address of a call ending
+    /// the previous block inside that block's region: the language handler
+    /// matches a frame's return address against the ranges.
+    fn place_in_seh_region(&mut self, block_idx: usize) {
+        let func = self.fcx.func;
+        if !func.has_seh() {
+            return;
+        }
+        let scope = func.seh_scope_of(block_idx as super::super::ir::BlockId);
+        if let Some(&(prev, _)) = self.seh_placed.last()
+            && func.seh_scope_of(prev) != scope
+        {
+            self.out.cx.code.push(0x90);
+        }
+        let at = self.out.cx.code.len();
+        self.seh_placed
+            .push((block_idx as super::super::ir::BlockId, at));
     }
 
     /// A block the plan leaves out writes nothing when lowered: its
@@ -669,6 +705,15 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
+        // A `__try` handler is entered with rsp where the exception left it.
+        if func.is_seh_target(block_idx as super::super::ir::BlockId) {
+            emit_lea_r_mem(
+                self.out.cx.code,
+                Reg::RSP,
+                Reg::RBP,
+                -(frame.frame_bytes as i32),
+            );
+        }
         super::ssa::emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,

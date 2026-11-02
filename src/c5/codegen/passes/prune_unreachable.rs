@@ -66,7 +66,10 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     let mut reachable = alloc::vec![false; n];
     let mut stack = alloc::vec![0 as BlockId];
     reachable[0] = true;
-    let mut succ: Vec<BlockId> = func.label_data_relocs.iter().map(|r| r.block).collect();
+    // A `__try` region's handler is entered by the exception dispatcher.
+    let mut succ: Vec<BlockId> = (func.label_data_relocs.iter().map(|r| r.block))
+        .chain(func.seh_scopes.iter().map(|s| s.target))
+        .collect();
     loop {
         for &s in &succ {
             if !reachable[s as usize] {

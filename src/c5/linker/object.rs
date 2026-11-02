@@ -1158,6 +1158,9 @@ pub struct NativeObject {
     /// Functions that return ahead of their frame (`NT_BADC_EARLY_RETURN`),
     /// each `(entry, frame path, early return)` offsets in this unit's `.text`.
     pub early_returns: Vec<(u64, u64, u64)>,
+    /// `__try` scope-table rows (`NT_BADC_SEH_ROW`), each `(function, begin,
+    /// end, handler)` offsets in this unit's `.text`.
+    pub seh_rows: Vec<[u64; 4]>,
     /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
     /// global definitions and states the binding in its symbol tables.
     pub unique: Vec<String>,
@@ -1422,6 +1425,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         copy_relocs: note.copy_relocs,
         prologue_ends: note.prologue_ends,
         early_returns: note.early_returns,
+        seh_rows: note.seh_rows,
         unique,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
@@ -2274,6 +2278,7 @@ struct BadcNote {
     elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
     prologue_ends: Vec<(u64, u64)>,
     early_returns: Vec<(u64, u64, u64)>,
+    seh_rows: Vec<[u64; 4]>,
     extern_data_names: Vec<String>,
 }
 
@@ -2444,6 +2449,15 @@ impl BadcNote {
                     self.early_returns
                         .push((word(c), word(c + 8), word(c + 16)));
                     c += 24;
+                }
+            }
+            14 => {
+                let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+                let mut c = cur;
+                while c + 32 <= desc_end {
+                    self.seh_rows
+                        .push([word(c), word(c + 8), word(c + 16), word(c + 24)]);
+                    c += 32;
                 }
             }
             _ => {}

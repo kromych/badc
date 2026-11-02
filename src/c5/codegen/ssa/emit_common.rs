@@ -69,6 +69,8 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
     /// The functions that return ahead of their frame.
     pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
+    /// The `__try` scope tables.
+    pub(crate) seh_rows: &'a mut alloc::vec::Vec<super::SehRow>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -1691,6 +1693,54 @@ pub(crate) fn record_block_src(
     }
 }
 
+/// The scope-table rows of `func`, whose function starts at `begin` and
+/// whose blocks were placed at `placed` (block, start), in order, up to
+/// `body_end`: per region, innermost first, each maximal run of code whose
+/// blocks lie in the region or in one nested in it.
+pub(crate) fn seh_rows(
+    func: &super::super::ir::FunctionSsa,
+    begin: usize,
+    placed: &[(super::super::ir::BlockId, usize)],
+    body_end: usize,
+    block_offsets: &[usize],
+) -> alloc::vec::Vec<super::SehRow> {
+    let scopes = &func.seh_scopes;
+    let chain = |mut s: Option<u32>| {
+        core::iter::from_fn(move || {
+            let at = s?;
+            s = scopes[at as usize].parent;
+            Some(at)
+        })
+    };
+    let mut order: alloc::vec::Vec<u32> = (0..scopes.len() as u32).collect();
+    order.sort_by_key(|&s| core::cmp::Reverse(chain(Some(s)).count()));
+    let mut rows = alloc::vec::Vec::new();
+    for s in order {
+        let target = block_offsets[scopes[s as usize].target as usize] as u32;
+        let mut run: Option<(usize, usize)> = None;
+        let mut flush = |run: Option<(usize, usize)>| {
+            if let Some((a, e)) = run.filter(|(a, e)| e > a) {
+                rows.push(super::SehRow {
+                    func: begin as u32,
+                    begin: a as u32,
+                    end: e as u32,
+                    target,
+                });
+            }
+        };
+        for (i, &(b, start)) in placed.iter().enumerate() {
+            let end = placed.get(i + 1).map_or(body_end, |p| p.1);
+            if chain(func.seh_scope_of(b)).any(|c| c == s) {
+                run = Some((run.map_or(start, |r| r.0), end));
+            } else {
+                flush(run.take());
+            }
+        }
+        flush(run);
+    }
+    rows
+}
+
 /// Record the byte offset of the first post-prologue instruction,
 /// keyed by the function's `ent_pc`. The DWARF CFI pass reads this
 /// to encode `DW_CFA_advance_loc <prologue bytes>` so the post-
@@ -1949,6 +1999,7 @@ pub(crate) struct LowerState {
     pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
     pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
+    pub(crate) seh_rows: alloc::vec::Vec<super::SehRow>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
@@ -1986,6 +2037,7 @@ impl LowerState {
             patchable_entries: alloc::vec::Vec::new(),
             mcount_sites: alloc::vec::Vec::new(),
             early_returns: alloc::vec::Vec::new(),
+            seh_rows: alloc::vec::Vec::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             ssa_line_rows: alloc::vec::Vec::new(),
@@ -2040,6 +2092,7 @@ impl LowerState {
                 region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
                 early_returns: &mut self.early_returns,
+                seh_rows: &mut self.seh_rows,
             },
             rodata: &mut self.rodata,
             asm_text_labels: &mut self.asm_text_labels,
@@ -2376,14 +2429,17 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // Vector slots become `V128` slot accesses, and inline-asm register
         // outputs into slots the statements' own values, for mem2reg to
         // promote.
+        // A function with a `__try` region keeps its locals in their slots,
+        // where the handler, entered with no edge from the region, reads
+        // the last value the region stored.
         pipeline.run("ssa::vector_slots::run", &mut ssa_funcs, |funcs| {
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 super::vector_slots::run(f);
                 super::asm_outputs::run(f);
             }
         });
         pipeline.run("ssa::mem2reg::run", &mut ssa_funcs, |funcs| {
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 let promoted = super::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
@@ -2526,7 +2582,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             } else {
                 Default::default()
             };
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 let budget = super::super::passes::sroa::Budget {
                     usable: usable_gpr,
                     caller: caller_gpr,
@@ -2838,7 +2894,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .iter_mut()
                 .map(|f| {
                     super::mem2reg::zero_read_undefs(f);
-                    if native.optimize {
+                    if native.optimize && !f.has_seh() {
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
@@ -3222,6 +3278,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         patchable_entries: st.patchable_entries,
         mcount_sites: st.mcount_sites,
         early_returns: st.early_returns,
+        seh_rows: st.seh_rows,
         func_names: st.func_names,
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,

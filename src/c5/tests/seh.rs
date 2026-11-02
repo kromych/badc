@@ -159,28 +159,171 @@ fn off_windows_the_seh_words_are_identifiers() {
     );
 }
 
-/// A unit the front end accepts reaches the walker, which refuses it with a
-/// diagnostic rather than a crash.
+const CAUGHT: &str = "int f(void) { int r = 0; __try { r = ext(); } __except (1) { r = (int)GetExceptionCode(); } return r; }";
+
+/// A program whose `main` calls [`CAUGHT`]'s function.
+#[cfg(feature = "full")]
+const PROGRAM: &str = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
+    int f(void) { int r = 0; __try { r = ext(); } __except (1) { r = (int)GetExceptionCode(); } return r; }\n\
+    int main(void) { return f(); }\n";
+
+/// The emit error for `body` as a relocatable object, else `None`.
+#[cfg(feature = "full")]
+fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
+    let program = Compiler::with_target(unit(body), target)
+        .compile()
+        .expect("front end");
+    let opts = crate::NativeOptions {
+        output_kind: crate::OutputKind::Relocatable,
+        ..crate::NativeOptions::new()
+    };
+    crate::emit_native_with_options(&program, target, opts)
+        .err()
+        .map(|e| e.to_string())
+}
+
+/// What the walker does not lower yet is a diagnostic, not a crash.
 #[cfg(feature = "full")]
 #[test]
-fn lowering_refuses_a_try_statement() {
-    let src = unit(
-        "int f(void) { int r = 0; __try { r = ext(); } __except (1) { r = (int)GetExceptionCode(); } return r; }",
-    );
+fn the_forms_later_steps_lower_are_refused() {
+    let rows = [
+        (
+            "void f(void) { __try { g = ext(); } __finally { g = 1; } }",
+            "SEH `__finally` lowering not implemented yet",
+        ),
+        (
+            "void f(void) { __try { g = ext(); } __except (g) { g = 2; } }",
+            "SEH non-constant filter not implemented yet",
+        ),
+        (
+            "void f(void) { __try { g = ext(); } __except (EXCEPTION_CONTINUE_EXECUTION) { g = 2; } }",
+            "SEH filter other than EXCEPTION_EXECUTE_HANDLER",
+        ),
+    ];
     for target in WINDOWS {
-        let program = Compiler::with_target(src.clone(), target)
+        assert_eq!(object_error(CAUGHT, target), None, "{target:?}");
+        for (body, needle) in rows {
+            let msg = object_error(body, target).expect("refused");
+            assert!(msg.contains(needle), "{target:?} {body}: {msg}");
+            assert!(
+                !msg.contains("internal compiler error"),
+                "{target:?}: {msg}"
+            );
+        }
+    }
+}
+
+/// An image written in one step has no stub for the language handler, and
+/// the interpreter has no exception dispatch: both refuse a region.
+#[cfg(feature = "full")]
+#[test]
+fn an_unlinked_image_and_the_interpreter_refuse_a_region() {
+    for target in WINDOWS {
+        let program = Compiler::with_target(PROGRAM.into(), target)
             .compile()
             .expect("front end");
-        let err = crate::emit_native_with_options(&program, target, crate::NativeOptions::new())
-            .expect_err("lowered a `__try` statement");
-        let msg = err.to_string();
+        let msg = crate::emit_native_with_options(&program, target, crate::NativeOptions::new())
+            .expect_err("wrote an image")
+            .to_string();
         assert!(
-            msg.contains("SEH lowering not implemented yet"),
+            msg.contains("compile with -c and link the object"),
             "{target:?}: {msg}"
         );
+        let msg = crate::Vm::new(program)
+            .run()
+            .expect_err("interpreted")
+            .to_string();
         assert!(
-            !msg.contains("internal compiler error"),
+            msg.contains("SEH under the interpreter not implemented yet"),
             "{target:?}: {msg}"
         );
     }
+}
+
+/// A linked image's unwind record for a function with a region names the
+/// language handler (x64 UNW_FLAG_EHANDLER, arm64 X bit) through a stub
+/// that jumps through its import slot, and a scope table whose rows give
+/// the constant filter 1 and a handler inside the function.
+#[cfg(feature = "full")]
+#[test]
+fn a_linked_image_carries_the_scope_table() {
+    for target in WINDOWS {
+        let program = Compiler::with_target(PROGRAM.into(), target)
+            .compile()
+            .expect("front end");
+        let pe = super::link_executable_with_runtime(&program, target, crate::NativeOptions::new())
+            .expect("link");
+        let tables = pe_scope_tables(&pe, target == Target::WindowsX64);
+        assert_eq!(tables.len(), 1, "{target:?}: {tables:?}");
+        let (begin, end, rows) = &tables[0];
+        assert_eq!(rows.len(), 1, "{target:?}: {rows:?}");
+        let [lo, hi, filter, jump] = rows[0];
+        assert!(
+            begin <= &lo && lo < hi && hi <= *end,
+            "{target:?}: {rows:?} in {begin:#x}..{end:#x}"
+        );
+        assert_eq!(filter, 1, "{target:?}");
+        assert!(
+            (*begin..*end).contains(&jump) && !(lo..hi).contains(&jump),
+            "{target:?}: {rows:?}"
+        );
+    }
+}
+
+/// Per function whose unwind record carries a language handler: its
+/// begin and end RVAs and its scope-table rows.
+#[cfg(feature = "full")]
+fn pe_scope_tables(pe: &[u8], x64: bool) -> alloc::vec::Vec<(u32, u32, alloc::vec::Vec<[u32; 4]>)> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let pe_off = word(0x3c) as usize;
+    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+    let opt = pe_off + 24;
+    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+    let rva_off = |rva: u32| {
+        (0..n_sec).find_map(|i| {
+            let s = opt + so_hdr + i * 40;
+            let (va, span, raw) = (word(s + 12), word(s + 8).max(word(s + 16)), word(s + 20));
+            (rva >= va && rva < va + span).then(|| (raw + rva - va) as usize)
+        })
+    };
+    // Data directory 3: the exception table.
+    let (dir, size) = (word(opt + 112 + 24), word(opt + 112 + 28));
+    let start = rva_off(dir).expect("exception directory");
+    let entry = if x64 { 12 } else { 8 };
+    let mut out = alloc::vec::Vec::new();
+    for e in (0..size as usize / entry).map(|i| start + i * entry) {
+        let begin = word(e);
+        let info = if x64 { word(e + 8) } else { word(e + 4) };
+        if !x64 && info & 3 != 0 {
+            continue;
+        }
+        let at = rva_off(info).expect("unwind record");
+        let (end, data) = if x64 {
+            if pe[at] >> 3 & 1 == 0 {
+                continue;
+            }
+            let codes = (usize::from(pe[at + 2]) + 1) & !1;
+            (word(e + 4), at + 4 + 2 * codes)
+        } else {
+            let header = word(at);
+            if header >> 20 & 1 == 0 {
+                continue;
+            }
+            let (words, epilogs) = (header >> 27, header >> 22 & 31);
+            let (code_words, epilogs, ext) = if words == 0 && epilogs == 0 {
+                let x = word(at + 4);
+                (x >> 16 & 0xFF, x & 0xFFFF, 4)
+            } else {
+                (words, if header >> 21 & 1 == 1 { 0 } else { epilogs }, 0)
+            };
+            let data = at + 4 + ext + 4 * (epilogs + code_words) as usize;
+            (begin + 4 * (header & 0x3_FFFF), data)
+        };
+        let count = word(data + 4) as usize;
+        let rows = (0..count)
+            .map(|i| core::array::from_fn(|k| word(data + 8 + 16 * i + 4 * k)))
+            .collect();
+        out.push((begin, end, rows));
+    }
+    out
 }

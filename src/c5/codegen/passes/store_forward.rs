@@ -269,7 +269,8 @@ fn take(
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
-    for func in funcs {
+    // A `__try` region's stores are the handler's to read.
+    for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
         run_one(func);
     }
 }
@@ -467,6 +468,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::SegStore { .. }
                 | Inst::Imm(_)
                 | Inst::Undef
+                | Inst::ExceptionCode
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -866,6 +868,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::Undef
+                | Inst::ExceptionCode
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -943,6 +946,8 @@ mod tests {
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

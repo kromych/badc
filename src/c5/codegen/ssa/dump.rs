@@ -96,6 +96,7 @@ fn fmt_inst(inst: &Inst) -> String {
     match inst {
         Imm(v) => format!("Imm({v})"),
         Undef => "Undef".into(),
+        ExceptionCode => "ExceptionCode".into(),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),

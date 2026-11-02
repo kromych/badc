@@ -757,6 +757,8 @@ mod tests {
     fn fresh(insts: Vec<Inst>, term: Terminator) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

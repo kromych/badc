@@ -204,8 +204,16 @@ impl<'a> Walker<'a> {
         let arm64 = target.is_aarch64();
         let reg = |width| asm_operand(AsmConstraint::Reg, false, width);
         Ok(match op {
-            Op::ExceptionCode | Op::ExceptionInfo | Op::AbnormalTermination => {
-                return Err(WalkError::Unsupported(super::SEH_NOT_LOWERED));
+            Op::ExceptionCode => self.seh_exception_code(b)?,
+            Op::ExceptionInfo => {
+                return Err(WalkError::Unsupported(
+                    "SEH filter intrinsics not implemented yet",
+                ));
+            }
+            Op::AbnormalTermination => {
+                return Err(WalkError::Unsupported(
+                    "SEH `__finally` lowering not implemented yet",
+                ));
             }
             Op::BitScan { reverse, width } => {
                 let found = b.binop_imm(BinOp::Ne, v[1], 0);

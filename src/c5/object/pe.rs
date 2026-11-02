@@ -588,6 +588,31 @@ impl<'a> PeWriter<'a> {
         l.text_raw_size = round_up(l.text_size, FILE_ALIGNMENT);
         l.pdata_rva = round_up(l.text_rva + l.text_size, l.section_align);
         l.pdata_file_off = l.text_file_off + l.text_raw_size;
+        // A scope table names `__C_specific_handler` by its stub in the image.
+        let handler = (build
+            .imports
+            .imports
+            .iter()
+            .zip(&build.plt_trampoline_offsets))
+        .find(|(i, _)| i.local_name == "__C_specific_handler")
+        .and_then(|(_, off)| *off);
+        let seh = match handler {
+            Some(stub) => Seh {
+                rows: &build.seh_rows,
+                handler: stub as u32,
+            },
+            None if build.seh_rows.is_empty() => Seh {
+                rows: &[],
+                handler: 0,
+            },
+            None => {
+                return Err(C5Error::hard(
+                    Code::UNSUPPORTED,
+                    "a `__try` region in a PE image written without a link: \
+                     compile with -c and link the object",
+                ));
+            }
+        };
         let pdata = build_pdata(
             self.machine,
             l.text_rva,
@@ -598,6 +623,7 @@ impl<'a> PeWriter<'a> {
             &build.a64_unwind,
             &build.early_returns,
             &build.pe_unwind,
+            seh,
         );
         l.pdata_directory_size = pdata.directory_size;
         l.pdata_info_slots = pdata.info_slots;
@@ -2486,6 +2512,7 @@ fn build_pdata(
     a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
+    seh: Seh,
 ) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
@@ -2496,6 +2523,7 @@ fn build_pdata(
             fn_unwind,
             early_returns,
             foreign,
+            seh,
         ),
         Machine::Aarch64 => build_aarch64_pdata(
             text_rva,
@@ -2504,7 +2532,38 @@ fn build_pdata(
             text_prologue_len,
             a64_unwind,
             foreign,
+            seh,
         ),
+    }
+}
+
+/// The `__try` scope tables, and the text offset of the stub through which
+/// they name `__C_specific_handler`.
+#[derive(Clone, Copy)]
+struct Seh<'a> {
+    rows: &'a [super::SehRow],
+    handler: u32,
+}
+
+impl Seh<'_> {
+    /// The handler RVA and the scope table that follow the unwind codes of
+    /// the function at `func`, or nothing for a function without regions:
+    /// Count, then per row Begin, End, HandlerAddress -- 1, the constant
+    /// filter EXCEPTION_EXECUTE_HANDLER -- and JumpTarget, all RVAs.
+    fn language_data(&self, func: u32, body: u32) -> Option<Vec<u8>> {
+        let rows: Vec<&super::SehRow> = self.rows.iter().filter(|r| r.func == func).collect();
+        if rows.is_empty() {
+            return None;
+        }
+        let mut out = Vec::with_capacity(8 + 16 * rows.len());
+        out.extend((body + self.handler).to_le_bytes());
+        out.extend((rows.len() as u32).to_le_bytes());
+        for r in rows {
+            for field in [body + r.begin, body + r.end, 1, body + r.target] {
+                out.extend(field.to_le_bytes());
+            }
+        }
+        Some(out)
     }
 }
 
@@ -2581,6 +2640,7 @@ fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u
 }
 
 /// x86_64 `.pdata` builder.
+#[allow(clippy::too_many_arguments)]
 fn build_x86_64_pdata(
     text_rva: u32,
     text_size: u32,
@@ -2589,6 +2649,7 @@ fn build_x86_64_pdata(
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
+    seh: Seh,
 ) -> Pdata {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
     if fn_unwind.is_empty() && foreign.is_empty() {
@@ -2629,11 +2690,14 @@ fn build_x86_64_pdata(
     let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
     let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
+    let body = text_rva + text_prologue_len;
     for (uw, &(begin, _)) in entries.iter().zip(&spans) {
         info_rvas.push(blobs_rva + blobs.len() as u32);
         let (codes, size_of_prolog, frame) = build_unwind_codes(uw, begin - uw.begin);
         let count_of_codes = (codes.len() / 2) as u8;
-        blobs.push(0x01); // Version 1, Flags 0.
+        let language = seh.language_data(uw.begin, body);
+        // Version 1; UNW_FLAG_EHANDLER where a language handler follows.
+        blobs.push(if language.is_some() { 0x09 } else { 0x01 });
         blobs.push(size_of_prolog);
         blobs.push(count_of_codes);
         blobs.push(frame);
@@ -2643,11 +2707,11 @@ fn build_x86_64_pdata(
         while !blobs.len().is_multiple_of(4) {
             blobs.push(0);
         }
+        blobs.extend(language.unwrap_or_default());
     }
 
     // The loader binary-searches the array, so the inputs' entries take
     // their places among the writer's by start.
-    let body = text_rva + text_prologue_len;
     let mut rows: Vec<(u32, u32, u32, Option<u64>)> = (spans.iter().zip(&info_rvas))
         .map(|(&(begin, end), &info)| (body + begin, body + end, info, None))
         .collect();
@@ -2689,6 +2753,7 @@ fn build_aarch64_pdata(
     text_prologue_len: u32,
     a64: &[super::A64Unwind],
     foreign: &[super::PeUnwindRange],
+    seh: Seh,
 ) -> Pdata {
     enum Data {
         Packed(u32),
@@ -2696,6 +2761,7 @@ fn build_aarch64_pdata(
         Xdata(Vec<u8>),
     }
     let body = text_prologue_len;
+    let body_rva = text_rva + text_prologue_len;
     let mut rows: Vec<(u32, u32, Data)> = (foreign.iter())
         .map(|r| {
             let data = match r.data {
@@ -2706,7 +2772,12 @@ fn build_aarch64_pdata(
         })
         .collect();
     rows.extend(a64.iter().filter_map(|u| {
-        let x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
+        let mut x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
+        // The X bit (header bit 20): the language handler and its data follow.
+        if let Some(language) = seh.language_data(u.begin, body_rva) {
+            x[2] |= 0x10;
+            x.extend(language);
+        }
         Some((body + u.begin, body + u.end, Data::Xdata(x)))
     }));
     rows.sort_by_key(|r| r.0);
@@ -3041,7 +3112,11 @@ mod tests {
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
         let text_size = 2047 * 4 + 4 + 4;
-        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[]);
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[], seh);
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);

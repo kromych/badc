@@ -113,6 +113,8 @@ pub(crate) struct SsaBuilder {
     /// terminator closes the block until [`Self::switch_to`] picks
     /// another one.
     current: Option<BlockId>,
+    /// The `__try` region blocks created now lie in.
+    seh_current: Option<u32>,
     /// Per-block CSE cache for `load_local` / `store_local`. The
     /// list stays short in practice (typical block touches a
     /// handful of slots), so a linear scan beats a BTreeMap. The
@@ -174,6 +176,8 @@ impl SsaBuilder {
             ssp: crate::c5::ir::SspFacts::default(),
             n_params,
             is_variadic,
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
             is_inline: false,
             is_always_inline: false,
             is_noinline: false,
@@ -225,6 +229,7 @@ impl SsaBuilder {
         let mut b = Self {
             func,
             current: None,
+            seh_current: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
             block_starts: Vec::new(),
@@ -328,6 +333,7 @@ impl SsaBuilder {
     /// [`Self::switch_to`].
     pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
+        self.func.block_seh.push(self.seh_current);
         self.block_starts.push(self.func.insts.len() as u32);
         self.block_ends.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
@@ -756,6 +762,41 @@ impl SsaBuilder {
         self.load_at(addr, kind, volatile, 0)
     }
 
+    /// Whether code built now lies in a `__try` region, where every memory
+    /// access may raise and so is volatile: kept, in order, as cl keeps it.
+    fn in_seh_region(&self) -> bool {
+        self.seh_current.is_some()
+    }
+
+    /// Open a `__try` region inside the current one, whose exceptions enter
+    /// `target`: the blocks created from here on lie in it.
+    pub(crate) fn open_seh_scope(&mut self, target: BlockId) -> u32 {
+        let id = self.func.seh_scopes.len() as u32;
+        (self.func.seh_scopes).push(crate::c5::ir::SehScope {
+            parent: self.seh_current,
+            target,
+        });
+        self.seh_current = Some(id);
+        id
+    }
+
+    /// Close region `id`; the blocks created from here on lie in its parent.
+    pub(crate) fn close_seh_scope(&mut self, id: u32) {
+        self.seh_current = self.func.seh_scopes[id as usize].parent;
+    }
+
+    /// Place `block`, created ahead of its statement, in the current region.
+    pub(crate) fn place_in_current_seh_scope(&mut self, block: BlockId) {
+        if let Some(scope) = self.func.block_seh.get_mut(block as usize) {
+            *scope = self.seh_current;
+        }
+    }
+
+    /// The exception code a region's handler entry receives.
+    pub(crate) fn exception_code(&mut self) -> ValueId {
+        self.push(Inst::ExceptionCode)
+    }
+
     /// [`Self::load_vol`] with the address's proven alignment; see
     /// [`Inst::Load`]. Zero means naturally aligned for the width.
     pub(crate) fn load_at(
@@ -765,6 +806,7 @@ impl SsaBuilder {
         volatile: bool,
         align: u8,
     ) -> ValueId {
+        let volatile = volatile || self.in_seh_region();
         let v = self.push(Inst::Load {
             addr,
             disp: 0,
@@ -810,6 +852,7 @@ impl SsaBuilder {
         volatile: bool,
         align: u8,
     ) -> ValueId {
+        let volatile = volatile || self.in_seh_region();
         self.local_cache.clear();
         self.push(Inst::Store {
             addr,
@@ -880,6 +923,7 @@ impl SsaBuilder {
     /// value and never seeds one, so every source-level read performs
     /// a memory access (C99 5.1.2.3p2).
     pub(crate) fn load_local_vol(&mut self, off: i64, kind: LoadKind, volatile: bool) -> ValueId {
+        let volatile = volatile || self.in_seh_region();
         if !volatile {
             for entry in &self.local_cache {
                 if entry.off == off && entry.kind == kind {
@@ -943,6 +987,7 @@ impl SsaBuilder {
         volatile: bool,
         nsw: bool,
     ) -> ValueId {
+        let volatile = volatile || self.in_seh_region();
         self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal {
             off,
@@ -1842,6 +1887,13 @@ impl SsaBuilder {
             });
         }
         self.func.blocks = blocks;
+        if self.func.seh_scopes.is_empty() {
+            self.func.block_seh.clear();
+        } else {
+            // A handler is a second entry into the frame, as a setjmp return
+            // is: the passes that gate on one keep out of the regions.
+            self.func.has_returns_twice_call = true;
+        }
         self.func
     }
 }

@@ -100,6 +100,18 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     for r in func.label_data_relocs.iter_mut() {
         r.block = mapped(new_id, r.block, "label data relocation target");
     }
+    for s in func.seh_scopes.iter_mut() {
+        s.target = mapped(new_id, s.target, "`__try` handler entry");
+    }
+    if !func.block_seh.is_empty() {
+        let mut scopes = alloc::vec![None; func.blocks.len()];
+        for (old, &new) in new_id.iter().enumerate() {
+            if let Some(slot) = scopes.get_mut(new as usize) {
+                *slot = func.block_seh.get(old).copied().flatten();
+            }
+        }
+        func.block_seh = scopes;
+    }
 }
 
 #[cfg(test)]

@@ -48,6 +48,16 @@ impl VmUnit {
             .map(|(&pc, _)| pc)
             .collect();
         let mut funcs = shadow::produce_ssa_funcs(&program, program.target, false, true)?;
+        // TODO: structured exception handling under the interpreter.
+        if let Some(f) = funcs.iter().find(|f| f.has_seh()) {
+            return Err(crate::c5::error::C5Error::hard(
+                crate::c5::diag::Code::UNSUPPORTED,
+                alloc::format!(
+                    "in function `{}`: SEH under the interpreter not implemented yet",
+                    f.name
+                ),
+            ));
+        }
         shadow::bind_alias_imports(&program, &mut funcs);
         for inst in funcs.iter_mut().flat_map(|f| f.insts.iter_mut()) {
             if matches!(inst, Inst::ImmCode(pc) if weak_fn_pcs.contains(pc)) {

@@ -91,6 +91,8 @@ pub(crate) struct Frame {
     /// A save pair names consecutive registers, the only pairs the Windows
     /// ARM64 unwind codes `save_regp` and `save_fregp` describe.
     pub consecutive_pairs: bool,
+    /// An integer division by zero raises an exception (Windows on ARM64).
+    pub raises_divide_by_zero: bool,
 }
 
 /// One callee save: `r` alone, or with `r2` in the slot above it as one
@@ -327,6 +329,7 @@ pub(crate) fn compute_frame(
         local_base,
         saves_top: 0,
         consecutive_pairs: target == Target::WindowsAarch64,
+        raises_divide_by_zero: target == Target::WindowsAarch64,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);

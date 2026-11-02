@@ -109,6 +109,7 @@ pub(crate) fn compile_function_to_bytes(
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
+                    seh_rows: &mut alloc::vec::Vec::new(),
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -220,6 +221,7 @@ pub(crate) fn compile_function_to_bytes(
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
+                    seh_rows: &mut alloc::vec::Vec::new(),
                 };
                 super::x86_64::emit::emit_function(
                     func,

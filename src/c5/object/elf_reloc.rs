@@ -107,6 +107,7 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 const NT_BADC_PROLOGUE_END: u32 = 11;
 const NT_BADC_EXTERN_DATA: u32 = 12;
 const NT_BADC_EARLY_RETURN: u32 = 13;
+const NT_BADC_SEH_ROW: u32 = 14;
 const RODATA_SECTION: &str = ".rodata";
 const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
@@ -1058,6 +1059,9 @@ struct Symtab<'a> {
     /// `(entry, frame path, early return)` `.text` offsets of each function
     /// that returns ahead of its frame.
     early_returns: Vec<(u64, u64, u64)>,
+    /// `(function, begin, end, handler)` `.text` offsets of each `__try`
+    /// scope-table row.
+    seh_rows: Vec<[u64; 4]>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
     defined_tls_symidx: BTreeMap<&'a str, u64>,
@@ -2583,6 +2587,13 @@ impl<'a> RelocWriter<'a> {
             let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
             if [a, b, c] == [SHIDX_TEXT; 3] {
                 self.syms.early_returns.push((entry, frame, exit));
+            }
+        }
+        for r in &build.seh_rows {
+            let place = |at: u32| self.text_place(u64::from(at));
+            let at = [place(r.func), place(r.begin), place(r.end), place(r.target)];
+            if at.iter().all(|p| p.0 == SHIDX_TEXT) {
+                self.syms.seh_rows.push(at.map(|p| p.1));
             }
         }
         Ok(())
@@ -4264,6 +4275,7 @@ impl<'a> RelocWriter<'a> {
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
             &self.syms.early_returns,
+            &self.syms.seh_rows,
             &noted_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
@@ -5066,6 +5078,7 @@ fn build_badc_note(
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
     prologue_ends: &[(u64, u64)],
     early_returns: &[(u64, u64, u64)],
+    seh_rows: &[[u64; 4]],
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
@@ -5197,6 +5210,13 @@ fn build_badc_note(
             }
         }
         push_note_record(&mut out, NT_BADC_EARLY_RETURN, &desc);
+    }
+
+    if !seh_rows.is_empty() {
+        let desc: Vec<u8> = (seh_rows.iter().flatten())
+            .flat_map(|at| at.to_le_bytes())
+            .collect();
+        push_note_record(&mut out, NT_BADC_SEH_ROW, &desc);
     }
 
     if !imports.data_bindings.is_empty() {

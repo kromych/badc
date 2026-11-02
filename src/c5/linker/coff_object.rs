@@ -1772,6 +1772,7 @@ pub fn parse_native_coff(
         copy_relocs: Vec::new(),
         prologue_ends: Vec::new(),
         early_returns: Vec::new(),
+        seh_rows: Vec::new(),
         extern_data_names: Vec::new(),
         alternate_names,
         comdats,

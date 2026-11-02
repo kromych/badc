@@ -663,6 +663,13 @@ mod jit_impl {
         for d in &build.diagnostics {
             report(d);
         }
+        // TODO: register unwind data with the language handler for JIT code.
+        if !build.seh_rows.is_empty() {
+            return Err(C5Error::hard(
+                crate::c5::diag::Code::UNSUPPORTED,
+                "SEH under --jit not implemented yet",
+            ));
+        }
         // A thread-pointer-relative access has no block to reach here: the
         // executing thread's TLS belongs to the host runtime.
         if !build.elf_tpoff_fixups.is_empty()

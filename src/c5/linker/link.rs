@@ -66,6 +66,9 @@ use crate::c5::object::elf_reloc_types::{
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
 
+/// The language handler a `__try` scope table names (PE).
+pub(crate) const LANGUAGE_HANDLER: &str = "__C_specific_handler";
+
 pub(crate) use crate::c5::object::elf_reloc_types::{GOT_BASE_SYMBOL, IMAGE_BASE_SYMBOL};
 
 /// The slot the loader writes a PE image's TLS index to.
@@ -339,6 +342,9 @@ pub struct MergedNative {
     /// The frame path and the early return of a function that returns ahead
     /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
     pub early_returns: HashMap<u64, (u64, u64)>,
+    /// `__try` scope-table rows (`NT_BADC_SEH_ROW`): `(function, begin, end,
+    /// handler)` merged-text offsets, a function's rows adjacent.
+    pub seh_rows: Vec<[u32; 4]>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -1271,6 +1277,7 @@ struct Link<'a> {
     prologue_ends: HashMap<u64, u64>,
     /// Function entry -> (frame path, early return), in merged text.
     early_returns: HashMap<u64, (u64, u64)>,
+    seh_rows: Vec<[u32; 4]>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
     local_funcs: Vec<(String, u64)>,
@@ -1409,6 +1416,7 @@ impl<'a> Link<'a> {
             absolute_defined: HashMap::new(),
             prologue_ends: HashMap::new(),
             early_returns: HashMap::new(),
+            seh_rows: Vec::new(),
             local_funcs: Vec::new(),
             imports: Vec::new(),
             import_idx_for_name: HashMap::new(),
@@ -2591,6 +2599,13 @@ impl<'a> Link<'a> {
                 self.early_returns
                     .insert(map.at(entry), (map.at(frame), map.at(exit)));
             }
+            for row in &obj.seh_rows {
+                self.seh_rows.push(row.map(|at| map.at(at) as u32));
+            }
+        }
+        // A scope table names its language handler, which the image imports.
+        if !self.seh_rows.is_empty() {
+            self.record_import(LANGUAGE_HANDLER);
         }
     }
 
@@ -5150,6 +5165,7 @@ impl<'a> Link<'a> {
                 .collect(),
             prologue_ends: self.prologue_ends,
             early_returns: self.early_returns,
+            seh_rows: self.seh_rows,
             local_funcs: self.local_funcs,
             symbols,
             tls_data: self.tls_data,
@@ -5681,6 +5697,19 @@ fn emit_plt(
             width: 4,
             image_relative: true,
         });
+    }
+    // A `__try` scope table names the language handler by its stub's RVA.
+    if !merged.seh_rows.is_empty() && slots == DataImportSlots::Thunk {
+        let handler =
+            (0..merged.imports.len()).find(|&i| import_name(merged, i) == LANGUAGE_HANDLER);
+        let Some(handler) = handler else {
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("a `__try` scope table names `{LANGUAGE_HANDLER}`, which nothing imports"),
+            ));
+        };
+        stub_for(merged, &mut tramp_for_import, &mut trampolines, handler);
     }
     merged.pending_imports = parked_back;
     record_plt_contribution(merged, plt_pool_start);
@@ -6365,6 +6394,7 @@ mod tests {
             copy_relocs: Vec::new(),
             prologue_ends: Vec::new(),
             early_returns: Vec::new(),
+            seh_rows: Vec::new(),
             extern_data_names: Vec::new(),
             alternate_names: Vec::new(),
             comdats: Vec::new(),
@@ -7769,6 +7799,7 @@ mod tests {
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
                 early_returns: alloc::vec::Vec::new(),
+                seh_rows: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),

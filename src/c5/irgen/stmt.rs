@@ -19,9 +19,8 @@ impl<'a> Walker<'a> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
-            Stmt::SehTry { .. } | Stmt::SehLeave => {
-                Err(WalkError::Unsupported(super::SEH_NOT_LOWERED))
-            }
+            Stmt::SehTry { body, handler } => self.walk_seh_try(b, *body, *handler),
+            Stmt::SehLeave => self.walk_seh_leave(b),
             Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
                 self.return_without_value(b);
@@ -186,6 +185,8 @@ impl<'a> Walker<'a> {
             },
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
+                // A forward `goto` may have created the block in another region.
+                b.place_in_current_seh_scope(label_blk);
                 // C99 6.8.1: a labeled statement is reachable by
                 // fall-through and by any matching goto. An open block
                 // is spliced in; a closed one has already recorded its
@@ -688,7 +689,7 @@ impl<'a> Walker<'a> {
 
     /// Leave the scopes above `depth`: end their lifetimes and, unless
     /// `returning`, restore sp from the outermost VLA scope left.
-    fn leave_scopes(&self, b: &mut SsaBuilder, depth: usize, returning: bool) {
+    pub(super) fn leave_scopes(&self, b: &mut SsaBuilder, depth: usize, returning: bool) {
         let left = &self.scopes[depth.min(self.scopes.len())..];
         for scope in left.iter().rev() {
             for &slot in scope.ends {

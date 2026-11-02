@@ -90,6 +90,15 @@ pub(super) fn emit_inst(
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }
+        // The language handler leaves the code in x0.
+        Inst::ExceptionCode => {
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("ExceptionCode: dst not int reg / spill");
+            };
+            emit_mov_reg(code, rd, Reg(0));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         Inst::ImmData(offset) => {
             let Some(rd) = int_or_spill_scratch(dst, scratch) else {
                 return fail("ImmData: dst not int reg / spill");

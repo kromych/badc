@@ -71,8 +71,8 @@ pub(crate) use crate::c5::codegen::{
     A64Unwind, Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
     MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
-    PrologueStep, ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs,
-    aarch64, x86_64,
+    PrologueStep, ResolvedImport, ResolvedImports, SehRow, Target, TlsIndexFixup, UnitDef,
+    UnitDefs, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -808,6 +808,7 @@ pub(crate) mod test_support {
         Build {
             elf: Default::default(),
             diagnostics: Vec::new(),
+            seh_rows: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),

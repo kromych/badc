@@ -84,7 +84,9 @@ enum Key {
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
-    for func in funcs {
+    // A value extended across a `__try` region boundary would be read where
+    // an exception left it unset.
+    for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
         run_one(func, caps);
     }
 }
@@ -835,6 +837,8 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

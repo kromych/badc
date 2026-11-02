@@ -2130,6 +2130,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
         | Inst::Undef
+        | Inst::ExceptionCode
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
         | Inst::ImmExtCode(_)
@@ -3460,6 +3461,9 @@ fn splice_multi_block(
         ent_pc: original.ent_pc,
         end_pc: original.end_pc,
         locals: merged_locals,
+        // Neither side of an inline holds a `__try` region.
+        seh_scopes: Vec::new(),
+        block_seh: Vec::new(),
         // The caller's frame now holds the callee's automatic objects, so it
         // inherits their stack-protector classification.
         ssp: {
@@ -4375,6 +4379,11 @@ pub(crate) fn run(
             }
             let mut changed = false;
             for (fi, caller) in funcs.iter_mut().enumerate() {
+                // A spliced body would take no part of the caller's `__try`
+                // regions; such a caller keeps its calls.
+                if caller.has_seh() {
+                    continue;
+                }
                 // A self-recursive caller's frame is paid once per recursion
                 // level, so inlining that inflates it costs stack in proportion
                 // to the depth -- a per-callee body cap is not enough. Once such

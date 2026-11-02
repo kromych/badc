@@ -1535,6 +1535,36 @@ pub(crate) struct ResolvedImports {
 }
 
 impl ResolvedImports {
+    /// The language handler a `__try` scope table names, from the target's
+    /// C runtime; no binding names it, so its binding index is none.
+    pub fn import_language_handler(&mut self, target: Target) {
+        const NAME: &str = "__C_specific_handler";
+        if self.imports.iter().any(|i| i.local_name == NAME) {
+            return;
+        }
+        let dll = ResolvedDylib::runtime_default(target);
+        let dylib_index = match self.dylibs.iter().position(|d| d.path == dll.path) {
+            Some(i) => i,
+            None => {
+                self.dylibs.push(dll);
+                self.dylibs.len() - 1
+            }
+        };
+        self.imports.push(ResolvedImport {
+            binding_idx: -1,
+            local_name: NAME.into(),
+            real_symbol: NAME.into(),
+            dylib_index,
+            flat_lookup: false,
+            ordinal: None,
+            kind: ImportKind::Function,
+            is_variadic: false,
+            fixed_args: 4,
+            return_type_tag: None,
+            param_types: Vec::new(),
+        });
+    }
+
     /// Look up the slot index for a given binding-flat index.
     /// `None` if the program doesn't reach for that binding --
     /// callers should treat that as a codegen bug (lowering
@@ -2209,6 +2239,8 @@ pub(crate) struct Build {
     pub mcount_sites: Vec<usize>,
     /// The functions that return ahead of their frame, in emission order.
     pub early_returns: Vec<EarlyReturn>,
+    /// The `__try` scope tables, in emission order.
+    pub seh_rows: Vec<SehRow>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -2667,6 +2699,18 @@ pub(crate) struct EarlyReturn {
     pub frame: u32,
     /// Where the early return starts; it runs to the function's end.
     pub exit: u32,
+}
+
+/// A row of a function's `__try` scope table, for `__C_specific_handler`:
+/// an exception raised in `[begin, end)` enters `target`. Byte offsets in
+/// `text`; a function's rows are adjacent, innermost region first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SehRow {
+    /// The function's first instruction.
+    pub func: u32,
+    pub begin: u32,
+    pub end: u32,
+    pub target: u32,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -4846,6 +4890,9 @@ pub(crate) fn lower_for_with_prebuilt(
         return Ok(build);
     }
     build.imports = imports;
+    if !build.seh_rows.is_empty() {
+        build.imports.import_language_handler(target);
+    }
     build.abi = target.abi();
     // The emitters build their per-function `Abi` from the same pair,
     // so the recorded one has to carry the mitigations too: the object

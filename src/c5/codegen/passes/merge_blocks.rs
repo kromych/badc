@@ -127,7 +127,8 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         .computed_goto_targets
         .iter()
         .chain(func.label_data_relocs.iter().map(|r| &r.block))
-        .chain(func.jump_tables.iter().flatten());
+        .chain(func.jump_tables.iter().flatten())
+        .chain(func.seh_scopes.iter().map(|s| &s.target));
     for &b in listed {
         pinned[b as usize] = true;
     }
@@ -152,7 +153,9 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
             .clone()
             .next()
             .is_some_and(|i| matches!(func.insts[i as usize], Inst::Phi { .. }));
-        if pinned[s] || p as usize == s || !jumps_here || leads_with_phi {
+        // A block of another `__try` region keeps its own code range.
+        let crosses = func.seh_scope_of(p) != func.seh_scope_of(s as BlockId);
+        if pinned[s] || p as usize == s || !jumps_here || leads_with_phi || crosses {
             continue;
         }
         next[p as usize] = s as BlockId;

@@ -1,5 +1,9 @@
 use super::*;
 
+/// `brk #0xf004`, which Windows on ARM64 reports as
+/// STATUS_INTEGER_DIVIDE_BY_ZERO.
+const BRK_DIVIDE_BY_ZERO: u32 = 0xD43E_0080;
+
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
 pub(super) fn emit_extend(
@@ -534,6 +538,20 @@ pub(super) fn emit_binop(
         Some(r) => r,
         None => return fail("Binop: rhs not int reg / spill"),
     };
+    // Windows on ARM64: a zero divisor raises STATUS_INTEGER_DIVIDE_BY_ZERO
+    // through `brk #0xf004`, as cl's code does, where `sdiv` / `udiv` would
+    // yield 0.
+    if frame.raises_divide_by_zero
+        && matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+    {
+        let skip = if narrow_div(alloc, v) {
+            super::encode::enc_cbnz_w(rm, 2)
+        } else {
+            super::encode::enc_cbnz(rm, 2)
+        };
+        emit(code, skip);
+        emit(code, BRK_DIVIDE_BY_ZERO);
+    }
     if let Some(cond) = compare_cond(op) {
         emit(code, cmp_reg_word(alloc, v, rn, rm));
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {

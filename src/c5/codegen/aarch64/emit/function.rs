@@ -98,6 +98,7 @@ struct EmitSnapshot {
     asm_text_labels: usize,
     asm_section_text_refs: usize,
     early_returns: usize,
+    seh_rows: usize,
     text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
@@ -145,6 +146,10 @@ struct FunctionEmitter<'a, 'b> {
     /// Inline-asm `.subsection` replacement sequences, appended after the
     /// body.
     deferred_regions: Vec<DeferredAsmRegion>,
+    /// `(block, start)` of each block placed, in order, and where the
+    /// blocks end, for a function with a `__try` region.
+    seh_placed: Vec<(BlockId, usize)>,
+    seh_body_end: usize,
 }
 
 /// Lower one function. Returns `true` when every block, instruction and
@@ -270,6 +275,7 @@ pub(crate) fn emit_function(
         asm_text_labels: asm_text_labels.len(),
         asm_section_text_refs: asm_section_text_refs.len(),
         early_returns: cx.early_returns.len(),
+        seh_rows: cx.seh_rows.len(),
         text_map_state: *text_map_state,
     };
     let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
@@ -315,8 +321,20 @@ pub(crate) fn emit_function(
         jump_table_fixups: Vec::new(),
         fp_literals: Vec::new(),
         deferred_regions: Vec::new(),
+        seh_placed: Vec::new(),
+        seh_body_end: 0,
     };
     em.emit_body()?;
+    if func.has_seh() {
+        let rows = super::ssa::emit_common::seh_rows(
+            func,
+            em.snapshot.code,
+            &em.seh_placed,
+            em.seh_body_end,
+            &em.block_offsets,
+        );
+        em.cx.seh_rows.extend(rows);
+    }
     debug_assert_eq!(
         scratch.third_taken() || frame.local_base,
         frame.uses_x19,
@@ -439,6 +457,7 @@ impl FunctionEmitter<'_, '_> {
         self.asm_text_labels.truncate(s.asm_text_labels);
         self.asm_section_text_refs.truncate(s.asm_section_text_refs);
         self.cx.early_returns.truncate(s.early_returns);
+        self.cx.seh_rows.truncate(s.seh_rows);
         *self.text_map_state = s.text_map_state;
     }
 
@@ -725,6 +744,7 @@ impl FunctionEmitter<'_, '_> {
             abi,
             ..
         } = self.fcx;
+        self.seh_placed.clear();
         // Blocks a `BR` can reach take a `BTI J` at their head, ahead of
         // the offset every branch fixup resolves to.
         let bti_targets = if abi.hardening.bti {
@@ -746,6 +766,14 @@ impl FunctionEmitter<'_, '_> {
                 self.align_stream();
             }
             self.block_offsets[block_idx] = self.cx.code.len();
+            if func.has_seh() {
+                self.seh_placed
+                    .push((block_idx as BlockId, self.cx.code.len()));
+            }
+            // A `__try` handler is entered with sp where the exception left it.
+            if func.is_seh_target(block_idx as BlockId) {
+                restore_dynamic_sp(self.cx.code, frame);
+            }
             super::ssa::emit_common::record_block_start_pc(
                 block_idx,
                 block.start_pc,
@@ -778,6 +806,7 @@ impl FunctionEmitter<'_, '_> {
             }
             self.emit_terminator(block_idx, block)?;
         }
+        self.seh_body_end = self.cx.code.len();
         // A block left out stands where its edges land, for every reader of
         // the offsets.
         for b in 0..func.blocks.len() {

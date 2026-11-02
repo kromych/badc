@@ -324,6 +324,15 @@ pub(super) fn emit_inst(
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             emit_incoming(code, inst, dst, v, fcx)
         }
+        // The language handler leaves the code in rax.
+        Inst::ExceptionCode => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("ExceptionCode: dst not int reg / spill");
+            };
+            emit_mov_rr(code, rd, Reg::RAX);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");

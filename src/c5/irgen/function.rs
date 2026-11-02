@@ -62,6 +62,8 @@ pub(crate) fn walk_function(
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
+        seh: alloc::vec::Vec::new(),
+        dynamic_sp: fun.alloca_top_slot != 0,
         scopes: alloc::vec::Vec::new(),
         label_scopes: alloc::vec::Vec::new(),
         label_blocks: alloc::vec![None; ast.goto_targets.len()],

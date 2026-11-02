@@ -504,6 +504,58 @@ fn the_x86_system_builtins_emit_their_instruction() {
     }
 }
 
+/// gcc's and clang's wrappers over the system builtins emit their
+/// instruction on both x86-64 targets: the `_mm_` fences, `_xgetbv`,
+/// `__rdtscp` and the RFLAGS pair, with the builtins `rdtscp` and
+/// `writeeflags_u64`. `_xgetbv` is gcc's `long long` on Linux and MSVC's
+/// `unsigned __int64` intrinsic on Windows, where every name here is one.
+#[cfg(feature = "full")]
+#[test]
+fn the_x86_system_wrappers_emit_their_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (target, xgetbv_ty) in [
+        (Target::LinuxX64, "long long"),
+        (Target::WindowsX64, "unsigned long long"),
+    ] {
+        let src = alloc::format!(
+            "#include <x86intrin.h>\n\
+            void fences(void) {{ _mm_sfence(); _mm_lfence(); _mm_mfence(); }}\n\
+            unsigned long long tscp(unsigned *a) {{ return __rdtscp(a) + __builtin_ia32_rdtscp(a); }}\n\
+            unsigned long long xcr(void) {{ return _xgetbv(0); }}\n\
+            void flags(unsigned long long f) {{\n\
+                __writeeflags(f); __builtin_ia32_writeeflags_u64(__readeflags());\n\
+            }}\n\
+            _Static_assert(_Generic(_xgetbv(0), {xgetbv_ty}: 1, default: 0), \"xgetbv\");\n\
+            _Static_assert(_Generic(__readeflags(), unsigned long long: 1, default: 0), \"flags\");\n\
+            _Static_assert(_Generic(__rdtscp(0), unsigned long long: 1, default: 0), \"rdtscp\");\n\
+            int main(void) {{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        for (needle, what) in [
+            (&[0x0fu8, 0xae, 0xf8][..], "sfence"),
+            (&[0x0f, 0xae, 0xe8][..], "lfence"),
+            (&[0x0f, 0xae, 0xf0][..], "mfence"),
+            (&[0x0f, 0x01, 0xf9][..], "rdtscp"),
+            (&[0x0f, 0x01, 0xd0][..], "xgetbv"),
+            (&[0x9c][..], "pushfq"),
+            (&[0x9d][..], "popfq"),
+        ] {
+            assert!(
+                bytes.windows(needle.len()).any(|w| w == needle),
+                "{target:?}: {what}: {needle:02x?} not in the emitted code"
+            );
+        }
+    }
+}
+
 /// `<cpuid.h>` executes CPUID, as gcc's does: `__get_cpuid_max` emits the
 /// instruction on both x86-64 targets with the range's first leaf in eax,
 /// rather than folding to a constant. The interpreter runs CPUID as zero in

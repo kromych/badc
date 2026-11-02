@@ -29,6 +29,14 @@ typedef long long __m128i_u
     __attribute__((__vector_size__(16), __may_alias__, __aligned__(1)));
 typedef double __m128d_u __attribute__((__vector_size__(16), __may_alias__, __aligned__(1)));
 
+static inline void _mm_lfence(void) {
+    __builtin_ia32_lfence();
+}
+
+static inline void _mm_mfence(void) {
+    __builtin_ia32_mfence();
+}
+
 /* Composition over the vector extension, as gcc does. `_mm_set_*` takes
 ** its lanes from the highest down, `_mm_setr_*` from lane zero up; the
 ** parameter names carry the lane number in both. */

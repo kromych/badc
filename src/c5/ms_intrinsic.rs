@@ -155,10 +155,14 @@ pub(crate) enum Op {
         sub: bool,
     },
     Rdtsc,
+    /// `rdtscp`: the counter, and IA32_TSC_AUX stored through the pointer.
+    Rdtscp,
     /// XCR[ecx] from `xgetbv`, edx:eax as one value.
     Xgetbv,
     /// RFLAGS, through `pushfq` and `popq`.
     ReadEflags,
+    /// RFLAGS from the operand, through `pushq` and `popfq`.
+    WriteEflags,
     /// `dmb`, `dsb` or `isb` with the constant option.
     Barrier(&'static str),
 }
@@ -301,8 +305,15 @@ const FIXED: &[Row] = &[
     ("__cpuid", X64, Op::Cpuid { sub: false }, None, &[p(Int), V(Int)]),
     ("__cpuidex", X64, Op::Cpuid { sub: true }, None, &[p(Int), V(Int), V(Int)]),
     ("__rdtsc", X64, Op::Rdtsc, Some(ULLong), &[]),
+    ("__rdtscp", X64, Op::Rdtscp, Some(ULLong), &[p(UInt)]),
+    ("__readeflags", X64, Op::ReadEflags, Some(ULLong), &[]),
+    ("__writeeflags", X64, Op::WriteEflags, None, &[V(ULLong)]),
+    ("_xgetbv", X64, Op::Xgetbv, Some(ULLong), &[V(UInt)]),
     ("__halt", X64, Op::Insn("hlt"), None, &[]),
     ("_mm_pause", X64, Op::Pause, None, &[]),
+    ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
+    ("_mm_mfence", X64, Op::Insn("mfence"), None, &[]),
+    ("_mm_sfence", X64, Op::Insn("sfence"), None, &[]),
     ("__lzcnt16", X64, bits(LZ, 2), Some(UShort), &[V(UShort)]),
     ("__lzcnt", X64, bits(LZ, 4), Some(UInt), &[V(UInt)]),
     ("__lzcnt64", X64, bits(LZ, 8), Some(ULLong), &[V(ULLong)]),
@@ -373,8 +384,10 @@ const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
     ("__builtin_ia32_mfence", Op::Insn("mfence"), None, &[]),
     ("__builtin_ia32_pause", Op::Pause, None, &[]),
     ("__builtin_ia32_rdtsc", Op::Rdtsc, Some(ULLong), &[]),
+    ("__builtin_ia32_rdtscp", Op::Rdtscp, Some(ULLong), &[p(UInt)]),
     ("__builtin_ia32_xgetbv", Op::Xgetbv, Some(ULLong), &[V(UInt)]),
     ("__builtin_ia32_readeflags_u64", Op::ReadEflags, Some(ULLong), &[]),
+    ("__builtin_ia32_writeeflags_u64", Op::WriteEflags, None, &[V(ULLong)]),
 ];
 
 /// The intrinsic `name` is on `target`, or `None`.

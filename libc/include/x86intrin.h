@@ -1,6 +1,7 @@
-/* GCC <x86intrin.h> umbrella: the scalar ia32 subset (byte swaps and
-** bit scans over the compiler builtins, rotates, and the rdtsc / rdpmc
-** / pause instructions as inline asm) plus the SIMD family headers.
+/* GCC <x86intrin.h> umbrella: the scalar ia32 subset (byte swaps, bit
+** scans, rdtscp and the RFLAGS access over the compiler builtins, rotates,
+** and the rdtsc / rdpmc / pause instructions as inline asm) plus the SIMD
+** family headers.
 ** Those carry the SSE2 / SSSE3 / SSE4.1 / AES / PCLMUL / RDRAND subset
 ** this build lowers; an operation outside it is absent rather than
 ** emulated. TODO: extend the subset to the rest of the family. */
@@ -65,11 +66,8 @@ static inline unsigned long long __rdtsc(void) {
     return ((unsigned long long)__hi << 32) | __lo;
 }
 
-static inline unsigned long long __rdtscp(unsigned int *__aux) {
-    unsigned int __lo, __hi, __cx;
-    __asm__ __volatile__("rdtscp" : "=a"(__lo), "=d"(__hi), "=c"(__cx));
-    *__aux = __cx;
-    return ((unsigned long long)__hi << 32) | __lo;
+static inline unsigned long long __rdtscp(unsigned int *__A) {
+    return __builtin_ia32_rdtscp(__A);
 }
 
 static inline unsigned long long __rdpmc(int __counter) {
@@ -110,6 +108,15 @@ static inline unsigned long long __rorq(unsigned long long __x, int __c) {
 
 #define _lrotl(x, c) __rolq((x), (c))
 #define _lrotr(x, c) __rorq((x), (c))
+
+/* RFLAGS; gcc's and clang's 32-bit forms are not provided. */
+static inline unsigned long long __readeflags(void) {
+    return __builtin_ia32_readeflags_u64();
+}
+
+static inline void __writeeflags(unsigned long long __X) {
+    __builtin_ia32_writeeflags_u64(__X);
+}
 #else
 #define _lrotl(x, c) __rold((x), (c))
 #define _lrotr(x, c) __rord((x), (c))

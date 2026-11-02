@@ -57,9 +57,9 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   CallExt { binding_idx=3, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return
-; --- SSA dump (ok=true) ent_pc=155 ---
+; --- SSA dump (ok=true) ent_pc=158 ---
 ; name=mmx
-fn ent_pc=155 n_params=0 variadic=false locals=8
+fn ent_pc=158 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -4567,9 +4567,9 @@ fn ent_pc=155 n_params=0 variadic=false locals=8
     v4077 LifetimeEnd(-7)                                  -> -
     v4078 LifetimeEnd(-8)                                  -> -
     terminator Return(v4074)   (exit_acc=v4074)
-; --- SSA dump (ok=true) ent_pc=156 ---
+; --- SSA dump (ok=true) ent_pc=159 ---
 ; name=sse3
-fn ent_pc=156 n_params=0 variadic=false locals=4
+fn ent_pc=159 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -5514,9 +5514,9 @@ fn ent_pc=156 n_params=0 variadic=false locals=4
     v817 LifetimeEnd(-160)                                -> -
     v818 LifetimeEnd(-159)                                -> -
     terminator Return(v808)   (exit_acc=v808)
-; --- SSA dump (ok=true) ent_pc=157 ---
+; --- SSA dump (ok=true) ent_pc=160 ---
 ; name=wait_on
-fn ent_pc=157 n_params=1 variadic=false locals=0
+fn ent_pc=160 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -5536,24 +5536,24 @@ fn ent_pc=157 n_params=1 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  InlineAsm { template="mwait", ops=2, args=[v13, v13] } -> -
     terminator Return
-; --- SSA dump (ok=true) ent_pc=159 ---
+; --- SSA dump (ok=true) ent_pc=162 ---
 ; name=main
-fn ent_pc=159 n_params=0 variadic=false locals=0
+fn ent_pc=162 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   ImmData(176)                                     -> x0
-    v4   ImmCode(ent_pc=157)                              -> x0
+    v4   ImmCode(ent_pc=160)                              -> x0
     v5   Store { addr=v3, disp=0, value=v4, kind=I64, volatile pc_rel } -> -
-    v6   Call { target_pc=155, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Call { target_pc=158, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v7   Extend { value=v6, kind=I32 }                    -> x0
     v8   Imm(0)                                           -> x1
     v9   Imm(0)                                           -> x1
     terminator Bnz { cond=v7, target=b18, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
-    v10  Call { target_pc=156, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  Call { target_pc=159, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x0
     v12  Imm(0)                                           -> x1
     v13  Imm(0)                                           -> x1

@@ -24,6 +24,10 @@ static inline void _mm_pause(void) {
     __asm__ __volatile__("pause");
 }
 
+static inline void _mm_sfence(void) {
+    __builtin_ia32_sfence();
+}
+
 static inline unsigned int _mm_getcsr(void) {
     unsigned int __csr;
     __asm__ __volatile__("stmxcsr %0" : "=m"(__csr));

@@ -346,11 +346,20 @@ impl<'a> Walker<'a> {
                 b.imm(0)
             }
             Op::Rdtsc => edx_eax(b, "rdtsc", Vec::new()),
+            Op::Rdtscp => {
+                let aux = asm_operand(AsmConstraint::Fixed(1), true, 4);
+                edx_eax(b, "rdtscp", alloc::vec![(aux, v[0])])
+            }
             Op::Xgetbv => {
                 let ecx = asm_operand(AsmConstraint::Fixed(1), false, 4);
                 edx_eax(b, "xgetbv", alloc::vec![(ecx, v[0])])
             }
             Op::ReadEflags => asm_value(b, "pushfq\n\tpopq %0", Vec::new(), 8),
+            Op::WriteEflags => {
+                let flags = asm_operand(AsmConstraint::Reg, false, 8);
+                emit_asm(b, "pushq %0\n\tpopfq", alloc::vec![(flags, v[0])], 0, true);
+                b.imm(0)
+            }
             Op::CompareExchange128 { order } => {
                 let desired = self.int128_materialize(b, (v[2], v[1]));
                 b.atomic_cas16(v[0], v[3], desired, order)

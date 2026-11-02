@@ -68,7 +68,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     reachable[0] = true;
     // A `__try` region's handler is entered by the exception dispatcher.
     let mut succ: Vec<BlockId> = (func.label_data_relocs.iter().map(|r| r.block))
-        .chain(func.seh_scopes.iter().map(|s| s.target))
+        .chain(func.seh_scopes.iter().filter_map(|s| s.target))
         .collect();
     loop {
         for &s in &succ {

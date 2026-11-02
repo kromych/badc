@@ -2039,25 +2039,40 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
-/// A `__try` region with an `__except` handler: an exception raised in a
-/// block of the region, or of a region nested in it, that `filter` accepts
-/// enters `target` with the exception code ([`Inst::ExceptionCode`]) and the
-/// frame's registers restored, sp aside.
+/// A `__try` region: an exception raised in a block of the region, or of a
+/// region nested in it, that an `__except` handler's filter accepts enters
+/// `target` with the exception code ([`Inst::ExceptionCode`]) and the
+/// frame's registers restored, sp aside; one that unwinds the region runs
+/// its `__finally` funclet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SehScope {
     pub parent: Option<u32>,
-    pub target: BlockId,
-    pub filter: SehFilter,
+    /// The `__except` body's entry, `None` for a `__finally`.
+    pub target: Option<BlockId>,
+    pub handler: ScopeHandler,
 }
 
-/// What decides whether a region's handler takes an exception.
+/// What a region's scope-table row names as its HandlerAddress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SehFilter {
-    /// The constant `EXCEPTION_EXECUTE_HANDLER`: every exception.
+pub(crate) enum ScopeHandler {
+    /// The constant filter `EXCEPTION_EXECUTE_HANDLER`: every exception.
     ExecuteHandler,
     /// The filter funclet at this `ent_pc`, `long (EXCEPTION_POINTERS *,
     /// void *frame)`, as cl compiles every other filter.
-    Funclet(usize),
+    Filter(usize),
+    /// The `__finally` funclet at this `ent_pc`, `void (unsigned char
+    /// abnormal, void *frame)`.
+    Finally(usize),
+}
+
+impl ScopeHandler {
+    /// The funclet's `ent_pc`.
+    pub(crate) fn funclet(self) -> Option<usize> {
+        match self {
+            ScopeHandler::ExecuteHandler => None,
+            ScopeHandler::Filter(pc) | ScopeHandler::Finally(pc) => Some(pc),
+        }
+    }
 }
 
 /// The byte width of each scalar argument, or parameter, narrower than 8
@@ -2583,7 +2598,7 @@ impl FunctionSsa {
 
     /// Whether `b` is a region's handler entry, which no edge reaches.
     pub(crate) fn is_seh_target(&self, b: BlockId) -> bool {
-        self.seh_scopes.iter().any(|s| s.target == b)
+        self.seh_scopes.iter().any(|s| s.target == Some(b))
     }
 
     /// Append `block` in the region block `of` lies in.
@@ -2698,9 +2713,9 @@ pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTre
 /// External functions that may return twice into the caller's frame:
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
-/// Windows x86_64 `setjmp` macro (libc/include/setjmp.h). The
-/// AArch64 inline setjmp is an intrinsic, recognised structurally by
-/// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
+/// Windows `setjmp` macro (libc/include/setjmp.h). The AArch64 inline
+/// setjmp an in-process image takes is an intrinsic, recognised
+/// structurally by `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
     matches!(
         name,

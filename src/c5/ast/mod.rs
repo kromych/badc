@@ -650,10 +650,17 @@ pub(crate) enum Stmt {
     /// a computed `goto`'s target is read.
     CleanupJump { cleanups: Vec<StmtId>, jump: StmtId },
     /// `__try body` with its `__except` or `__finally` handler (Microsoft
-    /// structured exception handling).
-    SehTry { body: StmtId, handler: SehHandler },
+    /// structured exception handling), the function's `index`th `__try`.
+    SehTry {
+        body: StmtId,
+        handler: SehHandler,
+        index: u32,
+    },
     /// `__leave;`: to the end of the innermost `__try` body.
     SehLeave,
+    /// A jump out of the body of `__try` statement `index` runs its
+    /// `__finally` block, abnormally; nothing for an `__except` handler.
+    SehFinallyCall(u32),
 }
 
 /// The handler of a `__try` statement.
@@ -665,17 +672,19 @@ pub(crate) enum SehHandler {
     Except {
         filter: ExprId,
         body: StmtId,
-        funclet: Option<FilterFunclet>,
+        funclet: Option<SehFunclet>,
     },
-    /// `__finally body`: runs whenever control leaves the `__try` body.
-    Finally(StmtId),
+    /// `__finally body`: runs whenever control leaves the `__try` body, as
+    /// `funclet`.
+    Finally { body: StmtId, funclet: SehFunclet },
 }
 
-/// The function a filter expression compiles to, as cl's `<f>$filt$<index>`:
-/// the frame slots the parser numbered past `slot_base` while parsing the
-/// filter, up to `slot_end`, are its own.
+/// The function a filter expression or a `__finally` block compiles to, as
+/// cl's `<f>$filt$<index>` or `<f>$fin$<index>`: the frame slots the parser
+/// numbered past `slot_base` while parsing it, up to `slot_end`, are its
+/// own.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct FilterFunclet {
+pub(crate) struct SehFunclet {
     pub index: u32,
     pub slot_base: i64,
     pub slot_end: i64,
@@ -916,7 +925,8 @@ pub(crate) struct FinishedFunction {
     /// label-address initializer.
     pub label_data_slots: alloc::vec::Vec<crate::c5::compiler::PendingLabelReloc>,
     pub name: alloc::string::String,
-    /// The `ent_pc` of each filter funclet, by [`FilterFunclet::index`].
+    /// The `ent_pc` of each filter and `__finally` funclet, by
+    /// [`SehFunclet::index`].
     pub funclet_pcs: alloc::vec::Vec<usize>,
 }
 

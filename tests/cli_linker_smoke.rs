@@ -5230,7 +5230,10 @@ fn a_native_image_takes_the_language_handler_from_the_kernel() {
 /// cl function itself and in badc functions it calls, so the unwinder
 /// passes badc frames and runs a `__finally` for an exception. A cl filter
 /// funclet decides over badc frames, and a badc filter funclet over a cl
-/// frame and over a cl filter that passed the exception on.
+/// frame and over a cl filter that passed the exception on. A badc
+/// `__finally` runs between a raise and a cl `__except`, a cl one between a
+/// badc raise and a badc `__except`, and cl's `return` through a
+/// `__finally` reaches msvcrt's `_local_unwind`.
 #[cfg(windows)]
 #[test]
 fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
@@ -5285,9 +5288,43 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
              }\n\
              return outer == 110;\n\
          }\n\
+         int cl_return_through(int *flag, int (*fn)(void));\n\
+         static int finally_flag;\n\
+         static void badc_finally_raiser(void)\n\
+         {\n\
+             __try {\n\
+                 RaiseException(0xE00000BB, 0, 0, 0);\n\
+             } __finally {\n\
+                 finally_flag = AbnormalTermination() ? 2 : 1;\n\
+             }\n\
+         }\n\
+         static int forty(void) { return 40; }\n\
+         static int raise_int(void) { RaiseException(0xE00000CC, 0, 0, 0); return 0; }\n\
+         static int finally_interop(void)\n\
+         {\n\
+             int flag = 0, r = 0;\n\
+             if (cl_catch(badc_finally_raiser) != 0xE00000BB || finally_flag != 2) return 1;\n\
+             __try {\n\
+                 cl_finally(&flag, raise_code);\n\
+             } __except (EXCEPTION_EXECUTE_HANDLER) {\n\
+                 r = GetExceptionCode() == 0xE0001234;\n\
+             }\n\
+             if (!r || flag != 2) return 2;\n\
+             flag = 0;\n\
+             if (cl_return_through(&flag, forty) != 41 || flag != 11) return 3;\n\
+             flag = 0;\n\
+             r = 0;\n\
+             __try {\n\
+                 cl_return_through(&flag, raise_int);\n\
+             } __except (EXCEPTION_EXECUTE_HANDLER) {\n\
+                 r = GetExceptionCode() == 0xE00000CC;\n\
+             }\n\
+             return !r || flag != 11 ? 4 : 0;\n\
+         }\n\
          int main(void)\n\
          {\n\
-             int seen = 0;\n\
+             int seen = 0, fi = finally_interop();\n\
+             if (fi) return 20 + fi;\n\
              if (cl_read_or_minus_one(&seven) != 7) return 1;\n\
              if (cl_read_or_minus_one(0) != -1) return 2;\n\
              if (cl_finally(&flag, nothing) != 0 || flag != 1) return 3;\n\

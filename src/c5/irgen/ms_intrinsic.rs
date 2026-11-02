@@ -206,11 +206,7 @@ impl<'a> Walker<'a> {
         Ok(match op {
             Op::ExceptionCode => self.seh_exception_code(b)?,
             Op::ExceptionInfo => self.seh_exception_info(b)?,
-            Op::AbnormalTermination => {
-                return Err(WalkError::Unsupported(
-                    "SEH `__finally` lowering not implemented yet",
-                ));
-            }
+            Op::AbnormalTermination => self.seh_abnormal_termination(b)?,
             Op::BitScan { reverse, width } => {
                 let found = b.binop_imm(BinOp::Ne, v[1], 0);
                 let (store, done) = (b.new_block(), b.new_block());

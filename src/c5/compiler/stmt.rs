@@ -56,8 +56,17 @@ pub(super) struct CleanupVar {
     fn_binding: super::emit::CalleeBinding,
 }
 
+/// What a jump out of a scope runs: a cleanup variable's function, or the
+/// `__finally` block, if any, of the `__try` statement whose body the scope
+/// is, by the statement's index.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Cleanup {
+    Var(alloc::boxed::Box<CleanupVar>),
+    Finally(u32),
+}
+
 /// The cleanup list a `return` runs, and whether it returns a value.
-pub(super) type ReturnExitKey = (alloc::vec::Vec<CleanupVar>, bool);
+pub(super) type ReturnExitKey = (alloc::vec::Vec<Cleanup>, bool);
 
 /// What the returns running one cleanup list share: the call statements,
 /// the value's temporary (symbol, slot), and the returns' `CleanupJump`s.
@@ -1002,13 +1011,13 @@ impl Compiler {
             fn_binding: self.callee_binding(fn_sym),
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
-            scope.vars.push(cv);
+            scope.vars.push(Cleanup::Var(alloc::boxed::Box::new(cv)));
         }
         self.note_jump_barrier(var_sym, false);
     }
 
     /// The innermost scope's cleanup variables, latest declared first.
-    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<CleanupVar> {
+    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<Cleanup> {
         self.cleanup_scopes
             .last()
             .map_or_else(alloc::vec::Vec::new, |s| {
@@ -1016,12 +1025,20 @@ impl Compiler {
             })
     }
 
-    /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
-    /// into the AST statement stream. The `Ident` is built from the
-    /// registered snapshot, not the live symbol slot.
-    pub(super) fn push_cleanup_call(&mut self, cv: &CleanupVar) {
+    /// Build the `Stmt::Expr` for one cleanup call `fn(&var)`, or the
+    /// `__finally` run, and push it into the AST statement stream. The
+    /// `Ident` is built from the registered snapshot, not the live symbol
+    /// slot.
+    pub(super) fn push_cleanup_call(&mut self, cleanup: &Cleanup) {
         use super::super::ast::{Expr, Stmt, UnOp};
         let pos = self.ast_src_pos();
+        let cv = match cleanup {
+            Cleanup::Var(cv) => cv,
+            Cleanup::Finally(index) => {
+                self.ast.push_stmt(Stmt::SehFinallyCall(*index), pos);
+                return;
+            }
+        };
         let ident = self.ast.push_expr(
             Expr::Ident {
                 sym: cv.var_sym as u32,
@@ -1059,8 +1076,8 @@ impl Compiler {
     /// (innermost scope cleaned first; each scope's variables in reverse
     /// declaration order, C++-style, matching GCC). Used before a
     /// `return` (`from == 0`), `break`, or `continue`.
-    fn emit_cleanups_above(&mut self, from: usize) {
-        let mut pending: alloc::vec::Vec<CleanupVar> = alloc::vec::Vec::new();
+    pub(super) fn emit_cleanups_above(&mut self, from: usize) {
+        let mut pending: alloc::vec::Vec<Cleanup> = alloc::vec::Vec::new();
         for scope in self.cleanup_scopes[from..].iter().rev() {
             for cv in scope.vars.iter().rev() {
                 pending.push(cv.clone());
@@ -1073,7 +1090,7 @@ impl Compiler {
 
     /// The variables a jump out of the scopes at index `from` and above
     /// cleans, in the order [`Self::emit_cleanups_above`] calls them.
-    fn cleanups_from(&self, from: usize) -> alloc::vec::Vec<CleanupVar> {
+    fn cleanups_from(&self, from: usize) -> alloc::vec::Vec<Cleanup> {
         let scopes = self.cleanup_scopes[from..].iter().rev();
         scopes.flat_map(|s| s.vars.iter().rev().cloned()).collect()
     }
@@ -1148,7 +1165,7 @@ impl Compiler {
     /// loop) capture a body by its last arena entry, so a bare `return`
     /// under a cleanup must resolve to a single statement carrying all of
     /// them, not just the trailing jump.
-    fn coalesce_exit_since(&mut self, start: usize) {
+    pub(super) fn coalesce_exit_since(&mut self, start: usize) {
         if self.ast.stmts.len().saturating_sub(start) > 1 {
             let ids: alloc::vec::Vec<super::super::ast::StmtId> = (start..self.ast.stmts.len())
                 .map(|i| i as super::super::ast::StmtId)

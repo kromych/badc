@@ -1589,6 +1589,10 @@ mod jit_impl {
         // fake-GOT region from the same enumeration the lowering
         // saw.
         let imports = ResolvedImports::resolve(program)?;
+        let options = NativeOptions {
+            in_process: true,
+            ..options
+        };
         let mut build = match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => aarch64::lower(
                 program,

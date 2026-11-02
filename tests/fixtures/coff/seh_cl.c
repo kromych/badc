@@ -64,3 +64,15 @@ void cl_store(volatile int *p, int v)
 {
     *p = v;
 }
+
+// `fn`'s result, returned through a `__finally` block that records in
+// `*flag` 10 plus AbnormalTermination(): 11 for the return, and for an
+// exception `fn` raises, which a caller's handler takes.
+int cl_return_through(int *flag, int (*fn)(void))
+{
+    __try {
+        return fn() + 1;
+    } __finally {
+        *flag = 10 + AbnormalTermination();
+    }
+}

@@ -342,10 +342,9 @@ pub struct MergedNative {
     /// The frame path and the early return of a function that returns ahead
     /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
     pub early_returns: HashMap<u64, (u64, u64)>,
-    /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`): `(function, begin,
-    /// end, handler)` merged-text offsets with the filter funclet's, a
-    /// function's rows adjacent.
-    pub seh_rows: Vec<([u32; 4], Option<u32>)>,
+    /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), merged-text offsets,
+    /// a function's rows adjacent.
+    pub seh_rows: Vec<super::object::SehRowAt<u32>>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -1278,7 +1277,7 @@ struct Link<'a> {
     prologue_ends: HashMap<u64, u64>,
     /// Function entry -> (frame path, early return), in merged text.
     early_returns: HashMap<u64, (u64, u64)>,
-    seh_rows: Vec<([u32; 4], Option<u32>)>,
+    seh_rows: Vec<super::object::SehRowAt<u32>>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
     local_funcs: Vec<(String, u64)>,
@@ -2600,9 +2599,9 @@ impl<'a> Link<'a> {
                 self.early_returns
                     .insert(map.at(entry), (map.at(frame), map.at(exit)));
             }
-            for &(row, filter) in &obj.seh_rows {
+            for &(row, target, handler) in &obj.seh_rows {
                 let at = |at: u64| map.at(at) as u32;
-                self.seh_rows.push((row.map(at), filter.map(at)));
+                (self.seh_rows).push((row.map(at), target.map(at), handler.map(at)));
             }
         }
         // A scope table names its language handler, which the image imports.

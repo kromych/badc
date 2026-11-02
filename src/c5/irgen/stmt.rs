@@ -19,8 +19,16 @@ impl<'a> Walker<'a> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
-            Stmt::SehTry { body, handler } => self.walk_seh_try(b, *body, *handler),
+            Stmt::SehTry {
+                body,
+                handler,
+                index,
+            } => self.walk_seh_try(b, *body, *handler, *index),
             Stmt::SehLeave => self.walk_seh_leave(b),
+            Stmt::SehFinallyCall(index) => {
+                self.walk_seh_finally_call(b, *index);
+                Ok(false)
+            }
             Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
                 self.return_without_value(b);
@@ -780,6 +788,13 @@ impl<'a> Walker<'a> {
             | Stmt::Switch { body, .. }
             | Stmt::Case { body, .. }
             | Stmt::Default { body } => self.collect_label_scopes(*body, chain, out),
+            // A `__finally` block is a funclet of its own, with its labels.
+            Stmt::SehTry { body, handler, .. } => {
+                self.collect_label_scopes(*body, chain, out);
+                if let crate::c5::ast::SehHandler::Except { body, .. } = handler {
+                    self.collect_label_scopes(*body, chain, out);
+                }
+            }
             _ => {}
         }
     }

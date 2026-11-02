@@ -128,7 +128,7 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         .iter()
         .chain(func.label_data_relocs.iter().map(|r| &r.block))
         .chain(func.jump_tables.iter().flatten())
-        .chain(func.seh_scopes.iter().map(|s| &s.target));
+        .chain(func.seh_scopes.iter().filter_map(|s| s.target.as_ref()));
     for &b in listed {
         pinned[b as usize] = true;
     }

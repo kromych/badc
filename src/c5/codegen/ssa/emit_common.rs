@@ -1702,6 +1702,48 @@ pub(crate) fn record_block_src(
     }
 }
 
+/// Code no function table describes to the unwinder (TODO #1860) keeps
+/// `longjmp` from unwinding: `setjmp` stores 0 as the frame, which makes
+/// msvcrt's x64 `longjmp` restore directly, and on Windows on ARM64, whose
+/// msvcrt `longjmp` unwinds for that frame too, the pair is the inline one.
+fn unwind_free_jumps(
+    funcs: &mut [super::super::ir::FunctionSsa],
+    imports: &super::ResolvedImports,
+    target: super::Target,
+) {
+    use super::super::ir::Inst;
+    use crate::c5::op::Intrinsic as I;
+    let named = |binding: i64, name: &str| {
+        (imports.imports.iter()).any(|i| i.binding_idx == binding && i.local_name == name)
+    };
+    let arm64 = target == super::Target::WindowsAarch64;
+    for f in funcs {
+        for inst in &mut f.insts {
+            let swap = match inst {
+                Inst::Intrinsic { kind, .. } if *kind == I::EstablisherFrame as i64 => {
+                    Some(Inst::Imm(0))
+                }
+                Inst::CallExt {
+                    binding_idx, args, ..
+                } if arm64 && named(*binding_idx, "__c5_msvcrt_setjmp") => Some(Inst::Intrinsic {
+                    kind: I::SetjmpAArch64 as i64,
+                    args: alloc::vec![args[0]],
+                }),
+                Inst::CallExt {
+                    binding_idx, args, ..
+                } if arm64 && named(*binding_idx, "__c5_msvcrt_longjmp") => Some(Inst::Intrinsic {
+                    kind: I::LongjmpAArch64 as i64,
+                    args: args.clone(),
+                }),
+                _ => None,
+            };
+            if let Some(swap) = swap {
+                *inst = swap;
+            }
+        }
+    }
+}
+
 /// The scope-table rows of `func`, whose function starts at `begin` and
 /// whose blocks were placed at `placed` (block, start), in order, up to
 /// `body_end`: per region, innermost first, each maximal run of code whose
@@ -1725,11 +1767,9 @@ pub(crate) fn seh_rows(
     order.sort_by_key(|&s| core::cmp::Reverse(chain(Some(s)).count()));
     let mut rows = alloc::vec::Vec::new();
     for s in order {
-        let target = block_offsets[scopes[s as usize].target as usize] as u32;
-        let filter = match scopes[s as usize].filter {
-            super::super::ir::SehFilter::ExecuteHandler => None,
-            super::super::ir::SehFilter::Funclet(pc) => Some(pc as u32),
-        };
+        let scope = scopes[s as usize];
+        let target = scope.target.map(|t| block_offsets[t as usize] as u32);
+        let handler = scope.handler.funclet().map(|pc| pc as u32);
         let mut run: Option<(usize, usize)> = None;
         let mut flush = |run: Option<(usize, usize)>| {
             if let Some((a, e)) = run.filter(|(a, e)| e > a) {
@@ -1738,7 +1778,7 @@ pub(crate) fn seh_rows(
                     begin: a as u32,
                     end: e as u32,
                     target,
-                    filter,
+                    handler,
                 });
             }
         };
@@ -2378,6 +2418,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // them symbolic for the linker.
     if native.output_kind != super::OutputKind::Relocatable {
         super::shadow::bind_alias_imports(program, &mut ssa_funcs);
+    }
+    if native.in_process {
+        unwind_free_jumps(&mut ssa_funcs, imports, target);
     }
     check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
@@ -3245,9 +3288,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     st.rodata.place_literals();
-    // A row names its filter funclet by text offset.
+    // A row names its funclet by text offset.
     for r in &mut st.seh_rows {
-        r.filter = r.filter.map(|pc| st.pc_to_native[pc as usize] as u32);
+        r.handler = r.handler.map(|pc| st.pc_to_native[pc as usize] as u32);
     }
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,

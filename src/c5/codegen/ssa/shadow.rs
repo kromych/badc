@@ -217,10 +217,11 @@ pub(crate) fn walk_program(
         // address. The walker's count covers a hidden result pointer.
         let touched = walker_param_count(&func);
         func.n_params = touched.max(f.n_params).max(func.n_params);
-        // A filter funclet takes cl's name and its function's section.
+        // A funclet takes cl's name, `$filt$` or `$fin$` and its number
+        // after its function's, and the function's section.
         for mut funclet in funclets {
             let index = funclet.ent_pc - f.end_pc;
-            funclet.name = alloc::format!("{}$filt${index}", func.name);
+            funclet.name = alloc::format!("{}{}{index}", func.name, funclet.name);
             funclet.is_internal = true;
             funclet.section = func.section.clone();
             walker_pcs.insert(funclet.ent_pc);
@@ -517,8 +518,8 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
     if section_of.is_empty() {
         return funcs;
     }
-    // `None` (default `.text`) sorts before every named group. A filter
-    // funclet, which no symbol names, carries its function's section.
+    // `None` (default `.text`) sorts before every named group. A funclet,
+    // which no symbol names, carries its function's section.
     fn group<'f>(
         section_of: &alloc::collections::BTreeMap<&'f str, &'f str>,
         f: &'f FunctionSsa,
@@ -832,11 +833,9 @@ pub(crate) fn compute_live_sets(
     let (func_pcs, data_live) =
         graph.solve(&defined, reachable_owners, assume_data_live, |pc, work| {
             let Some(f) = by_ent.get(&pc) else { return };
-            // A region's scope table names its filter funclet.
-            for s in &f.seh_scopes {
-                if let crate::c5::ir::SehFilter::Funclet(t) = s.filter {
-                    work.push(Node::Func(t));
-                }
+            // A region's scope table names its funclet.
+            for t in f.seh_scopes.iter().filter_map(|s| s.handler.funclet()) {
+                work.push(Node::Func(t));
             }
             // An address keeps its referent only if emitted: the use counts
             // behind the emitters' dead-code skip.

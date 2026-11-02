@@ -244,6 +244,7 @@ pub(super) const BUILTINS: &[Builtin] = &[
     ),
     library("__c5_aarch64_setjmp", Intrinsic::SetjmpAArch64),
     library("__c5_aarch64_longjmp", Intrinsic::LongjmpAArch64),
+    library("__c5_establisher_frame", Intrinsic::EstablisherFrame),
 ];
 
 /// Library functions whose `__builtin_` spelling gcc or clang provide as the

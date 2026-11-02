@@ -1158,10 +1158,9 @@ pub struct NativeObject {
     /// Functions that return ahead of their frame (`NT_BADC_EARLY_RETURN`),
     /// each `(entry, frame path, early return)` offsets in this unit's `.text`.
     pub early_returns: Vec<(u64, u64, u64)>,
-    /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), each `(function,
-    /// begin, end, handler)` offsets in this unit's `.text` with the filter
-    /// funclet's, `None` for `EXCEPTION_EXECUTE_HANDLER`.
-    pub seh_rows: Vec<([u64; 4], Option<u64>)>,
+    /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), offsets in this
+    /// unit's `.text`.
+    pub seh_rows: Vec<SehRowAt<u64>>,
     /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
     /// global definitions and states the binding in its symbol tables.
     pub unique: Vec<String>,
@@ -2279,9 +2278,14 @@ struct BadcNote {
     elf_tpoff_fixups: Vec<(u64, ElfTpoffTarget)>,
     prologue_ends: Vec<(u64, u64)>,
     early_returns: Vec<(u64, u64, u64)>,
-    seh_rows: Vec<([u64; 4], Option<u64>)>,
+    seh_rows: Vec<SehRowAt<u64>>,
     extern_data_names: Vec<String>,
 }
+
+/// A `__try` scope-table row: the function's, the range's begin and end
+/// offsets, the `__except` target's, `None` for a `__finally`, and the
+/// funclet's, `None` for the constant filter `EXCEPTION_EXECUTE_HANDLER`.
+pub(crate) type SehRowAt<T> = ([T; 3], Option<T>, Option<T>);
 
 /// The NUL-separated strings of a note body; an empty run is skipped.
 fn nul_separated(body: &[u8]) -> Vec<String> {
@@ -2458,12 +2462,11 @@ impl BadcNote {
                 let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
                 let size = if ntype == 14 { 32 } else { 40 };
                 let mut c = cur;
+                let some = |w: u64| (w != crate::c5::object::elf_reloc::SEH_NONE).then_some(w);
                 while c + size <= desc_end {
-                    let at = [word(c), word(c + 8), word(c + 16), word(c + 24)];
-                    let filter = (ntype == 15)
-                        .then(|| word(c + 32))
-                        .filter(|&f| f != crate::c5::object::elf_reloc::SEH_EXECUTE_HANDLER);
-                    self.seh_rows.push((at, filter));
+                    let at = [word(c), word(c + 8), word(c + 16)];
+                    let handler = (ntype == 15).then(|| word(c + 32)).and_then(some);
+                    self.seh_rows.push((at, some(word(c + 24)), handler));
                     c += size;
                 }
             }

@@ -335,6 +335,15 @@ pub(super) fn emit_intrinsic(
             Reg::RSP,
             "StackPointer: dst not int reg / spill",
         ),
+        // rbp less the FrameOffset the unwind record states.
+        I::FuncletFrame | I::EstablisherFrame => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("EstablisherFrame: dst not int reg / spill");
+            };
+            emit_lea_r_mem(code, rd, Reg::RBP, -(frame.saves_top as i32));
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame),
         I::Clz
         | I::Ctz
@@ -394,7 +403,12 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         // rbp-relative: the variadic areas, the frame address, the return
         // slot above the saved rbp. A read of rsp observes the same frame,
         // below its record.
-        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        I::VaStart
+        | I::FrameAddress
+        | I::ReturnAddress
+        | I::StackPointer
+        | I::FuncletFrame
+        | I::EstablisherFrame => true,
         // rsp moves for the rest of the function.
         I::Alloca | I::AllocaSave | I::AllocaRestore => true,
         // A pool register is borrowed around a push / pop.

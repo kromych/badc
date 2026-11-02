@@ -1074,6 +1074,7 @@ impl Compiler {
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
         self.seh_funclets = 0;
+        self.seh_trys = 0;
         self.in_function_body = true;
     }
 

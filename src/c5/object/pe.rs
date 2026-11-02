@@ -2548,10 +2548,12 @@ struct Seh<'a> {
 impl Seh<'_> {
     /// The handler RVA and the scope table that follow the unwind codes of
     /// the function at `func`, or nothing for a function without regions:
-    /// Count, then per row Begin, End, HandlerAddress -- the filter
-    /// funclet, or 1 for the constant filter EXCEPTION_EXECUTE_HANDLER --
-    /// and JumpTarget, all RVAs.
-    fn language_data(&self, func: u32, body: u32) -> Option<Vec<u8>> {
+    /// Count, then per row Begin, End, HandlerAddress -- the filter or
+    /// `__finally` funclet, or 1 for the constant filter
+    /// EXCEPTION_EXECUTE_HANDLER -- and JumpTarget, 0 for a `__finally`, all
+    /// RVAs. With them the x64 UNW_FLAG_EHANDLER (1) when a row has a
+    /// target and UNW_FLAG_UHANDLER (2) when one has none.
+    fn language_data(&self, func: u32, body: u32) -> Option<(u8, Vec<u8>)> {
         let rows: Vec<&super::SehRow> = self.rows.iter().filter(|r| r.func == func).collect();
         if rows.is_empty() {
             return None;
@@ -2559,13 +2561,16 @@ impl Seh<'_> {
         let mut out = Vec::with_capacity(8 + 16 * rows.len());
         out.extend((body + self.handler).to_le_bytes());
         out.extend((rows.len() as u32).to_le_bytes());
+        let mut flags = 0;
         for r in rows {
-            let filter = r.filter.map_or(1, |f| body + f);
-            for field in [body + r.begin, body + r.end, filter, body + r.target] {
+            flags |= if r.target.is_some() { 1 } else { 2 };
+            let handler = r.handler.map_or(1, |f| body + f);
+            let target = r.target.map_or(0, |t| body + t);
+            for field in [body + r.begin, body + r.end, handler, target] {
                 out.extend(field.to_le_bytes());
             }
         }
-        Some(out)
+        Some((flags, out))
     }
 }
 
@@ -2698,8 +2703,10 @@ fn build_x86_64_pdata(
         let (codes, size_of_prolog, frame) = build_unwind_codes(uw, begin - uw.begin);
         let count_of_codes = (codes.len() / 2) as u8;
         let language = seh.language_data(uw.begin, body);
-        // Version 1; UNW_FLAG_EHANDLER where a language handler follows.
-        blobs.push(if language.is_some() { 0x09 } else { 0x01 });
+        // Version 1, with the handler flags where a language handler follows.
+        let flags = language.as_ref().map_or(0, |l| l.0);
+        blobs.push(0x01 | flags << 3);
+        let language = language.map(|l| l.1);
         blobs.push(size_of_prolog);
         blobs.push(count_of_codes);
         blobs.push(frame);
@@ -2776,7 +2783,7 @@ fn build_aarch64_pdata(
     rows.extend(a64.iter().filter_map(|u| {
         let mut x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
         // The X bit (header bit 20): the language handler and its data follow.
-        if let Some(language) = seh.language_data(u.begin, body_rva) {
+        if let Some((_, language)) = seh.language_data(u.begin, body_rva) {
             x[2] |= 0x10;
             x.extend(language);
         }

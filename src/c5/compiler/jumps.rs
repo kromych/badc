@@ -15,12 +15,12 @@ use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::Compiler;
 use super::seh::SehPart;
-use super::stmt::CleanupVar;
+use super::stmt::Cleanup;
 
-/// An open scope: its id and its cleanup variables, in declaration order.
+/// An open scope: its id and its cleanups, in declaration order.
 pub(super) struct CleanupScope {
     pub(super) id: u32,
-    pub(super) vars: Vec<CleanupVar>,
+    pub(super) vars: Vec<Cleanup>,
 }
 
 /// A scope's barrier declarations as (name, is a VLA, line), whether it is a
@@ -49,8 +49,8 @@ struct PendingJump {
     stmt: StmtId,
     target: Target,
     from: JumpPoint,
-    /// The cleanup variables in scope at the jump, outermost first.
-    active: Vec<CleanupVar>,
+    /// The cleanups in scope at the jump, outermost first.
+    active: Vec<Cleanup>,
     line: usize,
 }
 
@@ -204,14 +204,14 @@ impl Compiler {
         self.ast.label_addrs = self.jumps.label_addrs.iter().copied().collect();
         let pending = core::mem::take(&mut self.jumps.pending);
         // Jumps to one label running one list share its calls.
-        let mut shared: BTreeMap<(LabelId, Vec<CleanupVar>), Vec<StmtId>> = BTreeMap::new();
+        let mut shared: BTreeMap<(LabelId, Vec<Cleanup>), Vec<StmtId>> = BTreeMap::new();
         for j in &pending {
             let (targets, what): (Vec<LabelId>, _) = match j.target {
                 Target::Label(l) => (alloc::vec![l], "`goto`"),
                 Target::Computed => (self.ast.label_addrs.clone(), "computed `goto`"),
                 Target::Asm { label, .. } => (alloc::vec![label], "`asm goto`"),
             };
-            let mut run: Option<Vec<CleanupVar>> = None;
+            let mut run: Option<Vec<Cleanup>> = None;
             for l in targets {
                 let Some(to) = self.jumps.labels.get(&l) else {
                     continue;
@@ -260,7 +260,7 @@ impl Compiler {
     }
 
     /// The call statements running `list`, placed at jump statement `stmt`.
-    fn cleanup_calls(&mut self, stmt: StmtId, list: &[CleanupVar]) -> Vec<StmtId> {
+    fn cleanup_calls(&mut self, stmt: StmtId, list: &[Cleanup]) -> Vec<StmtId> {
         let pos = self.ast.stmt_src[stmt as usize];
         let mut calls = Vec::with_capacity(list.len());
         for cv in list {
@@ -278,9 +278,9 @@ fn shared(a: &JumpPoint, b: &JumpPoint) -> usize {
     a.0.iter().zip(&b.0).take_while(|(x, y)| x.0 == y.0).count()
 }
 
-/// The cleanup variables in scope at the jump and not at `to`, latest
-/// declared first.
-fn cleanups_left(j: &PendingJump, to: &JumpPoint) -> Vec<CleanupVar> {
+/// The cleanups in scope at the jump and not at `to`, latest declared
+/// first.
+fn cleanups_left(j: &PendingJump, to: &JumpPoint) -> Vec<Cleanup> {
     let k = shared(&j.from, to);
     let mut kept: usize = j.from.0[..k.saturating_sub(1)]
         .iter()

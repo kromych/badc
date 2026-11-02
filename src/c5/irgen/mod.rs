@@ -266,8 +266,11 @@ struct Walker<'a> {
     ast: &'a Ast,
     /// The definition the walk lowers, or whose filter funclet it lowers.
     fun: &'a FinishedFunction,
-    /// The filter funclets lowered so far.
+    /// The filter and `__finally` funclets lowered so far.
     funclets: alloc::vec::Vec<FunctionSsa>,
+    /// Per `__try` statement with a `__finally` block, by its index, the
+    /// funclet's `ent_pc` and the region.
+    finally_calls: alloc::collections::BTreeMap<u32, (usize, u32)>,
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,

@@ -22,11 +22,10 @@ pub enum Intrinsic {
     /// (used as the longjmp return target), SP, and d8-d15 into
     /// `env`. Returns 0 on the initial call; on a matching
     /// longjmp the saved return address is branched back to with
-    /// the caller-supplied value in x19. AArch64 lowering only;
-    /// only emitted by Windows AArch64 headers because that
-    /// target's msvcrt longjmp routes through SEH and refuses an
-    /// SEH-free `jmp_buf` -- the Linux / macOS bindings continue
-    /// to use the host libc setjmp.
+    /// the caller-supplied value in x19. AArch64 lowering only; it
+    /// replaces msvcrt's pair in a Windows AArch64 image run in-process,
+    /// which no function table describes to the unwinder msvcrt's
+    /// `longjmp` needs.
     SetjmpAArch64 = 2,
     /// `__c5_aarch64_longjmp(env, val)` -- partner to
     /// `SetjmpAArch64`. Args reach this op as (env on the c5
@@ -294,6 +293,15 @@ pub enum Intrinsic {
     /// OS ABI reserves x18 (Windows and Darwin on AArch64): the register at
     /// the width of `T`. No arguments. The interpreter has no such register.
     PlatformRegister = 83,
+    /// The frame value the language handler passes the function's SEH
+    /// funclets: the establisher frame on x86_64, the frame's x29 on
+    /// AArch64. No arguments.
+    FuncletFrame = 84,
+    /// `__c5_establisher_frame()`: the establisher frame the unwinder
+    /// reports for the function -- rbp less the unwind FrameOffset on
+    /// x86_64, the sp at entry on AArch64 -- which `setjmp` stores as the
+    /// frame an unwinding `longjmp` stops at. No arguments.
+    EstablisherFrame = 85,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -453,6 +461,8 @@ impl Intrinsic {
             81 => Some(Intrinsic::AtomicReleaseFence),
             82 => Some(Intrinsic::AtomicSignalFence),
             83 => Some(Intrinsic::PlatformRegister),
+            84 => Some(Intrinsic::FuncletFrame),
+            85 => Some(Intrinsic::EstablisherFrame),
             _ => None,
         }
     }

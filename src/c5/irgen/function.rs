@@ -61,6 +61,7 @@ pub(crate) fn walk_function(
         ast,
         fun,
         funclets: alloc::vec::Vec::new(),
+        finally_calls: alloc::collections::BTreeMap::new(),
         symbols,
         structs,
         target,

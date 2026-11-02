@@ -107,10 +107,11 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 const NT_BADC_PROLOGUE_END: u32 = 11;
 const NT_BADC_EXTERN_DATA: u32 = 12;
 const NT_BADC_EARLY_RETURN: u32 = 13;
-/// `(function, begin, end, handler, filter)` per `__try` scope-table row.
+/// `(function, begin, end, target, handler)` per `__try` scope-table row.
 const NT_BADC_SEH_SCOPE: u32 = 15;
-/// The filter field of a row whose filter is `EXCEPTION_EXECUTE_HANDLER`.
-pub(crate) const SEH_EXECUTE_HANDLER: u64 = u64::MAX;
+/// The target of a `__finally` row, the handler of a row whose filter is
+/// the constant `EXCEPTION_EXECUTE_HANDLER`.
+pub(crate) const SEH_NONE: u64 = u64::MAX;
 const RODATA_SECTION: &str = ".rodata";
 const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
@@ -1062,8 +1063,8 @@ struct Symtab<'a> {
     /// `(entry, frame path, early return)` `.text` offsets of each function
     /// that returns ahead of its frame.
     early_returns: Vec<(u64, u64, u64)>,
-    /// `(function, begin, end, handler, filter)` `.text` offsets of each
-    /// `__try` scope-table row, [`SEH_EXECUTE_HANDLER`] for no filter.
+    /// `(function, begin, end, target, handler)` `.text` offsets of each
+    /// `__try` scope-table row, [`SEH_NONE`] for an absent one.
     seh_rows: Vec<[u64; 5]>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
@@ -2594,17 +2595,17 @@ impl<'a> RelocWriter<'a> {
         }
         for r in &build.seh_rows {
             let place = |at: u32| self.text_place(u64::from(at));
-            let filter = r.filter.map(place);
-            let at = [place(r.func), place(r.begin), place(r.end), place(r.target)];
-            if !at.iter().chain(&filter).all(|p| p.0 == SHIDX_TEXT) {
+            let (target, handler) = (r.target.map(place), r.handler.map(place));
+            let at = [place(r.func), place(r.begin), place(r.end)];
+            if !(at.iter().chain(&target).chain(&handler)).all(|p| p.0 == SHIDX_TEXT) {
                 return Err(C5Error::hard(
                     Code::OBJECT_FORMAT,
                     "a `__try` region in a function placed outside `.text`",
                 ));
             }
-            let [func, begin, end, target] = at.map(|p| p.1);
-            let filter = filter.map_or(SEH_EXECUTE_HANDLER, |p| p.1);
-            self.syms.seh_rows.push([func, begin, end, target, filter]);
+            let [func, begin, end] = at.map(|p| p.1);
+            let [target, handler] = [target, handler].map(|p| p.map_or(SEH_NONE, |p| p.1));
+            self.syms.seh_rows.push([func, begin, end, target, handler]);
         }
         Ok(())
     }

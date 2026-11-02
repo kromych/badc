@@ -937,19 +937,19 @@ impl SsaBuilder {
         self.seh_current.is_some()
     }
 
-    /// Open a `__try` region inside the current one, whose exceptions
-    /// `filter` accepts enter `target`: the blocks created from here on lie
-    /// in it.
+    /// Open a `__try` region inside the current one, handled by `handler`
+    /// and, for an `__except`, entering `target`: the blocks created from
+    /// here on lie in it.
     pub(crate) fn open_seh_scope(
         &mut self,
-        target: BlockId,
-        filter: crate::c5::ir::SehFilter,
+        target: Option<BlockId>,
+        handler: crate::c5::ir::ScopeHandler,
     ) -> u32 {
         let id = self.func.seh_scopes.len() as u32;
         (self.func.seh_scopes).push(crate::c5::ir::SehScope {
             parent: self.seh_current,
             target,
-            filter,
+            handler,
         });
         self.seh_current = Some(id);
         id
@@ -958,6 +958,15 @@ impl SsaBuilder {
     /// Close region `id`; the blocks created from here on lie in its parent.
     pub(crate) fn close_seh_scope(&mut self, id: u32) {
         self.seh_current = self.func.seh_scopes[id as usize].parent;
+    }
+
+    /// A new block outside region `id`, in its parent.
+    pub(crate) fn new_block_outside(&mut self, id: u32) -> BlockId {
+        let current = self.seh_current;
+        self.seh_current = self.func.seh_scopes[id as usize].parent;
+        let block = self.new_block();
+        self.seh_current = current;
+        block
     }
 
     /// Place `block`, created ahead of its statement, in the current region.

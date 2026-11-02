@@ -204,15 +204,23 @@ fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
         .map(|e| e.to_string())
 }
 
-/// What the walker does not lower is a diagnostic, not a crash: a
-/// `__finally`, and a filter that allocates on its stack.
+/// What the walker does not lower is a diagnostic, not a crash: a funclet
+/// inside a `__finally` block, and a funclet that allocates on its stack.
 #[cfg(feature = "full")]
 #[test]
 fn the_forms_later_steps_lower_are_refused() {
     let rows = [
         (
-            "void f(void) { __try { g = ext(); } __finally { g = 1; } }",
-            "SEH `__finally` lowering not implemented yet",
+            "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __finally { g = 2; } } }",
+            "SEH filter or `__finally` inside a `__finally` block not implemented yet",
+        ),
+        (
+            "void f(void) { __try { g = ext(); } __finally { __try { g = 1; } __except (g) { g = 2; } } }",
+            "SEH filter or `__finally` inside a `__finally` block not implemented yet",
+        ),
+        (
+            "void f(int n) { __try { g = ext(); } __finally { char v[n]; v[0] = 1; g = v[0]; } }",
+            "stack allocation in a `__finally` block",
         ),
         (
             "void f(int n) { __try { g = ext(); } __except (((char *)__builtin_alloca(n))[0] = 1) { g = 2; } }",
@@ -325,6 +333,57 @@ fn a_filter_is_a_funclet_the_scope_table_names() {
     }
 }
 
+/// A `__finally` region's row names its funclet as HandlerAddress, with
+/// JumpTarget 0, and an x64 unwind record carries UNW_FLAG_UHANDLER for it,
+/// with UNW_FLAG_EHANDLER too where an `__except` region shares the
+/// function: 0x11 and 0x19 in the header byte, as cl writes them.
+#[cfg(feature = "full")]
+#[test]
+fn a_finally_row_names_its_funclet_and_no_target() {
+    let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
+        int f(void) { __try { g = ext(); } __finally { g = 1; } return g; }\n\
+        int h(void) { __try { __try { g = ext(); } __finally { g = 1; } } __except (1) { g = 2; } return g; }\n\
+        int main(void) { return f() + h(); }\n";
+    for target in WINDOWS {
+        let program = Compiler::with_target(src.into(), target)
+            .compile()
+            .expect("front end");
+        let pe = super::link_executable_with_runtime(&program, target, crate::NativeOptions::new())
+            .expect("link");
+        let x64 = target == Target::WindowsX64;
+        let tables = pe_scope_tables(&pe, x64);
+        let starts = pe_function_starts(&pe, x64);
+        assert_eq!(tables.len(), 2, "{target:?}: {tables:?}");
+        let mut row_counts: alloc::vec::Vec<usize> = tables.iter().map(|t| t.2.len()).collect();
+        row_counts.sort();
+        assert_eq!(row_counts, [1, 2], "{target:?}: {tables:?}");
+        for (_, _, rows) in &tables {
+            let [_, _, handler, jump] = rows[0];
+            assert!(
+                jump == 0 && starts.contains(&handler),
+                "{target:?}: {rows:?}"
+            );
+        }
+        if x64 {
+            let mut flags = pe_handler_flags(&pe);
+            flags.sort();
+            assert_eq!(flags, [0x11, 0x19], "{target:?}");
+        }
+    }
+}
+
+/// The header byte of each x64 unwind record with a handler flag.
+#[cfg(feature = "full")]
+fn pe_handler_flags(pe: &[u8]) -> alloc::vec::Vec<u8> {
+    let (start, count, entry) = exception_table(pe, true);
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    (0..count)
+        .filter_map(|i| pe_rva_offset(pe, word(start + i * entry + 8)))
+        .map(|at| pe[at])
+        .filter(|&b| b >> 3 & 3 != 0)
+        .collect()
+}
+
 /// The begin RVA of each entry of the exception table.
 #[cfg(feature = "full")]
 fn pe_function_starts(pe: &[u8], x64: bool) -> alloc::vec::Vec<u32> {
@@ -375,7 +434,8 @@ fn pe_scope_tables(pe: &[u8], x64: bool) -> alloc::vec::Vec<(u32, u32, alloc::ve
         }
         let at = pe_rva_offset(pe, info).expect("unwind record");
         let (end, data) = if x64 {
-            if pe[at] >> 3 & 1 == 0 {
+            // UNW_FLAG_EHANDLER or UNW_FLAG_UHANDLER.
+            if pe[at] >> 3 & 3 == 0 {
                 continue;
             }
             let codes = (usize::from(pe[at + 2]) + 1) & !1;

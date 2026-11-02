@@ -27,6 +27,9 @@ EXCEPTION_DISPOSITION __C_specific_handler(struct _EXCEPTION_RECORD *ExceptionRe
                                            void *EstablisherFrame,
                                            struct _CONTEXT *ContextRecord,
                                            struct _DISPATCHER_CONTEXT *DispatcherContext);
+// cl's code leaves a `__try` body for a `return` through it.
+#pragma binding(msvcrt::_local_unwind, "_local_unwind")
+void _local_unwind(void *EstablisherFrame, void *TargetPc);
 
 // Valid in an `__except` filter or body, in a filter, and in a
 // `__finally` body respectively; the compiler supplies the values.

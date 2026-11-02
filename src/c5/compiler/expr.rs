@@ -1756,9 +1756,10 @@ impl Compiler {
         use crate::c5::op::Intrinsic;
         let is = |k: Intrinsic| intrinsic_id == k as i64;
         let fn_name = self.symbols[id_idx].name.clone();
-        // `__builtin_trap()` is the only nullary intrinsic;
-        // every other one needs at least one argument.
-        if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
+        // `__builtin_trap()` and `__c5_establisher_frame()` are the
+        // nullary intrinsics; every other one needs at least one argument.
+        let nullary = is(Intrinsic::Trap) || is(Intrinsic::EstablisherFrame);
+        if self.lex.tk == ')' && !nullary {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
                 format!("intrinsic `{fn_name}` requires one argument"),
@@ -1874,8 +1875,8 @@ impl Compiler {
         let mut walked_return_slot = false;
         let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
             alloc::vec::Vec::new();
-        if is(Intrinsic::Trap) {
-            // __builtin_trap() -- no arguments.
+        if is(Intrinsic::Trap) || is(Intrinsic::EstablisherFrame) {
+            // No arguments.
         } else if is(Intrinsic::Fma) || is(Intrinsic::Fmaf) {
             // C99 7.12.13.1 `fma` / `fmaf`: three operands in the result
             // precision, lowered to one `Inst::Fma`.

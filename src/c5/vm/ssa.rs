@@ -3571,6 +3571,13 @@ fn run_intrinsic(
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }
+        // No unwinder walks the interpreter's frames, so `setjmp` stores
+        // the frame that makes `longjmp` restore without unwinding.
+        Intrinsic::EstablisherFrame => {
+            frame.regs[v as usize] = 0;
+            Ok(())
+        }
+        Intrinsic::FuncletFrame => unreachable!("the interpreter refuses a `__try` region"),
         // The OS's value in x18 (the Windows TEB) has no interpreter
         // counterpart.
         Intrinsic::PlatformRegister => Err(C5Error::Runtime(

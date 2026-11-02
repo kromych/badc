@@ -250,12 +250,12 @@ fn synth_program_and_build(
         diagnostics: Vec::new(),
         seh_rows: (merged.seh_rows.iter())
             .map(
-                |&([func, begin, end, target], filter)| crate::c5::codegen::SehRow {
+                |&([func, begin, end], target, handler)| crate::c5::codegen::SehRow {
                     func,
                     begin,
                     end,
                     target,
-                    filter,
+                    handler,
                 },
             )
             .collect(),

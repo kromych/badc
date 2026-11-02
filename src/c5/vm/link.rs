@@ -417,7 +417,8 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
             f.ent_pc += b.pc;
             f.end_pc += b.pc;
             for s in &mut f.seh_scopes {
-                if let crate::c5::ir::SehFilter::Funclet(pc) = &mut s.filter {
+                use crate::c5::ir::ScopeHandler;
+                if let ScopeHandler::Filter(pc) | ScopeHandler::Finally(pc) = &mut s.handler {
                     *pc += b.pc;
                 }
             }

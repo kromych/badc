@@ -918,12 +918,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_copy_site_temps.c", 0),
     ("aggregate_register_parts.c", 0),
     ("call_result_in_place.c", 0),
-    // C99 7.13 setjmp / longjmp round-trip. On macOS / Linux
-    // the binding hits host libc; on Windows x86_64 it routes
-    // through msvcrt; on Windows AArch64 the inline
-    // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
-    // expansions in the codegen replace the missing CRT
-    // surface.
+    // C99 7.13 setjmp / longjmp round-trip. On macOS / Linux the
+    // binding hits host libc; on Windows it routes through msvcrt,
+    // except in an in-process image on AArch64, which takes the inline
+    // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64` pair.
     ("setjmp_longjmp_roundtrip.c", 0),
     // POSIX sigsetjmp / siglongjmp (savemask 0) mapped onto the same
     // per-target setjmp / longjmp machinery.
@@ -1033,6 +1031,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unwind_restores_callee_saved.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -1925,6 +1924,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("unwind_restores_callee_saved.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -3125,6 +3125,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("unwind_restores_callee_saved.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -4055,6 +4056,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("unwind_restores_callee_saved.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -4414,15 +4416,12 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_aggregate_initializers.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
-    // `movdqa` saves of xmm6..xmm15 don't AV. The longjmp side
-    // cannot round-trip yet -- msvcrt's `longjmp` walks frames via
-    // `RtlUnwindEx`, which needs per-function `UNWIND_INFO`
-    // matching the actual prologue. c5 currently emits a single
-    // coarse trivial entry, so frames don't unwind correctly.
-    // TODO: emit accurate per-function unwind data so
-    // `setjmp_longjmp.c` can join this list.
+    // `movdqa` saves of xmm6..xmm15 don't AV. msvcrt's `longjmp`
+    // unwinds to the frame `_setjmp` stored through each frame's
+    // unwind record.
     ("setjmp_basic_stack.c", 0),
     ("setjmp_misaligned.c", 0),
+    ("setjmp_longjmp.c", 0),
     ("packed_bitfield_repack.c", 0),
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),
@@ -4915,6 +4914,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("unwind_restores_callee_saved.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -5268,16 +5268,13 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
-    // Windows AArch64 routes setjmp / longjmp through the
-    // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
-    // inline expansions because msvcrt's `longjmp` requires SEH
-    // unwind metadata c5 doesn't emit; the intrinsics save the
-    // callee-saved registers + SP + a captured resume PC into
-    // the user's `jmp_buf` and branch back from longjmp. The
-    // round-trip fixture exercises both sides.
+    // Windows AArch64 setjmp / longjmp: msvcrt's `_setjmpex` stores the
+    // frame the unwinder reports for its caller, and its `longjmp`
+    // unwinds to it through each frame's unwind record.
     ("setjmp_basic_stack.c", 0),
     ("setjmp_misaligned.c", 0),
     ("setjmp_longjmp_roundtrip.c", 0),
+    ("setjmp_longjmp.c", 0),
     ("packed_bitfield_repack.c", 0),
     ("nested_designator_string_member.c", 0),
     ("union_member_unbraced_init.c", 0),

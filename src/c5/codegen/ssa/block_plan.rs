@@ -545,7 +545,10 @@ fn pinned_blocks(func: &FunctionSsa) -> Vec<bool> {
     pin(0);
     func.computed_goto_targets.iter().for_each(|&b| pin(b));
     func.label_data_relocs.iter().for_each(|r| pin(r.block));
-    func.seh_scopes.iter().for_each(|s| pin(s.target));
+    func.seh_scopes
+        .iter()
+        .filter_map(|s| s.target)
+        .for_each(&mut pin);
     for block in &func.blocks {
         // Row entry 0 is the fall-through, a direct edge.
         if let Terminator::AsmGoto { table } = block.terminator {

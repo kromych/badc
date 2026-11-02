@@ -3292,20 +3292,28 @@ impl Compiler {
     /// C99 6.5.4p2 and C11 6.5.4p4: a cast to a non-`void` type converts a
     /// scalar to a scalar, and no pointer to or from a floating type. GNU C
     /// adds a cast to the operand's own type, a union from a member's type,
-    /// and a cast involving a vector.
+    /// and a cast between a vector and a vector or an integer (not `_Bool`)
+    /// of the same size, which gcc and clang accept and no other.
     pub(super) fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
         let bare = |ty: i64| {
             super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
         };
-        let fits = match (self.operand(to), self.operand(from)) {
-            (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => false,
-            (Operand::Other, _) | (_, Operand::Other) => {
-                bare(to) == bare(from)
-                    || is_vector_ty(&self.structs, to)
-                    || is_vector_ty(&self.structs, from)
-                    || self.union_cast_member(to, from).is_some()
+        let vector = |ty: i64| is_vector_ty(&self.structs, ty);
+        let lane_bits = |ty: i64| {
+            vector(ty) || (self.operand(ty) == Operand::Integer && !super::types::is_bool_ty(ty))
+        };
+        let fits = if vector(to) || vector(from) {
+            lane_bits(to) && lane_bits(from) && self.size_of_type(to) == self.size_of_type(from)
+        } else {
+            match (self.operand(to), self.operand(from)) {
+                (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => {
+                    false
+                }
+                (Operand::Other, _) | (_, Operand::Other) => {
+                    bare(to) == bare(from) || self.union_cast_member(to, from).is_some()
+                }
+                _ => true,
             }
-            _ => true,
         };
         if fits {
             return Ok(());

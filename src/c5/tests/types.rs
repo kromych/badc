@@ -5228,6 +5228,56 @@ fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
     );
 }
 
+/// GNU C: a cast between a vector and an integer of the same size, `__int128`
+/// included, or between two vectors of the same size, keeps the bits; one
+/// to or from a pointer, a floating type, `_Bool` or another size is
+/// rejected, as gcc 16 and clang 21 reject it. The bits themselves are the
+/// `vector_casts_keep_the_bits.c` fixture's.
+#[test]
+fn a_vector_casts_only_to_an_integer_or_a_vector_of_its_size() {
+    use crate::{CompileOptions, Compiler, Target};
+    const DECLS: &str = "typedef int v2si __attribute__((vector_size(8)));\n\
+        typedef int v4si __attribute__((vector_size(16)));\n";
+    let accepted = [
+        "long long f(v2si v) { return (long long)v; }",
+        "v2si f(long long q) { return (v2si)q; }",
+        "unsigned long long f(v2si v) { return (unsigned long long)v; }",
+        "v4si f(__int128 q) { return (v4si)q; }",
+        "__int128 f(v4si v) { return (__int128)v; }",
+        "v4si f(v2si v) { return (v4si)(__int128)(long long)v; }",
+    ];
+    let rejected = [
+        "void *f(v2si v) { return (void *)v; }",
+        "v2si f(void *p) { return (v2si)p; }",
+        "double f(v2si v) { return (double)v; }",
+        "v2si f(double x) { return (v2si)x; }",
+        "int f(v2si v) { return (int)v; }",
+        "v4si f(long long q) { return (v4si)q; }",
+        "_Bool f(v2si v) { return (_Bool)v; }",
+        "v2si f(v4si v) { return (v2si)v; }",
+    ];
+    for target in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        let compile = |body: &str| {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(alloc::format!("{DECLS}{body}\n"), target, opts).compile()
+        };
+        for body in accepted {
+            if let Err(e) = compile(body) {
+                panic!("{target:?}: {body}: {e}");
+            }
+        }
+        for body in rejected {
+            match compile(body) {
+                Ok(_) => panic!("{target:?}: accepted {body}"),
+                Err(e) => assert!(
+                    alloc::format!("{e}").contains("invalid cast"),
+                    "{target:?}: {body}: {e}"
+                ),
+            }
+        }
+    }
+}
+
 /// A diagnostic presents a GNU vector type as a vector: it spells the type
 /// as its lane type with the `vector_size` attribute that declares it,
 /// rather than as the aggregate badc models it with, and calls a mismatch

@@ -102,11 +102,9 @@
 #define _Outptr_
 #define _Outptr_opt_
 
-// Function-like decorator macros (`__declspec(x)`, `__pragma(x)`,
-// `_Pre_satisfies_(x)`, ...) expand to nothing. The 1-arg shape
-// covers every form the bundled CRT headers emit; none of them
-// rely on argument concatenation or stringification.
-#define __declspec(x)
+// Function-like decorator macros (`__pragma(x)`, `_Pre_satisfies_(x)`,
+// ...) expand to nothing. `__declspec` is left to the compiler, which
+// honours align, thread, selectany, noreturn and dllimport / dllexport.
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
@@ -117,9 +115,9 @@
 #define _CRT_BEGIN_C_HEADER
 #define _CRT_END_C_HEADER
 
-// CRT import decorators. These expand to `__declspec(dllimport)` -- already
-// a no-op above -- but the SDK spells the import surface with per-library
-// aliases, so name them empty for the declarations that carry them.
+// CRT import decorators. The SDK spells the import surface with per-library
+// aliases expanding to `__declspec(dllimport)`; badc binds these names
+// itself, so they are empty for the declarations that carry them.
 #define _ACRTIMP
 #define _ACRTIMP_ALT
 #define _DCRTIMP

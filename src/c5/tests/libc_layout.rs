@@ -1373,3 +1373,17 @@ fn xsi_records_follow_each_c_library() {
         &[("sizeof(DBM)", 68), ("_Alignof(DBM)", 1)],
     );
 }
+
+/// msvc_compat.h leaves `__declspec` to the compiler, so the alignment a
+/// declaration asks for survives the header, as in MSVC's `M128A`.
+#[test]
+fn msvc_compat_keeps_the_declspec_alignment() {
+    let src = "#include <msvc_compat.h>\n#include <stddef.h>\n\
+               typedef struct __declspec(align(16)) { unsigned long long lo; long long hi; } m128a;\n\
+               struct ctx { char c; m128a x; };\n\
+               _Static_assert(_Alignof(m128a) == 16, \"align(16)\");\n\
+               _Static_assert(offsetof(struct ctx, x) == 16, \"member offset\");\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        compile(src, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}

@@ -881,6 +881,65 @@ fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
     }
 }
 
+// gcc and clang give each `__builtin_` library function its prototype with
+// no declaration in scope. Under `-nostdinc`, `-ffreestanding` and for a
+// preprocessed unit no header can be auto-included; the fixture still links
+// for linux-x64 and windows-x64 from every host, at -O0 and -O, and runs to
+// 0 for the host's own target.
+#[test]
+fn builtin_library_functions_link_without_a_declaration() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-builtin-prototypes");
+    let src = fixtures_dir().join("builtin_library_functions_need_no_declaration.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", _) => "macos-aarch64",
+        ("windows", "aarch64") => "windows-arm64",
+        ("windows", _) => "windows-x64",
+        (_, "aarch64") => "linux-aarch64",
+        _ => "linux-x64",
+    };
+    let mut targets = vec!["linux-x64", "windows-x64"];
+    if !targets.contains(&host) {
+        targets.push(host);
+    }
+    let build = |args: &[&std::ffi::OsStr], what: &str| {
+        let out = Command::new(badc).arg("-q").args(args).output();
+        let out = out.expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{what}: {err}");
+    };
+    let suffix = std::env::consts::EXE_SUFFIX;
+    for target in targets {
+        let flag = format!("--target={target}");
+        let unit = dir.join(format!("{target}.i"));
+        let preprocess = [
+            flag.as_ref(),
+            "-nostdinc".as_ref(),
+            "-E".as_ref(),
+            src.as_ref(),
+            "-o".as_ref(),
+            unit.as_ref(),
+        ];
+        build(&preprocess, target);
+        for (mode, input) in [("-nostdinc", &src), ("-ffreestanding", &src), (".i", &unit)] {
+            for level in ["-O0", "-O"] {
+                let what = format!("{target} {mode} {level}");
+                let exe = dir.join(format!("{target}{mode}{level}{suffix}"));
+                let mut args = vec![flag.as_ref(), level.as_ref()];
+                if mode != ".i" {
+                    args.push(mode.as_ref());
+                }
+                args.extend([input.as_os_str(), "-o".as_ref(), exe.as_os_str()]);
+                build(&args, &what);
+                if target == host {
+                    let run = Command::new(&exe).output().expect("run the program");
+                    assert_eq!(run.status.code(), Some(0), "{what}");
+                }
+            }
+        }
+    }
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

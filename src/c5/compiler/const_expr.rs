@@ -1761,46 +1761,6 @@ impl Compiler {
             self.skip_balanced_to_close_paren()?;
             return Ok(ConstVal::int(0));
         }
-        if self.lex.tk == Token::Id
-            && matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "__builtin_abs" | "__builtin_labs" | "__builtin_llabs"
-            )
-        {
-            // GCC integer absolute-value builtins fold with a constant
-            // argument. The operand narrows to the parameter type first,
-            // and the most negative value wraps, matching the runtime
-            // behavior of the corresponding library functions.
-            let ty = match self.symbols[self.lex.curr_id_idx].name.as_str() {
-                "__builtin_abs" => Ty::Int as i64,
-                "__builtin_labs" => Ty::Long as i64,
-                _ => Ty::LongLong as i64,
-            };
-            self.next()?;
-            if self.lex.tk != '(' {
-                return Err(
-                    self.compile_err(Code::SYNTAX, "`(` expected after absolute-value builtin")
-                );
-            }
-            self.next()?;
-            let arg = self.parse_const_expr_cond_val()?.as_i128();
-            if self.lex.tk != ')' {
-                return Err(
-                    self.compile_err(Code::SYNTAX, "`)` expected to close absolute-value builtin")
-                );
-            }
-            self.next()?;
-            let val = if self.size_of_type(ty) == 4 {
-                (arg as i32).wrapping_abs() as i128
-            } else {
-                (arg as i64).wrapping_abs() as i128
-            };
-            return Ok(ConstVal::Int {
-                val,
-                ty,
-                enumeration: None,
-            });
-        }
         if let Some(v) = self.try_fold_value_builtin()? {
             return Ok(v);
         }

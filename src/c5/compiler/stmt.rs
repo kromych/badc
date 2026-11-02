@@ -1194,32 +1194,63 @@ impl Compiler {
         ty: i64,
         value: super::super::ast::ExprId,
     ) -> (super::super::ast::StmtId, super::super::ast::ExprId) {
-        use super::super::ast::{Expr, Stmt};
+        let assign = self.bind_temp_at(sym, slot, ty, value);
         let pos = self.ast_src_pos();
-        let mk_ident = |c: &mut Self| {
-            c.ast.push_expr(
-                Expr::Ident {
-                    sym: sym as u32,
-                    ty,
-                    class: Token::Loc as i64,
-                    val: slot,
-                    is_thread_local: false,
-                    array_size: 0,
-                },
-                pos,
-            )
-        };
-        let lhs = mk_ident(self);
-        let assign = self.ast.push_expr(
-            Expr::Assign {
+        let stmt = self
+            .ast
+            .push_stmt(super::super::ast::Stmt::Expr(assign), pos);
+        (stmt, self.temp_ident(sym, slot, ty))
+    }
+
+    /// `value`, already of type `ty`, assigned to a fresh temporary: the
+    /// assignment expression and the temporary's symbol and slot.
+    pub(super) fn bind_temp(
+        &mut self,
+        value: super::super::ast::ExprId,
+        ty: i64,
+    ) -> (super::super::ast::ExprId, (usize, i64)) {
+        let (sym, slot) = self.new_temp(ty);
+        (self.bind_temp_at(sym, slot, ty, value), (sym, slot))
+    }
+
+    fn bind_temp_at(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+        value: super::super::ast::ExprId,
+    ) -> super::super::ast::ExprId {
+        let lhs = self.temp_ident(sym, slot, ty);
+        let pos = self.ast_src_pos();
+        self.ast.push_expr(
+            super::super::ast::Expr::Assign {
                 lhs,
                 rhs: value,
                 ty,
             },
             pos,
-        );
-        let stmt = self.ast.push_stmt(Stmt::Expr(assign), pos);
-        (stmt, mk_ident(self))
+        )
+    }
+
+    /// The temporary `sym` at `slot`, of type `ty`, as an lvalue.
+    pub(super) fn temp_ident(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        self.ast.push_expr(
+            super::super::ast::Expr::Ident {
+                sym: sym as u32,
+                ty,
+                class: Token::Loc as i64,
+                val: slot,
+                is_thread_local: false,
+                array_size: 0,
+            },
+            pos,
+        )
     }
 
     /// `{ ... }`. C99 block-scope: declarations may appear anywhere a

@@ -3830,15 +3830,13 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
         "struct S { int x; };\n\
          static struct S *g1 = 5;\n\
          static int *g2 = 7;\n\
-         static struct S *g3 = 1.5;\n\
-         static int *g4 = 2.5;\n\
          void f(struct S *sp, int *ip, __int128 w) {\n\
-           char c; signed char sc; unsigned char uc; int i; double d; _Bool b;\n\
+           char c; signed char sc; unsigned char uc; int i; _Bool b;\n\
            struct S *a1; int *a2;\n\
            c = sp; c = ip; sc = sp; sc = ip; uc = sp; uc = ip;\n\
-           i = sp; i = ip; d = sp; d = ip; b = sp; b = ip;\n\
-           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = 1.5; a2 = 1.5; a1 = w; a2 = w;\n\
-           (void)c; (void)sc; (void)uc; (void)i; (void)d; (void)b; (void)a1; (void)a2;\n\
+           i = sp; i = ip; b = sp; b = ip;\n\
+           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = w; a2 = w;\n\
+           (void)c; (void)sc; (void)uc; (void)i; (void)b; (void)a1; (void)a2;\n\
          }\n\
          int main(void) { return 0; }",
     );
@@ -3856,9 +3854,30 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
             count("pointer assigned to integer in assignment"),
             rows.len(),
         ),
-        (4, 4, 10, 18),
+        (2, 2, 8, 12),
         "got: {rows:?}"
     );
+}
+
+#[test]
+fn a_pointer_against_a_floating_value_is_an_error() {
+    // C99 6.5.4p4: no conversion relates a pointer and a floating type, so
+    // C99 6.5.16.1p1 admits neither as the other's operand, as gcc and
+    // clang reject it.
+    for (what, src) in [
+        ("initializer", "static int *g = 2.5;"),
+        ("assignment", "void f(double d) { int *p; p = d; (void)p; }"),
+        ("assignment", "void f(int *p) { double d; d = p; (void)d; }"),
+        ("argument", "double g(double); void f(int *p) { g(p); }"),
+        ("argument", "void g(int *); void f(float x) { g(x); }"),
+    ] {
+        let err = crate::Compiler::new(alloc::format!("{src}\nint main(void) {{ return 0; }}"))
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{what}: `{src}` compiled"));
+        let text = alloc::format!("{err}");
+        assert!(text.contains("incompatible types in"), "{what}: {text}");
+    }
 }
 
 #[test]

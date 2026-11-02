@@ -4116,7 +4116,7 @@ fn builtin_table_answers_all_three_roles() {
     for (name, fn_name) in [
         ("__builtin_strlen", "strlen"),
         ("__builtin_memcmp", "memcmp"),
-        ("__builtin_abs", "abs"),
+        ("__builtin_strchr", "strchr"),
         ("__builtin_malloc", "malloc"),
         ("__builtin_printf", "printf"),
         ("__builtin_vsnprintf", "vsnprintf"),
@@ -4158,12 +4158,16 @@ fn builtin_table_answers_all_three_roles() {
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
     }
-    // The classifications gcc folds from the operand are no calls, so a
-    // freestanding unit can take them.
+    // The classifications gcc folds from the operand and the absolute
+    // values are no calls, so a freestanding unit can take them.
     for name in [
         "__builtin_isdigit",
         "__builtin_isascii",
         "__builtin_toascii",
+        "__builtin_abs",
+        "__builtin_llabs",
+        "__builtin_imaxabs",
+        "__builtin_fabsl",
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
         assert!(
@@ -4174,7 +4178,9 @@ fn builtin_table_answers_all_three_roles() {
     // The binary search needs the list sorted, and a builtin that the
     // other table supplies is not also an alias.
     assert!(
-        builtins::LIBRARY_BUILTINS.windows(2).all(|w| w[0] < w[1]),
+        builtins::LIBRARY_BUILTINS
+            .windows(2)
+            .all(|w| w[0].0 < w[1].0),
         "the library builtins must be sorted and unique"
     );
     for b in builtins::BUILTINS {
@@ -4209,6 +4215,100 @@ fn builtin_table_answers_all_three_roles() {
     ));
 }
 
+/// Each builtin's prototype agrees with the declaration in the bundled
+/// header that declares its library function for the target: redeclared
+/// after it, the function compiles, `size_t`, `wchar_t`, `wint_t` and
+/// `va_list` taking the target's types.
+#[test]
+fn builtin_prototypes_agree_with_the_bundled_headers() {
+    use super::builtins::{FALLBACK_FUNCTIONS, LIBRARY_BUILTINS};
+    use crate::{CompileOptions, Compiler};
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let mut headers: alloc::collections::BTreeSet<&str> =
+            ["stdarg.h", "stddef.h", "stdio.h", "time.h", "wchar.h"].into();
+        let mut decls = String::new();
+        for &(name, proto) in LIBRARY_BUILTINS.iter().chain(FALLBACK_FUNCTIONS) {
+            let Some(header) = crate::c5::headers::header_declaring(name, target) else {
+                continue;
+            };
+            headers.insert(header);
+            let open = proto.find('(').expect("a parameter list");
+            decls += &format!("{} {name}{};\n", &proto[..open], &proto[open..]);
+        }
+        let mut src = String::from("#define _GNU_SOURCE 1\n");
+        for h in headers {
+            src += &format!("#include <{h}>\n");
+        }
+        src += &decls;
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+            panic!("{target:?}: {e}");
+        }
+    }
+}
+
+/// With no header, a call to each `__builtin_` alias calls its library
+/// function with the type the prototype spells: the type a declaration
+/// spelling it over the predefined types gives.
+#[test]
+fn builtin_calls_take_the_prototype_they_spell() {
+    use super::builtins::LIBRARY_BUILTINS;
+    use crate::{CompileOptions, Compiler};
+    const TYPES: &str = "typedef __SIZE_TYPE__ size_t;\n\
+                         typedef __WCHAR_TYPE__ wchar_t;\n\
+                         typedef __WINT_TYPE__ wint_t;\n\
+                         typedef __builtin_va_list va_list;\n\
+                         typedef int pid_t;\n\
+                         typedef void FILE;\n";
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let mut src = String::from(TYPES);
+        for &(name, proto) in LIBRARY_BUILTINS {
+            let open = proto.find('(').expect("a parameter list");
+            let params = &proto[open + 1..proto.len() - 1];
+            let fixed = params.split(", ").filter(|p| !matches!(*p, "void" | "..."));
+            let zeros: Vec<&str> = fixed.map(|_| "0").collect();
+            let spelled = proto.replace("struct tm", "void");
+            let (ret, list) = spelled.split_at(spelled.find('(').expect("a parameter list"));
+            src += &format!(
+                "void call_{name}(void) {{ if (0) __builtin_{name}({}); }}\n\
+                 {ret} spelled_{name}{list};\n",
+                zeros.join(", ")
+            );
+        }
+        let opts = CompileOptions::default()
+            .with_nostdinc(true)
+            .with_no_entry_point(true);
+        let program = Compiler::with_options(src, target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let symbol = |name: &str| {
+            let s = program.symbols.iter().find(|s| s.name == name);
+            let s = s.unwrap_or_else(|| panic!("{target:?}: no `{name}`"));
+            let params = &s.fn_type.params;
+            (s.type_, params.types.clone(), params.variadic)
+        };
+        for &(name, _) in LIBRARY_BUILTINS {
+            if super::builtins::library_alias_intrinsic(&format!("__builtin_{name}")).is_some() {
+                continue;
+            }
+            let (called, spelled) = (format!("{name}.builtin"), format!("spelled_{name}"));
+            assert_eq!(symbol(&called), symbol(&spelled), "{target:?} {name}");
+        }
+    }
+}
+
 /// `__has_builtin` answers 1 for every builtin badc accepts, however it is
 /// supplied: each row of the table, each library alias, and on the x86
 /// targets each vector builtin, which the other targets refuse. No
@@ -4230,7 +4330,7 @@ fn has_builtin_reports_every_accepted_builtin() {
     names.extend(
         builtins::LIBRARY_BUILTINS
             .iter()
-            .map(|f| format!("__builtin_{f}")),
+            .map(|(f, _)| format!("__builtin_{f}")),
     );
     let simd: Vec<&str> = crate::c5::x86_simd::OPS.iter().map(|o| o.name).collect();
     let mut src = String::new();

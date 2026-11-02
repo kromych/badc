@@ -42,6 +42,11 @@ pub(super) enum ValueBuiltin {
     /// the FP comparison they lower to. Every FP comparison badc emits is
     /// quiet (`ucomis*`, `fcmp`): a quiet NaN raises no invalid exception.
     Compare(BinOp),
+    /// `T (T)` over `int`, `long`, `long long` and, for `None`, `intmax_t`:
+    /// the magnitude, the most negative value wrapping as gcc's does.
+    Abs(Option<Ty>),
+    /// `T (T)` over a real floating type: the operand with its sign clear.
+    FAbs(i64),
 }
 
 impl ValueBuiltin {
@@ -67,6 +72,13 @@ impl ValueBuiltin {
             "__builtin_islessequal" => Self::Compare(BinOp::Fle),
             "__builtin_islessgreater" => Self::Compare(BinOp::Fone),
             "__builtin_isunordered" => Self::Compare(BinOp::Funo),
+            "__builtin_abs" => Self::Abs(Some(Ty::Int)),
+            "__builtin_labs" => Self::Abs(Some(Ty::Long)),
+            "__builtin_llabs" => Self::Abs(Some(Ty::LongLong)),
+            "__builtin_imaxabs" => Self::Abs(None),
+            "__builtin_fabs" => Self::FAbs(double),
+            "__builtin_fabsf" => Self::FAbs(float),
+            "__builtin_fabsl" => Self::FAbs(double | LONG_DOUBLE_BIT),
             _ => return None,
         })
     }
@@ -145,7 +157,14 @@ impl Compiler {
             ValueBuiltin::ReturnAddr => (alloc::vec![Value(void_ptr_ty())], 1),
             // Each operand keeps its type until the pair's common type is known.
             ValueBuiltin::Compare(_) => (alloc::vec![Value(Ty::Double as i64); 2], 2),
+            ValueBuiltin::Abs(ty) => (alloc::vec![Value(self.abs_operand_ty(ty))], 1),
+            ValueBuiltin::FAbs(ty) => (alloc::vec![Value(ty)], 1),
         }
+    }
+
+    /// The type an integer absolute value takes and yields.
+    fn abs_operand_ty(&self, ty: Option<Ty>) -> i64 {
+        ty.map_or_else(|| self.intmax_t_ty(), |t| t as i64)
     }
 
     /// The operands of `name`, the `(` consumed, through the `)`.
@@ -318,6 +337,11 @@ impl Compiler {
                 (self.ast_binary(BinOp::And, c, mask, int), int)
             }
             (ValueBuiltin::ReturnAddr, &[Arg::Value(addr)]) => (addr, void_ptr_ty()),
+            (ValueBuiltin::Abs(t), &[Arg::Value(x)]) => {
+                let ty = self.abs_operand_ty(t);
+                (self.ast_int_abs(x, ty), ty)
+            }
+            (ValueBuiltin::FAbs(ty), &[Arg::Value(x)]) => (self.ast_fp_abs(x, ty), ty),
             _ => unreachable!("`{name}` operands follow its parameters"),
         };
         // The value is never an array, whatever an operand decayed from.
@@ -354,6 +378,18 @@ impl Compiler {
         let line = self.lex.line;
         self.expr(Token::Assign as i64)?;
         self.reject_void_value(self.ty)?;
+        self.convert_builtin_value(name, pos, want, line)
+    }
+
+    /// The operand just parsed, at `pos` of `name` from `line`, converted
+    /// as [`Self::parse_builtin_value`] converts it.
+    pub(super) fn convert_builtin_value(
+        &mut self,
+        name: &str,
+        pos: usize,
+        want: i64,
+        line: usize,
+    ) -> Result<ExprId, C5Error> {
         let zero = self.value_is_null_pointer_constant();
         let untyped = self.last_emit_was_indirect_call();
         if let Some(m) = Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
@@ -385,6 +421,77 @@ impl Compiler {
                 to_ty: want,
             })
         })
+    }
+
+    /// `|x|` for `x` of signed integer type `ty`, evaluated once: `(x ^ m) -
+    /// m`, `m` the sign spread across the width, in the unsigned type so the
+    /// most negative value wraps.
+    fn ast_int_abs(&mut self, x: ExprId, ty: i64) -> ExprId {
+        let unsigned = ty | UNSIGNED_BIT;
+        let (set, (sym, slot)) = self.bind_temp(x, ty);
+        let width = self.size_of_type(ty) as i64 * 8;
+        let mut sign = || {
+            let t = self.temp_ident(sym, slot, ty);
+            let top = self.ast_node(Expr::IntLit {
+                val: width - 1,
+                ty: Ty::Int as i64,
+            });
+            let m = self.ast_binary(BinOp::Shr, t, top, ty);
+            self.ast_node(Expr::Cast {
+                child: m,
+                to_ty: unsigned,
+            })
+        };
+        let (m, m2) = (sign(), sign());
+        let t = self.temp_ident(sym, slot, ty);
+        let t = self.ast_node(Expr::Cast {
+            child: t,
+            to_ty: unsigned,
+        });
+        let flipped = self.ast_binary(BinOp::Xor, t, m, unsigned);
+        let magnitude = self.ast_binary(BinOp::Sub, flipped, m2, unsigned);
+        let value = self.ast_node(Expr::Cast {
+            child: magnitude,
+            to_ty: ty,
+        });
+        self.ast_node(Expr::Comma {
+            lhs: set,
+            rhs: value,
+            ty,
+        })
+    }
+
+    /// `x` of real floating type `ty` with its sign clear; `long double`
+    /// values are `double`s.
+    fn ast_fp_abs(&mut self, x: ExprId, ty: i64) -> ExprId {
+        use crate::c5::op::Intrinsic;
+        let float = Ty::Float as i64;
+        let (kind, op_ty) = if ty == float {
+            (Intrinsic::Fabsf, float)
+        } else {
+            (Intrinsic::Fabs, Ty::Double as i64)
+        };
+        let arg = if ty == op_ty {
+            x
+        } else {
+            self.ast_node(Expr::Cast {
+                child: x,
+                to_ty: op_ty,
+            })
+        };
+        let value = self.ast_node(Expr::Intrinsic {
+            kind: kind as i64,
+            args: alloc::vec![arg],
+            ty: op_ty,
+        });
+        if ty == op_ty {
+            value
+        } else {
+            self.ast_node(Expr::Cast {
+                child: value,
+                to_ty: ty,
+            })
+        }
     }
 
     pub(super) fn ast_node(&mut self, e: Expr) -> ExprId {
@@ -459,6 +566,27 @@ impl Compiler {
             ValueBuiltin::IsAscii => classify(self, |c| i32::from(c & !0x7f == 0))?,
             ValueBuiltin::ToAscii => classify(self, |c| c & 0x7f)?,
             ValueBuiltin::Compare(_) => unreachable!("folded above"),
+            ValueBuiltin::Abs(t) => {
+                let ty = self.abs_operand_ty(t);
+                let v = self.require_integer_const(args[0])?.as_i128();
+                let val = if self.size_of_type(ty) == 4 {
+                    i128::from((v as i32).wrapping_abs())
+                } else {
+                    i128::from((v as i64).wrapping_abs())
+                };
+                ConstVal::Int {
+                    val,
+                    ty,
+                    enumeration: None,
+                }
+            }
+            ValueBuiltin::FAbs(ty) => match args[0] {
+                ConstVal::Float { val, .. } => ConstVal::Float { val: val.abs(), ty },
+                _ => {
+                    let text = format!("argument 1 of `{name}` is not an arithmetic constant");
+                    return Err(self.compile_err(Code::INVALID_ARGUMENTS, text));
+                }
+            },
         }))
     }
 

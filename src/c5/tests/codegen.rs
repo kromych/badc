@@ -9988,6 +9988,112 @@ fn library_builtins_need_no_auto_include_retry() {
     );
 }
 
+/// gcc and clang give each `__builtin_` library function its prototype with
+/// no declaration in scope. Where no header can be auto-included -- under
+/// `-nostdinc`, `-ffreestanding` and for preprocessed input -- the unit
+/// compiles with no note; the absolute values and the functions a header
+/// binds to an instruction leave no reference, and the rest call the
+/// library function. `cli_fixture_smoke` links and runs it.
+#[cfg(feature = "full")]
+#[test]
+fn builtin_library_functions_need_no_declaration() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    let src = super::load_fixture("builtin_library_functions_need_no_declaration.c");
+    const INLINE: &[&str] = &[
+        "abs", "labs", "llabs", "imaxabs", "fabs", "fabsf", "fabsl", "sqrt", "floor",
+    ];
+    const CALLED: &[&str] = &[
+        "memset",
+        "memcpy",
+        "memmove",
+        "strlen",
+        "strcmp",
+        "strncmp",
+        "memcmp",
+        "strchr",
+        "vsnprintf",
+        "malloc",
+        "free",
+    ];
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let base = CompileOptions::default;
+        let nostdinc = base().with_nostdinc(true);
+        let text = Compiler::preprocess(src.clone(), target, nostdinc.clone()).expect("-E");
+        for (mode, text, opts) in [
+            ("-nostdinc", &src, nostdinc),
+            ("-ffreestanding", &src, base().with_no_builtin(true)),
+            (".i", &text, base().with_preprocessed(true)),
+        ] {
+            for optimize in [false, true] {
+                let what = alloc::format!("{target:?} {mode} optimize={optimize}");
+                let program = Compiler::with_options(text.clone(), target, opts.clone())
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{what}: {e}"));
+                assert!(program.notes.is_empty(), "{what}: {:?}", program.notes);
+                let reloc = NativeOptions {
+                    optimize,
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::default()
+                };
+                let object = crate::emit_native_with_options(&program, target, reloc)
+                    .unwrap_or_else(|e| panic!("{what}: {e}"));
+                let object = crate::parse_native_object(&object).expect("object");
+                let undefined: alloc::vec::Vec<&str> = (object.symbols.iter())
+                    .filter(|s| s.section == NativeSymSection::Undef)
+                    .map(|s| s.name.as_str())
+                    .collect();
+                for name in INLINE {
+                    assert!(!undefined.contains(name), "{what}: {name} is called");
+                }
+                for name in CALLED {
+                    assert!(undefined.contains(name), "{what}: {name} is not called");
+                }
+            }
+        }
+    }
+}
+
+/// A freestanding unit that defines a library function after calling its
+/// builtin calls its own definition: the object holds the one symbol, defined.
+#[cfg(feature = "full")]
+#[test]
+fn a_builtin_calls_the_units_later_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    const SRC: &str = "typedef __SIZE_TYPE__ size_t;\n\
+        size_t g(const char *s) { return __builtin_strlen(s); }\n\
+        void *h(void *d, const void *s, size_t n) { return __builtin_memcpy(d, s, n); }\n\
+        size_t strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }\n\
+        void *memcpy(void *d, const void *s, size_t n) {\n\
+            char *p = d; const char *q = s; while (n--) *p++ = *q++; return d; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default()
+            .with_no_builtin(true)
+            .with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let reloc = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let object = crate::emit_native_with_options(&program, target, reloc).expect("emit");
+        let object = crate::parse_native_object(&object).expect("object");
+        for name in ["strlen", "memcpy"] {
+            let entries: alloc::vec::Vec<_> = (object.symbols.iter())
+                .filter(|s| s.name == name)
+                .map(|s| s.section == NativeSymSection::Undef)
+                .collect();
+            assert_eq!(entries, [false], "{target:?} {name}");
+        }
+    }
+}
+
 /// C99 7.12.14's comparison builtins lower to the quiet compares, as gcc's
 /// and clang's do: `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64,
 /// never the signaling `comis*` or `fcmpe`, at -O0 and -O.

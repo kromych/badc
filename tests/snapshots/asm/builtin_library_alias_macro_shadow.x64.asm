@@ -80,15 +80,6 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movq	$-0x3, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	popq	%rbp
-               	retq
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x5, %edx
                	leaq	<rip>, %rsi # <addr>

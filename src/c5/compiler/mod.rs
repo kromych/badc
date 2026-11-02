@@ -31,6 +31,7 @@ mod function;
 mod global_init;
 mod initializer;
 mod jumps;
+mod library_builtin;
 mod locals;
 mod loop_idiom;
 mod ms_intrinsic;

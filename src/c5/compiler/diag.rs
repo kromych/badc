@@ -1023,6 +1023,15 @@ impl Compiler {
         // pointee, so it is decided ahead of the aggregate rules; an
         // aggregate object on the non-pointer side still reaches them.
         if decl_is_ptr != act_is_ptr && !decl_is_object && !act_is_object {
+            // C99 6.5.4p4: no conversion relates a pointer and a floating type.
+            let floating = super::types::is_floating_scalar;
+            if floating(declared) || floating(actual) {
+                return Some(TypeMismatch {
+                    code: Code::INCOMPATIBLE_TYPES,
+                    reason: "incompatible types",
+                    no_conversion: true,
+                });
+            }
             return match (decl_is_ptr, actual_is_zero_literal) {
                 // A null pointer constant (C99 6.3.2.3p3).
                 (true, true) => None,

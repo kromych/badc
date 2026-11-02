@@ -543,11 +543,22 @@ impl Compiler {
         name: &str,
     ) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId, MemTransferOp};
+        // The operands convert to the library function's parameters, with
+        // the diagnostics of a call to it.
+        let params = self.library_param_types(mem_transfer_lib_name(op));
         let mut args: Vec<ExprId> = Vec::new();
         let mut ptr_align = MAX_MEM_TRANSFER_ALIGN;
         if self.lex.tk != ')' {
             loop {
+                let Some(&want) = params.get(args.len()) else {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("too many arguments to `{name}` (expected 3)"),
+                    ));
+                };
+                let line = self.lex.line;
                 self.expr(Token::Assign as i64)?;
+                self.reject_void_value(self.ty)?;
                 // The pointer operands guarantee their pointee type's
                 // alignment (C99 6.3.2.3p7); the fill byte contributes
                 // nothing. `void *` is `unsigned char *` here, so an
@@ -560,20 +571,19 @@ impl Compiler {
                     };
                     ptr_align = ptr_align.min(a.max(1));
                 }
-                if let Some(a) = self.ast_acc {
-                    args.push(a);
+                args.push(self.convert_builtin_value(name, args.len(), want, line)?);
+                if !self.list_separator(')', "argument")? {
+                    break;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                    continue;
-                }
-                break;
             }
         }
-        if self.lex.tk != ')' || args.len() != 3 {
+        if args.len() < params.len() {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("`{name}` expects (dst, src, count)"),
+                format!(
+                    "too few arguments to `{name}` (expected 3, got {})",
+                    args.len()
+                ),
             ));
         }
         self.next()?;
@@ -687,30 +697,21 @@ impl Compiler {
         ty: i64,
     ) -> Result<(), C5Error> {
         let callable = self.callable_symbol(name);
-        let retry_unavailable =
-            self.nostdinc || self.preprocessed || self.library_name_is_opaque(name);
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
             // (gcc documents the fallback call for freestanding units).
-            // Where the auto-include retry would decline the name, an
-            // undeclared library name binds here as the extern function
-            // the builtin implies and the environment defines it at link
-            // time; otherwise the error stands so the retry installs the
-            // header's own library binding.
-            None if retry_unavailable => {
-                let i = self.resolve_symbol_named(name);
-                if self.symbols[i].class != 0 {
+            // Where the auto-include retry cannot declare the name, it is
+            // declared here with the builtin's prototype and the
+            // environment defines it at link time; otherwise the error
+            // stands so the retry installs the header's own binding.
+            None if self.auto_include_unavailable(name) => {
+                let Some(i) = self.library_function_slot(name) else {
                     return Err(self.compile_err(
                         Code::UNDECLARED_IDENTIFIER,
                         format!("unknown function `{name}`"),
                     ));
-                }
-                self.symbols[i].class = Token::Fun as i64;
-                self.symbols[i].type_ = ty;
-                self.symbols[i].incomplete_enum_tag = None;
-                self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
-                self.symbols[i].defined_here = false;
+                };
                 i
             }
             None => {
@@ -1616,6 +1617,15 @@ impl Compiler {
     /// A call on a bare identifier, the `(` consumed: a builtin lowered
     /// at the call site, or a call to the declared function.
     fn parse_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+        // An alias of a library function its header binds to an intrinsic
+        // lowers to the intrinsic, whatever the unit declares.
+        if self.symbols[id_idx].class == 0
+            && let Some(kind) = super::super::preprocessor::builtins::library_alias_intrinsic(
+                &self.symbols[id_idx].name,
+            )
+        {
+            return self.parse_intrinsic_call(id_idx, kind as i64);
+        }
         let id_idx = self.bind_call_target(id_idx)?;
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
@@ -1664,6 +1674,12 @@ impl Compiler {
                 super::super::preprocessor::builtins::library_alias(&self.symbols[id_idx].name);
             if let Some(fn_name) = alias {
                 id_idx = self.resolve_symbol_named(fn_name);
+                if self.symbols[id_idx].class == 0
+                    && self.auto_include_unavailable(fn_name)
+                    && let Some(slot) = self.library_function_slot(fn_name)
+                {
+                    id_idx = slot;
+                }
                 id_idx = self.builtin_library_symbol(id_idx);
             }
         }

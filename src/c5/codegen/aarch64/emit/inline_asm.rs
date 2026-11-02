@@ -599,7 +599,7 @@ impl AsmOperands<'_> {
                 "aarch64 inline asm: operand reference is not a register",
             ));
         };
-        Ok(match self.asm.operands[idx as usize].constraint {
+        Ok(match self.asm.operand_class(idx as usize) {
             // `%sN` selects the single view, `%dN` / bare the double.
             AsmConstraint::Fp => Opnd::VReg {
                 num: r,
@@ -955,7 +955,10 @@ impl AsmRegion {
                     ));
                 };
                 self.str_q(code, q, self.cap_off(i));
-            } else if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
+            } else if matches!(ops.asm.operand_class(i), AsmConstraint::Fp)
+                && !op.is_output
+                && op.width == 8
+            {
                 let Some(d) = materialize_fp(code, place, 16, self.frame) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: `w` operand not a floating-point place",
@@ -985,7 +988,7 @@ impl AsmRegion {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
             let Some(r) = ops.op_reg[i] else { continue };
-            if matches!(op.constraint, AsmConstraint::Fp) {
+            if matches!(ops.asm.operand_class(i), AsmConstraint::Fp) {
                 // A 16-byte `w` operand (input or read-write output) loads the full q
                 // register through its captured address; a read-write double output
                 // loads its current value the same way.

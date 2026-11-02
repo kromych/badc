@@ -10094,6 +10094,54 @@ fn a_builtin_calls_the_units_later_definition() {
     }
 }
 
+/// Each basic `<arm_neon.h>` floating form is the AArch64 instruction gcc 16
+/// emits for it: in the intrinsic's body at -O0, in the caller once -O
+/// inlines it. The masks clear the register fields.
+#[cfg(feature = "full")]
+#[test]
+fn arm_neon_float_intrinsics_are_their_instructions() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        float32x4_t add(float32x4_t a, float32x4_t b) { return vaddq_f32(a, b); }\n\
+        float32x2_t add2(float32x2_t a, float32x2_t b) { return vadd_f32(a, b); }\n\
+        float64x2_t mul(float64x2_t a, float64x2_t b) { return vmulq_f64(a, b); }\n\
+        float64x1_t add1(float64x1_t a, float64x1_t b) { return vadd_f64(a, b); }\n\
+        float32x4_t fma4(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmaq_f32(a, b, c); }\n\
+        uint32x4_t eq(float32x4_t a, float32x4_t b) { return vceqq_f32(a, b); }\n\
+        uint32x4_t lt(float32x4_t a, float32x4_t b) { return vcltq_f32(a, b); }\n\
+        int32x4_t cvt(float32x4_t a) { return vcvtq_s32_f32(a); }\n\
+        float32x4_t cvtf(uint32x4_t a) { return vcvtq_f32_u32(a); }\n\
+        float64x2_t wide(float32x2_t a) { return vcvt_f64_f32(a); }\n\
+        float32x4_t ld(const float *p) { return vld1q_f32(p); }\n\
+        void st(float *p, float32x4_t v) { vst1q_f32(p, v); }\n\
+        float32x4_t sel(uint32x4_t m, float32x4_t a, float32x4_t b) { return vbslq_f32(m, a, b); }\n";
+    const THREE: u32 = 0xFFE0_FC00;
+    const TWO: u32 = 0xFFFF_FC00;
+    for optimize in [false, true] {
+        for (caller, intrinsic, mask, want, insn) in [
+            ("add", "vaddq_f32", THREE, 0x4E20_D400u32, "fadd .4s"),
+            ("add2", "vadd_f32", THREE, 0x0E20_D400, "fadd .2s"),
+            ("mul", "vmulq_f64", THREE, 0x6E60_DC00, "fmul .2d"),
+            ("add1", "vadd_f64", THREE, 0x1E60_2800, "fadd d"),
+            ("fma4", "vfmaq_f32", THREE, 0x4E20_CC00, "fmla .4s"),
+            ("eq", "vceqq_f32", THREE, 0x4E20_E400, "fcmeq .4s"),
+            ("lt", "vcltq_f32", THREE, 0x6EA0_E400, "fcmgt .4s"),
+            ("cvt", "vcvtq_s32_f32", TWO, 0x4EA1_B800, "fcvtzs .4s"),
+            ("cvtf", "vcvtq_f32_u32", TWO, 0x6E21_D800, "ucvtf .4s"),
+            ("wide", "vcvt_f64_f32", TWO, 0x0E61_7800, "fcvtl .2d, .2s"),
+            ("ld", "vld1q_f32", 0xFFC0_0000, 0x3DC0_0000, "ldr q"),
+            ("st", "vst1q_f32", 0xFFC0_0000, 0x3D80_0000, "str q"),
+            ("sel", "vbslq_f32", THREE, 0x6E60_1C00, "bsl .16b"),
+        ] {
+            let name = if optimize { caller } else { intrinsic };
+            let words = super::perf_codegen::a64_at(SRC, name, optimize);
+            assert!(
+                words.iter().any(|w| w & mask == want),
+                "{name} optimize={optimize}: no {insn} in {words:08x?}"
+            );
+        }
+    }
+}
+
 /// C99 7.12.14's comparison builtins lower to the quiet compares, as gcc's
 /// and clang's do: `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64,
 /// never the signaling `comis*` or `fcmpe`, at -O0 and -O.

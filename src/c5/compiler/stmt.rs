@@ -2075,10 +2075,17 @@ impl Compiler {
             // from `__builtin_frame_address(0)` afterwards.
             let bound_reg = self.asm_operand_bound_register()?;
             let decayed_array = self.parse_asm_operand_expr()?;
+            // A matching input takes the class of the output it names.
+            let class = match constraint {
+                AsmConstraint::Match(n) => operands
+                    .get(n as usize)
+                    .map_or(constraint, |o: &AsmOperand| o.constraint),
+                c => c,
+            };
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.
-            let width = if matches!(constraint, AsmConstraint::Fp) {
+            let width = if matches!(class, AsmConstraint::Fp) {
                 self.size_of_type(self.ty).min(16) as u8
             } else {
                 self.size_of_type(self.ty).min(8) as u8
@@ -2100,7 +2107,7 @@ impl Compiler {
             let op_size = self.size_of_type(self.ty);
             if op_size > 8
                 && !matches!(
-                    constraint,
+                    class,
                     AsmConstraint::Mem
                         | AsmConstraint::MemBase
                         | AsmConstraint::Fp
@@ -2121,12 +2128,6 @@ impl Compiler {
             // a matching input takes the class of the output it names.
             // AArch64 `w` has its own (scalar-double) width check in the
             // emitter.
-            let class = match constraint {
-                AsmConstraint::Match(n) => operands
-                    .get(n as usize)
-                    .map_or(constraint, |o: &AsmOperand| o.constraint),
-                c => c,
-            };
             let scalar_fp = matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && super::types::is_floating_scalar(self.ty);
@@ -2239,6 +2240,21 @@ impl Compiler {
                     }
                 }
             }
+            // The AArch64 emitter reads an 8-byte `w` input as a value, as it
+            // reads a double; an 8-byte vector passes its bits so.
+            let e = if self.target.is_aarch64()
+                && matches!(class, AsmConstraint::Fp)
+                && !is_output
+                && width == 8
+                && super::types::is_vector_ty(&self.structs, self.ty)
+            {
+                self.ast_node(Expr::Cast {
+                    child: e,
+                    to_ty: Ty::LongLong as i64 | super::types::UNSIGNED_BIT,
+                })
+            } else {
+                e
+            };
             operand_exprs.push(e);
             operand_names.push(op_name);
             let early_clobber = cstr

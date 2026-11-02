@@ -741,6 +741,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad fcmp/fcmpe operands")),
         };
     }
+    // SIMD conversions `Vd.T, Vn.T` (T = 2s/4s/2d) between integer and FP
+    // lanes of one width; sz (bit 22) selects double.
+    if let Some(base) = match mnemonic {
+        "scvtf" => Some(0x0E21_D800u32),
+        "ucvtf" => Some(0x2E21_D800),
+        "fcvtzs" => Some(0x0EA1_B800),
+        "fcvtzu" => Some(0x2EA1_B800),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+    ] = *ops
+    {
+        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+            return Err(String::from(
+                "inline asm: vector conversions take 2s/4s/2d on both sides",
+            ));
+        }
+        let sz = if size == 3 { 0x40_0000u32 } else { 0 };
+        return Ok(base | (u32::from(q) << 30) | sz | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD single <-> double: `fcvtl{2} Vd.2d, Vn.2s|4s` widens the lower (upper)
+    // half, `fcvtn{2} Vd.2s|4s, Vn.2d` narrows into it.
+    if let Some((base, upper, widen)) = match mnemonic {
+        "fcvtl" => Some((0x0E61_7800u32, false, true)),
+        "fcvtl2" => Some((0x0E61_7800, true, true)),
+        "fcvtn" => Some((0x0E61_6800, false, false)),
+        "fcvtn2" => Some((0x0E61_6800, true, false)),
+        _ => None,
+    } {
+        let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad fcvtl/fcvtn operands"));
+        };
+        let (dst, src) = ((size, q), (s1, q1));
+        let (wide, narrow) = if widen { (dst, src) } else { (src, dst) };
+        if wide != (3, true) || narrow != (2, upper) {
+            return Err(String::from(
+                "inline asm: fcvtl/fcvtn pair 2d with 2s (4s for the `2` forms)",
+            ));
+        }
+        return Ok(base | (u32::from(upper) << 30) | ((rn as u32) << 5) | (rd as u32));
+    }
     // Integer -> FP: `scvtf|ucvtf Vd, Rn`. sf (bit 31) is the integer width,
     // the type bit (22) the FP width, bit 16 selects unsigned.
     if let Some(uns) = match mnemonic {
@@ -1097,8 +1151,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
     // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
     if let Some((base, is_d)) = match mnemonic {
-        "add" => Some((0x5EF0_8400u32, true)),
-        "sub" => Some((0x7EF0_8400, true)),
+        "add" => Some((0x5EE0_8400u32, true)),
+        "sub" => Some((0x7EE0_8400, true)),
         "sha1h" => Some((0x5E28_0800, false)),
         _ => None,
     } {

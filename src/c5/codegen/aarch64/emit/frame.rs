@@ -399,9 +399,9 @@ fn x19_overwritten(func: &FunctionSsa, fixed: super::FixedRegs) -> bool {
         Inst::InlineAsm { asm, args } => {
             asm.clobber_regs & (1 << 19) != 0
                 || asm_operand_regs(func, asm, args, fixed).map_or(true, |regs| {
-                    asm.operands.iter().zip(regs).any(|(op, r)| {
+                    regs.iter().enumerate().any(|(i, &r)| {
                         r == Some(19)
-                            && !matches!(op.constraint, super::super::ir::AsmConstraint::Fp)
+                            && !matches!(asm.operand_class(i), super::super::ir::AsmConstraint::Fp)
                     })
                 })
         }
@@ -695,7 +695,7 @@ pub(super) fn asm_save_masks(
     let mut fp_used: u32 = asm.clobber_fp_regs;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
-        if matches!(op.constraint, AsmConstraint::Fp) {
+        if matches!(asm.operand_class(i), AsmConstraint::Fp) {
             if op.width != 8 && op.width != 16 {
                 return Err(alloc::string::String::from(
                     "aarch64 inline asm: `w` operands must be 8 or 16 bytes",

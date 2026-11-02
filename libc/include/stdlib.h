@@ -458,6 +458,8 @@ char *getenv(const char *name);
 // calls that name directly.
 int _putenv(const char *string);
 int _putenv_s(const char *name, const char *value);
+int _wputenv_s(const wchar_t *name, const wchar_t *value);
+_Noreturn void _exit(int status);
 #else
 int setenv(const char *name, const char *value, int overwrite);
 #endif

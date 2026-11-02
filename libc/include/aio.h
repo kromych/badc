@@ -48,17 +48,9 @@ enum { LIO_WAIT, LIO_NOWAIT };
 #pragma binding(libc::aio_cancel, "aio_cancel")
 #pragma binding(libc::aio_suspend, "aio_suspend")
 #pragma binding(libc::aio_fsync, "aio_fsync")
-#pragma binding(libc::aio_init, "aio_init")
-#pragma binding(libc::aio_read64, "aio_read64")
-#pragma binding(libc::aio_write64, "aio_write64")
-#pragma binding(libc::lio_listio64, "lio_listio64")
-#pragma binding(libc::aio_error64, "aio_error64")
-#pragma binding(libc::aio_return64, "aio_return64")
-#pragma binding(libc::aio_cancel64, "aio_cancel64")
-#pragma binding(libc::aio_suspend64, "aio_suspend64")
-#pragma binding(libc::aio_fsync64, "aio_fsync64")
 
 #ifdef _GNU_SOURCE
+#pragma binding(libc::aio_init, "aio_init")
 // Tuning for glibc's thread pool (a GNU extension).
 struct aioinit {
     int aio_threads;
@@ -76,6 +68,14 @@ void aio_init(const struct aioinit *init);
 #if defined(_LARGEFILE64_SOURCE) || defined(_GNU_SOURCE)
 // The large-file names glibc declares; with a 64-bit off_t each is the
 // same call as its unsuffixed form.
+#pragma binding(libc::aio_read64, "aio_read64")
+#pragma binding(libc::aio_write64, "aio_write64")
+#pragma binding(libc::lio_listio64, "lio_listio64")
+#pragma binding(libc::aio_error64, "aio_error64")
+#pragma binding(libc::aio_return64, "aio_return64")
+#pragma binding(libc::aio_cancel64, "aio_cancel64")
+#pragma binding(libc::aio_suspend64, "aio_suspend64")
+#pragma binding(libc::aio_fsync64, "aio_fsync64")
 struct aiocb64 {
     int aio_fildes;
     int aio_lio_opcode;

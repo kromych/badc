@@ -883,6 +883,61 @@ fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
     }
 }
 
+// A `#pragma binding` declares nothing: with msvc_compat.h's bindings in
+// scope, a call to `malloc` the unit has not declared takes <stdlib.h>'s
+// prototype, and the pointer it returns from above 4 GiB survives. Built for
+// windows-x64 and windows-arm64 from every host at -O0 and -O, and run on
+// the Windows host of either. Where the header cannot be auto-included the
+// call is refused, not lowered as an `int` function.
+#[test]
+fn a_binding_alone_leaves_a_library_call_its_prototype() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-binding-prototype");
+    let src = fixtures_dir().join("undeclared_library_call_keeps_a_high_pointer.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "aarch64") => Some("windows-arm64"),
+        ("windows", _) => Some("windows-x64"),
+        _ => None,
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let flag = format!("--target={target}");
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("{target}{level}.exe"));
+            let out = Command::new(badc)
+                .args(["-q", &flag, level, "-include", "msvc_compat.h"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {level}: {err}");
+            assert!(!err.contains("B2005"), "{target} {level}: {err}");
+            if host == Some(target) {
+                let run = Command::new(&exe).output().expect("run the program");
+                assert_eq!(run.status.code(), Some(0), "{target} {level}");
+            }
+        }
+        let out = Command::new(badc)
+            .args([
+                "-q",
+                &flag,
+                "-ffreestanding",
+                "-include",
+                "msvc_compat.h",
+                "-c",
+            ])
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{target}.o")))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target} -ffreestanding");
+        assert!(err.contains("unknown function `malloc`"), "{target}: {err}");
+    }
+}
+
 // gcc and clang give each `__builtin_` library function its prototype with
 // no declaration in scope. Under `-nostdinc`, `-ffreestanding` and for a
 // preprocessed unit no header can be auto-included; the fixture still links

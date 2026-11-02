@@ -23,7 +23,6 @@
 #pragma binding(msvcrt::_chmod,   "_chmod")
 #pragma binding(msvcrt::_dup,     "_dup")
 #pragma binding(msvcrt::_dup2,    "_dup2")
-#pragma binding(msvcrt::_fileno,  "_fileno")
 #pragma binding(msvcrt::_isatty,  "_isatty")
 #pragma binding(msvcrt::_setmode, "_setmode")
 #pragma binding(msvcrt::_access,  "_access")

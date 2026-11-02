@@ -419,26 +419,36 @@ fn warn_return_type_mismatch() {
     );
 }
 
+/// A `#pragma binding` declares nothing (C99 6.5.1p2): a call to a name only
+/// a binding names is a call to an undeclared function, refused rather than
+/// lowered with an `int` result, and a block-scope prototype gives the call
+/// its return type.
 #[test]
-fn call_without_return_prototype_warns_implicit_int() {
+fn a_binding_alone_declares_no_function() {
     use crate::{Compiler, Target};
-    // A `#pragma binding` seen without an accompanying prototype leaves
-    // the callee's return type at the implicit `int` default. A call
-    // warns once: the result truncates to 32 bits if the function really
-    // returns a pointer or wider type. Target-fixed so the bound dylib
-    // name (`libc`) is the same regardless of the host.
-    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
-               #pragma binding(libc::mystery, \"getenv\")\n\
-               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
-    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
-        .compile()
-        .unwrap();
-    assert!(
-        p.warnings.iter().any(|w| w.to_string().contains("mystery")
-            && w.to_string().contains("without a return-type prototype")),
-        "expected implicit-int warning, got: {:?}",
-        p.warnings
+    let bound = "#pragma dylib(libc, \"libc.so.6\")\n\
+                 #pragma binding(libc::mystery, \"getenv\")\n";
+    let undeclared = format!("{bound}int main(void) {{ return mystery(\"PATH\") ? 0 : 1; }}\n");
+    let block = format!(
+        "{bound}int main(void) {{\n\
+             char *mystery(const char *name);\n\
+             _Static_assert(sizeof mystery(\"PATH\") == sizeof(char *), \"type\");\n\
+             return mystery(\"PATH\") ? 0 : 1;\n\
+         }}\n"
     );
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::WindowsAarch64] {
+        let err = Compiler::with_target(undeclared.clone(), target)
+            .compile()
+            .expect_err("an undeclared call");
+        assert!(
+            err.to_string().contains("unknown function `mystery`"),
+            "{target:?}: {err}"
+        );
+        let p = Compiler::with_target(block.clone(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert!(p.warnings.is_empty(), "{target:?}: {:?}", p.warnings);
+    }
 }
 
 #[test]

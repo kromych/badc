@@ -2446,6 +2446,8 @@ LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwTy
 #pragma binding(kernel32::GetProcessId,            "GetProcessId")
 #pragma binding(kernel32::lstrcpyA,                "lstrcpyA")
 #pragma binding(kernel32::lstrcpyW,                "lstrcpyW")
+#pragma binding(kernel32::lstrlenA,                "lstrlenA")
+#pragma binding(kernel32::lstrlenW,                "lstrlenW")
 #pragma binding(kernel32::GetDiskFreeSpaceA,       "GetDiskFreeSpaceA")
 #pragma binding(kernel32::GetDiskFreeSpaceW,       "GetDiskFreeSpaceW")
 #pragma binding(kernel32::GetFileAttributesA,      "GetFileAttributesA")
@@ -2655,6 +2657,8 @@ HANDLE CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess,
 DWORD GetProcessId(HANDLE Process);
 LPSTR lstrcpyA(LPSTR lpString1, LPCSTR lpString2);
 LPWSTR lstrcpyW(LPWSTR lpString1, LPCWSTR lpString2);
+int lstrlenA(LPCSTR lpString);
+int lstrlenW(LPCWSTR lpString);
 HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner,
                     LPCWSTR lpName);
 BOOL DeleteFileA(LPCSTR lpFileName);
@@ -4690,6 +4694,7 @@ HICON CreateIconIndirect(PICONINFO piconinfo);
 #define WriteConsole __MINGW_NAME_AW(WriteConsole)
 #define WriteConsoleInput __MINGW_NAME_AW(WriteConsoleInput)
 #define lstrcpy __MINGW_NAME_AW(lstrcpy)
+#define lstrlen __MINGW_NAME_AW(lstrlen)
 __MINGW_TYPEDEF_AW(MONITORINFOEX)
 __MINGW_TYPEDEF_AW(LPMONITORINFOEX)
 __MINGW_TYPEDEF_AW(OSVERSIONINFO)

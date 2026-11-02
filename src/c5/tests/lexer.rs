@@ -260,13 +260,11 @@ fn line_counter_advances_with_newlines() {
 }
 
 #[test]
-fn binding_names_seed_token_sys_when_dylibs_provided() {
-    // `init_symbols` no longer carries a fixed list of libc names;
-    // it walks the dylibs the preprocessor parsed and seeds each
-    // binding's `local_name` as a `Token::Sys` symbol with `val` set
-    // to the binding's flat-index. A program reaching for
-    // `malloc(...)` then lowers via `Inst::CallExt` with
-    // binding_idx 0 (or whichever index `malloc` ended up at).
+fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
+    // `init_symbols` walks the dylibs the preprocessor parsed and seeds
+    // each binding's `local_name` undeclared, with `binding_slot` set to
+    // the binding's flat index; a function declaration of the name makes
+    // it the `Token::Sys` symbol a call lowers to `Inst::CallExt` with.
     use crate::c5::lexer::{Lexer, SymbolIndex, init_symbols};
     use crate::c5::preprocessor::{Binding, DylibSpec};
 
@@ -298,8 +296,8 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         .iter()
         .find(|s| s.name == "malloc")
         .expect("malloc should be seeded from the dylibs list");
-    assert_eq!(sym.class, Token::Sys as i64);
-    assert_eq!(sym.val, 0, "first binding gets flat-index 0");
+    assert_eq!(sym.class, 0, "a binding alone declares nothing");
+    assert_eq!(sym.binding_slot, Some(0), "first binding gets flat-index 0");
 }
 
 #[test]

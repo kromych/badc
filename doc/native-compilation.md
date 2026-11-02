@@ -165,6 +165,8 @@ against the prototype; the codegen looks up the binding to learn that the
 loader should resolve `_printf` from `libSystem.B.dylib`. Switching target
 swaps the header and the bindings change with it -- `printf` lands on bare
 `printf` from `libc.so.6` on Linux, `printf` from `msvcrt.dll` on Windows.
+A binding declares nothing: until a declaration of `printf` is in scope the
+name is undeclared, and a call is refused as for any undeclared function.
 
 Validation runs at codegen entry: every intrinsic the program *references*
 must have a matching binding for the chosen target. An unused binding describes

@@ -2614,6 +2614,93 @@ fn windows_header_declarations_resolve_at_link() {
     }
 }
 
+/// Every function a bundled header binds with `#pragma binding` it also
+/// declares with a prototype, on every target the header serves and under
+/// the feature-test macros that hide or show its extensions, so a call
+/// takes the function's return type and parameter conversions. A PE import
+/// names an object as well as a function, so an object declaration serves
+/// too. A binding a header makes without a declaration routes the one the
+/// source makes itself, and agrees with the header that declares the name.
+#[test]
+fn bundled_bindings_come_with_a_prototype() {
+    use crate::c5::preprocessor::Preprocessor;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler};
+    use alloc::collections::BTreeSet;
+    use alloc::string::String;
+    const MACROS: [&str; 2] = [
+        "",
+        "#define _GNU_SOURCE 1\n#define _POSIX_C_SOURCE 200809L\n",
+    ];
+    type Route = (&'static str, &'static str, String, String, String);
+    let mut declared: BTreeSet<Route> = BTreeSet::new();
+    let mut routing: alloc::vec::Vec<(Route, &str)> = alloc::vec::Vec::new();
+    for (target, macros) in [
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ]
+    .into_iter()
+    .flat_map(|t| MACROS.map(|m| (t, m)))
+    {
+        for (header, targets, _) in crate::embedded_headers() {
+            if !targets.contains(target) {
+                continue;
+            }
+            let src = alloc::format!("{macros}#include <{header}>\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let Ok(program) = Compiler::with_options(src.clone(), target, opts).compile() else {
+                continue;
+            };
+            let mut pp = Preprocessor::new(target.id_str(), target, "0");
+            pp.process(&src).expect("the unit compiled");
+            for spec in &pp.dylibs {
+                for binding in spec.bindings.iter().filter(|b| !b.is_data) {
+                    let name = binding.local_name.as_str();
+                    let route = (
+                        target.id_str(),
+                        macros,
+                        name.into(),
+                        spec.path.clone(),
+                        binding.real_symbol.clone(),
+                    );
+                    let has_prototype = program.symbols.iter().any(|s| {
+                        s.name == name
+                            && ((s.class == Token::Sys as i64 && s.prototyped())
+                                || s.class == Token::Glo as i64)
+                    });
+                    if has_prototype {
+                        declared.insert(route);
+                    } else {
+                        routing.push((route, header));
+                    }
+                }
+            }
+        }
+    }
+    let mut missing: alloc::vec::Vec<String> = (routing.iter())
+        .filter(|(route, _)| !declared.contains(route))
+        .map(|((target, macros, name, path, _), header)| {
+            let mode = if macros.is_empty() {
+                ""
+            } else {
+                " (feature macros)"
+            };
+            alloc::format!("{target} <{header}>{mode} {name} from {path}")
+        })
+        .collect();
+    missing.sort();
+    missing.dedup();
+    assert!(
+        missing.is_empty(),
+        "{} bound without a prototype:\n{}",
+        missing.len(),
+        missing.join("\n")
+    );
+}
+
 /// Every declaration a bundled header makes for macOS and the Linux targets
 /// resolves at link. A name the platform's C library does not provide is
 /// left undeclared there. The gettext functions and crypt are what a

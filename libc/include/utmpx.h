@@ -77,10 +77,12 @@ void getutmpx(const struct utmp *utmp, struct utmpx *utmpx);
 #pragma binding(libc::getutxid, "getutxid")
 #pragma binding(libc::getutxline, "getutxline")
 #pragma binding(libc::pututxline, "pututxline")
+#ifdef _GNU_SOURCE
 #pragma binding(libc::utmpxname, "utmpxname")
 #pragma binding(libc::updwtmpx, "updwtmpx")
 #pragma binding(libc::getutmp, "getutmp")
 #pragma binding(libc::getutmpx, "getutmpx")
+#endif
 #elif defined(__APPLE__)
 #define _PATH_UTMPX "/var/run/utmpx"
 #define _UTX_USERSIZE 256
@@ -143,6 +145,7 @@ int wtmpxname(const char *file);
 #pragma binding(libc::getutxid, "_getutxid")
 #pragma binding(libc::getutxline, "_getutxline")
 #pragma binding(libc::pututxline, "_pututxline")
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
 #pragma binding(libc::getlastlogx, "_getlastlogx")
 #pragma binding(libc::getlastlogxbyname, "_getlastlogxbyname")
 #pragma binding(libc::getutmp, "_getutmp")
@@ -152,6 +155,7 @@ int wtmpxname(const char *file);
 #pragma binding(libc::endutxent_wtmp, "_endutxent_wtmp")
 #pragma binding(libc::utmpxname, "_utmpxname")
 #pragma binding(libc::wtmpxname, "_wtmpxname")
+#endif
 #endif
 
 void setutxent(void);

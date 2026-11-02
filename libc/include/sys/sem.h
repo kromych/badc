@@ -64,9 +64,9 @@ struct seminfo {
 #pragma binding(libc::semctl, "semctl")
 #pragma binding(libc::semget, "semget")
 #pragma binding(libc::semop, "semop")
-#pragma binding(libc::semtimedop, "semtimedop")
 
 #ifdef _GNU_SOURCE
+#pragma binding(libc::semtimedop, "semtimedop")
 int semtimedop(int semid, struct sembuf *sops, size_t nsops, const struct timespec *timeout);
 #endif
 #elif defined(__APPLE__)

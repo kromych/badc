@@ -3001,15 +3001,15 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
     out
 }
 
-/// Seed the symbol table with C keywords plus one `Token::Sys`
-/// entry per `#pragma binding(...)` the preprocessor parsed out of
-/// the included headers.
+/// Seed the symbol table with C keywords plus one entry per
+/// `#pragma binding(...)` the preprocessor parsed out of the
+/// included headers.
 ///
-/// Each binding becomes a callable name with `val` set to its
-/// flat index across all `bindings` in declaration order. The
-/// parser's call site builds an `Inst::CallExt` with that
-/// binding index, and the codegen / VM resolve it against the
-/// same flattened list at emit / run time.
+/// Each binding's name carries its flat index across all `bindings`
+/// in declaration order as `binding_slot`, and stays undeclared until
+/// a function declaration makes it a `Token::Sys` symbol. A call then
+/// builds an `Inst::CallExt` with that binding index, and the codegen
+/// / VM resolve it against the same flattened list at emit / run time.
 ///
 /// A name that's bound twice (two `#pragma binding`s with the
 /// same `local_name`) gets the *first* index; later bindings are
@@ -3036,11 +3036,9 @@ pub(crate) fn init_symbols(
             if binding.is_data {
                 // A data binding (e.g. environ) names a data object
                 // referenced through its `extern` declaration, not a
-                // callable symbol. Seeding it as `Token::Sys` would
-                // shadow the data symbol with a call entry; the COPY
-                // relocation binds it instead. Consume a binding index
-                // so the flat binding table stays aligned with
-                // `spec.bindings`.
+                // callable symbol; the COPY relocation binds it. Consume
+                // a binding index so the flat binding table stays
+                // aligned with `spec.bindings`.
                 binding_idx += 1;
                 continue;
             }
@@ -3049,12 +3047,7 @@ pub(crate) fn init_symbols(
                 symbols.push(Symbol {
                     name: name.to_string(),
                     token: Token::Id as i64,
-                    class: Token::Sys as i64,
-                    type_: Ty::Int as i64,
-                    val: binding_idx,
-                    // Return type defaults to `int` until a prototype
-                    // declares it; a call before then warns.
-                    implicit_return_int: true,
+                    binding_slot: Some(binding_idx),
                     ..Default::default()
                 });
                 index.record(hash);

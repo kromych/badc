@@ -1884,8 +1884,8 @@ impl ResolvedImports {
 }
 
 /// Find the binding at flat-index `binding_idx` across all dylibs
-/// in declaration order. The lexer assigned this index when seeding
-/// each binding's local_name as a `Token::Sys` symbol.
+/// in declaration order: the `binding_slot` the lexer seeded each
+/// binding's local_name with, a `Token::Sys` symbol's `val`.
 fn lookup_binding(
     program: &Program,
     binding_idx: i64,

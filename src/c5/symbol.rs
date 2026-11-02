@@ -80,13 +80,17 @@ pub(crate) struct Symbol {
     /// variadic call's ABI.
     pub h_fn_type: FnType,
 
-    /// True while the function's return type is the implicit `int`
-    /// default rather than a declared type: a `#pragma binding` seen
-    /// without a following prototype, or a C89 implicit declaration.
-    /// A call site warns once (the result is truncated to 32 bits if
-    /// the function really returns a pointer or wider type). Cleared
-    /// when a declaration supplies an explicit return type.
+    /// True while the function's return type is the implicit `int` of a
+    /// C89 implicit declaration (6.3.2.2). A call site warns once (the
+    /// result is truncated to 32 bits if the function really returns a
+    /// pointer or wider type). Cleared when a declaration supplies an
+    /// explicit return type.
     pub implicit_return_int: bool,
+
+    /// The flat index of the `#pragma binding` that names this identifier.
+    /// A binding declares nothing: a file-scope function declaration of the
+    /// name makes it a `Token::Sys` symbol that calls through the binding.
+    pub binding_slot: Option<i64>,
 
     /// True for a function declared `_Noreturn` / `noreturn` (C11
     /// 6.7.4) or one of the built-in non-returning library functions
@@ -948,6 +952,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             fn_type: _,
             h_fn_type: _,
             implicit_return_int: _,
+            binding_slot: _,
             is_noreturn: _,
             is_thread_local,
             h_is_thread_local: _,

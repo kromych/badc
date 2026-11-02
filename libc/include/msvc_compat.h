@@ -148,7 +148,9 @@
 // f(...)` rely on a separate link step to wire the IAT.
 // badc routes calls through `#pragma binding(<dylib>::<sym>,
 // "<real>")`; the bindings below cover the kernel32 / msvcrt
-// surface MSVC-shaped sources commonly reach for.
+// surface MSVC-shaped sources commonly reach for. A binding
+// declares nothing: the source's declaration, or that of the
+// SDK or CRT header which binds the name too, gives the type.
 
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma dylib(msvcrt,   "msvcrt.dll")

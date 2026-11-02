@@ -2335,9 +2335,8 @@ impl Compiler {
             count_is_constraint: s.prototyped() && !is_sys_call,
             prototyped: s.prototyped(),
         };
-        // A callee left at the implicit `int` (a `#pragma binding` with no
-        // prototype, or a C89 implicit declaration) truncates a wider return
-        // to 32 bits; warn once.
+        // A callee left at a C89 implicit declaration's `int` truncates a
+        // wider return to 32 bits; warn once.
         if self.symbols[id_idx].implicit_return_int && self.warned_implicit_ret.insert(id_idx) {
             let name = self.symbols[id_idx].name.clone();
             let line = self.lex.line;

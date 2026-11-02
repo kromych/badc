@@ -819,10 +819,7 @@ impl Compiler {
             };
         let prior_class = self.symbols[id_idx].class;
         let prior_type = self.symbols[id_idx].type_;
-        // A `#pragma binding` no prototype has claimed declares nothing.
-        let unclaimed_binding =
-            prior_class == Token::Sys as i64 && self.symbols[id_idx].implicit_return_int;
-        if prior_class != 0 && prior_class != Token::Typedef as i64 && !unclaimed_binding {
+        if prior_class != 0 && prior_class != Token::Typedef as i64 {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(
@@ -899,10 +896,19 @@ impl Compiler {
         let &FileScopeDecl { base_spelling, .. } = decl;
         let &DeclaratorBinding { id_idx, ty, .. } = b;
 
-        // A `Sys` binding may be re-declared as a prototype: the declaration
-        // teaches the parser the signature without overriding the binding. A
-        // bodyless function may be too -- an amalgamated unit repeats prototypes.
-        // A second body for one function is still a duplicate.
+        // The first function declaration of a name a `#pragma binding` names
+        // makes it a `Sys` symbol calling through the binding; a later one
+        // re-declares it. A bodyless function may be re-declared too -- an
+        // amalgamated unit repeats prototypes. A second body for one function
+        // is still a duplicate.
+        let declares_function = self.lex.tk == '(' || has_preconsumed_params;
+        if let Some(slot) = self.symbols[id_idx].binding_slot
+            && self.symbols[id_idx].class == 0
+            && declares_function
+        {
+            self.symbols[id_idx].class = Token::Sys as i64;
+            self.symbols[id_idx].val = slot;
+        }
         let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
         // Forward / repeat function declarations: allowed
         // either when the next token is `(` (the regular
@@ -910,8 +916,7 @@ impl Compiler {
         // already consumed the outer params for the
         // function-returning-FP shape (tk is `;` or `{`
         // depending on prototype-vs-definition).
-        let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
-            && (self.lex.tk == '(' || has_preconsumed_params);
+        let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64 && declares_function;
         // C11 6.9.2: a prior `T x;` becomes the defining declaration when
         // re-declared, and the definition reuses the storage it reserved so a
         // reference already emitted against that offset still resolves. A prior
@@ -950,8 +955,7 @@ impl Compiler {
         // For an object the spelling is the object's; for a function it is
         // the return type's.
         self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
-        // An explicit return type replaces the implicit-`int`
-        // default (Sys binding without a prior prototype).
+        // An explicit return type replaces a C89 implicit declaration's `int`.
         self.symbols[id_idx].implicit_return_int = false;
 
         Ok(PriorDecl {

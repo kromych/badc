@@ -4615,6 +4615,58 @@ fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::pat
     (pp, base)
 }
 
+/// With the Microsoft extensions, as clang has them for a Windows target,
+/// a `\` in a header name separates directories, in the quoted and the
+/// angled form and in a nested include, and the names the files go by in
+/// line markers and `__FILE__` use `/`. Another target keeps `\` as an
+/// ordinary character, so on a POSIX host the name finds no file.
+#[test]
+fn a_backslash_in_a_header_name_separates_directories_for_a_windows_target() {
+    let (_, base) = pp_with_headers("backslash-include", &[]);
+    for dir in ["sub/deep", "inc/sys"] {
+        std::fs::create_dir_all(base.join(dir)).unwrap();
+    }
+    for (name, body) in [
+        (
+            "sub/h.h",
+            "#pragma once\n#include \"deep\\d.h\"\nconst char *h_file = __FILE__;\n",
+        ),
+        ("sub/deep/d.h", "const char *d_file = __FILE__;\n"),
+        ("inc/sys/s.h", "#pragma once\nint s_def;\n"),
+    ] {
+        std::fs::write(base.join(name), body).unwrap();
+    }
+    let src = "#include \"sub\\h.h\"\n#include \"sub/h.h\"\n#include \"sub\\\\h.h\"\n\
+               #include <sys\\s.h>\n#include <sys/s.h>\n";
+    let run = |spec: &str, target: Target| {
+        let mut pp = Preprocessor::new(spec, target, "0.1.0");
+        pp.set_source_label(base.join("m.c").to_str().unwrap());
+        pp.add_search_path(base.join("inc").to_str().unwrap());
+        pp.process(src)
+    };
+    let out = run("windows-x64", Target::WindowsX64).expect("preprocessor failed");
+    let linux = run("linux-x64", Target::LinuxX64);
+    std::fs::remove_dir_all(&base).ok();
+    for (text, want) in [
+        ("/sub/h.h\";", 1),
+        ("/sub/deep/d.h\";", 1),
+        ("int s_def;", 1),
+    ] {
+        assert_eq!(out.matches(text).count(), want, "{text}: {out}");
+    }
+    let marker = |tail: &str| {
+        out.lines()
+            .any(|l| l.starts_with("# ") && l.ends_with(tail))
+    };
+    // The search directories end as the host spells them; the header names
+    // after them use `/`.
+    assert!(marker("/sub/h.h\"") && marker("inc/sys/s.h\""), "{out}");
+    if cfg!(unix) {
+        let err = linux.expect_err("a backslash is no separator off Windows");
+        assert!(format!("{err}").contains("not found"), "{err}");
+    }
+}
+
 /// `#pragma once` and the include-guard drop identify a file as gcc and
 /// clang do, by device and inode, so another spelling of the same file
 /// (`./`, `//`, an absolute path, a symbolic link, another case where the

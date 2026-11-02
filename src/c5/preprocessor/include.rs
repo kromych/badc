@@ -282,6 +282,12 @@ impl Preprocessor {
             }
             _ => SearchStart::Angle,
         };
+        // With the Microsoft extensions, which clang enables for a Windows
+        // target, a `\` in a header name separates directories as `/` does,
+        // on any host, as the target's file systems read it.
+        if self.target.ms_extensions() && name.contains('\\') {
+            return self.find_include(&name.replace('\\', "/"), start);
+        }
         self.find_include(name, start)
     }
 

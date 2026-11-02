@@ -1,4 +1,4 @@
-//! The operations of the MSVC intrinsics (`crate::c5::ms_intrinsic`): the
+//! The operations of the call-site intrinsics (`crate::c5::ms_intrinsic`): the
 //! bit and multiply forms in IR, the 16-byte compare-exchange on
 //! `Inst::AtomicCas16`, and an instruction C has no operator for as the
 //! inline asm the target's assembler encodes.
@@ -69,6 +69,19 @@ fn asm_value(
     operands.extend(inputs);
     emit_asm(b, template, operands, 0, false);
     b.load_local(slot, load_kind_for_width(u32::from(width)))
+}
+
+/// The edx:eax pair `insn` leaves, as one value, `inputs` following.
+fn edx_eax(b: &mut SsaBuilder, insn: &str, inputs: Vec<(AsmOperand, ValueId)>) -> ValueId {
+    let (lo, hi) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
+    let out = |r| asm_operand(AsmConstraint::Fixed(r), true, 4);
+    let mut operands = alloc::vec![(out(0), b.local_addr(lo)), (out(2), b.local_addr(hi))];
+    operands.extend(inputs);
+    emit_asm(b, insn, operands, 0, false);
+    let lo = b.load_local(lo, LoadKind::U32);
+    let hi = b.load_local(hi, LoadKind::U32);
+    let hi = b.binop_imm(BinOp::Shl, hi, 32);
+    b.binop(BinOp::Or, hi, lo)
 }
 
 fn count_leading_zeros(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
@@ -325,16 +338,12 @@ impl<'a> Walker<'a> {
                 emit_asm(b, "cpuid", operands, 0, true);
                 b.imm(0)
             }
-            Op::Rdtsc => {
-                let (lo, hi) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
-                let out = |r| asm_operand(AsmConstraint::Fixed(r), true, 4);
-                let operands = alloc::vec![(out(0), b.local_addr(lo)), (out(2), b.local_addr(hi))];
-                emit_asm(b, "rdtsc", operands, 0, false);
-                let lo = b.load_local(lo, LoadKind::U32);
-                let hi = b.load_local(hi, LoadKind::U32);
-                let hi = b.binop_imm(BinOp::Shl, hi, 32);
-                b.binop(BinOp::Or, hi, lo)
+            Op::Rdtsc => edx_eax(b, "rdtsc", Vec::new()),
+            Op::Xgetbv => {
+                let ecx = asm_operand(AsmConstraint::Fixed(1), false, 4);
+                edx_eax(b, "xgetbv", alloc::vec![(ecx, v[0])])
             }
+            Op::ReadEflags => asm_value(b, "pushfq\n\tpopq %0", Vec::new(), 8),
             Op::CompareExchange128 { order } => {
                 let desired = self.int128_materialize(b, (v[2], v[1]));
                 b.atomic_cas16(v[0], v[3], desired, order)

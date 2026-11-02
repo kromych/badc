@@ -80,6 +80,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("x86_system_builtins_read_the_processor.c", 0),
     ("mmx_sse3_and_mm_malloc_intrinsics.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("max_alignment_placement.c", 0),
@@ -1495,6 +1496,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
 /// stay in sync because both backends should faithfully execute the
 /// same fixtures; if they drift, one of them has a bug.
 pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
+    ("x86_system_builtins_read_the_processor.c", 0),
     ("mmx_sse3_and_mm_malloc_intrinsics.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("neon_raid6_checksum.c", 0),
@@ -2604,6 +2606,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("x86_system_builtins_read_the_processor.c", 0),
     ("mmx_sse3_and_mm_malloc_intrinsics.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("neon_raid6_checksum.c", 0),
@@ -3704,6 +3707,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("x86_system_builtins_read_the_processor.c", 0),
     ("mmx_sse3_and_mm_malloc_intrinsics.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("max_alignment_placement.c", 0),
@@ -4563,6 +4567,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("x86_system_builtins_read_the_processor.c", 0),
     ("mmx_sse3_and_mm_malloc_intrinsics.c", 0),
     ("vector_casts_keep_the_bits.c", 0),
     ("max_alignment_placement.c", 0),

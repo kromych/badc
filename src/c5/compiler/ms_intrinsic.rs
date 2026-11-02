@@ -1,4 +1,4 @@
-//! A call of an MSVC intrinsic (`crate::c5::ms_intrinsic`): the arguments
+//! A call of a call-site intrinsic (`crate::c5::ms_intrinsic`): the arguments
 //! convert as for its prototype and the call becomes the operation's node.
 
 use alloc::format;
@@ -72,7 +72,7 @@ impl Compiler {
 
     /// A call of the intrinsic `name`, the `(` consumed.
     pub(super) fn parse_ms_intrinsic(&mut self, name: &str) -> Result<(), C5Error> {
-        let intr = ms_intrinsic::lookup(name, self.target).expect("an MSVC intrinsic");
+        let intr = ms_intrinsic::lookup(name, self.target).expect("a call-site intrinsic");
         match intr.op {
             Op::Assume => return self.parse_ms_assume(),
             Op::Noop => return self.parse_ms_noop(),

@@ -431,6 +431,79 @@ fn mmx_and_sse3_operations_follow_the_sdm() {
     );
 }
 
+/// gcc's and clang's x86 system-instruction builtins, with gcc's prototypes,
+/// emit their instruction on both x86-64 targets, `__builtin_ia32_xgetbv`
+/// with its operand in ecx; on the AArch64 targets `__has_builtin` reports
+/// none of them and a call is to an unknown function, as gcc and clang have
+/// them.
+#[cfg(feature = "full")]
+#[test]
+fn the_x86_system_builtins_emit_their_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "void fences(void) {\n\
+            __builtin_ia32_sfence(); __builtin_ia32_lfence(); __builtin_ia32_mfence();\n\
+            __builtin_ia32_pause();\n\
+        }\n\
+        unsigned long long tsc(void) { return __builtin_ia32_rdtsc(); }\n\
+        unsigned long long xcr(unsigned int i) { return __builtin_ia32_xgetbv(i); }\n\
+        unsigned long long flags(void) { return __builtin_ia32_readeflags_u64(); }\n\
+        _Static_assert(_Generic(__builtin_ia32_rdtsc(), unsigned long long: 1, default: 0), \"rdtsc\");\n\
+        _Static_assert(_Generic(__builtin_ia32_xgetbv(0), unsigned long long: 1, default: 0), \"xgetbv\");\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        for (needle, what) in [
+            (&[0x0fu8, 0xae, 0xf8][..], "sfence"),
+            (&[0x0f, 0xae, 0xe8][..], "lfence"),
+            (&[0x0f, 0xae, 0xf0][..], "mfence"),
+            (&[0xf3, 0x90][..], "pause"),
+            (&[0x0f, 0x31][..], "rdtsc"),
+            (&[0x0f, 0x01, 0xd0][..], "xgetbv"),
+        ] {
+            assert!(
+                bytes.windows(needle.len()).any(|w| w == needle),
+                "{target:?}: {what}: {needle:02x?} not in the emitted code"
+            );
+        }
+        // pushfq, then a pop into a general register, REX.B or not.
+        let pop = |w: &[u8]| {
+            (0x58..=0x5f).contains(&w[0]) || (w[0] == 0x41 && (0x58..=0x5f).contains(&w[1]))
+        };
+        assert!(
+            bytes.windows(3).any(|w| w[0] == 0x9c && pop(&w[1..])),
+            "{target:?}: pushfq; pop not in the emitted code"
+        );
+    }
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let probe = "#if __has_builtin(__builtin_ia32_pause) || __has_builtin(__builtin_ia32_rdtsc)\n\
+            #error \"x86 builtin\"\n#endif\nint main(void) { return 0; }\n";
+        Compiler::with_target(probe.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let call = "void f(void) { __builtin_ia32_sfence(); }\nint main(void) { return 0; }\n";
+        let err = Compiler::with_target(call.to_string(), target)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{target:?}: the call compiled"));
+        assert!(
+            alloc::format!("{err}").contains("unknown function"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
 // ------------------------------------------------------------------
 // Operand rules.
 // ------------------------------------------------------------------

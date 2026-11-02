@@ -1,6 +1,8 @@
-//! The MSVC intrinsics the PE targets lower at the call site, whatever
-//! declares them, as MSVC and clang for a windows-msvc triple do: a name's
-//! signature, which the parser converts to, and the operation it performs.
+//! The intrinsics lowered at the call site, whatever declares them: the MSVC
+//! ones on the PE targets, as MSVC and clang for a windows-msvc triple do,
+//! and gcc's and clang's x86 system-instruction builtins on every x86-64
+//! target. Each is a name's signature, which the parser converts to, and the
+//! operation it performs.
 
 use alloc::vec::Vec;
 
@@ -145,6 +147,10 @@ pub(crate) enum Op {
         sub: bool,
     },
     Rdtsc,
+    /// XCR[ecx] from `xgetbv`, edx:eax as one value.
+    Xgetbv,
+    /// RFLAGS, through `pushfq` and `popq`.
+    ReadEflags,
     /// `dmb`, `dsb` or `isb` with the constant option.
     Barrier(&'static str),
 }
@@ -345,8 +351,29 @@ const FIXED: &[Row] = &[
     ("__crc32cd", Arm64, crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
 ];
 
+/// gcc's and clang's builtins of these names, with gcc's prototypes.
+#[rustfmt::skip]
+const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
+    ("__builtin_ia32_sfence", Op::Insn("sfence"), None, &[]),
+    ("__builtin_ia32_lfence", Op::Insn("lfence"), None, &[]),
+    ("__builtin_ia32_mfence", Op::Insn("mfence"), None, &[]),
+    ("__builtin_ia32_pause", Op::Pause, None, &[]),
+    ("__builtin_ia32_rdtsc", Op::Rdtsc, Some(ULLong), &[]),
+    ("__builtin_ia32_xgetbv", Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("__builtin_ia32_readeflags_u64", Op::ReadEflags, Some(ULLong), &[]),
+];
+
 /// The intrinsic `name` is on `target`, or `None`.
 pub(crate) fn lookup(name: &str, target: Target) -> Option<Intrinsic> {
+    if target.is_x86_64()
+        && let Some(&(_, op, ret, params)) = GNU_X64.iter().find(|r| r.0 == name)
+    {
+        return Some(Intrinsic {
+            op,
+            ret,
+            params: params.to_vec(),
+        });
+    }
     if !target.ms_extensions() || !name.starts_with('_') {
         return None;
     }

@@ -2349,6 +2349,10 @@ pub struct Compiler {
     /// `return;` is accepted and an operand of non-void type diagnosed
     /// (C99 6.8.6.4p1). Set at function-body entry, cleared at exit.
     current_func_returns_void: bool,
+    /// True while parsing the body of a function whose parameter list
+    /// ends in `...`, the only place `va_start` may appear (C99
+    /// 7.15.1.4p1). Set at function-body entry, cleared at exit.
+    current_func_variadic: bool,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
@@ -3153,6 +3157,7 @@ impl Compiler {
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
+            current_func_variadic: false,
             current_func_conv: crate::c5::codegen::CallConv::Target,
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,

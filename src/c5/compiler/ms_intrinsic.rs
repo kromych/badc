@@ -235,6 +235,7 @@ impl Compiler {
     /// whose lowering reads the prototype; what follows, the last fixed
     /// parameter (x64) or its address, size and alignment (arm64), is unevaluated.
     fn parse_ms_va_start(&mut self, name: &str) -> Result<(), C5Error> {
+        self.require_variadic_function()?;
         let list_ty = add_ptr_level(add_ptr_level(plain_char_ty(self.lex.char_signed)));
         let list = self.parse_builtin_value(name, 0, list_ty)?;
         while self.list_separator(')', "argument")? {

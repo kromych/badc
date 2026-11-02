@@ -1939,6 +1939,9 @@ impl Compiler {
         } else if is(Intrinsic::VaArg) {
             va_arg_result_ty = Some(self.parse_va_arg_operands(fn_name, &mut ast_intrinsic_args)?);
         } else if is(Intrinsic::VaStart) || is(Intrinsic::VaCopy) {
+            if is(Intrinsic::VaStart) {
+                self.require_variadic_function()?;
+            }
             // The `va_list`, then the rightmost fixed parameter (`va_start`, C99
             // 7.15.1.4) or the source `va_list` (`va_copy`), both as addresses.
             self.expr(Token::Assign as i64)?;
@@ -2107,6 +2110,19 @@ impl Compiler {
                 }
         });
         Some((VaArgDesc::EIGHTBYTES, codes))
+    }
+
+    /// C99 7.15.1.4p1: `va_start` reaches the variable arguments of the
+    /// function it appears in, so that function's parameter list ends in
+    /// `...`. gcc and clang reject it anywhere else, in every spelling.
+    pub(super) fn require_variadic_function(&self) -> Result<(), C5Error> {
+        if self.current_func_variadic {
+            return Ok(());
+        }
+        Err(self.compile_err(
+            Code::INVALID_ARGUMENTS,
+            "`va_start` used in function with fixed arguments",
+        ))
     }
 
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address

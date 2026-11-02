@@ -1557,6 +1557,61 @@ fn msvc_va_start_lowers_as_the_builtin() {
     assert!(dump.contains("Call"), "LinuxX64:\n{dump}");
 }
 
+/// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list
+/// ends in `...`. As under gcc and clang, it is an error in a function with
+/// fixed arguments in every spelling: the `<stdarg.h>` macro,
+/// `__builtin_va_start` in a nested block, a statement expression and a K&R
+/// definition, and MSVC's `__va_start` in its x64 and arm64 forms on the PE
+/// targets, where it is no builtin elsewhere. `va_copy` and `va_end` of a
+/// `va_list` parameter stay allowed there.
+#[test]
+fn va_start_needs_a_variadic_function() {
+    use crate::{CompileOptions, Target};
+    let compile = |src: &str, t: Target| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = crate::Compiler::with_options(src.to_string(), t, opts).compile();
+        compiled.map(|_| ()).map_err(|e| e.to_string())
+    };
+    let refused = [
+        "#include <stdarg.h>\nvoid f(int a) { va_list ap; va_start(ap, a); va_end(ap); }\n",
+        "void f(int a) { { __builtin_va_list ap; if (a) { __builtin_va_start(ap, a); } } }\n",
+        "void f(int a) { __builtin_va_list ap; (void)({ __builtin_va_start(ap, a); 1; }); }\n",
+        "void f(a) int a; { __builtin_va_list ap; __builtin_va_start(ap, a); }\n",
+    ];
+    let accepted = [
+        "#include <stdarg.h>\n\
+         void f(va_list src) { va_list d; va_copy(d, src); va_end(d); va_end(src); }\n",
+        "#include <stdarg.h>\n\
+         int f(int n, ...) { va_list ap; ({ va_start(ap, n); }); int r = va_arg(ap, int);\n\
+         va_end(ap); return r; }\n",
+    ];
+    let ms = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n";
+    let ms_x64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, a); }}\n");
+    let ms_arm64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, 4, 4, &a); }}\n");
+    let fixed = "`va_start` used in function with fixed arguments";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for src in refused {
+            let err = compile(src, t).expect_err(src);
+            assert!(err.contains(fixed), "{t:?}: {src}\n{err}");
+        }
+        for src in accepted {
+            compile(src, t).unwrap_or_else(|e| panic!("{t:?}: {src}\n{e}"));
+        }
+        for src in [&ms_x64, &ms_arm64] {
+            match compile(src, t) {
+                Err(e) if t.is_windows() => assert!(e.contains(fixed), "{t:?}: {src}\n{e}"),
+                got => assert!(got.is_ok() && !t.is_windows(), "{t:?}: {src}\n{got:?}"),
+            }
+        }
+    }
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {

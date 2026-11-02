@@ -1653,6 +1653,7 @@ impl Compiler {
         let return_ty = self.symbols[id_idx].type_;
         self.current_func_return_ty = return_ty;
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
+        self.current_func_variadic = self.symbols[id_idx].is_variadic();
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
@@ -2000,6 +2001,7 @@ impl Compiler {
         );
         self.current_function_name.clear();
         self.current_func_returns_void = false;
+        self.current_func_variadic = false;
 
         for name in &self.unresolved_gotos {
             if !self.label_is_defined(name) {

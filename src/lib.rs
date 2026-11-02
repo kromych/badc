@@ -184,5 +184,6 @@ pub use c5::{
     parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,
     parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, read_archive_at,
     read_indexed_archive_at, render_link_map, resolve_exec_stack, run_ld, script_unreadable,
-    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
+    traditional_imports, write_executable_elf64, write_native_image_from_merged,
+    write_native_image_from_merged_ex,
 };

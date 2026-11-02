@@ -115,7 +115,7 @@ pub use archive::{read_archive_at, read_indexed_archive_at};
 #[allow(unused_imports)]
 pub use coff_object::{
     ImportMember, import_libraries, is_arm64x_native_member, is_coff_import_member, is_coff_object,
-    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll,
+    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll, traditional_imports,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

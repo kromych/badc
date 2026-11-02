@@ -5324,39 +5324,186 @@ fn coff_object(
     sections: &[(&str, u32, &[u8])],
     symbols: &[(&str, i16, bool)],
 ) -> Vec<u8> {
-    let name8 = |name: &str| {
+    let sections: Vec<CoffSection> = (sections.iter())
+        .map(|&(name, flags, content)| (name, flags, content, &[][..]))
+        .collect();
+    let symbols: Vec<CoffSymbol> = (symbols.iter())
+        .map(|&(name, section, function)| (name, section, u16::from(function) * 0x20, 2))
+        .collect();
+    coff_relocatable(machine, &sections, &symbols)
+}
+
+/// A section of [`coff_relocatable`]: name (8 bytes at most),
+/// characteristics, content and `(offset, symbol index, type)` relocations.
+type CoffSection<'a> = (&'a str, u32, &'a [u8], CoffRelocs<'a>);
+type CoffRelocs<'a> = &'a [(u32, u32, u16)];
+/// A symbol record at the start of its section: name, 1-based section (0
+/// undefined), type and storage class.
+type CoffSymbol<'a> = (&'a str, i16, u16, u8);
+
+/// A COFF object for `machine` (PE/COFF specification): the section table,
+/// each section's content then its relocations, the symbol table and the
+/// string table holding the symbol names over 8 bytes.
+fn coff_relocatable(machine: u16, sections: &[CoffSection], symbols: &[CoffSymbol]) -> Vec<u8> {
+    let mut strings = vec![0u8; 4];
+    let mut name8 = |name: &str| {
         let mut field = [0u8; 8];
-        field[..name.len()].copy_from_slice(name.as_bytes());
+        if name.len() <= 8 {
+            field[..name.len()].copy_from_slice(name.as_bytes());
+        } else {
+            field[4..].copy_from_slice(&(strings.len() as u32).to_le_bytes());
+            strings.extend([name.as_bytes(), b"\0"].concat());
+        }
         field
     };
     let mut at = 20 + 40 * sections.len();
-    let data: Vec<u8> = sections.iter().flat_map(|s| s.2.iter().copied()).collect();
+    let mut body = Vec::new();
+    let mut headers = Vec::new();
+    for &(name, flags, content, relocs) in sections {
+        let raw = at + body.len();
+        body.extend(content);
+        let rel = at + body.len();
+        for &(offset, symbol, kind) in relocs {
+            body.extend(offset.to_le_bytes());
+            body.extend(symbol.to_le_bytes());
+            body.extend(kind.to_le_bytes());
+        }
+        headers.extend(name8(name));
+        headers.extend([0; 8]);
+        headers.extend((content.len() as u32).to_le_bytes());
+        headers.extend((raw as u32).to_le_bytes());
+        headers.extend((rel as u32).to_le_bytes());
+        headers.extend([0; 4]);
+        headers.extend((relocs.len() as u16).to_le_bytes());
+        headers.extend([0; 2]);
+        headers.extend(flags.to_le_bytes());
+    }
+    at += body.len();
+    for &(name, section, kind, class) in symbols {
+        body.extend(name8(name));
+        body.extend(0u32.to_le_bytes());
+        body.extend(section.to_le_bytes());
+        body.extend(kind.to_le_bytes());
+        body.extend([class, 0]);
+    }
+    let len = strings.len() as u32;
+    strings[..4].copy_from_slice(&len.to_le_bytes());
     let mut out = machine.to_le_bytes().to_vec();
     out.extend((sections.len() as u16).to_le_bytes());
     out.extend(0u32.to_le_bytes());
-    out.extend(((at + data.len()) as u32).to_le_bytes());
+    out.extend((at as u32).to_le_bytes());
     out.extend((symbols.len() as u32).to_le_bytes());
     out.extend([0; 4]);
-    for &(name, flags, content) in sections {
-        out.extend(name8(name));
-        out.extend([0; 8]);
-        out.extend((content.len() as u32).to_le_bytes());
-        out.extend((at as u32).to_le_bytes());
-        out.extend([0; 12]);
-        out.extend(flags.to_le_bytes());
-        at += content.len();
-    }
-    out.extend(data);
-    for &(name, section, function) in symbols {
-        out.extend(name8(name));
-        out.extend(0u32.to_le_bytes());
-        out.extend(section.to_le_bytes());
-        out.extend(u16::from(function).wrapping_mul(0x20).to_le_bytes());
-        // IMAGE_SYM_CLASS_EXTERNAL, no auxiliary record.
-        out.extend([2, 0]);
-    }
-    out.extend(4u32.to_le_bytes());
+    out.extend(headers);
+    out.extend(body);
+    out.extend(strings);
     out
+}
+
+/// GNU dlltool's import library for `dll` (`dlltool -l`): a head member
+/// holding the import directory entry, whose Name field (offset 12)
+/// addresses the DLL name the tail member defines, and for each `(name,
+/// data, ordinal)` a member whose `.idata$5` slot holds a hint/name RVA or
+/// an ordinal, a code import's beside its `jmp` thunk. The import members'
+/// `.idata$` sections name no content type, as dlltool writes them.
+fn dlltool_import_library(
+    machine: u16,
+    dll: &str,
+    imports: &[(&str, bool, Option<u16>)],
+) -> Vec<u8> {
+    const IDATA: u32 = 0xC030_0000;
+    const IDATA_CNT: u32 = IDATA | 0x40;
+    const TEXT: u32 = 0x6030_0020;
+    // adrp x16, __imp_<name>; ldr x16, [x16, :lo12:__imp_<name>]; br x16
+    let arm64_thunk = [0x9000_0010u32, 0xF940_0210, 0xD61F_0200]
+        .map(u32::to_le_bytes)
+        .concat();
+    let (nb, thunk, thunk_relocs): (u16, &[u8], CoffRelocs) = if machine == 0x8664 {
+        (3, &[0xFF, 0x25, 0, 0, 0, 0, 0x90, 0x90], &[(2, 1, 4)])
+    } else {
+        (2, &arm64_thunk, &[(0, 1, 4), (4, 1, 7)])
+    };
+    let name = format!("{dll}\0").into_bytes();
+    let head = coff_relocatable(
+        machine,
+        &[
+            (
+                ".idata$2",
+                IDATA_CNT,
+                &[0; 20],
+                &[(0, 0, nb), (12, 3, nb), (16, 1, nb)],
+            ),
+            (".idata$5", IDATA_CNT, &[], &[]),
+            (".idata$4", IDATA_CNT, &[], &[]),
+        ],
+        &[
+            (".idata$4", 3, 0, 3),
+            (".idata$5", 2, 0, 3),
+            ("_head_libtest_a", 1, 0, 2),
+            ("__libtest_a_iname", 0, 0, 2),
+        ],
+    );
+    let tail = coff_relocatable(
+        machine,
+        &[
+            (".idata$4", IDATA_CNT, &[0; 8], &[]),
+            (".idata$5", IDATA_CNT, &[0; 8], &[]),
+            (".idata$7", IDATA_CNT, &name, &[]),
+        ],
+        &[("__libtest_a_iname", 3, 0, 2)],
+    );
+    let mut members = vec![
+        (
+            "libtesth.o".to_string(),
+            head,
+            vec!["_head_libtest_a".to_string()],
+        ),
+        (
+            "libtestt.o".to_string(),
+            tail,
+            vec!["__libtest_a_iname".to_string()],
+        ),
+    ];
+    // `.idata$5` / `.idata$4` address `.idata$6`, `.idata$7` the head.
+    let (hint_name_reloc, head_reloc) = ([(0, 0, nb)], [(0, 2, nb)]);
+    for (k, &(symbol, data, ordinal)) in imports.iter().enumerate() {
+        let slot = ordinal
+            .map_or(0, |n| 1u64 << 63 | u64::from(n))
+            .to_le_bytes();
+        let by_name: CoffRelocs = if ordinal.is_none() {
+            &hint_name_reloc
+        } else {
+            &[]
+        };
+        let hint_name = [&[0, 0], symbol.as_bytes(), b"\0"].concat();
+        let imp = format!("__imp_{symbol}");
+        let mut sections: Vec<CoffSection> = vec![
+            (".idata$7", IDATA, &[0; 4], &head_reloc),
+            (".idata$5", IDATA, &slot, by_name),
+            (".idata$4", IDATA, &slot, by_name),
+            (".idata$6", IDATA, &hint_name, &[]),
+        ];
+        let mut symbols: Vec<CoffSymbol> = vec![
+            (".idata$6", 4, 0, 3),
+            (&imp, 2, 0, 2),
+            ("_head_libtest_a", 0, 0, 2),
+        ];
+        let mut names = vec![imp.clone()];
+        if !data {
+            sections.push((".text", TEXT, thunk, thunk_relocs));
+            symbols.push((symbol, 5, 0x20, 2));
+            names.push(symbol.to_string());
+        }
+        let object = coff_relocatable(machine, &sections, &symbols);
+        members.push((format!("libtests{k:05}.o"), object, names));
+    }
+    let names: Vec<Vec<&str>> = (members.iter())
+        .map(|m| m.2.iter().map(String::as_str).collect())
+        .collect();
+    let members: Vec<(&str, Vec<u8>, &[&str])> = (members.iter().zip(&names))
+        .map(|(m, n)| (m.0.as_str(), m.1.clone(), &n[..]))
+        .collect();
+    indexed_archive(&members)
 }
 
 /// An archive in lib.exe's layout: the two `/` indexes and, for an ARM64X
@@ -5482,6 +5629,55 @@ fn an_archive_member_is_read_when_the_link_pulls_it() {
             !out.status.success() && err.contains("member `junk.obj`"),
             "{src} {lib}: {err}"
         );
+    }
+}
+
+/// A driver links against GNU dlltool's import library as GNU ld links it:
+/// a call through the thunk, a dllimport call, a data import and an import
+/// by ordinal each import from the DLL the descriptor names, and an import
+/// nothing references is not imported.
+#[test]
+fn a_pe_link_imports_through_a_traditional_import_library() {
+    let dir = tempdir("pe-traditional-imports");
+    write_source(
+        &dir,
+        "drv.c",
+        "#pragma subsystem(driver)\n#pragma entrypoint(DriverEntry)\n\
+         unsigned long DbgPrint(const char *, ...);\n\
+         __declspec(dllimport) unsigned long DbgPrintEx(unsigned long, unsigned long, \
+         const char *, ...);\n\
+         __declspec(dllimport) extern unsigned char KdDebuggerEnabled;\n\
+         void ByOrdinal(void);\n\
+         long DriverEntry(void *d, void *r) {\n\
+         ByOrdinal();\n DbgPrintEx(0, 0, \"x\");\n\
+         return (long)DbgPrint(\"%d\", KdDebuggerEnabled);\n}\n",
+    );
+    let imports = [
+        ("DbgPrint", false, None),
+        ("DbgPrintEx", false, None),
+        ("KdDebuggerEnabled", true, None),
+        ("ByOrdinal", false, Some(7)),
+        ("Unused", false, None),
+    ];
+    let mut want: Vec<(String, String)> = ["#7", "DbgPrint", "DbgPrintEx", "KdDebuggerEnabled"]
+        .map(|s| ("ntoskrnl.exe".to_string(), s.to_string()))
+        .into();
+    want.sort();
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let lib = dlltool_import_library(machine, "ntoskrnl.exe", &imports);
+        std::fs::write(dir.join("libntoskrnl.a"), lib).unwrap();
+        let sys = dir.join(format!("{target}.sys"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["drv.c", "libntoskrnl.a", "-o"])
+                .arg(&sys)
+                .current_dir(&dir),
+            &format!("link for {target}"),
+        );
+        let mut got = pe_imports(&std::fs::read(&sys).unwrap());
+        got.sort();
+        assert_eq!(got, want, "{target}");
     }
 }
 

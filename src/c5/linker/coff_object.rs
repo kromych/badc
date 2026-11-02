@@ -1392,6 +1392,178 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
     libs.into_values().collect()
 }
 
+/// A COFF object's section headers and symbol records, without the
+/// classification and relocation translation a link applies.
+struct Shallow<'a> {
+    bytes: &'a [u8],
+    machine: u16,
+    sects: Vec<Sect>,
+    raw: Vec<Option<RawSym<'a>>>,
+}
+
+fn shallow(bytes: &[u8]) -> Option<Shallow<'_>> {
+    if !is_coff_object(bytes) {
+        return None;
+    }
+    let h = read_header(bytes).ok()?;
+    Some(Shallow {
+        bytes,
+        machine: h.machine,
+        sects: read_sections(bytes, &h).ok()?,
+        raw: read_symbols(bytes, &h).ok()?,
+    })
+}
+
+impl Shallow<'_> {
+    fn externals(&self) -> impl Iterator<Item = &RawSym<'_>> {
+        (self.raw.iter().flatten()).filter(|r| r.class == IMAGE_SYM_CLASS_EXTERNAL)
+    }
+
+    fn section_of(&self, r: &RawSym) -> Option<&Sect> {
+        self.sects
+            .get(usize::try_from(r.section).ok()?.checked_sub(1)?)
+    }
+
+    /// The external `name`'s record and section, when this object defines it.
+    fn defined(&self, name: &str) -> Option<(&RawSym<'_>, &Sect)> {
+        let r = self.externals().find(|r| r.name == name && r.section > 0)?;
+        Some((r, self.section_of(r)?))
+    }
+
+    /// The symbol an image-relative relocation at `off` in `s` names.
+    fn image_relative_at(&self, s: &Sect, off: u32) -> Option<&RawSym<'_>> {
+        let nb = match self.machine {
+            IMAGE_FILE_MACHINE_AMD64 => IMAGE_REL_AMD64_ADDR32NB,
+            _ => IMAGE_REL_ARM64_ADDR32NB,
+        };
+        let sym = (0..s.nrelocs as usize).find_map(|k| {
+            let p = s.reloc_off as usize + k * RELOCATION_SIZE;
+            (u32le(self.bytes, p)? == off && u16le(self.bytes, p + 8)? == nb)
+                .then(|| u32le(self.bytes, p + 4))?
+        })?;
+        self.raw.get(sym as usize)?.as_ref()
+    }
+
+    /// The NUL-terminated string at `r` plus `addend`.
+    fn string_at(&self, r: &RawSym, addend: u32) -> Option<String> {
+        let content = self.section_of(r)?.content(self.bytes).ok()?;
+        let tail = content.get((r.value as usize).checked_add(addend as usize)?..)?;
+        let end = tail.iter().position(|&c| c == 0)?;
+        core::str::from_utf8(&tail[..end]).ok().map(str::to_string)
+    }
+
+    /// The import a traditional import member describes, its DLL left to
+    /// the descriptor, and the names it references: `__imp_<symbol>` is an
+    /// 8-byte import address table slot in `.idata$5` holding the RVA of a
+    /// hint/name entry or an ordinal with bit 63 set; a `<symbol>` defined
+    /// beside it is the call thunk of a code import.
+    fn traditional_import(&self) -> Option<(ImportMember, Vec<String>)> {
+        let machine = match self.machine {
+            IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
+            IMAGE_FILE_MACHINE_ARM64 => NativeMachine::Aarch64,
+            _ => return None,
+        };
+        let (symbol, s, at) = self.externals().find_map(|r| {
+            let symbol = r.name.strip_prefix("__imp_")?;
+            let s = self.section_of(r).filter(|s| s.name == ".idata$5")?;
+            Some((symbol, s, r.value))
+        })?;
+        let content = s.content(self.bytes).ok()?;
+        let slot = u64::from_le_bytes(content.get(at as usize..at as usize + 8)?.try_into().ok()?);
+        let (import_name, ordinal) = match self.image_relative_at(s, at) {
+            Some(entry) => (self.string_at(entry, (slot as u32).checked_add(2)?)?, None),
+            None if slot >> 63 == 1 => (symbol.to_string(), Some(slot as u16)),
+            None => return None,
+        };
+        let references = (self.externals())
+            .filter(|r| r.section == IMAGE_SYM_UNDEFINED)
+            .map(|r| r.name.clone())
+            .collect();
+        let import = ImportMember {
+            machine,
+            symbol: symbol.to_string(),
+            dll: String::new(),
+            import_name,
+            ordinal,
+            data: self.defined(symbol).is_none(),
+        };
+        Some((import, references))
+    }
+
+    /// The target and stored addend of the Name field (offset 12) of the
+    /// import directory entry `symbol` defines in `.idata$2`.
+    fn descriptor_name(&self, symbol: &str) -> Option<(&RawSym<'_>, u32)> {
+        let (r, s) = self.defined(symbol).filter(|(_, s)| s.name == ".idata$2")?;
+        let field = r.value.checked_add(12)?;
+        let addend = u32le(s.content(self.bytes).ok()?, field as usize)?;
+        Some((self.image_relative_at(s, field)?, addend))
+    }
+}
+
+/// The imports an archive's traditional import members describe, the
+/// `.idata$` layout of the PE/COFF specification's import tables that GNU
+/// dlltool writes, one member per import. An import's DLL is the name the
+/// import directory entry it references addresses, in the entry's member
+/// or in the member defining that name. `symbols` is the archive's index;
+/// without one every member's definitions are read. Returns the imports
+/// for `machine` and the members read as them, in order.
+pub fn traditional_imports(
+    members: &[&[u8]],
+    symbols: Option<&[Vec<String>]>,
+    machine: NativeMachine,
+) -> (Vec<ImportMember>, Vec<usize>) {
+    let mut definer: BTreeMap<String, usize> = BTreeMap::new();
+    let mut candidates = Vec::new();
+    for (i, bytes) in members.iter().enumerate() {
+        let names: Vec<String> = match symbols {
+            Some(index) => index.get(i).cloned().unwrap_or_default(),
+            None => (shallow(bytes).into_iter())
+                .flat_map(|o| {
+                    (o.externals().filter(|r| r.section > 0))
+                        .map(|r| r.name.clone())
+                        .collect::<Vec<_>>()
+                })
+                .collect(),
+        };
+        if names.iter().any(|n| n.starts_with("__imp_")) {
+            candidates.push(i);
+        }
+        for n in names {
+            definer.entry(n).or_insert(i);
+        }
+    }
+    let read = |name: &str| shallow(members[*definer.get(name)?]);
+    let dll_of = |descriptor: &str| -> Option<String> {
+        let entry = read(descriptor)?;
+        let (name, addend) = entry.descriptor_name(descriptor)?;
+        if name.section > 0 {
+            return entry.string_at(name, addend);
+        }
+        let holder = read(&name.name)?;
+        holder.string_at(holder.defined(&name.name)?.0, addend)
+    };
+    let mut dlls: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let (mut imports, mut taken) = (Vec::new(), Vec::new());
+    for i in candidates {
+        let Some((mut import, references)) = (shallow(members[i]))
+            .and_then(|o| o.traditional_import())
+            .filter(|(import, _)| import.machine == machine)
+        else {
+            continue;
+        };
+        let dll = references.into_iter().find_map(|r| {
+            let dll = dlls.entry(r).or_insert_with_key(|r| dll_of(r));
+            dll.clone()
+        });
+        if let Some(dll) = dll {
+            import.dll = dll;
+            imports.push(import);
+            taken.push(i);
+        }
+    }
+    (imports, taken)
+}
+
 /// The PE header's offset of a PE image with `IMAGE_FILE_DLL` set.
 fn pe_dll_header(bytes: &[u8]) -> Option<usize> {
     let pe = u32le(bytes, 0x3c)? as usize;
@@ -1972,6 +2144,127 @@ mod tests {
         let o = parse_import_member(&by_ordinal).unwrap().unwrap();
         assert_eq!(o.ordinal, Some(7));
         assert_eq!(import_libraries(&[o])[0].export_ordinals["f"], 7);
+    }
+
+    /// GNU dlltool's import library: a head member with the import
+    /// directory entry, whose Name field addresses the DLL name the tail
+    /// member defines, and a member per import, whose `.idata$5` slot holds
+    /// a hint/name RVA or an ordinal and whose `.idata$` sections name no
+    /// content type. Each import member reads as its import, with the
+    /// archive index or without; another object stays a member.
+    #[test]
+    fn traditional_import_members_read_as_their_imports() {
+        const IDATA: u32 = 0xC030_0000;
+        const IDATA_CNT: u32 = IDATA | IMAGE_SCN_CNT_INITIALIZED_DATA;
+        const NB: u16 = IMAGE_REL_AMD64_ADDR32NB;
+        let ext = IMAGE_SYM_CLASS_EXTERNAL;
+        let head = object(
+            AMD64,
+            &[
+                with(
+                    sec(".idata$2", IDATA_CNT, &[0; 20]),
+                    &[(0, 0, NB), (12, 3, NB), (16, 1, NB)],
+                ),
+                sec(".idata$5", IDATA_CNT, &[]),
+                sec(".idata$4", IDATA_CNT, &[]),
+            ],
+            &[
+                sym(".idata$4", 0, 3, IMAGE_SYM_CLASS_STATIC),
+                sym(".idata$5", 0, 2, IMAGE_SYM_CLASS_STATIC),
+                sym("_head_libk_a", 0, 1, ext),
+                sym("__libk_a_iname", 0, 0, ext),
+            ],
+        );
+        let tail = object(
+            AMD64,
+            &[
+                sec(".idata$4", IDATA_CNT, &[0; 8]),
+                sec(".idata$5", IDATA_CNT, &[0; 8]),
+                sec(".idata$7", IDATA_CNT, b"k.exe\0\0\0"),
+            ],
+            &[sym("__libk_a_iname", 0, 3, ext)],
+        );
+        // `thunk` defines `symbol` as a `jmp *__imp_<symbol>(%rip)`.
+        let stub = |symbol: &'static str, imp, export: &str, thunk: bool, ordinal: Option<u64>| {
+            let slot = ordinal.map_or(0, |n| 1 << 63 | n).to_le_bytes();
+            let by_name: &[(u32, u32, u16)] = if ordinal.is_none() {
+                &[(0, 0, NB)]
+            } else {
+                &[]
+            };
+            let mut secs = alloc::vec![
+                with(sec(".idata$7", IDATA, &[0; 4]), &[(0, 2, NB)]),
+                with(sec(".idata$5", IDATA, &slot), by_name),
+                with(sec(".idata$4", IDATA, &slot), by_name),
+                sec(
+                    ".idata$6",
+                    IDATA,
+                    &[&[0, 0], export.as_bytes(), b"\0"].concat()
+                ),
+            ];
+            let mut syms = alloc::vec![
+                sym(".idata$6", 0, 4, IMAGE_SYM_CLASS_STATIC),
+                sym(imp, 0, 2, ext),
+                sym("_head_libk_a", 0, 0, ext),
+            ];
+            if thunk {
+                let jmp = [0xFF, 0x25, 0, 0, 0, 0, 0x90, 0x90];
+                secs.push(with(
+                    sec(".text", TEXT, &jmp),
+                    &[(2, 1, IMAGE_REL_AMD64_REL32)],
+                ));
+                syms.push(sym(symbol, 0, 5, ext));
+            }
+            object(AMD64, &secs, &syms)
+        };
+        let other = object(
+            AMD64,
+            &[sec(".text", TEXT, &[0xC3])],
+            &[sym("f", 0, 1, ext)],
+        );
+        let members = [
+            head,
+            stub("Dbg", "__imp_Dbg", "Dbg", true, None),
+            stub("Tick", "__imp_Tick", "Tick", false, None),
+            stub("Alias", "__imp_Alias", "Real", true, None),
+            stub("Ord", "__imp_Ord", "", true, Some(7)),
+            tail,
+            other,
+        ];
+        let bytes: Vec<&[u8]> = members.iter().map(|m| &m[..]).collect();
+        let names = |n: &[&str]| n.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let index = [
+            names(&["_head_libk_a"]),
+            names(&["Dbg", "__imp_Dbg"]),
+            names(&["__imp_Tick"]),
+            names(&["Alias", "__imp_Alias"]),
+            names(&["Ord", "__imp_Ord"]),
+            names(&["__libk_a_iname"]),
+            names(&["f"]),
+        ];
+        for symbols in [None, Some(&index[..])] {
+            let (imports, taken) = traditional_imports(&bytes, symbols, NativeMachine::X86_64);
+            assert_eq!(taken, [1, 2, 3, 4], "{symbols:?}");
+            let read: Vec<_> = (imports.iter())
+                .map(|i| (i.symbol.as_str(), i.dll.as_str(), i.import_name.as_str()))
+                .collect();
+            assert_eq!(
+                read,
+                [
+                    ("Dbg", "k.exe", "Dbg"),
+                    ("Tick", "k.exe", "Tick"),
+                    ("Alias", "k.exe", "Real"),
+                    ("Ord", "k.exe", "Ord")
+                ]
+            );
+            let kinds: Vec<_> = imports.iter().map(|i| (i.ordinal, i.data)).collect();
+            assert_eq!(
+                kinds,
+                [(None, false), (None, true), (None, false), (Some(7), false)]
+            );
+        }
+        let arm64 = traditional_imports(&bytes, None, NativeMachine::Aarch64);
+        assert!(arm64.0.is_empty(), "another machine's imports");
     }
 
     /// A common symbol without `-aligncomm` aligns to its size's power of

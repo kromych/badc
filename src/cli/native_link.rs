@@ -510,11 +510,23 @@ fn read_archive_members(
         };
     let mut out = Vec::with_capacity(members.len());
     let mut imports = Vec::new();
+    // A traditional import member is read as its import, as a short one is.
+    let mut taken = Vec::new();
+    if target.binary_format() == badc::BinaryFormat::Pe {
+        let bytes: Vec<&[u8]> = members.iter().map(|m| &m.bytes[..]).collect();
+        let traditional;
+        (traditional, taken) =
+            badc::traditional_imports(&bytes, symbols.as_deref(), target_machine(target));
+        imports.extend(traditional);
+    }
     let arm64x = !target.is_x86_64() && badc::is_arm64x_archive(&bytes);
     let indexed = symbols.is_some();
     let mut symbols = symbols.unwrap_or_default().into_iter();
-    for m in members {
+    for (i, m) in members.into_iter().enumerate() {
         let names = symbols.next().unwrap_or_default();
+        if taken.binary_search(&i).is_ok() {
+            continue;
+        }
         // A member may itself be a fat object (`lipo` output
         // archived as-is).
         let member_bytes = fat_slice_for_target(m.bytes, target);

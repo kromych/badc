@@ -5119,6 +5119,67 @@ fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<
     out
 }
 
+/// A DLL link resolves a function only against what the link supplies --
+/// an import library, or the C library the bundled headers bind a
+/// self-declared `puts` to -- and reports any other reference undefined,
+/// as an executable link does: a PE import names its DLL.
+#[test]
+fn a_dll_link_reports_a_function_no_library_supplies() {
+    let dir = tempdir("pe-dll-undefined");
+    write_source(
+        &dir,
+        "bogus.c",
+        "int nosuch_function_xyz(void);\n#pragma export(f)\n\
+         int f(void) { return nosuch_function_xyz(); }\n",
+    );
+    write_source(
+        &dir,
+        "say.c",
+        "int puts(const char *);\n#pragma export(f)\nint f(void) { return puts(\"x\"); }\n",
+    );
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let link = |args: &[&str]| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("--shared")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        let out = link(&["bogus.c", "-o", "bogus.dll"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("undefined reference to `nosuch_function_xyz`"),
+            "{target}: {err}"
+        );
+        let lib = short_import_library("nosuch.dll", &[(machine, "nosuch_function_xyz", None)]);
+        std::fs::write(dir.join("nosuch.lib"), lib).unwrap();
+        for (args, dll, import) in [
+            (
+                &["bogus.c", "nosuch.lib", "-o", "bogus.dll"][..],
+                "bogus.dll",
+                ("nosuch.dll", "nosuch_function_xyz"),
+            ),
+            (
+                &["say.c", "-o", "say.dll"][..],
+                "say.dll",
+                ("msvcrt.dll", "puts"),
+            ),
+        ] {
+            let out = link(args);
+            assert!(
+                out.status.success(),
+                "{target} {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let imports = pe_imports(&std::fs::read(dir.join(dll)).unwrap());
+            let want = (import.0.to_string(), import.1.to_string());
+            assert!(imports.contains(&want), "{target} {dll}: {imports:?}");
+        }
+    }
+}
+
 /// A PE link imports through what Windows toolchains name a library by:
 /// `#pragma comment(lib, ...)` in a badc unit, compiled in the link or
 /// from `-c`, searched on `-L` and on the `;`-separated `LIB` directories

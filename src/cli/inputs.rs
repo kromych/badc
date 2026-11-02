@@ -644,9 +644,16 @@ impl Inputs {
         // than read off the link host (see `TargetCLibrary`), so the image
         // is a function of the sources, the flags and the target alone. The
         // set is materialized during symbol selection below, once the
-        // undefined names are known.
-        self.target_libc = (cli.mode == Mode::NativeExecutable && !cli.freestanding)
-            .then(|| badc::TargetCLibrary::new(cli.target));
+        // undefined names are known. An ELF or Mach-O shared library leaves
+        // such a name to the loader's global scope; a DLL's import names
+        // its DLL, so a PE shared link takes the library as gcc's does.
+        let hosted = match cli.mode {
+            Mode::NativeExecutable => true,
+            Mode::SharedLibrary => cli.target.binary_format() == badc::BinaryFormat::Pe,
+            _ => false,
+        };
+        self.target_libc =
+            (hosted && !cli.freestanding).then(|| badc::TargetCLibrary::new(cli.target));
     }
     /// Fall back to stdin when no positional source was given
     /// and stdin isn't a terminal -- the `cat foo.c | badc`

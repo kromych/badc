@@ -1037,6 +1037,10 @@ pub enum Preemption {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LinkOptions {
+    /// An unresolved reference is a load-time import the loader's global
+    /// scope resolves, where the format has one: ELF and Mach-O. A PE
+    /// import names the DLL exporting it, so a PE link reports the
+    /// reference undefined.
     pub allow_undefined: bool,
     /// The image is a shared library.
     pub shared: bool,
@@ -1351,7 +1355,7 @@ impl<'a> Link<'a> {
         Ok(Link {
             objs,
             machine,
-            allow_undefined: opts.allow_undefined,
+            allow_undefined: opts.allow_undefined && opts.format != BinaryFormat::Pe,
             preemption: opts.preemption,
             export_all: opts.export_all,
             export_data: opts.export_data,
@@ -6925,6 +6929,36 @@ mod tests {
                 .all(|p| p.slot_load),
             "a shared-library data object must route as a slot read, not a call stub",
         );
+    }
+
+    /// A shared library's unresolved function is a load-time import the
+    /// loader's global scope resolves on ELF; a PE import names its DLL,
+    /// so a DLL link reports the same reference undefined.
+    #[test]
+    fn a_dll_link_reports_a_reference_no_library_supplies() {
+        let src = "int host_fn(void);\nint f(void) { return host_fn(); }\n";
+        for target in [Target::LinuxX64, Target::WindowsX64, Target::WindowsAarch64] {
+            let mut opts = NativeOptions::new().with_debug_info(false);
+            opts.output_kind = OutputKind::Relocatable;
+            let copts = crate::CompileOptions::default().with_no_entry_point(true);
+            let obj = compile_native_with(src, target, opts, copts);
+            let link = LinkOptions {
+                allow_undefined: true,
+                shared: true,
+                format: target.binary_format(),
+                ..Default::default()
+            };
+            let got = link_native_objects_with(core::slice::from_ref(&obj), &[], &link);
+            if target.binary_format() == BinaryFormat::Pe {
+                let err = got.err().map(|e| e.to_string()).unwrap_or_default();
+                assert!(
+                    err.contains("undefined reference to `host_fn`"),
+                    "{target:?}: {err}"
+                );
+            } else {
+                assert!(got.expect("ELF admits it").flat_imports.contains("host_fn"));
+            }
+        }
     }
 
     /// A shared library's own undefined references: the host supplies

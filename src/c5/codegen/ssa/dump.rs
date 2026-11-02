@@ -103,6 +103,11 @@ fn fmt_inst(inst: &Inst) -> String {
         BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
+        ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        } => format!("ParentLocalAddr(v{establisher}, parent={parent}, index={index})"),
         Load {
             addr,
             disp,

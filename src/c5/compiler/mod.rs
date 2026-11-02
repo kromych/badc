@@ -2114,6 +2114,8 @@ pub struct Compiler {
     loop_continue_depth: usize,
     /// The open parts of `__try` statements, outermost first.
     seh_contexts: Vec<seh::SehContext>,
+    /// The filter funclets of the function being parsed.
+    seh_funclets: u32,
     /// Recursion depth shared by the recursive-descent entry points
     /// (statements, expressions, constant expressions, declarators,
     /// initializer lists). Bounded by `MAX_NEST_DEPTH` via
@@ -3086,6 +3088,7 @@ impl Compiler {
             loop_break_depth: 0,
             loop_continue_depth: 0,
             seh_contexts: Vec::new(),
+            seh_funclets: 0,
             nest_depth: 0,
             labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),

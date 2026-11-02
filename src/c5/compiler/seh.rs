@@ -5,13 +5,16 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::super::ast::{SehHandler, Stmt, StmtId};
+use super::super::ast::{FilterFunclet, SehHandler, Stmt, StmtId};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ms_intrinsic::Op;
 use super::super::token::Token;
 use super::Compiler;
 use super::diag::Category;
+
+/// The filter value that runs the `__except` body.
+const EXCEPTION_EXECUTE_HANDLER: i64 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SehPart {
@@ -60,7 +63,12 @@ impl Compiler {
             self.next()?;
             self.consume(b'(', "`(` expected after `__except`")?;
             self.enter_seh_part(SehPart::Filter);
+            // The slots the filter reserves are its funclet's own.
+            let (slot_base, outer_max) = (self.loc_offs, self.max_loc_offs);
+            self.max_loc_offs = slot_base;
             self.parse_full_expr()?;
+            let slot_end = self.max_loc_offs;
+            self.max_loc_offs = outer_max.max(slot_end);
             self.seh_contexts.pop();
             let filter = self.ast_acc;
             let what = "filter expression of `__except`";
@@ -72,8 +80,24 @@ impl Compiler {
             )?;
             self.consume(b')', "`)` expected after the `__except` filter")?;
             self.flush_pending_stores();
+            // cl's scope table names EXCEPTION_EXECUTE_HANDLER as the constant
+            // 1 and every other filter, a constant one included, by a funclet.
+            let funclet = filter
+                .filter(|&f| self.ast.folded_int(f) != Some(EXCEPTION_EXECUTE_HANDLER))
+                .map(|_| {
+                    self.seh_funclets += 1;
+                    FilterFunclet {
+                        index: self.seh_funclets - 1,
+                        slot_base,
+                        slot_end,
+                    }
+                });
             let body = self.parse_seh_block(SehPart::Except)?;
-            filter.map(|filter| SehHandler::Except { filter, body })
+            filter.map(|filter| SehHandler::Except {
+                filter,
+                body,
+                funclet,
+            })
         } else if self.lex.tk == Token::SehFinally {
             self.next()?;
             Some(SehHandler::Finally(self.parse_seh_block(SehPart::Finally)?))
@@ -125,11 +149,10 @@ impl Compiler {
                 self.compile_err(Code::INVALID_STATEMENT, "`__leave` outside a `__try` block")
             );
         };
-        if self.seh_contexts[at..]
-            .iter()
-            .any(|c| c.part == SehPart::Finally)
+        if let Some(c) = (self.seh_contexts[at..].iter())
+            .find(|c| matches!(c.part, SehPart::Finally | SehPart::Filter))
         {
-            return Err(self.seh_finally_exit("`__leave`"));
+            return Err(self.seh_exit("`__leave`", c.part));
         }
         let pos = self.ast_src_pos();
         self.next()?;
@@ -139,24 +162,34 @@ impl Compiler {
     }
 
     /// Refuse a `break`, `continue` or (`depth` `None`) `return` that leaves
-    /// a `__finally` body.
+    /// a `__finally` body or an `__except` filter, which is a function of
+    /// its own.
     pub(super) fn check_seh_exit(&self, what: &str, depth: Option<Depth>) -> Result<(), C5Error> {
-        let leaves = self.seh_contexts.iter().any(|c| {
-            c.part == SehPart::Finally
+        let left = self.seh_contexts.iter().find(|c| {
+            matches!(c.part, SehPart::Finally | SehPart::Filter)
                 && match depth {
                     None => true,
                     Some(Depth::Break) => c.break_depth == self.loop_break_depth,
                     Some(Depth::Continue) => c.continue_depth == self.loop_continue_depth,
                 }
         });
-        if leaves {
-            return Err(self.seh_finally_exit(what));
+        match left {
+            Some(c) => Err(self.seh_exit(what, c.part)),
+            None => Ok(()),
+        }
+    }
+
+    /// Refuse a `goto` or a `__try` statement in an `__except` filter.
+    pub(super) fn check_seh_filter(&self, what: &str) -> Result<(), C5Error> {
+        if self.seh_contexts.iter().any(|c| c.part == SehPart::Filter) {
+            let text = format!("{what} in an `__except` filter");
+            return Err(self.compile_err(Code::INVALID_STATEMENT, text));
         }
         Ok(())
     }
 
-    fn seh_finally_exit(&self, what: &str) -> C5Error {
-        let text = format!("{what} jumps out of a `__finally` block");
+    fn seh_exit(&self, what: &str, part: SehPart) -> C5Error {
+        let text = format!("{what} jumps out of {}", part.block());
         self.compile_err(Code::INVALID_STATEMENT, text)
     }
 

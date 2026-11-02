@@ -402,6 +402,7 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
                     }
                     Inst::ImmData(off) => *off += b.data as i64,
                     Inst::TlsAddr(off) => *off += b.tls as i64,
+                    Inst::ParentLocalAddr { parent, .. } => *parent += b.pc,
                     Inst::CallExt { binding_idx, .. } => *binding_idx += b.binding,
                     Inst::ImmExtCode(idx) | Inst::TailExt(idx) => *idx += b.binding,
                     _ => {}
@@ -415,6 +416,11 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
             }
             f.ent_pc += b.pc;
             f.end_pc += b.pc;
+            for s in &mut f.seh_scopes {
+                if let crate::c5::ir::SehFilter::Funclet(pc) = &mut s.filter {
+                    *pc += b.pc;
+                }
+            }
             for r in &mut f.label_data_relocs {
                 r.data_offset += b.data;
             }

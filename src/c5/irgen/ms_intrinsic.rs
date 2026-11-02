@@ -205,11 +205,7 @@ impl<'a> Walker<'a> {
         let reg = |width| asm_operand(AsmConstraint::Reg, false, width);
         Ok(match op {
             Op::ExceptionCode => self.seh_exception_code(b)?,
-            Op::ExceptionInfo => {
-                return Err(WalkError::Unsupported(
-                    "SEH filter intrinsics not implemented yet",
-                ));
-            }
+            Op::ExceptionInfo => self.seh_exception_info(b)?,
             Op::AbnormalTermination => {
                 return Err(WalkError::Unsupported(
                     "SEH `__finally` lowering not implemented yet",

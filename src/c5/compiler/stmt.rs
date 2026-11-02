@@ -3499,6 +3499,7 @@ impl Compiler {
             return self.parse_asm_stmt();
         }
         if self.lex.tk == Token::SehTry {
+            self.check_seh_filter("a `__try` statement")?;
             return self.parse_seh_try();
         }
         if self.lex.tk == Token::SehLeave {
@@ -3683,6 +3684,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
+            self.check_seh_filter("`goto`")?;
             let line = self.lex.line;
             self.next()?;
             if self.lex.tk == Token::MulOp {

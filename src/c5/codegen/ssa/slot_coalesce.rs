@@ -30,7 +30,8 @@
 //! Reserved storage keeps a dedicated block: escaped objects, volatile
 //! slots, over-aligned region members, and slots the emit reaches through a
 //! `FunctionSsa` field rather than an instruction (`indirect_result_slot`,
-//! `param_local_slots`, both written by the prologue).
+//! `param_local_slots`, both written by the prologue, and `funclet_slots`,
+//! which filter funclets reach).
 //!
 //! The pass also fixes where each unit of storage lands, so it is where a
 //! protected frame's ordering constraint applies: storage holding an array
@@ -663,12 +664,13 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // Slots the emit reaches only through a `FunctionSsa` field, never an
     // instruction: the prologue stores of the indirect-result pointer, of a
     // narrow float parameter, and of a by-value aggregate parameter all
-    // land here, so their lifetime starts at entry.
+    // land here, so their lifetime starts at entry, as a filter funclet's
+    // access does.
     let mut field_slots: BTreeSet<i64> = BTreeSet::new();
     if movable(f.indirect_result_slot) {
         field_slots.insert(f.indirect_result_slot);
     }
-    for &s in &f.param_local_slots {
+    for &s in f.param_local_slots.iter().chain(&f.funclet_slots) {
         if movable(s) {
             field_slots.insert(s);
         }
@@ -1484,7 +1486,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     if let Some(&nn) = new_off.get(&f.indirect_result_slot) {
         f.indirect_result_slot = nn;
     }
-    for s in &mut f.param_local_slots {
+    for s in f.param_local_slots.iter_mut().chain(&mut f.funclet_slots) {
         if let Some(&nn) = new_off.get(s) {
             *s = nn;
         }

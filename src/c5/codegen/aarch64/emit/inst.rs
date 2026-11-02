@@ -154,6 +154,27 @@ pub(super) fn emit_inst(
             Ok(())
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, func, frame),
+        Inst::ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        } => {
+            let Some(&disp) =
+                (cx.funclet_frames.get(parent)).and_then(|offsets| offsets.get(*index as usize))
+            else {
+                return fail("ParentLocalAddr: the filtered function's frame is not laid out");
+            };
+            let place = place_of(alloc, *establisher);
+            let Some(rn) = materialize_int(code, place, scratch.primary, frame) else {
+                return fail("ParentLocalAddr: frame value not int reg / spill");
+            };
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("ParentLocalAddr: dst not int reg / spill");
+            };
+            emit_reg_disp(code, rd, rn, disp);
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         Inst::Load {
             addr,
             disp,

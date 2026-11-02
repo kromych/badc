@@ -713,10 +713,11 @@ registers under either compiler.
 
 1. Volatile-marked whole-aggregate copies (scalar volatile accesses are
    enforced; a volatile struct assignment's block copy is not marked).
-2. Structured exception handling on the PE targets: `__try` / `__except`
-   with the constant filter `EXCEPTION_EXECUTE_HANDLER` (or
-   `EXCEPTION_CONTINUE_SEARCH`), `__leave` and `_exception_code` are lowered
-   into scope tables for `__C_specific_handler` in a linked image; a
-   non-constant filter, `__finally`, `_exception_info` and
-   `_abnormal_termination` are refused at lowering, as is a region under
+2. Structured exception handling on the PE targets: `__try` / `__except`,
+   `__leave`, `_exception_code` and `_exception_info` are lowered into
+   scope tables for `__C_specific_handler` in a linked image, a filter other
+   than the constant `EXCEPTION_EXECUTE_HANDLER` into a funclet that reaches
+   the function's objects through the frame the handler passes it, as cl
+   compiles them; `__finally`, `_abnormal_termination` and a filter that
+   allocates on the stack are refused at lowering, as is a region under
    `--interp`, `--jit` or an image written without a link.

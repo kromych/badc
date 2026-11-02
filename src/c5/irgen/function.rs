@@ -11,7 +11,8 @@ use crate::c5::compiler::{StructDef, StructReturnAbi};
 /// `is_variadic` come from the declarator and `n_locals` is the
 /// post-parse slot count. `ent_pc` is the function's entry identifier,
 /// threaded through the SSA emit so the post-link codegen resolves
-/// call-site fixups against the identifier the linker rebased.
+/// call-site fixups against the identifier the linker rebased. Returns
+/// the function and its filter funclets.
 pub(crate) fn walk_function(
     fun: &FinishedFunction,
     symbols: &[Symbol],
@@ -20,7 +21,7 @@ pub(crate) fn walk_function(
     optimize: bool,
     jump_tables: bool,
     named_refs: super::NamedRefs,
-) -> Result<FunctionSsa, WalkError> {
+) -> Result<(FunctionSsa, alloc::vec::Vec<FunctionSsa>), WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
     b.set_conv(fun.conv);
@@ -58,6 +59,8 @@ pub(crate) fn walk_function(
     }
     let mut ctx = Walker {
         ast,
+        fun,
+        funclets: alloc::vec::Vec::new(),
         symbols,
         structs,
         target,
@@ -107,7 +110,7 @@ pub(crate) fn walk_function(
     // `frame_align` 16 the region sits at a static frame offset; above 16
     // the prologue realigns sp.
     b.place_region_members();
-    Ok(b.finish())
+    Ok((b.finish(), ctx.funclets))
 }
 
 /// How a definition returns its value (C99 6.8.6.4 + the host ABI).

@@ -2711,8 +2711,9 @@ pub(crate) struct EarlyReturn {
 }
 
 /// A row of a function's `__try` scope table, for `__C_specific_handler`:
-/// an exception raised in `[begin, end)` enters `target`. Byte offsets in
-/// `text`; a function's rows are adjacent, innermost region first.
+/// an exception raised in `[begin, end)` that `filter` accepts enters
+/// `target`. Byte offsets in `text`; a function's rows are adjacent,
+/// innermost region first.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct SehRow {
     /// The function's first instruction.
@@ -2720,6 +2721,9 @@ pub(crate) struct SehRow {
     pub begin: u32,
     pub end: u32,
     pub target: u32,
+    /// The filter funclet, `None` for `EXCEPTION_EXECUTE_HANDLER`. Its
+    /// `ent_pc` until the unit's lowering places it.
+    pub filter: Option<u32>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`

@@ -5228,7 +5228,9 @@ fn a_native_image_takes_the_language_handler_from_the_kernel() {
 /// Objects cl compiled with `__except` and `__finally` (seh_cl.c beside
 /// them) link with badc and handle exceptions at run time, raised in the
 /// cl function itself and in badc functions it calls, so the unwinder
-/// passes badc frames and runs a `__finally` for an exception.
+/// passes badc frames and runs a `__finally` for an exception. A cl filter
+/// funclet decides over badc frames, and a badc filter funclet over a cl
+/// frame and over a cl filter that passed the exception on.
 #[cfg(windows)]
 #[test]
 fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
@@ -5248,14 +5250,44 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
          int cl_read_or_minus_one(volatile int *p);\n\
          int cl_finally(int *flag, void (*fn)(void));\n\
          unsigned long cl_catch(void (*fn)(void));\n\
+         int cl_filter(void (*fn)(void), unsigned long want, int *seen);\n\
+         void cl_store(volatile int *p, int v);\n\
          static volatile int seven = 7;\n\
          static int flag;\n\
          static void nothing(void) {}\n\
          static void fault(void) { *(volatile int *)0 = 1; }\n\
          static void raise_code(void) { RaiseException(0xE0001234, 0, 0, 0); }\n\
          static void finally_inside(void) { cl_finally(&flag, fault); }\n\
+         __attribute__((noinline)) static void raise_deep(int n)\n\
+         {\n\
+             volatile int local = n;\n\
+             if (local) raise_deep(local - 1); else RaiseException(0xE0000099, 0, 0, 0);\n\
+         }\n\
+         static void raise_99(void) { raise_deep(3); }\n\
+         static void raise_aa(void) { RaiseException(0xE00000AA, 0, 0, 0); }\n\
+         static int badc_over_cl(void)\n\
+         {\n\
+             int code = 0;\n\
+             __try {\n\
+                 cl_store(0, 5);\n\
+             } __except (code = GetExceptionCode(), code == EXCEPTION_ACCESS_VIOLATION) {\n\
+                 code += 1;\n\
+             }\n\
+             return code == EXCEPTION_ACCESS_VIOLATION + 1;\n\
+         }\n\
+         static int badc_over_cl_filter(void)\n\
+         {\n\
+             int seen = -1, outer = 0;\n\
+             __try {\n\
+                 cl_filter(raise_aa, 0xE0000099, &seen);\n\
+             } __except (outer = seen, GetExceptionCode() == 0xE00000AA) {\n\
+                 outer += 100;\n\
+             }\n\
+             return outer == 110;\n\
+         }\n\
          int main(void)\n\
          {\n\
+             int seen = 0;\n\
              if (cl_read_or_minus_one(&seven) != 7) return 1;\n\
              if (cl_read_or_minus_one(0) != -1) return 2;\n\
              if (cl_finally(&flag, nothing) != 0 || flag != 1) return 3;\n\
@@ -5263,6 +5295,10 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
              if (cl_catch(fault) != EXCEPTION_ACCESS_VIOLATION) return 5;\n\
              flag = 0;\n\
              if (cl_catch(finally_inside) != EXCEPTION_ACCESS_VIOLATION || flag != 2) return 6;\n\
+             if (cl_filter(raise_99, 0xE0000099, &seen) != -1 || seen != 11) return 7;\n\
+             if (cl_filter(nothing, 0xE0000099, &seen) != 2) return 8;\n\
+             if (!badc_over_cl()) return 9;\n\
+             if (!badc_over_cl_filter()) return 10;\n\
              return 0;\n\
          }\n",
     );

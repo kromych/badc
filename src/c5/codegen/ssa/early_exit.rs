@@ -92,6 +92,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Extend { .. }
         | Inst::Phi { .. }
         | Inst::LifetimeEnd(_)
+        | Inst::ParentLocalAddr { .. }
         | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. }
         | Inst::BitField { .. } => true,

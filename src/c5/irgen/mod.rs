@@ -264,6 +264,10 @@ struct OpenScope<'a> {
 /// `LabelId -> BlockId` for cross-stmt gotos.
 struct Walker<'a> {
     ast: &'a Ast,
+    /// The definition the walk lowers, or whose filter funclet it lowers.
+    fun: &'a FinishedFunction,
+    /// The filter funclets lowered so far.
+    funclets: alloc::vec::Vec<FunctionSsa>,
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,

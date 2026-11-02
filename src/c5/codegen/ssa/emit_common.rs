@@ -71,6 +71,10 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
     /// The `__try` scope tables.
     pub(crate) seh_rows: &'a mut alloc::vec::Vec<super::SehRow>,
+    /// Per function with filter funclets, by `ent_pc`, where each of its
+    /// `funclet_slots` lies relative to the frame value the language
+    /// handler passes a funclet.
+    pub(crate) funclet_frames: &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -520,6 +524,11 @@ pub(crate) fn body_keeps_frame_record(
     intrinsic_keeps_frame: impl Fn(crate::c5::op::Intrinsic) -> bool,
 ) -> bool {
     use super::super::ir::Inst;
+    // A region's handler entry and its filter funclets address the frame
+    // through its record.
+    if func.has_seh() {
+        return true;
+    }
     func.insts.iter().any(|inst| match inst {
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
@@ -1717,6 +1726,10 @@ pub(crate) fn seh_rows(
     let mut rows = alloc::vec::Vec::new();
     for s in order {
         let target = block_offsets[scopes[s as usize].target as usize] as u32;
+        let filter = match scopes[s as usize].filter {
+            super::super::ir::SehFilter::ExecuteHandler => None,
+            super::super::ir::SehFilter::Funclet(pc) => Some(pc as u32),
+        };
         let mut run: Option<(usize, usize)> = None;
         let mut flush = |run: Option<(usize, usize)>| {
             if let Some((a, e)) = run.filter(|(a, e)| e > a) {
@@ -1725,6 +1738,7 @@ pub(crate) fn seh_rows(
                     begin: a as u32,
                     end: e as u32,
                     target,
+                    filter,
                 });
             }
         };
@@ -2000,6 +2014,7 @@ pub(crate) struct LowerState {
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
     pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
     pub(crate) seh_rows: alloc::vec::Vec<super::SehRow>,
+    pub(crate) funclet_frames: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
@@ -2038,6 +2053,7 @@ impl LowerState {
             mcount_sites: alloc::vec::Vec::new(),
             early_returns: alloc::vec::Vec::new(),
             seh_rows: alloc::vec::Vec::new(),
+            funclet_frames: alloc::collections::BTreeMap::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             ssa_line_rows: alloc::vec::Vec::new(),
@@ -2093,6 +2109,7 @@ impl LowerState {
                 mcount_sites: &mut self.mcount_sites,
                 early_returns: &mut self.early_returns,
                 seh_rows: &mut self.seh_rows,
+                funclet_frames: &mut self.funclet_frames,
             },
             rodata: &mut self.rodata,
             asm_text_labels: &mut self.asm_text_labels,
@@ -3228,6 +3245,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     st.rodata.place_literals();
+    // A row names its filter funclet by text offset.
+    for r in &mut st.seh_rows {
+        r.filter = r.filter.map(|pc| st.pc_to_native[pc as usize] as u32);
+    }
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),

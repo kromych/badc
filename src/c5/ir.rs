@@ -85,6 +85,15 @@ pub(crate) enum Inst {
     /// Address of a thread-local variable in the per-target TLS
     /// block.
     TlsAddr(i64),
+    /// In a filter funclet, the address of `funclet_slots[index]` of the
+    /// function `parent` (its `ent_pc`), from the frame value `establisher`
+    /// the language handler passes: rdx on x64 (the establisher frame), x1
+    /// on arm64 (the frame's x29).
+    ParentLocalAddr {
+        establisher: ValueId,
+        parent: usize,
+        index: u32,
+    },
     /// Load from `addr + disp`. Width / signedness driven by the
     /// source load op. `disp` is a byte offset folded from a constant
     /// pointer addition (a struct field offset) into the addressing
@@ -692,6 +701,7 @@ impl Inst {
                 | Inst::ImmExtCode(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::ParentLocalAddr { .. }
                 | Inst::Load {
                     volatile: false,
                     ..
@@ -757,6 +767,7 @@ impl Inst {
             Inst::BlockAddr(_) => "BlockAddr",
             Inst::LocalAddr(_) => "LocalAddr",
             Inst::TlsAddr(_) => "TlsAddr",
+            Inst::ParentLocalAddr { .. } => "ParentLocalAddr",
             Inst::Load { .. } => "Load",
             Inst::Store { .. } => "Store",
             Inst::SegLoad { .. } => "SegLoad",
@@ -858,7 +869,7 @@ impl Inst {
                 f(*rhs);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
-            Inst::Neg(v) | Inst::Fneg(v) => f(*v),
+            Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
@@ -979,7 +990,7 @@ impl Inst {
                 f(rhs);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
-            Inst::Neg(v) | Inst::Fneg(v) => f(v),
+            Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
@@ -2028,14 +2039,25 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
-/// A `__try` region with an `__except` handler whose filter is the constant
-/// `EXCEPTION_EXECUTE_HANDLER`: an exception raised in a block of the region,
-/// or of a region nested in it, enters `target` with the exception code
-/// ([`Inst::ExceptionCode`]) and the frame's registers restored, sp aside.
+/// A `__try` region with an `__except` handler: an exception raised in a
+/// block of the region, or of a region nested in it, that `filter` accepts
+/// enters `target` with the exception code ([`Inst::ExceptionCode`]) and the
+/// frame's registers restored, sp aside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SehScope {
     pub parent: Option<u32>,
     pub target: BlockId,
+    pub filter: SehFilter,
+}
+
+/// What decides whether a region's handler takes an exception.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SehFilter {
+    /// The constant `EXCEPTION_EXECUTE_HANDLER`: every exception.
+    ExecuteHandler,
+    /// The filter funclet at this `ent_pc`, `long (EXCEPTION_POINTERS *,
+    /// void *frame)`, as cl compiles every other filter.
+    Funclet(usize),
 }
 
 /// The byte width of each scalar argument, or parameter, narrower than 8
@@ -2481,6 +2503,9 @@ pub(crate) struct FunctionSsa {
     /// Per block, the innermost region its code lies in; empty when
     /// `seh_scopes` is, and a block past its end lies in none.
     pub block_seh: Vec<Option<u32>>,
+    /// The slots the function's filter funclets reach, by the index of an
+    /// [`Inst::ParentLocalAddr`]: they stay in the frame for the whole body.
+    pub funclet_slots: Vec<i64>,
 }
 
 /// An automatic object of the over-aligned region (`FunctionSsa::over_aligned`):
@@ -2703,6 +2728,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::BlockAddr { .. }
             | Inst::LocalAddr { .. }
             | Inst::TlsAddr { .. }
+            | Inst::ParentLocalAddr { .. }
             | Inst::Load { .. }
             | Inst::Store { .. }
             | Inst::LoadLocal { .. }
@@ -2761,6 +2787,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             ssp: _,
             seh_scopes: _,
             block_seh: _,
+            funclet_slots: _,
             n_params: _,
             is_variadic: _,
             is_inline: _,

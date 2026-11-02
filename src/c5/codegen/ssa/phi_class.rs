@@ -166,6 +166,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: String::new(),
             ent_pc: 0,
             end_pc: 0,

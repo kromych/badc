@@ -39,3 +39,28 @@ unsigned long cl_catch(void (*fn)(void))
     }
     return 0;
 }
+
+// A filter funclet over the frames of `fn` and what it calls: it takes the
+// code `want`, recording in `*seen` the step the region reached, and
+// passes on any other code.
+int cl_filter(void (*fn)(void), unsigned long want, int *seen)
+{
+    int step = 0;
+    __try {
+        step = 1;
+        fn();
+        step = 2;
+    } __except (*seen = step * 10 + (GetExceptionCode() == want),
+                GetExceptionCode() == want ? EXCEPTION_EXECUTE_HANDLER
+                                           : EXCEPTION_CONTINUE_SEARCH) {
+        return -1;
+    }
+    return step;
+}
+
+// A store through `p`, which raises in this frame for a filter of the
+// caller's to see.
+void cl_store(volatile int *p, int v)
+{
+    *p = v;
+}

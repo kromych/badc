@@ -2137,6 +2137,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
+        | Inst::ParentLocalAddr { .. }
         | Inst::Load { .. }
         | Inst::LoadIndexed { .. }
         | Inst::SegLoad { .. }
@@ -3464,6 +3465,7 @@ fn splice_multi_block(
         // Neither side of an inline holds a `__try` region.
         seh_scopes: Vec::new(),
         block_seh: Vec::new(),
+        funclet_slots: Vec::new(),
         // The caller's frame now holds the callee's automatic objects, so it
         // inherits their stack-protector classification.
         ssp: {

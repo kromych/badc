@@ -30,6 +30,7 @@ fn walk(
         true,
         Default::default(),
     )
+    .map(|(func, _)| func)
 }
 
 /// `return 7 + 3;` -- both operands are integer literals,

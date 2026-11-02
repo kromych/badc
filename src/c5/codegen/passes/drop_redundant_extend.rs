@@ -162,6 +162,9 @@ fn compute_high_observed_through(
                 parts.iter().for_each(|&p| observe(&mut hi, &mut work, p))
             }
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
+            Inst::ParentLocalAddr { establisher, .. } => {
+                observe_addr(&mut hi, &mut work, *establisher)
+            }
             Inst::Load { addr, .. } => observe_addr(&mut hi, &mut work, *addr),
             // An extending access reads the low word of its index.
             Inst::LoadIndexed {
@@ -1095,6 +1098,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

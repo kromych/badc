@@ -356,6 +356,29 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
         }
+        Inst::ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        } => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("ParentLocalAddr: dst not int reg / spill");
+            };
+            let Some(bytes) =
+                (cx.funclet_frames.get(parent)).and_then(|offsets| offsets.get(*index as usize))
+            else {
+                return fail("ParentLocalAddr: the filtered function's frame is not laid out");
+            };
+            let Ok(disp) = i32::try_from(*bytes) else {
+                return fail("ParentLocalAddr: offset doesn't fit in disp32");
+            };
+            let Some(rn) = materialize_int(code, place_of(alloc, *establisher), rd, frame) else {
+                return fail("ParentLocalAddr: frame value not int reg / spill");
+            };
+            emit_lea_r_mem(code, rd, rn, disp);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
             emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
         }

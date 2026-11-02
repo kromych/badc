@@ -2,7 +2,8 @@
 //! `__except`, `__finally` and `__leave` are keywords on the PE targets
 //! and identifiers elsewhere, as clang treats them, and each placement
 //! rule cl enforces (C2703, C2705, C2707, C2184) is an error, as are the
-//! jumps out of a `__finally` block cl warns about (C4532).
+//! jumps out of a `__finally` block cl warns about (C4532) and out of an
+//! `__except` filter, which is a function of its own.
 
 use super::Compiler;
 use crate::Target;
@@ -78,6 +79,26 @@ const REFUSED: &[(&str, &str)] = &[
         "`__leave` jumps out of a `__finally` block",
     ),
     (
+        "void f(void) { for (;;) { __try { g = ext(); } __except (({ break; 1; })) { g = 2; } } }",
+        "`break` jumps out of an `__except` filter",
+    ),
+    (
+        "int f(void) { __try { g = ext(); } __except (({ return 2; 1; })) { g = 2; } return 0; }",
+        "`return` jumps out of an `__except` filter",
+    ),
+    (
+        "void f(void) { __try { __try { g = ext(); } __except (({ __leave; 1; })) { g = 2; } } __except (1) { g = 3; } }",
+        "`__leave` jumps out of an `__except` filter",
+    ),
+    (
+        "void f(void) { __try { g = ext(); } __except (({ goto out; 1; })) { g = 2; } out: g = 3; }",
+        "`goto` in an `__except` filter",
+    ),
+    (
+        "void f(void) { __try { g = ext(); } __except (({ __try { g = 1; } __except (1) { g = 2; } 1; })) { g = 3; } }",
+        "a `__try` statement in an `__except` filter",
+    ),
+    (
         "void f(void) { __try { g = ext(); } __except (f()) { g = 2; } }",
         "`void` expression used as a value",
     ),
@@ -109,6 +130,7 @@ const ACCEPTED: &[&str] = &[
     "void f(void) { __try { for (;;) { if (ext()) __leave; } } __finally { g = 1; } }",
     "void f(void) { __try { if (ext()) goto out; } __finally { for (;;) { if (ext()) break; } if (g) goto in; in: g = 2; } out: g = 3; }",
     "void f(int n) { int v[n]; __try { v[0] = ext(); } __except (EXCEPTION_EXECUTE_HANDLER) { g = v[0]; } }",
+    "void f(void) { __try { g = ext(); } __except (({ int n = 0; for (;;) { if (++n > 2) break; } n == 3; })) { g = 2; } }",
 ];
 
 #[test]
@@ -182,7 +204,8 @@ fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
         .map(|e| e.to_string())
 }
 
-/// What the walker does not lower yet is a diagnostic, not a crash.
+/// What the walker does not lower is a diagnostic, not a crash: a
+/// `__finally`, and a filter that allocates on its stack.
 #[cfg(feature = "full")]
 #[test]
 fn the_forms_later_steps_lower_are_refused() {
@@ -192,12 +215,12 @@ fn the_forms_later_steps_lower_are_refused() {
             "SEH `__finally` lowering not implemented yet",
         ),
         (
-            "void f(void) { __try { g = ext(); } __except (g) { g = 2; } }",
-            "SEH non-constant filter not implemented yet",
+            "void f(int n) { __try { g = ext(); } __except (((char *)__builtin_alloca(n))[0] = 1) { g = 2; } }",
+            "stack allocation in an `__except` filter",
         ),
         (
-            "void f(void) { __try { g = ext(); } __except (EXCEPTION_CONTINUE_EXECUTION) { g = 2; } }",
-            "SEH filter other than EXCEPTION_EXECUTE_HANDLER",
+            "void f(int n) { __try { g = ext(); } __except (({ char v[n]; v[0] = 1; })) { g = 2; } }",
+            "stack allocation in an `__except` filter",
         ),
     ];
     for target in WINDOWS {
@@ -270,34 +293,87 @@ fn a_linked_image_carries_the_scope_table() {
     }
 }
 
+/// A filter other than the constant EXCEPTION_EXECUTE_HANDLER, the constant
+/// EXCEPTION_CONTINUE_SEARCH included, is a funclet of its own, as cl
+/// compiles it: the row's HandlerAddress is the start of a function with
+/// its own unwind entry, outside the function the region lies in.
+#[cfg(feature = "full")]
+#[test]
+fn a_filter_is_a_funclet_the_scope_table_names() {
+    let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
+        int f(void) { int r = 0; __try { r = ext(); } __except (r == 0) { r = 1; } return r; }\n\
+        int h(void) { __try { g = ext(); } __except (EXCEPTION_CONTINUE_SEARCH) { g = 2; } return g; }\n\
+        int main(void) { return f() + h(); }\n";
+    for target in WINDOWS {
+        let program = Compiler::with_target(src.into(), target)
+            .compile()
+            .expect("front end");
+        let pe = super::link_executable_with_runtime(&program, target, crate::NativeOptions::new())
+            .expect("link");
+        let x64 = target == Target::WindowsX64;
+        let tables = pe_scope_tables(&pe, x64);
+        let starts = pe_function_starts(&pe, x64);
+        assert_eq!(tables.len(), 2, "{target:?}: {tables:?}");
+        for (begin, end, rows) in &tables {
+            assert_eq!(rows.len(), 1, "{target:?}: {rows:?}");
+            let [_, _, filter, _] = rows[0];
+            assert!(
+                filter != 1 && !(*begin..*end).contains(&filter) && starts.contains(&filter),
+                "{target:?}: {filter:#x} for {begin:#x}..{end:#x} among {starts:x?}"
+            );
+        }
+    }
+}
+
+/// The begin RVA of each entry of the exception table.
+#[cfg(feature = "full")]
+fn pe_function_starts(pe: &[u8], x64: bool) -> alloc::vec::Vec<u32> {
+    let (start, count, entry) = exception_table(pe, x64);
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    (0..count).map(|i| word(start + i * entry)).collect()
+}
+
+/// The file offset of the exception table, its entry count and entry size.
+#[cfg(feature = "full")]
+fn exception_table(pe: &[u8], x64: bool) -> (usize, usize, usize) {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let pe_off = word(0x3c) as usize;
+    let opt = pe_off + 24;
+    let (dir, size) = (word(opt + 112 + 24), word(opt + 112 + 28));
+    let start = pe_rva_offset(pe, dir).expect("exception directory");
+    let entry = if x64 { 12 } else { 8 };
+    (start, size as usize / entry, entry)
+}
+
+/// The file offset of `rva`.
+#[cfg(feature = "full")]
+fn pe_rva_offset(pe: &[u8], rva: u32) -> Option<usize> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let pe_off = word(0x3c) as usize;
+    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+    (0..n_sec).find_map(|i| {
+        let s = pe_off + 24 + so_hdr + i * 40;
+        let (va, span, raw) = (word(s + 12), word(s + 8).max(word(s + 16)), word(s + 20));
+        (rva >= va && rva < va + span).then(|| (raw + rva - va) as usize)
+    })
+}
+
 /// Per function whose unwind record carries a language handler: its
 /// begin and end RVAs and its scope-table rows.
 #[cfg(feature = "full")]
 fn pe_scope_tables(pe: &[u8], x64: bool) -> alloc::vec::Vec<(u32, u32, alloc::vec::Vec<[u32; 4]>)> {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
-    let pe_off = word(0x3c) as usize;
-    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
-    let opt = pe_off + 24;
-    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
-    let rva_off = |rva: u32| {
-        (0..n_sec).find_map(|i| {
-            let s = opt + so_hdr + i * 40;
-            let (va, span, raw) = (word(s + 12), word(s + 8).max(word(s + 16)), word(s + 20));
-            (rva >= va && rva < va + span).then(|| (raw + rva - va) as usize)
-        })
-    };
     // Data directory 3: the exception table.
-    let (dir, size) = (word(opt + 112 + 24), word(opt + 112 + 28));
-    let start = rva_off(dir).expect("exception directory");
-    let entry = if x64 { 12 } else { 8 };
+    let (start, count, entry) = exception_table(pe, x64);
     let mut out = alloc::vec::Vec::new();
-    for e in (0..size as usize / entry).map(|i| start + i * entry) {
+    for e in (0..count).map(|i| start + i * entry) {
         let begin = word(e);
         let info = if x64 { word(e + 8) } else { word(e + 4) };
         if !x64 && info & 3 != 0 {
             continue;
         }
-        let at = rva_off(info).expect("unwind record");
+        let at = pe_rva_offset(pe, info).expect("unwind record");
         let (end, data) = if x64 {
             if pe[at] >> 3 & 1 == 0 {
                 continue;

@@ -234,6 +234,17 @@ pub(crate) fn emit_function(
             super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
         );
     }
+    // A filter funclet gets the frame's x29, as cl's funclets read it.
+    if !func.funclet_slots.is_empty() {
+        let mut offsets = Vec::with_capacity(func.funclet_slots.len());
+        for &slot in &func.funclet_slots {
+            let Some(disp) = super::mem::local_slot(slot, func, frame).fp_disp() else {
+                return fail("a filter funclet reaches an object off the frame pointer");
+            };
+            offsets.push(disp);
+        }
+        cx.funclet_frames.insert(func.ent_pc, offsets);
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -770,9 +781,13 @@ impl FunctionEmitter<'_, '_> {
                 self.seh_placed
                     .push((block_idx as BlockId, self.cx.code.len()));
             }
-            // A `__try` handler is entered with sp where the exception left it.
+            // A `__try` handler is entered with sp where the exception left
+            // it: the prologue's sp, realigned as the prologue realigns it.
             if func.is_seh_target(block_idx as BlockId) {
                 restore_dynamic_sp(self.cx.code, frame);
+                if frame.realign_align > 0 {
+                    emit_realign_sp(self.cx.code, frame);
+                }
             }
             super::ssa::emit_common::record_block_start_pc(
                 block_idx,

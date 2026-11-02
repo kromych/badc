@@ -960,6 +960,11 @@ impl FrameLoc {
         }
     }
 
+    /// The byte's displacement from fp, `None` off the static layout.
+    pub(super) fn fp_disp(&self) -> Option<i64> {
+        self.fp
+    }
+
     /// The same byte while sp stands `bytes` below the prologue's value
     /// ([`Frame::sp_lowering`]).
     pub(super) fn sp_lowered(self, bytes: u32) -> Self {

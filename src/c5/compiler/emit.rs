@@ -1073,6 +1073,7 @@ impl Compiler {
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
+        self.seh_funclets = 0;
         self.in_function_body = true;
     }
 
@@ -1110,13 +1111,17 @@ impl Compiler {
         // without this reservation the linker / DWARF range
         // invariant would fail.
         self.next_ent_pc += 1;
+        let end_pc = self.next_ent_pc;
+        // Each filter funclet takes the unit after its function's.
+        let funclet_pcs = (end_pc..end_pc + self.seh_funclets as usize).collect();
+        self.next_ent_pc += core::mem::take(&mut self.seh_funclets) as usize;
         self.rewrite_loop_idioms();
         self.expr_fns.clear();
         self.expr_enums.clear();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
-            end_pc: self.next_ent_pc,
+            end_pc,
             n_params,
             is_variadic,
             is_inline: self.current_func_attrs.is_inline,
@@ -1142,6 +1147,7 @@ impl Compiler {
             over_aligned_slots: alloc::vec::Vec::new(),
             ssp: crate::c5::ir::SspFacts::default(),
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
+            funclet_pcs,
         };
         self.in_function_body = false;
         self.current_func_attrs = super::DeclAttrs::default();

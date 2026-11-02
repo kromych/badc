@@ -1569,6 +1569,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Inst::Imm(_)
             | Inst::Undef
             | Inst::ExceptionCode
+            | Inst::ParentLocalAddr { .. }
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1747,6 +1748,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             Inst::Imm(k) => !(is_x86 && *k == 0),
             Inst::Undef
             | Inst::ExceptionCode
+            | Inst::ParentLocalAddr { .. }
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -3367,8 +3369,16 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | Undef | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
-        | TlsAddr(_) | ExceptionCode => ResultKind::Int,
+        Imm(_)
+        | Undef
+        | ImmData(_)
+        | ImmCode(_)
+        | ImmExtCode(_)
+        | BlockAddr(_)
+        | LocalAddr(_)
+        | TlsAddr(_)
+        | ExceptionCode
+        | ParentLocalAddr { .. } => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
@@ -5957,6 +5967,7 @@ int main(void) { return 0; }
         let func = FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -6204,6 +6215,7 @@ int main(void) { return 0; }
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

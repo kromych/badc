@@ -51,6 +51,50 @@ struct LocalCacheEntry {
     value: ValueId,
 }
 
+/// A filter funclet's view of the frame of the function it filters for.
+/// The slot numbers the walker passes are the parent's: the parameters and
+/// the slots up to `slot_base` name the parent's objects, reached through
+/// [`Inst::ParentLocalAddr`]; past it lie the filter's own temporaries.
+pub(crate) struct ParentFrame {
+    pub parent: usize,
+    pub slot_base: i64,
+    /// The parent's `funclet_slots`, which this funclet extends.
+    pub slots: Vec<i64>,
+    /// Parent objects reached through a slot holding their address: an
+    /// entry of `slots` names the object until the parent replaces it with
+    /// that slot.
+    pub indirect: alloc::collections::BTreeSet<i64>,
+    /// The members of `indirect` this funclet reached.
+    pub reached: alloc::collections::BTreeSet<i64>,
+    /// The slot holding the frame value the handler passes.
+    frame_slot: i64,
+}
+
+impl ParentFrame {
+    pub(crate) fn new(
+        parent: usize,
+        slot_base: i64,
+        slots: Vec<i64>,
+        indirect: alloc::collections::BTreeSet<i64>,
+    ) -> Self {
+        Self {
+            parent,
+            slot_base,
+            slots,
+            indirect,
+            reached: alloc::collections::BTreeSet::new(),
+            frame_slot: 0,
+        }
+    }
+}
+
+/// Where a slot number the walker passes lies.
+#[derive(Clone, Copy)]
+enum FrameSlot {
+    Own(i64),
+    Parent(i64),
+}
+
 /// Discriminant for the pure-value CSE cache. Imm / ImmData /
 /// ImmCode produce no side effects and read no memory, so the
 /// cache only needs `switch_to` invalidation. The intra-block
@@ -115,6 +159,8 @@ pub(crate) struct SsaBuilder {
     current: Option<BlockId>,
     /// The `__try` region blocks created now lie in.
     seh_current: Option<u32>,
+    /// In a filter funclet, the frame of the function it filters for.
+    parent_frame: Option<ParentFrame>,
     /// Per-block CSE cache for `load_local` / `store_local`. The
     /// list stays short in practice (typical block touches a
     /// handful of slots), so a linear scan beats a BTreeMap. The
@@ -178,6 +224,7 @@ impl SsaBuilder {
             is_variadic,
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             is_inline: false,
             is_always_inline: false,
             is_noinline: false,
@@ -230,6 +277,7 @@ impl SsaBuilder {
             func,
             current: None,
             seh_current: None,
+            parent_frame: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
             block_starts: Vec::new(),
@@ -244,6 +292,90 @@ impl SsaBuilder {
         let entry = b.new_block();
         b.switch_to(entry);
         b
+    }
+
+    /// A filter funclet at `ent_pc`, `long (EXCEPTION_POINTERS *, void
+    /// *frame)`, whose own slots start with the `own_slots` the parser
+    /// numbered past `frame.slot_base`. Returns the builder and the slot
+    /// holding the exception pointers.
+    pub(crate) fn new_funclet(ent_pc: usize, frame: ParentFrame, own_slots: i64) -> (Self, i64) {
+        let mut b = Self::new(ent_pc, 2, false);
+        b.set_locals(own_slots);
+        b.parent_frame = Some(frame);
+        b.alloca_init(0);
+        let pointers = b.alloc_synthetic_local();
+        let frame_slot = b.alloc_synthetic_local();
+        let p = b.param_ref(0, LoadKind::I64);
+        b.store_local(pointers, p, StoreKind::I64);
+        let e = b.param_ref(1, LoadKind::I64);
+        b.store_local(frame_slot, e, StoreKind::I64);
+        if let Some(f) = b.parent_frame.as_mut() {
+            f.frame_slot = frame_slot;
+        }
+        (b, pointers)
+    }
+
+    /// Where slot `off` lies: in a funclet, a parameter or a slot up to
+    /// `slot_base` is the parent's, a later one the funclet's own.
+    fn frame_slot(&self, off: i64) -> FrameSlot {
+        match &self.parent_frame {
+            Some(p) if off >= 0 || -off <= p.slot_base => FrameSlot::Parent(off),
+            Some(p) => FrameSlot::Own(off + p.slot_base),
+            None => FrameSlot::Own(off),
+        }
+    }
+
+    /// The function's own slot `off` names, `None` for a parent's.
+    pub(crate) fn own_slot(&self, off: i64) -> Option<i64> {
+        match self.frame_slot(off) {
+            FrameSlot::Own(o) => Some(o),
+            FrameSlot::Parent(_) => None,
+        }
+    }
+
+    /// The address of the parent's object at slot `off`, loaded from the slot
+    /// holding it for an object [`ParentFrame::indirect`] names.
+    fn parent_addr(&mut self, off: i64) -> ValueId {
+        let p = (self.parent_frame.as_mut()).expect("a parent slot outside a filter funclet");
+        let indirect = p.indirect.contains(&off);
+        if indirect {
+            p.reached.insert(off);
+        }
+        let index = match p.slots.iter().position(|&s| s == off) {
+            Some(i) => i,
+            None => {
+                p.slots.push(off);
+                p.slots.len() - 1
+            }
+        } as u32;
+        let (parent, frame_slot) = (p.parent, p.frame_slot);
+        let establisher = self.load_local(frame_slot, LoadKind::I64);
+        let addr = self.push(Inst::ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        });
+        if indirect {
+            self.load(addr, LoadKind::I64)
+        } else {
+            addr
+        }
+    }
+
+    /// The funclet and what it reached of the parent's frame.
+    pub(crate) fn finish_funclet(mut self) -> (FunctionSsa, ParentFrame) {
+        let frame = (self.parent_frame.take()).expect("a funclet builder");
+        (self.finish(), frame)
+    }
+
+    /// The slots the function's filter funclets reach.
+    pub(crate) fn set_funclet_slots(&mut self, slots: Vec<i64>) {
+        self.func.funclet_slots = slots;
+    }
+
+    /// [`FunctionSsa::funclet_slots`] so far.
+    pub(crate) fn funclet_slots(&self) -> Vec<i64> {
+        self.func.funclet_slots.clone()
     }
 
     /// Record that the function reserves `n` natural-width local
@@ -285,12 +417,30 @@ impl SsaBuilder {
     /// 8-byte frame slot, a member of the over-aligned frame region (C11
     /// 6.7.5). [`Self::place_region_members`] lays the region out.
     pub(crate) fn add_region_member(&mut self, slot: i64, align: i64, size: i64) {
+        let Some(slot) = self.own_slot(slot) else {
+            debug_assert!(false, "a filter funclet's region holds no parent object");
+            return;
+        };
         self.func.over_aligned.push(crate::c5::ir::RegionMember {
             slot,
             off: 0,
             align,
             size,
         });
+    }
+
+    /// Record a declared object of `cells` frame slots based at `base`.
+    pub(crate) fn add_multi_cell(&mut self, base: i64, cells: i64) {
+        if let Some(base) = self.own_slot(base) {
+            self.func.multi_cell_slots.push((base, cells));
+        }
+    }
+
+    /// Record a declared array based at `slot`.
+    pub(crate) fn add_array_slot(&mut self, slot: i64) {
+        if let Some(slot) = self.own_slot(slot) {
+            self.func.array_slots.push(slot);
+        }
     }
 
     /// Lay out the over-aligned region over the members added so far,
@@ -486,6 +636,7 @@ impl SsaBuilder {
     /// aggregate `agg_descs[ret_agg]` into the result temporary at
     /// frame slot `ret_slot_local`.
     pub(crate) fn set_call_ret_agg(&mut self, v: ValueId, ret_agg: u32, ret_slot_local: i64) {
+        let ret_slot_local = self.call_result_slot(ret_slot_local);
         if let Inst::Call {
             ret_agg: ra,
             ret_slot_local: rs,
@@ -513,12 +664,23 @@ impl SsaBuilder {
     /// Record the result object an out-pointer call writes through its
     /// first argument, `ret_agg` left unset.
     pub(crate) fn set_call_out_slot(&mut self, v: ValueId, slot: i64) {
+        let slot = self.call_result_slot(slot);
         if let Inst::Call { ret_slot_local, .. }
         | Inst::CallIndirect { ret_slot_local, .. }
         | Inst::CallExt { ret_slot_local, .. } = &mut self.func.insts[v as usize]
         {
             *ret_slot_local = slot;
         }
+    }
+
+    /// A call's result temporary, which the expression that makes the call
+    /// reserved and so is never a parent's slot.
+    fn call_result_slot(&self, slot: i64) -> i64 {
+        debug_assert!(
+            self.own_slot(slot).is_some(),
+            "a call result in a parent slot"
+        );
+        self.own_slot(slot).unwrap_or(slot)
     }
 
     /// Record the call's [`Inst::Call::arg_widths`].
@@ -699,7 +861,10 @@ impl SsaBuilder {
     /// `Inst::LifetimeEnd` -- the end of the automatic object at `slot`
     /// (C99 6.2.4p2). No value, no code; `ssa::slot_coalesce` reads it.
     pub(crate) fn lifetime_end(&mut self, slot: i64) -> ValueId {
-        self.push(Inst::LifetimeEnd(slot))
+        match self.frame_slot(slot) {
+            FrameSlot::Own(slot) => self.push(Inst::LifetimeEnd(slot)),
+            FrameSlot::Parent(_) => NO_VALUE,
+        }
     }
 
     /// `Inst::ParamRef`. The value is the i-th declared parameter
@@ -721,6 +886,10 @@ impl SsaBuilder {
     /// itself is pure but is deliberately NOT CSE'd -- see the
     /// `PureKey` comment for why.
     pub(crate) fn local_addr(&mut self, off: i64) -> ValueId {
+        let off = match self.frame_slot(off) {
+            FrameSlot::Own(off) => off,
+            FrameSlot::Parent(off) => return self.parent_addr(off),
+        };
         self.local_cache.clear();
         self.push(Inst::LocalAddr(off))
     }
@@ -768,13 +937,19 @@ impl SsaBuilder {
         self.seh_current.is_some()
     }
 
-    /// Open a `__try` region inside the current one, whose exceptions enter
-    /// `target`: the blocks created from here on lie in it.
-    pub(crate) fn open_seh_scope(&mut self, target: BlockId) -> u32 {
+    /// Open a `__try` region inside the current one, whose exceptions
+    /// `filter` accepts enter `target`: the blocks created from here on lie
+    /// in it.
+    pub(crate) fn open_seh_scope(
+        &mut self,
+        target: BlockId,
+        filter: crate::c5::ir::SehFilter,
+    ) -> u32 {
         let id = self.func.seh_scopes.len() as u32;
         (self.func.seh_scopes).push(crate::c5::ir::SehScope {
             parent: self.seh_current,
             target,
+            filter,
         });
         self.seh_current = Some(id);
         id
@@ -923,6 +1098,13 @@ impl SsaBuilder {
     /// value and never seeds one, so every source-level read performs
     /// a memory access (C99 5.1.2.3p2).
     pub(crate) fn load_local_vol(&mut self, off: i64, kind: LoadKind, volatile: bool) -> ValueId {
+        let off = match self.frame_slot(off) {
+            FrameSlot::Own(off) => off,
+            FrameSlot::Parent(off) => {
+                let addr = self.parent_addr(off);
+                return self.load_at(addr, kind, volatile, 0);
+            }
+        };
         let volatile = volatile || self.in_seh_region();
         if !volatile {
             for entry in &self.local_cache {
@@ -987,6 +1169,13 @@ impl SsaBuilder {
         volatile: bool,
         nsw: bool,
     ) -> ValueId {
+        let off = match self.frame_slot(off) {
+            FrameSlot::Own(off) => off,
+            FrameSlot::Parent(off) => {
+                let addr = self.parent_addr(off);
+                return self.store_at(addr, value, kind, volatile, 0);
+            }
+        };
         let volatile = volatile || self.in_seh_region();
         self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal {
@@ -1710,7 +1899,7 @@ impl SsaBuilder {
     /// exit-acc rather than explicit phi instructions.
     pub(crate) fn alloc_synthetic_local(&mut self) -> i64 {
         self.func.locals += 1;
-        -self.func.locals
+        -self.func.locals - self.parent_frame.as_ref().map_or(0, |p| p.slot_base)
     }
 
     /// Reserve `ceil(size/8)` contiguous 8-byte slots, at least one, and
@@ -1729,7 +1918,7 @@ impl SsaBuilder {
         }
         // Record the multi-cell range so slot coalescing reserves the
         // interior cells, which carry no instruction reference.
-        self.func.multi_cell_slots.push((base, nslots));
+        self.add_multi_cell(base, nslots);
         if align > 8 {
             self.add_region_member(base, align, nslots * 8);
         }

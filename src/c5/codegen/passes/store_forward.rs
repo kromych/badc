@@ -469,6 +469,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Imm(_)
                 | Inst::Undef
                 | Inst::ExceptionCode
+                | Inst::ParentLocalAddr { .. }
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -869,6 +870,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Imm(_)
                 | Inst::Undef
                 | Inst::ExceptionCode
+                | Inst::ParentLocalAddr { .. }
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -948,6 +950,7 @@ mod tests {
         FunctionSsa {
             seh_scopes: Vec::new(),
             block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,

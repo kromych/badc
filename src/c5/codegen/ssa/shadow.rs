@@ -177,8 +177,8 @@ pub(crate) fn walk_program(
                 )
             }
         });
-        let mut func = match walked {
-            Ok(func) => func,
+        let (mut func, funclets) = match walked {
+            Ok(walked) => walked,
             Err(e) => {
                 failed.push((f.ent_pc, e));
                 continue;
@@ -217,6 +217,15 @@ pub(crate) fn walk_program(
         // address. The walker's count covers a hidden result pointer.
         let touched = walker_param_count(&func);
         func.n_params = touched.max(f.n_params).max(func.n_params);
+        // A filter funclet takes cl's name and its function's section.
+        for mut funclet in funclets {
+            let index = funclet.ent_pc - f.end_pc;
+            funclet.name = alloc::format!("{}$filt${index}", func.name);
+            funclet.is_internal = true;
+            funclet.section = func.section.clone();
+            walker_pcs.insert(funclet.ent_pc);
+            out.push(funclet);
+        }
         out.push(func);
     }
     // Parser-emitted helpers (sys-trampolines) come through
@@ -508,12 +517,15 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
     if section_of.is_empty() {
         return funcs;
     }
-    // `None` (default `.text`) sorts before every named group.
-    funcs.sort_by(|a, b| {
-        section_of
-            .get(a.name.as_str())
-            .cmp(&section_of.get(b.name.as_str()))
-    });
+    // `None` (default `.text`) sorts before every named group. A filter
+    // funclet, which no symbol names, carries its function's section.
+    fn group<'f>(
+        section_of: &alloc::collections::BTreeMap<&'f str, &'f str>,
+        f: &'f FunctionSsa,
+    ) -> Option<&'f str> {
+        (section_of.get(f.name.as_str()).copied()).or(f.section.as_deref())
+    }
+    funcs.sort_by(|a, b| group(&section_of, a).cmp(&group(&section_of, b)));
     funcs
 }
 
@@ -820,6 +832,12 @@ pub(crate) fn compute_live_sets(
     let (func_pcs, data_live) =
         graph.solve(&defined, reachable_owners, assume_data_live, |pc, work| {
             let Some(f) = by_ent.get(&pc) else { return };
+            // A region's scope table names its filter funclet.
+            for s in &f.seh_scopes {
+                if let crate::c5::ir::SehFilter::Funclet(t) = s.filter {
+                    work.push(Node::Func(t));
+                }
+            }
             // An address keeps its referent only if emitted: the use counts
             // behind the emitters' dead-code skip.
             let counts = super::reg_alloc::compute_use_counts(f);

@@ -1110,7 +1110,9 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = *off;
             return Ok(());
         }
-        Inst::ExceptionCode => unreachable!("the interpreter refuses a `__try` region"),
+        Inst::ExceptionCode | Inst::ParentLocalAddr { .. } => {
+            unreachable!("the interpreter refuses a `__try` region")
+        }
         Inst::ImmCode(target_pc) => {
             // Code pointers don't map to bytes; tag with
             // `CODE_ADDR_TAG` so `CallIndirect` recognises them.

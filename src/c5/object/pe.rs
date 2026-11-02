@@ -2548,8 +2548,9 @@ struct Seh<'a> {
 impl Seh<'_> {
     /// The handler RVA and the scope table that follow the unwind codes of
     /// the function at `func`, or nothing for a function without regions:
-    /// Count, then per row Begin, End, HandlerAddress -- 1, the constant
-    /// filter EXCEPTION_EXECUTE_HANDLER -- and JumpTarget, all RVAs.
+    /// Count, then per row Begin, End, HandlerAddress -- the filter
+    /// funclet, or 1 for the constant filter EXCEPTION_EXECUTE_HANDLER --
+    /// and JumpTarget, all RVAs.
     fn language_data(&self, func: u32, body: u32) -> Option<Vec<u8>> {
         let rows: Vec<&super::SehRow> = self.rows.iter().filter(|r| r.func == func).collect();
         if rows.is_empty() {
@@ -2559,7 +2560,8 @@ impl Seh<'_> {
         out.extend((body + self.handler).to_le_bytes());
         out.extend((rows.len() as u32).to_le_bytes());
         for r in rows {
-            for field in [body + r.begin, body + r.end, 1, body + r.target] {
+            let filter = r.filter.map_or(1, |f| body + f);
+            for field in [body + r.begin, body + r.end, filter, body + r.target] {
                 out.extend(field.to_le_bytes());
             }
         }

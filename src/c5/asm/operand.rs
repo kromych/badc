@@ -600,6 +600,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
         let form = match func.insts.get(v as usize) {
             None | Some(Inst::Undef) => "an undefined value",
             Some(Inst::ExceptionCode) => "an exception code",
+            Some(Inst::ParentLocalAddr { .. }) => "the address of an enclosing function's object",
             Some(Inst::Copy { value, .. } | Inst::Extend { value, .. }) => {
                 v = *value;
                 continue;

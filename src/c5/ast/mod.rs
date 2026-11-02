@@ -660,10 +660,25 @@ pub(crate) enum Stmt {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum SehHandler {
     /// `__except (filter) body`: `body` runs when `filter` evaluates to
-    /// `EXCEPTION_EXECUTE_HANDLER`.
-    Except { filter: ExprId, body: StmtId },
+    /// `EXCEPTION_EXECUTE_HANDLER`. A filter other than that constant is
+    /// evaluated by `funclet`.
+    Except {
+        filter: ExprId,
+        body: StmtId,
+        funclet: Option<FilterFunclet>,
+    },
     /// `__finally body`: runs whenever control leaves the `__try` body.
     Finally(StmtId),
+}
+
+/// The function a filter expression compiles to, as cl's `<f>$filt$<index>`:
+/// the frame slots the parser numbered past `slot_base` while parsing the
+/// filter, up to `slot_end`, are its own.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FilterFunclet {
+    pub index: u32,
+    pub slot_base: i64,
+    pub slot_end: i64,
 }
 
 /// Value source of one runtime-initializer element: an expression to
@@ -901,6 +916,8 @@ pub(crate) struct FinishedFunction {
     /// label-address initializer.
     pub label_data_slots: alloc::vec::Vec<crate::c5::compiler::PendingLabelReloc>,
     pub name: alloc::string::String,
+    /// The `ent_pc` of each filter funclet, by [`FilterFunclet::index`].
+    pub funclet_pcs: alloc::vec::Vec<usize>,
 }
 
 /// Per-function AST. One instance lives on the active function in
@@ -1086,6 +1103,20 @@ impl Ast {
 
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
         &self.stmts[id as usize]
+    }
+
+    /// The value of an integer literal, cast or negated.
+    pub(crate) fn folded_int(&self, id: ExprId) -> Option<i64> {
+        match self.expr(id) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Cast { child, .. } => self.folded_int(*child),
+            Expr::Unary {
+                op: UnOp::Neg,
+                child,
+                ..
+            } => self.folded_int(*child).map(i64::wrapping_neg),
+            _ => None,
+        }
     }
 
     /// Apply `f` to every data-segment byte offset stored on AST nodes.
@@ -1395,6 +1426,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             ssp: _,
             label_data_slots,
             name: _,
+            funclet_pcs: _,
         } = self;
         label_data_slots.retain_mut(|s| crate::c5::layout::remap_kept_u64(&mut s.data_offset, r));
         ast.remap_data_offsets(r);

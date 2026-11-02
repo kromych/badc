@@ -249,12 +249,15 @@ fn synth_program_and_build(
     let build = Build {
         diagnostics: Vec::new(),
         seh_rows: (merged.seh_rows.iter())
-            .map(|&[func, begin, end, target]| crate::c5::codegen::SehRow {
-                func,
-                begin,
-                end,
-                target,
-            })
+            .map(
+                |&([func, begin, end, target], filter)| crate::c5::codegen::SehRow {
+                    func,
+                    begin,
+                    end,
+                    target,
+                    filter,
+                },
+            )
             .collect(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),

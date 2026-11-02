@@ -146,9 +146,10 @@ pub(crate) fn mark_abs_bases(func: &mut FunctionSsa, extern_bases: bool) {
 
 /// Mark the loads and stores of an x86-64 function whose address is a data
 /// address the unit itself places to form it PC-relative (`pc_rel`). A
-/// wider float, a vector and an access of proven lower alignment keep the
-/// address in a register.
-pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa) {
+/// wider float, a vector and, under `strict_align`, an access of proven
+/// lower alignment, which is split into pieces, keep the address in a
+/// register.
+pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
     let foreign: alloc::collections::BTreeSet<ValueId> =
         func.extern_imm_data_refs.iter().map(|&(v, _)| v).collect();
     let data = |a: ValueId| {
@@ -157,17 +158,19 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa) {
     let marks: Vec<usize> = (func.insts.iter().enumerate())
         .filter(|(_, inst)| match inst {
             Inst::Load {
-                addr,
-                kind,
-                align: 0,
-                ..
-            } => data(*addr) && !matches!(kind, LoadKind::F80 | LoadKind::F128 | LoadKind::V128),
+                addr, kind, align, ..
+            } => {
+                data(*addr)
+                    && (*align == 0 || !strict_align)
+                    && !matches!(kind, LoadKind::F80 | LoadKind::F128 | LoadKind::V128)
+            }
             Inst::Store {
-                addr,
-                kind,
-                align: 0,
-                ..
-            } => data(*addr) && !matches!(kind, StoreKind::F80 | StoreKind::F128 | StoreKind::V128),
+                addr, kind, align, ..
+            } => {
+                data(*addr)
+                    && (*align == 0 || !strict_align)
+                    && !matches!(kind, StoreKind::F80 | StoreKind::F128 | StoreKind::V128)
+            }
             _ => false,
         })
         .map(|(i, _)| i)

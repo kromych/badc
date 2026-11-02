@@ -133,8 +133,7 @@ Disassembly of section .text:
                	movl	$0x3c, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x1(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	movzbq	<rip>, %rcx # <addr>
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax

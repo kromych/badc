@@ -17720,3 +17720,42 @@ fn a_block_typedef_leaves_the_outer_convention_after_its_block() {
         .collect();
     assert_eq!(convs, [CallConv::Target]);
 }
+
+/// A member of an aggregate nested in a packed one, or of an element of a
+/// packed one's array, is only as aligned as the packed aggregate: each such
+/// load records the one-byte bound.
+#[test]
+fn a_member_reached_through_a_packed_aggregate_records_its_alignment() {
+    use crate::c5::ir::{Inst, LoadKind};
+    let src = "struct in { int a; short b; };\n\
+               #pragma pack(push, 1)\n\
+               struct out { char c; struct in i; struct in arr[2]; };\n\
+               #pragma pack(pop)\n\
+               struct out g;\n\
+               struct out g2[1][2];\n\
+               int f(int k) { return g.i.a + g.arr[1].a + g.i.b + g.arr[k].b + g2[0][k].i.a; }\n\
+               int main(void) { return 0; }\n";
+    let program = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        crate::Target::host(),
+        true,
+        true,
+    )
+    .expect("ssa");
+    let f = funcs.iter().find(|f| f.name == "f").expect("f");
+    let aligns: Vec<u8> = (f.insts.iter())
+        .filter_map(|i| match i {
+            Inst::Load { kind, align, .. } if !matches!(kind, LoadKind::I8 | LoadKind::U8) => {
+                Some(*align)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !aligns.is_empty() && aligns.iter().all(|&a| a == 1),
+        "{aligns:?}"
+    );
+}

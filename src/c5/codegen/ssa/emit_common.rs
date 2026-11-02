@@ -2817,7 +2817,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
         if target.is_x86_64() {
-            super::super::passes::index_fold::mark_pc_rel_accesses(f);
+            super::super::passes::index_fold::mark_pc_rel_accesses(f, native.strict_align);
         }
         f.general_regs_only = native.no_fp_regs;
         f.tls_dynamic = native.pic

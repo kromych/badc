@@ -2492,8 +2492,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v2576 Imm(0)                                           -> x0
     v2577 Imm(0)                                           -> x0
     v2578 ImmData(48)                                      -> x0
-    v2579 BinopI { op=add, lhs=v2578, rhs_imm=1 }          -> x1
-    v2580 Load { addr=v2578, disp=1, kind=U32, align=1 }   -> x0
+    v2579 BinopI { op=add, lhs=v2578, rhs_imm=1 }          -> x0
+    v2580 Load { addr=v2578, disp=1, kind=U32, align=1 pc_rel } -> x0
     v2581 BinopI { op=add, lhs=v2578, rhs_imm=5 }          -> x1
     v2582 Load { addr=v2578, disp=5, kind=U8 pc_rel }      -> x1
     v2583 BinopI { op=shl, lhs=v2582, rhs_imm=32 }         -> x1

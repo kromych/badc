@@ -12,10 +12,34 @@ impl<'a> Walker<'a> {
     /// lets the aggregate's own alignment stand for the base address,
     /// and an unresolved layout keeps the natural assumption.
     pub(super) fn member_align(&self, obj: ExprId, field_off: i64, width: u32) -> u8 {
-        let Some(base) = expr_ty(self.ast.expr(obj)).and_then(|t| self.struct_align_opt(t)) else {
+        let Some(base) = self.object_align(obj) else {
             return 0;
         };
         access_align(offset_align(base, field_off), width)
+    }
+
+    /// Alignment the address of the aggregate `e` names: its type's, or,
+    /// for a member or an element of an enclosing object, that object's
+    /// lowered by the member offset or the element stride, as a packed
+    /// aggregate's members are only as aligned as the aggregate itself. An
+    /// element of an array whose own alignment is not known takes its type's.
+    fn object_align(&self, e: ExprId) -> Option<u32> {
+        match self.ast.expr(e) {
+            Expr::Member { obj, field_off, .. } => {
+                Some(offset_align(self.object_align(*obj)?, *field_off))
+            }
+            Expr::Index { array, ty, .. } => {
+                let stride = match self.struct_align_opt(*ty) {
+                    Some(_) => self.struct_size(*ty),
+                    None => super::types::type_size_bytes(*ty, self.target) as i64,
+                };
+                let base = self
+                    .object_align(*array)
+                    .or_else(|| self.struct_align_opt(*ty))?;
+                Some(offset_align(base, stride.max(1)))
+            }
+            other => expr_ty(other).and_then(|t| self.struct_align_opt(t)),
+        }
     }
 
     /// [`Self::member_align`] for an lvalue expression: only a member

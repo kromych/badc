@@ -41,16 +41,16 @@ fn ent_pc=4 n_params=0 variadic=false locals=32
     v52  LocalAddr(-16)                                   -> x0
     v53  Imm(3)                                           -> x1
     v54  Store { addr=v52, disp=0, value=v53, kind=I32, align=1 } -> -
-    v55  LocalAddr(-16)                                   -> x0
-    v56  BinopI { op=add, lhs=v52, rhs_imm=4 }            -> x0
-    v57  BinopI { op=add, lhs=v52, rhs_imm=60 }           -> x0
-    v58  Imm(8)                                           -> x0
-    v59  StoreLocal { off=-16, disp=60, value=v58, kind=I32 } -> -
-    v60  LocalAddr(-16)                                   -> x0
-    v61  BinopI { op=add, lhs=v52, rhs_imm=4 }            -> x0
-    v62  BinopI { op=add, lhs=v52, rhs_imm=68 }           -> x0
-    v63  Imm(20)                                          -> x0
-    v64  StoreLocal { off=-16, disp=68, value=v63, kind=I32 } -> -
+    v55  LocalAddr(-16)                                   -> x1
+    v56  BinopI { op=add, lhs=v52, rhs_imm=4 }            -> x1
+    v57  BinopI { op=add, lhs=v52, rhs_imm=60 }           -> x1
+    v58  Imm(8)                                           -> x1
+    v59  Store { addr=v52, disp=60, value=v58, kind=I32, align=1 } -> -
+    v60  LocalAddr(-16)                                   -> x1
+    v61  BinopI { op=add, lhs=v52, rhs_imm=4 }            -> x1
+    v62  BinopI { op=add, lhs=v52, rhs_imm=68 }           -> x1
+    v63  Imm(20)                                          -> x1
+    v64  Store { addr=v52, disp=68, value=v63, kind=I32, align=1 } -> -
     v65  LocalAddr(-16)                                   -> x0
     v66  Imm(0)                                           -> x0
     v67  Imm(0)                                           -> x0

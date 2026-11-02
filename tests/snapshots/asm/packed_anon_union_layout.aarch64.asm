@@ -33,10 +33,10 @@ Disassembly of section .text:
                	sub	x0, x29, #0x80
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	mov	x0, #0x8                // =8
-               	stur	w0, [x29, #-0x44]
-               	mov	x0, #0x14               // =20
-               	stur	w0, [x29, #-0x3c]
+               	mov	x1, #0x8                // =8
+               	str	w1, [x0, #0x3c]
+               	mov	x1, #0x14               // =20
+               	str	w1, [x0, #0x44]
                	ldurb	w0, [x29, #-0x80]
                	eor	x0, x0, #0x3
                	cbz	w0, <addr>

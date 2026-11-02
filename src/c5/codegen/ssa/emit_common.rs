@@ -52,7 +52,7 @@ pub(crate) struct EmitCtx<'a> {
     /// frame, by `ent_pc`. Every local slot sits that much lower, so the
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
-    pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) local_shift_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
     /// What each function's prologue reserves below its return address,
     /// by `ent_pc`, region by region. What `-Wframe-larger-than=` is
     /// measured against.
@@ -1967,7 +1967,7 @@ pub(crate) struct LowerState {
     pub(crate) text_align: usize,
     pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
-    pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) region_frame_offsets:
@@ -2004,7 +2004,7 @@ impl LowerState {
             text_align: 16,
             label_relocs: alloc::vec::Vec::new(),
             text_data_ranges: alloc::vec::Vec::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
+            local_shift_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             region_frame_offsets: alloc::collections::BTreeMap::new(),
@@ -2034,7 +2034,7 @@ impl LowerState {
                 text_align: &mut self.text_align,
                 label_relocs: &mut self.label_relocs,
                 text_data_ranges: &mut self.text_data_ranges,
-                canary_frame_bytes: &mut self.canary_frame_bytes,
+                local_shift_bytes: &mut self.local_shift_bytes,
                 frame_stack: &mut self.frame_stack,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 region_frame_offsets: &mut self.region_frame_offsets,
@@ -3226,7 +3226,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
-        canary_frame_bytes: st.canary_frame_bytes,
+        local_shift_bytes: st.local_shift_bytes,
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),

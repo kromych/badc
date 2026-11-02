@@ -195,12 +195,12 @@ pub(super) fn emit_tls_addr(
 
 /// rbp-relative offset of c5 slot `off`: parameter `off - 2`'s home
 /// (`param_home_off`) for `off >= 2`, the local at `[rbp + off*8]` below
-/// the canary region otherwise.
+/// the save block and the canary region otherwise.
 pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
     if off >= 2 {
         param_home_off((off - 2) as usize, func, frame, abi)
     } else {
-        c5_slot_to_fp_offset(off, 16, frame.canary_bytes)
+        c5_slot_to_fp_offset(off, 16, frame.locals_shift())
     }
 }
 

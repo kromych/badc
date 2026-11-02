@@ -6905,7 +6905,7 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n, 0);
     assert!(!uw.leaf, "{code:02x?}");
     // `push rbx` directly after the frame allocation.
-    let saves_at = uw.frame_alloc_end.max(uw.set_fpreg_end) as usize;
+    let saves_at = uw.steps.last().map_or(0, |s| s.0) as usize;
     assert_eq!(
         code[saves_at], 0x53,
         "rbx (callee-saved, clobbered by cpuid) must be pushed: {code:02x?}"
@@ -7172,7 +7172,7 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     };
     let uw = decode(at as u32);
     assert!(!uw.leaf);
-    assert_eq!(uw.push_rbp_end, (at - entry) as u32 + 1);
+    assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1);
     // Without the anchor the entry reads as a frameless leaf.
     assert!(decode(0).leaf);
 }

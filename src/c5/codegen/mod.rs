@@ -2484,11 +2484,11 @@ pub(crate) struct Build {
     /// emitter consults this so a surviving local's `DW_OP_fbreg` location
     /// uses its post-coalesce offset. Slots coalesced onto shared storage are
     /// recorded in `promoted_local_slots` (empty location) instead.
-    /// Bytes the stack-protector region added to each protected function's
-    /// frame, by `ent_pc`. Every local slot sits that much lower, so the
-    /// debug-info emitter subtracts it from the slot's frame offset. Absent
-    /// for a function with no canary.
-    pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    /// Bytes the frame reserves between the frame base and the locals, by
+    /// `ent_pc`: the stack-protector region and the Win64 x86_64 save block.
+    /// Every local slot sits that much lower, so the debug-info emitter
+    /// subtracts it from the slot's frame offset. Absent where it is 0.
+    pub local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     /// Frame-base-relative byte offset of each parameter's memory home,
     /// by `ent_pc`, indexed by parameter number; the debug-info emitter
     /// places `DW_TAG_formal_parameter` locations with it. Absent for a
@@ -2593,11 +2593,9 @@ pub(crate) struct AsmTextLabel {
 /// `.debug_frame` builder installs its CFA rules at the same
 /// boundaries.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]` and the pushes
-/// of the callee-saved registers, which no field describes. The
-/// return address is at `[rsp]` on entry and at `[rbp + 8]` from the
-/// `mov` on. Each `*_end` field is the byte offset just past the
-/// matching instruction, which the unwind codes use as their
+/// The prologue's steps run in order; the return address is at `[rsp]`
+/// on entry and at `[rbp + 8]` once rbp is set. Each step's offset is the
+/// byte just past its instruction, which the unwind codes use as their
 /// `CodeOffset` (the offset of the next instruction).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FnUnwind {
@@ -2611,16 +2609,21 @@ pub(crate) struct FnUnwind {
     /// no codes and no frame register, and the unwinder treats it
     /// as a frameless body returning off the top-of-stack RA.
     pub leaf: bool,
-    /// Offset (from `begin`) past `push rbp`.
-    pub push_rbp_end: u32,
-    /// Offset (from `begin`) past `mov rbp,rsp`.
-    pub set_fpreg_end: u32,
-    /// Bytes the prologue's single `sub rsp,N` reserves: the frame
-    /// less the pushed callee-saved registers. 0 without that `sub`.
-    pub frame_bytes: u32,
-    /// Offset (from `begin`) past `sub rsp,N`. Set only when
-    /// `frame_bytes > 0`.
-    pub frame_alloc_end: u32,
+    /// The described steps, each with its offset from `begin`.
+    pub steps: alloc::vec::Vec<(u32, PrologueStep)>,
+}
+
+/// One x86_64 prologue instruction an unwinder replays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrologueStep {
+    /// `push r`, r a register number.
+    Push(u8),
+    /// A single `sub rsp, n`.
+    Alloc(u32),
+    /// `movups [rsp + off], xmm`.
+    SaveXmm { xmm: u8, off: u32 },
+    /// `lea rbp, [rsp + off]`, or `mov rbp, rsp` for 0.
+    SetFrame(u32),
 }
 
 /// An arm64 function's `[begin, end)` in `Build::text` and its prologue's codes.

@@ -2,14 +2,18 @@
 //! reserves and pushes, and that every exit restores it in mirror order with
 //! rsp where the pops expect it.
 //!
-//! The frame's bottom holds the callee-saved registers, pushed after the
-//! `sub`. An exit is: the return value staged, the canary check, `lea rsp`
-//! in a frame whose rsp moves, the pops, `leave` (or `pop rbp` when the
-//! pushes were the whole frame), `ret` or the tail `jmp`. No rsp-relative
-//! access and no call may sit between the first pop and the exit.
+//! On System V the frame's bottom holds the callee-saved registers, pushed
+//! after the `sub`. An exit is: the return value staged, the canary check,
+//! `lea rsp` in a frame whose rsp moves, the pops, `leave` (or `pop rbp`
+//! when the pushes were the whole frame), `ret` or the tail `jmp`. Win64
+//! pushes them right after rbp, ahead of the xmm saves and `lea rbp`, and
+//! an exit takes `lea rsp` onto the last push, the pops and `pop rbp`. No
+//! rsp-relative access and no call may sit between the first pop and the
+//! exit.
 
 use super::codegen::{elf_func_symbols, function_bytes, text_relocs};
 use super::perf_codegen::{X64Insn, x64_insns};
+use crate::c5::codegen::PrologueStep;
 use crate::{
     Hardening, NativeOptions, PatchableEntry, Profiling, StackProtect, StackProtector, Target,
 };
@@ -78,11 +82,15 @@ fn rsp_adjust(i: &X64Insn, modrm: u8) -> Option<u32> {
 /// What a framed function's prologue reserves: the bytes of its `sub` steps
 /// and the callee-saved registers it pushes, in push order, with the index
 /// of the first instruction past them. `early` is the index of the return
-/// the entry's test branches to ahead of the frame.
+/// the entry's test branches to ahead of the frame. A Win64 save block adds
+/// its xmm saves, `(xmm, offset from rsp)`, and its size, rbp's distance
+/// above the rsp it was set from (0 without the block).
 #[derive(Debug)]
 struct Frame {
     alloc: u32,
     pushes: Vec<u8>,
+    xmm_saves: Vec<(u8, i64)>,
+    block: i64,
     body: usize,
     early: Option<usize>,
 }
@@ -121,12 +129,36 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         );
     }
     let mov = insns[i + 1];
-    assert!(
-        mov.op == 0x89 && mov.rex_w() && mov.modrm == Some(0xE5),
-        "push rbp without mov rbp, rsp: {insns:x?}"
-    );
-    i += 2;
-    let mut alloc = 0;
+    let (mut alloc, mut pushes, mut xmm_saves, mut block) = (0, Vec::new(), Vec::new(), 0);
+    if mov.op == 0x89 && mov.rex_w() && mov.modrm == Some(0xE5) {
+        i += 2;
+    } else {
+        // The Win64 save block.
+        i += 1;
+        while let Some(r) = stack_op(&insns[i], 0x50, target) {
+            pushes.push(r);
+            i += 1;
+        }
+        if let Some(n) = rsp_adjust(&insns[i], 0xEC) {
+            alloc += n;
+            i += 1;
+        }
+        while insns[i].op == 0x0F11 && insns[i].mem_base() == Some(4) {
+            xmm_saves.push((insns[i].regs().0, insns[i].disp));
+            i += 1;
+        }
+        let lea = insns[i];
+        assert!(
+            target == Target::WindowsX64
+                && lea.op == 0x8D
+                && lea.rex_w()
+                && lea.regs().0 == 5
+                && lea.mem_base() == Some(4),
+            "push rbp without mov rbp, rsp or the Win64 block: {insns:x?}"
+        );
+        block = lea.disp;
+        i += 1;
+    }
     loop {
         let x = &insns[i];
         if let Some(n) = rsp_adjust(x, 0xEC) {
@@ -143,14 +175,15 @@ fn frame_of(insns: &[X64Insn], target: Target) -> Option<Frame> {
         }
         i += 1;
     }
-    let mut pushes = Vec::new();
-    while let Some(r) = stack_op(&insns[i], 0x50, target) {
+    while let Some(r) = stack_op(&insns[i], 0x50, target).filter(|_| block == 0) {
         pushes.push(r);
         i += 1;
     }
     Some(Frame {
         alloc,
         pushes,
+        xmm_saves,
+        block,
         body: i,
         early,
     })
@@ -176,8 +209,14 @@ fn check_exit(insns: &[X64Insn], e: usize, frame: &Frame, target: Target, what: 
         "no teardown: {}",
         ctx()
     );
-    // `pop rbp` alone is right only where the pops return rsp to rbp.
-    assert_eq!(leave, frame.alloc > 0, "teardown form: {}", ctx());
+    // `pop rbp` alone is right only where the pops return rsp to rbp: on
+    // System V the pushes are the whole frame, past the Win64 block's pops.
+    let want_leave = if frame.block > 0 {
+        frame.pushes.is_empty()
+    } else {
+        frame.alloc > 0
+    };
+    assert_eq!(leave, want_leave, "teardown form: {}", ctx());
     // Between the pops and the teardown: no rsp-relative operand, no stack
     // operation, no call, no branch.
     let mut j = t;
@@ -300,8 +339,9 @@ fn an_odd_push_count_keeps_the_frame_aligned() {
     }
 }
 
-/// A frame whose rsp moves re-establishes `rsp = rbp - frame` ahead of the
-/// pops: the displacement of the `lea` is the `sub` plus the pushes.
+/// A frame whose rsp moves re-establishes rsp ahead of the pops: on System V
+/// `rsp = rbp - frame`, the `sub` plus the pushes below rbp; on Win64 the
+/// last push, `rbp - 8 * pushes`, as every Win64 exit does.
 #[test]
 fn a_dynamic_frame_resets_rsp_ahead_of_the_pops() {
     const SRC: &str = "long h(long *, long);\n\
@@ -310,6 +350,10 @@ fn a_dynamic_frame_resets_rsp_ahead_of_the_pops() {
         let insns = insns_of(&optimized(SRC, target), "vla");
         let frame = frame_of(&insns, target).expect("a frame");
         assert!(!frame.pushes.is_empty(), "{target:?}: {insns:x?}");
+        let below = match target {
+            Target::WindowsX64 => 8 * frame.pushes.len() as i64,
+            _ => i64::from(frame.bytes()),
+        };
         for e in exits(&insns) {
             let first_pop = check_exit(&insns, e, &frame, target, "vla");
             let lea = insns[first_pop - 1];
@@ -318,11 +362,7 @@ fn a_dynamic_frame_resets_rsp_ahead_of_the_pops() {
                 lea.op == 0x8D && lea.rex == 0x48 && lea.regs().0 == 4 && lea.mem_base() == Some(5),
                 "{target:?}: no lea rsp ahead of the pops: {insns:x?}"
             );
-            assert_eq!(
-                lea.disp,
-                -i64::from(frame.bytes()),
-                "{target:?}: {insns:x?}"
-            );
+            assert_eq!(lea.disp, -below, "{target:?}: {insns:x?}");
         }
     }
 }
@@ -363,50 +403,49 @@ fn the_canary_is_checked_ahead_of_the_pops() {
     }
 }
 
-/// Win64 saves the non-volatile xmms the allocator assigned above the
-/// pushed registers: the `movups` stores follow the pushes at
-/// `slots16(pushes)` up, and every exit reloads them from the same
-/// offsets ahead of the pops.
+/// Win64 saves the non-volatile xmms the allocator assigned at the bottom
+/// of the save block: the `movups` stores follow the pushes and the pad,
+/// at `16 * k` from rsp, ahead of `lea rbp`, which puts rbp `block` above
+/// that rsp; every exit reloads them through rbp from the same slots
+/// ahead of the pops.
 #[test]
-fn win64_xmm_saves_sit_above_the_pushed_registers() {
+fn win64_xmm_saves_sit_in_the_save_block() {
     const SRC: &str = "double g(double); long h(long);\n\
         double mixed(double a, long n) { long t = h(n); return g(a) * a + (double)(t + n); }\n";
     let target = Target::WindowsX64;
     let insns = insns_of(&optimized(SRC, target), "mixed");
     let frame = frame_of(&insns, target).expect("a frame");
     assert!(!frame.pushes.is_empty(), "{insns:x?}");
-    let base = (8 * frame.pushes.len() as i64 + 15) & !15;
-    // `movups [rsp + disp], xmm` / `movups xmm, [rsp + disp]` of xmm6..15.
-    let xmm_slot = |x: &X64Insn, op: u16| {
-        (x.op == op && x.mem_base() == Some(4) && x.regs().0 >= 6).then_some((x.regs().0, x.disp))
-    };
-    let saves: Vec<(u8, i64)> = insns[frame.body..]
-        .iter()
-        .map_while(|x| xmm_slot(x, 0x0F11))
-        .collect();
-    assert!(
-        !saves.is_empty(),
-        "no xmm save after the pushes: {insns:x?}"
-    );
-    for (k, &(_, disp)) in saves.iter().enumerate() {
-        assert_eq!(disp, base + 16 * k as i64, "{insns:x?}");
+    let saves = &frame.xmm_saves;
+    assert!(!saves.is_empty(), "no xmm save in the block: {insns:x?}");
+    for (k, &(r, disp)) in saves.iter().enumerate() {
+        assert!((6..=15).contains(&r), "{insns:x?}");
+        assert_eq!(disp, 16 * k as i64, "{insns:x?}");
     }
-    assert!(
-        i64::from(frame.bytes()) >= base + 16 * saves.len() as i64,
-        "the saves lie inside the frame: {frame:?}"
+    let pushed = 8 * frame.pushes.len() as i64;
+    assert_eq!(
+        frame.block,
+        ((pushed + 15) & !15) + 16 * saves.len() as i64,
+        "{frame:?}"
     );
+    let reload = |x: &X64Insn| {
+        (x.op == 0x0F10 && x.mem_base() == Some(5)).then_some((x.regs().0, x.disp + frame.block))
+    };
     for e in exits(&insns) {
         let first_pop = check_exit(&insns, e, &frame, target, "mixed");
-        let loads: Vec<(u8, i64)> = insns[first_pop - saves.len()..first_pop]
+        // `lea rsp`, and the reloads ahead of it.
+        let at = first_pop - 1;
+        let loads: Vec<(u8, i64)> = insns[at - saves.len()..at]
             .iter()
-            .filter_map(|x| xmm_slot(x, 0x0F10))
+            .filter_map(reload)
             .collect();
-        assert_eq!(loads, saves, "{insns:x?}");
+        assert_eq!(&loads, saves, "{insns:x?}");
     }
     // System V has no non-volatile xmm: the same source saves none.
     let sysv = insns_of(&optimized(SRC, Target::LinuxX64), "mixed");
     let frame = frame_of(&sysv, Target::LinuxX64).expect("a frame");
-    assert!(xmm_slot(&sysv[frame.body], 0x0F11).is_none(), "{sysv:x?}");
+    assert!(frame.xmm_saves.is_empty() && frame.block == 0, "{sysv:x?}");
+    assert!(sysv[frame.body].op != 0x0F11, "{sysv:x?}");
 }
 
 /// A Win64 function whose FP values live across calls holds them in
@@ -430,15 +469,7 @@ fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
     let target = Target::WindowsX64;
     let saves = |name: &str| -> Vec<(u8, i64)> {
         let insns = insns_of(&optimized(SRC, target), name);
-        let Some(frame) = frame_of(&insns, target) else {
-            return Vec::new();
-        };
-        insns[frame.body..]
-            .iter()
-            .map_while(|x| {
-                (x.op == 0x0F11 && x.mem_base() == Some(4)).then_some((x.regs().0, x.disp))
-            })
-            .collect()
+        frame_of(&insns, target).map_or(Vec::new(), |f| f.xmm_saves)
     };
     let f_saves = saves("f");
     assert!(!f_saves.is_empty(), "f spills its live-across-call values");
@@ -665,14 +696,28 @@ fn the_prologue_decoder_reads_a_frame_with_pushes_behind_every_entry_form() {
             let insns = x64_insns(&code);
             let frame = frame_of(&insns, target).expect("a frame");
             assert!(!uw.leaf, "{target:?} {what}: {code:02x?}");
-            assert_eq!(
-                uw.frame_bytes, frame.alloc,
-                "{target:?} {what}: {code:02x?}"
-            );
-            assert!(uw.frame_bytes > 0 && !frame.pushes.is_empty());
-            // The described allocation ends where the pushes begin.
-            let push = insns[frame.body - frame.pushes.len()];
-            assert_eq!(uw.frame_alloc_end as usize, push.at, "{target:?} {what}");
+            assert!(!frame.pushes.is_empty());
+            let allocs: Vec<(u32, u32)> = (uw.steps.iter())
+                .filter_map(|&(at, s)| match s {
+                    PrologueStep::Alloc(n) => Some((at, n)),
+                    _ => None,
+                })
+                .collect();
+            let alloc: u32 = allocs.iter().map(|a| a.1).sum();
+            assert_eq!(alloc, frame.alloc, "{target:?} {what}: {code:02x?}");
+            if frame.block == 0 {
+                // The described allocation ends where the System V pushes begin.
+                let push = insns[frame.body - frame.pushes.len()];
+                assert_eq!(allocs[0].0 as usize, push.at, "{target:?} {what}");
+            } else {
+                let pushes: Vec<u8> = (uw.steps.iter())
+                    .filter_map(|&(_, s)| match s {
+                        PrologueStep::Push(r) if r != 5 => Some(r),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(pushes, frame.pushes, "{target:?} {what}: {code:02x?}");
+            }
             for e in exits(&insns) {
                 check_exit(&insns, e, &frame, target, what);
             }

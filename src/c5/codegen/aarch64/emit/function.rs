@@ -212,7 +212,7 @@ pub(crate) fn emit_function(
         return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
     if frame.canary_bytes > 0 {
-        cx.canary_frame_bytes
+        cx.local_shift_bytes
             .insert(func.ent_pc, frame.canary_bytes);
     }
     if func.n_params > 0 {

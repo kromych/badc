@@ -2503,9 +2503,7 @@ const UWOP_SET_FPREG: u8 = 3;
 /// Non-volatile GPR save at a scaled RSP offset.
 #[cfg(test)]
 const UWOP_SAVE_NONVOL: u8 = 4;
-/// 128-bit non-volatile xmm save (see `build_unwind_codes`: the saves
-/// are undescribed while the prologue keeps its frame-pointer layout).
-#[cfg(test)]
+/// 128-bit non-volatile xmm save at an RSP offset scaled by 16.
 const UWOP_SAVE_XMM128: u8 = 8;
 const UNWIND_REG_RBP: u8 = 5;
 
@@ -2529,70 +2527,45 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 }
 
 /// Build the `UNWIND_CODE` byte stream for one function, in the
-/// ABI-required descending-`CodeOffset` order. Returns `(codes,
-/// size_of_prolog, frame_register)`; `frame_register` is 0 for a
-/// frameless leaf and `UNWIND_REG_RBP` otherwise.
+/// ABI-required descending-`CodeOffset` order, one code per prologue step.
+/// Returns `(codes, size_of_prolog, frame)`; `frame` is the
+/// `UNWIND_INFO` byte holding FrameRegister (rbp) and FrameOffset, 0 for a
+/// frameless leaf.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, so the codes
-/// are, highest offset first: `UWOP_ALLOC N` (frame), `UWOP_SET_FPREG`
-/// (rbp, offset 0), `UWOP_PUSH_NONVOL rbp`. `RtlVirtualUnwind`
-/// processes them in array order: the alloc for `N` runs first but
-/// is immediately overwritten by `UWOP_SET_FPREG` (`RSP = RBP -
-/// 0`), which makes the recovery exact even though the body moves
-/// RSP for outgoing-call scratch; the push then restores rbp and
-/// leaves RSP at the return address.
-///
-/// The callee-saved GPRs are pushed after the frame allocation, at the
-/// frame bottom, and are not described; neither are the `movups` saves
-/// of the non-volatile xmms that follow them. RIP/RSP/RBP recover exactly
-/// at any body fault through the frame pointer, but a debugger / profiler /
-/// SEH / C++ unwind crossing this frame does not recover those register
-/// values. Codes are listed in descending prologue offset, so a
-/// `UWOP_PUSH_NONVOL` for one of these pushes would be processed before
-/// `UWOP_SET_FPREG`, against the running `context->Rsp`; and the body
-/// lowers each call as `sub rsp,scratch; call; add rsp,scratch` with
-/// per-site scratch, so at a call return address that RSP is
-/// `frame_rsp - scratch`. A `UWOP_SAVE_XMM128` reads its scaled,
-/// unsigned offset from the frame register's establishment point
-/// (`mov rbp,rsp` puts rbp at the frame top), so an in-frame xmm save
-/// is inexpressible while rbp sits above it. A faithful description
-/// pushes the GPRs before the frame pointer is established, so each
-/// recovers after `UWOP_SET_FPREG` resets RSP to rbp, and keeps the
-/// body's RSP fixed, so the xmm saves read their exact offsets at a
-/// call site too. TODO: that prologue restructure (prologue, epilogue
-/// and the decoder in lockstep, plus an 8*count shift of the
-/// rbp-relative offsets) with a frame-resident outgoing area and
-/// `UWOP_SAVE_XMM128` codes for the saves. badc emits no
-/// exception-using code today, so execution is unaffected until then.
+/// `RtlVirtualUnwind` processes the codes in array order. Whatever follows
+/// `UWOP_SET_FPREG` in the prologue -- the System V frame allocation --
+/// runs first and is overwritten by it (`RSP = RBP - FrameOffset * 16`),
+/// which makes the recovery exact even though the body moves RSP for
+/// outgoing-call scratch. The Win64 save block precedes it, so its
+/// `UWOP_SAVE_XMM128` offsets and `UWOP_PUSH_NONVOL` pops apply to the RSP
+/// it recovers. A frame of a page or more lowers to a stack-probe loop with
+/// no single `sub`, which runs after rbp is set and is left out.
 fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u8) {
+    use super::PrologueStep as S;
     if uw.leaf {
         return (Vec::new(), 0, 0);
     }
-    let mut codes = Vec::new();
-    // The `*_end` offsets count from the function's first byte, CodeOffset
-    // from the table entry's, `frame_start` (`build_x86_64_pdata`). A
-    // Win64 frame of a page or more lowers to a stack-probe loop with no
-    // single `sub`; it is left undescribed because the probe runs after the
-    // frame pointer is established, so `UWOP_SET_FPREG` recovers RSP
-    // exactly at any fault past it.
+    // The step offsets count from the function's first byte, CodeOffset
+    // from the table entry's, `frame_start` (`build_x86_64_pdata`).
     let at = |end: u32| (end - frame_start) as u8;
-    if uw.frame_alloc_end != 0 {
-        push_alloc_code(&mut codes, at(uw.frame_alloc_end), uw.frame_bytes);
+    let mut codes = Vec::new();
+    let mut frame = 0;
+    for &(end, step) in uw.steps.iter().rev() {
+        match step {
+            S::Push(r) => codes.extend([at(end), UWOP_PUSH_NONVOL | (r << 4)]),
+            S::Alloc(n) => push_alloc_code(&mut codes, at(end), n),
+            S::SaveXmm { xmm, off } => {
+                codes.extend([at(end), UWOP_SAVE_XMM128 | (xmm << 4)]);
+                codes.extend(((off / 16) as u16).to_le_bytes());
+            }
+            S::SetFrame(off) => {
+                codes.extend([at(end), UWOP_SET_FPREG]);
+                frame = UNWIND_REG_RBP | ((off / 16) as u8) << 4;
+            }
+        }
     }
-    codes.push(at(uw.set_fpreg_end));
-    codes.push(UWOP_SET_FPREG & 0x0F);
-    codes.push(at(uw.push_rbp_end));
-    codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
-    // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
-    // classifies the pre-frame-pointer region (push rbp) as prolog and the
-    // rest as body; PCs past `mov rbp,rsp` unwind correctly through the
-    // frame pointer whether labelled prolog or body.
-    let size_of_prolog = at(if uw.frame_alloc_end != 0 {
-        uw.frame_alloc_end
-    } else {
-        uw.set_fpreg_end
-    });
-    (codes, size_of_prolog, UNWIND_REG_RBP)
+    let size_of_prolog = uw.steps.last().map_or(0, |&(end, _)| at(end));
+    (codes, size_of_prolog, frame)
 }
 
 /// x86_64 `.pdata` builder.
@@ -2646,12 +2619,12 @@ fn build_x86_64_pdata(
     let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
     for (uw, &(begin, _)) in entries.iter().zip(&spans) {
         info_rvas.push(blobs_rva + blobs.len() as u32);
-        let (codes, size_of_prolog, frame_reg) = build_unwind_codes(uw, begin - uw.begin);
+        let (codes, size_of_prolog, frame) = build_unwind_codes(uw, begin - uw.begin);
         let count_of_codes = (codes.len() / 2) as u8;
         blobs.push(0x01); // Version 1, Flags 0.
         blobs.push(size_of_prolog);
         blobs.push(count_of_codes);
-        blobs.push(frame_reg & 0x0F);
+        blobs.push(frame);
         blobs.extend_from_slice(&codes);
         // The codes array holds an even number of slots; each slot is 2
         // bytes, so the blob is already u16-aligned.
@@ -2979,6 +2952,7 @@ fn pad_to(out: &mut Vec<u8>, target_len: usize) -> Result<(), C5Error> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::PrologueStep;
     use super::*;
     use alloc::string::ToString;
 
@@ -3847,10 +3821,15 @@ mod tests {
             long wide(long a) { char buf[1000]; snk(buf); return ext(a) + a + buf[0]; }
             int probed(int n) { char buf[8192]; buf[n & 4095] = (char)n; return buf[(n + 1) & 4095]; }
             double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
+            double every(double x) {
+                double a = x * 1.5, b = a + 2, c = b * x, d = c - a, e = d * 0.5, f = e + b;
+                double g = f * c, h = g - d, i = h * 0.25, j = i + x;
+                return fext(j) + a + b + c + d + e + f + g + h + i + j;
+            }
             int main(int argc, char **argv) {
                 (void)argv;
                 return add(argc, 2) + (int)saves(argc, 3) + (int)small(argc) + (int)wide(argc)
-                    + probed(argc) + (int)fpwork(1.5, argc);
+                    + probed(argc) + (int)fpwork(1.5, argc) + (int)every(argc);
             }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
@@ -3866,7 +3845,14 @@ mod tests {
                 optimize,
                 ..Default::default()
             };
-            let build = lower_for(&program, target, options).expect("lower");
+            // The full register pool, so the pressure caps do not change
+            // which frames push an even count and need no pad.
+            let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+                usize::MAX,
+                usize::MAX,
+                || lower_for(&program, target, options),
+            )
+            .expect("lower");
             let (mut framed, mut allocs, mut bare) = (0, 0, 0);
             for uw in &build.fn_unwind {
                 let prologue_end = build
@@ -3889,21 +3875,19 @@ mod tests {
                     frame_start,
                 );
                 assert_eq!(
-                    (uw.leaf, uw.push_rbp_end, uw.set_fpreg_end),
-                    (decoded.leaf, decoded.push_rbp_end, decoded.set_fpreg_end),
-                    "{target:?}: frame record of the function at {:#x}",
-                    uw.begin
-                );
-                assert_eq!(
-                    (uw.frame_bytes, uw.frame_alloc_end),
-                    (decoded.frame_bytes, decoded.frame_alloc_end),
-                    "{target:?}: allocation of the function at {:#x}",
+                    (uw.leaf, &uw.steps),
+                    (decoded.leaf, &decoded.steps),
+                    "{target:?}: prologue of the function at {:#x}",
                     uw.begin
                 );
                 assert_eq!(build_unwind_codes(uw, 0), build_unwind_codes(&decoded, 0));
+                let alloc = uw
+                    .steps
+                    .iter()
+                    .any(|s| matches!(s.1, PrologueStep::Alloc(_)));
                 framed += usize::from(!uw.leaf);
-                allocs += usize::from(uw.frame_alloc_end != 0);
-                bare += usize::from(!uw.leaf && uw.frame_alloc_end == 0);
+                allocs += usize::from(alloc);
+                bare += usize::from(!uw.leaf && !alloc);
             }
             // Described allocations and frames without one (probed, and
             // under `-O` the pushes alone) are both present.
@@ -3914,79 +3898,103 @@ mod tests {
         }
     }
 
-    /// Locks the documented unwind-metadata limitation: a non-leaf x64
-    /// Windows function that saves callee-saved GPRs or non-volatile
-    /// xmms describes only the frame-pointer prologue (SET_FPREG + one
-    /// PUSH_NONVOL, of rbp), never the saves (see `build_unwind_codes`).
+    /// Replay of `codes` as `RtlVirtualUnwind` processes them from the body:
+    /// in array order, from the RSP the frame register gives, recording where
+    /// each register is read. Returns `(saved, rsp)`: each register's slot as
+    /// a byte offset from the entry RSP, and the RSP the replay leaves, which
+    /// must be the entry RSP, where the return address is.
+    fn replay(codes: &[u8], frame: u8, rbp: i64) -> (Vec<(u8, bool, i64)>, i64) {
+        let mut rsp = rbp;
+        let mut saved = Vec::new();
+        let mut i = 0;
+        while i < codes.len() {
+            let (op, info) = (codes[i + 1] & 0x0F, codes[i + 1] >> 4);
+            let next = |k: usize| u16::from_le_bytes([codes[i + 2 * k], codes[i + 2 * k + 1]]);
+            match op {
+                UWOP_PUSH_NONVOL => {
+                    saved.push((info, false, rsp));
+                    rsp += 8;
+                }
+                UWOP_ALLOC_SMALL => rsp += 8 * (i64::from(info) + 1),
+                UWOP_ALLOC_LARGE if info == 0 => {
+                    rsp += 8 * i64::from(next(1));
+                    i += 2;
+                }
+                UWOP_SET_FPREG => rsp = rbp - 16 * i64::from(frame >> 4),
+                UWOP_SAVE_XMM128 => {
+                    saved.push((info, true, rsp + 16 * i64::from(next(1))));
+                    i += 2;
+                }
+                other => panic!("unexpected unwind code {other}"),
+            }
+            i += 2;
+        }
+        (saved, rsp)
+    }
+
+    /// A Win64 function's `UNWIND_INFO` describes every non-volatile save:
+    /// replaying its codes reads each callee-saved GPR and xmm the prologue
+    /// saved from the slot the prologue stored it to, and returns RSP to the
+    /// return address. The codes include no `UWOP_SAVE_NONVOL`, the pushes
+    /// being `UWOP_PUSH_NONVOL`s.
     #[test]
-    fn win64_gpr_spill_unwind_omits_save_nonvol() {
+    fn win64_unwind_codes_describe_every_save() {
         use crate::Compiler;
         let src = "
-            long g(long);
-            long f(long a, long b, long c, long d, long e, long h, long i) {
+            long g(long); double h(double);
+            long f(long a, long b, long c, long d, long e, long k, long i) {
                 long r = g(a) + g(b);
-                return r + a * b + c * d + e * h + i * a + b * c + d * e;
+                return r + a * b + c * d + e * k + i * a + b * c + d * e;
             }
-            int main(void) { return (int)f(1, 2, 3, 4, 5, 6, 7); }
+            double fp(double x, double y, double z, double w) {
+                double t = h(x) * y;
+                double u = h(t) * z;
+                return t + u + h(y) * w + x * y * z * w;
+            }
+            int main(void) { return (int)(f(1, 2, 3, 4, 5, 6, 7) + fp(1, 2, 3, 4)); }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        let build = lower_for(
-            &program,
-            super::super::Target::WindowsX64,
-            super::super::NativeOptions::default(),
-        )
-        .expect("lower");
-        fn ops_of(codes: &[u8]) -> Vec<u8> {
-            let mut ops = Vec::new();
-            let mut i = 0;
-            while i + 1 < codes.len() {
-                let op = codes[i + 1] & 0x0F;
-                let opinfo = codes[i + 1] >> 4;
-                ops.push(op);
-                let slots = match op {
-                    1 => {
-                        if opinfo == 0 {
-                            2
-                        } else {
-                            3
+        let (mut gprs, mut xmms) = (0, 0);
+        for optimize in [false, true] {
+            let options = super::super::NativeOptions {
+                optimize,
+                ..Default::default()
+            };
+            let build =
+                lower_for(&program, super::super::Target::WindowsX64, options).expect("lower");
+            for uw in build.fn_unwind.iter().filter(|u| !u.leaf) {
+                let (codes, _, frame) = build_unwind_codes(uw, 0);
+                assert_eq!(frame & 0x0F, UNWIND_REG_RBP);
+                assert!(codes.chunks(2).all(|c| c[1] & 0x0F != UWOP_SAVE_NONVOL));
+                // The prologue's own account of each slot, from the entry
+                // RSP: a push stores at the RSP it leaves, an xmm store at
+                // its offset from the RSP at that point.
+                let (mut rsp, mut rbp, mut want) = (0i64, 0i64, Vec::new());
+                for &(_, step) in &uw.steps {
+                    match step {
+                        PrologueStep::Push(r) => {
+                            rsp -= 8;
+                            want.push((r, false, rsp));
                         }
-                    } // ALLOC_LARGE
-                    _ => 1,
-                };
-                i += slots * 2;
+                        PrologueStep::Alloc(n) => rsp -= i64::from(n),
+                        PrologueStep::SaveXmm { xmm, off } => {
+                            want.push((xmm, true, rsp + i64::from(off)));
+                        }
+                        PrologueStep::SetFrame(off) => rbp = rsp + i64::from(off),
+                    }
+                }
+                let (mut saved, rsp) = replay(&codes, frame, rbp);
+                saved.sort();
+                want.sort();
+                assert_eq!(saved, want, "the function at {:#x}", uw.begin);
+                assert_eq!(rsp, 0, "RSP back at the return address");
+                gprs += want.iter().filter(|w| !w.1 && w.0 != 5).count();
+                xmms += want.iter().filter(|w| w.1).count();
             }
-            ops
         }
-        let mut saw_non_leaf = false;
-        for uw in &build.fn_unwind {
-            if uw.leaf {
-                continue;
-            }
-            saw_non_leaf = true;
-            let (codes, _size_of_prolog, frame_reg) = build_unwind_codes(uw, 0);
-            assert_eq!(frame_reg, UNWIND_REG_RBP);
-            let ops = ops_of(&codes);
-            assert!(
-                ops.contains(&UWOP_SET_FPREG),
-                "non-leaf must set the frame register"
-            );
-            assert_eq!(
-                ops.iter().filter(|&&op| op == UWOP_PUSH_NONVOL).count(),
-                1,
-                "non-leaf describes the push of rbp and no other"
-            );
-            assert!(
-                !ops.contains(&UWOP_SAVE_NONVOL),
-                "GPR saves are not (yet) described"
-            );
-            assert!(
-                !ops.contains(&UWOP_SAVE_XMM128),
-                "xmm saves are not described until the prologue restructure"
-            );
-        }
-        assert!(saw_non_leaf, "expected at least one non-leaf frame");
+        assert!(gprs >= 4 && xmms >= 2, "{gprs} GPR and {xmms} xmm saves");
     }
 
     /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every image we emit,

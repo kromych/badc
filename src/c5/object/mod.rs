@@ -71,7 +71,8 @@ pub(crate) use crate::c5::codegen::{
     A64Unwind, Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
     MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
-    ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
+    PrologueStep, ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs,
+    aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -862,7 +863,7 @@ pub(crate) mod test_support {
             func_prologue_native: BTreeMap::new(),
             promoted_local_slots: BTreeMap::new(),
             coalesced_slot_remap: BTreeMap::new(),
-            canary_frame_bytes: BTreeMap::new(),
+            local_shift_bytes: BTreeMap::new(),
             param_frame_offsets: BTreeMap::new(),
             region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),

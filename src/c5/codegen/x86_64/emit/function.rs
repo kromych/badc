@@ -1,3 +1,4 @@
+use super::super::PrologueStep;
 use super::*;
 
 /// The predecessor-exit moves for the `Inst::Phi`s at the head of every
@@ -225,9 +226,9 @@ pub(crate) fn emit_function(
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
         return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
-    if frame.canary_bytes > 0 {
-        cx.canary_frame_bytes
-            .insert(func.ent_pc, frame.canary_bytes);
+    if frame.locals_shift() > 0 {
+        cx.local_shift_bytes
+            .insert(func.ent_pc, frame.locals_shift());
     }
     if func.n_params > 0 {
         cx.param_frame_offsets.insert(
@@ -1271,11 +1272,48 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
     }
 }
 
+/// The Win64 callee-saved block, after `push rbp`: the GPRs pushed in
+/// `gpr_used` order, `sub rsp` for a pad to 16 and the xmm saves stored at
+/// its bottom, then `lea rbp, [rsp + saves_top]`, which puts rbp back on the
+/// saved rbp. Each step is one `UNWIND_CODE`: the unwinder replays
+/// `UWOP_SET_FPREG` (FrameOffset `saves_top / 16`) ahead of the xmm saves,
+/// so their offsets hold against rsp at any later rsp, and the pushes after
+/// it pop at the rsp it recovers (Microsoft, "x64 exception handling").
+fn emit_win64_saves(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    uw: &mut super::FnUnwind,
+    func_start: usize,
+) {
+    let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
+    for &r in &alloc.gpr_used {
+        emit_push_r(code, Reg(r));
+        uw.steps.push((rel(code), PrologueStep::Push(r)));
+    }
+    let below = frame.saves_top - pushed_gpr_bytes(alloc);
+    if below > 0 {
+        super::encode::emit_sub_rsp(code, below);
+        uw.steps.push((rel(code), PrologueStep::Alloc(below)));
+    }
+    for (j, &x) in alloc.fp_used.iter().enumerate() {
+        let off = j as u32 * 16;
+        emit_movups_mem_xmm(code, Reg::RSP, off as i32, Reg(x));
+        uw.steps
+            .push((rel(code), PrologueStep::SaveXmm { xmm: x, off }));
+    }
+    emit_lea_r_mem(code, Reg::RBP, Reg::RSP, frame.saves_top as i32);
+    uw.steps
+        .push((rel(code), PrologueStep::SetFrame(frame.saves_top)));
+}
+
 /// Whether the epilogue re-establishes `rsp = rbp - frame_bytes`: a
 /// dynamic-sp frame whose restores address from rsp. Without them `leave`
-/// takes rsp from rbp.
+/// takes rsp from rbp; the Win64 block restores through rbp.
 fn reestablishes_sp(frame: Frame, alloc: &Allocation) -> bool {
-    frame.dynamic_sp && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
+    frame.dynamic_sp
+        && frame.saves_top == 0
+        && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
 }
 
 /// Re-establish rsp ahead of the epilogue's rsp-relative restores where
@@ -1289,9 +1327,17 @@ pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Alloc
 
 /// Restore what [`save_callee_saved`] saved, with rsp at the frame bottom:
 /// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
+/// The Win64 block's xmm loads go through rbp; its pops are the teardown's.
 /// No rsp-relative access may follow. Every return path routes through this
 /// so the saved-region offsets cannot drift.
-pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+pub(super) fn restore_callee_saved(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+    if frame.saves_top > 0 {
+        let base = -(frame.saves_top as i32);
+        for (j, &r) in alloc.fp_used.iter().enumerate() {
+            emit_movups_xmm_mem(code, Reg(r), Reg::RBP, base + j as i32 * 16);
+        }
+        return;
+    }
     let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
@@ -1329,9 +1375,13 @@ fn emit_prologue(
     }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
-    uw.push_rbp_end = rel(code);
-    emit_mov_rr(code, Reg::RBP, Reg::RSP);
-    uw.set_fpreg_end = rel(code);
+    uw.steps.push((rel(code), PrologueStep::Push(Reg::RBP.0)));
+    if frame.saves_top > 0 {
+        emit_win64_saves(code, alloc, frame, &mut uw, func_start);
+    } else {
+        emit_mov_rr(code, Reg::RBP, Reg::RSP);
+        uw.steps.push((rel(code), PrologueStep::SetFrame(0)));
+    }
     // Win64 variadic callee: rcx/rdx/r8/r9 spill into the 32-byte home area at
     // `[rbp + 16 + i*8]`, which joins the incoming stack into one 8-byte-stride
     // region the body reads through its cells (stride 8) and `va_arg` walks.
@@ -1343,18 +1393,22 @@ fn emit_prologue(
             emit_mov_mem_r(code, Reg::RBP, home_off, Reg(reg));
         }
     }
-    let alloc_bytes = frame.frame_bytes - pushed_gpr_bytes(alloc);
+    let bottom_pushes = if frame.saves_top > 0 {
+        0
+    } else {
+        pushed_gpr_bytes(alloc)
+    };
+    let alloc_bytes = frame.frame_bytes - frame.saves_top - bottom_pushes;
     if alloc_bytes > 0 {
         // A single `sub rsp, N` is describable with `UWOP_ALLOC`; a probed frame
-        // stays undescribed (`frame_alloc_end == 0`), the frame-pointer rule
-        // recovering rsp at any body fault.
+        // stays undescribed, the frame-pointer rule recovering rsp at any body
+        // fault.
         let single_sub = alloc_bytes <= MAX_UNPROBED_STACK_STEP;
         // r11 is caller-saved, is no target's argument register, and
         // carries no live value in the prologue.
         emit_stack_alloc(code, alloc_bytes, Some(Reg::R11));
         if single_sub {
-            uw.frame_bytes = alloc_bytes;
-            uw.frame_alloc_end = rel(code);
+            uw.steps.push((rel(code), PrologueStep::Alloc(alloc_bytes)));
         }
     }
     // System V variadic callee: rdi rsi rdx rcx r8 r9 spill into the gp area
@@ -1391,11 +1445,13 @@ fn emit_prologue(
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
     }
-    // The pushed GPRs, then the movups saves of the non-volatile xmms
-    // the allocator assigned (on Win64; System V allocates none), and
-    // of any callee-saved scratch a `-ffixed-` fallback moved off the
-    // Win64 volatile set.
-    save_callee_saved(code, alloc);
+    // The pushed GPRs, then the movups saves of the non-volatile xmms the
+    // allocator assigned (an `ms_abi` function off Win64; System V assigns
+    // none), and of any callee-saved scratch a `-ffixed-` fallback moved off
+    // the Win64 volatile set.
+    if frame.saves_top == 0 {
+        save_callee_saved(code, alloc);
+    }
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: the over-aligned region below the static frame, after the
@@ -1574,7 +1630,7 @@ fn emit_return(
         emit_parts_return(code, parts, fp_mask, alloc, frame)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, alloc);
+        restore_callee_saved(code, frame, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }
@@ -1645,7 +1701,7 @@ fn emit_return(
         }
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, alloc);
+        restore_callee_saved(code, frame, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }
@@ -1714,7 +1770,7 @@ fn emit_return(
     // ahead of the pops.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
-    restore_callee_saved(code, alloc);
+    restore_callee_saved(code, frame, alloc);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
     }
@@ -1799,6 +1855,17 @@ pub(super) fn emit_frame_teardown(
     abi: super::Abi,
 ) {
     if is_full_leaf(func, frame, alloc, abi) {
+        return;
+    }
+    // The Win64 block: `lea rsp` onto the last push, the pops, `pop rbp`, the
+    // epilogue form the unwinder recognizes; `leave` with no GPR to pop.
+    if frame.saves_top > 0 && !alloc.gpr_used.is_empty() {
+        let last = -(pushed_gpr_bytes(alloc) as i32);
+        emit_lea_r_mem(code, Reg::RSP, Reg::RBP, last);
+        for &r in alloc.gpr_used.iter().rev() {
+            emit_pop_r(code, Reg(r));
+        }
+        emit_pop_r(code, Reg::RBP);
         return;
     }
     let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
@@ -1886,12 +1953,7 @@ fn emit_canary_store(
         return;
     }
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
-    emit_mov_mem_r(
-        code,
-        Reg::RBP,
-        super::ssa::emit_common::CANARY_SLOT_OFF,
-        CANARY_SCRATCH,
-    );
+    emit_mov_mem_r(code, Reg::RBP, frame.canary_slot_off(), CANARY_SCRATCH);
     super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
@@ -1915,7 +1977,7 @@ pub(super) fn emit_canary_check(
         8,
         CANARY_SCRATCH,
         Reg::RBP,
-        super::ssa::emit_common::CANARY_SLOT_OFF,
+        frame.canary_slot_off(),
     );
     super::encode::emit_jcc_rel8(code, Cc::E, 0);
     let rel8_at = code.len() - 1;

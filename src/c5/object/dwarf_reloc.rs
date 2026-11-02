@@ -1139,7 +1139,7 @@ impl RelocInfoUnit<'_> {
             }
             write_uleb128(&mut self.body, 1);
             self.body.push(self.frame_base_op);
-            let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
+            let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
                 let type_off = self.type_offsets[type_id];
                 let eff = build
@@ -1148,7 +1148,7 @@ impl RelocInfoUnit<'_> {
                     .and_then(|m| m.get(&v.fp_slot))
                     .copied()
                     .unwrap_or(v.fp_slot);
-                let fp_byte_offset = fp_byte_offset_for_slot(eff, canary_shift);
+                let fp_byte_offset = fp_byte_offset_for_slot(eff, local_shift);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
                 } else {
@@ -2051,11 +2051,11 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
 }
 
 /// c5's frame-slot index to native byte offset from the frame pointer.
-fn fp_byte_offset_for_slot(slot: i64, canary_shift: i64) -> i64 {
+fn fp_byte_offset_for_slot(slot: i64, local_shift: i64) -> i64 {
     if slot >= 2 {
         (slot - 1) * 16
     } else {
-        slot * 8 - canary_shift
+        slot * 8 - local_shift
     }
 }
 

@@ -758,7 +758,10 @@ fn stored_const(
 /// recorded -- only a store seeds a constant here -- so a load left
 /// alone stays a load.
 pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
-    if func.blocks.is_empty()
+    // A funclet writes the frame while a call runs, with no address in
+    // the tape; the handler reads what the region left.
+    if func.has_seh()
+        || func.blocks.is_empty()
         || !func
             .insts
             .iter()

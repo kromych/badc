@@ -103,7 +103,8 @@ fn forward_kind(sk: StoreKind, lk: LoadKind) -> LoadForward {
 /// `Mcpy` itself was allowed to use is exactly the widening the flag
 /// forbids.
 pub(crate) fn run(funcs: &mut [FunctionSsa], strict_align: bool) {
-    for func in funcs {
+    // A funclet reads and writes the frame while a call runs.
+    for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
         run_one(func, strict_align);
     }
 }

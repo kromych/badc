@@ -203,6 +203,26 @@ static int over_aligned(void)
     return big[0] == 22;
 }
 
+// A `__finally` block writing a scalar and a member the function stored
+// before the `__try` statement and reads after it.
+struct pair {
+    int a, b;
+};
+
+static int writes_back(int v)
+{
+    int x = 1;
+    struct pair p;
+    p.a = v;
+    p.b = 2;
+    __try {
+    } __finally {
+        x = p.b + 5;
+        p.a = 7;
+    }
+    return x == 7 && p.a == 7;
+}
+
 int main(void)
 {
     fallthrough();
@@ -228,6 +248,8 @@ int main(void)
         return 6;
     if (!over_aligned())
         return 7;
+    if (!writes_back(3))
+        return 8;
     return 0;
 }
 #else

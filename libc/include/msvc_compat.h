@@ -32,6 +32,13 @@
 // call.
 #define _MSC_VER 1900
 
+// MSVC defines `_MSC_EXTENSIONS` under its default /Ze, and clang does for a
+// windows-msvc triple with -fms-extensions; badc's Windows targets always
+// take the Microsoft extensions. The SDK headers make their unions and
+// structures nameless (`DUMMYUNIONNAME`) and define types such as
+// `PROPVARIANT` only under it.
+#define _MSC_EXTENSIONS 1
+
 // Target-architecture macros MSVC predefines and the Windows SDK headers
 // gate on. <winnt.h> selects its per-arch register/context definitions from
 // the `_<ARCH>_` form and errors ("No Target Architecture") if none is set;

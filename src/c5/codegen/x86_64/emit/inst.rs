@@ -154,11 +154,12 @@ pub(super) enum FusedBranch {
     JnpAnd(Cc),
 }
 
-/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`: the swap
+/// Whether an `Flt` / `Fle` compare emits `ucomisd rhs, lhs`: the swap
 /// turns them into the `>` / `>=` shapes whose `A` / `Ae` (and `Be` / `B`)
-/// codes are exact under the unordered flag state, so the branch needs no
-/// parity test. The compare and [`fused_branch_cc`] derive it alike.
-pub(super) fn fused_fp_swaps_operands(op: BinOp) -> bool {
+/// codes are exact under the unordered flag state, so neither the `setcc`
+/// nor the branch needs a parity test. The compare, its `setcc` and
+/// [`fused_branch_cc`] derive it alike.
+pub(super) fn fp_compare_swaps_operands(op: BinOp) -> bool {
     matches!(op, BinOp::Flt | BinOp::Fle)
 }
 
@@ -235,6 +236,8 @@ pub(super) fn fused_branch_cc(
                 FusedBranch::JpOr(Cc::Ne)
             }
         }
+        BinOp::Fone => FusedBranch::Jcc(if negate { Cc::E } else { Cc::Ne }),
+        BinOp::Funo => FusedBranch::Jcc(if negate { Cc::Np } else { Cc::P }),
         _ => return None,
     })
 }

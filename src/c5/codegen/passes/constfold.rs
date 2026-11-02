@@ -35,7 +35,7 @@
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::ir::{
-    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId, is_comparison_op,
 };
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -79,7 +79,7 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
     }
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => *k == 0 || *k == 1,
-        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
+        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_comparison_op(*op),
         Some(Inst::Extend { value, kind, .. }) => {
             !matches!(kind, LoadKind::F32 | LoadKind::F64) && is_bool_value(func, *value, depth - 1)
         }
@@ -92,29 +92,6 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
         }
         _ => false,
     }
-}
-
-/// Integer and FP comparisons; both produce an integer 0/1.
-fn is_compare_op(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
-    )
 }
 
 /// The operand an instruction reproduces bit for bit, if any: `x != 0`
@@ -1459,6 +1436,8 @@ mod tests {
             BinOp::Fgt,
             BinOp::Fle,
             BinOp::Fge,
+            BinOp::Fone,
+            BinOp::Funo,
         ] {
             assert!(!binopi_safe(op), "{op:?}");
         }

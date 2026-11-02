@@ -1179,6 +1179,10 @@ pub(crate) enum BinOp {
     Fgt,
     Fle,
     Fge,
+    /// Ordered and unequal, the quiet `islessgreater` (C99 7.12.14.5).
+    Fone,
+    /// Unordered, the quiet `isunordered` (C99 7.12.14.6).
+    Funo,
 }
 
 /// A zero divisor reached [`eval_int_binop`]. C99 6.5.5p5 leaves integer
@@ -1206,12 +1210,24 @@ pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
 }
 
 /// Floating-point relational and equality operators (C99 6.5.8 /
-/// 6.5.9).
+/// 6.5.9) and the 7.12.14 comparison macros.
 pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
     matches!(
         op,
-        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
+        BinOp::Feq
+            | BinOp::Fne
+            | BinOp::Flt
+            | BinOp::Fgt
+            | BinOp::Fle
+            | BinOp::Fge
+            | BinOp::Fone
+            | BinOp::Funo
     )
+}
+
+/// Floating-point arithmetic or comparison.
+pub(crate) fn is_fp_op(op: BinOp) -> bool {
+    is_fp_arith_op(op) || is_fp_comparison_op(op)
 }
 
 /// True for a relational or equality operator (integer or
@@ -1306,7 +1322,9 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Flt
         | BinOp::Fgt
         | BinOp::Fle
-        | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
+        | BinOp::Fge
+        | BinOp::Fone
+        | BinOp::Funo => unreachable!("eval_int_binop reached on {op:?}"),
     };
     Ok(v)
 }

@@ -38,12 +38,9 @@ Disassembly of section .text:
                	vaddsd	%xmm15, %xmm14, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	ucomisd	%xmm0, %xmm1
-               	setb	%al
+               	ucomisd	%xmm1, %xmm0
+               	seta	%al
                	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -57,11 +54,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	ucomisd	%xmm0, %xmm0
-               	setbe	%al
+               	setae	%al
                	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax

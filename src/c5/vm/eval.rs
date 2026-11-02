@@ -77,6 +77,13 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
         BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
         BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
+        BinOp::Fone | BinOp::Funo => {
+            let order = f64::from_bits(lhs as u64).partial_cmp(&f64::from_bits(rhs as u64));
+            match op {
+                BinOp::Fone => order.is_some_and(|o| o.is_ne()) as i64,
+                _ => order.is_none() as i64,
+            }
+        }
         op => return eval_int_binop(op, lhs, rhs).map_err(|_| EvalTrap::zero_divisor(op)),
     };
     Ok(r)
@@ -101,20 +108,7 @@ pub(crate) fn fold_binop(op: BinOp, lhs: i64, rhs: i64) -> Option<i64> {
     if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru) && !(0..64).contains(&rhs) {
         return None;
     }
-    if matches!(
-        op,
-        BinOp::Fadd
-            | BinOp::Fsub
-            | BinOp::Fmul
-            | BinOp::FmulContractible
-            | BinOp::Fdiv
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
-    ) {
+    if super::super::ir::is_fp_op(op) {
         return None;
     }
     if matches!(op, BinOp::Div | BinOp::Mod) && lhs == i64::MIN && rhs == -1 {
@@ -260,6 +254,25 @@ mod tests {
     fn fold_refuses_fp_ops() {
         assert_eq!(fold_binop(BinOp::Fadd, 1, 2), None);
         assert_eq!(fold_binop(BinOp::Feq, 1, 1), None);
+        assert_eq!(fold_binop(BinOp::Funo, 1, 1), None);
+    }
+
+    /// C99 7.12.14.5 / 7.12.14.6: `<>` is false and unordered true when an
+    /// operand is a NaN.
+    #[test]
+    fn ordered_unequal_and_unordered() {
+        let [nan, one, two] = [f64::NAN, 1.0, 2.0].map(|x| x.to_bits() as i64);
+        for (x, y, lg, un) in [
+            (one, two, 1, 0),
+            (two, one, 1, 0),
+            (one, one, 0, 0),
+            (nan, one, 0, 1),
+            (one, nan, 0, 1),
+            (nan, nan, 0, 1),
+        ] {
+            assert_eq!(apply_binop(BinOp::Fone, x, y), Ok(lg));
+            assert_eq!(apply_binop(BinOp::Funo, x, y), Ok(un));
+        }
     }
 
     #[test]

@@ -9988,6 +9988,75 @@ fn library_builtins_need_no_auto_include_retry() {
     );
 }
 
+/// C99 7.12.14's comparison builtins lower to the quiet compares, as gcc's
+/// and clang's do: `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64,
+/// never the signaling `comis*` or `fcmpe`, at -O0 and -O.
+#[cfg(feature = "full")]
+#[test]
+fn c99_comparison_builtins_compare_quietly() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "int gt(double a, double b) { return __builtin_isgreater(a, b); }\n\
+        int ge(double a, double b) { return __builtin_isgreaterequal(a, b); }\n\
+        int lt(double a, double b) { return __builtin_isless(a, b); }\n\
+        int le(double a, double b) { return __builtin_islessequal(a, b); }\n\
+        int lg(double a, double b) { return __builtin_islessgreater(a, b); }\n\
+        int un(double a, double b) { return __builtin_isunordered(a, b); }\n\
+        int gtf(float a, float b) { return __builtin_isgreater(a, b); }\n\
+        int main(void) { return 0; }\n";
+    let word = |w: &[u8]| u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+    ] {
+        for optimize in [false, true] {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+            let opts = NativeOptions {
+                optimize,
+                ..NativeOptions::default()
+            };
+            let bytes = crate::c5::object::emit_native_single_tu_for_test(&program, target, opts)
+                .expect("emit_native");
+            let what = alloc::format!("{target:?} optimize={optimize}");
+            if target.is_x86_64() {
+                // ucomisd 66 0f 2e, ucomiss 0f 2e; comisd 66 0f 2f, comiss 0f 2f.
+                assert!(
+                    bytes.windows(3).any(|w| w == [0x66, 0x0f, 0x2e]),
+                    "{what}: ucomisd"
+                );
+                assert!(
+                    bytes
+                        .windows(3)
+                        .any(|w| w[0] != 0x66 && w[1..] == [0x0f, 0x2e]),
+                    "{what}: ucomiss"
+                );
+                assert!(
+                    !bytes.windows(2).any(|w| w == [0x0f, 0x2f]),
+                    "{what}: comis*"
+                );
+            } else {
+                // FCMP (register) is 0x1e202000 | ftype << 22, FCMPE sets bit 4.
+                let compare = |w: u32| w & 0xff20_fc0f == 0x1e20_2000;
+                assert!(
+                    bytes
+                        .windows(4)
+                        .any(|w| compare(word(w)) && word(w) & 0x10 == 0),
+                    "{what}: fcmp"
+                );
+                assert!(
+                    !bytes
+                        .windows(4)
+                        .any(|w| compare(word(w)) && word(w) & 0x10 != 0),
+                    "{what}: fcmpe"
+                );
+            }
+        }
+    }
+}
+
 /// The absolute-value builtins fold in a constant expression alongside
 /// the other library builtins.
 #[test]

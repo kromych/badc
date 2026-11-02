@@ -90,12 +90,9 @@ Disassembly of section .text:
                	retq
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%dl
+               	ucomisd	%xmm14, %xmm15
+               	seta	%dl
                	movzbq	%dl, %rdx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rdx
                	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0x8, %eax
@@ -132,12 +129,9 @@ Disassembly of section .text:
                	retq
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setbe	%dl
+               	ucomisd	%xmm14, %xmm15
+               	setae	%dl
                	movzbq	%dl, %rdx
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rdx
                	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0xc, %eax

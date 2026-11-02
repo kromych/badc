@@ -1,0 +1,226 @@
+
+c99_comparison_macros_raise_no_invalid.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
+               	mov	x16, #0x7ff8000000000000 // =9221120237041090560
+               	fmov	d0, x16
+               	stur	d0, [x29, #-0x38]
+               	fmov	d0, #1.00000000
+               	stur	d0, [x29, #-0x30]
+               	fmov	d0, #2.00000000
+               	stur	d0, [x29, #-0x28]
+               	mov	x16, #0x7ff0000000000000 // =9218868437227405312
+               	fmov	d0, x16
+               	stur	d0, [x29, #-0x20]
+               	fmov	s0, #1.00000000
+               	stur	s0, [x29, #-0x18]
+               	mov	x16, #0x4b800000        // =1266679808
+               	fmov	s0, w16
+               	stur	s0, [x29, #-0x10]
+               	mov	x0, #0x1                // =1
+               	movk	x0, #0x100, lsl #16
+               	stur	w0, [x29, #-0x8]
+               	mov	x0, #0x1f               // =31
+               	bl	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.gt	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.ge	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.mi	<addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	b.ls	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbnz	x0, <addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	b.vs	<addr>
+               	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	b.gt	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	b.mi	<addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbnz	x0, <addr>
+               	ldur	d0, [x29, #-0x38]
+               	ldur	d1, [x29, #-0x38]
+               	fcmp	d0, d1
+               	b.vs	<addr>
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x3                // =3
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldur	d0, [x29, #-0x28]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.le	<addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.lt	<addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x28]
+               	fcmp	d0, d1
+               	b.pl	<addr>
+               	ldur	d0, [x29, #-0x28]
+               	ldur	d1, [x29, #-0x28]
+               	fcmp	d0, d1
+               	b.hi	<addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x28]
+               	fcmp	d0, d1
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbz	x0, <addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbnz	x0, <addr>
+               	ldur	d0, [x29, #-0x30]
+               	ldur	d1, [x29, #-0x28]
+               	fcmp	d0, d1
+               	b.vc	<addr>
+               	mov	x0, #0x4                // =4
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	fmov	d0, #2.00000000
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.le	<addr>
+               	ldur	s1, [x29, #-0x18]
+               	fcvt	d1, s1
+               	ldur	d2, [x29, #-0x28]
+               	fcmp	d1, d2
+               	b.pl	<addr>
+               	ldur	s1, [x29, #-0x18]
+               	fcvt	d1, s1
+               	ldur	d2, [x29, #-0x30]
+               	fcmp	d1, d2
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbz	x0, <addr>
+               	mov	x0, #0x5                // =5
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldursw	x0, [x29, #-0x8]
+               	scvtf	s1, x0
+               	ldur	s2, [x29, #-0x10]
+               	fcmp	s1, s2
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbnz	x0, <addr>
+               	ldursw	x0, [x29, #-0x8]
+               	scvtf	s1, x0
+               	ldur	s2, [x29, #-0x10]
+               	fcmp	s1, s2
+               	b.ls	<addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x30]
+               	fmov	d1, #1.00000000
+               	mov	x1, #0x1                // =1
+               	str	w1, [x0, #0x30]
+               	mov	x1, #0x2                // =2
+               	str	w1, [x0, #0x30]
+               	fcmp	d1, d0
+               	cset	x1, mi
+               	csinc	x1, x1, xzr, le
+               	cbz	x1, <addr>
+               	ldrsw	x1, [x0, #0x30]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x30]
+               	add	x1, x1, #0x1
+               	str	w1, [x0, #0x30]
+               	fcmp	d1, d0
+               	b.vs	<addr>
+               	ldrsw	x0, [x0, #0x30]
+               	cmp	w0, #0x4
+               	b.eq	<addr>
+               	mov	x0, #0x7                // =7
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldur	d0, [x29, #-0x20]
+               	ldur	d1, [x29, #-0x30]
+               	fcmp	d0, d1
+               	b.le	<addr>
+               	ldur	d0, [x29, #-0x20]
+               	ldur	d1, [x29, #-0x20]
+               	fneg	d1, d1
+               	fcmp	d0, d1
+               	b.vs	<addr>
+               	ldur	d0, [x29, #-0x20]
+               	fneg	d0, d0
+               	ldur	d1, [x29, #-0x20]
+               	fcmp	d0, d1
+               	cset	x0, mi
+               	csinc	x0, x0, xzr, le
+               	cbnz	x0, <addr>
+               	mov	x0, #0x8                // =8
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	mov	x0, #0x9                // =9
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	b	<addr>

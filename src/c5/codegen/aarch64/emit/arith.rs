@@ -461,7 +461,7 @@ pub(super) fn emit_binop(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
-    if let Some(cond) = fp_compare_cond(op) {
+    if crate::c5::ir::is_fp_comparison_op(op) {
         // The compare width follows the operands' precision.
         let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
@@ -486,7 +486,14 @@ pub(super) fn emit_binop(
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
         }
-        emit(code, enc_cset(rd, cond));
+        match fp_compare_cond(op) {
+            Some(cond) => emit(code, enc_cset(rd, cond)),
+            None => {
+                // `Fone`: less (N), or greater, which `le` excludes.
+                emit(code, enc_cset(rd, Cond::Mi));
+                emit(code, super::encode::enc_csinc(rd, rd, Reg::SP, Cond::Le));
+            }
+        }
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
@@ -652,7 +659,7 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
 }
 
 /// The condition of an FP comparison's `fcmp` + `cset`, `None`
-/// otherwise.
+/// otherwise. `Fone` has none: `less or greater` spans two conditions.
 pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
     Some(match op {
         BinOp::Feq => Cond::Eq,
@@ -661,8 +668,15 @@ pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
         BinOp::Fgt => Cond::Gt,
         BinOp::Fle => Cond::Ls,
         BinOp::Fge => Cond::Ge,
+        BinOp::Funo => Cond::Vs,
         _ => return None,
     })
+}
+
+/// Whether a comparison's flags decide a single `b.cond`, so the
+/// allocator may fuse it with the branch.
+pub(crate) fn compare_fuses(op: BinOp) -> bool {
+    compare_cond(op).or_else(|| fp_compare_cond(op)).is_some()
 }
 
 /// The condition of an integer comparison's `cmp` + `cset`.

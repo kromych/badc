@@ -675,16 +675,15 @@ static inline int isnormal(double x) {
 #define signbit(x) \
     (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \
      : sizeof(x) == sizeof(double) ? signbit(x) : __badc_signbitl(x))
-// C99 7.12.14 relational macros. The standard forms avoid the "invalid"
-// FP exception on a NaN operand; the emitted code does not raise that
-// exception, so the plain relational operators yield the same result
-// value (a NaN comparison is false), which is what callers observe.
-#define isgreater(x, y) ((x) > (y))
-#define isgreaterequal(x, y) ((x) >= (y))
-#define isless(x, y) ((x) < (y))
-#define islessequal(x, y) ((x) <= (y))
-#define islessgreater(x, y) ((x) < (y) || (x) > (y))
-#define isunordered(x, y) (isnan(x) || isnan(y))
+// C99 7.12.14 relational macros over the builtins, as glibc's, the macOS
+// SDK's and mingw-w64's headers have them: each argument is evaluated
+// once, and a quiet NaN raises no invalid exception.
+#define isgreater(x, y) __builtin_isgreater(x, y)
+#define isgreaterequal(x, y) __builtin_isgreaterequal(x, y)
+#define isless(x, y) __builtin_isless(x, y)
+#define islessequal(x, y) __builtin_islessequal(x, y)
+#define islessgreater(x, y) __builtin_islessgreater(x, y)
+#define isunordered(x, y) __builtin_isunordered(x, y)
 // C99 7.12.11.1: copysign copies the sign bit; copysignf reuses the double
 // form, a float magnitude widening to double exactly.
 static inline double copysign(double x, double y) {

@@ -568,6 +568,8 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Fgt => "fgt",
         BinOp::Fle => "fle",
         BinOp::Fge => "fge",
+        BinOp::Fone => "fone",
+        BinOp::Funo => "funo",
     }
 }
 

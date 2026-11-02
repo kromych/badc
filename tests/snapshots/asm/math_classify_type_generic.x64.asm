@@ -382,111 +382,21 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movss	-0x20(%rbp), %xmm0
-               	movss	%xmm0, -0x38(%rbp)
-               	movl	-0x38(%rbp), %eax
-               	movq	%rax, %rcx
-               	shrq	$0x17, %rcx
-               	andq	$0xff, %rcx
-               	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	testl	%eax, %eax
-               	je	<addr>
-               	movl	$0x3f800000, -0x38(%rbp) # imm = 0x3F800000
-               	movl	-0x38(%rbp), %eax
-               	movq	%rax, %rcx
-               	shrq	$0x17, %rcx
-               	andq	$0xff, %rcx
-               	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	testl	%eax, %eax
-               	jne	<addr>
+               	movl	$0x3f800000, %eax       # imm = 0x3F800000
+               	movq	%rax, %xmm15
+               	ucomiss	%xmm15, %xmm0
+               	jnp	<addr>
                	movsd	-0x8(%rbp), %xmm0
-               	movsd	%xmm0, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rax
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	testl	%eax, %eax
-               	je	<addr>
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm14
-               	movsd	%xmm14, -0x40(%rbp)
-               	movq	-0x40(%rbp), %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rax
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	testl	%eax, %eax
-               	jne	<addr>
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
+               	jnp	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
                	xorl	%eax, %eax
                	leave
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
-               	jne	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
-               	jne	<addr>
-               	testq	%rax, %rax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	movl	$0x3, %eax
-               	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	movl	$0x8, %eax
                	leave
                	retq

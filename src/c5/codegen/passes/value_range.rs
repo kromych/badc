@@ -463,20 +463,7 @@ fn binop_code(op: BinOp) -> u32 {
 /// alone. The floating-point opcodes are excluded: their results are
 /// not integers and the ranges here would not describe them.
 fn is_pure_int(op: BinOp) -> bool {
-    !matches!(
-        op,
-        BinOp::Fadd
-            | BinOp::Fsub
-            | BinOp::Fmul
-            | BinOp::FmulContractible
-            | BinOp::Fdiv
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
-    )
+    !crate::c5::ir::is_fp_op(op)
 }
 
 /// Integer comparison operators, with whether they read their operands

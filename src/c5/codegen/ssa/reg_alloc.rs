@@ -1733,27 +1733,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // phi predecessor moves emitted between the body and the
     // terminator use only flag-transparent instructions (mov / xchg /
     // spill load / store / movz / fmov) except the case guarded below.
-    let is_compare_op = |op: BinOp| {
-        matches!(
-            op,
-            BinOp::Eq
-                | BinOp::Ne
-                | BinOp::Lt
-                | BinOp::Gt
-                | BinOp::Le
-                | BinOp::Ge
-                | BinOp::Ult
-                | BinOp::Ugt
-                | BinOp::Ule
-                | BinOp::Uge
-                | BinOp::Feq
-                | BinOp::Fne
-                | BinOp::Flt
-                | BinOp::Fgt
-                | BinOp::Fle
-                | BinOp::Fge
-        )
-    };
+    let is_compare_op = crate::c5::ir::is_comparison_op;
     let is_x86 = target.is_x86_64();
     // Whether the inst's lowering writes the host flags. On x86_64
     // every integer ALU op does, a zero immediate materialises as
@@ -1888,7 +1868,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 let fuses = branch_mask_fuses(*rhs_imm, low_word, is_x86);
                 (fuses && is_x86, fuses && !is_x86)
             }
-            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (is_compare_op(*op), false),
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (
+                is_compare_op(*op)
+                    && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(*op)),
+                false,
+            ),
             Some(inst) => {
                 let quad = matches!(
                     inst,

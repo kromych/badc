@@ -4,7 +4,8 @@
 //! load/store into the heap region consults the allocations table and
 //! turns dangling-pointer access into a `Runtime` error.
 
-use super::try_run_fixture;
+use super::{compile_str, run_str, try_run_fixture};
+use crate::Vm;
 
 fn expect_error_containing(name: &str, needle: &str) {
     match try_run_fixture(name) {
@@ -128,4 +129,58 @@ fn negative_size_argument_is_caught() {
     // trip the code-segment guard). With the new size validation it
     // surfaces a clear "negative size" error at the intrinsic boundary.
     expect_error_containing("negative_size_memset.c", "negative size");
+}
+
+// ---- Allocation functions ----
+
+/// C99 7.20.3: space that cannot be allocated is a null pointer, with
+/// `errno` set to ENOMEM as the C libraries set it, and a failed `realloc`
+/// leaves the old object as it was. The guest memory stops at 4 GiB, so
+/// the terabyte `calloc` a native C library grants lazily is refused too.
+#[test]
+fn an_allocation_the_interpreter_cannot_hold_is_a_null_pointer() {
+    let src = "#include <errno.h>\n\
+        int main(void) {\n\
+            errno = 0;\n\
+            if (malloc((size_t)-1 / 2) || errno != ENOMEM) return 1;\n\
+            errno = 0;\n\
+            if (malloc((size_t)-1) || errno != ENOMEM) return 2;\n\
+            errno = 0;\n\
+            if (calloc((size_t)-1 / 2, 4) || errno != ENOMEM) return 3;\n\
+            errno = 0;\n\
+            if (calloc(1, (size_t)1 << 40) || errno != ENOMEM) return 4;\n\
+            unsigned char *q = calloc(4, 4);\n\
+            if (!q) return 5;\n\
+            for (int i = 0; i < 16; i++) if (q[i]) return 6;\n\
+            memcpy(q, \"keep\", 5);\n\
+            errno = 0;\n\
+            if (realloc(q, (size_t)-1 / 2) || errno != ENOMEM) return 7;\n\
+            if (memcmp(q, \"keep\", 5)) return 8;\n\
+            unsigned char *r = realloc(q, 64);\n\
+            if (!r || memcmp(r, \"keep\", 5)) return 9;\n\
+            unsigned char *s = realloc(0, 8);\n\
+            void *z1 = malloc(0), *z2 = malloc(0);\n\
+            if (!s || (z1 && z1 == z2)) return 10;\n\
+            if (read(-1, r, (size_t)-1 / 2) != -1) return 11;\n\
+            free(r); free(s); free(z1); free(z2);\n\
+            return 0;\n\
+        }\n";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn a_fill_or_resize_past_the_interpreters_memory_is_a_runtime_error() {
+    // The size is checked against the memory before anything is built for
+    // it; an unknown pointer is as `free` reports it.
+    for (body, needle) in [
+        (
+            "char *p = malloc(8); memset(p, 0, (size_t)-1 / 2);",
+            "past memory len",
+        ),
+        ("char c; realloc(&c, 8);", "realloc of unknown pointer"),
+    ] {
+        let src = format!("int main(void) {{ {body} return 0; }}\n");
+        let err = Vm::new(compile_str(&src)).run().expect_err(body);
+        assert!(err.to_string().contains(needle), "{body}: {err}");
+    }
 }

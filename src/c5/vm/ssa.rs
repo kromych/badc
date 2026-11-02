@@ -63,7 +63,9 @@ pub(super) const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
 ///                                     `malloc` advances
 ///                                     `heap_top`, `free` is a
 ///                                     no-op (the SSA-VM is
-///                                     short-lived).
+///                                     short-lived). The whole
+///                                     memory stays within
+///                                     [`Memory::LIMIT`] bytes.
 ///
 /// `Inst::LocalAddr(off)` returns a real byte address into
 /// `bytes`. `Inst::ImmData(off)` returns `off` (which lands in
@@ -104,7 +106,8 @@ struct Memory {
     /// `run_program_with_args_tracked` (or the
     /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
-    /// Base of the stdio block ([`STDIO_ERRNO`]), 0 until first use.
+    /// Base of the stdio block ([`STDIO_ERRNO`]), the first heap
+    /// allocation.
     stdio: usize,
 }
 
@@ -151,7 +154,7 @@ impl Memory {
         bytes.extend_from_slice(data);
         bytes.resize(total, 0);
         let heap_base = data_end + STACK_BYTES;
-        Self {
+        let mut mem = Self {
             bytes,
             data_end,
             stack_top: data_end,
@@ -162,21 +165,28 @@ impl Memory {
             next_alloc_id: 1,
             track_pointers: false,
             stdio: 0,
+        };
+        // Allocated up front, inside the reserved heap, so `errno` stays
+        // reachable after the heap is exhausted.
+        let base = mem.heap_alloc((STDIO_ERRNO + 8) as u64);
+        for i in 0..3 {
+            let file = (base + i * STDIO_FILE_BYTES) as u64;
+            let slot = base + STDIO_SLOTS + i * 8;
+            mem.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
         }
+        mem.stdio = base;
+        mem
     }
 
-    /// The stdio block, allocated on first use.
-    fn stdio(&mut self) -> usize {
-        if self.stdio == 0 {
-            let base = self.heap_alloc(STDIO_ERRNO + 8);
-            for i in 0..3 {
-                let file = (base + i * STDIO_FILE_BYTES) as u64;
-                let slot = base + STDIO_SLOTS + i * 8;
-                self.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
-            }
-            self.stdio = base;
-        }
+    /// The stdio block.
+    fn stdio(&self) -> usize {
         self.stdio
+    }
+
+    /// Store `ENOMEM` in `errno`, as a failed allocation function does.
+    fn set_enomem(&mut self) {
+        let at = self.stdio + STDIO_ERRNO;
+        self.bytes[at..at + 4].copy_from_slice(&ENOMEM.to_le_bytes());
     }
 
     fn with_track_pointers(mut self, on: bool) -> Self {
@@ -247,7 +257,7 @@ impl Memory {
     /// into VM-addressable memory rather than into the host's
     /// process address space. Returns 0 if the heap is exhausted.
     fn install_cstring(&mut self, src: &[u8]) -> usize {
-        let base = self.heap_alloc(src.len() + 1);
+        let base = self.heap_alloc(src.len() as u64 + 1);
         if base == 0 {
             return 0;
         }
@@ -256,23 +266,53 @@ impl Memory {
         base
     }
 
-    /// Bump-pointer `malloc`. Grows `bytes` on demand.
-    fn heap_alloc(&mut self, n: usize) -> usize {
-        let aligned = (n + 15) & !15;
+    /// Bytes the guest memory may span. A request past it, or past what
+    /// the host reserves, is space that cannot be allocated, for which
+    /// the allocation functions return a null pointer (C99 7.20.3).
+    const LIMIT: u64 = 4 << 30;
+
+    /// Bump-pointer `malloc`: the base of `n` fresh bytes, or 0 when the
+    /// memory cannot grow to hold them. A zero-size request takes 16
+    /// bytes, so each pointer returned is distinct (C99 7.20.3p1).
+    fn heap_alloc(&mut self, n: u64) -> usize {
         let base = self.heap_top;
-        let next = base.saturating_add(aligned);
+        let next = n
+            .max(1)
+            .checked_next_multiple_of(16)
+            .and_then(|size| (base as u64).checked_add(size))
+            .filter(|&end| end <= Self::LIMIT)
+            .and_then(|end| usize::try_from(end).ok());
+        let Some(next) = next else {
+            return 0;
+        };
         if next > self.bytes.len() {
+            let more = next - self.bytes.len();
+            if self.bytes.try_reserve(more).is_err() && self.bytes.try_reserve_exact(more).is_err()
+            {
+                return 0;
+            }
             self.bytes.resize(next, 0);
         }
         // Zero the new region so a `malloc` caller doesn't read
         // a previous allocation's leftovers (C99 doesn't promise
         // zeroed memory but it's friendlier than uninitialised).
-        for b in &mut self.bytes[base..next] {
-            *b = 0;
-        }
+        self.bytes[base..next].fill(0);
         self.heap_top = next;
-        self.record_allocation(base, n);
+        self.record_allocation(base, n as usize);
         base
+    }
+
+    /// `n` bytes at `addr` set to `val`, checked as [`Self::write_bytes`]
+    /// checks a store.
+    fn fill_bytes(&mut self, addr: usize, val: u8, n: usize) -> Result<(), C5Error> {
+        if addr.checked_add(n).is_none_or(|end| end > self.bytes.len()) {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: store: addr 0x{addr:x}, {n} bytes past memory len {}",
+                self.bytes.len(),
+            )));
+        }
+        self.bytes[addr..addr + n].fill(val);
+        Ok(())
     }
 
     /// Size of the per-frame record: the link to the caller's record and
@@ -1194,7 +1234,7 @@ fn run_inst<H: Host>(
                 )));
             }
             mem.check_data_access(dst_addr as usize, *size as usize, AccessKind::Write)?;
-            mem.write_bytes(dst_addr as usize, &alloc::vec![0u8; *size as usize])?;
+            mem.fill_bytes(dst_addr as usize, 0, *size as usize)?;
             return Ok(());
         }
         Inst::AtomicRmw {
@@ -1589,6 +1629,8 @@ fn run_inst<H: Host>(
 const STDIO_FILE_BYTES: usize = 48;
 const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
 const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
+/// `ENOMEM` as the bundled `<errno.h>` numbers it on every target.
+const ENOMEM: i32 = 12;
 
 fn std_stream_index(sym: &str) -> Option<usize> {
     match sym {
@@ -1635,6 +1677,8 @@ pub(super) fn interp_supplies(name: &str) -> bool {
             | "read"
             | "close"
             | "malloc"
+            | "calloc"
+            | "realloc"
             | "free"
             | "printf"
             | "__iob_func"
@@ -1717,8 +1761,7 @@ fn dispatch_callext<H: Host>(
                 )));
             }
             mem.check_data_access(dst as usize, n, AccessKind::Write)?;
-            let buf = alloc::vec![val; n];
-            mem.write_bytes(dst as usize, &buf)?;
+            mem.fill_bytes(dst as usize, val, n)?;
             Ok(dst)
         }
         // `int memcmp(const void *s1, const void *s2, size_t n)`.
@@ -1774,6 +1817,8 @@ fn dispatch_callext<H: Host>(
                     "vm_ssa: read: negative buf addr 0x{buf_addr:x}",
                 )));
             }
+            // No more can arrive than the memory past `buf` holds.
+            let n = n.min(mem.bytes.len().saturating_sub(buf_addr as usize));
             let mut buf = alloc::vec![0u8; n];
             let read_bytes = host.read(fd, &mut buf);
             if read_bytes < 0 {
@@ -1788,11 +1833,48 @@ fn dispatch_callext<H: Host>(
             let fd = args.first().copied().unwrap_or(-1);
             Ok(host.close(fd))
         }
-        // `void *malloc(size_t n)` -- bump-pointer heap.
-        // Returns 0 on out-of-heap (C99 null pointer).
+        // `void *malloc(size_t n)` -- bump-pointer heap. A null pointer
+        // with `errno` set to ENOMEM when the space cannot be allocated
+        // (C99 7.20.3), as the C libraries do.
         "malloc" => {
-            let n = libc_size(name, args.first().copied())?;
-            Ok(mem.heap_alloc(n) as i64)
+            let n = alloc_size(name, args, 0)?;
+            Ok(guest_alloc(mem, Some(n)))
+        }
+        // `void *calloc(size_t nmemb, size_t size)` (C99 7.20.3.1): a
+        // product past `size_t` is space that cannot be allocated. The
+        // heap hands out zeroed bytes.
+        "calloc" => {
+            let n = alloc_size(name, args, 0)?.checked_mul(alloc_size(name, args, 1)?);
+            Ok(guest_alloc(mem, n))
+        }
+        // `void *realloc(void *ptr, size_t size)` (C99 7.20.3.4): a new
+        // object holding the old one's bytes up to the lesser size; when
+        // it cannot be allocated, a null pointer, and the old object
+        // stays as it was.
+        "realloc" => {
+            let ptr = args.first().copied().unwrap_or(0);
+            let n = alloc_size(name, args, 1)?;
+            if ptr == 0 {
+                return Ok(guest_alloc(mem, Some(n)));
+            }
+            let p = ptr as usize;
+            let Some(old) = mem.allocations.iter().position(|a| a.start == p) else {
+                return Err(C5Error::Runtime(format!(
+                    "realloc of unknown pointer 0x{p:x} (not returned by malloc)"
+                )));
+            };
+            let Allocation { len, freed, id, .. } = mem.allocations[old];
+            if freed && mem.track_pointers {
+                return Err(C5Error::Runtime(format!(
+                    "realloc of allocation #{id} at 0x{p:x} after it was freed"
+                )));
+            }
+            let base = guest_alloc(mem, Some(n));
+            if base != 0 {
+                mem.copy_within(base as usize, p, len.min(n as usize))?;
+                mem.allocations[old].freed = true;
+            }
+            Ok(base)
         }
         // `void free(void *p)` -- no actual reclamation (the
         // bump-pointer heap only grows). Under `track_pointers`,
@@ -2443,6 +2525,25 @@ fn libc_three_arg(name: &str, args: &[i64]) -> Result<(usize, usize, usize), C5E
         )));
     }
     Ok((a as usize, b as usize, n))
+}
+
+/// Argument `idx` of an allocation function, a `size_t`: every bit
+/// pattern is a size, the largest ones sizes no memory can hold.
+fn alloc_size(name: &str, args: &[i64], idx: usize) -> Result<u64, C5Error> {
+    let raw = (args.get(idx).copied())
+        .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {name}: missing size arg")))?;
+    Ok(raw as u64)
+}
+
+/// A heap block of `n` bytes for the guest, or a null pointer with
+/// `errno` set to ENOMEM when `n` is `None` (a size past `size_t`) or
+/// cannot be allocated.
+fn guest_alloc(mem: &mut Memory, n: Option<u64>) -> i64 {
+    let base = n.map_or(0, |n| mem.heap_alloc(n));
+    if base == 0 {
+        mem.set_enomem();
+    }
+    base as i64
 }
 
 /// Validate a libc size argument. Negative sizes turn into

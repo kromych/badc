@@ -42,7 +42,7 @@ regenerates.
 | B1003 | `malformed-directive` | warning | controllable | default | a macro-expanded `#include` or `#line` operand that does not reparse |
 | B1004 | `unknown-pragmas` | warning | controllable | default,all | a `#pragma` badc does not implement; the directive is ignored |
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
-| B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop with no matching push |
+| B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop or a `pop_macro` with no matching push |
 | B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
 | B1008 | `date-time` | ignore | controllable | - | a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next |
 | B1009 | `undef` | ignore | controllable | - | an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0 |

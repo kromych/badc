@@ -3,7 +3,7 @@ use super::directive::format_line_marker;
 use super::text::skip_literal;
 use super::{
     Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
-    Preprocessor, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
+    Preprocessor, SavedMacro, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
@@ -102,9 +102,15 @@ impl Preprocessor {
         presumed_file: &str,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        match parse_pragma_directive(args) {
+        match parse_pragma_directive(args, self.dollar()) {
             PragmaDirective::Once => {
                 self.pragma_once_files.insert(site.file.to_string());
+            }
+            // TODO: the line is expanded before its operators apply, so a
+            // use of the name later on the same line sees the definition
+            // from before the pragma; gcc and clang apply it in place.
+            PragmaDirective::MacroStack(verb, operand) => {
+                self.parse_pragma_macro_stack(verb, operand, site)?;
             }
             PragmaDirective::Other => {
                 let lexer_reads = pragma_is_pack(args)
@@ -818,6 +824,62 @@ impl Preprocessor {
         Ok(())
     }
 
+    /// `#pragma push_macro("name")` saves the definition of `name`, or its
+    /// absence, on a stack per name, and `#pragma pop_macro("name")`
+    /// reinstates the latest save, as gcc, clang and MSVC read the pair. A
+    /// pop with no save is reported, as clang and MSVC report it; gcc and
+    /// clang reject an operand other than one parenthesized string literal.
+    pub(super) fn parse_pragma_macro_stack(
+        &mut self,
+        verb: &str,
+        operand: &str,
+        site: Site<'_>,
+    ) -> Result<(), C5Error> {
+        let Some(name) = macro_stack_name(operand) else {
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
+                site.file,
+                site.line,
+                format!("`#pragma {verb}` expects a macro name in quotes, got `{operand}`"),
+            ));
+        };
+        let name = ident::key(name).into_owned();
+        self.obs_note(&name);
+        if verb == "push_macro" {
+            let saved = match (self.macros.get(&name), self.fn_macros.get(&name)) {
+                (Some(body), _) => SavedMacro::Object(body.clone()),
+                (_, Some(f)) => SavedMacro::Function(f.clone()),
+                (None, None) => SavedMacro::Undefined,
+            };
+            self.pushed_macros.entry(name).or_default().push(saved);
+            return Ok(());
+        }
+        let Some(stack) = self.pushed_macros.get_mut(&name) else {
+            self.warn(
+                PRAGMA_POP_WITHOUT_PUSH,
+                site,
+                format!("`#pragma pop_macro(\"{name}\")` with no matching push"),
+            );
+            return Ok(());
+        };
+        let saved = stack.pop().expect("an emptied stack leaves the map");
+        if stack.is_empty() {
+            self.pushed_macros.remove(&name);
+        }
+        self.macros.remove(&name);
+        self.fn_macros.remove(&name);
+        match saved {
+            SavedMacro::Undefined => {}
+            SavedMacro::Object(body) => {
+                self.macros.insert(name, body);
+            }
+            SavedMacro::Function(f) => {
+                self.fn_macros.insert(name, f);
+            }
+        }
+        Ok(())
+    }
+
     /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
     fn parse_pragma_weak(&mut self, operand: &str, site: Site<'_>) {
         let (name, target) = match operand.split_once('=') {
@@ -1109,19 +1171,30 @@ pub(super) fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(St
 
 /// Sub-classification of `#pragma` payloads. `dylib(...)` /
 /// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
-/// the dylib registry; `once` is structural (it tags the *current*
-/// header) and lives on the preprocessor itself.
-pub(super) enum PragmaDirective {
+/// the dylib registry. `once` (it tags the *current* header) and
+/// `push_macro` / `pop_macro` act on the preprocessor's own state and,
+/// as with gcc and clang, leave nothing in `-E` output.
+pub(super) enum PragmaDirective<'a> {
     Once,
+    /// The verb and its operand.
+    MacroStack(&'static str, &'a str),
     Other,
 }
 
-pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
-    if args.trim() == "once" {
-        PragmaDirective::Once
-    } else {
-        PragmaDirective::Other
+pub(super) fn parse_pragma_directive(args: &str, dollar: Dollar) -> PragmaDirective<'_> {
+    let args = args.trim();
+    if args == "once" {
+        return PragmaDirective::Once;
     }
+    for verb in ["push_macro", "pop_macro"] {
+        if let Some(operand) = args
+            .strip_prefix(verb)
+            .filter(|rest| ident::char_len(rest.as_bytes(), 0, dollar) == 0)
+        {
+            return PragmaDirective::MacroStack(verb, operand.trim());
+        }
+    }
+    PragmaDirective::Other
 }
 
 /// The actions MSVC's `#pragma warning(<action> : N ...)` takes, and
@@ -1164,6 +1237,23 @@ impl WarningAction {
             WarningAction::Level => {}
         }
     }
+}
+
+/// The name a `push_macro` / `pop_macro` operand `("name")` spells: one
+/// string literal in parentheses, taken as written, as clang takes it.
+fn macro_stack_name(operand: &str) -> Option<&str> {
+    let literal = operand.strip_prefix('(')?.strip_suffix(')')?.trim();
+    let body = literal.strip_prefix('"')?;
+    let bytes = body.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'"' => return (i + 1 == bytes.len()).then(|| &body[..i]),
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 /// The operand of a `weak` pragma: `name` or `name = target`.

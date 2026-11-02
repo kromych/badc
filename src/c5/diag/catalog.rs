@@ -68,9 +68,9 @@ catalog! {
     1005, "pragma-syntax", [], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic pragma badc implements whose operand is malformed";
-    1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
+    1006, "pragma-pop-without-push", ["C4193", "C4602"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic-pragma pop with no matching push";
+        "a diagnostic-pragma pop or a `pop_macro` with no matching push";
     1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";

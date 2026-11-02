@@ -146,6 +146,15 @@ struct FnMacro {
     va_name: Option<String>,
 }
 
+/// What `#pragma push_macro` saves of a name: its definition, or that
+/// it had none.
+#[derive(Debug, Clone, PartialEq)]
+enum SavedMacro {
+    Undefined,
+    Object(String),
+    Function(FnMacro),
+}
+
 /// Output of a successful preprocessor run: the substituted source
 /// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
@@ -166,6 +175,9 @@ pub(crate) struct Preprocessor {
     /// constant by it, and `__CHAR_UNSIGNED__` reports it.
     pub(super) char_signed: bool,
     fn_macros: HashMap<String, FnMacro>,
+    /// `#pragma push_macro` saves per name, latest last; a name leaves
+    /// the map when its last save is popped.
+    pushed_macros: HashMap<String, Vec<SavedMacro>>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
@@ -436,6 +448,7 @@ pub(crate) struct PpReuse {
     source_text: String,
     macros: HashMap<String, String>,
     fn_macros: HashMap<String, FnMacro>,
+    pushed_macros: HashMap<String, Vec<SavedMacro>>,
     once_files: BTreeSet<String>,
     include_guards: HashMap<String, String>,
     counter: i64,
@@ -1259,6 +1272,7 @@ impl Preprocessor {
             wchar: target.wchar_type(false),
             char_signed: target.plain_char_signed(),
             fn_macros,
+            pushed_macros: HashMap::new(),
             dylibs: Vec::new(),
             dylib_index: HashMap::new(),
             exports: Vec::new(),
@@ -1717,6 +1731,7 @@ impl Preprocessor {
         let n_records = self.include_records.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
+        let entry_pushed = self.pushed_macros.clone();
         let entry_once = self.pragma_once_files.clone();
         let entry_guards = self.include_guards.clone();
         let entry_counter = self.counter.get();
@@ -1735,6 +1750,7 @@ impl Preprocessor {
             source_text: out[source_start..].to_string(),
             macros: entry_macros,
             fn_macros: entry_fn_macros,
+            pushed_macros: entry_pushed,
             once_files: entry_once,
             include_guards: entry_guards,
             counter: entry_counter,
@@ -1758,10 +1774,10 @@ impl Preprocessor {
     /// this preprocessor's side outputs are what a full run would leave.
     ///
     /// Beyond its own text and the filesystem, the source pass reads the
-    /// macro tables, the once / include-guard registries, the
-    /// `__COUNTER__` position and the pragma-warning state, and appends
-    /// to the side outputs. Each read is checked below against what the
-    /// recorded pass observed; the appends are replayed.
+    /// macro tables and their `push_macro` saves, the once / include-guard
+    /// registries, the `__COUNTER__` position and the pragma-warning
+    /// state, and appends to the side outputs. Each read is checked below
+    /// against what the recorded pass observed; the appends are replayed.
     pub(crate) fn process_reusing(&mut self, prior: &PpReuse) -> Option<String> {
         let mut out = String::new();
         self.process_preamble(&mut out).ok()?;
@@ -1836,8 +1852,9 @@ impl Preprocessor {
         Some(out)
     }
 
-    /// Whether any macro-table difference against `prior`'s source-entry
-    /// snapshot touches a name the recorded pass observed.
+    /// Whether any macro-table or `push_macro` difference against
+    /// `prior`'s source-entry snapshot touches a name the recorded pass
+    /// observed.
     fn macro_delta_observed(&self, prior: &PpReuse) -> bool {
         let obj = self
             .macros
@@ -1861,7 +1878,20 @@ impl Preprocessor {
                     .keys()
                     .filter(|k| !self.fn_macros.contains_key(*k)),
             );
-        obj.chain(func).any(|name| prior.filter.hit(obs_hash(name)))
+        let pushed = self
+            .pushed_macros
+            .iter()
+            .filter(|(k, v)| prior.pushed_macros.get(*k) != Some(*v))
+            .map(|(k, _)| k)
+            .chain(
+                prior
+                    .pushed_macros
+                    .keys()
+                    .filter(|k| !self.pushed_macros.contains_key(*k)),
+            );
+        obj.chain(func)
+            .chain(pushed)
+            .any(|name| prior.filter.hit(obs_hash(name)))
     }
 
     /// Record `name` as observed by the source pass. Called wherever
@@ -2482,10 +2512,13 @@ impl<'p, 's> LinePass<'p, 's> {
         if !self.active {
             return Ok(Emitted::No);
         }
-        match parse_pragma_directive(args) {
+        match parse_pragma_directive(args, self.pp.dollar()) {
             PragmaDirective::Once => {
                 let filename = self.filename.to_string();
                 self.pp.pragma_once_files.insert(filename);
+            }
+            PragmaDirective::MacroStack(verb, operand) => {
+                self.pp.parse_pragma_macro_stack(verb, operand, site)?;
             }
             // `#pragma pack(...)`, `#pragma GCC visibility ...` and
             // `#pragma STDC FP_CONTRACT` bind to their source position: a

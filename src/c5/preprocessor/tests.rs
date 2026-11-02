@@ -1157,6 +1157,143 @@ fn msvc_pragma_operator_ignored_inside_string_literal() {
 }
 
 #[test]
+fn push_macro_saves_a_definition_and_pop_macro_reinstates_it() {
+    // gcc, clang and MSVC keep a stack per name of what `push_macro` saw:
+    // an object-like or function-like definition, or none.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             #define X 2\n\
+             x2 = X;\n\
+             #pragma pop_macro(\"X\")\n\
+             x1 = X;\n\
+             #define F(a) (a + 1)\n\
+             #pragma push_macro ( \"F\" )\n\
+             #undef F\n\
+             #define F 7\n\
+             f7 = F(0);\n\
+             _Pragma(\"pop_macro(\\\"F\\\")\")\n\
+             f1 = F(0);\n\
+             __pragma(push_macro(\"U\"))\n\
+             #define U 3\n\
+             #pragma pop_macro(\"U\")\n\
+             #ifdef U\n\
+             u_defined;\n\
+             #endif\n\
+             #define N 1\n\
+             #define M 9\n\
+             #pragma push_macro(\"N\")\n\
+             #pragma push_macro(\"M\")\n\
+             #undef N\n\
+             #define N 2\n\
+             #pragma push_macro(\"N\")\n\
+             #undef M\n\
+             #undef N\n\
+             #pragma pop_macro(\"N\")\n\
+             n2 = N, m = M;\n\
+             #pragma pop_macro(\"N\")\n\
+             n1 = N;\n\
+             #pragma pop_macro(\"M\")\n\
+             m9 = M;\n",
+        )
+        .expect("preprocessor failed");
+    for want in [
+        "x2 = 2;",
+        "x1 = 1;",
+        "f7 = 7(0);",
+        "f1 = (0 + 1);",
+        "n2 = 2, m = M;",
+        "n1 = 1;",
+        "m9 = 9;",
+    ] {
+        assert!(out.contains(want), "{want}: {out:?}");
+    }
+    assert!(!out.contains("u_defined"), "{out:?}");
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
+    // clang reports it under -Wignored-pragmas, MSVC as C4602; gcc is
+    // silent. None of them changes the definition.
+    let src = "#define X 1\n\
+               #pragma pop_macro(\"X\")\n\
+               x = X;\n\
+               #pragma push_macro(\"X\")\n\
+               #pragma pop_macro(\"X\")\n\
+               #pragma pop_macro(\"X\")\n\
+               y = X;\n";
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp.process(src).expect("preprocessor failed");
+    assert!(out.contains("x = 1;") && out.contains("y = 1;"), "{out:?}");
+    assert_eq!(
+        codes(&pp),
+        vec![PRAGMA_POP_WITHOUT_PUSH, PRAGMA_POP_WITHOUT_PUSH]
+    );
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.process(&format!("#pragma warning(disable : 4602)\n{src}"))
+        .expect("preprocessor failed");
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_push_macro_operand_other_than_one_string_literal_is_an_error() {
+    // gcc: "invalid #pragma push_macro directive"; clang: "pragma
+    // push_macro requires a parenthesized string".
+    for pragma in [
+        "push_macro(X)",
+        "push_macro",
+        "pop_macro()",
+        "push_macro(\"X\" \"Y\")",
+        "pop_macro(\"X)",
+        "push_macro(\"X\\\")",
+        "push_macro(L\"X\")",
+        "pop_macro(\"X\"",
+    ] {
+        let err = process_err(&format!("#pragma {pragma}\n"));
+        assert!(
+            err.contains("expects a macro name in quotes"),
+            "{pragma}: {err}"
+        );
+    }
+    // A longer pragma name is another pragma.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.process("#pragma push_macros(\"X\")\n")
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn push_macro_and_pop_macro_leave_nothing_in_preprocessed_output() {
+    // gcc -E and clang -E consume the pair: the expansion already
+    // reflects it.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_keep_pragmas(true);
+    let out = pp
+        .process(
+            "#define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             _Pragma(\"pop_macro(\\\"X\\\")\")\n\
+             int x = X;\n",
+        )
+        .expect("preprocessor failed");
+    assert!(!out.contains("_macro"), "{out:?}");
+    assert!(out.contains("int x = 1;"), "{out:?}");
+}
+
+#[test]
 fn named_rest_variadic_macro_binds_tail() {
     // `#define foo(rest...)` reaches the trailing args through `rest`.
     let out = process("#define F(args...) g(args)\nF(1, 2, 3);\n");
@@ -4779,6 +4916,34 @@ fn retry_reuse_follows_the_counter_position() {
             );
         }
     }
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
+}
+
+#[test]
+fn retry_reuse_declines_when_the_extension_pushes_a_name_the_source_pops() {
+    // The macro tables at source entry agree, but the extension leaves a
+    // `push_macro` save of `N` that the source's `pop_macro` reinstates.
+    let dir = std::env::temp_dir().join(format!("badc_pp_reuse_push_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("push.h");
+    std::fs::write(&hdr, "#define N 5\n#pragma push_macro(\"N\")\n#undef N\n").unwrap();
+    let src = "#pragma pop_macro(\"N\")\nint n = N;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let extended = || {
+        let mut pp = reuse_pp();
+        pp.add_search_path(dir.to_str().unwrap());
+        pp.add_force_include("push.h");
+        pp
+    };
+    assert!(
+        extended().process_reusing(&cache).is_none(),
+        "a save the source pops must fall back to a full run"
+    );
+    let out = extended().process(src).expect("full run succeeds");
+    assert!(out.contains("int n = 5;"), "{out:?}");
     std::fs::remove_file(&hdr).ok();
     std::fs::remove_dir(&dir).ok();
 }

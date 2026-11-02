@@ -5389,6 +5389,102 @@ fn lib_archive(members: &[(&str, Vec<u8>)], arm64x: bool) -> Vec<u8> {
     out
 }
 
+/// An archive whose SysV `/` index lists, for each of `members`, its
+/// names, each entry the offset of the member's header (ar(5)).
+fn indexed_archive(members: &[(&str, Vec<u8>, &[&str])]) -> Vec<u8> {
+    let padded = |n: usize| n + n % 2;
+    let names: Vec<(usize, &str)> = (members.iter().enumerate())
+        .flat_map(|(i, m)| m.2.iter().map(move |n| (i, *n)))
+        .collect();
+    let index_len = 4 + 4 * names.len() + names.iter().map(|n| n.1.len() + 1).sum::<usize>();
+    let mut at = 8 + 60 + padded(index_len);
+    let headers: Vec<usize> = (members.iter())
+        .map(|m| {
+            let header = at;
+            at += 60 + padded(m.1.len());
+            header
+        })
+        .collect();
+    let mut index = (names.len() as u32).to_be_bytes().to_vec();
+    index.extend(
+        names
+            .iter()
+            .flat_map(|n| (headers[n.0] as u32).to_be_bytes()),
+    );
+    index.extend(names.iter().flat_map(|n| [n.1.as_bytes(), b"\0"].concat()));
+    let mut out = b"!<arch>\n".to_vec();
+    let bodies = std::iter::once(("/".to_string(), &index))
+        .chain((members.iter()).map(|m| (format!("{}/", m.0), &m.1)));
+    for (name, body) in bodies {
+        let header = format!(
+            "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            0,
+            0,
+            0,
+            644,
+            body.len()
+        );
+        out.extend(header.as_bytes());
+        out.extend(body);
+        if body.len() % 2 == 1 {
+            out.push(b'\n');
+        }
+    }
+    out
+}
+
+/// A link reads an archive member once the archive's symbol index lists a
+/// name the link still needs, as GNU ld and link.exe do: a member that is
+/// no object fails the link only when a reference reaches it. An archive
+/// without an index has every member read.
+#[test]
+fn an_archive_member_is_read_when_the_link_pulls_it() {
+    let dir = tempdir("pe-archive-lazy");
+    write_source(
+        &dir,
+        "pick.c",
+        "int pick(void);\nint main(void) { return pick() - 5; }\n",
+    );
+    write_source(
+        &dir,
+        "junk.c",
+        "int junk(void);\nint main(void) { return junk(); }\n",
+    );
+    const TEXT: u32 = 0x6030_0020;
+    let x64 = [0xB8, 5, 0, 0, 0, 0xC3];
+    let pick = coff_object(0x8664, &[(".text", TEXT, &x64)], &[("pick", 1, true)]);
+    let junk = b"not an object".to_vec();
+    let members = [
+        ("pick.obj", pick.clone(), &["pick"][..]),
+        ("junk.obj", junk.clone(), &["junk"][..]),
+    ];
+    std::fs::write(dir.join("indexed.lib"), indexed_archive(&members)).unwrap();
+    let plain = [("pick.obj", pick), ("junk.obj", junk)];
+    std::fs::write(dir.join("plain.lib"), lib_archive(&plain, false)).unwrap();
+    let link = |src: &str, lib: &str| {
+        Command::new(badc())
+            .args(["--target=windows-x64", src, lib, "-o"])
+            .arg(dir.join("a.exe"))
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let out = link("pick.c", "indexed.lib");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    for (src, lib) in [("junk.c", "indexed.lib"), ("pick.c", "plain.lib")] {
+        let out = link(src, lib);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("member `junk.obj`"),
+            "{src} {lib}: {err}"
+        );
+    }
+}
+
 /// A PE link takes from an archive the members link.exe gives its machine:
 /// of an ARM64X library, whose `pick` exists for arm64, ARM64EC and x64,
 /// the arm64 one; and on either machine an `IMAGE_FILE_MACHINE_UNKNOWN`
@@ -16628,15 +16724,17 @@ fn platform_ar_member_names_match_ar_t() {
     }
 }
 
-/// A member whose container is not ELF is named by its resolved member
-/// name and by its own format. badc's relocatable format is ELF on
-/// every target, so a Mach-O member cannot be linked even where the
-/// target's images are Mach-O; the diagnostic says that rather than
-/// reporting the raw header field.
+/// A member the link pulls whose container it cannot read is named by its
+/// resolved member name and by its own format, here a big-endian Mach-O
+/// object, rather than by the raw header field.
 #[test]
 fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
     let dir = tempdir("foreign-member");
-    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let src = write_source(
+        &dir,
+        "main.c",
+        "int unused(void);\nint main(void) { return unused(); }\n",
+    );
     // MH_CIGAM_64 leads a 64-bit Mach-O object; the rest is padding,
     // since the input is rejected on the container alone.
     let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
@@ -16647,7 +16745,7 @@ fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
             name: "a_very_long_member_name_over_sixteen.o".into(),
             bytes: macho,
         }],
-        &[(0, vec!["_unused".into()])],
+        &[(0, vec!["unused".into()])],
     );
     std::fs::write(&lib, &blob).expect("write the archive");
 
@@ -16655,8 +16753,8 @@ fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
         let out = Command::new(badc())
             .arg(format!("--target={target}"))
             .args(["-o", "prog"])
-            .arg(&lib)
             .arg(&src)
+            .arg(&lib)
             .current_dir(&dir)
             .output()
             .expect("run badc");
@@ -16848,6 +16946,54 @@ fn macos_foreign_member_libc_references_resolve_implicitly() {
     );
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(10), "strlen result mismatch");
+}
+
+/// A Mach-O member is found through either archiver's index: ranlib lists
+/// `__forty` for the C name `_forty`, badc's archiver `_forty`, as the
+/// reader names it.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_archive_index_finds_a_mach_o_member_in_either_spelling() {
+    let dir = tempdir("macos-index-spelling");
+    write_source(&dir, "forty.c", "int _forty(void) { return 40; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "int _forty(void);\nint main(void) { return _forty() + 2; }\n",
+    );
+    let ok = Command::new("cc")
+        .args(["-c", "forty.c", "-o", "forty.o"])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    run(
+        Command::new("ar")
+            .args(["rcs", "libranlib.a", "forty.o"])
+            .current_dir(&dir),
+        "the system archiver",
+    );
+    run(
+        Command::new(badc())
+            .args(["--ar", "-o", "libbadc.a", "forty.o"])
+            .current_dir(&dir),
+        "badc's archiver",
+    );
+    for lib in ["ranlib", "badc"] {
+        let exe = dir.join(format!("prog_{lib}"));
+        run(
+            Command::new(badc())
+                .arg("-o")
+                .arg(&exe)
+                .args(["main.c", "-L.", &format!("-l{lib}")])
+                .current_dir(&dir),
+            &format!("link against lib{lib}.a"),
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(out.status.code(), Some(42), "lib{lib}.a");
+    }
 }
 
 /// A shared library in a container the linker cannot read is reported

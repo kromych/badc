@@ -105,11 +105,12 @@ fn tagged(module: &str, msg: &str) -> alloc::string::String {
     }
 }
 
-#[cfg(feature = "std")]
-pub use archive::read_archive_at;
 pub use archive::{
-    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+    ArchiveMember, IndexedArchive, elf_archive_symbols, is_arm64x_archive, read_archive,
+    write_archive,
 };
+#[cfg(feature = "std")]
+pub use archive::{read_archive_at, read_indexed_archive_at};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use coff_object::{

@@ -74,9 +74,6 @@ pub use output_file::write_output_file;
 pub use codegen::jit_run_with_sources;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
-pub use linker::read_archive_at;
-#[cfg(all(feature = "full", feature = "std"))]
-#[allow(unused_imports)]
 pub use linker::{
     ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
     LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
@@ -97,11 +94,15 @@ pub use linker::{
 #[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+    ArchiveMember, IndexedArchive, elf_archive_symbols, is_arm64x_archive, read_archive,
+    write_archive,
 };
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
+#[cfg(all(feature = "full", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::{read_archive_at, read_indexed_archive_at};
 #[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "full")]

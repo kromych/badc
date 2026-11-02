@@ -163,7 +163,7 @@ pub use c5::{StdHost, write_output_file};
 
 #[cfg(feature = "full")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, elf_archive_symbols,
+    ArchiveMember, Binding, DylibSpec, IndexedArchive, Linkage, Subsystem, elf_archive_symbols,
     embedded_compiler_rt, embedded_libc, embedded_runtime, is_arm64x_archive, jit_run_with_sources,
     read_archive, write_archive,
 };
@@ -183,6 +183,6 @@ pub use c5::{
     os_error_text, parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
     parse_native_elf, parse_native_mach_o, parse_native_object, parse_native_object_for,
     parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword, read_archive_at,
-    render_link_map, resolve_exec_stack, run_ld, script_unreadable, write_executable_elf64,
-    write_native_image_from_merged, write_native_image_from_merged_ex,
+    read_indexed_archive_at, render_link_map, resolve_exec_stack, run_ld, script_unreadable,
+    write_executable_elf64, write_native_image_from_merged, write_native_image_from_merged_ex,
 };

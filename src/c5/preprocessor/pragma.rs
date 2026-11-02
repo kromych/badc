@@ -104,7 +104,8 @@ impl Preprocessor {
     ) -> Result<(), C5Error> {
         match parse_pragma_directive(args, self.dollar()) {
             PragmaDirective::Once => {
-                self.pragma_once_files.insert(site.file.to_string());
+                let id = self.current_file_id(site.file);
+                self.pragma_once_files.insert(id);
             }
             // TODO: the line is expanded before its operators apply, so a
             // use of the name later on the same line sees the definition

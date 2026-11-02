@@ -4615,6 +4615,66 @@ fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::pat
     (pp, base)
 }
 
+/// `#pragma once` and the include-guard drop identify a file as gcc and
+/// clang do, by device and inode, so another spelling of the same file
+/// (`./`, `//`, an absolute path, a symbolic link, another case where the
+/// file system folds it) is the same file, and a file of the same name
+/// in another directory is another.
+#[test]
+fn pragma_once_and_the_guard_drop_identify_a_file_by_its_identity() {
+    let (mut pp, base) = pp_with_headers(
+        "once-identity",
+        &[
+            ("b.h", "#pragma once\nint once_def;\n"),
+            ("p.h", "_Pragma(\"once\")\nint operator_def;\n"),
+            ("g.h", "#ifndef G_H\n#define G_H\nint guard_def;\n#endif\n"),
+        ],
+    );
+    std::fs::create_dir_all(base.join("sub")).unwrap();
+    std::fs::write(base.join("sub/b.h"), "#pragma once\nint other_def;\n").unwrap();
+    let dir = base.to_str().unwrap();
+    let mut spellings = vec![
+        "<b.h>".to_string(),
+        "<./b.h>".to_string(),
+        "<.//b.h>".to_string(),
+        "<sub/../b.h>".to_string(),
+        format!("\"{dir}/b.h\""),
+        format!("\"{dir}//./b.h\""),
+    ];
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(base.join("b.h"), base.join("link.h")).unwrap();
+        spellings.push("<link.h>".to_string());
+    }
+    if base.join("B.H").exists() {
+        spellings.push("<B.H>".to_string());
+    }
+    let mut src: String = spellings
+        .iter()
+        .map(|s| format!("#include {s}\n"))
+        .collect();
+    src.push_str("#include <p.h>\n#include <./p.h>\n#include <g.h>\n#include <./g.h>\n");
+    src.push_str("#include <sub/b.h>\n");
+    pp.set_track_includes(true);
+    let out = pp.process(&src).expect("preprocessor failed");
+    std::fs::remove_dir_all(&base).ok();
+    for (decl, want) in [
+        ("int once_def;", 1),
+        ("int operator_def;", 1),
+        ("int guard_def;", 1),
+        ("int other_def;", 1),
+    ] {
+        assert_eq!(out.matches(decl).count(), want, "{decl}: {out}");
+    }
+    let cached = |name: &str| {
+        pp.include_records
+            .iter()
+            .filter(|r| r.spelling == name && r.status == IncludeStatus::Cached)
+            .count()
+    };
+    assert_eq!((cached("./g.h"), cached("./p.h")), (1, 1));
+}
+
 /// A header wholly wrapped in `#ifndef G` / `#endif` contributes nothing
 /// on re-inclusion while `G` is defined, so the repeat `#include` is
 /// dropped without reading the file.

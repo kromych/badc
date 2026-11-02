@@ -197,15 +197,16 @@ pub(crate) struct Preprocessor {
     export_names: BTreeSet<String>,
     /// `#pragma weak name` and `#pragma weak name = target`, in source order.
     pub weak_pragmas: Vec<(String, Option<String>)>,
-    /// Headers that opted in to single-inclusion via `#pragma once`.
-    /// A subsequent `#include` of a name in this set is dropped.
-    pragma_once_files: BTreeSet<String>,
+    /// Files that opted in to single inclusion via `#pragma once`. A
+    /// later `#include` that resolves to one of them, by any spelling, is
+    /// dropped.
+    pragma_once_files: BTreeSet<include::FileId>,
     /// Controlling macro of each processed file whose whole content sits
     /// inside one `#ifndef X` / `#endif` pair. While `X` is defined such
-    /// a file contributes nothing, so a repeat `#include` of that path is
+    /// a file contributes nothing, so a repeat `#include` of that file is
     /// dropped instead of being read and scanned again (C99 6.10.2; the
     /// same optimization gcc and clang apply).
-    include_guards: HashMap<String, String>,
+    include_guards: HashMap<include::FileId, String>,
     /// Headers being expanded, innermost last, each with the search step
     /// that supplied it. `find_include` reads the step for its closed-set
     /// rule -- only a file served from the own set resolves its includes
@@ -433,9 +434,9 @@ struct ReuseRecorder {
     filter: ObsFilter,
     /// The pass expanded `__COUNTER__`.
     counter_used: Cell<bool>,
-    /// Resolution keys the pass checked against the `#pragma once` /
-    /// include-guard registries.
-    consulted_includes: BTreeSet<String>,
+    /// Files the pass checked against the `#pragma once` / include-guard
+    /// registries.
+    consulted_includes: BTreeSet<include::FileId>,
     /// `#pragma` directives feeding the side outputs the compile
     /// consumes, in source order: (args, line, filename).
     pragma_events: Vec<(String, usize, String)>,
@@ -449,15 +450,15 @@ pub(crate) struct PpReuse {
     macros: HashMap<String, String>,
     fn_macros: HashMap<String, FnMacro>,
     pushed_macros: HashMap<String, Vec<SavedMacro>>,
-    once_files: BTreeSet<String>,
-    include_guards: HashMap<String, String>,
+    once_files: BTreeSet<include::FileId>,
+    include_guards: HashMap<include::FileId, String>,
     counter: i64,
     warn_disabled: BTreeSet<String>,
     /// Whether the recorded source pass left diagnostic-pragma events.
     diag_pragmas: bool,
     filter: ObsFilter,
     counter_used: bool,
-    consulted_includes: BTreeSet<String>,
+    consulted_includes: BTreeSet<include::FileId>,
     pragma_events: Vec<(String, usize, String)>,
     warnings: Vec<Diagnostic>,
     include_records: Vec<IncludeRecord>,
@@ -2369,14 +2370,12 @@ impl<'p, 's> LinePass<'p, 's> {
                 "preprocessor: unterminated `#if` / `#ifdef` block",
             ));
         }
-        // Only files reached through `#include` can be re-included, and
-        // only they have a resolved path to key on.
+        // Only files reached through `#include` can be re-included.
         if !self.pp.include_stack.is_empty()
             && let Some(name) = self.guard.finish(depth)
         {
-            self.pp
-                .include_guards
-                .insert(self.filename.to_string(), name);
+            let id = self.pp.current_file_id(self.filename);
+            self.pp.include_guards.insert(id, name);
         }
         Ok(())
     }
@@ -2521,8 +2520,8 @@ impl<'p, 's> LinePass<'p, 's> {
         }
         match parse_pragma_directive(args, self.pp.dollar()) {
             PragmaDirective::Once => {
-                let filename = self.filename.to_string();
-                self.pp.pragma_once_files.insert(filename);
+                let id = self.pp.current_file_id(self.filename);
+                self.pp.pragma_once_files.insert(id);
             }
             PragmaDirective::MacroStack(verb, operand) => {
                 self.pp.parse_pragma_macro_stack(verb, operand, site)?;

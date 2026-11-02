@@ -1,10 +1,10 @@
 //! The ARM64 unwind codes and `.xdata` record of a badc function's prologue
 //! (Microsoft, "ARM64 exception handling"). After an optional `paciasp` and a
 //! Windows variadic callee's register area, a frame is `stp x29, x30, [sp,
-//! #-16]!; mov x29, sp`, or a callee save pre-indexing it, the other saves
-//! (`nop`s), then `stp x29, x30, [sp, #k]; add x29, sp, #k`. The prolog ends
-//! where x29 is set: `set_fp` / `add_fp` recover sp from it, so what the body
-//! allocates and saves after is undescribed. TODO: epilog scopes.
+//! #-16]!; mov x29, sp`, or a callee save pre-indexing it, the other saves,
+//! then `stp x29, x30, [sp, #k]; add x29, sp, #k`. The prolog ends where x29
+//! is set: `set_fp` / `add_fp` recover sp from it, so what the body
+//! allocates after is undescribed. TODO: epilog scopes.
 
 use alloc::vec::Vec;
 
@@ -15,10 +15,13 @@ pub(crate) const END: u8 = 0xE4;
 enum Insn {
     Pac,
     SubSp(u32),
-    /// A store with sp as its base: `pre` holds a pre-index's allocation.
+    /// A store with sp as its base: `pre` holds a pre-index's allocation,
+    /// `rt2` a pair's second register, `fp` a d-register store.
     StoreSp {
         pre: Option<u32>,
-        fp_lr: bool,
+        fp: bool,
+        rt: u8,
+        rt2: Option<u8>,
         off: u32,
     },
     /// `add x29, sp, #n`.
@@ -26,19 +29,39 @@ enum Insn {
     Other,
 }
 
+impl Insn {
+    /// The `stp x29, x30` of the frame record.
+    fn fp_lr(&self) -> bool {
+        matches!(
+            self,
+            Insn::StoreSp {
+                fp: false,
+                rt: 29,
+                rt2: Some(30),
+                ..
+            }
+        )
+    }
+}
+
 fn classify(w: u32) -> Insn {
-    let (rt, rn, rt2) = (w & 31, (w >> 5) & 31, (w >> 10) & 31);
+    let (rt, rn, rt2) = ((w & 31) as u8, (w >> 5) & 31, ((w >> 10) & 31) as u8);
     let simm =
         |v: u32, bits: u32, scale: i64| ((i64::from(v) << (64 - bits)) >> (64 - bits)) * scale;
-    let store = |pre: bool, off: i64, fp_lr: bool| match (pre, off) {
+    let fp = w & (1 << 26) != 0;
+    let store = |pre: bool, off: i64, rt2: Option<u8>| match (pre, off) {
         (true, o) if o < 0 => Insn::StoreSp {
             pre: Some(-o as u32),
-            fp_lr,
+            fp,
+            rt,
+            rt2,
             off: 0,
         },
         (false, o) if o >= 0 => Insn::StoreSp {
             pre: None,
-            fp_lr,
+            fp,
+            rt,
+            rt2,
             off: o as u32,
         },
         _ => Insn::Other,
@@ -49,23 +72,18 @@ fn classify(w: u32) -> Insn {
     if rn != 31 {
         return Insn::Other;
     }
+    let pair = simm((w >> 15) & 0x7F, 7, 8);
     match w & 0xFFC0_0000 {
         // STP Xt, Xt2 / Dt, Dt2: pre-indexed, then signed offset.
-        0xA980_0000 | 0x6D80_0000 => {
-            let fp_lr = w & 0xFFC0_0000 == 0xA980_0000 && rt == 29 && rt2 == 30;
-            return store(true, simm((w >> 15) & 0x7F, 7, 8), fp_lr);
-        }
-        0xA900_0000 | 0x6D00_0000 => {
-            let fp_lr = w & 0xFFC0_0000 == 0xA900_0000 && rt == 29 && rt2 == 30;
-            return store(false, simm((w >> 15) & 0x7F, 7, 8), fp_lr);
-        }
+        0xA980_0000 | 0x6D80_0000 => return store(true, pair, Some(rt2)),
+        0xA900_0000 | 0x6D00_0000 => return store(false, pair, Some(rt2)),
         // STR Xt / Dt, unsigned scaled offset.
-        0xF900_0000 | 0xFD00_0000 => return store(false, i64::from((w >> 10) & 0xFFF) * 8, false),
+        0xF900_0000 | 0xFD00_0000 => return store(false, i64::from((w >> 10) & 0xFFF) * 8, None),
         _ => {}
     }
     // STR Xt / Dt, pre-indexed.
     if matches!(w & 0xFFE0_0C00, 0xF800_0C00 | 0xFC00_0C00) {
-        return store(true, simm((w >> 12) & 0x1FF, 9, 1), false);
+        return store(true, simm((w >> 12) & 0x1FF, 9, 1), None);
     }
     let imm = ((w >> 10) & 0xFFF) << (12 * ((w >> 22) & 1));
     match w & 0xFF80_0000 {
@@ -83,6 +101,42 @@ fn alloc(bytes: u32) -> Option<Vec<u8>> {
         0..32 => Some(alloc::vec![x as u8]),
         32..2048 => Some(alloc::vec![0xC0 | (x >> 8) as u8, x as u8]),
         2048..0x0100_0000 => Some(alloc::vec![0xE0, (x >> 16) as u8, (x >> 8) as u8, x as u8]),
+        _ => None,
+    }
+}
+
+/// The `save_reg*` / `save_freg*` code of a callee save of x19-x28 or
+/// d8-d15, alone or paired with the next register, at `[sp, #off]` or
+/// pre-indexing `pre` bytes; `None` for a store no code describes.
+fn save(fp: bool, rt: u8, rt2: Option<u8>, pre: Option<u32>, off: u32) -> Option<Vec<u8>> {
+    let (first, count) = if fp { (8, 8) } else { (19, 10) };
+    let x = rt.checked_sub(first).filter(|&x| x < count)?;
+    let pair = match rt2 {
+        None => false,
+        Some(r) if r == rt + 1 && x + 1 < count => true,
+        Some(_) => return None,
+    };
+    let bytes = pre.unwrap_or(off);
+    if !bytes.is_multiple_of(8) {
+        return None;
+    }
+    // A pre-index of n bytes is encoded as n / 8 - 1, an offset as off / 8.
+    let z = (bytes / 8).checked_sub(u32::from(pre.is_some()))?;
+    // The single pre-indexed forms carry a 5-bit offset after a wider
+    // register field; the others a 6-bit offset.
+    let (op, narrow) = match (fp, pair, pre.is_some()) {
+        (false, true, false) => (0xC8, false),
+        (false, true, true) => (0xCC, false),
+        (false, false, false) => (0xD0, false),
+        (false, false, true) => (0xD4, true),
+        (true, true, false) => (0xD8, false),
+        (true, true, true) => (0xDA, false),
+        (true, false, false) => (0xDC, false),
+        (true, false, true) => (0xDE, true),
+    };
+    match narrow {
+        false if z < 64 => Some(alloc::vec![op | (x >> 2), (x & 3) << 6 | z as u8]),
+        true if z < 32 => Some(alloc::vec![op | (x >> 3), (x & 7) << 5 | z as u8]),
         _ => None,
     }
 }
@@ -105,25 +159,17 @@ pub(crate) fn prologue_codes(text: &[u8], start: u32, limit: u32) -> Option<Vec<
         fwd.push(alloc::vec![0xFC]);
         insn = next()?;
     }
+    // The register area's stores home arguments and restore nothing.
     if let Insn::SubSp(n) = insn {
         fwd.push(alloc(n)?);
         insn = next()?;
-        while let Insn::StoreSp {
-            pre: None,
-            fp_lr: false,
-            ..
-        } = insn
-        {
+        while matches!(insn, Insn::StoreSp { pre: None, .. }) && !insn.fp_lr() {
             fwd.push(alloc::vec![NOP]);
             insn = next()?;
         }
     }
     match insn {
-        Insn::StoreSp {
-            pre: Some(16),
-            fp_lr: true,
-            ..
-        } => {
+        Insn::StoreSp { pre: Some(16), .. } if insn.fp_lr() => {
             fwd.push(alloc::vec![0x81]);
             let Insn::AddFp(0) = next()? else {
                 return None;
@@ -132,22 +178,24 @@ pub(crate) fn prologue_codes(text: &[u8], start: u32, limit: u32) -> Option<Vec<
         }
         Insn::StoreSp {
             pre: Some(n),
-            fp_lr: false,
+            fp,
+            rt,
+            rt2,
             ..
         } => {
-            fwd.push(alloc(n)?);
+            fwd.push(save(fp, rt, rt2, Some(n), 0)?);
             let k = loop {
                 match next()? {
+                    i @ Insn::StoreSp { pre: None, off, .. } if i.fp_lr() && off <= 504 => {
+                        break off;
+                    }
                     Insn::StoreSp {
                         pre: None,
-                        fp_lr: false,
-                        ..
-                    } => fwd.push(alloc::vec![NOP]),
-                    Insn::StoreSp {
-                        pre: None,
-                        fp_lr: true,
+                        fp,
+                        rt,
+                        rt2,
                         off,
-                    } if off <= 504 => break off,
+                    } => fwd.push(save(fp, rt, rt2, None, off)?),
                     _ => return None,
                 }
             };
@@ -208,7 +256,7 @@ mod tests {
         let t = words(&[0xF81A_0FF4, 0xA905_7BFD, 0x9101_43FD]);
         assert_eq!(
             prologue_codes(&t, 0, 12),
-            Some(alloc::vec![0xE2, 10, 0x4A, 0x06])
+            Some(alloc::vec![0xE2, 10, 0x4A, 0xD4, 0x2B])
         );
         // paciasp; sub sp, sp, #64; str x0, [sp]; str x1, [sp, #8]; the frame
         let t = words(&[
@@ -229,5 +277,37 @@ mod tests {
             xdata(0x40, &[0xE1, 0x81]).unwrap(),
             [0x10, 0, 0, 0x08, 0xE1, 0x81, 0xE4, 0xE4]
         );
+    }
+
+    /// Each callee save before `add x29` takes its `save_*` code.
+    #[test]
+    fn every_callee_save_takes_its_code() {
+        // stp d8, d9, [sp, #-0x70]!; stp d10, d11, [sp, #0x10];
+        // str d12, [sp, #0x20]; stp x19, x20, [sp, #0x30];
+        // str x21, [sp, #0x40]; stp x29, x30, [sp, #0x60]; add x29, sp, #0x60
+        let t = words(&[
+            0x6DB9_27E8,
+            0x6D01_2FEA,
+            0xFD00_13EC,
+            0xA903_53F3,
+            0xF900_23F5,
+            0xA906_7BFD,
+            0x9101_83FD,
+        ]);
+        let codes = [
+            0xE2, 12, 0x4C, 0xD0, 0x88, 0xC8, 0x06, 0xDD, 0x04, 0xD8, 0x82, 0xDA, 0x0D,
+        ];
+        assert_eq!(prologue_codes(&t, 0, 28).as_deref(), Some(&codes[..]));
+        // The single and pair pre-indexed forms: str d8, [sp, #-0x20]! and
+        // stp x19, x20, [sp, #-0x20]!, then stp x29, x30, [sp, #0x10];
+        // add x29, sp, #0x10.
+        for (first, code) in [(0xFC1E_0FE8, [0xDE, 0x03]), (0xA9BE_53F3, [0xCC, 0x03])] {
+            let t = words(&[first, 0xA901_7BFD, 0x9100_43FD]);
+            let want = [0xE2, 2, 0x42, code[0], code[1]];
+            assert_eq!(prologue_codes(&t, 0, 12).as_deref(), Some(&want[..]));
+        }
+        // No code names the pair x20, x22.
+        let t = words(&[0xA9BE_53F3, 0xA901_5BF4, 0xA902_7BFD, 0x9100_83FD]);
+        assert_eq!(prologue_codes(&t, 0, 16), None);
     }
 }

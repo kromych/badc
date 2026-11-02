@@ -853,7 +853,7 @@ pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame) -> i64 
     if off >= 2 {
         param_home_off((off - 2) as usize, func, frame)
     } else {
-        c5_slot_to_fp_offset(off, 16, frame.canary_bytes)
+        c5_slot_to_fp_offset(off, 16, frame.locals_shift())
     }
 }
 

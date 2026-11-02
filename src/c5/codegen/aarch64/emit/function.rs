@@ -211,9 +211,9 @@ pub(crate) fn emit_function(
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
         return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
-    if frame.canary_bytes > 0 {
+    if frame.locals_shift() > 0 {
         cx.local_shift_bytes
-            .insert(func.ent_pc, frame.canary_bytes);
+            .insert(func.ent_pc, frame.locals_shift());
     }
     if func.n_params > 0 {
         cx.param_frame_offsets.insert(
@@ -1693,80 +1693,50 @@ fn emit_struct_param_scatter(
 /// either way). The region sits just above sp, within reach of the pair
 /// imm7 and the scaled imm12, until a wide outgoing area pushes the
 /// offsets past the pair forms; the saves then go through x16, which the
-/// allocation left free. With `fold != 0` (see `frame_fold_bytes`) the
-/// first save pre-indexes the whole allocation, frame plus the fp/lr
-/// pair, in place of the prologue's `stp x29, x30, [sp, #-16]!` /
-/// `sub sp`; every other offset is unchanged.
-fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
-    let mut alloc_pending = fold != 0;
+/// allocation left free. With `pre != 0` the block starts at sp: the first
+/// save pre-indexes `pre` bytes, the folded frame (`frame_fold_bytes`) or
+/// the top block (`Frame::saves_top`) plus the fp/lr pair, in place of the
+/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`.
+fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, pre: u32) {
+    let plan = save_plan(alloc, frame);
+    debug_assert!(
+        pre == 0 || !plan.is_empty(),
+        "a pre-index with no callee save"
+    );
+    let (sbase, shift) = save_base(code, alloc, frame, pre);
+    for (i, s) in plan.into_iter().enumerate() {
+        let off = s.off + shift;
+        let neg = -(pre as i32);
+        let word = match (s.fp, s.r2, i == 0 && pre != 0) {
+            (true, Some(r2), true) => enc_stp_d_pre(s.r, r2, Reg(31), neg),
+            (true, None, true) => enc_str_d_pre(s.r, Reg(31), neg),
+            (false, Some(r2), true) => enc_stp_pre(Reg(s.r), Reg(r2), Reg(31), neg),
+            (false, None, true) => enc_str_pre(Reg(s.r), Reg(31), neg),
+            (true, Some(r2), false) => enc_stp_d_off(s.r, r2, sbase, off as i32),
+            (true, None, false) => enc_str_d_imm(s.r, sbase, off),
+            (false, Some(r2), false) => enc_stp_off(Reg(s.r), Reg(r2), sbase, off as i32),
+            (false, None, false) => enc_str_imm(Reg(s.r), sbase, off),
+        };
+        emit(code, word);
+    }
+}
+
+/// The register and offset the save block addresses from: sp itself for a
+/// block at sp, else sp plus the outgoing area, carried in x16 once a save
+/// offset could leave the pair forms' reach (the fold caps the frame at
+/// 480, well inside it).
+fn save_base(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, pre: u32) -> (Reg, u32) {
     let out = frame.outgoing_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-    // The base register carries the bottom's `out` shift once a save's
-    // offset could leave the pair forms' reach (the fold caps the frame
-    // at 480, well inside it).
-    let (sbase, shift) = if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
+    if frame.saves_top != 0 {
+        (Reg(31), 0)
+    } else if pre == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
         emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
-        (Reg(16), 0u32)
+        (Reg(16), 0)
     } else {
         (Reg(31), out)
-    };
-    let fp = &alloc.fp_used;
-    let mut i = 0usize;
-    while i + 1 < fp.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(
-                code,
-                enc_stp_d_pre(fp[i], fp[i + 1], Reg(31), -(fold as i32)),
-            );
-        } else {
-            emit(
-                code,
-                enc_stp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
-            );
-        }
-        i += 2;
     }
-    if i < fp.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_d_pre(fp[i], Reg(31), -(fold as i32)));
-        } else {
-            emit(code, enc_str_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
-        }
-    }
-    let gpr = &alloc.gpr_used;
-    let mut i = 0usize;
-    while i + 1 < gpr.len() {
-        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
-        if core::mem::take(&mut alloc_pending) {
-            emit(
-                code,
-                enc_stp_pre(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), -(fold as i32)),
-            );
-        } else {
-            emit(code, enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
-        }
-        i += 2;
-    }
-    if i < gpr.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_pre(Reg(gpr[i]), Reg(31), -(fold as i32)));
-        } else {
-            let off = saved_fpr_bytes + (i as u32) * 8 + shift;
-            emit(code, enc_str_imm(Reg(gpr[i]), sbase, off));
-        }
-    }
-    if frame.uses_x19 {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_pre(Reg(19), Reg(31), -(fold as i32)));
-        } else {
-            emit(
-                code,
-                enc_str_imm(Reg(19), sbase, saved_fpr_bytes + saved_gpr_bytes + shift),
-            );
-        }
-    }
-    debug_assert!(!alloc_pending, "frame fold requested with no callee save");
 }
 
 /// The stack-protector sequences' scratch: x16 / x17, free at the end
@@ -1834,11 +1804,7 @@ fn emit_canary_store(
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
     emit(
         code,
-        super::encode::enc_stur(
-            CANARY_SCRATCH,
-            Reg(29),
-            super::ssa::emit_common::CANARY_SLOT_OFF,
-        ),
+        super::encode::enc_stur(CANARY_SCRATCH, Reg(29), frame.canary_slot_off()),
     );
     emit(code, enc_movz(CANARY_SCRATCH, 0, 0));
 }
@@ -1859,11 +1825,7 @@ fn emit_canary_check(
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
     emit(
         code,
-        super::encode::enc_ldur(
-            CANARY_SCRATCH2,
-            Reg(29),
-            super::ssa::emit_common::CANARY_SLOT_OFF,
-        ),
+        super::encode::enc_ldur(CANARY_SCRATCH2, Reg(29), frame.canary_slot_off()),
     );
     emit(
         code,
@@ -1907,78 +1869,41 @@ fn restores_regs(alloc: &Allocation, frame: Frame) -> bool {
 }
 
 /// Restore what `emit_prologue_saved_regs` saved, in mirror order so the
-/// offset-0 access comes last and, with `fold != 0`, post-indexes the
-/// whole frame plus the fp/lr pair back. The unfolded shape of a frame
+/// offset-0 access comes last and, with `post != 0`, post-indexes the
+/// block plus the fp/lr pair back. The unfolded bottom block of a frame
 /// with a locals base addresses from x19, which then loads last.
-fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-    let out = frame.outgoing_bytes;
-    // The locals base, which holds the frame bottom; else the mirror of the
+fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, post: u32) {
+    // The locals base holds the frame bottom; else the mirror of the
     // prologue's base selection, x16 being free here (the canary check
     // clears it, the dynamic-sp restore last used it).
-    let (sbase, shift) = if fold == 0 && frame.local_base {
-        (Reg(19), out)
-    } else if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
-        emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
-        (Reg(16), 0u32)
+    let (sbase, shift) = if post == 0 && frame.local_base {
+        (Reg(19), frame.outgoing_bytes)
     } else {
-        (Reg(31), out)
+        save_base(code, alloc, frame, post)
     };
-    let gpr = &alloc.gpr_used;
-    let x19_off = saved_fpr_bytes + saved_gpr_bytes + shift;
-    if frame.uses_x19 && sbase != Reg(19) {
-        if x19_off == 0 && fold != 0 {
-            emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_imm(Reg(19), sbase, x19_off));
+    let plan = save_plan(alloc, frame);
+    let mut x19_off = None;
+    for (i, s) in plan.into_iter().enumerate().rev() {
+        let off = s.off + shift;
+        if !s.fp && s.r == 19 && sbase == Reg(19) {
+            x19_off = Some(off);
+            continue;
         }
+        let back = post as i32;
+        let word = match (s.fp, s.r2, i == 0 && post != 0) {
+            (true, Some(r2), true) => enc_ldp_d_post(s.r, r2, Reg(31), back),
+            (true, None, true) => enc_ldr_d_post(s.r, Reg(31), back),
+            (false, Some(r2), true) => enc_ldp_post(Reg(s.r), Reg(r2), Reg(31), back),
+            (false, None, true) => enc_ldr_post(Reg(s.r), Reg(31), back),
+            (true, Some(r2), false) => enc_ldp_d_off(s.r, r2, sbase, off as i32),
+            (true, None, false) => enc_ldr_d_imm(s.r, sbase, off),
+            (false, Some(r2), false) => enc_ldp_off(Reg(s.r), Reg(r2), sbase, off as i32),
+            (false, None, false) => enc_ldr_imm(Reg(s.r), sbase, off),
+        };
+        emit(code, word);
     }
-    let mut i = gpr.len();
-    if i % 2 == 1 {
-        i -= 1;
-        let off = saved_fpr_bytes + (i as u32) * 8 + shift;
-        if off == 0 && fold != 0 {
-            emit(code, enc_ldr_post(Reg(gpr[i]), Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_imm(Reg(gpr[i]), sbase, off));
-        }
-    }
-    while i >= 2 {
-        i -= 2;
-        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
-        if off == 0 && fold != 0 {
-            emit(
-                code,
-                enc_ldp_post(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), fold as i32),
-            );
-        } else {
-            emit(code, enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
-        }
-    }
-    let fp = &alloc.fp_used;
-    let mut i = fp.len();
-    if i % 2 == 1 {
-        i -= 1;
-        if i == 0 && fold != 0 {
-            emit(code, enc_ldr_d_post(fp[i], Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
-        }
-    }
-    while i >= 2 {
-        i -= 2;
-        if i == 0 && fold != 0 {
-            emit(code, enc_ldp_d_post(fp[i], fp[i + 1], Reg(31), fold as i32));
-        } else {
-            emit(
-                code,
-                enc_ldp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
-            );
-        }
-    }
-    if sbase == Reg(19) {
-        emit(code, enc_ldr_imm(Reg(19), Reg(19), x19_off));
+    if let Some(off) = x19_off {
+        emit(code, enc_ldr_imm(Reg(19), Reg(19), off));
     }
 }
 
@@ -1989,25 +1914,19 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
 /// The scaled imm7 pair forms reach 504, so a pair-first frame folds up
 /// to 480; a single-register bottom save takes the unscaled imm9 (255)
 /// and folds up to 224.
-fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
+pub(super) fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
     // A realigning function keeps the unfolded shape so
     // `restore_dynamic_sp` returns sp to the static frame bottom first.
     // The folded shape's first save lands at sp + 0, the bytes the
     // outgoing area claims, so a frame with one keeps the unfolded shape.
-    if frame.realign_align != 0 || frame.reserves_outgoing() {
+    if frame.realign_align != 0 || frame.reserves_outgoing() || frame.saves_top != 0 {
         return 0;
     }
-    let n_bottom = if !alloc.fp_used.is_empty() {
-        alloc.fp_used.len()
-    } else if !alloc.gpr_used.is_empty() {
-        alloc.gpr_used.len()
-    } else if frame.uses_x19 {
-        1
-    } else {
+    let Some(first) = save_plan(alloc, frame).first().copied() else {
         return 0;
     };
     debug_assert!(frame.frame_bytes >= 16, "saves imply a non-empty frame");
-    let limit = if n_bottom >= 2 { 480 } else { 224 };
+    let limit = if first.r2.is_some() { 480 } else { 224 };
     if frame.frame_bytes <= limit {
         frame.frame_bytes
     } else {
@@ -2018,13 +1937,17 @@ fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
 /// The frame record, fp, the frame allocation and the callee saves. The
 /// folded shape allocates everything with the first save's pre-index and
 /// keeps fp and every offset identical to the unfolded
-/// `stp fp/lr; mov fp, sp; sub sp` shape.
+/// `stp fp/lr; mov fp, sp; sub sp` shape. A top save block is allocated
+/// the same way, and the rest of the frame after fp is set.
 fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    let fold = frame_fold_bytes(alloc, frame);
-    if fold != 0 {
-        emit_prologue_saved_regs(code, alloc, frame, fold + 16);
-        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), fold as i32));
-        emit(code, enc_add_imm(Reg(29), Reg(31), fold));
+    let block = frame_fold_bytes(alloc, frame).max(frame.saves_top);
+    if block != 0 {
+        emit_prologue_saved_regs(code, alloc, frame, block + 16);
+        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), block as i32));
+        emit(code, enc_add_imm(Reg(29), Reg(31), block));
+        if frame.frame_bytes > block {
+            emit_stack_alloc(code, frame.frame_bytes - block, Some(Reg(16)));
+        }
         return;
     }
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
@@ -2116,7 +2039,13 @@ pub(super) fn emit_return(
     // The folded shape restores fp/lr first (the lr load feeds `ret`) and
     // tears the frame down with the last restore's post-index.
     let fold = frame_fold_bytes(alloc, frame);
-    if fold != 0 {
+    if frame.saves_top != 0 {
+        // sp from fp in every frame, as the unwind codes recover it.
+        let top = frame.saves_top;
+        emit(code, enc_sub_imm(Reg(31), Reg(29), top));
+        emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), top as i32));
+        emit_epilogue_restore_regs(code, alloc, frame, top + 16);
+    } else if fold != 0 {
         if frame.dynamic_sp {
             restore_dynamic_sp(code, frame);
         }

@@ -83,9 +83,92 @@ pub(crate) struct Frame {
     /// instruction. The modulo and cursor `va_arg` lowerings that take x19
     /// as a third scratch push and pop it around the use.
     pub local_base: bool,
+    /// Bytes of the callee-saved block directly below the frame record, 0
+    /// where the saves sit at the frame bottom. Windows on ARM64 places them
+    /// there when the frame does not fold, so the prolog stores them before
+    /// it sets x29 and its unwind codes describe each one.
+    pub saves_top: u32,
+    /// A save pair names consecutive registers, the only pairs the Windows
+    /// ARM64 unwind codes `save_regp` and `save_fregp` describe.
+    pub consecutive_pairs: bool,
+}
+
+/// One callee save: `r` alone, or with `r2` in the slot above it as one
+/// `stp`; a d-register when `fp`; at byte `off` of the save block.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Save {
+    pub fp: bool,
+    pub r: u8,
+    pub r2: Option<u8>,
+    pub off: u32,
+}
+
+/// The callee saves in slot order: the FP registers, the GPRs, then x19
+/// in its own 16-byte slot. Under `consecutive_pairs` each list is sorted
+/// and only consecutive registers pair.
+pub(super) fn save_plan(alloc: &Allocation, frame: Frame) -> Vec<Save> {
+    let mut plan = Vec::new();
+    let mut base = 0u32;
+    for (fp, list) in [(true, &alloc.fp_used), (false, &alloc.gpr_used)] {
+        let mut regs = list.clone();
+        if frame.consecutive_pairs {
+            regs.sort_unstable();
+        }
+        let mut i = 0usize;
+        while i < regs.len() {
+            let pair =
+                i + 1 < regs.len() && (!frame.consecutive_pairs || regs[i + 1] == regs[i] + 1);
+            plan.push(Save {
+                fp,
+                r: regs[i],
+                r2: pair.then(|| regs[i + 1]),
+                off: base + i as u32 * 8,
+            });
+            i += 1 + usize::from(pair);
+        }
+        base += super::ssa::emit_common::slots16(regs.len() as u32);
+    }
+    if frame.uses_x19 {
+        plan.push(Save {
+            fp: false,
+            r: 19,
+            r2: None,
+            off: base,
+        });
+    }
+    plan
 }
 
 impl Frame {
+    /// fp-relative shift of the locals: the save block above them, then the
+    /// canary region.
+    pub(super) fn locals_shift(self) -> u32 {
+        self.saves_top + self.canary_bytes
+    }
+
+    /// fp-relative offset of the canary slot, the top of its region.
+    pub(super) fn canary_slot_off(self) -> i32 {
+        super::ssa::emit_common::CANARY_SLOT_OFF - self.saves_top as i32
+    }
+
+    /// Move the callee saves from the frame bottom to directly below the
+    /// frame record; every fp-relative region under them moves down by
+    /// their size, and `frame_bytes` keeps its total.
+    fn lift_saves(&mut self) {
+        let s = self.parts.saved_regs;
+        self.saves_top = s;
+        self.alloc_spill_base += s;
+        for off in [
+            &mut self.param_cells_off,
+            &mut self.asm_scratch_off,
+            &mut self.align_region_off,
+        ] {
+            if *off != 0 {
+                *off -= i64::from(s);
+            }
+        }
+    }
+
     /// sp keeps its prologue value across the body and the prologue
     /// reserved the outgoing argument area at `[sp, #0]`.
     pub(crate) fn reserves_outgoing(self) -> bool {
@@ -242,9 +325,17 @@ pub(crate) fn compute_frame(
         },
         outgoing_bytes,
         local_base,
+        saves_top: 0,
+        consecutive_pairs: target == Target::WindowsAarch64,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
+    // Microsoft, "ARM64 exception handling": the unwind codes recover sp
+    // from x29 first, so a save they describe precedes the x29 setup.
+    if frame.consecutive_pairs && frame.parts.saved_regs != 0 && frame_fold_bytes(alloc, frame) == 0
+    {
+        frame.lift_saves();
+    }
     frame
 }
 

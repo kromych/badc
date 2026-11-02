@@ -17951,3 +17951,101 @@ fn a_member_reached_through_a_packed_aggregate_records_its_alignment() {
         "{aligns:?}"
     );
 }
+
+/// The callee-saved registers the `save_*` codes in `codes` name, x19-x28
+/// as 19..=28 and d8-d15 as 108..=115 (Microsoft, "ARM64 exception
+/// handling").
+fn a64_codes_save(codes: &[u8]) -> alloc::vec::Vec<u8> {
+    let mut regs = alloc::vec::Vec::new();
+    let mut i = 0;
+    while i < codes.len() {
+        let b = codes[i];
+        let w = (u16::from(b) << 8) | u16::from(*codes.get(i + 1).unwrap_or(&0));
+        let save = match b {
+            0x20..=0x3F => Some((19, true)),
+            0xC8..=0xCF => Some((19 + ((w >> 6) & 15) as u8, true)),
+            0xD0..=0xD3 => Some((19 + ((w >> 6) & 15) as u8, false)),
+            0xD4..=0xD5 => Some((19 + ((w >> 5) & 15) as u8, false)),
+            0xD8..=0xDB => Some((108 + ((w >> 6) & 7) as u8, true)),
+            0xDC..=0xDD => Some((108 + ((w >> 6) & 7) as u8, false)),
+            0xDE => Some((108 + ((w >> 5) & 7) as u8, false)),
+            _ => None,
+        };
+        if let Some((r, pair)) = save {
+            regs.push(r);
+            if pair {
+                regs.push(r + 1);
+            }
+        }
+        i += match b {
+            0xC0..=0xDF | 0xE2 => 2,
+            0xE0 => 4,
+            _ => 1,
+        };
+    }
+    regs.sort_unstable();
+    regs
+}
+
+/// The callee-saved registers `w` stores through sp, numbered as in
+/// [`a64_codes_save`].
+fn a64_callee_stores(w: u32) -> alloc::vec::Vec<u8> {
+    let (rt, rn, rt2) = (w & 31, (w >> 5) & 31, (w >> 10) & 31);
+    let pair = w & 0x3A40_0000 == 0x2800_0000;
+    let single = w & 0x3B40_0000 == 0x3900_0000 || w & 0x3B60_0000 == 0x3800_0000;
+    let simd = w & (1 << 26) != 0;
+    let name = |r: u32| match (simd, r) {
+        (false, 19..=28) => Some(r as u8),
+        (true, 8..=15) => Some(100 + r as u8),
+        _ => None,
+    };
+    let regs = match (rn, pair, single) {
+        (31, true, _) => [name(rt), name(rt2)],
+        (31, false, true) => [name(rt), None],
+        _ => [None, None],
+    };
+    regs.into_iter().flatten().collect()
+}
+
+/// Windows on ARM64: the prolog stores every callee-saved register before
+/// `add x29`, and its unwind codes name each one; a frame that folds keeps
+/// the block at its bottom, a larger one directly below the frame record.
+#[test]
+fn win_arm64_unwind_codes_name_every_callee_save() {
+    const SRC: &str = "long h(long); double g(double); void snk(char *);\n\
+        long kept(long a, long b, double x, double y) {\n\
+          long c = h(a); double z = g(x);\n\
+          return c + a + b + (long)(x * y * z);\n\
+        }\n\
+        long wide(long a, long b, double x, double y) {\n\
+          char buf[8192]; snk(buf);\n\
+          long c = h(a); double z = g(x);\n\
+          return c + a + b + buf[a & 7] + (long)(x * y * z);\n\
+        }\n";
+    let obj = relocatable_object(SRC, crate::Target::WindowsAarch64);
+    for name in ["kept", "wide"] {
+        let code = function_bytes(&obj, name);
+        let words = function_words(&obj, name);
+        let codes = crate::c5::object::arm64_unwind::prologue_codes(&code, 0, code.len() as u32)
+            .unwrap_or_else(|| panic!("`{name}`: no codes for {words:08x?}"));
+        // `add x29, sp, #k` ends the prolog.
+        let end = (words.iter())
+            .position(|w| w & 0xFF80_001F == 0x9100_001D)
+            .unwrap_or_else(|| panic!("`{name}`: no add x29 in {words:08x?}"));
+        let mut stored: alloc::vec::Vec<u8> = words[..end]
+            .iter()
+            .flat_map(|&w| a64_callee_stores(w))
+            .collect();
+        stored.sort_unstable();
+        assert!(stored.len() >= 4, "`{name}`: {words:08x?}");
+        assert_eq!(a64_codes_save(&codes), stored, "`{name}`: {codes:02x?}");
+        let late: alloc::vec::Vec<u8> = words[end..]
+            .iter()
+            .flat_map(|&w| a64_callee_stores(w))
+            .collect();
+        assert!(
+            late.is_empty(),
+            "`{name}` saves {late:?} after x29: {words:08x?}"
+        );
+    }
+}

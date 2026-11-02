@@ -123,6 +123,34 @@ fn calling_a_forged_code_pointer_is_refused() {
     );
 }
 
+/// GCC's labels as values: `goto *` must reach a label of the function
+/// that runs it. An integer whose bits decode to the entry block ran the
+/// function again forever; one decoding past the last block indexed out
+/// of range. A label of another function, a label's address moved by a
+/// byte, and the block after the label's are no label addresses either.
+#[test]
+fn a_computed_goto_to_a_value_that_is_no_label_address_is_refused() {
+    let elsewhere = "void *other;\n\
+        void take(void) { other = &&there; there: return; }\n";
+    for (setup, operand) in [
+        ("", "(void *)(long)12345"),
+        ("", "(void *)(long)(1 << 30)"),
+        ("take();", "other"),
+        ("", "(char *)&&here + 1"),
+        ("", "(char *)&&here + (1 << 20)"),
+    ] {
+        let src = format!(
+            "{elsewhere}int main(void) {{ {setup} void *p = {operand}; goto *p; \
+             here: return 0; }}\n"
+        );
+        let err = Vm::new(compile_str(&src)).run().expect_err(operand);
+        assert!(
+            err.to_string().contains("is not the address of a label"),
+            "{operand}: {err}"
+        );
+    }
+}
+
 #[test]
 fn negative_size_argument_is_caught() {
     // memset(p, 0, -1) used to walk the address space (and accidentally

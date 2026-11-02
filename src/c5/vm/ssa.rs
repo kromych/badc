@@ -41,9 +41,14 @@ pub(super) fn code_position(func_idx: usize, block: usize, offset: usize) -> i64
     CODE_ADDR_TAG | ((func_idx as i64) << 40) | ((block as i64) << 20) | offset as i64
 }
 
-/// The block a code position lies in.
-fn code_position_block(position: i64) -> usize {
-    ((position >> 20) & 0xF_FFFF) as usize
+/// The block of `func`, at `func_idx` in `Program::funcs`, that a `goto *`
+/// to `position` enters: a block whose address `Inst::BlockAddr` or a
+/// `&&label` initializer gives, which `computed_goto_targets` lists. `None`
+/// for any other value, which no label address of this function equals.
+fn label_block(func: &FunctionSsa, func_idx: usize, position: i64) -> Option<usize> {
+    let block = ((position >> 20) & 0xF_FFFF) as usize;
+    let label = func.computed_goto_targets.contains(&(block as u32));
+    (label && position == code_position(func_idx, block, 0)).then_some(block)
 }
 
 /// `Inst::ImmExtCode` results carry this bit so `Inst::CallIndirect`
@@ -946,9 +951,16 @@ fn run_func<H: Host>(
                 frame.block_idx = target as usize;
             }
             Terminator::GotoIndirect { target } => {
-                // `target` holds the code position `Inst::BlockAddr`
-                // materialized for the label's block.
-                frame.block_idx = code_position_block(frame.regs[target as usize]);
+                // GCC's labels as values: the operand must be the address
+                // of a label in this function; any other jump is undefined
+                // and stops the run.
+                let raw = frame.regs[target as usize];
+                let Some(block) = label_block(frame.func, frame.func_idx, raw) else {
+                    break Err(C5Error::Runtime(format!(
+                        "vm_ssa: goto *: 0x{raw:x} is not the address of a label in this function"
+                    )));
+                };
+                frame.block_idx = block;
             }
             Terminator::JumpTable { idx, table } => {
                 // The lowering's bounds check proves the index in

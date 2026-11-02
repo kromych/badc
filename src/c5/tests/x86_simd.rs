@@ -504,6 +504,46 @@ fn the_x86_system_builtins_emit_their_instruction() {
     }
 }
 
+/// `<cpuid.h>` executes CPUID, as gcc's does: `__get_cpuid_max` emits the
+/// instruction on both x86-64 targets with the range's first leaf in eax,
+/// rather than folding to a constant. The interpreter runs CPUID as zero in
+/// every register, so there the maximum is 0 and `__get_cpuid` rejects the
+/// leaf, leaving its outputs as they were.
+#[cfg(feature = "full")]
+#[test]
+fn cpuid_h_executes_the_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "#include <cpuid.h>\n\
+        unsigned int basic(unsigned int *sig) { return __get_cpuid_max(0, sig); }\n\
+        int main(void) {\n\
+            unsigned int sig = 7, a = 9, b = 9, c = 9, d = 9;\n\
+            if (basic(&sig) != 0 || sig != 0) return 1;\n\
+            if (__get_cpuid(1, &a, &b, &c, &d) || a != 9 || d != 9) return 2;\n\
+            return bit_SSE2 == (1 << 26) && signature_INTEL_ebx == 0x756e6547 ? 0 : 3;\n\
+        }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        assert!(
+            bytes.windows(2).any(|w| w == [0x0f, 0xa2]),
+            "{target:?}: cpuid not in the emitted code"
+        );
+        let program = super::compile_str_bare_for(src, target);
+        assert_eq!(
+            super::Vm::new(program).run().expect("interpreted run"),
+            0,
+            "{target:?}: the interpreter's CPUID"
+        );
+    }
+}
+
 // ------------------------------------------------------------------
 // Operand rules.
 // ------------------------------------------------------------------

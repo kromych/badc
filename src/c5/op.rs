@@ -290,6 +290,10 @@ pub enum Intrinsic {
     /// signal handler on the same thread needs no instruction on either
     /// target; the intrinsic is the compiler barrier.
     AtomicSignalFence = 82,
+    /// Read of a file-scope `register T name asm("x18")` variable where the
+    /// OS ABI reserves x18 (Windows and Darwin on AArch64): the register at
+    /// the width of `T`. No arguments. The interpreter has no such register.
+    PlatformRegister = 83,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -448,6 +452,7 @@ impl Intrinsic {
             80 => Some(Intrinsic::AtomicAcquireFence),
             81 => Some(Intrinsic::AtomicReleaseFence),
             82 => Some(Intrinsic::AtomicSignalFence),
+            83 => Some(Intrinsic::PlatformRegister),
             _ => None,
         }
     }

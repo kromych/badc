@@ -1598,13 +1598,14 @@ impl Compiler {
         } else if class == Token::Fun as i64 || class == Token::Sys as i64 {
             self.parse_function_designator(id_idx)
         } else if class == Token::Loc as i64
-            && matches!(
-                self.symbols[id_idx].asm_register,
-                Some(
-                    crate::c5::symbol::AsmRegister::StackPointer
-                        | crate::c5::symbol::AsmRegister::FramePointer
-                )
-            )
+            && (self.symbols[id_idx].is_global_register
+                || matches!(
+                    self.symbols[id_idx].asm_register,
+                    Some(
+                        crate::c5::symbol::AsmRegister::StackPointer
+                            | crate::c5::symbol::AsmRegister::FramePointer
+                    )
+                ))
         {
             self.parse_register_variable(id_idx)
         } else {
@@ -2684,8 +2685,8 @@ impl Compiler {
     }
 
     fn parse_register_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
-        // A stack- or frame-pointer register variable reads as a register
-        // move; a write has no meaning.
+        // A stack-, frame- or platform-register variable reads as a
+        // register move; badc takes no write to one.
         if self.lex.tk == Token::Assign
             || self.lex.tk == Token::AssignOp
             || self.lex.tk == Token::Inc
@@ -2707,10 +2708,17 @@ impl Compiler {
             Some(crate::c5::symbol::AsmRegister::FramePointer) => {
                 crate::c5::op::Intrinsic::FrameAddress
             }
+            Some(crate::c5::symbol::AsmRegister::Gp(_)) => {
+                crate::c5::op::Intrinsic::PlatformRegister
+            }
             _ => crate::c5::op::Intrinsic::StackPointer,
         };
+        // The 32-bit view of the platform register (`w18`) is its low half:
+        // the 64-bit read, converted.
+        let narrow =
+            kind == crate::c5::op::Intrinsic::PlatformRegister && self.size_of_type(self.ty) < 8;
         let args = alloc::vec::Vec::new();
-        let intr_ty = self.ty;
+        let intr_ty = if narrow { Ty::LongLong as i64 } else { self.ty };
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(
             super::super::ast::Expr::Intrinsic {
@@ -2721,6 +2729,9 @@ impl Compiler {
             pos,
         );
         self.ast_acc = Some(id);
+        if narrow {
+            self.ast_emit_cast(id, self.ty);
+        }
         Ok(())
     }
 

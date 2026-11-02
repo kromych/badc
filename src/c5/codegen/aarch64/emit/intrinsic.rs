@@ -120,6 +120,9 @@ pub(super) fn emit_intrinsic(
         I::FrameAddress => emit_frame_register(code, dst, frame, Reg(29), "FrameAddress"),
         // A `register T v asm("sp")` read; `add` reads register 31 as sp.
         I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
+        // A `register T v asm("x18")` read: the allocator never assigns
+        // x18, so it holds the value the OS put there.
+        I::PlatformRegister => emit_frame_register(code, dst, frame, Reg(18), "PlatformRegister"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
         // The walker lowers the bit-count and byte-swap builtins to
         // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
@@ -192,6 +195,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::AArch64DcCvau
         | I::AArch64IcIvau
         | I::AArch64ReadCacheType
+        | I::PlatformRegister
         | I::Sqrt
         | I::Sqrtf
         | I::Fabs

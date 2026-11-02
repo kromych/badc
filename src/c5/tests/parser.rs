@@ -2650,7 +2650,7 @@ fn file_scope_register_asm_binding() {
     );
     expect_compile_error(
         &format!("register long x asm(\"{gp}\"); int main(void) {{ return (int)x; }}"),
-        "supported for the stack and frame pointer only",
+        &format!("register `{gp}` unsuitable for global register variables on this target"),
     );
     expect_compile_error(
         &format!("static register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
@@ -2684,6 +2684,93 @@ fn file_scope_register_asm_binding() {
             .map(crate::c5::symbol::Symbol::link_name),
         Some("renamed")
     );
+}
+
+/// Windows and Darwin reserve x18, AAPCS64's platform register (Windows
+/// keeps the TEB pointer there), so a file-scope variable may name it, as
+/// gcc and clang allow, and a read is a move from x18 (`add x0, x18, #0`).
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_platform_register_variable_reads_x18() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "register void *teb __asm__(\"x18\");\nvoid *current(void) { return teb; }\n";
+    let move_from_x18 = 0x9100_0240u32.to_le_bytes();
+    for target in [Target::WindowsAarch64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj = emit_native_with_options(&program, target, nopts).expect("emit");
+        assert!(
+            obj.windows(4).any(|w| w == move_from_x18),
+            "{target:?}: no move from x18"
+        );
+    }
+}
+
+#[test]
+fn a_file_scope_register_variable_names_the_reserved_platform_register() {
+    // clang refuses every register a function may allocate, x18 on Linux
+    // included, in the words badc uses.
+    use crate::Target;
+    // The 32-bit view.
+    compile_for_target(
+        "register unsigned int lo asm(\"w18\"); int main(void) { return (int)lo; }",
+        Target::WindowsAarch64,
+    )
+    .expect("w18");
+    let unsuitable = "unsuitable for global register variables on this target";
+    for (target, decl, needle) in [
+        (
+            Target::LinuxAarch64,
+            "register void *r asm(\"x18\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x17\");",
+            unsuitable,
+        ),
+        (
+            Target::MacOSAarch64,
+            "register void *r asm(\"x9\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsX64,
+            "register void *r asm(\"rbx\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x18\") = 0;",
+            "cannot be initialized",
+        ),
+        (
+            Target::WindowsAarch64,
+            "register char r asm(\"x18\");",
+            "size of register `x18` does not match variable size",
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x18\"); void w(void) { r = 0; }",
+            "cannot write register variable",
+        ),
+        // A block-scope binding is an operand binding, which the emitters
+        // cannot give x18.
+        (
+            Target::WindowsAarch64,
+            "void l(void) { register void *r asm(\"x18\"); (void)r; }",
+            "reserved and cannot hold a register variable",
+        ),
+    ] {
+        let err = compile_for_target(decl, target).expect_err(decl);
+        assert!(err.contains(needle), "{target:?} {decl}: {err}");
+    }
 }
 
 #[test]

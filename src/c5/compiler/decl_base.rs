@@ -742,7 +742,8 @@ impl Compiler {
                 "an explicit-register variable cannot be `static` or `extern`",
             ));
         }
-        Ok(Some(self.resolve_asm_register(&name)?))
+        // Past the check above, static storage duration means file scope.
+        Ok(Some(self.resolve_asm_register(&name, static_duration)?))
     }
 
     /// The block-scope form of the suffix: C99 6.2.4 gives an object there
@@ -776,25 +777,19 @@ impl Compiler {
     }
 
     /// `register T name asm("reg")` at file scope: a GNU global register
-    /// variable. Stack- and frame-pointer bindings are supported; reads
-    /// anywhere in the unit compile into direct register moves, the name
-    /// holds no storage and emits no symbol. The declaration may repeat
-    /// across the unit (headers re-include it) as long as the register
-    /// matches. TODO: general-purpose global register variables (the
-    /// register must be reserved in every function's allocation).
+    /// variable on a register no function allocates, which
+    /// [`Self::resolve_asm_register`] admitted. Reads anywhere in the unit
+    /// compile into direct register moves, the name holds no storage and
+    /// emits no symbol. The declaration may repeat across the unit (headers
+    /// re-include it) as long as the register matches. TODO: global
+    /// register variables on an allocatable register, which gcc takes out
+    /// of every function's allocation.
     pub(super) fn bind_file_scope_register(
         &mut self,
         id_idx: usize,
         ty: i64,
         reg: crate::c5::symbol::AsmRegister,
     ) -> Result<(), C5Error> {
-        use crate::c5::symbol::AsmRegister as R;
-        if !matches!(reg, R::StackPointer | R::FramePointer) {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "file-scope register variables are supported for the stack and frame pointer only",
-            ));
-        }
         // A function block-scope declarations left on the slot is a prior
         // declaration too.
         let prior_class = self.symbols[id_idx].class;
@@ -812,6 +807,23 @@ impl Compiler {
             }
         }
         self.check_register_asm_init(Some(reg))?;
+        if self.lex.tk == Token::Assign {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "a global register variable cannot be initialized",
+            ));
+        }
+        // The platform register is read at the variable's width, which its
+        // 64-bit `x18` and 32-bit `w18` views give an integer or pointer.
+        let fits = !super::types::is_struct_value_ty(ty)
+            && !super::types::is_float_ty(ty)
+            && matches!(self.size_of_type(ty), 4 | 8);
+        if matches!(reg, crate::c5::symbol::AsmRegister::Gp(_)) && !fits {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "size of register `x18` does not match variable size",
+            ));
+        }
         // Binds `Loc` without a `shadow_symbol`, so list it explicitly;
         // it stays bound past every scope exit.
         self.scope_bound.push(id_idx as u32);
@@ -844,11 +856,18 @@ impl Compiler {
     /// asm emitter picks its staging scratch around bound operands); on
     /// aarch64 the encoders stage large immediates and veneers through
     /// x16 / x17 unconditionally and x18 is the platform register on the
-    /// supported OS ABIs, so those three are rejected. Non-general-
-    /// purpose registers are rejected on both.
+    /// supported OS ABIs, so a block-scope binding of those three is
+    /// rejected. Non-general-purpose registers are rejected on both.
+    ///
+    /// A file-scope binding holds its register for the whole unit, so it
+    /// takes only a register no function allocates: the stack and frame
+    /// pointers, and x18 where the OS ABI reserves it. clang refuses every
+    /// other register with the message below; gcc takes the register out of
+    /// the unit's allocation, which badc does not do.
     pub(super) fn resolve_asm_register(
         &self,
         name: &str,
+        file_scope: bool,
     ) -> Result<crate::c5::symbol::AsmRegister, C5Error> {
         use crate::c5::symbol::AsmRegister as R;
         let n = name.trim_start_matches('%');
@@ -885,7 +904,7 @@ impl Compiler {
                             // x16 / x17 are the emitters' scratch pair; x18
                             // is the platform register on the supported
                             // OS ABIs.
-                            if (16..=18).contains(&i) {
+                            if !file_scope && (16..=18).contains(&i) {
                                 return Err(self.compile_err(Code::INVALID_DECLARATION, format!(
                                 "register `{n}` is reserved and cannot hold a register variable"
                             )));
@@ -917,7 +936,7 @@ impl Compiler {
                     _ => None,
                 }
             };
-        resolved.ok_or_else(|| {
+        let reg = resolved.ok_or_else(|| {
             self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(
@@ -925,7 +944,18 @@ impl Compiler {
                     self.target.id_str()
                 ),
             )
-        })
+        })?;
+        let reserved = match reg {
+            R::StackPointer | R::FramePointer => true,
+            R::Gp(i) => aarch64 && i == 18 && self.target.reserves_platform_register(),
+        };
+        if file_scope && !reserved {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("register `{n}` unsuitable for global register variables on this target"),
+            ));
+        }
+        Ok(reg)
     }
 
     /// `__auto_type` (GCC): the declared variable takes its

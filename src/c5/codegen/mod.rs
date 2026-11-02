@@ -360,6 +360,13 @@ impl Target {
         self.is_windows()
     }
 
+    /// Whether the OS ABI reserves x18, AAPCS64's platform register, so no
+    /// code may allocate it: Windows keeps the TEB pointer there and Darwin
+    /// reserves it. Linux leaves it a temporary.
+    pub fn reserves_platform_register(self) -> bool {
+        matches!(self, Target::WindowsAarch64 | Target::MacOSAarch64)
+    }
+
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.

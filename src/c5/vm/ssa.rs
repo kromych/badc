@@ -3557,6 +3557,11 @@ fn run_intrinsic(
             frame.regs[v as usize] = frame.stack_base as i64;
             Ok(())
         }
+        // The OS's value in x18 (the Windows TEB) has no interpreter
+        // counterpart.
+        Intrinsic::PlatformRegister => Err(C5Error::Runtime(
+            "vm_ssa: the platform register x18 is not modelled under --interp".to_string(),
+        )),
         Intrinsic::ReturnAddress => {
             // The return slot of a frame record: this frame's without an
             // operand, the walked-to frame's with one, as natively.

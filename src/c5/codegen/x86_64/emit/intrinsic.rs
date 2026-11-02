@@ -380,6 +380,7 @@ pub(super) fn emit_intrinsic(
         | I::Atomic128LoadEx
         | I::Atomic128StoreEx
         | I::Atomic128StoreInsert => fail("128-bit atomic asm shape is aarch64-only"),
+        I::PlatformRegister => fail("the platform register is aarch64-only"),
     }
 }
 
@@ -431,6 +432,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::Truncf => false,
         // No lowering on this target; `emit_intrinsic` refuses them.
         I::ConstantP
+        | I::PlatformRegister
         | I::SetjmpAArch64
         | I::LongjmpAArch64
         | I::Fma

@@ -834,6 +834,31 @@ fn matching_redeclaration_is_silent() {
     assert_eq!(Vm::new(prog).run().unwrap(), 7);
 }
 
+/// A repeated `extern __declspec(dllimport)` declaration of an object, as the
+/// WDK's headers write it, declares the same import: an `extern` declaration
+/// without an initializer is no definition (C99 6.9.2).
+#[test]
+fn a_repeated_dllimport_object_declaration_is_no_definition() {
+    let src = "extern __declspec(dllimport) char K;\n\
+               extern __declspec(dllimport) char K;\n\
+               extern __declspec(dllimport) void (*fp)(void);\n\
+               extern __declspec(dllimport) void (*fp)(void);\n\
+               int main(void) { fp(); return K; }\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let prog = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let imported: alloc::vec::Vec<&str> = (prog.symbols.iter())
+            .filter(|s| s.dllimport)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert!(
+            imported.contains(&"K") && imported.contains(&"fp"),
+            "{target:?}: {imported:?}"
+        );
+    }
+}
+
 /// `dllimport` follows gcc on the PE targets: a redeclaration without it
 /// drops it, a type or an inline function ignores it, dllexport overrides
 /// it, and a definition, internal linkage or an address constant is an

@@ -2332,6 +2332,20 @@ fn pragma_warning_enable_and_default_restore_reporting() {
     }
 }
 
+/// A level specifier (`3 : N`, MSVC's warning-level assignment) is
+/// accepted without effect, and a clause after it still applies.
+#[test]
+fn pragma_warning_level_specifiers_are_accepted() {
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let src = format!(
+        "#pragma warning(3: 4189 4100)\n\
+         #pragma warning(4: 4201; disable: 4068)\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
+}
+
 #[test]
 fn pragma_warning_error_raises_the_level_and_fails_the_pass() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");

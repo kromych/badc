@@ -507,7 +507,7 @@ impl Preprocessor {
                     format!(
                         "unrecognised `#pragma warning` action `{action}` \
                          -- expected `disable` / `enable` / `default` / \
-                         `error` / `once` / `suppress`"
+                         `error` / `once` / `suppress` / a level 1 to 4"
                     ),
                 );
                 continue;
@@ -1125,7 +1125,9 @@ pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
 }
 
 /// The actions MSVC's `#pragma warning(<action> : N ...)` takes, and
-/// the level each records for the rows the numbers resolve to.
+/// the level each records for the rows the numbers resolve to. A level
+/// specifier `1` to `4` moves the warnings to that MSVC verbosity level,
+/// which badc has no counterpart for, so it records nothing.
 #[derive(Clone, Copy)]
 enum WarningAction {
     Disable,
@@ -1134,6 +1136,7 @@ enum WarningAction {
     Error,
     Once,
     Suppress,
+    Level,
 }
 
 impl WarningAction {
@@ -1145,6 +1148,7 @@ impl WarningAction {
             "error" => WarningAction::Error,
             "once" => WarningAction::Once,
             "suppress" => WarningAction::Suppress,
+            "1" | "2" | "3" | "4" => WarningAction::Level,
             _ => return None,
         })
     }
@@ -1157,6 +1161,7 @@ impl WarningAction {
             WarningAction::Error => control.set_level(offset, code, Level::Error),
             WarningAction::Once => control.report_once(offset, code),
             WarningAction::Suppress => control.open_suppress(offset, code),
+            WarningAction::Level => {}
         }
     }
 }

@@ -29,14 +29,14 @@ typedef const char *PCCH;
 #define STATUS_UNSUCCESSFUL           ((NTSTATUS)0xC0000001L)
 #define STATUS_HV_NOT_PRESENT         ((NTSTATUS)0xC0351000L)
 #define STATUS_HV_FEATURE_UNAVAILABLE ((NTSTATUS)0xC035001EL)
-#define STATUS_HV_NO_RESOURCES        ((NTSTATUS)0xC0350005L)
+#define STATUS_HV_NO_RESOURCES        ((NTSTATUS)0xC035001DL)
 #define NT_SUCCESS(s)                 ((NTSTATUS)(s) >= 0)
 
 /* PAGE_READWRITE and the all-groups / debug-filter selectors the calls
  * below take as plain scalars. */
 #define PAGE_READWRITE          0x04
 #define ALL_PROCESSOR_GROUPS    0xFFFF
-#define DPFLTR_IHVDRIVER_ID     51
+#define DPFLTR_IHVDRIVER_ID     77
 #define DPFLTR_ERROR_LEVEL      0
 
 /* 64-bit physical address, returned and taken by value (8 bytes, passed

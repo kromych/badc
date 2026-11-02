@@ -109,6 +109,8 @@ pub(crate) struct FrontEnd {
     pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
+    /// gcc `-ffreestanding`, the compile flag; `--freestanding` is the link's.
+    pub(crate) freestanding: bool,
     pub(crate) defines: Vec<(String, String)>,
     pub(crate) undefines: Vec<String>,
     pub(crate) include_paths: Vec<String>,
@@ -1358,14 +1360,22 @@ impl Parser {
                     }
                 };
             }
-            // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
-            // spelled with a library function's own name is an ordinary
-            // call the compiler may not fold. `-ffreestanding` also drops
-            // the hosted assumption that such a name is declarable, which
-            // is the auto-include retry. The `__builtin_` spellings are
-            // unaffected, as under gcc.
-            "-fno-builtin" | "-ffreestanding" => front.no_builtin = true,
-            "-fbuiltin" | "-fhosted" => front.no_builtin = false,
+            // gcc / clang `-fno-builtin`: a call spelled with a library
+            // function's own name is an ordinary call the compiler may not
+            // fold; the `__builtin_` spellings are unaffected, as under gcc.
+            // `-ffreestanding` (`-fno-hosted`) implies it and makes the
+            // implementation freestanding; `-fhosted` (`-fno-freestanding`)
+            // undoes both, as gcc's options do.
+            "-fno-builtin" => front.no_builtin = true,
+            "-fbuiltin" => front.no_builtin = false,
+            "-ffreestanding" | "-fno-hosted" => {
+                front.freestanding = true;
+                front.no_builtin = true;
+            }
+            "-fhosted" | "-fno-freestanding" => {
+                front.freestanding = false;
+                front.no_builtin = false;
+            }
             s if s.starts_with("-fno-builtin-") => {
                 front
                     .no_builtin_fns
@@ -2623,6 +2633,7 @@ impl FrontEnd {
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
             .with_std(self.std)
             .with_optimize(self.optimize)

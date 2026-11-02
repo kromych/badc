@@ -973,8 +973,8 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     (
         PredefOn::Every,
         &[
-            // C99 6.10.8. `__STDC_HOSTED__` holds because every target
-            // binds the host libc. `__STDC_VERSION__` reports C11 unless
+            // C99 6.10.8. `__STDC_HOSTED__` is 0 under `-ffreestanding`
+            // (`set_hosted`). `__STDC_VERSION__` reports C11 unless
             // `-std=` selects another edition (`set_std`): the surface is
             // C99 plus the C11 features real code gates on this macro. `__DATE__` / `__TIME__` come from
             // [`install_translation_time`].
@@ -1557,6 +1557,12 @@ impl Preprocessor {
     /// half. See [`Preprocessor::no_builtin`].
     pub fn set_no_builtin(&mut self, on: bool) {
         self.no_builtin = on;
+    }
+
+    /// `__STDC_HOSTED__`: 1 for a hosted implementation, 0 for a
+    /// freestanding one (`-ffreestanding`, C99 6.10.8).
+    pub fn set_hosted(&mut self, hosted: bool) {
+        self.define("__STDC_HOSTED__", if hosted { "1" } else { "0" });
     }
 
     /// Add a header to splice in front of the user's translation

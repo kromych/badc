@@ -542,15 +542,19 @@ pub struct CompileOptions {
     /// retry is off with it: a unit that asked for no library headers must
     /// not be given one. See [`Preprocessor::set_nostdinc`].
     pub nostdinc: bool,
-    /// `-fno-builtin` / `-ffreestanding` -- a call spelled with a library
-    /// function's own name is an ordinary call, not a builtin the compiler
-    /// may fold. The `__builtin_` spellings keep folding, as they do under
-    /// gcc's flag, and the auto-include retry is off with it: a
-    /// freestanding unit has no library to declare the name from.
+    /// `-fno-builtin`, which `-ffreestanding` implies -- a call spelled
+    /// with a library function's own name is an ordinary call, not a
+    /// builtin the compiler may fold. The `__builtin_` spellings keep
+    /// folding, as they do under gcc's flag, and the auto-include retry
+    /// declares no library name.
     pub no_builtin: bool,
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-ffreestanding` -- a freestanding implementation (C99 4p6):
+    /// `__STDC_HOSTED__` is 0 (C99 6.10.8) and the auto-include retry,
+    /// whose permission (C99 7.1.4p2) is a hosted one, is off.
+    pub freestanding: bool,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// The translation time `__DATE__` / `__TIME__` report, as seconds
@@ -803,7 +807,7 @@ impl CompileOptions {
         self
     }
     /// Stop treating a library function's own name as a builtin
-    /// (`-fno-builtin` / `-ffreestanding`).
+    /// (`-fno-builtin`).
     pub fn with_no_builtin(mut self, on: bool) -> Self {
         self.no_builtin = on;
         self
@@ -813,16 +817,22 @@ impl CompileOptions {
         self.no_builtin_fns = names;
         self
     }
+    /// Compile for a freestanding implementation (`-ffreestanding`).
+    pub fn with_freestanding(mut self, on: bool) -> Self {
+        self.freestanding = on;
+        self
+    }
 
     /// Whether the auto-include retry may not declare `name`. C99
     /// 7.1.4p2's permission to use a library function without a
-    /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
-    /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
-    /// under `-nostdinc` the header the retry would splice in is off the
-    /// search, and a preprocessed unit includes nothing. The
-    /// undeclared-function error stands instead.
+    /// declaration is a hosted one, so `-ffreestanding` withdraws it;
+    /// `-fno-builtin` withdraws it for every library name and
+    /// `-fno-builtin-<name>` for that name; under `-nostdinc` the header
+    /// the retry would splice in is off the search, and a preprocessed
+    /// unit includes nothing. The undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
         self.nostdinc
+            || self.freestanding
             || self.no_builtin
             || self.preprocessed
             || self.no_builtin_fns.iter().any(|n| n == name)
@@ -2456,6 +2466,8 @@ pub struct Compiler {
     vla_larger_than: Option<u64>,
     /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
+    freestanding: bool,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
@@ -2823,6 +2835,7 @@ impl Compiler {
         }
         pp.set_nostdinc(opts.nostdinc);
         pp.set_no_builtin(opts.no_builtin);
+        pp.set_hosted(!opts.freestanding);
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
@@ -2867,7 +2880,7 @@ impl Compiler {
         // with a force-include, need a copy. Recording for pass reuse is
         // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
-        let record = !(opts.nostdinc || opts.no_builtin || opts.preprocessed);
+        let record = !(opts.nostdinc || opts.freestanding || opts.no_builtin || opts.preprocessed);
         let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
@@ -3153,6 +3166,7 @@ impl Compiler {
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
             nostdinc: opts.nostdinc,
+            freestanding: opts.freestanding,
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,

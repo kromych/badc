@@ -941,6 +941,69 @@ fn builtin_library_functions_link_without_a_declaration() {
     }
 }
 
+// C99 6.10.8p1: `__STDC_HOSTED__` is 1 for a hosted implementation and 0
+// for a freestanding one. As under gcc, `-ffreestanding` (`-fno-hosted`)
+// selects the latter for `-E`, `-dM -E` and a compiled unit, a later
+// `-fhosted` (`-fno-freestanding`) restores the former, and `-fbuiltin` /
+// `-fno-builtin` leave it alone. A freestanding unit gets no auto-included
+// header for an undeclared library call, and `<xmmintrin.h>` declares
+// `_mm_malloc` from `<mm_malloc.h>` only when hosted.
+#[test]
+fn ffreestanding_makes_stdc_hosted_zero() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-stdc-hosted");
+    let src = dir.join("h.c");
+    std::fs::write(
+        &src,
+        "int hosted = __STDC_HOSTED__;\n\
+         int main(void) {\n\
+         #if __STDC_HOSTED__\n  return 3;\n#else\n  return 4;\n#endif\n}\n",
+    )
+    .expect("write h.c");
+    let badc_out = |args: &[&str], input: &std::path::Path| {
+        let out = Command::new(badc).arg("-q").args(args).arg(input).output();
+        let out = out.expect("run badc");
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), text, err)
+    };
+    let exe = dir.join(format!("h{}", std::env::consts::EXE_SUFFIX));
+    let exe_arg = exe.to_str().expect("path");
+    for (flags, hosted) in [
+        (&[][..], 1),
+        (&["-ffreestanding"][..], 0),
+        (&["-fno-hosted"][..], 0),
+        (&["-ffreestanding", "-fbuiltin"][..], 0),
+        (&["-ffreestanding", "-fhosted"][..], 1),
+        (&["-ffreestanding", "-fno-freestanding"][..], 1),
+        (&["-fno-builtin"][..], 1),
+    ] {
+        let (ok, text, err) = badc_out(&[flags, &["-E"]].concat(), &src);
+        let line = format!("int hosted = {hosted};");
+        assert!(ok && text.contains(&line), "{flags:?}: {err}");
+        let (ok, text, err) = badc_out(&[flags, &["-dM", "-E"]].concat(), &src);
+        let line = format!("#define __STDC_HOSTED__ {hosted}\n");
+        assert!(ok && text.contains(&line), "{flags:?} -dM: {err}");
+        let (ok, _, err) = badc_out(&[flags, &["-o", exe_arg]].concat(), &src);
+        assert!(ok, "{flags:?}: {err}");
+        let run = Command::new(&exe).output().expect("run h");
+        assert_eq!(run.status.code(), Some(4 - hosted), "{flags:?}");
+    }
+    let call = dir.join("call.c");
+    std::fs::write(&call, "int main(void) { return puts(\"x\") < 0; }\n").expect("write");
+    let (ok, _, err) = badc_out(&["-ffreestanding", "-fbuiltin", "-c", "-o", exe_arg], &call);
+    assert!(!ok && err.contains("puts"), "{err}");
+    let sse = dir.join("sse.c");
+    std::fs::write(&sse, "#include <xmmintrin.h>\n").expect("write sse.c");
+    for (flags, declared) in [(&[][..], true), (&["-ffreestanding"][..], false)] {
+        let args = [flags, &["--target=linux-x64", "-E"]].concat();
+        let (ok, text, err) = badc_out(&args, &sse);
+        assert!(ok, "{flags:?}: {err}");
+        assert_eq!(text.contains("mm_malloc.h"), declared, "{flags:?}");
+        assert_eq!(text.contains("_mm_malloc"), declared, "{flags:?}");
+    }
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

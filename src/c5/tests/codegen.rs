@@ -10027,7 +10027,11 @@ fn builtin_library_functions_need_no_declaration() {
         let text = Compiler::preprocess(src.clone(), target, nostdinc.clone()).expect("-E");
         for (mode, text, opts) in [
             ("-nostdinc", &src, nostdinc),
-            ("-ffreestanding", &src, base().with_no_builtin(true)),
+            (
+                "-ffreestanding",
+                &src,
+                base().with_no_builtin(true).with_freestanding(true),
+            ),
             (".i", &text, base().with_preprocessed(true)),
         ] {
             for optimize in [false, true] {

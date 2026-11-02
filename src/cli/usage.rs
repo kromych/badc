@@ -231,13 +231,15 @@ Compile knobs:
                            headers; its headers are left out of -MM and
                            of the unused-binding warnings. Repeatable.
   -fno-builtin[-<name>]    Treat a call spelled with a library
-  -ffreestanding           function's own name as an ordinary call the
+                           function's own name as an ordinary call the
                            compiler may not fold, and drop the C99
                            7.1.4p2 recovery that declares an undeclared
                            library function by auto-including its
                            header. The `__builtin_` spellings keep
-                           folding. -fbuiltin / -fhosted restore the
-                           default.
+                           folding. -fbuiltin restores the default.
+  -ffreestanding           Compile for a freestanding implementation:
+                           -fno-builtin, and `__STDC_HOSTED__` is 0.
+                           -fhosted restores both.
   -nostdinc                Drop the bundled standard headers and the
                            system directories from the #include search,
                            leaving only -I, -iquote and the including

@@ -16,6 +16,7 @@ impl Compiler {
     /// Whether the auto-include retry cannot declare library function `name`.
     pub(super) fn auto_include_unavailable(&self, name: &str) -> bool {
         self.nostdinc
+            || self.freestanding
             || self.preprocessed
             || self.library_name_is_opaque(name)
             || super::super::headers::header_declaring(name, self.target).is_none()

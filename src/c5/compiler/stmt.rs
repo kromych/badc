@@ -3451,6 +3451,19 @@ impl Compiler {
         if self.lex.tk == Token::Asm {
             return self.parse_asm_stmt();
         }
+        if self.lex.tk == Token::SehTry {
+            return self.parse_seh_try();
+        }
+        if self.lex.tk == Token::SehLeave {
+            return self.parse_seh_leave();
+        }
+        if self.lex.tk == Token::SehExcept || self.lex.tk == Token::SehFinally {
+            let text = format!(
+                "{} without a `__try` block",
+                super::super::token::describe(self.lex.tk)
+            );
+            return Err(self.compile_err(Code::SYNTAX, text));
+        }
 
         if self.lex.tk == Token::If {
             // Capture the `if` keyword position before consuming
@@ -3662,6 +3675,7 @@ impl Compiler {
                     self.compile_err(Code::INVALID_STATEMENT, "break outside of loop or switch")
                 );
             }
+            self.check_seh_exit("`break`", Some(super::seh::Depth::Break))?;
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after break")?;
             // Run the cleanup functions of every scope opened inside the
@@ -3676,6 +3690,7 @@ impl Compiler {
             if self.loop_continue_depth == 0 {
                 return Err(self.compile_err(Code::INVALID_STATEMENT, "continue outside of loop"));
             }
+            self.check_seh_exit("`continue`", Some(super::seh::Depth::Continue))?;
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after continue")?;
             let start = self.ast.stmts.len();
@@ -3685,6 +3700,7 @@ impl Compiler {
             self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Return {
             let line = self.lex.line;
+            self.check_seh_exit("`return`", None)?;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_value_ty(ret_ty);

@@ -249,6 +249,7 @@ pshpack4.h	-	-	-	y	y
 wingdi.h	-	-	-	p	p
 poppack.h	-	-	-	y	y
 winternl.h	-	-	-	y	y
+excpt.h	-	-	-	y	y
 wchar.h	y	y	y	y	y
 scsi/sg.h	-	y	y	-	-
 linux/magic.h	-	y	y	-	-

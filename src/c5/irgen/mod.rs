@@ -53,6 +53,10 @@ pub(crate) use types::fold_int_binop;
 /// The low and high 64-bit halves of a 128-bit value, in that order.
 type Halves = (ValueId, ValueId);
 
+/// The refusal of a function holding a `__try` statement or an exception
+/// handling intrinsic. TODO: lower structured exception handling.
+pub(super) const SEH_NOT_LOWERED: &str = "SEH lowering not implemented yet";
+
 /// A shape the walker does not lower. The `Unsupported` variants
 /// reject constructs the target or the backend does not provide,
 /// reachable from valid input; the `Invalid` variants mean a front-end

@@ -649,6 +649,21 @@ pub(crate) enum Stmt {
     /// A `goto` or computed `goto` (`jump`) running `cleanups` first, after
     /// a computed `goto`'s target is read.
     CleanupJump { cleanups: Vec<StmtId>, jump: StmtId },
+    /// `__try body` with its `__except` or `__finally` handler (Microsoft
+    /// structured exception handling).
+    SehTry { body: StmtId, handler: SehHandler },
+    /// `__leave;`: to the end of the innermost `__try` body.
+    SehLeave,
+}
+
+/// The handler of a `__try` statement.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SehHandler {
+    /// `__except (filter) body`: `body` runs when `filter` evaluates to
+    /// `EXCEPTION_EXECUTE_HANDLER`.
+    Except { filter: ExprId, body: StmtId },
+    /// `__finally body`: runs whenever control leaves the `__try` body.
+    Finally(StmtId),
 }
 
 /// Value source of one runtime-initializer element: an expression to

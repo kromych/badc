@@ -2735,10 +2735,20 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
 /// wide; `__ptr64` (a pointer is 64 bits there already), `__w64` (a
 /// portability marker), `__sptr` / `__uptr` (how a 32-bit pointer extends)
 /// and `__unaligned` (an access that may be misaligned, which both PE
-/// targets' loads and stores allow) qualify without effect; and
-/// `__builtin_alignof` is `_Alignof`.
+/// targets' loads and stores allow) qualify without effect;
+/// `__builtin_alignof` is `_Alignof`; and `__try`, `__except`, `__finally`
+/// and `__leave` are the structured exception handling statements, which
+/// clang leaves identifiers off a windows-msvc triple.
 /// TODO: `_Alignof` of an `__unaligned` type, which clang reports as 1.
 pub(crate) fn init_ms_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
+    for (name, token) in [
+        ("__try", Token::SehTry),
+        ("__except", Token::SehExcept),
+        ("__finally", Token::SehFinally),
+        ("__leave", Token::SehLeave),
+    ] {
+        add_keyword(symbols, index, name, token as i64);
+    }
     for name in [
         "__ptr32",
         "__ptr64",

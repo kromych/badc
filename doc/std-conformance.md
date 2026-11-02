@@ -713,9 +713,7 @@ registers under either compiler.
 
 1. Volatile-marked whole-aggregate copies (scalar volatile accesses are
    enforced; a volatile struct assignment's block copy is not marked).
-2. x86_64 Windows UNWIND_INFO describes only the frame-pointer prologue
-   (RIP/RSP/RBP recover exactly); callee-saved GPR spills are not yet
-   described, so a debugger / profiler / SEH unwind crossing such a frame
-   does not recover those registers. Program execution is unaffected --
-   badc emits no exception-using code. A faithful description needs a
-   push-before-setframe prologue restructure.
+2. Structured exception handling on the PE targets: `__try`, `__except`,
+   `__finally`, `__leave` and `<excpt.h>`'s intrinsics are parsed and held
+   to MSVC's placement rules, and a function holding one is refused at
+   lowering; no scope table is emitted yet.

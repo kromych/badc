@@ -24,6 +24,9 @@
 // Win32 system error codes (GetLastError values) and the Winsock codes.
 #include <winerror.h>
 
+// Structured exception handling: the filter results and the intrinsics.
+#include <excpt.h>
+
 // Win32 API decoration macros. The runtime calls go through the
 // IAT (kernel32.dll already exports them by name) so the
 // __stdcall / __declspec(dllimport) tagging the headers carry on
@@ -1598,9 +1601,6 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define CONTROL_C_EXIT                      STATUS_CONTROL_C_EXIT
 #define EXCEPTION_NONCONTINUABLE         0x1
 #define EXCEPTION_MAXIMUM_PARAMETERS     15
-#define EXCEPTION_EXECUTE_HANDLER        1
-#define EXCEPTION_CONTINUE_SEARCH        0
-#define EXCEPTION_CONTINUE_EXECUTION     (-1)
 
 typedef struct _EXCEPTION_RECORD {
     DWORD                     ExceptionCode;

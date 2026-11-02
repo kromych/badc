@@ -78,6 +78,7 @@ mod redeclaration;
 mod reloc_golden;
 #[cfg(feature = "full")]
 mod relocatable;
+mod seh;
 #[cfg(feature = "full")]
 mod stack_guard;
 #[cfg(feature = "full")]

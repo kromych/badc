@@ -61,6 +61,14 @@ pub(crate) enum Op {
     VaStart,
     /// No instruction; no memory access moves across it.
     CompilerBarrier,
+    /// `_exception_code()`: the code of the exception a filter or an
+    /// `__except` body handles.
+    ExceptionCode,
+    /// `_exception_info()`: the `EXCEPTION_POINTERS` a filter receives.
+    ExceptionInfo,
+    /// `_abnormal_termination()`: whether a `__finally` body runs because an
+    /// exception or a jump left its `__try` body.
+    AbnormalTermination,
     ReturnAddress,
     /// The return address's slot, one pointer above the saved frame pointer.
     AddressOfReturnAddress,
@@ -252,6 +260,12 @@ const FIXED: &[Row] = &[
     ("_ReadWriteBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_ReadBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_WriteBarrier", Both, Op::CompilerBarrier, None, &[]),
+    ("_exception_code", Both, Op::ExceptionCode, Some(ULong), &[]),
+    ("__exception_code", Both, Op::ExceptionCode, Some(ULong), &[]),
+    ("_exception_info", Both, Op::ExceptionInfo, Some(VoidPtr), &[]),
+    ("__exception_info", Both, Op::ExceptionInfo, Some(VoidPtr), &[]),
+    ("_abnormal_termination", Both, Op::AbnormalTermination, Some(Int), &[]),
+    ("__abnormal_termination", Both, Op::AbnormalTermination, Some(Int), &[]),
     ("_ReturnAddress", Both, Op::ReturnAddress, Some(VoidPtr), &[]),
     ("_AddressOfReturnAddress", Both, Op::AddressOfReturnAddress, Some(VoidPtr), &[]),
     ("__debugbreak", Both, Op::DebugBreak, None, &[]),

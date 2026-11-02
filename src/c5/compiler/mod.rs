@@ -36,6 +36,7 @@ mod loop_idiom;
 mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
+mod seh;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
@@ -2110,6 +2111,8 @@ pub struct Compiler {
     /// Number of currently-open `continue`-eligible scopes
     /// (loops only; `switch` doesn't open one).
     loop_continue_depth: usize,
+    /// The open parts of `__try` statements, outermost first.
+    seh_contexts: Vec<seh::SehContext>,
     /// Recursion depth shared by the recursive-descent entry points
     /// (statements, expressions, constant expressions, declarators,
     /// initializer lists). Bounded by `MAX_NEST_DEPTH` via
@@ -3081,6 +3084,7 @@ impl Compiler {
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
+            seh_contexts: Vec::new(),
             nest_depth: 0,
             labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),

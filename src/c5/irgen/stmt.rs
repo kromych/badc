@@ -19,6 +19,9 @@ impl<'a> Walker<'a> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
+            Stmt::SehTry { .. } | Stmt::SehLeave => {
+                Err(WalkError::Unsupported(super::SEH_NOT_LOWERED))
+            }
             Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
                 self.return_without_value(b);

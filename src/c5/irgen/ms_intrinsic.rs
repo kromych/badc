@@ -204,6 +204,9 @@ impl<'a> Walker<'a> {
         let arm64 = target.is_aarch64();
         let reg = |width| asm_operand(AsmConstraint::Reg, false, width);
         Ok(match op {
+            Op::ExceptionCode | Op::ExceptionInfo | Op::AbnormalTermination => {
+                return Err(WalkError::Unsupported(super::SEH_NOT_LOWERED));
+            }
             Op::BitScan { reverse, width } => {
                 let found = b.binop_imm(BinOp::Ne, v[1], 0);
                 let (store, done) = (b.new_block(), b.new_block());

@@ -402,6 +402,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("wingdi.h", WINDOWS),
     header!("poppack.h", WINDOWS),
     header!("winternl.h", WINDOWS),
+    header!("excpt.h", WINDOWS),
     header!("wchar.h", ALL),
     // Opt-in MSVC-shape predefines: no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long

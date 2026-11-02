@@ -73,6 +73,7 @@ impl Compiler {
     /// A call of the intrinsic `name`, the `(` consumed.
     pub(super) fn parse_ms_intrinsic(&mut self, name: &str) -> Result<(), C5Error> {
         let intr = ms_intrinsic::lookup(name, self.target).expect("a call-site intrinsic");
+        self.check_seh_intrinsic(intr.op, name)?;
         match intr.op {
             Op::Assume => return self.parse_ms_assume(),
             Op::Noop => return self.parse_ms_noop(),

@@ -26,27 +26,23 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x1
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	sub	x2, x2, x0
                	cmp	x2, #0x1
                	b.ne	<addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	sub	x2, x2, x0
                	mov	x17, #-0x2              // =-2
                	cmp	x2, x17
                	b.ne	<addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	sub	x2, x2, x0
                	cmp	x2, #0x3
                	b.ne	<addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	sub	x2, x2, x0
                	cmp	x2, #0x1
                	b.ne	<addr>
@@ -56,8 +52,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	sub	x1, x1, x2
@@ -65,38 +60,32 @@ Disassembly of section .text:
                	cmp	x1, x17
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	sub	x1, x1, x0
                	cmp	x1, #0x3
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	sub	x1, x1, x0
                	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	sub	x1, x1, x0
                	mov	x17, #-0x4              // =-4
                	cmp	x1, x17
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	sub	x0, x1, x0
                	cmp	x0, #0x6
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	sub	x0, x0, x1
                	cmp	x0, #0x4
                	b.eq	<addr>

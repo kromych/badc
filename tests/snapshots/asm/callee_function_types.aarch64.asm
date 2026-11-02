@@ -152,8 +152,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x20, x20, #0x20
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
@@ -161,8 +160,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x20, x20, #0x40
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
@@ -202,8 +200,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x20, x20, #0x1000
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	blr	x0
                	fmov	d1, #6.00000000
                	fcmp	d0, d1
@@ -238,8 +235,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	orr	x20, x20, #0x4
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	blr	x0
                	fmov	d0, #3.00000000
                	blr	x0

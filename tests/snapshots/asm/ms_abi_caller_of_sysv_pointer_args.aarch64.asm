@@ -23,8 +23,7 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	str	x0, [x8]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x2, [x0]
+               	str	x2, [x0, #0xb0]
                	str	x3, [x8, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x0, x4, x17
@@ -131,8 +130,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.ne	<addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	cmp	x2, x3

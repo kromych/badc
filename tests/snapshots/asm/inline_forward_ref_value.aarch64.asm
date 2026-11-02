@@ -23,9 +23,8 @@ Disassembly of section .text:
                	ret
                	lsl	x0, x0, #1
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	add	x4, x0, #0x1
-               	str	w4, [x3]
+               	str	w4, [x3, #0x30]
                	add	x0, x0, x1
                	add	x0, x0, x2
                	ret
@@ -34,8 +33,7 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0xd3               // =211
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	mov	x0, #0x0                // =0
                	ret

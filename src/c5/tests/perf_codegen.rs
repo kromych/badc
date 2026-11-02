@@ -5595,3 +5595,31 @@ fn static_object_access_is_rip_relative() {
         }
     }
 }
+
+/// On aarch64 a static object read or written at its own address takes
+/// the `adrp` page alone, the access carrying the low 12 bits: no `add`
+/// of the page offset, the `adrp` hoisted out of a loop. A member at a
+/// displacement, and an address that escapes, keep the `add`.
+#[test]
+fn static_object_access_takes_the_page_offset_in_the_access() {
+    let src = "long q; int w; char b; double d; float f; struct { int a; long c; } s;\n\
+               long lq(void) { return q + w + b; }\n\
+               void st(long v) { q = v; w = 0; b = 1; }\n\
+               double fp(void) { f = (float)d; return d; }\n\
+               long lp(int n) { long t = 0; for (int i = 0; i < n; i++) t += q; return t; }\n\
+               long mem(void) { return s.c + s.a; }\n\
+               long *esc(void) { return &q; }";
+    let adrp = |w: &u32| w & 0x9F00_0000 == 0x9000_0000;
+    let page_add = |w: &u32| w & 0xFFC0_0000 == 0x9100_0000 && (w >> 10) & 0xFFF == 0;
+    for name in ["lq", "st", "fp", "lp"] {
+        let words = a64(src, name);
+        assert!(
+            words.iter().any(adrp) && !words.iter().any(page_add),
+            "{name}: {words:08x?}"
+        );
+    }
+    assert_eq!(a64(src, "lp").iter().filter(|w| adrp(w)).count(), 1);
+    for name in ["mem", "esc"] {
+        assert!(a64(src, name).iter().any(page_add), "{name}");
+    }
+}

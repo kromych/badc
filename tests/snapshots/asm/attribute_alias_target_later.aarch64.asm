@@ -15,10 +15,9 @@ Disassembly of section .text:
 
 <probe_generic>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1]
+               	ldrsw	x2, [x1, #0x30]
                	add	x0, x2, x0
-               	str	w0, [x1]
+               	str	w0, [x1, #0x30]
                	ret
 
 <after_alias>:
@@ -31,8 +30,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -41,16 +39,15 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x4
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	mov	x0, x1
                	cmp	w0, #0x7
                	b.eq	<addr>

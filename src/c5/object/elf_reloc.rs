@@ -3335,6 +3335,29 @@ impl<'a> RelocWriter<'a> {
         let mut table = core::mem::take(&mut self.relocs.text);
         for fx in &build.data_fixups {
             let (sym, addend) = self.data_section_ref(fx.data_offset as i64);
+            // An in-page half alone is a load or store whose size scales it.
+            if matches!(machine, Machine::Aarch64) && fx.part == AddrPart::InPage {
+                let size = (build.text.get(fx.instr_offset..fx.instr_offset + 4))
+                    .and_then(|w| w.try_into().ok())
+                    .and_then(|w| {
+                        crate::c5::codegen::aarch64::patch::lo12_access_size(u32::from_le_bytes(w))
+                    })
+                    .ok_or_else(|| {
+                        C5Error::internal(format!(
+                            "elf_reloc: in-page fixup at text+{:#x} is not a load or store",
+                            fx.instr_offset
+                        ))
+                    })?;
+                let rtype = a64_insn_reloc_type(crate::c5::asm::AsmRelocKind::A64LdstLo12(size))
+                    .expect("a load or store size names its relocation");
+                let rela = Elf64Rela {
+                    r_offset: fx.instr_offset as u64,
+                    r_info: (sym << 32) | rtype as u64,
+                    r_addend: addend + fx.addend,
+                };
+                write_struct(&mut table, &rela);
+                continue;
+            }
             emit_addr_fixup_relocs(
                 machine,
                 &mut table,

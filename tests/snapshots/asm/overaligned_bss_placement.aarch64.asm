@@ -39,9 +39,8 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	strb	w0, [x3]
                	adrp	x4, <page>
-               	add	x4, x4, <lo12>
                	mov	x0, #0x4                // =4
-               	str	w0, [x4]
+               	str	w0, [x4, #0x500]
                	ldrb	w1, [x1]
                	ldrb	w2, [x2]
                	add	x1, x1, x2

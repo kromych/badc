@@ -139,8 +139,7 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	blr	x0
                	cmp	w0, #0x1
                	b.eq	<addr>

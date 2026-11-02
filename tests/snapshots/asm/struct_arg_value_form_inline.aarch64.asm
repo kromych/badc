@@ -36,10 +36,9 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1]
-               	ldr	w1, [x1]
+               	str	w0, [x1, #0x30]
+               	ldr	w1, [x1, #0x30]
                	cbz	w1, <addr>
                	mov	x0, #0x8                // =8
                	ret

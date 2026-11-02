@@ -37,13 +37,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	wzr, [x1]
+               	str	wzr, [x1, #0x30]
                	mov	x3, #0x1                // =1
-               	str	w3, [x1]
-               	str	wzr, [x1]
+               	str	w3, [x1, #0x30]
+               	str	wzr, [x1, #0x30]
                	mov	x2, #0x1                // =1
-               	str	w2, [x1]
+               	str	w2, [x1, #0x30]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cbz	x1, <addr>

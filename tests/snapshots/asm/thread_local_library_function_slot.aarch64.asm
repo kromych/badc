@@ -23,8 +23,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x10
                	ldr	x0, [x1]
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x3, [x3]
+               	ldr	x3, [x3, <lo12>]
                	cmp	x0, x3
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	x0, #0x2
                	cset	x1, eq

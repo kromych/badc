@@ -925,8 +925,7 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x0, #0x1                // =1
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1

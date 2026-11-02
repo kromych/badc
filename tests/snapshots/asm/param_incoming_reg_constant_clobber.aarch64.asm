@@ -18,8 +18,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x1, #0x5                // =5
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrsw	x0, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -32,20 +31,18 @@ Disassembly of section .text:
 
 <func_10>:
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x3]
+               	ldrsw	x1, [x3, #0x60]
                	cmp	w1, #0x5
                	b.gt	<addr>
                	ldrsw	x1, [x2]
                	str	w1, [x2]
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x68]
                	cbnz	x1, <addr>
-               	ldrsw	x1, [x3]
+               	ldrsw	x1, [x3, #0x60]
                	add	x1, x1, #0x1
-               	str	w1, [x3]
-               	ldrsw	x1, [x3]
+               	str	w1, [x3, #0x60]
+               	ldrsw	x1, [x3, #0x60]
                	cmp	w1, #0x5
                	b.le	<addr>
                	adrp	x0, <page>
@@ -63,8 +60,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x1, #0x5                // =5
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrsw	x0, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -72,12 +68,10 @@ Disassembly of section .text:
                	mov	x4, x1
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x70]
                	cbnz	w0, <addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x60]
                	cmp	w0, #0x6
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

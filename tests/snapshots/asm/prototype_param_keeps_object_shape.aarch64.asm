@@ -53,8 +53,7 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10

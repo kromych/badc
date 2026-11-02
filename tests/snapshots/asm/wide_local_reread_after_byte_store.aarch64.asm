@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <keep>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
+               	str	x0, [x1, #0x50]
                	ret
 
 <long_double_reread>:
@@ -727,8 +726,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x30]
                	dup	v0.16b, w0
                	sub	x0, x29, #0x20
                	stur	q0, [x29, #-0x20]

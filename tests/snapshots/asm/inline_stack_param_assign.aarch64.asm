@@ -55,8 +55,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x40
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x20]
                	mov	x8, #0x86a0             // =34464
                	movk	x8, #0x1, lsl #16
                	mov	x9, #0x5e00             // =24064
@@ -95,8 +94,7 @@ Disassembly of section .text:
                	mov	x7, #0x320              // =800
                	mov	x10, #0x9               // =9
                	adrp	x11, <page>
-               	add	x11, x11, <lo12>
-               	ldr	x11, [x11]
+               	ldr	x11, [x11, <lo12>]
                	str	x10, [sp]
                	str	x8, [sp, #0x8]
                	str	x9, [sp, #0x10]

@@ -186,8 +186,7 @@ Disassembly of section .text:
                	sdiv	w17, w0, w1
                	msub	w0, w17, w1, w0
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
@@ -199,10 +198,9 @@ Disassembly of section .text:
 
 <count_yield>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xa8]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xa8]
                	ret
 
 <lex>:
@@ -220,26 +218,22 @@ Disassembly of section .text:
                	ldr	x17, [x17, x0, lsl #3]
                	br	x17
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xa0]
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	wzr, [x0]
+               	str	wzr, [x0, #0xa0]
                	add	x20, x20, #0x1
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	blr	x0
                	ldrb	w0, [x20]
                	sub	x0, x0, #0x2a
                	cmp	x0, #0x10
                	b.lo	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
-               	str	w1, [x0]
+               	str	w1, [x0, #0xa0]
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
@@ -483,8 +477,7 @@ Disassembly of section .text:
                	mov	x0, #0x1ce              // =462
                	mov	x1, #0x93               // =147
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
+               	ldr	x2, [x2, <lo12>]
                	blr	x2
                	cmp	w0, #0x15
                	b.eq	<addr>
@@ -586,8 +579,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xa8]
                	cbz	w0, <addr>
                	mov	x0, #0xe                // =14
                	ldr	x28, [sp, #0x50]
@@ -601,9 +593,7 @@ Disassembly of section .text:
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
                	adrp	x22, <page>
-               	add	x22, x22, <lo12>
                	adrp	x21, <page>
-               	add	x21, x21, <lo12>
                	ldrb	w0, [x20]
                	sub	x0, x0, #0x2a
                	cmp	x0, #0x10
@@ -613,28 +603,25 @@ Disassembly of section .text:
                	ldr	x17, [x17, x0, lsl #3]
                	br	x17
                	mov	x0, #0x1                // =1
-               	str	w0, [x21]
+               	str	w0, [x21, #0xa0]
                	b	<addr>
-               	str	wzr, [x21]
+               	str	wzr, [x21, #0xa0]
                	add	x20, x20, #0x1
-               	ldr	x0, [x22]
+               	ldr	x0, [x22, #0x20]
                	blr	x0
                	ldrb	w0, [x20]
                	sub	x0, x0, #0x2a
                	cmp	x0, #0x10
                	b.lo	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
-               	str	w1, [x0]
+               	str	w1, [x0, #0xa0]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xa8]
                	cmp	w0, #0x5
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xa0]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0xf                // =15

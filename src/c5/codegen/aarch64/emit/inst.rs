@@ -27,6 +27,8 @@ pub(super) struct FnCtx<'a> {
     /// Internal-linkage data object name -> unified data offset, for a
     /// function-body inline-asm symbol operand naming a static.
     pub(super) data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// Per value: an `ImmData` that holds its page alone ([`page_only_data`]).
+    pub(super) page_only: &'a [bool],
 }
 
 /// Emit one SSA instruction. An op with no lowering is an `Err`, so the
@@ -61,6 +63,7 @@ pub(super) fn emit_inst(
         param_plan,
         name2entpc,
         data_sym_offsets,
+        ..
     } = *fcx;
     let code = &mut *cx.code;
     match inst {
@@ -93,12 +96,21 @@ pub(super) fn emit_inst(
             };
             // The writer's `patch_adrp_add` reads rd back from the placeholder.
             let instr_offset = code.len();
-            emit_adrp_add(code, rd);
+            let page_only = fcx.page_only.get(v as usize).copied().unwrap_or(false);
+            if page_only {
+                emit(code, enc_adrp(rd, 0));
+            } else {
+                emit_adrp_add(code, rd);
+            }
             cx.data_fixups.push(DataFixup {
                 instr_offset,
                 data_offset: *offset as u64,
                 addend: 0,
-                part: AddrPart::Whole,
+                part: if page_only {
+                    AddrPart::Page
+                } else {
+                    AddrPart::Whole
+                },
             });
             store_spilled_int(code, frame, dst, rd);
             Ok(())
@@ -139,18 +151,22 @@ pub(super) fn emit_inst(
             kind,
             align,
             ..
-        } => emit_load(
-            code,
-            dst,
-            *addr,
-            *disp,
-            *kind,
-            alloc.is_f32(v),
-            alloc,
-            frame,
-            scratch,
-            narrow_bound(*align, abi),
-        ),
+        } => {
+            let start = code.len();
+            emit_load(
+                code,
+                dst,
+                *addr,
+                *disp,
+                *kind,
+                alloc.is_f32(v),
+                alloc,
+                frame,
+                scratch,
+                narrow_bound(*align, abi),
+            )?;
+            note_in_page(cx, fcx, *addr, start)
+        }
         Inst::Store {
             addr,
             disp,
@@ -158,19 +174,23 @@ pub(super) fn emit_inst(
             kind,
             align,
             ..
-        } => emit_store(
-            code,
-            v,
-            dst,
-            *addr,
-            *disp,
-            *value,
-            *kind,
-            alloc,
-            frame,
-            scratch,
-            narrow_bound(*align, abi),
-        ),
+        } => {
+            let start = code.len();
+            emit_store(
+                code,
+                v,
+                dst,
+                *addr,
+                *disp,
+                *value,
+                *kind,
+                alloc,
+                frame,
+                scratch,
+                narrow_bound(*align, abi),
+            )?;
+            note_in_page(cx, fcx, *addr, start)
+        }
         Inst::LoadLocal {
             off, disp, kind, ..
         } => emit_load_local(
@@ -498,6 +518,47 @@ pub(super) fn emit_inst(
 
 /// The `adrp rd, page; add rd, rd, lo12` placeholder pair an address fixup
 /// patches.
+/// Record the access emitted from `start` through a page-only `addr` as the
+/// in-page half of its reference: the one unsigned-offset load or store
+/// whose base is the register holding the page.
+fn note_in_page(
+    cx: &mut super::ssa::emit_common::EmitCtx,
+    fcx: &FnCtx,
+    addr: super::super::ir::ValueId,
+    start: usize,
+) -> Emit {
+    if !fcx.page_only.get(addr as usize).copied().unwrap_or(false) {
+        return Ok(());
+    }
+    let Inst::ImmData(off) = fcx.func.insts[addr as usize] else {
+        return fail("page-only access: address not a data address");
+    };
+    let page = match place_of(fcx.alloc, addr) {
+        Place::IntReg(r) => u32::from(r),
+        _ => u32::from(fcx.scratch.primary.0),
+    };
+    let code = &*cx.code;
+    let sites: Vec<usize> = (start..code.len())
+        .step_by(4)
+        .filter(|&at| {
+            let w = u32::from_le_bytes([code[at], code[at + 1], code[at + 2], code[at + 3]]);
+            crate::c5::codegen::aarch64::patch::lo12_access_size(w).is_some()
+                && (w >> 5) & 31 == page
+                && (w >> 10) & 0xFFF == 0
+        })
+        .collect();
+    let [at] = sites[..] else {
+        return fail("page-only access: no single in-page load / store");
+    };
+    cx.data_fixups.push(DataFixup {
+        instr_offset: at,
+        data_offset: off as u64,
+        addend: 0,
+        part: AddrPart::InPage,
+    });
+    Ok(())
+}
+
 pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));

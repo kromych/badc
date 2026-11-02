@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <keep>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
+               	str	x0, [x1, #0x30]
                	ret
 
 <mk_U1>:
@@ -232,8 +231,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x1]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -325,8 +323,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x2]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -420,8 +417,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x3]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -515,8 +511,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -612,8 +607,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x5]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -709,8 +703,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x6]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -808,8 +801,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0x7]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -906,8 +898,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0xc]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -1009,8 +1000,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0xc]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
@@ -1120,8 +1110,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0, #0xc]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17

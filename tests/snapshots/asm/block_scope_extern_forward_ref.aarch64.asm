@@ -15,17 +15,16 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	add	x1, x1, #0x4
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	cmp	w1, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

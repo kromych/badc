@@ -17,10 +17,9 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	strb	w1, [x0]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0xa
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	ret
 
 <reads_sp>:

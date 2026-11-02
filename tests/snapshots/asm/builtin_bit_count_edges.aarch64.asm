@@ -15,11 +15,10 @@ Disassembly of section .text:
 
 <check32>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
-               	ldr	x4, [x1]
-               	str	x0, [x1]
-               	ldr	x6, [x1]
+               	str	x0, [x1, #0x30]
+               	ldr	x4, [x1, #0x30]
+               	str	x0, [x1, #0x30]
+               	ldr	x6, [x1, #0x30]
                	mov	w1, w0
                	clz	w5, w4
                	mov	x2, #0x0                // =0
@@ -116,9 +115,8 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x0, [x2]
-               	ldr	x2, [x2]
+               	str	x0, [x2, #0x30]
+               	ldr	x2, [x2, #0x30]
                	clz	w5, w2
                	mov	x2, #0x0                // =0
                	mov	x3, #0x1f               // =31
@@ -133,9 +131,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	ret
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x0, [x2]
-               	ldr	x2, [x2]
+               	str	x0, [x2, #0x30]
+               	ldr	x2, [x2, #0x30]
                	rbit	w5, w2
                	clz	w5, w5
                	mov	x2, #0x0                // =0
@@ -149,9 +146,8 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ret
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x0, [x2]
-               	ldr	x0, [x2]
+               	str	x0, [x2, #0x30]
+               	ldr	x0, [x2, #0x30]
                	fmov	s16, w0
                	cnt	v16.8b, v16.8b
                	addv	b16, v16.8b
@@ -271,11 +267,10 @@ Disassembly of section .text:
 
 <check64>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
-               	ldr	x3, [x1]
-               	str	x0, [x1]
-               	ldr	x5, [x1]
+               	str	x0, [x1, #0x30]
+               	ldr	x3, [x1, #0x30]
+               	str	x0, [x1, #0x30]
+               	ldr	x5, [x1, #0x30]
                	clz	x4, x3
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3f               // =63
@@ -472,11 +467,10 @@ Disassembly of section .text:
 
 <check_long>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
-               	ldr	x4, [x1]
-               	str	x0, [x1]
-               	ldr	x5, [x1]
+               	str	x0, [x1, #0x30]
+               	ldr	x4, [x1, #0x30]
+               	str	x0, [x1, #0x30]
+               	ldr	x5, [x1, #0x30]
                	clz	x3, x4
                	mov	x1, #0x0                // =0
                	mov	x2, #0x3f               // =63
@@ -668,11 +662,10 @@ Disassembly of section .text:
                	ret
                	mov	x3, #0x0                // =0
                	adrp	x5, <page>
-               	add	x5, x5, <lo12>
                	mov	x0, #0x1                // =1
                	lsl	x0, x0, x3
-               	str	x0, [x5]
-               	ldr	x4, [x5]
+               	str	x0, [x5, #0x30]
+               	ldr	x4, [x5, #0x30]
                	mov	w0, w4
                	orr	x1, x0, #0x1
                	rbit	w6, w1
@@ -726,12 +719,11 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	mov	x1, x0
                	mov	x3, #-0x1               // =-1
                	lsr	x3, x3, x0
-               	str	x3, [x2]
-               	ldr	x3, [x2]
+               	str	x3, [x2, #0x30]
+               	ldr	x3, [x2, #0x30]
                	fmov	d16, x3
                	cnt	v16.8b, v16.8b
                	addv	b16, v16.8b

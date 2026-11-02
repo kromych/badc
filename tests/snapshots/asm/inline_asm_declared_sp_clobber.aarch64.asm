@@ -235,19 +235,18 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x30]
                	add	x29, sp, #0x30
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	mov	x17, #0x5               // =5
                	mul	x21, x1, x17
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	mov	x17, #0x99              // =153
                	eor	x22, x1, x17
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	add	x23, x1, #0x4d
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	mov	x17, #0x3               // =3
                	mul	x24, x1, x17
-               	ldr	x20, [x0]
+               	ldr	x20, [x0, #0x18]
                	mov	x0, x20
                	bl	<addr>
                	mov	x25, x0

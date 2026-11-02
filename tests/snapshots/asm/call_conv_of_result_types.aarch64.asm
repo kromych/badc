@@ -159,8 +159,7 @@ Disassembly of section .text:
                	mov	x21, x1
                	mov	x0, #0x7                // =7
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	mov	x2, x0
                	mov	x0, x20

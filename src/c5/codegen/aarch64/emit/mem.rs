@@ -1312,6 +1312,66 @@ pub(super) fn emit_load(
     Ok(())
 }
 
+/// Per value: an `ImmData` every emitted reader of which is a naturally
+/// aligned integer, `float` or `double` load or store at the address
+/// itself. Such a value is the `adrp` page alone, and each access takes the
+/// low 12 bits of the same address in its offset, as compilers pair `adrp`
+/// with `ldr` / `str`; another reader, or a displacement, needs the whole
+/// address, since the page of `sym + disp` need not be that of `sym`.
+pub(super) fn page_only_data(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    extern_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+) -> Vec<bool> {
+    let n = func.insts.len();
+    let (mut folded, mut whole) = (alloc::vec![false; n], alloc::vec![false; n]);
+    let scalar_load = |k: LoadKind| !matches!(k, LoadKind::F80 | LoadKind::F128 | LoadKind::V128);
+    let scalar_store =
+        |k: StoreKind| !matches!(k, StoreKind::F80 | StoreKind::F128 | StoreKind::V128);
+    for (v, inst) in func.insts.iter().enumerate() {
+        if super::ssa::emit_common::is_dead_pure(inst, v as u32, alloc) {
+            continue;
+        }
+        match inst {
+            Inst::Load {
+                addr,
+                disp: 0,
+                align: 0,
+                kind,
+                ..
+            } if scalar_load(*kind) => folded[*addr as usize] = true,
+            Inst::Store {
+                addr,
+                value,
+                disp: 0,
+                align: 0,
+                kind,
+                ..
+            } if scalar_store(*kind) => {
+                folded[*addr as usize] = true;
+                whole[*value as usize] = true;
+            }
+            _ => super::ssa::reg_alloc::for_each_operand(inst, |op| whole[op as usize] = true),
+        }
+    }
+    for block in &func.blocks {
+        block
+            .terminator
+            .for_each_operand(|op| whole[op as usize] = true);
+        if let Some(slot) = whole.get_mut(block.exit_acc as usize) {
+            *slot = true;
+        }
+    }
+    (0..n)
+        .map(|v| {
+            matches!(func.insts[v], Inst::ImmData(_))
+                && folded[v]
+                && !whole[v]
+                && !extern_names.contains_key(&(v as u32))
+        })
+        .collect()
+}
+
 /// A base for the binary128 object at `loc` that its sequences, which move sp, may address.
 fn binary128_base(code: &mut Vec<u8>, loc: FrameLoc, t: Reg) -> (Reg, i64) {
     let (base, disp) = loc.pick(|d| LDR_X.offset(d).is_some() && LDR_X.offset(d + 8).is_some());

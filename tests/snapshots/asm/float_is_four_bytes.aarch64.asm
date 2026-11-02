@@ -36,14 +36,13 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, #0x6               // =6
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, #0x18]
                	fmov	s1, #1.50000000
                	fcmp	s0, s1
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	s0, [x1]
+               	ldr	s0, [x1, #0x18]
                	fcvt	d0, s0
                	bl	<addr>
                	mov	x20, #0x7               // =7

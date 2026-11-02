@@ -18,10 +18,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xb0
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x6667             // =26215
                	movk	x4, #0x6666, lsl #16
@@ -48,10 +47,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x2493             // =9363
                	movk	x4, #0x9249, lsl #16
@@ -78,10 +76,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x2493             // =9363
                	movk	x4, #0x9249, lsl #16
@@ -109,10 +106,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -131,10 +127,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #-0x80000000        // =-2147483648
                	adrp	x3, <page>
@@ -157,10 +152,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
@@ -184,10 +178,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -212,10 +205,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
@@ -239,10 +231,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x1                // =1
                	movk	x4, #0x4000, lsl #16
@@ -269,10 +260,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -297,10 +287,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x1                // =1
                	movk	x4, #0x4000, lsl #16
@@ -328,10 +317,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0x6667             // =26215
                	movk	x5, #0x6666, lsl #16
@@ -358,10 +346,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0x4925             // =18725
                	movk	x5, #0x2492, lsl #16
@@ -390,10 +377,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -413,10 +399,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -439,10 +424,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -465,10 +449,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x1, #0x1                // =1
                	movk	x1, #0x8000, lsl #16
@@ -493,10 +476,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0xfffffffe         // =4294967294
                	adrp	x6, <page>
@@ -521,10 +503,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0xffffffff         // =4294967295
                	adrp	x6, <page>
@@ -549,10 +530,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #0xfffd             // =65533
                	movk	x2, #0xffff, lsl #16
@@ -579,10 +559,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #0xffffffff         // =4294967295
                	adrp	x5, <page>
@@ -612,275 +591,233 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -890,10 +827,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0xb0
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	mov	x5, #0x6667             // =26215
@@ -924,10 +860,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0xf7cf             // =63439
                	movk	x4, #0xe353, lsl #16
@@ -959,10 +894,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #0x5555555555555555 // =6148914691236517205
                	adrp	x3, <page>
@@ -984,10 +918,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #-0x8000000000000000 // =-9223372036854775808
                	adrp	x3, <page>
@@ -1010,10 +943,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x1, #0x0                // =0
                	mov	x3, #0x5555555555555555 // =6148914691236517205
                	adrp	x4, <page>
@@ -1040,10 +972,9 @@ Disassembly of section .text:
                	cmp	w1, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	mov	x5, #-0xffff            // =-65535
@@ -1073,10 +1004,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x1                // =1
                	movk	x4, #0x4000, lsl #48
@@ -1105,10 +1035,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x1, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	adrp	x5, <page>
@@ -1136,10 +1065,9 @@ Disassembly of section .text:
                	cmp	w1, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	mov	x5, #0x6667             // =26215
@@ -1170,10 +1098,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x1, #0x0                // =0
                	mov	x4, #0x2493             // =9363
                	movk	x4, #0x9249, lsl #16
@@ -1205,10 +1132,9 @@ Disassembly of section .text:
                	cmp	w1, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x3, #0x5555555555555555 // =6148914691236517205
                	adrp	x4, <page>
@@ -1233,10 +1159,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	adrp	x5, <page>
@@ -1261,10 +1186,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #-0x7fffffffffffffff // =-9223372036854775807
                	mov	x5, #0x5555555555555555 // =6148914691236517205
@@ -1291,10 +1215,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x3, #-0x1               // =-1
                	mov	x4, #0x5555555555555555 // =6148914691236517205
@@ -1321,10 +1244,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #-0x3               // =-3
                	mov	x5, #0x5555555555555555 // =6148914691236517205
@@ -1351,10 +1273,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	mov	x5, #0x6667             // =26215
@@ -1385,10 +1306,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x4925             // =18725
                	movk	x4, #0x2492, lsl #16
@@ -1420,10 +1340,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x1, #0x0                // =0
                	mov	x3, #0x5555555555555555 // =6148914691236517205
                	adrp	x4, <page>
@@ -1450,10 +1369,9 @@ Disassembly of section .text:
                	cmp	w1, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #-0x8000000000000000 // =-9223372036854775808
                	adrp	x3, <page>
@@ -1476,10 +1394,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5555555555555555 // =6148914691236517205
                	mov	x5, #0x6667             // =26215
@@ -1510,10 +1427,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #0x1                // =1
                	movk	x2, #0x8000, lsl #16
@@ -1543,10 +1459,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #-0x3               // =-3
                	mov	x5, #0x5555555555555555 // =6148914691236517205
@@ -1577,288 +1492,244 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -1868,10 +1739,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x90
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5556             // =21846
                	movk	x4, #0x5555, lsl #16
@@ -1898,10 +1768,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -1926,10 +1795,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -1950,10 +1818,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5556             // =21846
                	movk	x4, #0x5555, lsl #16
@@ -1979,10 +1846,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x102              // =258
                	movk	x4, #0x101, lsl #16
@@ -2008,10 +1874,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x6667             // =26215
                	movk	x4, #0x6666, lsl #16
@@ -2038,10 +1903,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -2066,10 +1930,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x5, #0xaaab             // =43691
                	movk	x5, #0xaaaa, lsl #16
@@ -2095,10 +1958,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -2121,10 +1983,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x2, #0xfffd             // =65533
                	movk	x2, #0xffff, lsl #16
@@ -2151,10 +2012,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x5556             // =21846
                	movk	x4, #0x5555, lsl #16
@@ -2181,10 +2041,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -2205,10 +2064,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -2228,10 +2086,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
@@ -2256,10 +2113,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x4925             // =18725
                	movk	x4, #0x2492, lsl #16
@@ -2288,10 +2144,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0x4925             // =18725
                	movk	x4, #0x2492, lsl #16
@@ -2321,10 +2176,9 @@ Disassembly of section .text:
                	cmp	w0, #0x18
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x0, #0x0                // =0
                	mov	x4, #0xffffffff         // =4294967295
                	adrp	x5, <page>
@@ -2353,223 +2207,189 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	x0, x0, #0x64
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xf0]
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -2696,10 +2516,9 @@ Disassembly of section .text:
                	mov	x0, #0x3e8              // =1000
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xf0]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0xf0]
                	mov	x21, x20
                	ldr	x0, [x23, x21, lsl #3]
                	sxtw	x22, w0
@@ -2730,6 +2549,5 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x50
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x20, [x0]
+               	ldrsw	x20, [x0, #0xf0]
                	b	<addr>

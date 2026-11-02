@@ -462,8 +462,7 @@ Disassembly of section .text:
 
 <sink>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x0, [x1]
+               	str	x0, [x1, #0x40]
                	add	x0, x0, #0x1
                	ret
 
@@ -1310,8 +1309,7 @@ Disassembly of section .text:
                	cmp	x1, #0x8
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x20               // =32
@@ -1337,8 +1335,7 @@ Disassembly of section .text:
                	cmp	x0, #0x8
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x21               // =33

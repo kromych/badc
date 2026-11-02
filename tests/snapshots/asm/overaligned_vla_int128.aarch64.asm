@@ -39,10 +39,9 @@ Disassembly of section .text:
                	and	x2, x4, #0xf
                	cbz	x2, <addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x3, [x2]
+               	ldrsw	x3, [x2, #0x30]
                	orr	x3, x3, #0x1
-               	str	w3, [x2]
+               	str	w3, [x2, #0x30]
                	str	w0, [x1]
                	mov	x0, #0x6                // =6
                	str	w0, [x1, #0x8]
@@ -78,10 +77,9 @@ Disassembly of section .text:
                	and	x1, x0, #0xf
                	cbz	x1, <addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x3, [x1]
+               	ldrsw	x3, [x1, #0x30]
                	orr	x3, x3, #0x2
-               	str	w3, [x1]
+               	str	w3, [x1, #0x30]
                	str	x2, [x0]
                	str	xzr, [x0, #0x8]
                	add	x0, x0, #0x10
@@ -111,7 +109,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x30]
                	ldp	x29, x30, [sp], #0x10
                	ret

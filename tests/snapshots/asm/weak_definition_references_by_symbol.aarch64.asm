@@ -25,9 +25,8 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	adrp	x1, <addr>
 		R_AARCH64_ADR_PREL_PG_HI21	.data+0x20
-               	add	x1, x1, #0x0
-		R_AARCH64_ADD_ABS_LO12_NC	.data+0x20
                	ldr	x1, [x1]
+		R_AARCH64_LDST64_ABS_LO12_NC	.data+0x20
                	ldr	x1, [x1]
                	add	x0, x0, x1
                	cmp	x0, #0xa
@@ -49,9 +48,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
 		R_AARCH64_ADR_PREL_PG_HI21	.data+0x28
-               	add	x0, x0, #0x0
-		R_AARCH64_ADD_ABS_LO12_NC	.data+0x28
                	ldr	x0, [x0]
+		R_AARCH64_LDST64_ABS_LO12_NC	.data+0x28
                	blr	x0
                	mov	x20, x0
                	bl	<addr>

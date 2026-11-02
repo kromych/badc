@@ -34,13 +34,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcmp	s0, s0
                	b.eq	<addr>
                	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
-               	ldr	s0, [x0]
+               	ldr	s0, [x0, #0x4]
                	adrp	x16, <addr>
                	ldr	s1, [x16, #0x10]
                	fcmp	s0, s1

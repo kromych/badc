@@ -18,12 +18,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x5, [x0]
+               	ldr	x5, [x0, #0x20]
                	mov	x6, #0x0                // =0
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	orr	x4, x6, x0
                	mov	x9, #-0x8000000000000000 // =-9223372036854775808
                	mov	x12, #0x1               // =1
@@ -264,8 +262,7 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	and	x2, x5, x3
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x3, [x3]
+               	ldr	x3, [x3, <lo12>]
                	cmp	x1, x3
                	b.ne	<addr>
                	cbz	x2, <addr>

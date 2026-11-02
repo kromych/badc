@@ -100,8 +100,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	stur	w1, [x29, #-0x28]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0x20]
                	stur	w1, [x29, #-0x24]
                	mov	x1, #0x5                // =5
                	stur	w1, [x29, #-0x20]
@@ -120,8 +119,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ldrb	w1, [x0]
                	mov	x17, #0x6f              // =111
                	eor	x1, x1, x17

@@ -40,8 +40,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	w0, [x0]
+               	ldr	w0, [x0, #0x38]
                	eor	x0, x0, #0x3
                	cbz	w0, <addr>
                	mov	x0, #0x3                // =3

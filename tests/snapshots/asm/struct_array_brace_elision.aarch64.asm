@@ -53,8 +53,7 @@ Disassembly of section .text:
                	cmp	w2, #0x3
                	b.lt	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>

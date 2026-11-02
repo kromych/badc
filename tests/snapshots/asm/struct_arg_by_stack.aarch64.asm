@@ -22,49 +22,42 @@ Disassembly of section .text:
                	mov	x7, #0x6                // =6
                	mov	x1, #0x7                // =7
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x1, [x0]
+               	str	x1, [x0, #0x30]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x2, [x1]
+               	str	x2, [x1, #0x38]
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x3, [x2]
+               	str	x3, [x2, #0x40]
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x4, [x3]
+               	str	x4, [x3, #0x48]
                	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	str	x5, [x4]
+               	str	x5, [x4, #0x50]
                	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	str	x6, [x5]
+               	str	x6, [x5, #0x58]
                	adrp	x6, <page>
-               	add	x6, x6, <lo12>
-               	str	x7, [x6]
-               	ldr	x0, [x0]
+               	str	x7, [x6, #0x60]
+               	ldr	x0, [x0, #0x30]
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldr	x0, [x1]
+               	ldr	x0, [x1, #0x38]
                	cmp	x0, #0xb
                	b.ne	<addr>
-               	ldr	x0, [x2]
+               	ldr	x0, [x2, #0x40]
                	cmp	x0, #0x16
                	b.ne	<addr>
-               	ldr	x0, [x3]
+               	ldr	x0, [x3, #0x48]
                	cmp	x0, #0x21
                	b.ne	<addr>
-               	ldr	x0, [x4]
+               	ldr	x0, [x4, #0x50]
                	cmp	x0, #0x2c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	ldr	x0, [x5]
+               	ldr	x0, [x5, #0x58]
                	cmp	x0, #0x5
                	b.ne	<addr>
-               	ldr	x0, [x6]
+               	ldr	x0, [x6, #0x60]
                	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

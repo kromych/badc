@@ -15,10 +15,9 @@ Disassembly of section .text:
 
 <cold>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x2, [x1]
+               	ldr	x2, [x1, #0x30]
                	add	x0, x2, x0
-               	str	x0, [x1]
+               	str	x0, [x1, #0x30]
                	ret
 
 <hot>:
@@ -193,8 +192,7 @@ Disassembly of section .text:
                	ldr	x17, [sp, #0x88]
                	eor	x0, x21, x17
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	tbz	w20, #0x0, <addr>
                	mov	x0, #0x0                // =0
@@ -324,8 +322,7 @@ Disassembly of section .text:
                	bl	<addr>
                	eor	x0, x20, x0
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x50]

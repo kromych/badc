@@ -272,6 +272,7 @@ pub(crate) fn emit_function(
         early_returns: cx.early_returns.len(),
         text_map_state: *text_map_state,
     };
+    let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
     let mut em = FunctionEmitter {
         cx,
         fixups,
@@ -296,6 +297,7 @@ pub(crate) fn emit_function(
             param_plan: &param_plan,
             name2entpc,
             data_sym_offsets,
+            page_only: &page_only,
         },
         abs_jump_tables,
         entry,

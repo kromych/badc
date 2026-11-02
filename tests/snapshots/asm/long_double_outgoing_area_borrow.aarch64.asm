@@ -224,8 +224,7 @@ Disassembly of section .text:
                	sub	x0, x0, x10
                	add	x0, x0, x9
                	adrp	x9, <page>
-               	add	x9, x9, <lo12>
-               	ldr	x9, [x9]
+               	ldr	x9, [x9, <lo12>]
                	str	x0, [sp]
                	str	x1, [sp, #0x8]
                	mov	x0, x7
@@ -333,11 +332,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	stp	x20, x21, [sp, #0x40]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	mov	x17, #0x3               // =3
                	mul	x2, x0, x17
                	mov	x17, #0x5               // =5

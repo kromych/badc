@@ -20,13 +20,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x2, [x1]
+               	ldr	x2, [x1, #0x18]
                	cmp	x2, x0
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	ldr	x2, [x1]
+               	ldr	x2, [x1, #0x18]
                	cmp	x0, x2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -35,7 +34,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, #0x18]
                	blr	x1
                	mov	x20, x0
                	adrp	x0, <page>

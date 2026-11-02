@@ -168,8 +168,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x2, [x0]
+               	ldr	x2, [x0, #0x28]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -402,11 +401,10 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x21, x1
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0]
-               	ldr	x2, [x0]
+               	str	x1, [x0, #0x40]
+               	ldr	x2, [x0, #0x40]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -417,8 +415,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x2, [x0]
+               	ldr	x2, [x0, #0x40]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -429,8 +426,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x2, [x0]
+               	ldr	x2, [x0, #0x40]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -441,11 +437,10 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0]
-               	ldr	x2, [x0]
+               	str	x1, [x0, #0x40]
+               	ldr	x2, [x0, #0x40]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2
@@ -456,8 +451,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x2, [x0]
+               	ldr	x2, [x0, #0x40]
                	mov	x0, x20
                	mov	x1, x21
                	blr	x2

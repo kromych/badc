@@ -22,13 +22,12 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	cmp	x1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x1, #0x63               // =99
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	mov	x0, #0x0                // =0
                	ret

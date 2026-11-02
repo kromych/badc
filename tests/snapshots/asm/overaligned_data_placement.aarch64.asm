@@ -97,8 +97,7 @@ Disassembly of section .text:
                	cmp	w1, #0x2
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0x208]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	ret

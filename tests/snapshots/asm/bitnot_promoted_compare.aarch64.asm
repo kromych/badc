@@ -20,8 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	sturb	w0, [x29, #-0x8]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w2, [x1]
+               	ldr	w2, [x1, #0x18]
                	sturb	w0, [x29, #-0x8]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w2, w17
@@ -30,15 +29,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w2, [x1]
+               	ldr	w2, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w2, w17
                	b.lo	<addr>
-               	ldr	w2, [x1]
+               	ldr	w2, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w2, w17
                	b.lo	<addr>
-               	ldr	w2, [x1]
+               	ldr	w2, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w2, w17
                	b.hs	<addr>
@@ -47,10 +46,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	w3, [x2]
-               	ldr	w3, [x1]
-               	ldr	w3, [x1]
+               	ldr	w3, [x2, #0x20]
+               	ldr	w3, [x1, #0x18]
+               	ldr	w3, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w3, w17
                	b.hs	<addr>
@@ -58,12 +56,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w4, [x1]
+               	ldr	w4, [x1, #0x18]
                	mov	x3, #0xffffffff         // =4294967295
                	udiv	w4, w3, w4
                	eor	x4, x4, #0x1
                	cbnz	w4, <addr>
-               	ldr	w4, [x2]
+               	ldr	w4, [x2, #0x20]
                	udiv	w17, w3, w4
                	msub	w3, w17, w4, w3
                	eor	x3, x3, #0x3
@@ -72,14 +70,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w3, [x1]
+               	ldr	w3, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w3, w17
                	b.ne	<addr>
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	strb	w0, [x3]
-               	ldr	w3, [x1]
+               	strb	w0, [x3, #0x40]
+               	ldr	w3, [x1, #0x18]
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w3, w17
                	b.hs	<addr>
@@ -106,7 +103,7 @@ Disassembly of section .text:
                	ret
                	ldurb	w3, [x29, #-0x8]
                	mvn	x3, x3
-               	ldr	w4, [x1]
+               	ldr	w4, [x1, #0x18]
                	cmp	w3, w4
                	b.hi	<addr>
                	ldurb	w3, [x29, #-0x8]
@@ -121,11 +118,11 @@ Disassembly of section .text:
                	ret
                	mov	x3, #0xf                // =15
                	sturb	w3, [x29, #-0x8]
-               	ldr	w2, [x2]
+               	ldr	w2, [x2, #0x20]
                	mov	x17, #0xfffffff0        // =4294967280
                	cmp	w2, w17
                	b.hs	<addr>
-               	ldr	w1, [x1]
+               	ldr	w1, [x1, #0x18]
                	mov	x17, #0xfffffff0        // =4294967280
                	cmp	w1, w17
                	b.lo	<addr>

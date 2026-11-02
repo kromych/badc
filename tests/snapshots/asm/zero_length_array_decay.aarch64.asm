@@ -23,8 +23,7 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x5a
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

@@ -40,15 +40,14 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	str	w0, [x1]
+               	str	w0, [x1, #0x48]
                	mov	x2, #0x7                // =7
-               	str	w2, [x1]
+               	str	w2, [x1, #0x48]
                	mov	x2, #0x1                // =1
-               	str	w2, [x1]
+               	str	w2, [x1, #0x48]
                	mov	x2, #0xb                // =11
-               	str	w2, [x1]
+               	str	w2, [x1, #0x48]
                	mov	x2, #0xd                // =13
-               	str	w2, [x1]
+               	str	w2, [x1, #0x48]
                	ret

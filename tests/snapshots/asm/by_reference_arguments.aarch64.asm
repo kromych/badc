@@ -226,13 +226,11 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0xa8]
                	stur	x1, [x29, #-0xc0]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	sub	x0, x29, #0xa8
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	sub	x0, x29, #0xc0
                	mov	x1, #0x1                // =1
@@ -244,8 +242,7 @@ Disassembly of section .text:
                	mov	x1, #-0x1               // =-1
                	stur	x1, [x29, #-0xc0]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	sub	x0, x29, #0xb0
                	adrp	x1, <page>

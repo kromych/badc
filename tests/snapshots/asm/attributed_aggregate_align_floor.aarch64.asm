@@ -96,14 +96,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x18]
                	mov	x17, #0x31              // =49
                	eor	x1, x1, x17
                	cbnz	w1, <addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x130]
                	mov	x17, #0x35              // =53
                	eor	x1, x1, x17
                	cbz	w1, <addr>

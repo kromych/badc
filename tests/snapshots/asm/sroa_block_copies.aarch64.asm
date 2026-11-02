@@ -411,8 +411,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x290
                	stp	x20, x21, [sp]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x20, [x0]
+               	ldr	x20, [x0, #0x18]
                	sub	x0, x29, #0x278
                	stp	xzr, xzr, [x0]
                	str	x20, [sp, #0x18]

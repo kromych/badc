@@ -3469,17 +3469,11 @@ fn a_naked_function_s_operands_take_registers_and_no_frame() {
         (
             crate::Target::LinuxAarch64,
             "__asm__ volatile(\"mov w0, %w0\\n\\tret\" : : \"r\"(g) : \"x0\");",
-            // adrp x0, g; add x0, x0, :lo12:g; ldrsw x1, [x0]; mov w0, w1; ret
-            [
-                0x9000_0000,
-                0x9100_0000,
-                0xb980_0001,
-                0x2a01_03e0,
-                0xd65f_03c0,
-            ]
-            .into_iter()
-            .flat_map(u32::to_le_bytes)
-            .collect(),
+            // adrp x0, g; ldrsw x1, [x0, :lo12:g]; mov w0, w1; ret
+            [0x9000_0000, 0xb980_0001, 0x2a01_03e0, 0xd65f_03c0]
+                .into_iter()
+                .flat_map(u32::to_le_bytes)
+                .collect(),
         ),
     ] {
         let src = alloc::format!(
@@ -3658,7 +3652,7 @@ fn aarch64_naked_function_binds_register_and_memory_operands() {
     // The `r` operand is loaded into a register the clobbers spare, the
     // `m` operand is the static's address formed in x16, and no frame.
     use crate::c5::object::elf_reloc_types::{
-        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21,
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST64_ABS_LO12_NC,
     };
     let src = "int g; long h;\n\
                __attribute__((naked)) void entry(void)\n\
@@ -3679,8 +3673,7 @@ fn aarch64_naked_function_binds_register_and_memory_operands() {
             .bytes;
         let want: alloc::vec::Vec<u8> = [
             0x9000_0000, // adrp x0, h
-            0x9100_0000, // add x0, x0, :lo12:h
-            0xf940_0002, // ldr x2, [x0]
+            0xf940_0002, // ldr x2, [x0, :lo12:h]
             0x9000_0010, // adrp x16, g
             0x9100_0210, // add x16, x16, :lo12:g
             0xb940_0200, // ldr w0, [x16]
@@ -3696,9 +3689,9 @@ fn aarch64_naked_function_binds_register_and_memory_operands() {
             text_relocs(&o),
             [
                 bss(0, R_AARCH64_ADR_PREL_PG_HI21, 8),
-                bss(4, R_AARCH64_ADD_ABS_LO12_NC, 8),
-                bss(12, R_AARCH64_ADR_PREL_PG_HI21, 0),
-                bss(16, R_AARCH64_ADD_ABS_LO12_NC, 0),
+                bss(4, R_AARCH64_LDST64_ABS_LO12_NC, 8),
+                bss(8, R_AARCH64_ADR_PREL_PG_HI21, 0),
+                bss(12, R_AARCH64_ADD_ABS_LO12_NC, 0),
             ]
         );
     }

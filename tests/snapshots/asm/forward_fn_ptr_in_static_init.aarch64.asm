@@ -31,8 +31,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0xa                // =10
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0xc
                	b.eq	<addr>

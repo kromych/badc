@@ -1376,8 +1376,13 @@ fn assert_windows_imports(target: crate::Target, headers: &str, imports: &[(&str
 }
 
 /// Links `src` for `target`, which compiles with no diagnostic and no
-/// auto-included header, and checks that each `(symbol, dll)` is imported.
-fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&str, &str)]) {
+/// auto-included header, checks that each `(symbol, dll)` is imported, and
+/// returns the image.
+fn assert_windows_unit_imports(
+    target: crate::Target,
+    src: &str,
+    imports: &[(&str, &str)],
+) -> alloc::vec::Vec<u8> {
     use crate::{Compiler, NativeOptions};
     let program = Compiler::with_target(src.to_string(), target)
         .compile()
@@ -1397,6 +1402,7 @@ fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&st
             "{target:?}: {symbol}"
         );
     }
+    image
 }
 
 /// The user32, gdi32, opengl32 and advapi32 functions `<windows.h>`
@@ -2209,6 +2215,46 @@ fn windows_string_h_declares_the_ucrt_wide_string_functions() {
                     Some("string.h" | "wchar.h")
                 ),
                 "{target:?}: {name}"
+            );
+        }
+    }
+}
+
+/// On the Windows targets `<stdlib.h>` defines the UCRT's C `max` and `min`,
+/// which `NOMINMAX` leaves in place, alone and beside `<windows.h>`'s, and
+/// `<locale.h>` declares `_wcreate_locale` with the UCRT's type. msvcrt.dll
+/// exports no `_wcreate_locale`: the image imports its `_create_locale`, and
+/// links beside the formatting and conversion that run in a ucrtbase.dll
+/// locale.
+#[test]
+fn windows_stdlib_minmax_and_wcreate_locale_follow_the_ucrt() {
+    const CHECKS: &str = "#include <stdio.h>\n\
+        _Static_assert(max(3, 8) == 8 && min(3, 8) == 3, \"minmax\");\n\
+        _Static_assert(_Generic(&_wcreate_locale, _locale_t (*)(int, const wchar_t *): 1, \
+        default: 0), \"_wcreate_locale\");\n\
+        int main(void) {\n\
+        char b[8];\n\
+        return _wcreate_locale(LC_ALL, L\"C\") == 0 || _create_locale(LC_ALL, \"C\") == 0 ||\n\
+        snprintf(b, 8, \"%.1f\", strtod(\"1.5\", 0)) != 3;\n\
+        }\n";
+    const IMPORTS: &[(&str, &str)] = &[
+        ("_create_locale", "msvcrt.dll"),
+        ("__stdio_common_vsprintf", "ucrtbase.dll"),
+        ("_strtod_l", "ucrtbase.dll"),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <stdlib.h>\n#include <locale.h>\n",
+            "#define NOMINMAX\n#include <windows.h>\n#include <stdlib.h>\n#include <locale.h>\n",
+            "#include <windows.h>\n#include <stdlib.h>\n#include <locale.h>\n",
+            "#include <stdlib.h>\n#include <windows.h>\n#include <locale.h>\n",
+        ] {
+            let src = alloc::format!("{headers}{CHECKS}");
+            let image = assert_windows_unit_imports(target, &src, IMPORTS);
+            assert_eq!(
+                pe_import_dll_of(&image, "_wcreate_locale"),
+                None,
+                "{target:?}"
             );
         }
     }

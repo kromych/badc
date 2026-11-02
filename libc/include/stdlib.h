@@ -271,6 +271,14 @@ errno_t _splitpath_s(const char *_FullPath, char *_Drive, size_t _DriveSize, cha
 #define _CVTBUFSIZE (309 + 40)
 #define __max(a, b) (((a) > (b)) ? (a) : (b))
 #define __min(a, b) (((a) < (b)) ? (a) : (b))
+// The UCRT defines these for C with its other non-standard names; NOMINMAX
+// gates only the <windows.h> copies.
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 #ifndef _countof
 #define _countof(_Array) (sizeof(_Array) / sizeof(_Array[0]))
 #endif

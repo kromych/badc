@@ -139,6 +139,9 @@ struct lconv {
 _locale_t _create_locale(int category, const char *locale);
 void _free_locale(_locale_t locale);
 _locale_t _get_current_locale(void);
+// ucrtbase.dll exports it and msvcrt.dll does not; libc/lib/locale_ext.c
+// defines it over _create_locale and joins the link on demand.
+_locale_t _wcreate_locale(int _Category, const wchar_t *_Locale);
 #endif
 
 char *setlocale(int category, const char *locale);

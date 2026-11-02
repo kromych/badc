@@ -857,6 +857,45 @@ int main(void){ do_invlpga(0, 0); return 0; }
 }
 
 #[test]
+fn inline_asm_umonitor_and_skinit_encode_as_gnu_as_does() {
+    // `umonitor` (F3 0F AE /6) takes the address in a register of the address
+    // size: a 64-bit one as written, a 32-bit one (`%k0`) under 0x67. `skinit`
+    // (0F 01 DE) takes its SLB address in an implicit `eax`, which a template
+    // may spell out.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void arm(void *p){ __asm__ volatile("umonitor %0" : : "a"(p) : "memory"); }
+void arm32(void *p){ __asm__ volatile("umonitor %k0" : : "c"(p) : "memory"); }
+void launch(unsigned int slb){ __asm__ volatile("skinit %0" : : "a"(slb) : "memory"); }
+int main(void){ arm(0); arm32(0); launch(0); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    let has = |b: &[u8]| text.windows(b.len()).any(|w| w == b);
+    assert!(
+        has(&[0xF3, 0x0F, 0xAE, 0xF0]),
+        "umonitor %rax must encode F3 0F AE F0: {text:02x?}"
+    );
+    assert!(
+        has(&[0x67, 0xF3, 0x0F, 0xAE, 0xF1]),
+        "umonitor %ecx must encode 67 F3 0F AE F1: {text:02x?}"
+    );
+    assert!(
+        has(&[0x0F, 0x01, 0xDE]),
+        "skinit must encode 0F 01 DE: {text:02x?}"
+    );
+}
+
+#[test]
 fn inline_asm_section_operand_constant_survives_unpromoted_function() {
     // C99 6.5p6: an `"i"` operand is an integer constant expression. A computed
     // goto opts the function out of slot promotion, so the constant reaches the

@@ -421,6 +421,16 @@ pub(crate) enum Mnemonic {
     InvMem {
         opcode: u8,
     },
+    /// An instruction whose one register operand holds an address, in
+    /// ModR/M.rm under a mandatory prefix and an opcode extension: `umonitor`
+    /// (F3 0F AE /6). The register's width is the address size, so the width
+    /// the mode does not default to takes the 0x67 prefix, as a memory operand
+    /// does.
+    AddrReg {
+        pp: u8,
+        opcode: &'static [u8],
+        ext: u8,
+    },
     /// `xadd r, r/m` (0F C0/C1): exchange-and-add, the atomic primitive of
     /// the interlocked increment / decrement.
     Xadd,
@@ -1222,6 +1232,12 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "rdpmc" => Mnemonic::Rdpmc,
         "monitor" => Mnemonic::Monitor,
         "mwait" => Mnemonic::Mwait,
+        // The user-mode monitor arm (WAITPKG).
+        "umonitor" => Mnemonic::AddrReg {
+            pp: 0xF3,
+            opcode: &[0x0F, 0xAE],
+            ext: 6,
+        },
         "hlt" => Mnemonic::Hlt,
         "lock" => Mnemonic::Prefix(0xF0),
         "rep" | "repe" | "repz" => Mnemonic::Prefix(0xF3),
@@ -4417,6 +4433,39 @@ fn encode_bespoke(
             mr.emit(code, mode, addr, gpr & 7)?;
             Ok(())
         }
+        Mnemonic::AddrReg { pp, opcode, ext } => {
+            let [op] = ops else {
+                return Err(String::from(
+                    "inline asm: this instruction takes one register operand",
+                ));
+            };
+            let (reg, size) = as_reg(*op)?;
+            // Long mode addresses at 64 or 32 bits, the other modes at 32 or
+            // 16; the 0x67 prefix precedes the mandatory one, as GNU as
+            // places it.
+            let width = size.bytes();
+            let other = if mode == super::table::Mode::Bits32 {
+                2
+            } else {
+                4
+            };
+            if reg >= MMX_BASE || (width != mode.addrsize() && width != other) {
+                return Err(format!(
+                    "inline asm: {}-bit addressing is unavailable for this instruction",
+                    u32::from(width) * 8
+                ));
+            }
+            if width != mode.addrsize() {
+                code.push(0x67);
+            }
+            code.push(pp);
+            if reg >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.extend_from_slice(opcode);
+            code.push(modrm_reg(ext, reg));
+            Ok(())
+        }
         Mnemonic::SizedNullary { opcode, opw, stack } => {
             let dflt = if stack {
                 mode.stack_opsize()
@@ -6204,6 +6253,56 @@ mod tests {
             (Bits64, b"lret $65536"),
             (Bits64, b"iret $8"),
             (Bits64, b"pushf $8"),
+        ] {
+            assert!(mode_asm_bytes(mode, tmpl).is_err(), "{tmpl:?}");
+        }
+    }
+
+    /// The WAITPKG and SVM system forms. `umonitor` takes its address in a
+    /// register whose width is the address size, so the mode's other width
+    /// takes 0x67 ahead of the F3; `skinit` and the VMCB ops take their
+    /// implicit register spelled or not. Bytes measured with GNU as 2.46.1
+    /// under each `.code` directive; llvm-mc 22.1.8 agrees in long mode.
+    #[test]
+    fn waitpkg_and_svm_forms_match_gnu_as() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        #[rustfmt::skip]
+        let cases: &[(super::super::table::Mode, &[u8], &[u8])] = &[
+            (Bits64, b"umonitor %%rax",  &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"umonitor %%eax",  &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"umonitor %%r10",  &[0xF3, 0x41, 0x0F, 0xAE, 0xF2]),
+            (Bits64, b"umonitor %%r10d", &[0x67, 0xF3, 0x41, 0x0F, 0xAE, 0xF2]),
+            (Bits32, b"umonitor %%eax",  &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits32, b"umonitor %%ax",   &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits16, b"umonitor %%ax",   &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits16, b"umonitor %%eax",  &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"skinit",          &[0x0F, 0x01, 0xDE]),
+            (Bits64, b"skinit %%eax",    &[0x0F, 0x01, 0xDE]),
+            (Bits32, b"skinit %%eax",    &[0x0F, 0x01, 0xDE]),
+            (Bits64, b"umwait %%r9d",    &[0xF2, 0x41, 0x0F, 0xAE, 0xF1]),
+            (Bits64, b"tpause %%ecx",    &[0x66, 0x0F, 0xAE, 0xF1]),
+            (Bits64, b"invlpga %%rax, %%ecx", &[0x0F, 0x01, 0xDF]),
+            (Bits64, b"vmrun %%rax",     &[0x0F, 0x01, 0xD8]),
+            (Bits64, b"vmload %%rax",    &[0x0F, 0x01, 0xDA]),
+            (Bits64, b"vmsave %%rax",    &[0x0F, 0x01, 0xDB]),
+            (Bits64, b"stgi",            &[0x0F, 0x01, 0xDC]),
+            (Bits64, b"clgi",            &[0x0F, 0x01, 0xDD]),
+        ];
+        for (mode, tmpl, want) in cases {
+            let got = mode_asm_bytes(*mode, tmpl).unwrap();
+            assert_eq!(
+                got.as_slice(),
+                *want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // GNU as: "16-bit addressing unavailable for `umonitor'"; a 64-bit
+        // address needs long mode.
+        for (mode, tmpl) in [
+            (Bits64, b"umonitor %%ax".as_slice()),
+            (Bits32, b"umonitor %%rax"),
+            (Bits64, b"umonitor %%xmm0"),
         ] {
             assert!(mode_asm_bytes(mode, tmpl).is_err(), "{tmpl:?}");
         }

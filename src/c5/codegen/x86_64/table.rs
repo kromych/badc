@@ -898,7 +898,9 @@ fn encode_best(
 /// the database lists only the
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
-/// named in the opcode. `invlpga` is the two-operand member of the same class:
+/// named in the opcode; `skinit` takes its SLB address in an implicit `eax`,
+/// and GNU as accepts `skinit %eax` the same way. `invlpga` is the two-operand
+/// member of the same class:
 /// the address rides an implicit `rax` and the ASID an implicit `ecx`, so the
 /// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
 /// `vmsave` the registers are not named in the opcode. The descriptor-table
@@ -1314,6 +1316,20 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         pp: &[],
         map: Map::Op0F,
         opcode: &[0x01, 0xDF],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::NoReg,
+        rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Skinit,
+        mnemonic: "skinit",
+        ops: &[OpPat::Fixed(0, W::L)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0x01, 0xDE],
         plus_r: false,
         rexw: RexW::W0,
         reg: RegField::NoReg,

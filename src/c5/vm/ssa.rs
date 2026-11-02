@@ -2911,6 +2911,7 @@ fn run_inline_asm(
             | Mnemonic::Wrmsr
             | Mnemonic::Monitor
             | Mnemonic::Mwait
+            | Mnemonic::AddrReg { .. }
             | Mnemonic::Hlt
             | Mnemonic::Prefix(_) => {
                 // Interrupt-flag / cache / MSR-write / monitor-wait / halt

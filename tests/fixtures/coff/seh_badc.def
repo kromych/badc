@@ -1,0 +1,5 @@
+LIBRARY seh_badc.dll
+EXPORTS
+    badc_raise
+    badc_catch
+    badc_jump_across

@@ -625,8 +625,9 @@ registers under either compiler.
   handler passes them, nested in a `__finally` block to any depth. A
   `__finally` block may allocate on its stack; a filter may not (cl's
   C2494). `longjmp` unwinds, running the `__finally` blocks it passes. The
-  tables interoperate with cl's objects. Unlike cl for ARM64 (C2702), an
-  `__except` inside a `__finally` block is accepted there too.
+  tables interoperate with cl's objects, and across a DLL boundary with cl's
+  code in either module. Unlike cl for ARM64 (C2702), an `__except` inside
+  a `__finally` block is accepted there too.
 - `__COUNTER__` (also recognized by GCC), `__BASE_FILE__`.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is

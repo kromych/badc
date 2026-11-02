@@ -5356,6 +5356,128 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
     }
 }
 
+/// Structured exception handling across a DLL boundary, both ways: a cl
+/// executable calls a badc DLL, and a badc executable a cl DLL (seh_host_cl.c
+/// and seh_dll_cl.c beside the images). Each side raises and the other
+/// catches with `__except`, the `__finally` blocks of both sides run during
+/// the unwind, innermost first, and a badc `longjmp` to a badc `setjmp` runs
+/// the `__finally` block of the cl frame between them.
+#[cfg(windows)]
+#[test]
+fn structured_exceptions_cross_a_dll_boundary() {
+    let (target, arch) = if cfg!(target_arch = "aarch64") {
+        ("windows-arm64", "arm64")
+    } else {
+        ("windows-x64", "x64")
+    };
+    let coff = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coff");
+    let dir = tempdir("seh-dll-boundary");
+    let dll_src = write_source(
+        &dir,
+        "seh_badc.c",
+        "#include <windows.h>\n#include <setjmp.h>\n\
+         #define NOTE(f) (*(f) = *(f) * 10 + (AbnormalTermination() ? 4 : 3))\n\
+         static jmp_buf jb;\n\
+         __declspec(dllexport) void badc_raise(unsigned long code, int *flag)\n\
+         {\n\
+             __try { RaiseException(code, 0, 0, 0); } __finally { NOTE(flag); }\n\
+         }\n\
+         __declspec(dllexport) unsigned long badc_catch(void (*fn)(int *), int *flag)\n\
+         {\n\
+             unsigned long code = 0;\n\
+             __try {\n\
+                 __try { fn(flag); } __finally { NOTE(flag); }\n\
+             } __except (code = GetExceptionCode(), code >= 0xE0000000) {\n\
+                 *flag = *flag * 10 + 7;\n\
+             }\n\
+             return code;\n\
+         }\n\
+         static void badc_longjmp(int *flag) { *flag = *flag * 10 + 5; longjmp(jb, 1); }\n\
+         __declspec(dllexport) int badc_jump_across(void (*fn)(void (*)(int *), int *), int *flag)\n\
+         {\n\
+             if (setjmp(jb) == 0) { fn(badc_longjmp, flag); return -1; }\n\
+             return *flag;\n\
+         }\n",
+    );
+    let main_src = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n#include <setjmp.h>\n\
+         __declspec(dllimport) void cl_dll_raise(unsigned long code, int *flag);\n\
+         __declspec(dllimport) unsigned long cl_dll_catch(void (*fn)(int *), int *flag);\n\
+         __declspec(dllimport) void cl_dll_through(void (*fn)(int *), int *flag);\n\
+         #define NOTE(f) (*(f) = *(f) * 10 + (AbnormalTermination() ? 4 : 3))\n\
+         static int flag;\n\
+         static jmp_buf jb;\n\
+         static void badc_raiser(int *f)\n\
+         {\n\
+             __try { RaiseException(0xE0000B02, 0, 0, 0); } __finally { NOTE(f); }\n\
+         }\n\
+         static void badc_longjmp(int *f) { *f = *f * 10 + 5; longjmp(jb, 1); }\n\
+         static void nothing(int *f) { (void)f; }\n\
+         int main(void)\n\
+         {\n\
+             int caught = 0;\n\
+             __try {\n\
+                 __try { cl_dll_raise(0xE0000C01, &flag); } __finally { NOTE(&flag); }\n\
+             } __except (GetExceptionCode() == 0xE0000C01) {\n\
+                 caught = 1;\n\
+             }\n\
+             if (!caught || flag != 24) return 1;\n\
+             flag = 0;\n\
+             if (cl_dll_catch(badc_raiser, &flag) != 0xE0000B02 || flag != 426) return 2;\n\
+             flag = 0;\n\
+             if (setjmp(jb) == 0) { cl_dll_through(badc_longjmp, &flag); return 3; }\n\
+             if (flag != 52) return 4;\n\
+             flag = 0;\n\
+             cl_dll_through(nothing, &flag);\n\
+             return flag == 1 ? 0 : 5;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        let run_dir = dir.join(format!("run{opt}"));
+        std::fs::create_dir_all(&run_dir).expect("run directory");
+        let copy = |from: String, to: &str| {
+            std::fs::copy(coff.join(&from), run_dir.join(to)).expect(&from);
+        };
+        copy(format!("seh_host_cl.{arch}.pe"), "host.exe");
+        copy(
+            format!("seh_dll_cl.{arch}.pe"),
+            &format!("seh_dll_cl.{arch}.dll"),
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg("-shared")
+                .arg(&dll_src)
+                .arg("-o")
+                .arg(run_dir.join("seh_badc.dll")),
+            "build the badc DLL",
+        );
+        let exe = run_dir.join("main.exe");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg(&main_src)
+                .arg(coff.join(format!("seh_dll_cl.{arch}.lib")))
+                .arg("-o")
+                .arg(&exe),
+            "link against the cl DLL",
+        );
+        for image in [run_dir.join("host.exe"), exe] {
+            let out = Command::new(&image).output().expect("run the image");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{target} {opt} {}: {out:?}",
+                image.display()
+            );
+        }
+    }
+}
+
 /// An import library of short import members (PE/COFF specification), each
 /// `(machine, name, ordinal)` importing a function from `dll`.
 fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {

@@ -18326,3 +18326,173 @@ fn win_arm64_unwind_codes_name_every_callee_save() {
         );
     }
 }
+
+/// Each `.pdata` entry of a windows-arm64 image: its begin RVA, its length
+/// in bytes and, for an `.xdata` record, its unwind codes.
+#[cfg(feature = "full")]
+fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::vec::Vec<u8>>)> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let hdr = word(0x3C) as usize;
+    let opt = hdr + 24;
+    let table = opt + usize::from(u16::from_le_bytes([pe[hdr + 20], pe[hdr + 21]]));
+    let sections = usize::from(u16::from_le_bytes([pe[hdr + 6], pe[hdr + 7]]));
+    let off = |rva: u32| {
+        (0..sections).map(|i| table + 40 * i).find_map(|s| {
+            let (va, raw) = (word(s + 12), word(s + 20));
+            (va..va + word(s + 8).max(word(s + 16)))
+                .contains(&rva)
+                .then(|| (raw + rva - va) as usize)
+        })
+    };
+    let (dir, size) = (word(opt + 112 + 24), word(opt + 112 + 28));
+    let start = off(dir).expect("exception directory");
+    (0..size as usize / 8)
+        .map(|i| {
+            let (begin, info) = (word(start + 8 * i), word(start + 8 * i + 4));
+            if info & 3 != 0 {
+                return (begin, 4 * ((info >> 2) & 0x7FF), None);
+            }
+            let at = off(info).expect("xdata");
+            let h = word(at);
+            let (words, epilogs, ext) = match (h >> 27, (h >> 22) & 31) {
+                (0, 0) => (word(at + 4) >> 16 & 0xFF, word(at + 4) & 0xFFFF, 4),
+                (w, e) => (w, if h >> 21 & 1 == 1 { 0 } else { e }, 0),
+            };
+            let codes = at + 4 + ext + 4 * epilogs as usize;
+            let codes = pe[codes..codes + 4 * words as usize].to_vec();
+            (begin, 4 * (h & 0x3_FFFF), Some(codes))
+        })
+        .collect()
+}
+
+/// Whether the unwind code opening `code` describes the instruction `w`
+/// (Microsoft, "ARM64 exception handling").
+#[cfg(feature = "full")]
+fn a64_code_describes(code: &[u8], w: u32) -> bool {
+    let z = |b: u8| u32::from(b);
+    match code[0] {
+        0xE3 => matches!(w, 0xD503_245F | 0xD503_201F) || w & 0xFFC0_03E0 == 0xF900_03E0,
+        0xFC => w == 0xD503_233F,
+        0xE1 => w == 0x9100_03FD,
+        0xE2 => w == 0x9100_03FD | (8 * z(code[1])) << 10,
+        0x81 => w == 0xA9BF_7BFD,
+        b @ 0x40..=0x7F => w == 0xA900_7BFD | z(b & 0x3F) << 15,
+        b @ 0x00..=0x1F => w == 0xD100_03FF | (16 * z(b)) << 10,
+        0xC8..=0xDF => !a64_callee_stores(w).is_empty(),
+        _ => false,
+    }
+}
+
+/// Windows on ARM64 under `-mbranch-protection`: each function of a linked
+/// image with a frame or a signed return address has its own `.xdata`
+/// record, one code per prolog instruction from the entry, or from the
+/// frame where the test of an early return precedes it. `bti c` takes `nop`
+/// and `paciasp` `pac_sign_lr`, as clang's `.seh_nop` and
+/// `.seh_pac_sign_lr`.
+#[cfg(feature = "full")]
+#[test]
+fn win_arm64_hardened_entries_take_their_own_unwind_records() {
+    use crate::{Hardening, NativeOptions, OutputKind, Target};
+    const SRC: &str = "#include <stdarg.h>\n\
+        __attribute__((noinline)) int g(int x) { return x * 3 + 1; }\n\
+        __attribute__((noinline)) int f(int x) { int a = g(x), b = g(a); return a + b + g(b); }\n\
+        __attribute__((noinline)) int e(int *p) { if (!p) return 0; return g(*p) + g(p[1]); }\n\
+        __attribute__((noinline)) int sum(int n, ...) {\n\
+          va_list ap; va_start(ap, n); int s = 0;\n\
+          while (n--) s += va_arg(ap, int);\n\
+          va_end(ap); return s;\n\
+        }\n\
+        int main(void) { int v[2] = {1, 2}; return f(1) + e(v) + sum(2, 3, 4) - 31; }\n";
+    let target = Target::WindowsAarch64;
+    let bti = Hardening {
+        bti: true,
+        ..Hardening::NONE
+    };
+    let standard = Hardening {
+        pac_ret: true,
+        ..bti
+    };
+    let leaf = Hardening {
+        pac_ret_leaf: true,
+        ..standard
+    };
+    for (label, hardening, optimize) in [
+        ("bti", bti, false),
+        ("bti", bti, true),
+        ("standard", standard, false),
+        ("standard", standard, true),
+        ("pac-ret+leaf+bti", leaf, true),
+    ] {
+        let program = crate::Compiler::with_target(SRC.into(), target)
+            .compile()
+            .expect("front end");
+        let opts = NativeOptions {
+            hardening,
+            optimize,
+            ..NativeOptions::new()
+        };
+        let case = alloc::format!("{label} -O={optimize}");
+        let obj = crate::emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..opts.clone()
+            },
+        )
+        .expect("object");
+        let pe = super::link_executable_with_runtime(&program, target, opts).expect("link");
+        let (text_rva, text) = pe_text_section(&pe).expect(".text");
+        let entries = a64_pe_unwind_entries(&pe);
+        // The program's object leads the image's text.
+        let first = function_bytes(&obj, "g");
+        let found = text.windows(first.len()).position(|w| w == first);
+        let base =
+            text_rva + found.expect("`g`") as u32 - elf_func_value(&obj, "g").unwrap() as u32;
+        for name in ["g", "f", "e", "sum", "main"] {
+            let words = function_words(&obj, name);
+            let at = base + elf_func_value(&obj, name).unwrap() as u32;
+            let span = at..at + 4 * words.len() as u32;
+            let x29 = words.iter().position(|w| w & 0xFFC0_03FF == 0x9100_03FD);
+            let last = x29.or_else(|| words.iter().position(|&w| w == 0xD503_233F));
+            let n = 4 * (last.unwrap_or(0) + 1);
+            let image = &text[(at - text_rva) as usize..][..n];
+            assert_eq!(image, &function_bytes(&obj, name)[..n], "{case}: `{name}`");
+            let own: alloc::vec::Vec<_> = (entries.iter())
+                .filter(|(b, _, c)| span.contains(b) && c.is_some())
+                .collect();
+            let Some(last) = last else {
+                assert!(own.is_empty(), "{case}: `{name}` unsigned leaf: {own:x?}");
+                continue;
+            };
+            assert_eq!(own.len(), 1, "{case}: `{name}` {words:08x?}: {entries:x?}");
+            let (begin, len, codes) = own[0];
+            let codes = codes.as_deref().unwrap();
+            let s = ((begin - at) / 4) as usize;
+            assert!(begin + len > at + 4 * last as u32, "{case}: `{name}`");
+            // The codes, last first, from the end of the prolog.
+            let mut prolog = alloc::vec::Vec::new();
+            let mut i = 0;
+            while i < codes.len() && codes[i] != 0xE4 {
+                prolog.push(&codes[i..]);
+                i += match codes[i] {
+                    0xC0..=0xDF | 0xE2 => 2,
+                    0xE0 => 4,
+                    _ => 1,
+                };
+            }
+            prolog.reverse();
+            let want = last + 1 - s;
+            assert_eq!(prolog.len(), want, "{case}: `{name}`: {codes:02x?}");
+            for (k, code) in prolog.iter().enumerate() {
+                assert!(
+                    a64_code_describes(code, words[s + k]),
+                    "{case}: `{name}` insn {} {:08x} takes {:02x}",
+                    s + k,
+                    words[s + k],
+                    code[0]
+                );
+            }
+        }
+    }
+}

@@ -1,11 +1,14 @@
 //! The ARM64 unwind codes and `.xdata` record of a badc function's prologue
-//! (Microsoft, "ARM64 exception handling"). After an optional `paciasp` and a
-//! Windows variadic callee's register area, a frame is `stp x29, x30, [sp,
-//! #-16]!; mov x29, sp`, or a callee save pre-indexing it, the other saves,
-//! then `stp x29, x30, [sp, #k]; add x29, sp, #k`. The prolog ends where x29
-//! is set: `set_fp` / `add_fp` recover sp from it, so what the body
-//! allocates after is undescribed. TODO: epilog scopes.
+//! (Microsoft, "ARM64 exception handling"). After the `bti c` landing pad and
+//! the `-fpatchable-function-entry` NOPs, each taking a `nop` code, an
+//! optional `paciasp` (all of a signed leaf's prolog) and a Windows variadic
+//! callee's register area, a frame is `stp x29, x30, [sp, #-16]!; mov x29,
+//! sp`, or a callee save pre-indexing it, the other saves, then `stp x29,
+//! x30, [sp, #k]; add x29, sp, #k`. The prolog ends where x29 is set:
+//! `set_fp` / `add_fp` recover sp from it, so what the body allocates after
+//! is undescribed. TODO: epilog scopes.
 
+use crate::c5::codegen::aarch64::encode::{BTI_C, NOP as NOP_INSN, PACIASP};
 use alloc::vec::Vec;
 
 const NOP: u8 = 0xE3;
@@ -13,6 +16,8 @@ pub(crate) const END: u8 = 0xE4;
 
 /// One prologue instruction, as the unwinder sees it.
 enum Insn {
+    /// `bti c` or `nop`: no effect the unwinder reverses.
+    Hint,
     Pac,
     SubSp(u32),
     /// A store with sp as its base: `pre` holds a pre-index's allocation,
@@ -66,8 +71,10 @@ fn classify(w: u32) -> Insn {
         },
         _ => Insn::Other,
     };
-    if w == 0xD503_233F {
-        return Insn::Pac;
+    match w {
+        BTI_C | NOP_INSN => return Insn::Hint,
+        PACIASP => return Insn::Pac,
+        _ => {}
     }
     if rn != 31 {
         return Insn::Other;
@@ -142,7 +149,8 @@ fn save(fp: bool, rt: u8, rt2: Option<u8>, pre: Option<u32>, off: u32) -> Option
 }
 
 /// The unwind codes of the prologue at `start` in `text` before `limit`, last
-/// first and `end` excluded; `None` for a frameless function or another shape.
+/// first and `end` excluded; `None` for an unsigned frameless function or
+/// another shape.
 pub(crate) fn prologue_codes(text: &[u8], start: u32, limit: u32) -> Option<Vec<u8>> {
     let mut at = start;
     let mut next = || -> Option<Insn> {
@@ -155,9 +163,17 @@ pub(crate) fn prologue_codes(text: &[u8], start: u32, limit: u32) -> Option<Vec<
     };
     let mut fwd: Vec<Vec<u8>> = Vec::new();
     let mut insn = next()?;
+    while let Insn::Hint = insn {
+        fwd.push(alloc::vec![NOP]);
+        insn = next()?;
+    }
     if let Insn::Pac = insn {
         fwd.push(alloc::vec![0xFC]);
-        insn = next()?;
+        // A signed leaf's prolog ends at `paciasp`.
+        match next() {
+            Some(i) => insn = i,
+            None => return Some(fwd.into_iter().rev().flatten().collect()),
+        }
     }
     // The register area's stores home arguments and restore nothing.
     if let Insn::SubSp(n) = insn {
@@ -277,6 +293,30 @@ mod tests {
             xdata(0x40, &[0xE1, 0x81]).unwrap(),
             [0x10, 0, 0, 0x08, 0xE1, 0x81, 0xE4, 0xE4]
         );
+    }
+
+    /// `bti c` and the patchable-entry NOPs ahead of the frame take a `nop`
+    /// code each, as clang's `.seh_nop`, before or without `pac_sign_lr`.
+    #[test]
+    fn landing_pad_and_entry_nops_take_nop_codes() {
+        let frame = [0xA9BF_7BFD, 0x9100_03FD];
+        // bti c; the frame
+        let t = words(&[&[0xD503_245F][..], &frame].concat());
+        assert_eq!(
+            prologue_codes(&t, 0, 12),
+            Some(alloc::vec![0xE1, 0x81, 0xE3])
+        );
+        // bti c; nop; nop; paciasp; the frame
+        let entry = [0xD503_245F, 0xD503_201F, 0xD503_201F, 0xD503_233F];
+        let t = words(&[&entry[..], &frame].concat());
+        let codes = alloc::vec![0xE1, 0x81, 0xFC, 0xE3, 0xE3, 0xE3];
+        assert_eq!(prologue_codes(&t, 0, 24), Some(codes));
+        // A frameless body behind the pad has no prolog; a signed one's
+        // ends at `paciasp`, as clang's `-mbranch-protection=pac-ret+leaf`.
+        let t = words(&[0xD503_245F, 0xD503_233F, 0x9100_0400, 0xD65F_03C0]);
+        assert_eq!(prologue_codes(&t, 0, 4), None);
+        assert_eq!(prologue_codes(&t, 0, 8), Some(alloc::vec![0xFC, 0xE3]));
+        assert_eq!(prologue_codes(&t, 4, 8), Some(alloc::vec![0xFC]));
     }
 
     /// Each callee save before `add x29` takes its `save_*` code.

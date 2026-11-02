@@ -722,6 +722,46 @@ fn fixture_parity_native_optimized() {
     );
 }
 
+/// `RtlVirtualUnwind` walks frames built under `-mbranch-protection=bti`,
+/// `standard` and `pac-ret+leaf+bti`, at -O0 and -O: each function's
+/// `.xdata` record describes its `bti c` and `paciasp`.
+#[test]
+fn unwind_walks_branch_protected_frames() {
+    if !host_can_run_pe() {
+        eprintln!("skip unwind_walks_branch_protected_frames: no PE runner on this host");
+        return;
+    }
+    let bti = crate::Hardening {
+        bti: true,
+        ..crate::Hardening::NONE
+    };
+    let standard = crate::Hardening {
+        pac_ret: true,
+        ..bti
+    };
+    let leaf = crate::Hardening {
+        pac_ret_leaf: true,
+        ..standard
+    };
+    let mut failures = Vec::new();
+    for (label, hardening) in [("bti", bti), ("standard", standard), ("leaf", leaf)] {
+        for optimize in [false, true] {
+            let opts = NativeOptions {
+                hardening,
+                optimize,
+                ..NativeOptions::new()
+            };
+            let suffix = format!("-{label}{}", if optimize { "-O" } else { "" });
+            let outcome =
+                build_and_run_fixture_with_options("unwind_restores_callee_saved.c", opts, &suffix);
+            if !outcome.matches(0) {
+                failures.push(format!("{suffix}: {outcome:?}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 /// [`BADC_FIXTURES`], at -O0 and -O.
 #[test]
 fn badc_fixtures() {

@@ -154,6 +154,7 @@ fn an_extension_with_a_full_width_reader_stays() {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         },
     ];
     for reader in readers {

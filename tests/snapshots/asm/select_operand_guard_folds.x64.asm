@@ -26,60 +26,53 @@ Disassembly of section .text:
                	int3
 
 <add_page>:
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
                	orq	%rdi, %rax
-               	movq	%rax, (%rcx)
+               	movq	%rax, <rip> # <addr>
                	andq	$0x3, %rax
                	retq
                	xorl	%eax, %eax
                	jmp	<addr>
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	$0x0, (%rax)
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rsi
-               	movq	(%rsi), %rsi
-               	testl	$0x400000, %esi         # imm = 0x400000
+               	movq	$0x0, <rip> # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	movq	(%rcx), %rcx
+               	testl	$0x400000, %ecx         # imm = 0x400000
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	$0x400000, (%rax)       # imm = 0x400000
-               	movq	(%rcx), %rax
-               	movq	(%rax), %rax
-               	testl	$0x400000, %eax         # imm = 0x400000
-               	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x0, (%rax)
-               	leaq	<rip>, %rax # <addr>
-               	movq	$0x1000, (%rax)         # imm = 0x1000
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, (%rcx)
-               	leaq	<rip>, %rcx # <addr>
-               	movq	$0x1001, (%rcx)         # imm = 0x1001
+               	movq	$0x400000, <rip> # imm = 0x400000
+                                                # <addr>
+               	movq	<rip>, %rcx # <addr>
                	movq	(%rcx), %rcx
+               	testl	$0x400000, %ecx         # imm = 0x400000
+               	je	<addr>
+               	movl	$0x0, <rip> # <addr>
+               	movq	$0x1000, <rip> # imm = 0x1000
+                                                # <addr>
+               	movl	$0x1, <rip> # <addr>
+               	movq	$0x1001, <rip> # imm = 0x1001
+                                                # <addr>
+               	movq	<rip>, %rcx # <addr>
                	cmpq	$0x1001, %rcx           # imm = 0x1001
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, (%rcx)
-               	leaq	<rip>, %rdx # <addr>
-               	cmpl	$0x0, (%rdx)
+               	movl	$0x1, <rip> # <addr>
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	xorl	%eax, %eax
-               	movl	%eax, (%rdx)
-               	cmpl	$0x0, (%rcx)
+               	movl	%eax, <rip> # <addr>
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
-               	cmpl	$0x0, (%rdx)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movl	%eax, (%rcx)
+               	movl	%eax, <rip> # <addr>
                	retq
                	movl	$0x6, %eax
                	retq

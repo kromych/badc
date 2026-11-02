@@ -347,6 +347,9 @@ pub(super) fn emit_inst(
         Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
             emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
         }
+        Inst::Load { pc_rel: true, .. } | Inst::Store { pc_rel: true, .. } => {
+            emit_pc_rel(code, data_fixups, inst, v, dst, fcx)
+        }
         Inst::Load { .. }
         | Inst::Store { .. }
         | Inst::SegLoad { .. }

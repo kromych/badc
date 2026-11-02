@@ -144,6 +144,41 @@ pub(crate) fn mark_abs_bases(func: &mut FunctionSsa, extern_bases: bool) {
     }
 }
 
+/// Mark the loads and stores of an x86-64 function whose address is a data
+/// address the unit itself places to form it PC-relative (`pc_rel`). A
+/// wider float, a vector and an access of proven lower alignment keep the
+/// address in a register.
+pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa) {
+    let foreign: alloc::collections::BTreeSet<ValueId> =
+        func.extern_imm_data_refs.iter().map(|&(v, _)| v).collect();
+    let data = |a: ValueId| {
+        matches!(func.insts.get(a as usize), Some(Inst::ImmData(_))) && !foreign.contains(&a)
+    };
+    let marks: Vec<usize> = (func.insts.iter().enumerate())
+        .filter(|(_, inst)| match inst {
+            Inst::Load {
+                addr,
+                kind,
+                align: 0,
+                ..
+            } => data(*addr) && !matches!(kind, LoadKind::F80 | LoadKind::F128 | LoadKind::V128),
+            Inst::Store {
+                addr,
+                kind,
+                align: 0,
+                ..
+            } => data(*addr) && !matches!(kind, StoreKind::F80 | StoreKind::F128 | StoreKind::V128),
+            _ => false,
+        })
+        .map(|(i, _)| i)
+        .collect();
+    for i in marks {
+        if let Inst::Load { pc_rel, .. } | Inst::Store { pc_rel, .. } = &mut func.insts[i] {
+            *pc_rel = true;
+        }
+    }
+}
+
 /// Count uses of every value across instructions, terminators, and
 /// block exit accumulators.
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
@@ -248,6 +283,7 @@ fn foldable_scaled_addresses(
                 kind,
                 volatile: false,
                 align: 0,
+                ..
             } => (*addr, int_load_width(*kind)),
             Inst::Store {
                 addr,
@@ -408,6 +444,7 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
                     Inst::LoadLocal {
                         off,
@@ -423,6 +460,7 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
                     Inst::StoreLocal {
                         off,
@@ -532,6 +570,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => {
                     if let (Some(width), Some(&(base, index, scale))) = (
                         int_load_width(*kind),
@@ -558,6 +597,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 kind: *kind,
                                 volatile: *volatile,
                                 align: *align,
+                                pc_rel: false,
                             },
                         ));
                     }
@@ -569,6 +609,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => {
                     if let (Some(width), Some(&(base, index, scale))) = (
                         int_store_width(*kind),
@@ -597,6 +638,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                                 kind: *kind,
                                 volatile: *volatile,
                                 align: *align,
+                                pc_rel: false,
                             },
                         ));
                     }
@@ -707,6 +749,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -718,6 +761,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -997,6 +1041,7 @@ mod tests {
                 kind: LoadKind::U8,
                 volatile: true,
                 align: 0,
+                pc_rel: false,
             },
             Inst::Load {
                 addr: 3,
@@ -1004,6 +1049,7 @@ mod tests {
                 kind: LoadKind::U8,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
             Inst::Load {
                 addr: 3,
@@ -1011,6 +1057,7 @@ mod tests {
                 kind: LoadKind::U8,
                 volatile: false,
                 align: 1,
+                pc_rel: false,
             },
         ] {
             let out = with(vec![load(3, LoadKind::U8), odd.clone()]);

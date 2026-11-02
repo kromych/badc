@@ -32,12 +32,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	cmpq	$0x1, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	$0x63, (%rax)
+               	movq	$0x63, <rip> # <addr>
                	xorl	%eax, %eax
                	retq

@@ -2793,12 +2793,15 @@ fn patch_addr_load(
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
-            crate::c5::codegen::require_whole_addr(part, "PE: address load")?;
-            let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
+            let field = crate::c5::codegen::x86_disp32_field(
+                u64::from(instr_offset_in_text),
+                part,
+                "PE: address load",
+            )? as u32;
             patch_x86_64_disp32(
                 text,
-                (instr_offset_in_text + 3) as usize,
-                after_rva,
+                field as usize,
+                text_section_rva + field + 4,
                 target_rva,
             )
         }

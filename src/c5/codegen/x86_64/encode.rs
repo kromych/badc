@@ -185,14 +185,30 @@ fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
     }
 }
 
-/// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
-/// SIB loads extend (`I32` only when `hi`); returns the displacement's offset.
-pub(crate) fn emit_load_index_abs(
+/// A memory operand with no base register, ending in a 32-bit displacement
+/// the writer patches: `disp32(,%index,scale)` or `disp32(%rip)`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Disp32Mem {
+    Index(Reg, u8),
+    Rip,
+}
+
+impl Disp32Mem {
+    fn opnd(self, width: u8) -> super::table::Opnd {
+        match self {
+            Disp32Mem::Index(index, scale) => mindex(index, scale, width),
+            Disp32Mem::Rip => super::table::Opnd::RipRel { disp: 0, width },
+        }
+    }
+}
+
+/// Load of `kind` from `mem` into `dst`, extended as the SIB loads extend
+/// (`I32` only when `hi`); returns the displacement's offset.
+pub(crate) fn emit_load_disp32(
     code: &mut Vec<u8>,
     kind: crate::c5::ir::LoadKind,
     dst: Reg,
-    index: Reg,
-    scale: u8,
+    mem: Disp32Mem,
     hi: bool,
 ) -> usize {
     use crate::c5::ir::LoadKind;
@@ -205,52 +221,58 @@ pub(crate) fn emit_load_index_abs(
         LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
         LoadKind::U8 => (Mnem::Movzx, None, 8, 1),
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            unreachable!("indexed load of a floating kind")
+            unreachable!("disp32 load of a floating kind")
         }
     };
     super::table::encode_into_disp32(
         code,
         mnem,
         width_override,
-        &[rw(dst, dst_width), mindex(index, scale, width)],
+        &[rw(dst, dst_width), mem.opnd(width)],
     )
 }
 
-/// Store of the low `width` bytes of `src` to `disp32(,%index,scale)`;
-/// returns the offset of the displacement field.
-pub(crate) fn emit_store_index_abs(
-    code: &mut Vec<u8>,
-    width: u8,
-    index: Reg,
-    scale: u8,
-    src: Reg,
-) -> usize {
+/// Store of the low `width` bytes of `src` to `mem`; returns the offset of
+/// the displacement field.
+pub(crate) fn emit_store_disp32(code: &mut Vec<u8>, width: u8, mem: Disp32Mem, src: Reg) -> usize {
     super::table::encode_into_disp32(
         code,
         Mnem::Mov,
         Some(width),
-        &[mindex(index, scale, width), rw(src, width)],
+        &[mem.opnd(width), rw(src, width)],
     )
 }
 
-/// `op disp32(,%index,scale), imm`: [`emit_mi_sib`] with no base register;
-/// returns the offset of the displacement field.
-pub(crate) fn emit_mi_index_abs(
+/// `op mem, imm`: [`emit_mi`] with no base register; returns the offset of
+/// the displacement field.
+pub(crate) fn emit_mi_disp32(
     code: &mut Vec<u8>,
     mnem: Mnem,
     width: u8,
-    (index, scale): (Reg, u8),
+    mem: Disp32Mem,
     imm: i32,
 ) -> usize {
     super::table::encode_into_disp32(
         code,
         mnem,
         Some(width),
-        &[
-            mindex(index, scale, width),
-            super::table::Opnd::Imm(imm as i64),
-        ],
+        &[mem.opnd(width), super::table::Opnd::Imm(imm as i64)],
     )
+}
+
+/// `movss` (`F3`) or `movsd` (`F2`) between `xmm` and `disp32(%rip)`:
+/// `0F 10` loads, `0F 11` stores. Returns the offset of the displacement.
+pub(crate) fn emit_sse_mov_rip(code: &mut Vec<u8>, prefix: u8, store: bool, xmm: Reg) -> usize {
+    emit_byte(code, prefix);
+    if xmm.high() {
+        emit_byte(code, rex(false, true, false, false));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, if store { 0x11 } else { 0x10 });
+    emit_byte(code, modrm(0b00, xmm.lo(), 0b101));
+    let field = code.len();
+    emit_i32(code, 0);
+    field
 }
 
 fn emit_byte(code: &mut Vec<u8>, b: u8) {

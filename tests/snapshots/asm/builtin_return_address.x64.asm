@@ -28,11 +28,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rbp), %rcx
-               	movq	%rcx, (%rax)
-               	leaq	<rip>, %rax # <addr>
-               	cmpq	$0x0, (%rax)
+               	movq	0x8(%rbp), %rax
+               	movq	%rax, <rip> # <addr>
+               	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	xorl	%eax, %eax
                	popq	%rbp

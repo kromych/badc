@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <touch>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdi, (%rax)
+               	movq	%rdi, <rip> # <addr>
                	retq
 
 <fl>:
@@ -469,19 +468,17 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r12
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	%r12, %r13
-               	imulq	%rcx, %r13
-               	movq	0x8(%rax), %rcx
+               	imulq	%rax, %r13
+               	movq	<rip>, %rax # <addr>
                	movq	%r12, %r14
-               	imulq	%rcx, %r14
-               	movq	0x10(%rax), %rcx
+               	imulq	%rax, %r14
+               	movq	<rip>, %rax # <addr>
                	movq	%r12, %r15
-               	imulq	%rcx, %r15
-               	movq	0x18(%rax), %rax
+               	imulq	%rax, %r15
+               	movq	<rip>, %rax # <addr>
                	movq	%r12, %r10
                	imulq	%rax, %r10
                	movq	%r10, 0x88(%rsp)
@@ -689,21 +686,19 @@ Disassembly of section .text:
                	movsbq	%cl, %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	imulq	%r12, %rcx
-               	cmpq	%rcx, %r13
+               	movq	<rip>, %rax # <addr>
+               	imulq	%r12, %rax
+               	cmpq	%rax, %r13
                	jne	<addr>
-               	movq	0x8(%rax), %rcx
-               	imulq	%r12, %rcx
-               	cmpq	%rcx, %r14
+               	movq	<rip>, %rax # <addr>
+               	imulq	%r12, %rax
+               	cmpq	%rax, %r14
                	jne	<addr>
-               	movq	0x10(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	imulq	%r12, %rax
                	cmpq	%rax, %r15
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	imulq	%r12, %rax
                	movq	%rax, %r10
                	movq	0x88(%rsp), %rax

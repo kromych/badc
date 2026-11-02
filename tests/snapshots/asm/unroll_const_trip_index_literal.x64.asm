@@ -162,14 +162,15 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movq	%rax, %rdx
-               	jmp	<addr>
+               	movl	<rip>, %esi # <addr>
+               	cmpl	%esi, %eax
+               	jge	<addr>
                	leaq	<rip>, %rsi # <addr>
                	movslq	(%rsi,%rax,4), %rsi
                	shlq	$0x8, %rsi
                	addq	%rsi, %rdx
                	incq	%rax
-               	leaq	<rip>, %rsi # <addr>
-               	movl	(%rsi), %esi
+               	movl	<rip>, %esi # <addr>
                	cmpl	%esi, %eax
                	jl	<addr>
                	cmpq	%rcx, %rdx

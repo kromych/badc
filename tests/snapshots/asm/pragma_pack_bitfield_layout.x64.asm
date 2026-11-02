@@ -446,9 +446,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movzwq	(%rax), %rcx
-               	movzbq	0x2(%rax), %rax
-               	shlq	$0x10, %rax
+               	movzwq	(%rax), %rax
+               	movzbq	<rip>, %rcx # <addr>
+               	shlq	$0x10, %rcx
                	orq	%rcx, %rax
                	shlq	$0x2a, %rax
                	sarq	$0x2a, %rax

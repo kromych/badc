@@ -5335,12 +5335,21 @@ fn emit_addr_fixup_relocs(
                              relocation type"
                     )));
                 }
+                AddrPart::Disp32 => {
+                    return Err(C5Error::internal(format!(
+                        "elf_reloc: x86_64 displacement fixup at text+{instr_offset:#x} on aarch64"
+                    )));
+                }
             }
         }
         Machine::X86_64 => {
-            crate::c5::codegen::require_whole_addr(part, "elf_reloc: address fixup")?;
+            let field = crate::c5::codegen::x86_disp32_field(
+                instr_offset,
+                part,
+                "elf_reloc: address fixup",
+            )?;
             let rela = Elf64Rela {
-                r_offset: instr_offset + 3,
+                r_offset: field,
                 r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
                 r_addend: addend - 4,
             };

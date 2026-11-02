@@ -1273,8 +1273,8 @@ fn patch_addr_load(
             patch_adrp_add(out, code, instr_offset_in_code, target_vmaddr, part, label)
         }
         Machine::X86_64 => {
-            crate::c5::codegen::require_whole_addr(part, label)?;
-            patch_lea_rip32(out, code, instr_offset_in_code, target_vmaddr, label)
+            let field = crate::c5::codegen::x86_disp32_field(instr_offset_in_code, part, label)?;
+            patch_rip_disp32(out, code, field, target_vmaddr, label)
         }
     }
 }
@@ -1326,18 +1326,16 @@ fn patch_call_qword_rip32(
     Ok(())
 }
 
-/// Patch the disp32 field of `lea r64, [rip + disp32]` so the instruction
-/// computes `target_vmaddr` into its destination.
-fn patch_lea_rip32(
+/// Patch the rip-relative displacement at `field` so its operand names
+/// `target_vmaddr`.
+fn patch_rip_disp32(
     out: &mut [u8],
     code: CodePlacement,
-    instr_offset_in_code: u64,
+    field: u64,
     target_vmaddr: u64,
     label: &str,
 ) -> Result<(), C5Error> {
-    let lea_len = x86_64::LEA_RIP32_LEN as u64;
-    let instr_vmaddr = code.vmaddr_at(instr_offset_in_code);
-    let after = instr_vmaddr + lea_len;
+    let after = code.vmaddr_at(field) + 4;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
         return Err(C5Error::internal(format!(
@@ -1345,7 +1343,7 @@ fn patch_lea_rip32(
         )));
     }
     let disp32 = delta as i32;
-    let disp_file_off = code.file_at(instr_offset_in_code + lea_len - 4);
+    let disp_file_off = code.file_at(field);
     out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
     Ok(())
 }
@@ -1367,7 +1365,7 @@ fn patch_got_data_load(
         )));
     }
     out[opcode_off] = 0x8B;
-    patch_lea_rip32(out, code, instr_offset_in_code, slot_vmaddr, label)
+    patch_rip_disp32(out, code, instr_offset_in_code + 3, slot_vmaddr, label)
 }
 
 /// Patch the fields `part` names so the reference computes `target_vmaddr`.

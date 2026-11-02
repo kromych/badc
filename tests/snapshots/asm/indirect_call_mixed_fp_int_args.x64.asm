@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
-               	leaq	<rip>, %rcx # <addr>
-               	movsd	(%rcx), %xmm0
+               	movl	<rip>, %eax # <addr>
+               	movsd	<rip>, %xmm0 # <addr>
                	leaq	0x2(%rax), %rcx
                	movabsq	$0x3fd0000000000000, %rdx # imm = 0x3FD0000000000000
                	movl	$0x3fc00000, %esi       # imm = 0x3FC00000

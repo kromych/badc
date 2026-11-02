@@ -70,8 +70,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %edi
+               	movl	<rip>, %edi # <addr>
                	movq	$-0x7, %rax
                	movl	$0xb2d05e00, %edx       # imm = 0xB2D05E00
                	movq	%rax, -0x10(%rbp)
@@ -110,8 +109,7 @@ Disassembly of section .text:
                	movl	$0x9, %r12d
                	movl	$0x186a0, %r13d         # imm = 0x186A0
                	movl	$0xb2d05e00, %r14d      # imm = 0xB2D05E00
-               	leaq	<rip>, %r15 # <addr>
-               	movq	(%r15), %r15
+               	movq	<rip>, %r15 # <addr>
                	subq	$0x30, %rsp
                	movq	%rax, (%rsp)
                	movq	%rbx, 0x8(%rsp)

@@ -207,22 +207,38 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rbx # <addr>
-               	movl	$0xffffffff, (%rbx)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rbx)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x8(%rbx)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0xc(%rbx)  # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x10(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x14(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x18(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x1c(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x20(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x24(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x28(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x2c(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x30(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x34(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x38(%rbx) # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x3c(%rbx) # imm = 0xFFFFFFFF
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
                	movl	$0xa, %esi
                	movq	%rbx, %rdi
                	callq	<addr>

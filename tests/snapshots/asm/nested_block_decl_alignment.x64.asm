@@ -64,23 +64,23 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rcx # <addr>
                	xorl	%eax, %eax
-               	movl	$0x3, (%rcx)
+               	movl	$0x3, <rip> # <addr>
                	testb	$0x3f, %cl
                	jne	<addr>
-               	movl	(%rcx), %ecx
+               	movl	<rip>, %ecx # <addr>
                	xorq	$0x3, %rcx
                	testl	%ecx, %ecx
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	leaq	<rip>, %rcx # <addr>
-               	movb	$0x5, (%rcx)
-               	testb	$0x7f, %cl
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	leaq	<rip>, %rdx # <addr>
+               	movb	$0x5, <rip> # <addr>
+               	testb	$0x7f, %dl
                	jne	<addr>
-               	movsbq	(%rcx), %rax
+               	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x5, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rdx,%rax), %rbx
+               	leaq	(%rcx,%rax), %rbx
                	callq	<addr>
                	addq	%rax, %rbx
                	callq	<addr>
@@ -91,5 +91,5 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	jmp	<addr>

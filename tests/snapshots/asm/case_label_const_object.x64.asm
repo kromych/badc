@@ -54,13 +54,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x9, (%rax)
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx), %ecx
-               	cmpl	$0x3e8, %ecx            # imm = 0x3E8
+               	movl	$0x9, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jne	<addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0xa, %eax

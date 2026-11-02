@@ -292,6 +292,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => {
                     if let Some(&(s, _)) = la_slot.get(addr) {
                         // A write into a tracked slot. Promotable only as a
@@ -319,6 +320,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                     kind,
                     volatile,
                     align,
+                    ..
                 } => {
                     if let Some(&(s, _)) = la_slot.get(addr) {
                         if *disp == 0 && !*volatile && *align == 0 {
@@ -486,6 +488,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                         kind: u.kind,
                         volatile: false,
                         align: 0,
+                        pc_rel: false,
                     },
                 ));
                 // A reference to the copy's result reads the stored value.

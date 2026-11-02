@@ -77,33 +77,29 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	testb	$0x1f, %cl
+               	leaq	<rip>, %rax # <addr>
+               	testb	$0x1f, %al
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
-               	movl	$0x13, 0x8(%rax)
-               	movl	$0x17, (%rcx)
-               	movl	0x8(%rax), %eax
+               	movl	$0x13, <rip> # <addr>
+               	movl	$0x17, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
                	addq	$0x17, %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movsbq	(%rcx), %rcx
+               	movsbq	<rip>, %rax # <addr>
+               	movsbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movsbq	(%rcx), %rcx
+               	movsbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	cmpl	$0x6, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -127,18 +123,14 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movsbq	(%rcx), %rcx
+               	movsbq	<rip>, %rax # <addr>
+               	movsbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movsbq	(%rcx), %rcx
+               	movsbq	<rip>, %rcx # <addr>
                	addq	%rcx, %rax
                	cmpl	$0xf, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

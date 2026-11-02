@@ -30,75 +30,72 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, (%rax)     # imm = 0xFFFFFFFF
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %esi
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
+                                                # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	movl	<rip>, %esi # <addr>
                	movl	%ecx, %eax
                	xorl	%edx, %edx
                	divl	%esi
                	movq	%rdx, %rbx
                	leaq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movl	(%rdx), %esi
-               	andq	$0x4, %rsi
-               	andq	%rbx, %rsi
-               	movl	(%rcx,%rsi,4), %esi
-               	movl	%esi, (%rax)
-               	movl	(%rdx), %edx
-               	andq	$0x4, %rdx
-               	andq	%rbx, %rdx
-               	movl	(%rcx,%rdx,4), %ecx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movl	(%rdx), %esi
-               	andq	$0x4, %rsi
-               	andq	%rbx, %rsi
-               	movl	(%rcx,%rsi,4), %esi
-               	movl	%esi, (%rax)
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %eax
+               	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
-               	movl	(%rdx), %esi
-               	andq	$0x4, %rsi
-               	andq	%rbx, %rsi
-               	movl	(%rcx,%rsi,4), %esi
-               	movl	%esi, (%rax)
-               	movl	(%rdx), %edx
-               	andq	$0x4, %rdx
-               	andq	%rbx, %rdx
-               	movl	(%rcx,%rdx,4), %ecx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %eax
+               	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movl	(%rdx), %esi
-               	andq	$0x4, %rsi
-               	andq	%rbx, %rsi
-               	movl	(%rcx,%rsi,4), %esi
-               	movl	%esi, (%rax)
-               	movl	(%rdx), %edx
-               	andq	$0x4, %rdx
-               	andq	%rbx, %rdx
-               	movl	(%rcx,%rdx,4), %ecx
-               	movl	%ecx, (%rax)
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movl	(%rdx), %edx
-               	andq	$0x4, %rdx
-               	andq	%rbx, %rdx
-               	movl	(%rcx,%rdx,4), %ecx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %eax
+               	movl	%eax, <rip> # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	andq	$0x4, %rcx
+               	andq	%rbx, %rcx
+               	movl	(%rax,%rcx,4), %eax
+               	movl	%eax, <rip> # <addr>
                	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
                	movb	$0x0, %al

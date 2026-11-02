@@ -5,20 +5,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(32)                                      -> x0
-    v2   Load { addr=v1, disp=0, kind=F64, volatile }     -> d0
-    v3   Load { addr=v1, disp=0, kind=F64, volatile }     -> d1
+    v2   Load { addr=v1, disp=0, kind=F64, volatile pc_rel } -> d0
+    v3   Load { addr=v1, disp=0, kind=F64, volatile pc_rel } -> d1
     v4   Binop { op=fdiv, lhs=v2, rhs=v3 }                -> d0
     v5   Imm(0)                                           -> x0
     v6   ImmData(8)                                       -> x0
-    v7   Load { addr=v6, disp=0, kind=F64, volatile }     -> d1
+    v7   Load { addr=v6, disp=0, kind=F64, volatile pc_rel } -> d1
     v8   Imm(0)                                           -> x0
     v9   ImmData(40)                                      -> x0
-    v10  Load { addr=v9, disp=0, kind=F32, volatile }     -> d2 [f32]
-    v11  Load { addr=v9, disp=0, kind=F32, volatile }     -> d3 [f32]
+    v10  Load { addr=v9, disp=0, kind=F32, volatile pc_rel } -> d2 [f32]
+    v11  Load { addr=v9, disp=0, kind=F32, volatile pc_rel } -> d3 [f32]
     v12  Binop { op=fdiv, lhs=v10, rhs=v11 }              -> d2 [f32]
     v13  Imm(0)                                           -> x0
     v14  ImmData(16)                                      -> x0
-    v15  Load { addr=v14, disp=0, kind=F32, volatile }    -> d3 [f32]
+    v15  Load { addr=v14, disp=0, kind=F32, volatile pc_rel } -> d3 [f32]
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
@@ -329,12 +329,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

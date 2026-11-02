@@ -30,9 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdx # <addr>
                	xorl	%ecx, %ecx
-               	movl	$0x1, (%rdx)
-               	movl	$0x2, 0x4(%rdx)
-               	movl	$0x4, 0x8(%rdx)
+               	movl	$0x1, <rip> # <addr>
+               	movl	$0x2, <rip> # <addr>
+               	movl	$0x4, <rip> # <addr>
                	movq	%rdx, %rax
                	leaq	0xc(%rdx), %rsi
                	cmpq	%rsi, %rax
@@ -48,9 +48,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rcx # <addr>
                	xorl	%esi, %esi
-               	movl	$0x1, (%rcx)
-               	movl	$0x2, 0x4(%rcx)
-               	movl	$0x4, 0x8(%rcx)
+               	movl	$0x1, <rip> # <addr>
+               	movl	$0x2, <rip> # <addr>
+               	movl	$0x4, <rip> # <addr>
                	movq	%rcx, %rax
                	leaq	0xc(%rcx), %rdx
                	cmpq	%rdx, %rax

@@ -3431,10 +3431,8 @@ fn a_naked_function_s_operands_take_registers_and_no_frame() {
         (
             crate::Target::LinuxX64,
             "__asm__ volatile(\"movl %0, %%eax\\n\\tretq\" : : \"r\"(g) : \"eax\");",
-            // leaq g(%rip), %rax; movslq (%rax), %rcx; movl %ecx, %eax; retq
-            alloc::vec![
-                0x48, 0x8d, 0x05, 0, 0, 0, 0, 0x48, 0x63, 0x08, 0x89, 0xc8, 0xc3
-            ],
+            // movslq g(%rip), %rcx; movl %ecx, %eax; retq
+            alloc::vec![0x48, 0x63, 0x0d, 0, 0, 0, 0, 0x89, 0xc8, 0xc3],
         ),
         (
             crate::Target::LinuxX64,
@@ -3454,11 +3452,9 @@ fn a_naked_function_s_operands_take_registers_and_no_frame() {
             crate::Target::LinuxX64,
             "__asm__ volatile(\"movq %0, %%rsp\" : : \"m\"(q));\n\
              __asm__ volatile(\"movq %0, %%rbp\\n\\tretq\" : : \"r\"(q) : \"rbp\");",
-            // leaq q(%rip), %rax; movq q(%rip), %rsp; movq (%rax), %rax;
-            // movq %rax, %rbp; retq
+            // movq q(%rip), %rsp; movq q(%rip), %rax; movq %rax, %rbp; retq
             alloc::vec![
-                0x48, 0x8d, 0x05, 0, 0, 0, 0, 0x48, 0x8b, 0x25, 0, 0, 0, 0, 0x48, 0x8b, 0x00, 0x48,
-                0x89, 0xc5, 0xc3,
+                0x48, 0x8b, 0x25, 0, 0, 0, 0, 0x48, 0x8b, 0x05, 0, 0, 0, 0, 0x48, 0x89, 0xc5, 0xc3,
             ],
         ),
         (
@@ -3597,26 +3593,32 @@ fn a_naked_function_computes_its_operands_without_a_frame() {
         .bytes;
     #[rustfmt::skip]
     let want: &[u8] = &[
-        0x48, 0x8d, 0x35, 0, 0, 0, 0, // leaq ctx(%rip), %rsi
         0x0f, 0x01, 0x15, 0, 0, 0, 0, // lgdtq ctx+40(%rip)
         0x8e, 0x15, 0, 0, 0, 0, // movw ctx+8(%rip), %ss
         0x48, 0x8b, 0x25, 0, 0, 0, 0, // movq ctx(%rip), %rsp
-        0x48, 0x8b, 0x56, 0x18, // movq 24(%rsi), %rdx
+        0x48, 0x8b, 0x15, 0, 0, 0, 0, // movq ctx+24(%rip), %rdx
         0x89, 0xd0, // movl %edx, %eax
         0x48, 0xc1, 0xea, 0x20, // shrq $32, %rdx
         0xb9, 0x77, 0x02, 0, 0, // movl $0x277, %ecx
         0x0f, 0x30, // wrmsr
-        0x48, 0x8b, 0x46, 0x10, // movq 16(%rsi), %rax
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // movq ctx+16(%rip), %rax
         0x0f, 0x22, 0xc0, // movq %rax, %cr0
-        0x48, 0x8b, 0x46, 0x20, // movq 32(%rsi), %rax
-        0x48, 0x8d, 0x0d, 0, 0, 0, 0, // leaq handle(%rip), %rcx
-        0x48, 0x8b, 0x09, // movq (%rcx), %rcx
+        0x48, 0x8b, 0x05, 0, 0, 0, 0, // movq ctx+32(%rip), %rax
+        0x48, 0x8b, 0x0d, 0, 0, 0, 0, // movq handle(%rip), %rcx
         0x50, 0x51, 0x48, 0xcb, // pushq %rax; pushq %rcx; lretq
     ];
     assert_eq!(text.as_slice(), want, "{text:02x?}");
     assert_eq!(
         text_relocs(&o),
-        [rip(3, 0), rip(10, 40), rip(16, 8), rip(23, 0), rip(58, 56)]
+        [
+            rip(3, 40),
+            rip(9, 8),
+            rip(16, 0),
+            rip(23, 24),
+            rip(43, 16),
+            rip(53, 32),
+            rip(60, 56)
+        ]
     );
     // -O0 takes the same RIP-relative memory operands and no frame either.
     let o = obj(false);
@@ -3801,10 +3803,10 @@ fn a_naked_function_s_statements_are_emitted_or_refused() {
     }
     for (body, want) in [
         ("(void) a; ; asm(\"ret\");", &[0xc3u8][..]),
-        // leaq g(%rip), %rax; movl $1, (%rax); retq
+        // movl $1, g(%rip); retq
         (
             "g = 1; asm(\"ret\");",
-            &[0x48, 0x8d, 0x05, 0, 0, 0, 0, 0xc7, 0x00, 1, 0, 0, 0, 0xc3],
+            &[0xc7, 0x05, 0, 0, 0, 0, 1, 0, 0, 0, 0xc3],
         ),
     ] {
         assert_eq!(

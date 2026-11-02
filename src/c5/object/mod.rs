@@ -308,7 +308,7 @@ fn resolve_single_image_asm_sym_fixups(
             (None, Loc::WeakUndef)
                 if matches!(r.kind, AsmRelocKind::A64Branch26 { .. })
                     && weak_undef::aarch64_branch_to_nop(&mut build.text, r.instr_offset) => {}
-            (None, _) | (Some(AddrPart::Whole), _) => {
+            (None, _) | (Some(AddrPart::Whole | AddrPart::Disp32), _) => {
                 return Err(refuse("a symbol operand"));
             }
         }

@@ -67,12 +67,10 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jb	<addr>
-               	leaq	<rip>, %rax # <addr>
                	xorl	%edi, %edi
-               	movb	%dil, (%rax)
-               	leaq	<rip>, %r9 # <addr>
-               	movb	%dil, (%r9)
-               	movb	$-0x3d, 0x1(%rax)
+               	movb	%dil, <rip> # <addr>
+               	movb	%dil, <rip> # <addr>
+               	movb	$-0x3d, <rip> # <addr>
                	movl	$0x10, %eax
                	movq	%rdi, %rcx
                	movq	%rdx, %rsi
@@ -91,8 +89,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x1(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x2, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -112,8 +109,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x2(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x20, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -133,8 +129,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x2(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x3, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -154,8 +149,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x3(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x30, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -175,8 +169,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x3(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x4, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -196,8 +189,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x4(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x40, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -217,8 +209,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x4(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x5, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -238,8 +229,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x5(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x50, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -259,8 +249,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x5(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x6, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -280,8 +269,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x6(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x60, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -301,8 +289,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x6(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x7, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -322,8 +309,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x7(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x70, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -343,8 +329,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x7(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x8, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -364,8 +349,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x8(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x80, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -385,8 +369,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x8(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x9, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -406,8 +389,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x9(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0x90, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -427,8 +409,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0x9(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xa, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -448,8 +429,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xa(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xa0, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -469,8 +449,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xa(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xb, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -490,8 +469,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xb(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xb0, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -511,8 +489,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xb(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xc, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -532,8 +509,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xc(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xc0, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -553,8 +529,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xc(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xd, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -574,8 +549,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xd(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xd0, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -595,8 +569,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xd(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xe, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -616,8 +589,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xe(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xe0, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -637,8 +609,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xe(%r9)
-               	leaq	<rip>, %r9 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xf, %eax
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
@@ -658,8 +629,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xf(%r9)
-               	leaq	<rip>, %r8 # <addr>
+               	movb	%cl, <rip> # <addr>
                	movl	$0xf0, %eax
                	xorl	%esi, %esi
                	movq	%rsi, %rcx
@@ -678,7 +648,7 @@ Disassembly of section .text:
                	shrq	%rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movb	%cl, 0xf(%r8)
+               	movb	%cl, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %r8 # <addr>
                	xorl	%edx, %edx

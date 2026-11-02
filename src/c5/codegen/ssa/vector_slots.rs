@@ -394,6 +394,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                         kind: LoadKind::V128,
                         volatile: false,
                         align: 0,
+                        pc_rel: false,
                     },
                 },
             ),
@@ -440,6 +441,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                         kind: StoreKind::V128,
                         volatile: false,
                         align: 0,
+                        pc_rel: false,
                     },
                 };
                 gone.insert(n);

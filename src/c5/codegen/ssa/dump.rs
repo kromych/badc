@@ -108,11 +108,13 @@ fn fmt_inst(inst: &Inst) -> String {
             kind,
             volatile,
             align,
+            pc_rel,
         } => format!(
-            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{} }}",
+            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{}{} }}",
             fmt_load_kind(*kind),
             fmt_volatile(*volatile),
             fmt_align(*align),
+            fmt_pc_rel(*pc_rel),
         ),
         Store {
             addr,
@@ -121,11 +123,13 @@ fn fmt_inst(inst: &Inst) -> String {
             kind,
             volatile,
             align,
+            pc_rel,
         } => format!(
-            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{} }}",
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{}{} }}",
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
             fmt_align(*align),
+            fmt_pc_rel(*pc_rel),
         ),
         SegLoad {
             addr,
@@ -466,6 +470,11 @@ fn fmt_disp(disp: i32) -> alloc::string::String {
 /// ` abs` for a base carried as the access's absolute displacement.
 fn fmt_abs_base(abs: bool) -> &'static str {
     if abs { " abs" } else { "" }
+}
+
+/// ` pc_rel` for an address the access forms PC-relative.
+fn fmt_pc_rel(pc_rel: bool) -> &'static str {
+    if pc_rel { " pc_rel" } else { "" }
 }
 
 /// Follows the index operand; empty for a full-width index.

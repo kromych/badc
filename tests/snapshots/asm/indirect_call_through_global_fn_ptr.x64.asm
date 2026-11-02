@@ -34,35 +34,27 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x7, (%rax)
-               	leaq	<rip>, %rcx # <addr>
+               	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
-               	movl	%edx, (%rcx)
+               	movl	%edx, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	movl	(%rax), %esi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movl	<rip>, %esi # <addr>
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	popq	%rbp
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x7, (%rax)
-               	leaq	<rip>, %rcx # <addr>
+               	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
-               	movl	%edx, (%rcx)
+               	movl	%edx, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	movl	(%rax), %esi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movl	<rip>, %esi # <addr>
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	popq	%rbp
                	retq

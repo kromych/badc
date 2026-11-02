@@ -976,6 +976,7 @@ mod tests {
             kind: LoadKind::I32,
             volatile,
             align: 0,
+            pc_rel: false,
         };
         let (f, a) = rotated(alloc::vec![load(false), compare()]);
         assert_eq!(repeats(&BlockPlan::build(&f, &a, true, None)), [(0, 2)]);
@@ -1106,6 +1107,7 @@ mod tests {
             kind: LoadKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let (f, a) = counted(Inst::Imm(0), alloc::vec![load, lt()]);
         assert_eq!(decided(&f, &a), None);

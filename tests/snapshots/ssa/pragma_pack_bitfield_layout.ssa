@@ -906,10 +906,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
     terminator Return(v769)   (exit_acc=v769)
   block 50  start_pc=0
     v783 ImmData(176)                                     -> x0
-    v784 Load { addr=v783, disp=0, kind=U16, align=1 }    -> x1
-    v785 BinopI { op=add, lhs=v783, rhs_imm=2 }           -> x2
-    v786 Load { addr=v783, disp=2, kind=U8 }              -> x0
-    v787 BinopI { op=shl, lhs=v786, rhs_imm=16 }          -> x0
+    v784 Load { addr=v783, disp=0, kind=U16, align=1 }    -> x0
+    v785 BinopI { op=add, lhs=v783, rhs_imm=2 }           -> x1
+    v786 Load { addr=v783, disp=2, kind=U8 pc_rel }       -> x1
+    v787 BinopI { op=shl, lhs=v786, rhs_imm=16 }          -> x1
     v788 Binop { op=or, lhs=v784, rhs=v787 }              -> x0
     v789 BinopI { op=and, lhs=v788, rhs_imm=4194303 }     -> x1
     v790 BinopI { op=shl, lhs=v788, rhs_imm=42 }          -> x0
@@ -1245,12 +1245,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

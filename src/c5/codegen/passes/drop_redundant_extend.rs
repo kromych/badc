@@ -1205,6 +1205,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1242,6 +1243,7 @@ mod tests {
                     kind: LoadKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1279,6 +1281,7 @@ mod tests {
                     kind: LoadKind::U8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1314,6 +1317,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1346,6 +1350,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1376,6 +1381,7 @@ mod tests {
                     kind: LoadKind::U32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Extend {
                     value: 1,
@@ -1423,6 +1429,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -1441,6 +1448,7 @@ mod tests {
                     kind: store_kind,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
             ],
             vec![Block {
@@ -1459,6 +1467,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let store = |value| Inst::Store {
             addr: 0,
@@ -1467,6 +1476,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let op = if folded {
             Inst::BinopI {
@@ -1533,6 +1543,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         });
         f.inst_src.push((0, 0));
         f.f32_values.push(false);
@@ -1564,6 +1575,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
             Inst::BinopI {
                 op: BinOp::And,
@@ -1578,6 +1590,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
         ];
         insts.extend(tail);
@@ -1634,6 +1647,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             });
             f.inst_src.push((0, 0));
             f.f32_values.push(false);
@@ -1675,6 +1689,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
             Inst::LoadIndexed {
                 base: 1,
@@ -1717,6 +1732,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             }),
         );
         f.insts[4] = Inst::Store {
@@ -1726,6 +1742,7 @@ mod tests {
             kind: StoreKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         run_one(&mut f);
         assert_eq!(first_operand(&f.insts[3]), 2, "{:?}", f.insts[3]);
@@ -1755,6 +1772,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             run_one(&mut f);
             assert_eq!(first_operand(&f.insts[3]), 2, "{mask:#x}");
@@ -2320,6 +2338,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Binop {
                     op: BinOp::Mul,

@@ -883,6 +883,7 @@ mod tests {
             kind: StoreKind::I32,
             volatile: false,
             align: 4,
+            pc_rel: false,
         };
         assert_eq!(asm_operand_const(&body(through), 5), None);
     }

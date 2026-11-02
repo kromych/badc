@@ -428,9 +428,15 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
             },
         ),
         Inst::Store {
-            addr, value, kind, ..
+            addr,
+            value,
+            kind,
+            pc_rel,
+            ..
         } => {
-            f(*addr, false);
+            if !pc_rel {
+                f(*addr, false);
+            }
             f(*value, fp_store(*kind, *value));
         }
         Inst::StoreLocal { value, kind, .. } => f(*value, fp_store(*kind, *value)),
@@ -3273,12 +3279,13 @@ pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
 /// allocator's use counting.
 ///
-/// The traversal itself is `Inst::for_each_operand`, with two deviations:
+/// The traversal itself is `Inst::for_each_operand`, with these deviations:
 /// the `VaArg` intrinsic's second operand, a compile-time packed type
 /// descriptor (`VaArgDesc`) the per-target emit reads straight off the
-/// constant `Inst::Imm`, and the base of an indexed access carrying it as
-/// its displacement (`abs_base`). Neither is a runtime value, so counting
-/// one would force it into a register instead of letting it stay dead.
+/// constant `Inst::Imm`, the base of an indexed access carrying it as its
+/// displacement (`abs_base`), and the address an access forms PC-relative
+/// (`pc_rel`). None is a runtime value, so counting one would force it
+/// into a register instead of letting it stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
     match inst {
         Inst::Intrinsic { kind, args } if *kind == crate::c5::op::Intrinsic::VaArg as i64 => {
@@ -3302,6 +3309,12 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*index);
             f(*value);
         }
+        Inst::Load { pc_rel: true, .. } => {}
+        Inst::Store {
+            value,
+            pc_rel: true,
+            ..
+        } => f(*value),
         _ => inst.for_each_operand(f),
     }
 }
@@ -6481,6 +6494,7 @@ int main(void) { return 0; }
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 

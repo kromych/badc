@@ -85,12 +85,9 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r12
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r13
+               	movq	<rip>, %rbx # <addr>
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %r13 # <addr>
                	movq	%rbx, %rdi
                	movq	%r13, %rdx
                	movq	%r12, %rsi
@@ -166,8 +163,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %edi
+               	movl	<rip>, %edi # <addr>
                	callq	<addr>
                	testl	%eax, %eax
                	setne	%al

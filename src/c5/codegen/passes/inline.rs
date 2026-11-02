@@ -2966,6 +2966,7 @@ fn splice_multi_block(
                     kind: lk,
                     volatile: false,
                     align: piece_align(ret_align, off, size),
+                    pc_rel: false,
                 });
                 new_inst_src.push((0, 0));
                 new_f32.push(false);
@@ -2979,6 +2980,7 @@ fn splice_multi_block(
                     kind: sk,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 });
                 new_inst_src.push((0, 0));
                 new_f32.push(false);
@@ -5384,6 +5386,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             });
             insts.push(Inst::Bswap { value: 1, width: 8 });
         }
@@ -5395,6 +5398,7 @@ mod tests {
                 kind: LoadKind::U8,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             });
             let byte = insts.len() as ValueId - 1;
             insts.push(Inst::BinopI {

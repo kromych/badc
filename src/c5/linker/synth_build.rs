@@ -1538,6 +1538,28 @@ fn project_x86_64_pending(
     //   * `lea reg, [rip + disp32]`  -- 7-byte REX form, disp32 at +3
     //   * `mov reg, [rip + disp32]`  -- same shape, unrelaxed GOT load
     //   * `call rel32`                -- 5-byte form,    disp32 at +1
+    // R_X86_64_PC32 / R_X86_64_PLT32 store the addend as
+    // `target_offset - 4` so the linker's `S + A - P` reproduces the
+    // CPU's RIP-relative semantics (rip points at the next
+    // instruction, four bytes past the displacement field). The
+    // writer's data / function patchers operate on the actual
+    // target offset within the merged section, so add 4 back here.
+    let target_byte_offset = reloc.addend.wrapping_add(4);
+    // A data reference of any instruction names its displacement field.
+    if reloc.rtype == R_X86_64_PC32
+        && matches!(
+            reloc.target_section,
+            NativeSymSection::Data | NativeSymSection::Bss
+        )
+    {
+        data_fixups.push(DataFixup {
+            instr_offset: reloc.text_offset as usize,
+            data_offset: reloc.anchor as u64,
+            addend: target_byte_offset - reloc.anchor,
+            part: AddrPart::Disp32,
+        });
+        return Ok(());
+    }
     let instr_back_off = match reloc.rtype {
         R_X86_64_PC32 | R_X86_64_GOTPCREL | R_X86_64_REX_GOTPCRELX => 3,
         R_X86_64_PLT32 => 1,
@@ -1552,13 +1574,6 @@ fn project_x86_64_pending(
                 instr_back_off
             ))
         })?;
-    // R_X86_64_PC32 / R_X86_64_PLT32 store the addend as
-    // `target_offset - 4` so the linker's `S + A - P` reproduces the
-    // CPU's RIP-relative semantics (rip points at the next
-    // instruction, four bytes past the displacement field). The
-    // writer's data / function patchers operate on the actual
-    // target offset within the merged section, so add 4 back here.
-    let target_byte_offset = reloc.addend.wrapping_add(4);
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {

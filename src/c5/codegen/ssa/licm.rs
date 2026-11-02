@@ -585,6 +585,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -689,6 +690,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: true,
                 align: 0,
+                pc_rel: false,
             },
             sink(BODY + 1),
         ]);

@@ -151,53 +151,53 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rax # <addr>
-               	movq	$0x0, (%rax)
-               	movq	$0x0, 0x8(%rax)
-               	movq	$0x1, 0x10(%rax)
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x0, <rip> # <addr>
+               	movq	$0x1, <rip> # <addr>
                	leaq	0x10(%rax), %rdx
                	movq	$0x2, 0x8(%rdx)
-               	movq	$0x2, 0x20(%rax)
+               	movq	$0x2, <rip> # <addr>
                	leaq	0x20(%rax), %rdx
                	movq	$0x4, 0x8(%rdx)
-               	movq	$0x3, 0x30(%rax)
+               	movq	$0x3, <rip> # <addr>
                	leaq	0x30(%rax), %rsi
                	movq	$0x6, 0x8(%rsi)
-               	movq	$0x4, 0x40(%rax)
+               	movq	$0x4, <rip> # <addr>
                	leaq	0x40(%rax), %rsi
                	movq	$0x8, 0x8(%rsi)
-               	movq	$0x5, 0x50(%rax)
+               	movq	$0x5, <rip> # <addr>
                	addq	$0x50, %rax
                	movq	$0xa, 0x8(%rax)
                	leaq	<rip>, %rax # <addr>
-               	movq	$0x6, 0x60(%rax)
+               	movq	$0x6, <rip> # <addr>
                	leaq	0x60(%rax), %rdx
                	movq	$0xc, 0x8(%rdx)
-               	movq	$0x7, 0x70(%rax)
+               	movq	$0x7, <rip> # <addr>
                	leaq	0x70(%rax), %rdi
                	movq	$0xe, 0x8(%rdi)
-               	movq	$0x8, 0x80(%rax)
+               	movq	$0x8, <rip> # <addr>
                	leaq	0x80(%rax), %rcx
                	movq	$0x10, 0x8(%rcx)
-               	movq	$0x9, 0x90(%rax)
+               	movq	$0x9, <rip> # <addr>
                	leaq	0x90(%rax), %rcx
                	movq	$0x12, 0x8(%rcx)
-               	movq	$0xa, 0xa0(%rax)
+               	movq	$0xa, <rip> # <addr>
                	addq	$0xa0, %rax
                	movq	$0x14, 0x8(%rax)
                	leaq	<rip>, %rdi # <addr>
-               	movq	$0xb, 0xb0(%rdi)
+               	movq	$0xb, <rip> # <addr>
                	leaq	0xb0(%rdi), %rax
                	movq	$0x16, 0x8(%rax)
-               	movq	$0xc, 0xc0(%rdi)
+               	movq	$0xc, <rip> # <addr>
                	leaq	0xc0(%rdi), %rax
                	movq	$0x18, 0x8(%rax)
-               	movq	$0xd, 0xd0(%rdi)
+               	movq	$0xd, <rip> # <addr>
                	leaq	0xd0(%rdi), %rax
                	movq	$0x1a, 0x8(%rax)
-               	movq	$0xe, 0xe0(%rdi)
+               	movq	$0xe, <rip> # <addr>
                	leaq	0xe0(%rdi), %rax
                	movq	$0x1c, 0x8(%rax)
-               	movq	$0xf, 0xf0(%rdi)
+               	movq	$0xf, <rip> # <addr>
                	leaq	0xf0(%rdi), %rax
                	movq	$0x1e, 0x8(%rax)
                	leaq	0x10(%rdi), %rdx

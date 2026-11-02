@@ -38,8 +38,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0x7777777777777777, %r11 # imm = 0x7777777777777777
                	cmpq	%r11, %rax
                	je	<addr>

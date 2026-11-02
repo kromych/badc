@@ -38,8 +38,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x15, %edi
                	callq	*%rax
                	cmpl	$0x2a, %eax
@@ -47,8 +46,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x20(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x7, %edi
                	callq	*%rax
                	cmpl	$-0x7, %eax
@@ -56,8 +54,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpl	$0x64, %eax
@@ -65,8 +62,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x28(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpl	$-0x11, %eax
@@ -74,15 +70,14 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x64, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movsbq	(%rax), %rax
+               	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movsbq	(%rax), %rax
                	cmpl	$0x6e, %eax
                	je	<addr>

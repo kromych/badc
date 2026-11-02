@@ -68,8 +68,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	jne	<addr>
                	movl	$0x9, -0x8(%rbp)
-               	leaq	<rip>, %rax # <addr>
-               	cmpq	$0x0, (%rax)
+               	cmpq	$0x0, <rip> # <addr>
                	jne	<addr>
                	xorl	%eax, %eax
                	leave

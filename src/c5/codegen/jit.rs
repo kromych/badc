@@ -2605,7 +2605,7 @@ mod jit_impl {
                     )));
                 }
                 code[op_off] = 0x8B;
-                patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                patch_rip_disp32(code, code_vmaddr, instr_offset + 3, target_vmaddr, label)
             }
         }
     }
@@ -2653,8 +2653,8 @@ mod jit_impl {
                 patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, part, label)
             }
             Target::LinuxX64 | Target::WindowsX64 => {
-                super::super::require_whole_addr(part, label)?;
-                patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
+                let field = super::super::x86_disp32_field(instr_offset, part, label)?;
+                patch_rip_disp32(code, code_vmaddr, field, target_vmaddr, label)
             }
         }
     }
@@ -2677,16 +2677,15 @@ mod jit_impl {
         .map_err(|e| C5Error::internal(e.describe(&format!("JIT: {label}"))))
     }
 
-    fn patch_lea_rip32(
+    /// Patch the rip-relative displacement at `field`.
+    fn patch_rip_disp32(
         code: &mut [u8],
         code_vmaddr: u64,
-        instr_offset: u64,
+        field: u64,
         target_vmaddr: u64,
         label: &str,
     ) -> Result<(), C5Error> {
-        const LEA_LEN: u64 = super::super::x86_64::LEA_RIP32_LEN as u64;
-        let instr_vmaddr = code_vmaddr + instr_offset;
-        let after = instr_vmaddr + LEA_LEN;
+        let after = code_vmaddr + field + 4;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
             return Err(C5Error::internal(format!(
@@ -2694,7 +2693,7 @@ mod jit_impl {
             )));
         }
         let disp32 = delta as i32;
-        let off = (instr_offset + LEA_LEN - 4) as usize;
+        let off = field as usize;
         code[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
         Ok(())
     }

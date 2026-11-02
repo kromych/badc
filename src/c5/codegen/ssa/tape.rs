@@ -538,6 +538,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 8,
+                    pc_rel: false
                 },
             ],
             alloc::vec![block(0..2, Terminator::Return(1))],

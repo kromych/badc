@@ -64,7 +64,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx # <addr>
                	movl	$0x3, %eax
-               	movq	%rax, (%rcx)
+               	movq	%rax, <rip> # <addr>
                	movq	%rcx, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movq	(%rcx), %rcx

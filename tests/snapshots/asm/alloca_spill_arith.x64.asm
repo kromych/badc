@@ -48,22 +48,21 @@ Disassembly of section .text:
                	subq	$0x1, %r11
                	jne	<addr>
                	movq	%rax, %rsp
-               	leaq	<rip>, %rcx # <addr>
-               	movzbq	(%rcx), %rdx
-               	movb	%dl, (%rax)
-               	movzbq	0x1(%rcx), %rdx
-               	movb	%dl, 0x1(%rax)
-               	movzbq	0x2(%rcx), %rdx
-               	movb	%dl, 0x2(%rax)
-               	movzbq	0x3(%rcx), %rdx
-               	movb	%dl, 0x3(%rax)
-               	movzbq	0x4(%rcx), %rdx
-               	movb	%dl, 0x4(%rax)
-               	movzbq	0x5(%rcx), %rdx
-               	movb	%dl, 0x5(%rax)
-               	leaq	0xffff(%rax), %rdx
-               	movzbq	0x6(%rcx), %rcx
-               	movb	%cl, (%rdx)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, (%rax)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, 0x1(%rax)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, 0x2(%rax)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, 0x3(%rax)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, 0x4(%rax)
+               	movzbq	<rip>, %rcx # <addr>
+               	movb	%cl, 0x5(%rax)
+               	leaq	0xffff(%rax), %rcx
+               	movzbq	<rip>, %rdx # <addr>
+               	movb	%dl, (%rcx)
                	movzbq	(%rax), %r15
                	movzbq	0x1(%rax), %rbx
                	movzbq	0x2(%rax), %r12

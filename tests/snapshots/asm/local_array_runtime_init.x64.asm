@@ -26,12 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movw	$0x1234, 0xa(%rax)      # imm = 0x1234
-               	leaq	<rip>, %rcx # <addr>
-               	movw	$0x5678, 0xa(%rcx)      # imm = 0x5678
-               	movzwq	0xa(%rax), %rax
-               	movzwq	0xa(%rcx), %rcx
+               	movw	$0x1234, <rip> # imm = 0x1234
+                                                # <addr>
+               	movw	$0x5678, <rip> # imm = 0x5678
+                                                # <addr>
+               	movzwq	<rip>, %rax # <addr>
+               	movzwq	<rip>, %rcx # <addr>
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	addq	%rcx, %rax
                	cmpl	$0x477198, %eax         # imm = 0x477198

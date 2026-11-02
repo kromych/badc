@@ -5567,3 +5567,31 @@ fn leaf_atomics_are_one_instruction() {
     );
     m.finish();
 }
+
+/// An access to a static object at a constant offset takes its address as a
+/// `disp32(%rip)` operand (ModRM mod=00 r/m=101), with no `lea` ahead of it:
+/// loads of each width, stores of a register and of an immediate, float
+/// accesses, a zero test that branches, and, at `-O` where the member
+/// offset folds into the access, struct members.
+#[test]
+fn static_object_access_is_rip_relative() {
+    let src = "long q; int w; short h; signed char b; double d; float f;\n\
+               struct { int a; long c; } s;\n\
+               long lq(void) { return q + w + h + b; }\n\
+               void st(long v) { q = v; w = (int)v; }\n\
+               void imm(void) { q = -1; w = 0x12345678; h = -2; b = 7; }\n\
+               int zt(void) { if (b) return 3; return 4; }\n\
+               double fp(void) { f = (float)d; d = 2.5; return d + f; }\n\
+               long mem(void) { s.a = 1; return s.c + s.a; }";
+    let rip = |i: &X64Insn| i.op != 0x8D && i.modrm.is_some_and(|m| m & 0xC7 == 0x05);
+    for optimize in [false, true] {
+        let members = if optimize { &["mem"][..] } else { &[] };
+        for &name in ["lq", "st", "imm", "zt", "fp"].iter().chain(members) {
+            let insns = x64_at(src, name, optimize);
+            assert!(
+                insns.iter().any(rip) && !insns.iter().any(|i| i.op == 0x8D),
+                "{name} (optimize {optimize}): {insns:x?}"
+            );
+        }
+    }
+}

@@ -31,13 +31,12 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rcx
+               	movq	<rip>, %rcx # <addr>
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movq	0x8(%rcx), %rcx
+               	movq	<rip>, %rcx # <addr>
                	cmpq	$0x5a5a5a5a, %rcx       # imm = 0x5A5A5A5A
                	je	<addr>
                	movl	$0x1, %eax

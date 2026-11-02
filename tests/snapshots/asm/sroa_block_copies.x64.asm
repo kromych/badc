@@ -409,8 +409,7 @@ Disassembly of section .text:
                	subq	$0x280, %rsp            # imm = 0x280
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rbx
+               	movq	<rip>, %rbx # <addr>
                	leaq	-0x278(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)

@@ -26,47 +26,42 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdx
+               	movq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
+               	movq	<rip>, %rcx # <addr>
                	orq	%rax, %rcx
-               	leaq	<rip>, %rsi # <addr>
-               	movl	(%rsi), %edi
-               	cmpl	$0x1, %edi
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x1, %esi
                	jne	<addr>
-               	movl	0x20(%rsi), %edi
-               	cmpl	$0x2, %edi
+               	movl	<rip>, %esi # <addr>
+               	cmpl	$0x2, %esi
                	jne	<addr>
-               	movq	0x10(%rsi), %rdi
-               	movq	0x18(%rsi), %rsi
-               	xorq	%rcx, %rdi
-               	xorq	%rdx, %rsi
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	xorq	%rcx, %rsi
+               	xorq	%rdx, %rdi
                	orq	%rdi, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rsi # <addr>
-               	movq	(%rsi), %rdi
-               	movq	0x8(%rsi), %rsi
-               	xorq	%rcx, %rdi
-               	xorq	%rdx, %rsi
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	xorq	%rcx, %rsi
+               	xorq	%rdx, %rdi
                	orq	%rdi, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rsi # <addr>
-               	movq	(%rsi), %rdi
-               	movq	0x8(%rsi), %r8
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdi # <addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
-               	xorq	%r11, %r8
-               	orq	%r8, %rdi
-               	testq	%rdi, %rdi
+               	xorq	%r11, %rdi
+               	orq	%rdi, %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
-               	movq	0x8(%rsi), %rsi
+               	movq	<rip>, %rsi # <addr>
                	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
                	cmpq	%r11, %rsi
                	je	<addr>

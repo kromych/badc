@@ -27,10 +27,9 @@ Disassembly of section .text:
 
 <note>:
                	movq	%rdi, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx), %edx
-               	addq	%rax, %rdx
-               	movl	%edx, (%rcx)
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rax, %rcx
+               	movl	%ecx, <rip> # <addr>
                	retq
 
 <both>:
@@ -516,8 +515,7 @@ Disassembly of section .text:
                	jl	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x16, %ebx

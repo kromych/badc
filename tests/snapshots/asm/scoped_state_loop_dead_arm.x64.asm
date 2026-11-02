@@ -26,28 +26,25 @@ Disassembly of section .text:
                	int3
 
 <work>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	addq	%rdi, %rcx
-               	movq	%rcx, (%rax)
+               	movq	<rip>, %rax # <addr>
+               	addq	%rdi, %rax
+               	movq	%rax, <rip> # <addr>
                	retq
 
 <main>:
                	xorl	%edx, %edx
                	movl	$0x3, %ecx
-               	leaq	<rip>, %r8 # <addr>
-               	movq	(%r8), %rax
-               	leaq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rax # <addr>
                	movq	%rdx, %rsi
-               	movq	(%rdi), %r9
-               	addq	%rax, %r9
-               	movq	%r9, (%rdi)
+               	movq	<rip>, %rdi # <addr>
+               	addq	%rax, %rdi
+               	movq	%rdi, <rip> # <addr>
                	incq	%rsi
                	cmpl	$0x2, %ecx
                	jb	<addr>
                	cmpl	$0x3, %ecx
                	jb	<addr>
-               	movq	(%r8), %rcx
+               	movq	<rip>, %rcx # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movq	%rdx, %rcx
@@ -61,8 +58,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x2, %eax

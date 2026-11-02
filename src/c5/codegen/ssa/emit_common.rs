@@ -2816,6 +2816,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         if abs32 {
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
+        if target.is_x86_64() {
+            super::super::passes::index_fold::mark_pc_rel_accesses(f);
+        }
         f.general_regs_only = native.no_fp_regs;
         f.tls_dynamic = native.pic
             && !native.pie
@@ -3350,6 +3353,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ];
         let func = |ret| FunctionSsa {

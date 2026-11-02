@@ -2251,6 +2251,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::BinopI {
                     op: BinOp::Uge,
@@ -2272,6 +2273,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 });
             }
             let load = insts.len() as u32;
@@ -2281,6 +2283,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             });
             insts.push(Inst::BinopI {
                 op: BinOp::Ge,
@@ -2356,6 +2359,7 @@ mod tests {
                     kind,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -2363,6 +2367,7 @@ mod tests {
                     kind: load_kind,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::BinopI {
                     op: BinOp::Ge,
@@ -2404,6 +2409,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             // The write separating the load from the branch that
             // tests it.
@@ -2414,6 +2420,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::BinopI {
                 op: BinOp::Uge,
@@ -2427,6 +2434,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::BinopI {
                 op: BinOp::Ge,
@@ -3034,6 +3042,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let f = counted(wide.clone(), Inst::Imm(1000), BinOp::Lt, step_by(1), true);
         let r = Ranges::compute(&f, &[]);

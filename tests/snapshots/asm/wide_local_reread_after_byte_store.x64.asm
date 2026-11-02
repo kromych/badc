@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <keep>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdi, (%rax)
+               	movq	%rdi, <rip> # <addr>
                	retq
 
 <long_double_reread>:

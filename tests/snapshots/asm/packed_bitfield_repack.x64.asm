@@ -73,12 +73,11 @@ Disassembly of section .text:
                	sarq	$0x39, %rdx
                	cmpl	$0x3c, %edx
                	jne	<addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movzbq	(%rdx), %rsi
-               	movsbq	%sil, %rsi
-               	cmpl	$0x55, %esi
+               	movzbq	<rip>, %rdx # <addr>
+               	movsbq	%dl, %rdx
+               	cmpl	$0x55, %edx
                	jne	<addr>
-               	movsbq	0x1(%rdx), %rdx
+               	movsbq	<rip>, %rdx # <addr>
                	cmpl	$0x7, %edx
                	je	<addr>
                	leave

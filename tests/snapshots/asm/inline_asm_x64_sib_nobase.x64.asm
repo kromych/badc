@@ -26,16 +26,23 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	$0x2000, (%rax)         # imm = 0x2000
-               	movq	$0x2001, 0x8(%rax)      # imm = 0x2001
-               	movq	$0x2002, 0x10(%rax)     # imm = 0x2002
-               	movq	$0x2003, 0x18(%rax)     # imm = 0x2003
-               	movq	$0x2004, 0x20(%rax)     # imm = 0x2004
-               	movq	$0x2005, 0x28(%rax)     # imm = 0x2005
-               	movq	$0x2006, 0x30(%rax)     # imm = 0x2006
+               	movq	$0x2000, <rip> # imm = 0x2000
+                                                # <addr>
+               	movq	$0x2001, <rip> # imm = 0x2001
+                                                # <addr>
+               	movq	$0x2002, <rip> # imm = 0x2002
+                                                # <addr>
+               	movq	$0x2003, <rip> # imm = 0x2003
+                                                # <addr>
+               	movq	$0x2004, <rip> # imm = 0x2004
+                                                # <addr>
+               	movq	$0x2005, <rip> # imm = 0x2005
+                                                # <addr>
+               	movq	$0x2006, <rip> # imm = 0x2006
+                                                # <addr>
                	leaq	<rip>, %r9 # <addr>
-               	movq	$0x2007, 0x38(%r9)      # imm = 0x2007
+               	movq	$0x2007, <rip> # imm = 0x2007
+                                                # <addr>
                	testb	$0x7, %r9b
                	je	<addr>
                	movl	$0x1, %eax
@@ -65,8 +72,7 @@ Disassembly of section .text:
                	shrq	$0x3, %rax
                	movl	$0xbeef, %r10d          # imm = 0xBEEF
                	movq	%r10, 0x18(,%rax,8)
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x18(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0xbeef, %rax           # imm = 0xBEEF
                	je	<addr>
                	movl	$0x5, %eax

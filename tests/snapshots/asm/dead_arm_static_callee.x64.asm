@@ -29,18 +29,15 @@ Disassembly of section .text:
                	retq
 
 <f2>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	addq	$0xa, %rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	addq	$0xa, %rax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	addq	$0xa, %rcx
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rax
+               	movl	<rip>, %eax # <addr>
+               	addq	$0xa, %rax
+               	movl	%eax, <rip> # <addr>
                	cmpl	$0xa, %eax
                	jne	<addr>
                	xorl	%eax, %eax

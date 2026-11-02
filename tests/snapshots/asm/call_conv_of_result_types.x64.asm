@@ -168,8 +168,7 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
                	movl	$0x7, %edi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
@@ -262,7 +261,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%dh, (%rcx)
 
 <get_ms>:
                	xorl	%eax, %eax

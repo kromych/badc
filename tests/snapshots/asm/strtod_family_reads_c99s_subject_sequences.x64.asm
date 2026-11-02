@@ -317,29 +317,25 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x18(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	testq	%rax, %rax

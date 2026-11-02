@@ -45,8 +45,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
+               	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	<addr>
                	movabsq	$0x300000001, %r11      # imm = 0x300000001
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rdi
+               	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	<addr>
                	movabsq	$0x5000000000001, %r11  # imm = 0x5000000000001
@@ -65,8 +63,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %rdi
+               	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	<addr>
                	movabsq	$0x700000000000001, %r11 # imm = 0x700000000000001

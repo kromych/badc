@@ -1496,6 +1496,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                                 kind: c.load,
                                 volatile: false,
                                 align: 0,
+                                pc_rel: false,
                             },
                         });
                         new_insts.push(Inst::StoreLocal {
@@ -1529,6 +1530,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             kind: c.store,
                             volatile: false,
                             align: 0,
+                            pc_rel: false,
                         });
                         new_src.push(loc);
                         new_f32.push(false);
@@ -1767,6 +1769,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
     fn load(addr: ValueId) -> Inst {
@@ -1776,6 +1779,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
     fn add_imm(lhs: ValueId, k: i64) -> Inst {
@@ -1938,6 +1942,7 @@ mod tests {
             kind: LoadKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
     /// A float load of the bytes at `disp`: read where an integer store
@@ -1949,6 +1954,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
     fn store32(addr: ValueId, disp: i32, value: ValueId) -> Inst {
@@ -1959,6 +1965,7 @@ mod tests {
             kind: StoreKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -2224,6 +2231,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2 s.state = 3
             Inst::LocalAddr(-4), // v3
             Inst::Load {
@@ -2232,6 +2240,7 @@ mod tests {
                 kind: LoadKind::U32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4 s.state
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-4, 4)]);
@@ -2272,6 +2281,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2
             Inst::Imm(2),        // v3
             Inst::LocalAddr(-2), // v4
@@ -2282,6 +2292,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v5
             Inst::LocalAddr(-2), // v6
             Inst::Load {
@@ -2290,6 +2301,7 @@ mod tests {
                 kind: LoadKind::U32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v7
             Inst::LocalAddr(-2), // v8
             Inst::Load {
@@ -2298,6 +2310,7 @@ mod tests {
                 kind: LoadKind::U32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v9
             Inst::Binop {
                 op: BinOp::Add,
@@ -2344,6 +2357,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2
             Inst::LocalAddr(-2), // v3
             Inst::Store {
@@ -2353,6 +2367,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4
             Inst::LocalAddr(-2), // v5
             Inst::Load {
@@ -2361,6 +2376,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v6
         ];
         let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
@@ -2392,6 +2408,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4 4-byte load at 0
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
@@ -2418,6 +2435,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4 4-byte load at 0
             Inst::Load {
                 addr: 3,
@@ -2425,6 +2443,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v5 4-byte load at 4
             Inst::Binop {
                 op: BinOp::Add,
@@ -2505,6 +2524,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
@@ -2556,6 +2576,7 @@ mod tests {
                 kind: LoadKind::U8,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4
         ];
         let mut f = func(insts, Terminator::Return(4), alloc::vec![(-1126, 1126)]);
@@ -2595,6 +2616,7 @@ mod tests {
                 kind: StoreKind::I8,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2
             Inst::ImmData(64),     // v3
             Inst::Mcpy {
@@ -2784,6 +2806,7 @@ mod tests {
                 kind: StoreKind::F64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2
             Inst::ImmData(64),   // v3
             Inst::Mcpy {
@@ -2825,6 +2848,7 @@ mod tests {
                 kind: LoadKind::F64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v2
         ];
         let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
@@ -2861,6 +2885,7 @@ mod tests {
                 kind: LoadKind::F64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v3
         ];
         let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
@@ -2957,6 +2982,7 @@ mod tests {
                     kind: StoreKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 });
             }
             insts.push(Inst::ImmData(64));
@@ -3211,6 +3237,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: true,
                 align: 0,
+                pc_rel: false
             }, // v1 read by nothing
             Inst::Imm(1),        // v2
         ];
@@ -3312,6 +3339,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: true,
                 align: 0,
+                pc_rel: false
             }, // v2
         ];
         let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
@@ -3332,6 +3360,7 @@ mod tests {
             kind: StoreKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let insts = alloc::vec![
             Inst::Imm(1),        // v0
@@ -3344,6 +3373,7 @@ mod tests {
                 kind: LoadKind::F80,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v4
             Inst::Store {
                 addr: 1,
@@ -3352,6 +3382,7 @@ mod tests {
                 kind: StoreKind::F80,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v5
             Inst::Load {
                 addr: 1,
@@ -3359,6 +3390,7 @@ mod tests {
                 kind: LoadKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             }, // v6
         ];
         let mut f = func(insts, Terminator::Return(6), alloc::vec![(-4, 4)]);
@@ -3425,6 +3457,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 }, // v1  reads [8, 16)
                 Inst::Imm(5), // v2
                 store(0, 2), // v3  writes [0, 8)
@@ -3559,6 +3592,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(1),
@@ -3604,6 +3638,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(1),
@@ -3677,6 +3712,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(1),

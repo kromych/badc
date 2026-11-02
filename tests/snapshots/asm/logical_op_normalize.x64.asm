@@ -53,8 +53,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movslq	(%rax), %rbx
+               	movslq	<rip>, %rbx # <addr>
                	xorl	%esi, %esi
                	movq	%rbx, %rdi
                	callq	<addr>

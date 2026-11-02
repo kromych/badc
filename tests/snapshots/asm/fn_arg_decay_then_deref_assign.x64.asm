@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x29, (%rax)
-               	movl	$0x2a, (%rax)
+               	movl	$0x29, <rip> # <addr>
+               	movl	$0x2a, <rip> # <addr>
                	xorl	%eax, %eax
                	retq

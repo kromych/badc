@@ -43,7 +43,6 @@ Disassembly of section .text:
                	shrq	$0x20, %rax
                	movq	%rdx, %rsi
                	shrq	$0x20, %rsi
-               	leaq	<rip>, %r9 # <addr>
                	addq	%rdi, %rax
                	addq	$0x3e8, %rax            # imm = 0x3E8
                	addq	%rdx, %rax
@@ -74,7 +73,7 @@ Disassembly of section .text:
                	movl	0x38(%rbp), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rax, (%r9)
+               	movq	%rax, <rip> # <addr>
                	leave
                	retq
 
@@ -130,8 +129,7 @@ Disassembly of section .text:
                	movl	(%r8), %r8d
                	callq	<addr>
                	addq	$0x30, %rsp
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x1a12, %rax           # imm = 0x1A12
                	je	<addr>
                	movl	$0x1, %eax

@@ -681,9 +681,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=26
     v285 ImmData(2128)                                    -> x2
     v286 Mcpy { dst=v284, src=v285, size=1000, align=1 }  -> -
     v287 BinopI { op=add, lhs=v284, rhs_imm=999 }         -> x0
-    v288 Load { addr=v284, disp=999, kind=I8 }            -> x0
+    v288 Load { addr=v284, disp=999, kind=I8 pc_rel }     -> x0
     v289 BinopI { op=add, lhs=v285, rhs_imm=999 }         -> x6
-    v290 Load { addr=v285, disp=999, kind=I8 }            -> x6
+    v290 Load { addr=v285, disp=999, kind=I8 pc_rel }     -> x6
     v291 Binop { op=eq, lhs=v288, rhs=v290 }              -> x0
     v292 Extend { value=v291, kind=I32 }                  -> x6
     v293 Extend { value=v291, kind=I32 }                  -> x6
@@ -1136,12 +1136,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

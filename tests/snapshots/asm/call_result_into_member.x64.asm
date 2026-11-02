@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <keep>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdi, (%rax)
+               	movq	%rdi, <rip> # <addr>
                	retq
 
 <mk_U1>:
@@ -226,8 +225,7 @@ Disassembly of section .text:
                	movb	%al, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x1(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -333,8 +331,7 @@ Disassembly of section .text:
                	movw	%ax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x2(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -442,8 +439,7 @@ Disassembly of section .text:
                	movb	%al, -0x6(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x3(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -553,8 +549,7 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x4(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -664,8 +659,7 @@ Disassembly of section .text:
                	movb	%al, -0x4(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x5(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -777,8 +771,7 @@ Disassembly of section .text:
                	movw	%ax, -0x4(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x6(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -892,8 +885,7 @@ Disassembly of section .text:
                	movb	%al, -0x2(%rbp)
                	leaq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x7(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -1008,8 +1000,7 @@ Disassembly of section .text:
                	movl	%edx, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0xc(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -1126,8 +1117,7 @@ Disassembly of section .text:
                	movss	%xmm1, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0xc(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx
@@ -1246,8 +1236,7 @@ Disassembly of section .text:
                	movl	%edx, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rdi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0xc(%rax), %rax
                	movq	%rax, %rcx
                	xorq	$0x55, %rcx

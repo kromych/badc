@@ -53,8 +53,7 @@ Disassembly of section .text:
                	je	<addr>
                	addq	$0x4, %rax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	addq	$0x3, %rax
                	cmpl	$0x7, %eax
                	jne	<addr>
@@ -117,14 +116,21 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
 
 <text_tbl>:
                	enter	$-0x2, $-0x1
-               	movl	$0x1000001a, %esp       # imm = 0x1000001A
+               	int3
+               	sbbb	(%rax), %al
+               	addb	%dl, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%dh, 0x1a(%rax)
+               	addb	%al, %al
+               	sbbb	(%rax), %al
+               	addb	%al, (%rax)
                	addb	%al, (%rax)
                	addb	%al, (%rax)
 

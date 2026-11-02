@@ -34,13 +34,12 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movslq	(%rax), %r10
+               	movslq	<rip>, %r10 # <addr>
                	movq	%r10, -0x40(%rbp)
-               	movl	(%rax), %ecx
-               	incq	%rcx
-               	movslq	%ecx, %r14
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movslq	%eax, %r14
+               	movl	<rip>, %eax # <addr>
                	decq	%rax
                	movslq	%eax, %rsi
                	movq	%r14, %r10

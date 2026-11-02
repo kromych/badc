@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <slowpath_handler>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
                	movl	$0x0, (%rdi)
                	retq
 
@@ -37,24 +36,21 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0x1, (%rdi)
+               	movl	$0x1, <rip> # <addr>
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
-               	cmpl	$0x0, (%rdi)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movl	$0x3, (%rdi)
+               	movl	$0x3, <rip> # <addr>
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	xorq	$0x1, %rax
                	testl	%eax, %eax
                	je	<addr>

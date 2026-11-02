@@ -711,6 +711,7 @@ fn run_one(func: &mut FunctionSsa, target_little_endian: bool) {
             kind: m.kind,
             volatile: false,
             align: 1,
+            pc_rel: false,
         };
         if let Some(width) = m.swap_width {
             func.insts[m.root as usize] = Inst::Bswap {
@@ -740,6 +741,7 @@ fn run_one(func: &mut FunctionSsa, target_little_endian: bool) {
             kind: m.kind,
             volatile: false,
             align: 1,
+            pc_rel: false,
         };
     }
 }
@@ -830,6 +832,7 @@ mod tests {
             kind: LoadKind::U8,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
     fn shl(lhs: ValueId, k: i64) -> Inst {
@@ -861,6 +864,7 @@ mod tests {
             kind: StoreKind::I8,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -894,7 +898,8 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U32,
                     volatile: false,
-                    align: 1
+                    align: 1,
+                    ..
                 }
             ),
             "expected a wide U32 load, got {:?}",
@@ -934,7 +939,8 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U32,
                     volatile: false,
-                    align: 1
+                    align: 1,
+                    ..
                 }
             ),
             "expected the reversal over a wide load, got {:?}",
@@ -999,7 +1005,8 @@ mod tests {
                     disp: 0,
                     kind: LoadKind::U8,
                     volatile: true,
-                    align: 0
+                    align: 0,
+                    pc_rel: false
                 }, // v1
                 u8_load(0, 1), // v2
                 shl(2, 8),     // v3
@@ -1242,7 +1249,8 @@ mod tests {
                     value: 1,
                     kind: StoreKind::I32,
                     volatile: false,
-                    align: 1
+                    align: 1,
+                    ..
                 }
             ),
             "expected a wide I32 store, got {:?}",

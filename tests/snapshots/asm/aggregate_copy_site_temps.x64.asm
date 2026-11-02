@@ -383,8 +383,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	(%r11), %r10
                	movq	%r10, (%rax)
-               	movsbq	0x3e7(%rcx), %rax
-               	movsbq	0x3e7(%rdx), %rsi
+               	movsbq	<rip>, %rax # <addr>
+               	movsbq	<rip>, %rsi # <addr>
                	cmpl	%esi, %eax
                	jne	<addr>
                	xorl	%eax, %eax

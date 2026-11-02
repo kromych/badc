@@ -273,6 +273,7 @@ fn scatter(
                 kind,
                 volatile: false,
                 align: access_align(desc, off, size),
+                pc_rel: false,
             },
             false,
         );
@@ -291,6 +292,7 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
                 kind,
                 volatile: false,
                 align: access_align(desc, off, size),
+                pc_rel: false,
             },
             is_f32,
         )

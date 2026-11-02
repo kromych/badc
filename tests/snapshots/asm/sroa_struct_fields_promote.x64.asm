@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rbx
+               	movq	<rip>, %rbx # <addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rbx, %rcx

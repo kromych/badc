@@ -5,8 +5,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
-    v2   Imm(0)                                           -> x1
-    v3   Load { addr=v1, disp=0, kind=I64, volatile }     -> x0
+    v2   Imm(0)                                           -> x0
+    v3   Load { addr=v1, disp=0, kind=I64, volatile pc_rel } -> x0
     v4   InlineAsm { template="movq %1, %0", ops=2, args=[-, v3] } -> x0
     v5   BinopI { op=ne, lhs=v4, rhs_imm=7 }              -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
@@ -15,13 +15,13 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
     v7   ImmData(8)                                       -> x0
-    v8   Imm(8)                                           -> x1
-    v9   BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x1
-    v10  Load { addr=v7, disp=8, kind=I64, volatile }     -> x1
-    v11  Imm(16)                                          -> x2
-    v12  BinopI { op=add, lhs=v7, rhs_imm=16 }            -> x2
-    v13  Load { addr=v7, disp=16, kind=I64, volatile }    -> x0
-    v14  InlineAsm { template="addq %1, %0", ops=2, args=[v10, v13] } -> x1
+    v8   Imm(8)                                           -> x0
+    v9   BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x0
+    v10  Load { addr=v7, disp=8, kind=I64, volatile pc_rel } -> x0
+    v11  Imm(16)                                          -> x1
+    v12  BinopI { op=add, lhs=v7, rhs_imm=16 }            -> x1
+    v13  Load { addr=v7, disp=16, kind=I64, volatile pc_rel } -> x1
+    v14  InlineAsm { template="addq %1, %0", ops=2, args=[v10, v13] } -> x0
     v15  BinopI { op=ne, lhs=v14, rhs_imm=8 }             -> x0
     terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
@@ -29,9 +29,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v16)   (exit_acc=v16)
   block 4  start_pc=0
     v17  ImmData(8)                                       -> x0
-    v18  Imm(24)                                          -> x1
-    v19  BinopI { op=add, lhs=v17, rhs_imm=24 }           -> x1
-    v20  Load { addr=v17, disp=24, kind=I64, volatile }   -> x1
+    v18  Imm(24)                                          -> x0
+    v19  BinopI { op=add, lhs=v17, rhs_imm=24 }           -> x0
+    v20  Load { addr=v17, disp=24, kind=I64, volatile pc_rel } -> x1
     v21  InlineAsm { template="movl %k2, %0\n\tmovl %k2, %1\n\tshrl $1, %1", ops=3, args=[-, -, v20] } -> x0
     v22  AsmOut(1, kind=I64)                              -> x2
     v23  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x0
@@ -47,9 +47,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
     v31  ImmData(8)                                       -> x0
-    v32  Imm(32)                                          -> x1
-    v33  BinopI { op=add, lhs=v31, rhs_imm=32 }           -> x1
-    v34  Load { addr=v31, disp=32, kind=I64, volatile }   -> x0
+    v32  Imm(32)                                          -> x0
+    v33  BinopI { op=add, lhs=v31, rhs_imm=32 }           -> x0
+    v34  Load { addr=v31, disp=32, kind=I64, volatile pc_rel } -> x0
     v35  BinopI { op=and, lhs=v34, rhs_imm=255 }          -> x1
     v36  InlineAsm { template="movb %1, %0", ops=2, args=[-, v35] } -> x1
     v37  BinopI { op=and, lhs=v34, rhs_imm=65535 }        -> x0
@@ -65,9 +65,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v44)   (exit_acc=v44)
   block 8  start_pc=0
     v45  ImmData(8)                                       -> x0
-    v46  Imm(40)                                          -> x1
-    v47  BinopI { op=add, lhs=v45, rhs_imm=40 }           -> x1
-    v48  Load { addr=v45, disp=40, kind=I64, volatile }   -> x0
+    v46  Imm(40)                                          -> x0
+    v47  BinopI { op=add, lhs=v45, rhs_imm=40 }           -> x0
+    v48  Load { addr=v45, disp=40, kind=I64, volatile pc_rel } -> x0
     v49  InlineAsm { template="movq %1, %0", ops=2, args=[-, v48] } -> x0
     v50  InlineAsm { template="movq %1, %0\n\taddq $1, %0", ops=2, args=[-, v49] } -> x1
     v51  BinopI { op=mul, lhs=v49, rhs_imm=100 }          -> x0
@@ -81,18 +81,18 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v56)   (exit_acc=v56)
   block 10  start_pc=0
     v57  ImmData(8)                                       -> x0
-    v58  Imm(48)                                          -> x1
-    v59  BinopI { op=add, lhs=v57, rhs_imm=48 }           -> x1
-    v60  Load { addr=v57, disp=48, kind=I64, volatile }   -> x1
-    v61  Imm(0)                                           -> x0
+    v58  Imm(48)                                          -> x0
+    v59  BinopI { op=add, lhs=v57, rhs_imm=48 }           -> x0
+    v60  Load { addr=v57, disp=48, kind=I64, volatile pc_rel } -> x0
+    v61  Imm(0)                                           -> x1
     v62  StoreLocal { off=-1, value=v61, kind=I64 }       -> -
-    v63  ImmData(80)                                      -> x0
-    v64  LocalAddr(-1)                                    -> x2
-    v65  Store { addr=v63, disp=0, value=v64, kind=I64 }  -> -
-    v66  InlineAsm { template="movq %1, %0", ops=2, args=[-, v60] } -> x1
+    v63  ImmData(80)                                      -> x1
+    v64  LocalAddr(-1)                                    -> x1
+    v65  Store { addr=v63, disp=0, value=v64, kind=I64 pc_rel } -> -
+    v66  InlineAsm { template="movq %1, %0", ops=2, args=[-, v60] } -> x0
     v67  StoreLocal { off=-1, value=v66, kind=I64 }       -> -
-    v68  Load { addr=v63, disp=0, kind=I64 }              -> x0
-    v69  Load { addr=v68, disp=0, kind=I64 }              -> x0
+    v68  Load { addr=v63, disp=0, kind=I64 pc_rel }       -> x1
+    v69  Load { addr=v68, disp=0, kind=I64 }              -> x1
     v70  LoadLocal { off=-1, kind=I64 }                   -> x2
     v71  Binop { op=add, lhs=v69, rhs=v66 }               -> x0
     v72  LifetimeEnd(-1)                                  -> -
@@ -103,9 +103,9 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
     terminator Return(v74)   (exit_acc=v74)
   block 12  start_pc=0
     v75  ImmData(8)                                       -> x0
-    v76  Imm(56)                                          -> x1
-    v77  BinopI { op=add, lhs=v75, rhs_imm=56 }           -> x1
-    v78  Load { addr=v75, disp=56, kind=I64, volatile }   -> x1
+    v76  Imm(56)                                          -> x0
+    v77  BinopI { op=add, lhs=v75, rhs_imm=56 }           -> x0
+    v78  Load { addr=v75, disp=56, kind=I64, volatile pc_rel } -> x1
     v79  LocalAddr(-1)                                    -> x0
     v80  InlineAsm { template="movq %1, %0", ops=2, args=[v79, v78] } -> -
     v81  LoadLocal { off=-1, kind=I64, volatile }         -> x0
@@ -216,12 +216,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

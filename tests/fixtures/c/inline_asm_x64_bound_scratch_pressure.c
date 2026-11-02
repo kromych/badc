@@ -1,10 +1,10 @@
 // x86-64 inline asm whose register operands bind to their values'
 // registers while more of them lack a register than the two scratch
 // registers a site reserves ahead of the allocation: constant and static
-// address `r` inputs while the six System V argument registers hold
-// parameters read after the statement, and inputs reaching the statement
-// from spill slots while the caller-saved registers hold values live
-// across it. Each template reads its inputs before it writes an output.
+// address `r` inputs while the six System V argument registers and one more
+// register hold values read after the statement, and inputs reaching the
+// statement from spill slots while the caller-saved registers hold values
+// live across it. Each template reads its inputs before it writes an output.
 // Returns 42. Native x86-64 only.
 
 #define NOINLINE __attribute__((noinline))
@@ -13,10 +13,12 @@ typedef long long i64;
 
 static i64 cells[4];
 
-/* Two constants and a static address: three scratch registers. */
+/* Two constants and a static address while seven values are live: three
+   scratch registers. */
 NOINLINE static i64 store_constants(i64 a, i64 b, i64 c, i64 d, i64 e, i64 g) {
+    i64 h = a ^ g;
     __asm__ volatile("movq %0, (%1,%2,8)" : : "r"(5LL), "r"(cells), "r"(1LL) : "memory");
-    return cells[1] + a * 2 + b * 3 + c * 5 + d * 7 + e * 11 + g * 13;
+    return cells[1] + a * 2 + b * 3 + c * 5 + d * 7 + e * 11 + g * 13 + h;
 }
 
 /* A read-write output and three constant inputs. */
@@ -52,7 +54,7 @@ int main(void) {
     i64 p[18];
     for (int i = 0; i < 18; i++)
         p[i] = i * 3 + 1;
-    if (store_constants(in[0], in[1], in[2], in[3], in[4], in[5]) != 189 || cells[1] != 5)
+    if (store_constants(in[0], in[1], in[2], in[3], in[4], in[5]) != 196 || cells[1] != 5)
         return 1;
     if (add_constants(in[0], in[1], in[2], in[3], in[4], in[5]) != 290)
         return 2;

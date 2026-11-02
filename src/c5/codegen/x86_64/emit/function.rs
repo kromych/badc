@@ -870,12 +870,11 @@ impl FnEmit<'_, '_> {
                 // disp32 reaches into the blob; the writer patches it. A
                 // static link indexes the table by its address instead.
                 let site = if self.abs32_addrs {
-                    super::encode::emit_load_index_abs(
+                    super::encode::emit_load_disp32(
                         code,
                         LoadKind::I64,
                         SCRATCH_R10,
-                        rt,
-                        8,
+                        super::encode::Disp32Mem::Index(rt, 8),
                         true,
                     )
                 } else {

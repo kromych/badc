@@ -82,22 +82,15 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rcx
                	movq	%rsi, %rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r12
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r13
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r14
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r15
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r10
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %r13 # <addr>
+               	movq	<rip>, %r14 # <addr>
+               	movq	<rip>, %r15 # <addr>
+               	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x48(%rsp)
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r10
+               	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x40(%rsp)
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r10
+               	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x38(%rsp)
                	subq	$0x20, %rsp
                	callq	<addr>
@@ -130,22 +123,21 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	movsd	%xmm1, 0x48(%rsp)
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x40(%rsp)
-               	movsd	0x8(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x38(%rsp)
-               	movsd	0x10(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x30(%rsp)
-               	movsd	0x18(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x28(%rsp)
-               	movsd	0x20(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x20(%rsp)
-               	movsd	0x28(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x18(%rsp)
-               	movsd	0x30(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x10(%rsp)
-               	movsd	0x38(%rax), %xmm14
+               	movsd	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x8(%rsp)
                	subq	$0x20, %rsp
                	callq	<addr>

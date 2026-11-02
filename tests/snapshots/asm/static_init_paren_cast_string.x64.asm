@@ -26,36 +26,35 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movzbq	(%rcx), %rcx
-               	xorq	$0x5, %rcx
-               	testl	%ecx, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movzbq	(%rax), %rax
+               	xorq	$0x5, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	(%rax), %rcx
-               	movzbq	0x5(%rcx), %rcx
-               	xorq	$0x1a, %rcx
-               	testl	%ecx, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movzbq	0x5(%rax), %rax
+               	xorq	$0x1a, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	0x8(%rax), %rcx
-               	movzbq	(%rcx), %rcx
-               	xorq	$0x9, %rcx
-               	testl	%ecx, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movzbq	(%rax), %rax
+               	xorq	$0x9, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movq	0x8(%rax), %rcx
-               	movzbq	0x9(%rcx), %rcx
-               	xorq	$0x4, %rcx
-               	testl	%ecx, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movzbq	0x9(%rax), %rax
+               	xorq	$0x4, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	0x10(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movzbq	0x9(%rax), %rax
                	xorq	$0x1, %rax
                	testl	%eax, %eax

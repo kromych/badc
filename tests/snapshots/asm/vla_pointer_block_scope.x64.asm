@@ -33,108 +33,99 @@ Disassembly of section .text:
                	leaq	0x1(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x1, %rcx
-               	setne	%sil
-               	movzbq	%sil, %rsi
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rdi
-               	xorl	%edx, %edx
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movq	(%rcx), %rdx
-               	leaq	0x1(%rdx), %rdi
-               	subq	%rdx, %rdi
-               	cmpq	$0x1, %rdi
                	setne	%dl
                	movzbq	%dl, %rdx
-               	leaq	<rip>, %rdi # <addr>
-               	movq	%rdi, (%rcx)
-               	orq	%rsi, %rdx
-               	leaq	0x2(%rax), %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x2, %rsi
-               	setne	%al
-               	movzbq	%al, %rax
-               	orq	%rax, %rdx
-               	movq	(%rcx), %rcx
-               	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	movq	<rip>, %rsi # <addr>
+               	xorl	%ecx, %ecx
+               	testq	%rsi, %rsi
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	leaq	0x2(%rax), %rcx
-               	subq	%rax, %rcx
-               	cmpq	$0x2, %rcx
+               	movq	<rip>, %rcx # <addr>
+               	leaq	0x1(%rcx), %rsi
+               	subq	%rcx, %rsi
+               	cmpq	$0x1, %rsi
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	leaq	<rip>, %rsi # <addr>
+               	movq	%rsi, <rip> # <addr>
+               	orq	%rdx, %rcx
+               	leaq	0x2(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x2, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rsi, (%rcx)
-               	orq	%rax, %rdx
+               	orq	%rax, %rcx
+               	movq	<rip>, %rdx # <addr>
+               	xorl	%eax, %eax
+               	testq	%rdx, %rdx
+               	je	<addr>
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x2(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x2, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, <rip> # <addr>
+               	orq	%rax, %rcx
                	leaq	-0x40(%rbp), %rax
-               	leaq	0x4(%rax), %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x4, %rsi
+               	leaq	0x4(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x4, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rdx
-               	movq	(%rcx), %rcx
+               	orq	%rax, %rcx
+               	movq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	leaq	0x4(%rax), %rcx
-               	subq	%rax, %rcx
-               	cmpq	$0x4, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x4(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x4, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rsi, (%rcx)
-               	orq	%rax, %rdx
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, <rip> # <addr>
+               	orq	%rax, %rcx
                	leaq	-0x40(%rbp), %rax
-               	leaq	0x8(%rax), %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x8, %rsi
+               	leaq	0x8(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x8, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rdx
-               	movq	(%rcx), %rcx
+               	orq	%rax, %rcx
+               	movq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	leaq	0x8(%rax), %rcx
-               	subq	%rax, %rcx
-               	cmpq	$0x8, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x8(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x8, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rsi, (%rcx)
-               	orq	%rax, %rdx
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, <rip> # <addr>
+               	orq	%rax, %rcx
                	leaq	-0x40(%rbp), %rax
-               	leaq	0x10(%rax), %rsi
-               	subq	%rax, %rsi
-               	cmpq	$0x10, %rsi
+               	leaq	0x10(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x10, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	orq	%rax, %rdx
-               	movq	(%rcx), %rcx
+               	orq	%rax, %rcx
+               	movq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
-               	leaq	0x10(%rax), %rcx
-               	subq	%rax, %rcx
-               	cmpq	$0x10, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x10(%rax), %rdx
+               	subq	%rax, %rdx
+               	cmpq	$0x10, %rdx
                	setne	%al
                	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movq	%rsi, (%rcx)
-               	orq	%rdx, %rax
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, <rip> # <addr>
+               	orq	%rcx, %rax
                	leave
                	retq

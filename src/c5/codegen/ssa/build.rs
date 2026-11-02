@@ -771,6 +771,7 @@ impl SsaBuilder {
             kind,
             volatile,
             align,
+            pc_rel: false,
         });
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
@@ -817,6 +818,7 @@ impl SsaBuilder {
             kind,
             volatile,
             align,
+            pc_rel: false,
         })
     }
 

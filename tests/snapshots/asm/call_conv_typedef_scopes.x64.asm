@@ -181,23 +181,20 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
                	callq	*%rax
                	addq	$0x20, %rsp
                	imulq	$0x2710, %rax, %r13     # imm = 0x2710
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	*%rax
                	imulq	$0x64, %rax, %rax
                	addq	%rax, %r13
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	*%rax
@@ -231,8 +228,7 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	callq	<addr>
                	movq	%rax, %r13
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
@@ -245,8 +241,7 @@ Disassembly of section .text:
                	callq	<addr>
                	imulq	$0x2710, %rax, %rax     # imm = 0x2710
                	addq	%rax, %r13
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
                	movq	%rbx, %rcx
                	movq	%r12, %rdx
@@ -270,8 +265,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movq	%rdi, %rcx
                	movq	%rsi, %rdx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	subq	$0x20, %rsp
                	callq	*%rax
                	addq	$0x20, %rsp

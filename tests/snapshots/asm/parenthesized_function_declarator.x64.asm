@@ -32,11 +32,10 @@ Disassembly of section .text:
 <two>:
                	leaq	<rip>, %rax # <addr>
                	shlq	%rdi
-               	movl	%edi, (%rax)
+               	movl	%edi, <rip> # <addr>
                	retq
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0xa, (%rax)
+               	movl	$0xa, <rip> # <addr>
                	xorl	%eax, %eax
                	retq

@@ -43,13 +43,11 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movss	(%rax), %xmm0
+               	movss	<rip>, %xmm0 # <addr>
                	ucomiss	%xmm0, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movss	(%rax), %xmm0
+               	movss	<rip>, %xmm0 # <addr>
                	movl	$0x7f61b1e6, %eax       # imm = 0x7F61B1E6
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

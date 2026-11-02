@@ -1116,6 +1116,7 @@ mod tests {
             kind,
             volatile: false,
             align: 8,
+            pc_rel: false,
         };
         for (between, forwarded) in [
             (store(-4, 0, 0, StoreKind::I64), true),
@@ -1211,6 +1212,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1218,6 +1220,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1251,6 +1254,7 @@ mod tests {
                     kind: StoreKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1258,6 +1262,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1299,6 +1304,7 @@ mod tests {
                     kind: StoreKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1306,6 +1312,7 @@ mod tests {
                     kind: LoadKind::U8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1321,6 +1328,7 @@ mod tests {
                     kind: LoadKind::U8,
                     volatile: false,
                     align: 0,
+                    ..
                 }
             ),
             "an unsigned sub-width reload must not forward",
@@ -1350,6 +1358,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -1363,6 +1372,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),
@@ -1406,6 +1416,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::InlineAsm {
                     asm,
@@ -1417,6 +1428,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),
@@ -1450,6 +1462,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1457,6 +1470,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1491,6 +1505,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1498,6 +1513,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1505,6 +1521,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -1633,6 +1650,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -1843,6 +1861,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1850,6 +1869,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -1994,6 +2014,7 @@ mod tests {
             kind: StoreKind::I8,
             volatile,
             align: 0,
+            pc_rel: false,
         };
         let barriers: Vec<Inst> = alloc::vec![
             store_indexed(0, 2, 1, 2, StoreKind::I8),
@@ -2060,6 +2081,7 @@ mod tests {
             kind: LoadKind::I8,
             volatile: true,
             align: 0,
+            pc_rel: false,
         };
         let (v, _) = indexed_reload(
             load_indexed(0, 1, 1, LoadKind::I8),
@@ -2082,6 +2104,7 @@ mod tests {
                     kind: LoadKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 store_indexed(1, 0, 1, 1, StoreKind::I8),
                 Inst::Load {
@@ -2090,6 +2113,7 @@ mod tests {
                     kind: LoadKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),

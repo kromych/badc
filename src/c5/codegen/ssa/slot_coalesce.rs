@@ -1624,6 +1624,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 1,
@@ -1665,6 +1666,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 1,
@@ -1711,6 +1713,7 @@ mod tests {
                         kind: StoreKind::I8,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::LoadLocal {
                         disp: 0,
@@ -1842,6 +1845,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::StoreLocal {
                     disp: 0,
@@ -1880,6 +1884,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -1943,6 +1948,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: base + 1,
@@ -1950,6 +1956,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ]
         };
@@ -1995,6 +2002,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::LocalAddr(-4),
             Inst::Binop {
@@ -2009,6 +2017,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: 2,
@@ -2016,6 +2025,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: 5,
@@ -2023,6 +2033,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]);
         let mut f = one_block(insts, 8, 9);
@@ -2064,6 +2075,7 @@ mod tests {
                         kind: StoreKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::CallExt {
                         binding_idx: 0,
@@ -2093,6 +2105,7 @@ mod tests {
                         kind: StoreKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::Load {
                         addr: 6,
@@ -2100,6 +2113,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 8,
@@ -2146,6 +2160,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             insts[a + 2] = Inst::Load {
                 addr: a as ValueId,
@@ -2153,6 +2168,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             insts[5] = Inst::Load {
                 addr: b_take as ValueId,
@@ -2160,6 +2176,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             let mut f = one_block(insts, 5, 9);
             f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
@@ -2209,6 +2226,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             2,
@@ -2231,6 +2249,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -2238,6 +2257,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LocalAddr(-2),
                 Inst::Imm(7),
@@ -2248,6 +2268,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 3,
@@ -2255,6 +2276,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             6,
@@ -2310,6 +2332,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: base + 1,
@@ -2317,6 +2340,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]
     }
@@ -2340,6 +2364,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ];
             insts.extend(touch_group(-4, 3));
@@ -2350,6 +2375,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 }]
             } else {
                 alloc::vec![Inst::Imm(1)]
@@ -2401,6 +2427,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let build = |end_on_back_edge: bool| {
             let mut insts = alloc::vec![
@@ -2454,6 +2481,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let write = |addr: ValueId, value: ValueId| Inst::Store {
             addr,
@@ -2462,6 +2490,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let build = |escape_at_entry: bool| {
             let mut insts = alloc::vec![Inst::Imm(0), Inst::LocalAddr(-8), write(1, 0)];

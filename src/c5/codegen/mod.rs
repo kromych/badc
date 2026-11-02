@@ -61,9 +61,25 @@ pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 /// carried by [`DataFixup`], [`FuncFixup`] and [`GotFixup`].
 pub(crate) use aarch64::patch::AddrPart;
 
-/// Reject a split record on a machine whose references occupy a single
-/// field. x86_64 relocates a reference through one displacement, so
-/// only [`AddrPart::Whole`] has an encoding there.
+/// Reject any record but a `lea`'s on x86_64, for a reference whose
+/// instruction the writer rewrites or reads.
+/// The offset of the displacement an x86_64 address record at `site`
+/// covers: 3 bytes into a `lea` for [`AddrPart::Whole`], the site itself
+/// for [`AddrPart::Disp32`]. RIP is 4 bytes past it.
+pub(crate) fn x86_disp32_field(
+    site: u64,
+    part: AddrPart,
+    label: &str,
+) -> Result<u64, error::C5Error> {
+    match part {
+        AddrPart::Whole => Ok(site + 3),
+        AddrPart::Disp32 => Ok(site),
+        AddrPart::Page | AddrPart::InPage => Err(error::C5Error::internal(alloc::format!(
+            "{label}: x86_64 reference recorded as {part:?}"
+        ))),
+    }
+}
+
 pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), error::C5Error> {
     if part == AddrPart::Whole {
         return Ok(());

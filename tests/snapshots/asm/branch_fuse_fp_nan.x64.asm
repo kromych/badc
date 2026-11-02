@@ -26,18 +26,14 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm0
-               	movsd	(%rax), %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	movsd	<rip>, %xmm1 # <addr>
                	divsd	%xmm1, %xmm0
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm1
-               	leaq	<rip>, %rax # <addr>
-               	movss	(%rax), %xmm2
-               	movss	(%rax), %xmm3
+               	movsd	<rip>, %xmm1 # <addr>
+               	movss	<rip>, %xmm2 # <addr>
+               	movss	<rip>, %xmm3 # <addr>
                	divss	%xmm3, %xmm2
-               	leaq	<rip>, %rax # <addr>
-               	movss	(%rax), %xmm3
+               	movss	<rip>, %xmm3 # <addr>
                	ucomisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x1, %eax

@@ -451,23 +451,23 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v351 Imm(45)                                          -> x0
     v352 Imm(45)                                          -> x0
     v353 ImmData(64)                                      -> x0
-    v354 Load { addr=v353, disp=0, kind=I32 }             -> x1
-    v355 BinopI { op=add, lhs=v354, rhs_imm=1 }           -> x1
-    v356 Store { addr=v353, disp=0, value=v355, kind=I32 } -> -
-    v357 Imm(45)                                          -> x0
-    v358 Imm(45)                                          -> x0
-    v359 Imm(42)                                          -> x0
-    v360 Imm(42)                                          -> x0
-    v361 Imm(45)                                          -> x0
-    v362 Imm(45)                                          -> x0
-    v363 Imm(90)                                          -> x0
-    v364 Imm(90)                                          -> x0
-    v365 Imm(135)                                         -> x0
-    v366 Imm(135)                                         -> x0
-    v367 Imm(135)                                         -> x0
-    v368 Imm(135)                                         -> x0
-    v369 Imm(0)                                           -> x0
-    v370 ImmData(64)                                      -> x0
+    v354 Load { addr=v353, disp=0, kind=I32 pc_rel }      -> x0
+    v355 BinopI { op=add, lhs=v354, rhs_imm=1 }           -> x0
+    v356 Store { addr=v353, disp=0, value=v355, kind=I32 pc_rel } -> -
+    v357 Imm(45)                                          -> x1
+    v358 Imm(45)                                          -> x1
+    v359 Imm(42)                                          -> x1
+    v360 Imm(42)                                          -> x1
+    v361 Imm(45)                                          -> x1
+    v362 Imm(45)                                          -> x1
+    v363 Imm(90)                                          -> x1
+    v364 Imm(90)                                          -> x1
+    v365 Imm(135)                                         -> x1
+    v366 Imm(135)                                         -> x1
+    v367 Imm(135)                                         -> x1
+    v368 Imm(135)                                         -> x1
+    v369 Imm(0)                                           -> x1
+    v370 ImmData(64)                                      -> x1
     v371 Extend { value=v355, kind=I32 }                  -> x0
     v372 BinopI { op=ne, lhs=v371, rhs_imm=1 }            -> x0
     terminator Bz { cond=v372, target=b18, fall=b17 }   (exit_acc=v372)
@@ -687,12 +687,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

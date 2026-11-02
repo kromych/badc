@@ -665,8 +665,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ebx
+               	movl	<rip>, %ebx # <addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	testl	%eax, %eax

@@ -504,10 +504,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movzbq	0x9(%rax), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movzbq	0x9(%rcx), %rcx
+               	movzbq	<rip>, %rax # <addr>
+               	movzbq	<rip>, %rcx # <addr>
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x6, %eax
@@ -516,48 +514,71 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x1020304, (%rax)      # imm = 0x1020304
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1020304, (%rcx)      # imm = 0x1020304
-               	movl	$0x2040608, 0x4(%rax)   # imm = 0x2040608
-               	movl	$0x2040608, 0x4(%rcx)   # imm = 0x2040608
-               	movl	$0x306090c, 0x8(%rax)   # imm = 0x306090C
-               	movl	$0x306090c, 0x8(%rcx)   # imm = 0x306090C
-               	movl	$0x4080c10, 0xc(%rax)   # imm = 0x4080C10
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x4080c10, 0xc(%rax)   # imm = 0x4080C10
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x50a0f14, 0x10(%rcx)  # imm = 0x50A0F14
-               	movl	$0x50a0f14, 0x10(%rax)  # imm = 0x50A0F14
-               	movl	$0x60c1218, 0x14(%rcx)  # imm = 0x60C1218
-               	movl	$0x60c1218, 0x14(%rax)  # imm = 0x60C1218
-               	movl	$0x70e151c, 0x18(%rcx)  # imm = 0x70E151C
-               	movl	$0x70e151c, 0x18(%rax)  # imm = 0x70E151C
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x8101820, 0x1c(%rax)  # imm = 0x8101820
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x8101820, 0x1c(%rcx)  # imm = 0x8101820
-               	movl	$0x9121b24, 0x20(%rax)  # imm = 0x9121B24
-               	movl	$0x9121b24, 0x20(%rcx)  # imm = 0x9121B24
-               	movl	$0xa141e28, 0x24(%rax)  # imm = 0xA141E28
-               	movl	$0xa141e28, 0x24(%rcx)  # imm = 0xA141E28
-               	movl	$0xb16212c, 0x28(%rax)  # imm = 0xB16212C
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0xb16212c, 0x28(%rax)  # imm = 0xB16212C
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0xc182430, 0x2c(%rcx)  # imm = 0xC182430
-               	movl	$0xc182430, 0x2c(%rax)  # imm = 0xC182430
-               	movl	$0xd1a2734, 0x30(%rcx)  # imm = 0xD1A2734
-               	movl	$0xd1a2734, 0x30(%rax)  # imm = 0xD1A2734
-               	movl	$0xe1c2a38, 0x34(%rcx)  # imm = 0xE1C2A38
-               	movl	$0xe1c2a38, 0x34(%rax)  # imm = 0xE1C2A38
+               	movl	$0x1020304, <rip> # imm = 0x1020304
+                                                # <addr>
+               	movl	$0x1020304, <rip> # imm = 0x1020304
+                                                # <addr>
+               	movl	$0x2040608, <rip> # imm = 0x2040608
+                                                # <addr>
+               	movl	$0x2040608, <rip> # imm = 0x2040608
+                                                # <addr>
+               	movl	$0x306090c, <rip> # imm = 0x306090C
+                                                # <addr>
+               	movl	$0x306090c, <rip> # imm = 0x306090C
+                                                # <addr>
+               	movl	$0x4080c10, <rip> # imm = 0x4080C10
+                                                # <addr>
+               	movl	$0x4080c10, <rip> # imm = 0x4080C10
+                                                # <addr>
+               	movl	$0x50a0f14, <rip> # imm = 0x50A0F14
+                                                # <addr>
+               	movl	$0x50a0f14, <rip> # imm = 0x50A0F14
+                                                # <addr>
+               	movl	$0x60c1218, <rip> # imm = 0x60C1218
+                                                # <addr>
+               	movl	$0x60c1218, <rip> # imm = 0x60C1218
+                                                # <addr>
+               	movl	$0x70e151c, <rip> # imm = 0x70E151C
+                                                # <addr>
+               	movl	$0x70e151c, <rip> # imm = 0x70E151C
+                                                # <addr>
+               	movl	$0x8101820, <rip> # imm = 0x8101820
+                                                # <addr>
+               	movl	$0x8101820, <rip> # imm = 0x8101820
+                                                # <addr>
+               	movl	$0x9121b24, <rip> # imm = 0x9121B24
+                                                # <addr>
+               	movl	$0x9121b24, <rip> # imm = 0x9121B24
+                                                # <addr>
+               	movl	$0xa141e28, <rip> # imm = 0xA141E28
+                                                # <addr>
+               	movl	$0xa141e28, <rip> # imm = 0xA141E28
+                                                # <addr>
+               	movl	$0xb16212c, <rip> # imm = 0xB16212C
+                                                # <addr>
+               	movl	$0xb16212c, <rip> # imm = 0xB16212C
+                                                # <addr>
+               	movl	$0xc182430, <rip> # imm = 0xC182430
+                                                # <addr>
+               	movl	$0xc182430, <rip> # imm = 0xC182430
+                                                # <addr>
+               	movl	$0xd1a2734, <rip> # imm = 0xD1A2734
+                                                # <addr>
+               	movl	$0xd1a2734, <rip> # imm = 0xD1A2734
+                                                # <addr>
+               	movl	$0xe1c2a38, <rip> # imm = 0xE1C2A38
+                                                # <addr>
+               	movl	$0xe1c2a38, <rip> # imm = 0xE1C2A38
+                                                # <addr>
                	leaq	<rip>, %rdi # <addr>
-               	movl	$0xf1e2d3c, 0x38(%rdi)  # imm = 0xF1E2D3C
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0xf1e2d3c, 0x38(%rcx)  # imm = 0xF1E2D3C
-               	movl	$0x10203040, 0x3c(%rdi) # imm = 0x10203040
-               	movl	$0x10203040, 0x3c(%rcx) # imm = 0x10203040
+               	movl	$0xf1e2d3c, <rip> # imm = 0xF1E2D3C
+                                                # <addr>
+               	movl	$0xf1e2d3c, <rip> # imm = 0xF1E2D3C
+                                                # <addr>
+               	movl	$0x10203040, <rip> # imm = 0x10203040
+                                                # <addr>
+               	movl	$0x10203040, <rip> # imm = 0x10203040
+                                                # <addr>
                	leaq	0x20(%rdi), %rsi
                	movl	$0x8, %edx
                	callq	<addr>
@@ -610,11 +631,11 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	(%rdi), %rax
-               	movb	%al, (%rsi)
+               	movb	%al, <rip> # <addr>
                	movzbq	0x1(%rdi), %rax
-               	movb	%al, 0x1(%rsi)
+               	movb	%al, <rip> # <addr>
                	movzbq	0x2(%rdi), %rax
-               	movb	%al, 0x2(%rsi)
+               	movb	%al, <rip> # <addr>
                	leaq	0x3(%rsi), %rax
                	leaq	0x3(%rdi), %rcx
                	movzbq	(%rcx), %rdx

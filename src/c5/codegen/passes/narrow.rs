@@ -411,6 +411,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -555,6 +556,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -825,6 +827,7 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]);
         assert!(m.iter().all(|b| !b));

@@ -71,10 +71,9 @@ Disassembly of section .text:
                	xchgl	%ecx, (%rax)
                	testl	%ecx, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	incq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	<rip>, %rax # <addr>
+               	incq	%rax
+               	movq	%rax, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
@@ -83,10 +82,9 @@ Disassembly of section .text:
                	xchgb	%cl, (%rax)
                	testb	$-0x1, %cl
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	incq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	<rip>, %rax # <addr>
+               	incq	%rax
+               	movq	%rax, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movb	%cl, (%rax)
@@ -189,42 +187,35 @@ Disassembly of section .text:
                	movl	$0x66, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x67, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x68, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpq	$0x0, (%rax)
+               	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x69, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movswq	(%rax), %rax
+               	movswq	<rip>, %rax # <addr>
                	cmpl	$0xffff9c40, %eax       # imm = 0xFFFF9C40
                	je	<addr>
                	movl	$0x6a, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x6b, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x6c, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x9c40, %rax           # imm = 0x9C40
                	je	<addr>
                	movl	$0x6d, %eax

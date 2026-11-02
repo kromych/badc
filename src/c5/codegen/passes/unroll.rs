@@ -1553,6 +1553,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);
@@ -1569,6 +1570,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: true,
             align: 0,
+            pc_rel: false,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);
@@ -1660,6 +1662,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Binop {
                     op: BinOp::Add,

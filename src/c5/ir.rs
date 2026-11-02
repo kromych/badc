@@ -99,18 +99,23 @@ pub(crate) enum Inst {
     /// that. A pass that rebuilds the access at the same address must
     /// carry the field across; one that retargets it to a different
     /// address must recompute it.
+    ///
+    /// With `pc_rel` the address is an `ImmData` the access forms itself,
+    /// PC-relative (x86-64 `disp32(%rip)`), so no register holds it. It is
+    /// set immediately before allocation.
     Load {
         addr: ValueId,
         disp: i32,
         kind: LoadKind,
         volatile: bool,
         align: u8,
+        pc_rel: bool,
     },
     /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
     /// instruction's id read that value. `disp` is a byte offset folded
     /// from a constant pointer addition, zero for a plain dereference.
-    /// `volatile` and `align` as for [`Self::Load`].
+    /// `volatile`, `align` and `pc_rel` as for [`Self::Load`].
     Store {
         addr: ValueId,
         disp: i32,
@@ -118,6 +123,7 @@ pub(crate) enum Inst {
         kind: StoreKind,
         volatile: bool,
         align: u8,
+        pc_rel: bool,
     },
     /// Load from a local / parameter slot. Equivalent to a
     /// `LocalAddr(off)` followed by `Load { disp, kind }`, but
@@ -2762,6 +2768,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 alloc::vec![1]
             ),
@@ -2773,6 +2780,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 alloc::vec![1, 2]
             ),

@@ -26,41 +26,34 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movslq	(%rax), %rax
+               	movslq	<rip>, %rax # <addr>
                	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rdx # <addr>
-               	movq	(%rdx), %rdi
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %r8
-               	leaq	<rip>, %rsi # <addr>
-               	movl	(%rsi), %r9d
-               	cmpq	$-0x1, %rdi
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	movl	<rip>, %esi # <addr>
+               	cmpq	$-0x1, %rcx
                	jne	<addr>
                	testq	%rax, %rax
                	jne	<addr>
-               	testq	%r8, %r8
+               	testq	%rdx, %rdx
                	jne	<addr>
-               	testl	%r9d, %r9d
+               	testl	%esi, %esi
                	jne	<addr>
-               	movq	(%rdx), %rax
-               	movq	(%rcx), %rdx
-               	movl	(%rsi), %edx
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	movl	<rip>, %ecx # <addr>
                	cmpq	$0x64, %rax
                	jbe	<addr>
-               	movq	(%rcx), %rax
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rdx
-               	movl	(%rax), %eax
-               	cmpq	$0x64, %rdx
+               	movq	<rip>, %rax # <addr>
+               	movl	<rip>, %eax # <addr>
+               	movq	<rip>, %rax # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	cmpq	$0x64, %rax
                	jbe	<addr>
-               	movq	(%rcx), %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
                	cmpq	$0x64, %rax
                	jbe	<addr>
                	xorl	%eax, %eax

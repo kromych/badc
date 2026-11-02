@@ -38,8 +38,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x178, %rsp            # imm = 0x178
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x15, %edi
                	callq	*%rax
                	cmpl	$0x2a, %eax
@@ -48,8 +47,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x29, %edi
                	callq	*%rax
                	cmpl	$0x2a, %eax

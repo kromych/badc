@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v1   LocalAddr(-3)                                    -> x0
     v2   Mzero { dst=v1, size=24, align=8 }               -> -
     v3   ImmData(16)                                      -> x1
-    v4   Load { addr=v3, disp=0, kind=I32 }               -> x0
+    v4   Load { addr=v3, disp=0, kind=I32 pc_rel }        -> x0
     v5   LocalAddr(-3)                                    -> x2
     v6   StoreLocal { off=-3, value=v4, kind=I32 }        -> -
     v7   Imm(104)                                         -> x0
@@ -152,9 +152,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 10  start_pc=0
     v115 Imm(0)                                           -> x1
     v116 BinopI { op=add, lhs=v46, rhs_imm=16 }           -> x1
-    v117 Load { addr=v46, disp=16, kind=I64 }             -> x1
-    v118 ImmData(16)                                      -> x0
-    v119 Binop { op=ne, lhs=v117, rhs=v118 }              -> x1
+    v117 Load { addr=v46, disp=16, kind=I64 }             -> x0
+    v118 ImmData(16)                                      -> x1
+    v119 Binop { op=ne, lhs=v117, rhs=v118 }              -> x0
     terminator Bz { cond=v119, target=b12, fall=b11 }   (exit_acc=v119)
   block 11  start_pc=0
     v120 Imm(4)                                           -> x0
@@ -164,12 +164,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 12  start_pc=0
     v123 LocalAddr(-5)                                    -> x7
     v124 Mzero { dst=v123, size=12, align=8 }             -> -
-    v125 ImmData(16)                                      -> x1
-    v126 Load { addr=v118, disp=0, kind=I32 }             -> x0
+    v125 ImmData(16)                                      -> x0
+    v126 Load { addr=v118, disp=0, kind=I32 pc_rel }      -> x0
     v127 LocalAddr(-5)                                    -> x1
     v128 StoreLocal { off=-5, value=v126, kind=I32 }      -> -
     v129 ImmData(24)                                      -> x0
-    v130 Load { addr=v129, disp=0, kind=I32 }             -> x0
+    v130 Load { addr=v129, disp=0, kind=I32 pc_rel }      -> x0
     v131 LocalAddr(-5)                                    -> x1
     v132 BinopI { op=add, lhs=v123, rhs_imm=4 }           -> x1
     v133 StoreLocal { off=-5, disp=4, value=v130, kind=I32 } -> -
@@ -216,7 +216,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     terminator Return(v165)   (exit_acc=v165)
   block 16  start_pc=0
     v168 ImmData(32)                                      -> x0
-    v169 Load { addr=v168, disp=0, kind=I64 }             -> x0
+    v169 Load { addr=v168, disp=0, kind=I64 pc_rel }      -> x0
     v170 Imm(0)                                           -> x1
     v171 Imm(0)                                           -> x1
     v172 Imm(0)                                           -> x1
@@ -343,12 +343,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

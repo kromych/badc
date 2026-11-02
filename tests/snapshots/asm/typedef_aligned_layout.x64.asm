@@ -159,26 +159,26 @@ Disassembly of section .text:
                	movl	$0x43, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	testb	$0xf, %cl
+               	leaq	<rip>, %rax # <addr>
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x44, %eax
                	popq	%rbp
                	retq
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x45, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x3, (%rax)
+               	movl	$0x3, <rip> # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x4c, %eax
                	popq	%rbp
                	retq
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	addq	$0x3, %rax
                	cmpl	$0x6, %eax
                	je	<addr>

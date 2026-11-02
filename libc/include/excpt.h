@@ -20,6 +20,7 @@ struct _CONTEXT;
 struct _DISPATCHER_CONTEXT;
 struct _EXCEPTION_POINTERS;
 
+// A native-subsystem (kernel-mode) image imports it from ntoskrnl.exe.
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::__C_specific_handler, "__C_specific_handler")
 EXCEPTION_DISPOSITION __C_specific_handler(struct _EXCEPTION_RECORD *ExceptionRecord,

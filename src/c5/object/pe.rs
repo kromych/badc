@@ -388,9 +388,10 @@ impl<'a> PeWriter<'a> {
             .imports
             .iter()
             .map(|imp| {
+                let dll = &build.imports.dylibs[imp.dylib_index].path;
                 (
                     imp.real_symbol.clone(),
-                    build.imports.dylibs[imp.dylib_index].path.clone(),
+                    image_dll(dll, subsystem),
                     imp.ordinal,
                 )
             })
@@ -2183,6 +2184,17 @@ fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
 struct DllGroup {
     dll_name: String,
     members: Vec<usize>,
+}
+
+/// The DLL an import from `dll` binds to in an image of `subsystem`. A
+/// native-subsystem (kernel-mode) image cannot load the user-mode C library
+/// and takes the C runtime it calls, `__C_specific_handler` among it, from
+/// ntoskrnl.exe.
+fn image_dll(dll: &str, subsystem: u16) -> String {
+    if subsystem == IMAGE_SUBSYSTEM_NATIVE && dll.eq_ignore_ascii_case("msvcrt.dll") {
+        return "ntoskrnl.exe".into();
+    }
+    dll.into()
 }
 
 fn group_imports_by_dll(imports: &[(String, String, Option<u16>)]) -> Vec<DllGroup> {

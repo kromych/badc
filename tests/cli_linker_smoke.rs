@@ -5087,6 +5087,202 @@ fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The file offset of `rva` in a PE32+ image.
+fn pe_rva_offset(pe: &[u8], rva: u32) -> Option<usize> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let pe_off = word(0x3c) as usize;
+    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+    (0..n_sec).find_map(|i| {
+        let s = pe_off + 24 + so_hdr + i * 40;
+        let (va, span, raw) = (word(s + 12), word(s + 8).max(word(s + 16)), word(s + 20));
+        (rva >= va && rva < va + span).then(|| (raw + rva - va) as usize)
+    })
+}
+
+/// The RVA of the import address table slot `dll` fills with `symbol`.
+fn pe_iat_slot(pe: &[u8], dll: &str, symbol: &str) -> Option<u32> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let opt = word(0x3c) as usize + 24;
+    let mut desc = pe_rva_offset(pe, word(opt + 120))?;
+    for (name, symbols) in pe_import_directory(pe) {
+        let iat = word(desc + 16);
+        if name.eq_ignore_ascii_case(dll)
+            && let Some(i) = symbols.iter().position(|s| s == symbol)
+        {
+            return Some(iat + 8 * i as u32);
+        }
+        desc += 20;
+    }
+    None
+}
+
+/// An image-relative field (ADDR32NB) naming an imported function, as a
+/// `.xdata` record names its language handler, holds the RVA of the
+/// import's stub inside the image, which jumps through the import's
+/// address table slot: `jmp [rip + disp]` on x64, `adrp x16; ldr x16;
+/// br x16` on arm64.
+#[test]
+fn an_image_relative_field_naming_an_import_takes_its_stub() {
+    const MAGIC: [u8; 4] = [0x5E, 0xB5, 0xEB, 0x5E];
+    let rows: [(&str, u16, u16); 2] = [("windows-x64", 0x8664, 3), ("windows-arm64", 0xAA64, 2)];
+    for (target, machine, addr32nb) in rows {
+        let dir = tempdir(&format!("addr32nb-import-{target}"));
+        let rdata = [MAGIC, [0; 4]].concat();
+        let relocs = [(4, 1, addr32nb)];
+        let object = coff_relocatable(
+            machine,
+            &[(".rdata", 0x4030_0040, &rdata, &relocs)],
+            &[("seh_table", 1, 0, 2), ("__C_specific_handler", 0, 0x20, 2)],
+        );
+        std::fs::write(dir.join("table.coff"), object).expect("write object");
+        let main = write_source(
+            &dir,
+            "main.c",
+            "extern const unsigned seh_table[2];\n\
+             int main(void) { return seh_table[1] == 0; }\n",
+        );
+        let exe = dir.join("t.exe");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&main)
+                .arg(dir.join("table.coff"))
+                .arg("-o")
+                .arg(&exe),
+            "link the table",
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let at = pe
+            .windows(4)
+            .position(|w| w == MAGIC)
+            .expect("the table in the image");
+        let field = u32::from_le_bytes(pe[at + 4..at + 8].try_into().unwrap());
+        let slot = pe_iat_slot(&pe, "msvcrt.dll", "__C_specific_handler").expect("the import");
+        let stub = pe_rva_offset(&pe, field).expect("the field names an RVA in the image");
+        let insn =
+            |i: usize| u32::from_le_bytes(pe[stub + 4 * i..stub + 4 * i + 4].try_into().unwrap());
+        let reached = if machine == 0x8664 {
+            assert_eq!(
+                pe[stub..stub + 2],
+                [0xFF, 0x25],
+                "{target}: no `jmp [rip + disp]`"
+            );
+            let disp = i32::from_le_bytes(pe[stub + 2..stub + 6].try_into().unwrap());
+            (i64::from(field) + 6 + i64::from(disp)) as u32
+        } else {
+            let (adrp, ldr) = (insn(0), insn(1));
+            assert_eq!(adrp & 0x9F00_001F, 0x9000_0010, "{target}: no `adrp x16`");
+            assert_eq!(
+                ldr & 0xFFC0_03FF,
+                0xF940_0210,
+                "{target}: no `ldr x16, [x16]`"
+            );
+            assert_eq!(insn(2), 0xD61F_0200, "{target}: no `br x16`");
+            let pages = (((adrp >> 5) & 0x7_FFFF) << 2 | (adrp >> 29) & 3) as i32;
+            let page = (field & !0xFFF) as i64 + ((i64::from(pages) << 44) >> 32);
+            (page + i64::from((ldr >> 10) & 0xFFF) * 8) as u32
+        };
+        assert_eq!(
+            reached, slot,
+            "{target}: the stub reaches {reached:#x}, the slot is {slot:#x}"
+        );
+    }
+}
+
+/// A kernel-mode (native-subsystem) image takes the language handler, and
+/// the rest of the C runtime it calls, from ntoskrnl.exe.
+#[test]
+fn a_native_image_takes_the_language_handler_from_the_kernel() {
+    for target in ["windows-x64", "windows-arm64"] {
+        let dir = tempdir(&format!("native-handler-{target}"));
+        let src = write_source(
+            &dir,
+            "drv.c",
+            "#pragma subsystem(native)\n#pragma entrypoint(DriverEntry)\n#include <excpt.h>\n\
+             long DriverEntry(void *d, void *r)\n\
+             { (void)d; (void)r; return &__C_specific_handler != 0; }\n",
+        );
+        let image = dir.join("drv.sys");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&src)
+                .arg("-o")
+                .arg(&image),
+            "link the driver",
+        );
+        let pe = std::fs::read(&image).expect("read image");
+        let imports = pe_imports(&pe);
+        assert!(
+            imports.contains(&("ntoskrnl.exe".into(), "__C_specific_handler".into())),
+            "{target}: {imports:?}"
+        );
+        assert!(
+            !pe_import_dll_names(&pe).contains(&"msvcrt.dll".to_string()),
+            "{target}: {imports:?}"
+        );
+    }
+}
+
+/// Objects cl compiled with `__except` and `__finally` (seh_cl.c beside
+/// them) link with badc and handle exceptions at run time, raised in the
+/// cl function itself and in badc functions it calls, so the unwinder
+/// passes badc frames and runs a `__finally` for an exception.
+#[cfg(windows)]
+#[test]
+fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
+    let (target, object) = if cfg!(target_arch = "aarch64") {
+        ("windows-arm64", "seh_cl.arm64.coff")
+    } else {
+        ("windows-x64", "seh_cl.x64.coff")
+    };
+    let object = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/coff")
+        .join(object);
+    let dir = tempdir("cl-seh-objects");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n\
+         int cl_read_or_minus_one(volatile int *p);\n\
+         int cl_finally(int *flag, void (*fn)(void));\n\
+         unsigned long cl_catch(void (*fn)(void));\n\
+         static volatile int seven = 7;\n\
+         static int flag;\n\
+         static void nothing(void) {}\n\
+         static void fault(void) { *(volatile int *)0 = 1; }\n\
+         static void raise_code(void) { RaiseException(0xE0001234, 0, 0, 0); }\n\
+         static void finally_inside(void) { cl_finally(&flag, fault); }\n\
+         int main(void)\n\
+         {\n\
+             if (cl_read_or_minus_one(&seven) != 7) return 1;\n\
+             if (cl_read_or_minus_one(0) != -1) return 2;\n\
+             if (cl_finally(&flag, nothing) != 0 || flag != 1) return 3;\n\
+             if (cl_catch(raise_code) != 0xE0001234) return 4;\n\
+             if (cl_catch(fault) != EXCEPTION_ACCESS_VIOLATION) return 5;\n\
+             flag = 0;\n\
+             if (cl_catch(finally_inside) != EXCEPTION_ACCESS_VIOLATION || flag != 2) return 6;\n\
+             return 0;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("seh{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg(&main)
+                .arg(&object)
+                .arg("-o")
+                .arg(&exe),
+            "link the cl objects",
+        );
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "{target} {opt}: {out:?}");
+    }
+}
+
 /// An import library of short import members (PE/COFF specification), each
 /// `(machine, name, ordinal)` importing a function from `dll`.
 fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {

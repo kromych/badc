@@ -198,6 +198,10 @@ pub struct MergedNative {
     pub data_import_refs: Vec<DataImportBind>,
     /// The same for `_Thread_local` template slots.
     pub tls_data_import_refs: Vec<DataImportBind>,
+    /// 4-byte image-relative fields in [`Self::data`] naming an imported
+    /// function, such as a `.xdata` record's language handler: the PLT
+    /// pass points each at the import's stub inside the image.
+    pub data_import_rva_refs: Vec<DataImportBind>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
@@ -1324,6 +1328,7 @@ struct Link<'a> {
     /// Data slots that name an import; see [`MergedNative::data_import_refs`].
     data_import_refs: Vec<DataImportBind>,
     tls_data_import_refs: Vec<DataImportBind>,
+    data_import_rva_refs: Vec<DataImportBind>,
     /// `.rela.tdata` slots, resolved like `.rela.data` ones.
     tls_abs_relocs: Vec<DataAbsReloc>,
 }
@@ -1436,6 +1441,7 @@ impl<'a> Link<'a> {
             data_pcrel_relocs: Vec::new(),
             data_import_refs: Vec::new(),
             tls_data_import_refs: Vec::new(),
+            data_import_rva_refs: Vec::new(),
             tls_abs_relocs: Vec::new(),
         })
     }
@@ -4303,6 +4309,20 @@ impl<'a> Link<'a> {
         let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let Some(d) = self.defined.get(sym.name.as_str()) else {
+                    let name = sym.name.as_str();
+                    let import = self.shlib_exports.contains(name)
+                        || self.is_routed_import(name)
+                        || self.import_idx_for_name.contains_key(name);
+                    if image_relative && !in_tls && width == 4 && import {
+                        let import = self.record_import(name);
+                        self.flat_imports.insert(sym.name.clone());
+                        self.data_import_rva_refs.push(DataImportBind {
+                            data_offset: slot_offset,
+                            import,
+                            addend: reloc.addend,
+                        });
+                        return Ok(());
+                    }
                     self.note_undefined_at(&sym.name, &format!(" ({what})"));
                     return Ok(());
                 };
@@ -5079,6 +5099,7 @@ impl<'a> Link<'a> {
             data_pcrel_relocs: self.data_pcrel_relocs,
             data_import_refs: self.data_import_refs,
             tls_data_import_refs: self.tls_data_import_refs,
+            data_import_rva_refs: self.data_import_rva_refs,
             machine: self.machine,
             dylibs: merged_dylibs.dylibs,
             import_dylib_map: merged_dylibs.import_dylib_map,
@@ -5621,20 +5642,12 @@ fn emit_plt(
                 ),
             ));
         }
-        let stub_at = match tramp_for_import.get(&import_index) {
-            Some(&off) => off,
-            None => {
-                let text_offset = merged.text.len();
-                tramp_for_import.insert(import_index, text_offset);
-                trampolines.push(PltTrampoline {
-                    text_offset,
-                    import_index,
-                });
-                merged.text.extend_from_slice(&stub);
-                text_offset
-            }
-        };
-        merged.stub_address_imports.insert(import_index);
+        let stub_at = stub_for(
+            merged,
+            &mut tramp_for_import,
+            &mut trampolines,
+            import_index,
+        );
         let reloc = DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub_at as i64 + addend),
@@ -5646,9 +5659,54 @@ fn emit_plt(
             merged.data_abs_relocs.push(reloc);
         }
     }
+    // An image-relative field (PE's ADDR32NB) cannot name another image,
+    // so it takes the RVA of the import's stub, which jumps through the
+    // import address table.
+    for bind in core::mem::take(&mut merged.data_import_rva_refs) {
+        let name = import_name(merged, bind.import);
+        if slots != DataImportSlots::Thunk || is_data_import(merged, bind.import) {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "an image-relative reference names `{name}`, which is no imported function"
+                ),
+            ));
+        }
+        let stub_at = stub_for(merged, &mut tramp_for_import, &mut trampolines, bind.import);
+        merged.data_pcrel_relocs.push(DataPcRel {
+            slot_offset: bind.data_offset,
+            target: MergedTarget::Text(stub_at as i64 + bind.addend),
+            anchor: MergedTarget::Text(stub_at as i64),
+            width: 4,
+            image_relative: true,
+        });
+    }
     merged.pending_imports = parked_back;
     record_plt_contribution(merged, plt_pool_start);
     Ok(trampolines)
+}
+
+/// The text offset of `import`'s stub, appended on first use; an address
+/// taken of the import is the stub's.
+fn stub_for(
+    merged: &mut MergedNative,
+    tramp_for_import: &mut BTreeMap<usize, usize>,
+    trampolines: &mut Vec<PltTrampoline>,
+    import_index: usize,
+) -> usize {
+    merged.stub_address_imports.insert(import_index);
+    if let Some(&off) = tramp_for_import.get(&import_index) {
+        return off;
+    }
+    let text_offset = merged.text.len();
+    tramp_for_import.insert(import_index, text_offset);
+    trampolines.push(PltTrampoline {
+        text_offset,
+        import_index,
+    });
+    merged.text.extend_from_slice(&plt_stub(merged.machine));
+    text_offset
 }
 
 /// [`emit_plt`] for x86_64: each call site's disp32 reaches its

@@ -691,21 +691,41 @@ fn install_data_model(
     // stays out, as bare `linux` / `unix` do.
     const X86_64_NAMES: &[&str] = &["__x86_64__", "__x86_64", "__amd64__", "__amd64"];
     const I386_NAMES: &[&str] = &["__i386__", "__i386"];
-    for name in X86_64_NAMES.iter().chain(I386_NAMES).chain(&[
-        "__LP64__",
-        "_LP64",
-        "__ILP32__",
-        "_ILP32",
-        "__SIZEOF_INT128__",
-        "__WCHAR_TYPE__",
-        "__code_model_32__",
-        "__code_model_small__",
-        "__code_model_kernel__",
-    ]) {
+    // The x86-64 baseline ISA, as gcc and clang predefine it for every x86-64
+    // target; gcc's i686 default for `-m32` has none of it.
+    const X86_64_ISA: &[&str] = &[
+        "__MMX__",
+        "__SSE__",
+        "__SSE2__",
+        "__SSE_MATH__",
+        "__SSE2_MATH__",
+        "__FXSR__",
+    ];
+    for name in X86_64_NAMES
+        .iter()
+        .chain(I386_NAMES)
+        .chain(X86_64_ISA)
+        .chain(&[
+            "__LP64__",
+            "_LP64",
+            "__ILP32__",
+            "_ILP32",
+            "__SIZEOF_INT128__",
+            "__WCHAR_TYPE__",
+            "__code_model_32__",
+            "__code_model_small__",
+            "__code_model_kernel__",
+        ])
+    {
         macros.remove(*name);
     }
     if target.is_x86_64() {
-        for name in if ilp32 { I386_NAMES } else { X86_64_NAMES } {
+        let names: &[&[&str]] = if ilp32 {
+            &[I386_NAMES]
+        } else {
+            &[X86_64_NAMES, X86_64_ISA]
+        };
+        for name in names.iter().flat_map(|n| n.iter()) {
             macros.insert(name.to_string(), "1".to_string());
         }
     }

@@ -518,7 +518,8 @@ fn lp64_predefined_for_lp64_targets_only() {
 
 /// `set_unit_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
-/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
+/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`, the
+/// x86-64 baseline ISA (`__MMX__`, `__SSE2__`) with the 64-bit model only.
 #[test]
 fn elf_class_selects_the_data_model_predefines() {
     use crate::c5::{CodeModel, ElfClass};
@@ -527,13 +528,16 @@ fn elf_class_selects_the_data_model_predefines() {
         "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
         "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
         "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "#ifdef __MMX__\nmmx\n#endif\n#ifdef __SSE2__\nsse2\n#endif\n",
         "#ifdef __code_model_32__\ncm32\n#endif\n",
         "#ifdef __code_model_small__\ncmsmall\n#endif\n",
         "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
         "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
         "wchar __WCHAR_TYPE__ .\n",
     );
-    let names64 = ["x86_64", "amd64", "lp64", "int128", "cmsmall"];
+    let names64 = [
+        "x86_64", "amd64", "lp64", "int128", "cmsmall", "mmx", "sse2",
+    ];
     let names32 = ["i386", "i386_bare", "ilp32", "cm32"];
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
     pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);

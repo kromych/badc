@@ -210,6 +210,7 @@ stringapiset.h	-	-	-	y	y
 intsafe.h	-	-	-	y	y
 share.h	-	-	-	y	y
 corecrt.h	-	-	-	y	y
+_timeval.h	-	-	-	y	y
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p

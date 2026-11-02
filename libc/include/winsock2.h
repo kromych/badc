@@ -376,8 +376,8 @@ typedef struct _WSAPROTOCOL_INFOA {
 // slots to mean "take these from the protocol-info block".
 #define FROM_PROTOCOL_INFO (-1)
 
-// `struct timeval` for select() is supplied by <time.h>, already
-// pulled in ahead of this header.
+// `struct timeval` for select(), as mingw-w64's winsock2.h includes it.
+#include <_timeval.h>
 
 // Windows `fd_set` is an array of SOCKET handles, not the POSIX
 // bitmap (winsock2.h). The FD_* macros operate on that array;

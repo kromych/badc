@@ -358,6 +358,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("intsafe.h", WINDOWS),
     header!("share.h", WINDOWS),
     header!("corecrt.h", WINDOWS),
+    header!("_timeval.h", WINDOWS),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),

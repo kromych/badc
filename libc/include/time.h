@@ -61,23 +61,11 @@ struct timespec {
     long long tv_nsec;
 };
 
-// Winsock's select() reads `struct timeval` as two 32-bit `long` fields
-// (LLP64), so the whole object is 8 bytes. A 64-bit field would place
-// tv_usec where select expects tv_sec's high half, zeroing the timeout.
-// mingw-w64's time.h and winsock2.h share it, and the timer macros, under
-// _TIMEVAL_DEFINED.
-#ifndef _TIMEVAL_DEFINED
-#define _TIMEVAL_DEFINED
-struct timeval {
-    long tv_sec;
-    long tv_usec;
-};
-#define timerisset(tvp) ((tvp)->tv_sec || (tvp)->tv_usec)
-#define timercmp(tvp, uvp, cmp)                                                   \
-    ((tvp)->tv_sec cmp (uvp)->tv_sec ||                                            \
-     ((tvp)->tv_sec == (uvp)->tv_sec && (tvp)->tv_usec cmp (uvp)->tv_usec))
-#define timerclear(tvp) (tvp)->tv_sec = (tvp)->tv_usec = 0
-#endif
+// The UCRT's <time.h> defines no `struct timeval`: the SDK's winsock.h and
+// winsock2.h define it unguarded, so a definition here would collide with
+// theirs in either order. <sys/time.h> and <winsock2.h> take it from
+// <_timeval.h>; gettimeofday below needs only the tag.
+struct timeval;
 #elif defined(__APPLE__)
 struct timespec {
     long tv_sec;

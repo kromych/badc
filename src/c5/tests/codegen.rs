@@ -1703,9 +1703,9 @@ fn windows_sharing_opens_and_checked_conversions_import_msvcrt() {
 /// `<stdlib.h>`'s `__clear_cache` reaches kernel32's FlushInstructionCache
 /// through a reserved name, so a unit's own declaration of the Win32 name
 /// with the SDK's types, before or after the header, and `<windows.h>`'s
-/// agree; `<time.h>` shares `struct timeval` and its timer macros with
-/// `<winsock2.h>` and with a unit that defines it under `_TIMEVAL_DEFINED`,
-/// as mingw-w64's headers do.
+/// agree; `<winsock2.h>` shares `struct timeval` and its timer macros with
+/// a unit that defines it under `_TIMEVAL_DEFINED`, as mingw-w64's headers
+/// do.
 #[test]
 fn windows_crt_headers_leave_win32_names_to_their_headers() {
     const SRC: &str = "int FlushInstructionCache(void *hProcess, const void *lpBaseAddress,\n\
@@ -1736,6 +1736,60 @@ fn windows_crt_headers_leave_win32_names_to_their_headers() {
             ],
         );
         assert_windows_unit_imports(target, TIMER, &[]);
+    }
+}
+
+/// The SDK's winsock.h and winsock2.h define `struct timeval` and the timer
+/// macros unguarded, under `_WINSOCKAPI_`, and the UCRT's `<time.h>` defines
+/// neither. On the Windows targets `<time.h>` defines neither either, and
+/// `<sys/time.h>` defines them unless the SDK's headers did: both combine
+/// with the SDK's definitions in either order in every language mode, and
+/// gettimeofday takes the SDK's struct.
+#[test]
+fn windows_time_h_leaves_struct_timeval_to_the_winsock_headers() {
+    use crate::{CStd, CompileOptions, Compiler};
+    // The definitions as winsock2.h 10.0.26100.0 spells them.
+    const SDK: &str = "#define _WINSOCK2API_\n#define _WINSOCKAPI_\n\
+        struct timeval {\n        long    tv_sec;\n        long    tv_usec;\n};\n\
+        #define timerisset(tvp)         ((tvp)->tv_sec || (tvp)->tv_usec)\n\
+        #define timercmp(tvp, uvp, cmp) \\\n        ((tvp)->tv_sec cmp (uvp)->tv_sec || \\\n\
+        \x20        (tvp)->tv_sec == (uvp)->tv_sec && (tvp)->tv_usec cmp (uvp)->tv_usec)\n\
+        #define timerclear(tvp)         (tvp)->tv_sec = (tvp)->tv_usec = 0\n";
+    const USE: &str = "int main(void)\n{\n\
+        struct timeval a = {1, 2}, b = {1, 3};\n\
+        timerclear(&a);\n\
+        return !timerisset(&a) && timercmp(&a, &b, <) && gettimeofday(&b, 0) == 0 ? 0 : 1;\n\
+        }\n";
+    // Without the SDK's headers <time.h> leaves the tag free and
+    // <sys/time.h> defines the struct and the macros.
+    const UCRT: &str = "#include <time.h>\n#ifdef timerisset\n#error timerisset\n#endif\n\
+        struct timeval { char own; };\nint main(void) { return 0; }\n";
+    let units = [
+        alloc::format!("{SDK}#include <time.h>\n#include <sys/time.h>\n{USE}"),
+        alloc::format!("#include <time.h>\n{SDK}#include <sys/time.h>\n{USE}"),
+        alloc::format!("#include <sys/time.h>\n{USE}"),
+        UCRT.to_string(),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for std in ["c89", "c99", "c11", "c17", "c23", "gnu11", "gnu17", "gnu23"] {
+            for src in &units {
+                let opts = CompileOptions::default().with_std(CStd::from_dialect(std).unwrap());
+                let program = Compiler::with_options(src.clone(), target, opts)
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{target:?} {std}: {e}\n{src}"));
+                assert!(
+                    program.warnings.is_empty() && program.notes.is_empty(),
+                    "{target:?} {std}: {:?} {:?}\n{src}",
+                    program.warnings,
+                    program.notes
+                );
+            }
+        }
+        assert_windows_unit_imports(
+            target,
+            &units[1],
+            &[("GetSystemTimePreciseAsFileTime", "kernel32.dll")],
+        );
     }
 }
 

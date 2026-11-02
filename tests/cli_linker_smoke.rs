@@ -5681,6 +5681,54 @@ fn a_pe_link_imports_through_a_traditional_import_library() {
     }
 }
 
+/// An archive member the link pulls through a name another pulled member
+/// only lists, as the WDK's memset.obj lists `memset_$fo$`, links with the
+/// section defining it, which names no content type and no memory flag
+/// besides COMDAT: it is placed as read-only data.
+#[test]
+fn a_pulled_section_without_a_content_type_is_placed() {
+    let dir = tempdir("pe-no-content-type");
+    write_source(
+        &dir,
+        "main.c",
+        "int fill(void);\nint main(void) { return fill() - 5; }\n",
+    );
+    const TEXT: u32 = 0x6050_0020;
+    let x64 = [0xB8, 5, 0, 0, 0, 0xC3];
+    let fill = coff_relocatable(
+        0x8664,
+        &[(".text$mn", TEXT, &x64, &[])],
+        &[("fill", 1, 0x20, 2), ("fill_$fo$", 0, 0, 2)],
+    );
+    let fo = coff_relocatable(
+        0x8664,
+        &[("fill_$fo_bdd$", 0x1000, &[7; 48], &[])],
+        &[("fill_$fo$", 1, 0, 2)],
+    );
+    let members = [
+        ("fill.obj", fill, &["fill"][..]),
+        ("fo.obj", fo, &["fill_$fo$"][..]),
+    ];
+    std::fs::write(dir.join("fill.lib"), indexed_archive(&members)).unwrap();
+    let exe = dir.join("fill.exe");
+    run(
+        Command::new(badc())
+            .args(["--target=windows-x64", "main.c", "fill.lib", "-o"])
+            .arg(&exe)
+            .current_dir(&dir),
+        "link the members",
+    );
+    let image = std::fs::read(&exe).unwrap();
+    assert!(
+        image.windows(48).any(|w| w == [7; 48]),
+        "the section's bytes"
+    );
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        let status = Command::new(&exe).status().expect("run the image");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
 /// A PE link takes from an archive the members link.exe gives its machine:
 /// of an ARM64X library, whose `pick` exists for arm64, ARM64EC and x64,
 /// the arm64 one; and on either machine an `IMAGE_FILE_MACHINE_UNKNOWN`

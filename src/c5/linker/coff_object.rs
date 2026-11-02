@@ -451,7 +451,10 @@ fn is_tls(name: &str) -> bool {
 }
 
 /// The merged stream a section joins. A relocated read-only section
-/// joins the relro stream, as the ELF reader places one.
+/// joins the relro stream, as the ELF reader places one. A section with
+/// no `CNT_*` flag takes its content from the name it groups under, as
+/// link.exe and GNU ld place it there: `.text` code, `.bss` zero fill,
+/// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
     // `.pdata` is read by `read_unwind`. GNU as gives `.drectve` data flags, not LNK_INFO.
@@ -475,17 +478,14 @@ fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
             SectionFamily::Tdata
         });
     }
-    if f & (IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE) != 0 {
+    let content =
+        IMAGE_SCN_CNT_CODE | IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_CNT_UNINITIALIZED_DATA;
+    let group = (f & content == 0).then(|| s.name.split('$').next().unwrap_or_default());
+    if f & (IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE) != 0 || group == Some(".text") {
         return Ok(SectionFamily::Text);
     }
-    if f & IMAGE_SCN_CNT_UNINITIALIZED_DATA != 0 {
+    if f & IMAGE_SCN_CNT_UNINITIALIZED_DATA != 0 || group == Some(".bss") {
         return Ok(SectionFamily::Bss);
-    }
-    if f & IMAGE_SCN_CNT_INITIALIZED_DATA == 0 {
-        return Err(unsupported(&format!(
-            "section `{}` has characteristics {f:#010x}, which name no content the merge places",
-            s.name
-        )));
     }
     Ok(if f & IMAGE_SCN_MEM_WRITE != 0 {
         SectionFamily::Data
@@ -2377,6 +2377,55 @@ mod tests {
         let dropped: Vec<_> = o.discarded.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(dropped, [".debug$S", ".pdata", ".rdata", ".llvm_addrsig"]);
         assert_eq!(o.rodata, [3; 4]);
+    }
+
+    /// A section with no content-type flag takes it from its group name,
+    /// `.text` code and `.bss` zero fill, and is otherwise initialized data
+    /// its memory flags place: GNU dlltool's `.idata$7` (read, write)
+    /// writable, an MSVC COMDAT with no flag besides read-only, relocated
+    /// in the relro stream when it carries relocations.
+    #[test]
+    fn a_section_without_a_content_type_is_placed_by_name_and_memory_flags() {
+        const READ: u32 = 0x4000_0000;
+        let mut leader = sym("x$fo$", 0, 5, IMAGE_SYM_CLASS_STATIC);
+        leader.aux.push(section_aux(8, 0, 2));
+        let o = parse(
+            &[
+                sec(
+                    ".idata$7",
+                    READ | IMAGE_SCN_MEM_WRITE | 0x0030_0000,
+                    &[1; 4],
+                ),
+                sec(".text$x", READ, &[0xC3]),
+                sec(".bss$x", READ | IMAGE_SCN_MEM_WRITE, &[0; 8]),
+                with(
+                    sec(".rdata$r", READ, &[0; 8]),
+                    &[(0, 2, IMAGE_REL_AMD64_ADDR64)],
+                ),
+                sec("x$fo$", IMAGE_SCN_LNK_COMDAT, &[2; 8]),
+            ],
+            &[leader, sym("f", 0, 2, IMAGE_SYM_CLASS_EXTERNAL)],
+        )
+        .unwrap();
+        let families: Vec<_> = o
+            .sections
+            .iter()
+            .map(|s| (s.name.as_str(), s.family))
+            .collect();
+        assert_eq!(
+            families,
+            [
+                (".idata$7", SectionFamily::Data),
+                (".text$x", SectionFamily::Text),
+                (".bss$x", SectionFamily::Bss),
+                (".rdata$r", SectionFamily::RelRo),
+                ("x$fo$", SectionFamily::RoData),
+            ]
+        );
+        assert_eq!(
+            (o.data, o.text, o.rodata),
+            (alloc::vec![1; 4], alloc::vec![0xC3], alloc::vec![2; 8])
+        );
     }
 
     /// A form the linker has no translation for, and a machine it does not

@@ -2139,6 +2139,7 @@ impl Parser {
             }
         }
         self.check_arch(target)?;
+        self.check_jit_target(mode, target)?;
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
@@ -2247,6 +2248,29 @@ impl Parser {
             }
             Target::MacOSAarch64 => format!("invalid arch name `-arch {arch}`"),
             other => format!("unsupported option `-arch` for target `{}`", other.id_str()),
+        };
+        Err(ParseError::diag(format!("badc: error: {message}")))
+    }
+
+    /// `--jit` runs the code it lowers in this process, so it lowers for
+    /// the target this host runs. Another OS on the same architecture has
+    /// another calling convention, data model and C library, so it is
+    /// refused as another architecture is.
+    fn check_jit_target(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
+        if mode != Mode::Jit || Target::native_host() == Some(target) {
+            return Ok(());
+        }
+        let message = match Target::native_host() {
+            Some(host) => format!(
+                "`--jit` runs the program in this process, which runs {} code; \
+                 `--target={}` cannot run here: build an image for it, or \
+                 interpret it with `--interp`",
+                host.id_str(),
+                target.id_str()
+            ),
+            None => "`--jit` runs the program in this process, and badc has no \
+                     target for this host"
+                .to_string(),
         };
         Err(ParseError::diag(format!("badc: error: {message}")))
     }
@@ -3003,6 +3027,31 @@ mod tests {
             Target::WindowsX64
         );
         assert!(reject(&["--target=nope", "a.c"]).0.contains("nope"));
+    }
+
+    /// `--jit` runs what it lowers in this process, so it takes only the
+    /// target this host runs; another OS on the same architecture is
+    /// another calling convention, data model and C library. `--interp`
+    /// takes every target.
+    #[test]
+    fn jit_takes_only_the_target_this_host_runs() {
+        for target in Target::ALL {
+            let spec = format!("--target={}", target.id_str());
+            if Target::native_host() == Some(target) {
+                assert_eq!(parse(&["--jit", &spec, "a.c"]).target, target);
+            } else {
+                let (message, _) = reject(&["--jit", &spec, "a.c"]);
+                assert!(
+                    message.contains("`--jit` runs the program in this process")
+                        && message.contains(&spec),
+                    "{spec}: {message}"
+                );
+            }
+            assert_eq!(parse(&["--interp", &spec, "a.c"]).target, target);
+        }
+        if Target::native_host().is_some() {
+            assert_eq!(parse(&["--jit", "a.c"]).mode, Mode::Jit);
+        }
     }
 
     /// The catalogue text `args` prints. Panics on any other outcome.

@@ -205,8 +205,12 @@ Compile knobs:
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
-                           the host. Ignored under --interp / --jit
-                           (those always target the host).
+                           the host. --interp compiles for the target
+                           (its data model, predefined macros and
+                           headers) and interprets that program; its
+                           C library calls go to the interpreter's
+                           own library. --jit runs host code and
+                           takes no other target.
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate). A

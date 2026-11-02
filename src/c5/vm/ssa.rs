@@ -114,6 +114,9 @@ struct Memory {
     /// Base of the stdio block ([`STDIO_ERRNO`]), the first heap
     /// allocation.
     stdio: usize,
+    /// Width in bytes of the interpreted target's `long`, which the
+    /// library shims read an `l`-sized argument at: 4 under LLP64.
+    long_bytes: u8,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -170,6 +173,7 @@ impl Memory {
             next_alloc_id: 1,
             track_pointers: false,
             stdio: 0,
+            long_bytes: 8,
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -667,6 +671,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv).with_track_pointers(track_pointers);
+    mem.long_bytes = target.long_width_bytes() as u8;
     // `__attribute__((constructor))` functions run before the entry, in
     // the native `.init_array` order the caller already sorted. An
     // `exit()` from a constructor short-circuits to the exit status.
@@ -2155,7 +2160,7 @@ enum ArgLen {
     Char,  // hh
     Short, // h
     Int,   // (none)
-    Long,  // l / ll / j / z / t / L
+    Long,  // 64-bit: ll / j / z / t / L, and l where `long` is 64 bits
 }
 
 /// One parsed conversion specification (C99 7.19.6.1p4).
@@ -2261,9 +2266,15 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             }
             Some(b'l') => {
                 i += 1;
-                s.len = ArgLen::Long;
+                // `l` names the target's `long`, 32 bits under LLP64.
+                s.len = if mem.long_bytes == 4 {
+                    ArgLen::Int
+                } else {
+                    ArgLen::Long
+                };
                 if fmt.get(i) == Some(&b'l') {
                     i += 1;
+                    s.len = ArgLen::Long;
                 }
             }
             Some(b'j') | Some(b'z') | Some(b't') | Some(b'L') => {

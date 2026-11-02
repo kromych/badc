@@ -78,7 +78,8 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         c_args.extend(cli.positional[*prog_args_start..].iter().cloned());
     }
     if cli.mode == Mode::Jit {
-        // The JIT lowers for the host; --target plays no part.
+        // The JIT lowers for the host, which the parser holds `cli.target`
+        // to.
         let mut jit_opts = NativeOptions::new()
             .with_inline_cap(cli.codegen.inline_cap)
             .with_diag(cli.front.diag.clone());

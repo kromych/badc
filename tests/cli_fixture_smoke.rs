@@ -1480,6 +1480,67 @@ fn in_process_runs_join_the_on_demand_sources() {
     }
 }
 
+// `--interp` compiles for the target it names and interprets that program:
+// the target's data model and predefined macros, and a library whose `%l`
+// reads the target's `long`. `--jit` runs host code and refuses any other
+// target before compiling.
+#[test]
+fn interp_takes_the_target_and_jit_only_the_host() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-target");
+    let src = dir.join("types.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <wchar.h>\n\
+         int main(void) {\n\
+           long m = -1L;\n\
+           int win = 0;\n\
+         #ifdef _WIN32\n\
+           win = 1;\n\
+         #endif\n\
+           printf(\"%zu %zu %d %lx\\n\", sizeof(long), sizeof(wchar_t), win, m);\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for (target, want) in [
+        ("macos-aarch64", "8 4 0 ffffffffffffffff\n"),
+        ("linux-aarch64", "8 4 0 ffffffffffffffff\n"),
+        ("linux-x64", "8 4 0 ffffffffffffffff\n"),
+        ("windows-x64", "4 2 1 ffffffff\n"),
+        ("windows-arm64", "4 2 1 ffffffff\n"),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{spec}");
+        let out = Command::new(badc)
+            .arg("--jit")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        if out.status.success() {
+            // The host C library's text-mode stdout ends a line with CR LF
+            // on Windows.
+            let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
+            assert_eq!(stdout, want, "--jit {spec}");
+        } else {
+            assert!(
+                err.contains("`--jit` runs the program in this process") && out.stdout.is_empty(),
+                "--jit {spec}: {err}"
+            );
+        }
+    }
+}
+
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
 #[test]
 fn in_process_runs_keep_a_64k_alignment() {

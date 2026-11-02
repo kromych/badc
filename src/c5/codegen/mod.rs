@@ -448,22 +448,31 @@ impl Target {
         self.binary_format() != BinaryFormat::Pe
     }
 
-    /// Target matching the host this build of badc is running on.
-    /// The match is resolved at compile time via `cfg!`, so each
-    /// build only ever returns one value.
+    /// Target matching the host this build of badc is running on, or
+    /// `macos-aarch64` on a host no target matches. The match is resolved
+    /// at compile time via `cfg!`, so each build only ever returns one
+    /// value.
     pub fn host() -> Self {
+        Self::native_host().unwrap_or(Target::MacOSAarch64)
+    }
+
+    /// The target whose code this host runs: its architecture, and its OS,
+    /// which fixes the calling convention, the data model and the C
+    /// library. `None` on a host badc has no target for, such as an x86-64
+    /// Mac.
+    pub fn native_host() -> Option<Self> {
         if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Target::MacOSAarch64
+            Some(Target::MacOSAarch64)
         } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            Target::LinuxAarch64
+            Some(Target::LinuxAarch64)
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Target::LinuxX64
+            Some(Target::LinuxX64)
         } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            Target::WindowsX64
+            Some(Target::WindowsX64)
         } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            Target::WindowsAarch64
+            Some(Target::WindowsAarch64)
         } else {
-            Target::MacOSAarch64
+            None
         }
     }
 

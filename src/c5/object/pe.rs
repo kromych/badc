@@ -63,6 +63,7 @@ const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x0000_0080;
 const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
+const IMAGE_SCN_MEM_NOT_PAGED: u32 = 0x0800_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
@@ -316,7 +317,42 @@ pub(super) fn write(
     w.layout_dwarf_and_coff();
     w.build_text()?;
     w.emit_headers()?;
-    w.emit_sections()
+    let native = w.subsystem == IMAGE_SUBSYSTEM_NATIVE;
+    let mut image = w.emit_sections()?;
+    if native {
+        store_checksum(&mut image);
+    }
+    Ok(image)
+}
+
+/// Offset of `OptionalHeader.CheckSum`: past the PE signature, the COFF
+/// header and 64 bytes of the PE32+ optional header.
+fn checksum_field(image: &[u8]) -> usize {
+    let pe = u32::from_le_bytes([image[0x3c], image[0x3d], image[0x3e], image[0x3f]]) as usize;
+    pe + 4 + 20 + 64
+}
+
+/// The PE image checksum (`CheckSumMappedFile`): the 16-bit words of the
+/// file, the CheckSum field read as zero, summed with the carry folded back
+/// in, plus the file length. A native-subsystem image carries it, as
+/// `link.exe /DRIVER` writes it.
+fn image_checksum(image: &[u8]) -> u32 {
+    let field = checksum_field(image);
+    let mut sum: u32 = 0;
+    for (i, pair) in image.chunks(2).enumerate() {
+        if (field..field + 4).contains(&(i * 2)) {
+            continue;
+        }
+        sum += u32::from(pair[0]) | u32::from(pair.get(1).copied().unwrap_or(0)) << 8;
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    (sum & 0xffff) + image.len() as u32
+}
+
+fn store_checksum(image: &mut [u8]) {
+    let field = checksum_field(image);
+    let sum = image_checksum(image);
+    image[field..field + 4].copy_from_slice(&sum.to_le_bytes());
 }
 
 impl<'a> PeWriter<'a> {
@@ -1318,18 +1354,33 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
+    /// `IMAGE_SCN_MEM_NOT_PAGED` for a section of a native-subsystem image
+    /// named `name`: every resident section but a `PAGE*` one, as
+    /// `link.exe /DRIVER` marks them.
+    fn resident(&self, name: &[u8]) -> u32 {
+        if self.subsystem == IMAGE_SUBSYSTEM_NATIVE && !name.starts_with(b"PAGE") {
+            IMAGE_SCN_MEM_NOT_PAGED
+        } else {
+            0
+        }
+    }
+
     /// One header per section, in the plan's order.
     fn section_headers(&self) -> Result<Vec<SectionHeader>, C5Error> {
         let l = &self.layout;
         let reloc_size = l.reloc_bytes.len() as u32;
         let mut sections: Vec<SectionHeader> = Vec::with_capacity(l.plan.count());
+        let ro = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | self.resident(b".rdata");
         sections.push(SectionHeader {
             name: *b".text\0\0\0",
             virtual_size: l.text_size,
             virtual_address: l.text_rva,
             size_of_raw_data: l.text_raw_size,
             pointer_to_raw_data: l.text_file_off,
-            characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+            characteristics: IMAGE_SCN_CNT_CODE
+                | IMAGE_SCN_MEM_EXECUTE
+                | IMAGE_SCN_MEM_READ
+                | self.resident(b".text"),
         });
         sections.push(SectionHeader {
             name: *b".pdata\0\0",
@@ -1337,17 +1388,17 @@ impl<'a> PeWriter<'a> {
             virtual_address: l.pdata_rva,
             size_of_raw_data: l.pdata_raw_size,
             pointer_to_raw_data: l.pdata_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+            characteristics: ro,
         });
+        // The loaders write the IAT while they bind the image and protect it
+        // afterwards, so it is read-only, as in link.exe's `.rdata`.
         sections.push(SectionHeader {
             name: *b".idata\0\0",
             virtual_size: l.idata.bytes.len() as u32,
             virtual_address: l.idata_rva,
             size_of_raw_data: l.idata_raw_size,
             pointer_to_raw_data: l.idata_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                | IMAGE_SCN_MEM_READ
-                | IMAGE_SCN_MEM_WRITE,
+            characteristics: ro,
         });
         if l.rdata_present {
             sections.push(SectionHeader {
@@ -1356,7 +1407,7 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.rdata_rva,
                 size_of_raw_data: l.rdata_raw_size,
                 pointer_to_raw_data: l.rdata_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+                characteristics: ro,
             });
         }
         if l.data_present {
@@ -1368,7 +1419,8 @@ impl<'a> PeWriter<'a> {
                 pointer_to_raw_data: l.data_file_off,
                 characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
                     | IMAGE_SCN_MEM_READ
-                    | IMAGE_SCN_MEM_WRITE,
+                    | IMAGE_SCN_MEM_WRITE
+                    | self.resident(b".data"),
             });
         }
         // Read-only families keep `.rdata`'s protection, the writable ones
@@ -1390,7 +1442,8 @@ impl<'a> PeWriter<'a> {
                 } else {
                     IMAGE_SCN_CNT_INITIALIZED_DATA
                 } | IMAGE_SCN_MEM_READ
-                    | if writable { IMAGE_SCN_MEM_WRITE } else { 0 },
+                    | if writable { IMAGE_SCN_MEM_WRITE } else { 0 }
+                    | self.resident(bytes),
             });
         }
         if l.reloc_present {
@@ -1412,7 +1465,7 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.edata_rva,
                 size_of_raw_data: l.edata_raw_size,
                 pointer_to_raw_data: l.edata_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+                characteristics: ro,
             });
         }
         for slot in &l.dwarf_sections {
@@ -3074,6 +3127,94 @@ mod tests {
             })
             .collect();
         (headers, word(optional_off + 32), word(optional_off + 56))
+    }
+
+    /// Each section's name and characteristics.
+    fn section_flags(bytes: &[u8]) -> Vec<([u8; 8], u32)> {
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let coff_off = word(60) as usize + 4;
+        let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let table = coff_off + COFF_HEADER_SIZE + optional_size;
+        (0..n)
+            .map(|i| {
+                let h = table + i * SECTION_HEADER_SIZE;
+                (bytes[h..h + 8].try_into().unwrap(), word(h + 36))
+            })
+            .collect()
+    }
+
+    /// A windows-x64 image of `src` whose data carries the named sections
+    /// `PAGEDATA` and `mydata`.
+    fn windows_x64_image(src: &str) -> Vec<u8> {
+        let target = super::super::Target::WindowsX64;
+        let program = crate::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let mut build =
+            lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+        build.data = alloc::vec![1; 64];
+        for (name, offset) in [("PAGEDATA", 16), ("mydata", 32)] {
+            build.named_sections.push(crate::c5::codegen::NamedSection {
+                name: name.into(),
+                offset,
+                size: 16,
+                align: 8,
+                bss: false,
+                write: true,
+            });
+        }
+        write(&program, &build, Machine::X86_64, target).expect("write PE")
+    }
+
+    /// A native-subsystem image marks every resident section non-paged but a
+    /// `PAGE*` one, as `link.exe /DRIVER` does, and stores the image checksum;
+    /// a console image keeps both clear. Neither leaves the IAT writable.
+    #[test]
+    fn a_driver_image_is_resident_and_checksummed() {
+        let driver = windows_x64_image(
+            "#pragma subsystem(native)\n#pragma entrypoint(Entry)\n\
+             long Entry(long a, long b) { (void)a; (void)b; return 0; }",
+        );
+        let console = windows_x64_image("int main(void) { return 0; }");
+        for (bytes, native) in [(&driver, true), (&console, false)] {
+            let flags = section_flags(bytes);
+            for name in [&b"PAGEDATA"[..], b"mydata", b".idata"] {
+                assert!(flags.iter().any(|(n, _)| n.starts_with(name)));
+            }
+            for (name, flags) in flags {
+                if name.starts_with(b".idata") {
+                    assert_eq!(
+                        flags & IMAGE_SCN_MEM_WRITE,
+                        0,
+                        "native {native}: {flags:#x}"
+                    );
+                }
+                let resident = flags & IMAGE_SCN_MEM_DISCARDABLE == 0 && !name.starts_with(b"PAGE");
+                assert_eq!(
+                    flags & IMAGE_SCN_MEM_NOT_PAGED != 0,
+                    native && resident,
+                    "native {native}: {} {flags:#x}",
+                    String::from_utf8_lossy(&name)
+                );
+            }
+            let field = checksum_field(bytes);
+            let stored = u32::from_le_bytes(bytes[field..field + 4].try_into().unwrap());
+            assert_eq!(stored, if native { image_checksum(bytes) } else { 0 });
+        }
+    }
+
+    /// The checksum sums the 16-bit words with the carry folded back in,
+    /// skips the CheckSum field and adds the file length.
+    #[test]
+    fn image_checksum_folds_the_carry_and_skips_its_field() {
+        let mut image = alloc::vec![0u8; 256];
+        image[0x3c] = 0x40;
+        image[..4].copy_from_slice(&[0xff, 0xff, 0x01, 0x00]);
+        image[0x40 + 88..0x40 + 92].copy_from_slice(&0x1234_5678u32.to_le_bytes());
+        // 0xffff + 0x0001 folds to 0x0001, then e_lfanew's 0x0040.
+        assert_eq!(image_checksum(&image), 0x41 + 256);
     }
 
     /// An empty named section takes no header, and its bounds name where the next starts.

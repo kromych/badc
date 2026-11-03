@@ -193,6 +193,25 @@ impl Compiler {
         Ok((indirection, ret_indirection, f))
     }
 
+    /// Park the parameter of `params` named like the function `fn_idx`, so
+    /// the declarator's reads and writes of the function reach the function
+    /// ([`crate::c5::symbol::Symbol::parked_param`]).
+    pub(super) fn park_self_named_param(&mut self, fn_idx: usize, params: &ParsedParams) {
+        let s = &mut self.symbols[fn_idx];
+        if params.indices.contains(&fn_idx) && !s.parked_param {
+            Self::swap_parked_param(s);
+        }
+    }
+
+    /// Bring a parameter [`Self::park_self_named_param`] parked back into
+    /// scope.
+    pub(super) fn unpark_param(&mut self, idx: usize) {
+        let s = &mut self.symbols[idx];
+        if s.parked_param {
+            Self::swap_parked_param(s);
+        }
+    }
+
     /// A parameter's attributes describe that parameter, not the declarator
     /// the list belongs to, so the enclosing ones are detached across the
     /// list the way the other declarator carriers are.

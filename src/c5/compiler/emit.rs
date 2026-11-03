@@ -841,6 +841,9 @@ impl Compiler {
     /// and already holds a `&mut Symbol`; passing the symbol
     /// reference avoids re-borrowing the symbol table.
     pub(super) fn restore_shadowed_symbol(sym: &mut Symbol) {
+        if sym.parked_param {
+            Self::swap_parked_param(sym);
+        }
         // A scoped function declaration over a previously unbound name:
         // the name unbinds, but the entity -- prototype, linkage, asm
         // rename -- stays on the slot for call lowering and the
@@ -887,6 +890,47 @@ impl Compiler {
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
         // being unbound, never to the restored outer symbol.
+    }
+
+    /// Exchange the binding [`Self::shadow_symbol`] saved with the live one,
+    /// every field it saves: a parameter named like the function its
+    /// declarator declares parks in the `h_*` fields, leaving the function
+    /// live for the declarator, and comes back for the body
+    /// ([`Symbol::parked_param`]).
+    pub(super) fn swap_parked_param(s: &mut Symbol) {
+        use core::mem::swap;
+        swap(&mut s.binding, &mut s.h_binding);
+        swap(&mut s.class, &mut s.h_class);
+        swap(&mut s.type_, &mut s.h_type);
+        swap(&mut s.val, &mut s.h_val);
+        swap(&mut s.fn_ptr_indirection, &mut s.h_fn_ptr_indirection);
+        let ret_indirection = &mut s.h_fn_ptr_ret_indirection;
+        swap(&mut s.fn_ptr_ret_indirection, ret_indirection);
+        swap(&mut s.fn_type, &mut s.h_fn_type);
+        swap(&mut s.incomplete_enum_tag, &mut s.h_incomplete_enum_tag);
+        swap(&mut s.enumeration, &mut s.h_enumeration);
+        swap(&mut s.array_size, &mut s.h_array_size);
+        swap(&mut s.type_align, &mut s.h_type_align);
+        swap(&mut s.inner_array_size, &mut s.h_inner_array_size);
+        swap(&mut s.array_dims, &mut s.h_array_dims);
+        swap(&mut s.is_vla, &mut s.h_is_vla);
+        swap(&mut s.vla_ptr_slot, &mut s.h_vla_ptr_slot);
+        swap(&mut s.vla_size_slot, &mut s.h_vla_size_slot);
+        swap(&mut s.is_zero_len_array, &mut s.h_is_zero_len_array);
+        swap(&mut s.reserved_data_bytes, &mut s.h_reserved_data_bytes);
+        swap(&mut s.fam_init_bytes, &mut s.h_fam_init_bytes);
+        swap(&mut s.data_align, &mut s.h_data_align);
+        swap(&mut s.is_thread_local, &mut s.h_is_thread_local);
+        swap(&mut s.is_const_qualified, &mut s.h_is_const_qualified);
+        swap(&mut s.storage_is_const, &mut s.h_storage_is_const);
+        swap(&mut s.runtime_initialized, &mut s.h_runtime_initialized);
+        swap(&mut s.is_extern_decl, &mut s.h_is_extern_decl);
+        swap(&mut s.asm_register, &mut s.h_asm_register);
+        swap(&mut s.is_global_register, &mut s.h_is_global_register);
+        swap(&mut s.asm_name, &mut s.h_asm_name);
+        swap(&mut s.const_object_value, &mut s.h_const_object_value);
+        swap(&mut s.entity_record, &mut s.h_entity_record);
+        s.parked_param = !s.parked_param;
     }
 
     /// Take the outer binding's info, dropping its pending stores as a branch does.
@@ -976,7 +1020,10 @@ impl Compiler {
     /// typedef, enumerator, or scoped function declaration), or a
     /// block-scope `extern` that converted a bound file-scope name.
     pub(super) fn scope_binding_active(sym: &Symbol) -> bool {
-        sym.class == Token::Loc as i64 || sym.is_scope_bound || sym.block_extern_active
+        sym.class == Token::Loc as i64
+            || sym.is_scope_bound
+            || sym.block_extern_active
+            || sym.parked_param
     }
 
     /// Restore the outer binding of every symbol in `bound` that still

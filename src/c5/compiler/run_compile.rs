@@ -575,6 +575,12 @@ impl Compiler {
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        // A list the declarator consumed (`T (*f(args))(...)`) may name a
+        // parameter like `f`; the rest of the declarator describes `f`.
+        if let Some(params) = self.pending.fn_params.take() {
+            self.park_self_named_param(id_idx, &params);
+            self.pending.fn_params = Some(params);
+        }
         let id_idx = if is_typedef {
             self.claim_file_scope_name(id_idx)
         } else {
@@ -1002,6 +1008,10 @@ impl Compiler {
             self.next()?;
             self.parse_function_params()?
         };
+        // C99 6.2.1p4: a parameter named like the function hides it from its
+        // own declarator on, but the rest of the declarator, and the
+        // definition's frame, describe the function.
+        self.park_self_named_param(id_idx, &params);
         // A function declarator may carry a trailing attribute
         // before the prototype's `;` or the body's `{`
         // (`RET name(args) __attribute__((noreturn));`).
@@ -1357,12 +1367,17 @@ impl Compiler {
         for (name, id) in core::mem::take(&mut params.tags) {
             self.tag_scopes.bind(&name, id);
         }
+        // The parameter declarations declare the parameters.
+        if params.indices.contains(&id_idx) {
+            self.unpark_param(id_idx);
+        }
         self.open_param_list_scope();
         let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
         let enumerators = self.close_param_list_scope();
         kr?;
         params.enumerators.extend(enumerators);
         self.check_complete_parameters(&params, def.line)?;
+        self.park_self_named_param(id_idx, &params);
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
         if self.incomplete_aggregate_tag(ret).is_some() {
@@ -1693,9 +1708,6 @@ impl Compiler {
         } else {
             2
         };
-        for (i, &idx) in params.indices.iter().enumerate() {
-            self.symbols[idx].val = (i as i64) + param_base;
-        }
 
         self.loc_offs = 0;
         self.committed_loc_offs = 0;
@@ -1714,14 +1726,7 @@ impl Compiler {
         self.ast_reset();
 
         let ent_pc = self.next_ent_pc;
-        // C99 6.2.1: a parameter sharing the function's name shadows it inside the
-        // body, so the entry pc goes onto the shadowed binding the function-exit
-        // cleanup restores, leaving the parameter its slot.
-        if params.indices.contains(&id_idx) {
-            self.symbols[id_idx].h_val = ent_pc as i64;
-        } else {
-            self.symbols[id_idx].val = ent_pc as i64;
-        }
+        self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
@@ -1747,6 +1752,12 @@ impl Compiler {
             });
         }
 
+        // A parameter named like the function hides it in the body (C99
+        // 6.2.1p4); the function-exit cleanup restores the function.
+        self.unpark_param(id_idx);
+        for (i, &idx) in params.indices.iter().enumerate() {
+            self.symbols[idx].val = (i as i64) + param_base;
+        }
         ent_pc
     }
 

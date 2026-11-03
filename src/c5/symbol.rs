@@ -602,6 +602,12 @@ pub(crate) struct Symbol {
     pub binding: BindingInfo,
     /// Shadow slot for `binding` (see `h_class`).
     pub h_binding: BindingInfo,
+    /// A parameter named like the function its declarator declares is
+    /// bound here and parked in the `h_*` fields, which hold the
+    /// parameter while the live ones hold the function, for the rest of
+    /// the declarator (C99 6.2.1p4: the parameter is in scope from its
+    /// own declarator on, the function is what the declarator describes).
+    pub parked_param: bool,
 }
 
 /// One binding of a name: its declaration site and its uses. Each binding
@@ -1056,6 +1062,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_string_literal: _,
             binding: _, // declaration site and uses, not an offset
             h_binding: _,
+            parked_param: _,
         } = self;
         if *class != crate::c5::token::Token::Glo as i64
             || !*defined_here

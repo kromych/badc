@@ -1612,6 +1612,47 @@ fn va_start_needs_a_variadic_function() {
     }
 }
 
+/// C99 6.2.1p4: a parameter named like its function hides the function in
+/// the body, and the declarator still gives the type each `return`
+/// converts to. The fixture under the interpreter, for every target's data
+/// model, at -O0 and -O; the native and JIT tables run it on each backend.
+/// A `return` matching the function's type draws nothing, and one matching
+/// only the parameter's draws the function's conversion diagnostic, as in
+/// gcc 16 and clang 22.
+#[test]
+fn a_parameter_named_like_its_function_keeps_the_function_type() {
+    use crate::{CompileOptions, Target};
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("param_named_like_function.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let checked = "struct X; struct L;\n\
+                   static int already_checked(const struct X *cert,\n\
+                   const struct L *already_checked) { return cert != 0; }\n\
+                   int use(void) { return already_checked(0, 0); }\n";
+    let program = compile(checked).unwrap_or_else(|e| panic!("{e}"));
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+    let err = compile("static int *p(int p) { return p; }\nint *use(void) { return p(1); }\n")
+        .map(|_| ())
+        .expect_err("an int returned as `int *`");
+    let text = err.to_string();
+    let want = "in return (declared=int*, returned=int)";
+    assert!(text.contains(want), "{text}");
+}
+
 /// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
 /// 7.15.1.4p4): `va_start` naming other than the last named parameter
 /// (both compilers), one declared `register` (both) or one of a type the

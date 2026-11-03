@@ -136,6 +136,7 @@ initializer.
   benchmarks and CI.
 * [Tools](./doc/tools.md): the helper programs under `tools/` and `scripts/`.
 * [Performance](https://badc.dev/performance/): CI's benchmark results.
+* [Contributing](./CONTRIBUTING.md): what a pull request needs to be merged.
 
 ## Disclaimer
 

@@ -71,6 +71,7 @@ jobs:
           cat README.md >> _src/index.md
           cp README.md _src/README.md
           cp LICENSE _src/LICENSE
+          cp CONTRIBUTING.md _src/CONTRIBUTING.md
           cp -R doc _src/doc
           # The page that charts the CI benchmark runs, served at /performance/.
           mkdir -p _src/performance

@@ -500,6 +500,18 @@ pub struct StructField {
     pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
+/// What [`Compiler::preprocess_unit`] returns for one unit.
+pub struct Preprocessed {
+    /// The expanded text.
+    pub text: String,
+    /// The headers the pass opened, when the options track them.
+    pub include_records: Vec<IncludeRecord>,
+    /// The `#define` lines the unit ends with, when asked for.
+    pub macros: Vec<String>,
+    /// The diagnostics the pass reported, in order.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// Optional preprocessor / driver knobs threaded through compiler
 /// construction. Everything here has a sensible default (empty
 /// vectors, empty label, tracing off); only callers that need to
@@ -2758,6 +2770,31 @@ impl Compiler {
         let mut pp = Self::configure_preprocessor(target, &opts);
         pp.process(&source)?;
         Ok(pp.macro_definitions())
+    }
+
+    /// One unit through the preprocessor to its end, for `-E`: the text, the
+    /// include records, the closing macro definitions when `macros` asks for
+    /// them (`-dM`), and every diagnostic the pass reported. An error among
+    /// those fails the unit after its text is written, as under gcc and
+    /// clang; a hard error stops the pass and carries the ones before it.
+    pub fn preprocess_unit(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+        macros: bool,
+    ) -> Result<Preprocessed, C5Error> {
+        let mut pp = Self::configure_preprocessor(target, &opts);
+        let text = pp.process_to_end(&source)?;
+        Ok(Preprocessed {
+            macros: if macros {
+                pp.macro_definitions()
+            } else {
+                Vec::new()
+            },
+            diagnostics: pp.sink.take(),
+            include_records: pp.include_records,
+            text,
+        })
     }
 
     /// Assemble one GNU-as source unit for `target`, yielding the program the

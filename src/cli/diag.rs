@@ -95,11 +95,20 @@ pub(crate) fn report_unit_diagnostics(
     for line in &program.notes {
         log.diag(tty, line);
     }
-    for d in &program.warnings {
+    report_diagnostics(log, tty, &program.warnings)
+}
+
+/// Print a phase's catalogued diagnostics and report whether the unit may
+/// go on: one raised to an error fails it here, at the phase boundary.
+pub(crate) fn report_diagnostics(
+    log: &mut TuLog,
+    tty: bool,
+    diagnostics: &[badc::diag::Diagnostic],
+) -> Result<(), ()> {
+    for d in diagnostics {
         log.raw(rendered(d, tty));
     }
-    if program
-        .warnings
+    if diagnostics
         .iter()
         .any(|d| d.level == badc::diag::Level::Error)
     {

@@ -1668,12 +1668,20 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
+        let out = self.process_to_end(source)?;
+        self.fail_on_errors()?;
+        Ok(out)
+    }
+
+    /// [`Self::process`] leaving the diagnostics in the sink, an error
+    /// among them included: `-E` writes the whole text and then fails, as
+    /// gcc and clang do. A hard error still stops the pass.
+    pub fn process_to_end(&mut self, source: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
         self.process_preamble(&mut out)
             .map_err(|e| self.failed(e))?;
         self.process_source(source, &mut out)
             .map_err(|e| self.failed(e))?;
-        self.fail_on_errors()?;
         Ok(out)
     }
 

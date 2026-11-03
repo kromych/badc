@@ -5,7 +5,7 @@ use badc::{NativeOptions, Target};
 use super::args::{Cli, FrontEnd};
 
 use super::deps::{DepOptions, emit_deps};
-use super::diag::{TuLog, rendered, report_unit_diagnostics};
+use super::diag::{TuLog, rendered, report_diagnostics, report_unit_diagnostics};
 use super::options::SourceKind;
 
 /// Native-stack reservation shared by the driver thread and every
@@ -248,14 +248,11 @@ pub(crate) fn assemble_tu(
     let src_bytes = read_tu_source(src_path, cfg, log)?;
     let copts = tu_compile_options(src_path, &[], cfg);
     let text = if cfg.front.source_kind(src_path) == (SourceKind::Asm { preprocess: true }) {
-        let (text, records) =
-            match badc::Compiler::preprocess_tracked(src_bytes, cfg.target, copts.clone()) {
-                Ok(r) => r,
-                Err(e) => {
-                    log.error(cfg.stderr_is_tty, "", &e);
-                    return Err(());
-                }
-            };
+        let pp = badc::Compiler::preprocess_unit(src_bytes, cfg.target, copts.clone(), false);
+        let unit = pp.map_err(|e| log.error(cfg.stderr_is_tty, "", &e))?;
+        // The preprocessor's diagnostics, as a C unit's are reported.
+        report_diagnostics(log, cfg.stderr_is_tty, &unit.diagnostics)?;
+        let (text, records) = (unit.text, unit.include_records);
         if let Some(d) = cfg.deps
             && emit_deps(
                 src_path,

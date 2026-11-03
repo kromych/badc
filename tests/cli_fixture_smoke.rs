@@ -1061,6 +1061,68 @@ fn ffreestanding_makes_stdc_hosted_zero() {
     }
 }
 
+// gcc and clang print the preprocessor's diagnostics under `-E` to stderr as
+// a compile does, under the same `-W` controls, `-Werror` and `-w`; stdout
+// carries the same text whatever they report, and an error among them, or an
+// `#error`, fails the run. `-dM -E`, `-M`, `-MM` and `-fsyntax-only` report
+// the same rows.
+#[test]
+fn preprocessing_alone_reports_the_preprocessors_diagnostics() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-pp-diagnostics");
+    let src = dir.join("w.c");
+    std::fs::write(
+        &src,
+        "#warning hi\n#define A 1\n#define A 2\n#define D defined(X)\n#if D\n#endif\nint x = A;\n",
+    )
+    .expect("write w.c");
+    let run = |flags: &[&str], input: &std::path::Path| {
+        let mut cmd = Command::new(badc);
+        cmd.arg("--target=linux-x64").args(flags).arg(input);
+        cmd.output().expect("run badc")
+    };
+    let all = &["[B1002]", "[B1015]", "[B1016]"][..];
+    // The rows each stderr line reports at `level`.
+    let rows = |out: &std::process::Output, level: &str| -> Vec<&'static str> {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let at = |code: &str| err.lines().any(|l| l.contains(level) && l.contains(code));
+        all.iter().copied().filter(|c| at(c)).collect()
+    };
+    let text = run(&["-E", "-w"], &src).stdout;
+    assert!(String::from_utf8_lossy(&text).contains("int x = 2;"));
+    // The flags, whether the run succeeds, and the rows warned and failed.
+    type Case<'a> = (&'a [&'a str], bool, &'a [&'a str], &'a [&'a str]);
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        (&["-E"], true, &["[B1002]", "[B1015]"], &[]),
+        (&["-E", "-Wextra"], true, all, &[]),
+        (&["-E", "-Wextra", "-Werror"], false, &[], all),
+        (&["-E", "-Werror", "-Wno-error=#warnings"], false, &["[B1002]"], &["[B1015]"]),
+        (&["-E", "-Wno-#warnings", "-Wno-macro-redefined"], true, &[], &[]),
+        (&["-E", "-Wextra", "-w"], true, &[], &[]),
+        (&["-E", "-dM", "-Wextra"], true, all, &[]),
+        (&["-M", "-Wextra"], true, all, &[]),
+        (&["-MM", "-Wextra", "-Werror"], false, &[], all),
+        (&["-fsyntax-only", "-Wextra"], true, all, &[]),
+    ];
+    for &(flags, ok, warned, failed) in cases {
+        let out = run(flags, &src);
+        let what = format!("{flags:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(out.status.success(), ok, "{what}");
+        assert_eq!(rows(&out, "warning: "), warned, "{what}");
+        assert_eq!(rows(&out, "error: "), failed, "{what}");
+        if flags[0] == "-E" && !flags.contains(&"-dM") {
+            assert_eq!(out.stdout, text, "{what}");
+        }
+    }
+    let stop = dir.join("e.c");
+    std::fs::write(&stop, "#error stop here\nint x;\n").expect("write e.c");
+    let out = run(&["-E"], &stop);
+    let err = String::from_utf8_lossy(&out.stderr);
+    let stopped = err.contains("#error stop here");
+    assert!(!out.status.success() && stopped, "{err}");
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

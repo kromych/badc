@@ -151,6 +151,56 @@ fn a_computed_goto_to_a_value_that_is_no_label_address_is_refused() {
     }
 }
 
+/// A label address and a return address are positions in a function's
+/// code, not functions: none equals a function pointer, and a call through
+/// one stops instead of running the function whose pointer has its bits.
+#[test]
+fn a_call_through_a_label_or_return_address_is_refused() {
+    // The calls in `first`'s entry block return to offsets that span the
+    // functions' entry points, which the first function's positions in its
+    // first block once shared their bits with.
+    let defs = "typedef int fn(int);\n\
+        void *code[18];\n\
+        void *ret(void);\n\
+        void first(void) {\n\
+          code[0] = ret(); code[1] = ret(); code[2] = ret(); code[3] = ret();\n\
+          code[4] = ret(); code[5] = ret(); code[6] = ret(); code[7] = ret();\n\
+          code[8] = ret(); code[9] = ret(); code[10] = ret(); code[11] = ret();\n\
+          code[12] = ret(); code[13] = ret(); code[14] = ret(); code[15] = ret();\n\
+          code[16] = &&here;\n\
+          here: code[17] = &&there;\n\
+          there: return;\n\
+        }\n\
+        void *ret(void) { return __builtin_return_address(0); }\n\
+        #define F(n) int f##n(int x) { return x + n; }\n\
+        F(0) F(1) F(2) F(3) F(4) F(5) F(6) F(7) F(8) F(9) F(10) F(11) F(12) F(13)\n\
+        F(14) F(15) F(16) F(17) F(18) F(19) F(20) F(21) F(22) F(23) F(24) F(25)\n\
+        F(26) F(27) F(28) F(29) F(30) F(31) F(32) F(33) F(34) F(35) F(36) F(37)\n\
+        fn *const fns[] = {f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12,\n\
+          f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27,\n\
+          f28, f29, f30, f31, f32, f33, f34, f35, f36, f37};\n";
+    let compare = "int main(void) {\n\
+          first();\n\
+          int equal = 0;\n\
+          for (int i = 0; i < 18; i++)\n\
+            for (int j = 0; j < 38; j++)\n\
+              equal += code[i] == (void *)fns[j] || code[i] == (void *)first;\n\
+          return equal;\n\
+        }\n";
+    assert_eq!(run_str(&format!("{defs}{compare}")), 0);
+    for which in [0, 15, 16] {
+        let call = format!("int main(void) {{ first(); return ((fn *)code[{which}])(0); }}\n");
+        let err = Vm::new(compile_str(&format!("{defs}{call}")))
+            .run()
+            .expect_err("a call through a code position");
+        assert!(
+            err.to_string()
+                .contains("is a label or return address, not a function"),
+            "code[{which}]: {err}"
+        );
+    }
+}
+
 #[test]
 fn negative_size_argument_is_caught() {
     // memset(p, 0, -1) used to walk the address space (and accidentally

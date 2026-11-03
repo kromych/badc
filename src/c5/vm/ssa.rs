@@ -31,14 +31,25 @@ mod asm_a64;
 pub(super) const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
-/// A position inside a function's code, tagged like a function pointer:
-/// the function's index in `Program::funcs` above bit 40, the block
-/// above bit 20 and the instruction offset within the block below it.
-/// `Inst::BlockAddr` is offset 0 of the label's block and a return
-/// address the offset after the call, so the positions in one function
-/// order the way its blocks do, as native addresses do.
+/// Set, besides `CODE_ADDR_TAG`, on a position inside a function's code,
+/// so that no label or return address equals a function pointer.
+const CODE_POSITION_TAG: i64 = 0x1000_0000_0000_0000;
+
+/// Each field of a code position holds fewer than this many values.
+const CODE_POSITION_FIELD: usize = 1 << 20;
+
+/// A position inside a function's code: the function's index in
+/// `Program::funcs` above bit 40, the block above bit 20 and the
+/// instruction offset within the block below it. `Inst::BlockAddr` is
+/// offset 0 of the label's block and a return address the offset after
+/// the call, so the positions in one function order the way its blocks
+/// do, as native addresses do.
 pub(super) fn code_position(func_idx: usize, block: usize, offset: usize) -> i64 {
-    CODE_ADDR_TAG | ((func_idx as i64) << 40) | ((block as i64) << 20) | offset as i64
+    CODE_ADDR_TAG
+        | CODE_POSITION_TAG
+        | ((func_idx as i64) << 40)
+        | ((block as i64) << 20)
+        | offset as i64
 }
 
 /// The block of `func`, at `func_idx` in `Program::funcs`, that a `goto *`
@@ -666,6 +677,18 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     fini_pcs: &[usize],
     target: crate::c5::codegen::Target,
 ) -> Result<i64, C5Error> {
+    let too_large = funcs.len() >= CODE_POSITION_FIELD
+        || funcs.iter().any(|f| {
+            f.blocks.len() >= CODE_POSITION_FIELD
+                || (f.blocks.iter()).any(|b| b.inst_range.len() >= CODE_POSITION_FIELD)
+        });
+    if too_large {
+        return Err(C5Error::Runtime(
+            "vm_ssa: the program has more functions, blocks or instructions in a block \
+             than a code position encodes"
+                .to_string(),
+        ));
+    }
     let prog = Program::new(funcs, target)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
@@ -1536,7 +1559,13 @@ fn run_inst<H: Host>(
             // segment's `CodeReloc` entries so static initialisers
             // can carry function pointers without an SSA-aware
             // fix-up.
-            let target_pc = if raw & CODE_ADDR_MASK != 0 {
+            let position = CODE_ADDR_TAG | CODE_POSITION_TAG;
+            let target_pc = if raw & position == position {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: CallIndirect: target 0x{raw:016x} is a label or return address, \
+                     not a function",
+                )));
+            } else if raw & CODE_ADDR_MASK != 0 {
                 (raw & !CODE_ADDR_MASK) as usize
             } else if (raw as usize) >= super::super::CODE_BASE {
                 (raw as usize) - super::super::CODE_BASE

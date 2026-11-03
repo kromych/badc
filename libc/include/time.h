@@ -202,6 +202,7 @@ typedef long clock_t;
 // kernel32. The reentrant localtime_r / gmtime_r / ctime_r / asctime_r are
 // declared, as there, under `_POSIX_C_SOURCE` alone.
 #include <corecrt.h>
+#include <__badc_wtime.h>
 // The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
 // prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
 #pragma binding(msvcrt::_ctime32_s, "_ctime32_s")

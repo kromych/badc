@@ -160,40 +160,20 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 struct __c5_FILE;
 
 #ifdef _WIN32
+// The UCRT's corecrt_w*.h sets, which its <wchar.h> includes.
 #include <__badc_wstring.h>
+#include <__badc_wstdlib.h>
+#include <__badc_wstdio.h>
+#include <__badc_wio.h>
+#include <__badc_wdirect.h>
+#include <__badc_wprocess.h>
+#include <__badc_wtime.h>
+#include <__badc_wconio.h>
+#include <__badc_wctype.h>
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::wcstol, "wcstol")
-#pragma binding(msvcrt::wcstoul, "wcstoul")
-#pragma binding(msvcrt::_wopen, "_wopen")
-#pragma binding(msvcrt::_itow,    "_itow")
-#pragma binding(msvcrt::_ltow,    "_ltow")
-#pragma binding(msvcrt::_ultow,   "_ultow")
-#pragma binding(msvcrt::_i64tow,  "_i64tow")
-#pragma binding(msvcrt::_ui64tow, "_ui64tow")
-#pragma binding(msvcrt::_vscwprintf, "_vscwprintf")
-#pragma binding(msvcrt::fgetwc,   "fgetwc")
-#pragma binding(msvcrt::fputwc,   "fputwc")
-#pragma binding(msvcrt::getwc,    "getwc")
-#pragma binding(msvcrt::putwc,    "putwc")
-#pragma binding(msvcrt::ungetwc,  "ungetwc")
-#pragma binding(msvcrt::getwchar, "getwchar")
-#pragma binding(msvcrt::putwchar, "putwchar")
-#pragma binding(msvcrt::fgetws,   "fgetws")
-#pragma binding(msvcrt::fputws,   "fputws")
 #pragma binding(msvcrt::mbrlen,   "mbrlen")
-// msvcrt.dll spells wcstoll / wcstoull as it spells strtoll / strtoull.
-#pragma binding(msvcrt::wcstoll,  "_wcstoi64")
-#pragma binding(msvcrt::wcstoull, "_wcstoui64")
-wchar_t *_itow(int value, wchar_t *dst, int radix);
-wchar_t *_ltow(long value, wchar_t *dst, int radix);
-wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
-wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
-wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
-int _vscwprintf(const wchar_t *format, __builtin_va_list ap);
-int _wopen(const wchar_t *path, int oflag, ...);
 #pragma binding(msvcrt::_wsetlocale, "_wsetlocale")
 wchar_t *_wsetlocale(int _Category, const wchar_t *_Locale);
-#pragma binding(msvcrt::wcsftime, "wcsftime")
 #pragma binding(msvcrt::wcsrtombs, "wcsrtombs")
 #pragma binding(msvcrt::mbsrtowcs, "mbsrtowcs")
 #pragma binding(msvcrt::mbrtowc,   "mbrtowc")
@@ -206,8 +186,6 @@ wchar_t *_wsetlocale(int _Category, const wchar_t *_Locale);
 // over the exported primitives. mingw-w64 defines fwide as a request granted, msvcrt streams having no
 // orientation, and mbsinit over msvcrt's int-sized conversion state.
 #include <stdarg.h>
-#pragma binding(msvcrt::_vsnwprintf, "_vsnwprintf")
-int _vsnwprintf(wchar_t *buffer, size_t count, const wchar_t *format, va_list ap);
 static inline int fwide(struct __c5_FILE *stream, int mode) {
     (void)stream;
     return mode;
@@ -215,97 +193,6 @@ static inline int fwide(struct __c5_FILE *stream, int mode) {
 static inline int mbsinit(const mbstate_t *ps) {
     return !ps || !(ps->__opaque[0] | ps->__opaque[1] | ps->__opaque[2] | ps->__opaque[3]);
 }
-#include <corecrt.h>
-struct tm;
-// The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
-// prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
-#pragma binding(msvcrt::wprintf_s, "wprintf_s")
-int wprintf_s(const wchar_t *_Format, ...);
-#pragma binding(msvcrt::fwprintf_s, "fwprintf_s")
-int fwprintf_s(struct __c5_FILE *_File, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::swprintf_s, "swprintf_s")
-int swprintf_s(wchar_t *_DstBuf, size_t _DstSize, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::vwprintf_s, "vwprintf_s")
-int vwprintf_s(const wchar_t *_Format, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::vfwprintf_s, "vfwprintf_s")
-int vfwprintf_s(struct __c5_FILE *_File, const wchar_t *_Format, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::vswprintf_s, "vswprintf_s")
-int vswprintf_s(wchar_t *_DstBuf, size_t _DstSize, const wchar_t *_Format, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::_snwprintf_s, "_snwprintf_s")
-int _snwprintf_s(wchar_t *_DstBuf, size_t _DstSize, size_t _MaxCount, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::_vsnwprintf_s, "_vsnwprintf_s")
-int _vsnwprintf_s(wchar_t *_DstBuf, size_t _DstSize, size_t _MaxCount, const wchar_t *_Format, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::_wprintf_s_l, "_wprintf_s_l")
-int _wprintf_s_l(const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_vwprintf_s_l, "_vwprintf_s_l")
-int _vwprintf_s_l(const wchar_t *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::_fwprintf_s_l, "_fwprintf_s_l")
-int _fwprintf_s_l(struct __c5_FILE *_File, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_vfwprintf_s_l, "_vfwprintf_s_l")
-int _vfwprintf_s_l(struct __c5_FILE *_File, const wchar_t *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::_swprintf_s_l, "_swprintf_s_l")
-int _swprintf_s_l(wchar_t *_DstBuf, size_t _DstSize, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_vswprintf_s_l, "_vswprintf_s_l")
-int _vswprintf_s_l(wchar_t *_DstBuf, size_t _DstSize, const wchar_t *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::_snwprintf_s_l, "_snwprintf_s_l")
-int _snwprintf_s_l(wchar_t *_DstBuf, size_t _DstSize, size_t _MaxCount, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_vsnwprintf_s_l, "_vsnwprintf_s_l")
-int _vsnwprintf_s_l(wchar_t *_DstBuf, size_t _DstSize, size_t _MaxCount, const wchar_t *_Format, _locale_t _Locale, __builtin_va_list _ArgList);
-#pragma binding(msvcrt::wscanf_s, "wscanf_s")
-int wscanf_s(const wchar_t *_Format, ...);
-#pragma binding(msvcrt::fwscanf_s, "fwscanf_s")
-int fwscanf_s(struct __c5_FILE *_File, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::swscanf_s, "swscanf_s")
-int swscanf_s(const wchar_t *_Src, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::_snwscanf_s, "_snwscanf_s")
-int _snwscanf_s(const wchar_t *_Src, size_t _MaxCount, const wchar_t *_Format, ...);
-#pragma binding(msvcrt::_wscanf_s_l, "_wscanf_s_l")
-int _wscanf_s_l(const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_fwscanf_s_l, "_fwscanf_s_l")
-int _fwscanf_s_l(struct __c5_FILE *_File, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_swscanf_s_l, "_swscanf_s_l")
-int _swscanf_s_l(const wchar_t *_Src, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_snwscanf_s_l, "_snwscanf_s_l")
-int _snwscanf_s_l(const wchar_t *_Src, size_t _MaxCount, const wchar_t *_Format, _locale_t _Locale, ...);
-#pragma binding(msvcrt::_wfopen_s, "_wfopen_s")
-errno_t _wfopen_s(struct __c5_FILE **_File, const wchar_t *_Filename, const wchar_t *_Mode);
-#pragma binding(msvcrt::_wtmpnam_s, "_wtmpnam_s")
-errno_t _wtmpnam_s(wchar_t *_DstBuf, size_t _SizeInWords);
-#pragma binding(msvcrt::_wasctime_s, "_wasctime_s")
-errno_t _wasctime_s(wchar_t *_Buf, size_t _SizeInWords, const struct tm *_Tm);
-#pragma binding(msvcrt::_wctime32_s, "_wctime32_s")
-errno_t _wctime32_s(wchar_t *_Buf, size_t _SizeInWords, const __time32_t *_Time);
-#pragma binding(msvcrt::_wctime64_s, "_wctime64_s")
-errno_t _wctime64_s(wchar_t *_Buf, size_t _SizeInWords, const __time64_t *_Time);
-#pragma binding(msvcrt::_wstrdate_s, "_wstrdate_s")
-errno_t _wstrdate_s(wchar_t *_Buf, size_t _SizeInWords);
-#pragma binding(msvcrt::_wstrtime_s, "_wstrtime_s")
-errno_t _wstrtime_s(wchar_t *_Buf, size_t _SizeInWords);
-#pragma binding(msvcrt::_waccess_s, "_waccess_s")
-errno_t _waccess_s(const wchar_t *_Filename, int _AccessMode);
-#pragma binding(msvcrt::_wmktemp_s, "_wmktemp_s")
-errno_t _wmktemp_s(wchar_t *_TemplateName, size_t _SizeInWords);
-#pragma binding(msvcrt::_itow_s, "_itow_s")
-errno_t _itow_s(int _Val, wchar_t *_DstBuf, size_t _SizeInWords, int _Radix);
-#pragma binding(msvcrt::_ltow_s, "_ltow_s")
-errno_t _ltow_s(long _Val, wchar_t *_DstBuf, size_t _SizeInWords, int _Radix);
-#pragma binding(msvcrt::_ultow_s, "_ultow_s")
-errno_t _ultow_s(unsigned long _Val, wchar_t *_DstBuf, size_t _SizeInWords, int _Radix);
-#pragma binding(msvcrt::_i64tow_s, "_i64tow_s")
-errno_t _i64tow_s(long long _Val, wchar_t *_DstBuf, size_t _SizeInWords, int _Radix);
-#pragma binding(msvcrt::_ui64tow_s, "_ui64tow_s")
-errno_t _ui64tow_s(unsigned long long _Val, wchar_t *_DstBuf, size_t _SizeInWords, int _Radix);
-#pragma binding(msvcrt::_wgetenv_s, "_wgetenv_s")
-errno_t _wgetenv_s(size_t *_ReturnSize, wchar_t *_DstBuf, size_t _DstSizeInWords, const wchar_t *_VarName);
-#pragma binding(msvcrt::_wmakepath_s, "_wmakepath_s")
-errno_t _wmakepath_s(wchar_t *_PathResult, size_t _SizeInWords, const wchar_t *_Drive, const wchar_t *_Dir, const wchar_t *_Filename, const wchar_t *_Ext);
-#pragma binding(msvcrt::_wsearchenv_s, "_wsearchenv_s")
-errno_t _wsearchenv_s(const wchar_t *_Filename, const wchar_t *_EnvVar, wchar_t *_ResultPath, size_t _SizeInWords);
-#pragma binding(msvcrt::_wsplitpath_s, "_wsplitpath_s")
-errno_t _wsplitpath_s(const wchar_t *_FullPath, wchar_t *_Drive, size_t _DriveSizeInWords, wchar_t *_Dir, size_t _DirSizeInWords, wchar_t *_Filename, size_t _FilenameSizeInWords, wchar_t *_Ext, size_t _ExtSizeInWords);
-// mingw-w64 binds _wctime_s to _wctime64_s, time_t being 64-bit.
-#pragma binding(msvcrt::_wctime_s, "_wctime64_s")
-errno_t _wctime_s(wchar_t *_Buffer, size_t _SizeInWords, const __time64_t *_Time);
 static inline wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n) {
     for (; n; --n, ++s)
         if (*s == c)

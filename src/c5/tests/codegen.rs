@@ -2098,6 +2098,103 @@ fn windows_wide_strings_wsetlocale_and_l_conversions_bind_msvcrt() {
     }
 }
 
+/// On the PE targets `<wchar.h>` and each set's own header declare the
+/// functions of the UCRT's corecrt_w*.h sets that msvcrt.dll exports, as the
+/// UCRT's and mingw-w64's headers do, and each imports the entry its binding
+/// names; `<stdlib.h>` declares the `_atodbl` family with the UCRT's result
+/// types, and `_wcstof_l` is the runtime's over `_wcstod_l`.
+#[test]
+fn windows_ucrt_wide_sets_import_their_entry_points() {
+    const BLOCKS: &[(&str, &[&str])] = &[
+        (
+            include_str!("../../../libc/include/__badc_wstdlib.h"),
+            &["stdlib.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wstdio.h"),
+            &["stdio.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wio.h"),
+            &["io.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wdirect.h"),
+            &["direct.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wprocess.h"),
+            &["process.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wtime.h"),
+            &["time.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wconio.h"),
+            &["conio.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wctype.h"),
+            &["ctype.h", "wctype.h"],
+        ),
+    ];
+    // The bindings outside a nested conditional, with their DLLs.
+    let bindings = |block: &'static str| {
+        let mut depth = 0usize;
+        let mut out: alloc::vec::Vec<(&str, &str, &str)> = alloc::vec::Vec::new();
+        for line in block.lines() {
+            if line.starts_with("#if") {
+                depth += 1;
+            } else if line.starts_with("#endif") {
+                depth -= 1;
+            } else if depth == 1
+                && let Some(rest) = line.strip_prefix("#pragma binding(")
+                && let Some((lib, rest)) = rest.split_once("::")
+                && let Some((name, rest)) = rest.split_once(", \"")
+                && let Some((symbol, _)) = rest.split_once('"')
+            {
+                let dll = if lib == "ucrtbase" {
+                    "ucrtbase.dll"
+                } else {
+                    "msvcrt.dll"
+                };
+                out.push((name, symbol, dll));
+            }
+        }
+        out
+    };
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for &(block, homes) in BLOCKS {
+            let imports = bindings(block);
+            assert!(imports.len() >= 5, "{imports:?}");
+            assert_windows_imports(target, "#include <wchar.h>\n", &imports);
+            for home in homes {
+                assert_windows_imports(target, &alloc::format!("#include <{home}>\n"), &imports);
+            }
+        }
+        assert_windows_imports(
+            target,
+            "#include <stdlib.h>\n\
+             _Static_assert(sizeof(_LDOUBLE) == 10 && sizeof(_CRT_DOUBLE) == 8 && \
+             sizeof(_CRT_FLOAT) == 4, \"\");\n",
+            &[
+                ("_atodbl", "_atodbl", M),
+                ("_atoldbl", "_atoldbl", M),
+                ("_atodbl_l", "_atodbl_l", M),
+                ("_atoflt_l", "_atoflt_l", M),
+                ("_atoldbl_l", "_atoldbl_l", M),
+                ("_atoflt", "_atoflt_l", M),
+            ],
+        );
+        let src = "#include <wchar.h>\n\
+                   int main(void) { wchar_t *e; return (int)(_wcstof_l(L\"1\", &e, 0) + wcstod(L\"2\", &e)); }\n";
+        let image = assert_windows_unit_imports(target, src, &[("_wcstod_l", M)]);
+        assert_eq!(pe_import_dll_of(&image, "_wcstof_l"), None, "{target:?}");
+    }
+}
+
 /// `<tchar.h>`'s bounds-checked generic-text names, as mingw-w64's
 /// `sec_api/tchar_s.h` maps them, each resolve for both Windows targets under
 /// `_UNICODE`, `_MBCS` (with and without `_MB_MAP_DIRECT`) and neither, and

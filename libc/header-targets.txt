@@ -216,6 +216,14 @@ corecrt.h	-	-	-	y	y
 _timeval.h	-	-	-	y	y
 __badc_timeval.h	-	-	-	-	-
 __badc_wstring.h	-	-	-	-	-
+__badc_wstdlib.h	-	-	-	-	-
+__badc_wstdio.h	-	-	-	-	-
+__badc_wio.h	-	-	-	-	-
+__badc_wdirect.h	-	-	-	-	-
+__badc_wprocess.h	-	-	-	-	-
+__badc_wtime.h	-	-	-	-	-
+__badc_wconio.h	-	-	-	-	-
+__badc_wctype.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p

@@ -1157,6 +1157,17 @@ impl Compiler {
     /// source position, the census the inline linkage models read (C99
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
+        // C99 5.1.2.2.1: a hosted program's startup calls an external
+        // `main`. clang's `-Wmain` flags each `static` declaration of one.
+        if static_seen
+            && !self.freestanding
+            && self.symbols[id_idx].name == "main"
+            && self.in_user_source()
+        {
+            let text =
+                String::from("`main` is declared `static`, so the program startup cannot call it");
+            self.warn_at(Code::MAIN, self.lex.line, text);
+        }
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
@@ -3357,9 +3368,9 @@ impl Compiler {
     /// another TU may call them through the link-unit symbol
     /// table; the linker is responsible for the cross-TU
     /// reachability check. Names starting with `_` are suppressed
-    /// (gcc / clang `-Wunused-function` convention). `main` is
-    /// suppressed regardless of linkage: it is the program's
-    /// entry, called by the runtime stub the codegen emits.
+    /// (gcc / clang `-Wunused-function` convention). A `static` `main`
+    /// is no program entry, so it is reported like any other, as gcc
+    /// and clang report it.
     fn warn_unused_static_functions(&mut self) {
         use crate::c5::symbol::Linkage;
         // A `__attribute__((constructor))` / `((destructor))` function
@@ -3382,7 +3393,6 @@ impl Compiler {
                 || sym.binding.was_referenced
                 || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
-                || sym.name == "main"
                 || sym.is_used
                 || sym.binding.maybe_unused
                 || init_names.contains(sym.name.as_str())

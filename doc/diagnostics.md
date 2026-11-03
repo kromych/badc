@@ -74,6 +74,7 @@ regenerates.
 | B2016 | `missing-declarations` | ignore | controllable | - | an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes |
 | B2017 | `implicit-fallthrough=5` | ignore | controllable | - | a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates |
 | B2018 | `vla-larger-than` | ignore | controllable | - | under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count |
+| B2019 | `main` | warning | controllable | default | a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point |
 | B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
@@ -110,6 +111,7 @@ regenerates.
 | B3031 | `discarded-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has |
 | B3032 | `pointer-sign` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness |
 | B3033 | `modifiable-lvalue` | error | hard | - | an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member |
+| B3034 | `varargs` | warning | controllable | default | a `va_start` whose second operand is not the last named parameter, or is one declared `register` or of a type the default argument promotions change; a `va_arg` of such a type (C99 7.15.1) |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |

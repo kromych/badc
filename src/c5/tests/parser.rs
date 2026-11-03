@@ -2315,6 +2315,45 @@ fn constructor_is_not_reported_unused() {
     );
 }
 
+/// A `static` `main` is no program entry point: gcc 16 and clang 22 report
+/// it unused under `-Wall`, hosted or freestanding, and clang's `-Wmain`, on
+/// by default, flags each hosted `static` declaration of it. An external
+/// `main` draws neither. `-Wno-main` and `-Wno-unused-function` silence
+/// their rows.
+#[test]
+fn a_static_main_is_reported_and_an_external_one_is_not() {
+    use crate::c5::diag::{Code, Level};
+    use crate::{CompileOptions, Target};
+    let codes = |src: &str, freestanding: bool, off: Option<Code>| -> Vec<Code> {
+        let mut diag = super::diag_config(&["all"]);
+        if let Some(code) = off {
+            diag.set_level(code, Level::Ignore);
+        }
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding)
+            .with_diag(diag);
+        let program = Compiler::with_options(src.to_string(), Target::default_target(), opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        program.warnings.iter().map(|w| w.code).collect()
+    };
+    let st = "static int main(void);\nstatic int main(void) { return 0; }\n";
+    let ext = "int main(void);\nint main(void) { return 0; }\n";
+    let (m, u) = (Code::MAIN, Code::UNUSED_FUNCTION);
+    for (src, freestanding, off, want) in [
+        (st, false, None, alloc::vec![m, m, u]),
+        (st, true, None, alloc::vec![u]),
+        (st, false, Some(m), alloc::vec![u]),
+        (st, false, Some(u), alloc::vec![m, m]),
+        (ext, false, None, alloc::vec![]),
+        (ext, true, None, alloc::vec![]),
+    ] {
+        let got = codes(src, freestanding, off);
+        assert_eq!(got, want, "{src} freestanding={freestanding} off={off:?}");
+    }
+}
+
 #[test]
 fn a_report_about_a_function_points_at_its_definition() {
     // A prototype ahead of the definition does not keep the position: a

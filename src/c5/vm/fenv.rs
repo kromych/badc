@@ -131,7 +131,7 @@ fn shift_round(sig: u128, sh: i32, sticky: bool) -> (u128, bool, bool) {
     (sig >> sh, half, rest || sticky)
 }
 
-/// The `f64` bit pattern of `±kept·2^q`, already rounded to fit.
+/// The `f64` bit pattern of `+/-kept * 2^q`, already rounded to fit.
 fn pack(neg: bool, kept: u128, q: i32) -> u64 {
     if kept == 0 {
         return signed(neg, 0);
@@ -155,7 +155,7 @@ fn finite(bits: u64) -> (u128, i32) {
     }
 }
 
-/// Whether `m·2^e` equals `n·2^d`.
+/// Whether `m * 2^e` equals `n * 2^d`.
 fn equal_scaled(m: u128, e: i32, (n, d): (u128, i32)) -> bool {
     let (scaled, other, sh) = if e >= d { (m, n, e - d) } else { (n, m, d - e) };
     sh < 128 && scaled.leading_zeros() as i32 >= sh && scaled << sh == other
@@ -215,7 +215,7 @@ impl FpEnv {
         }
     }
 
-    /// Round `±sig·2^exp`, plus a nonzero amount below `2^exp` when
+    /// Round `+/-sig * 2^exp`, plus a nonzero amount below `2^exp` when
     /// `sticky`, to `f`; `sig` is nonzero.
     pub(super) fn round(&mut self, neg: bool, sig: u128, exp: i32, sticky: bool, f: Format) -> u64 {
         let top = top_bit(&(neg, sig, exp));
@@ -445,7 +445,7 @@ impl FpEnv {
         }
     }
 
-    /// `a·b + c` rounded once (C99 7.12.13.1).
+    /// `a * b + c` rounded once (C99 7.12.13.1).
     pub(super) fn fma(&mut self, a: u64, b: u64, c: u64, f: Format) -> u64 {
         let np = negative(a) != negative(b);
         match (class(a), class(b), class(c)) {

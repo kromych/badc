@@ -2878,7 +2878,7 @@ impl HexStyle {
     }
 }
 
-/// `h.hhhp±d` for `%a` / `%A` (7.19.6.1p8) of a value of sign `neg`,
+/// `h.hhhp[+-]d` for `%a` / `%A` (7.19.6.1p8) of a value of sign `neg`,
 /// without the sign and `0x`.
 fn format_hex(
     h: HexForm,

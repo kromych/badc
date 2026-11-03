@@ -399,6 +399,58 @@ fn a_finally_row_names_its_funclet_and_no_target() {
     }
 }
 
+/// `.pdata` holds the RUNTIME_FUNCTION array alone, the extent the exception
+/// directory gives, and every unwind record an entry points to lies in
+/// `.rdata`, where link.exe and lld-link place `.xdata`: a reader that takes
+/// the section as the array, as llvm-readobj does, reads each entry.
+#[cfg(feature = "full")]
+#[test]
+fn pdata_holds_the_array_alone_and_the_unwind_records_lie_in_rdata() {
+    let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
+        int f(void) { int r = 0; __try { r = ext(); } __except (r == 0) { r = 1; } return r; }\n\
+        int h(int n) { int s = 0; for (int i = 0; i < n; i++) s += ext() * i; return s; }\n\
+        int main(void) { return f() + h(3); }\n";
+    let word = |pe: &[u8], at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let section = |pe: &[u8], name: &[u8]| {
+        let pe_off = word(pe, 0x3c) as usize;
+        let n = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+        let opt = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+        (0..n)
+            .map(|i| pe_off + 24 + opt + i * 40)
+            .find(|&s| pe[s..s + 8].starts_with(name))
+            .map(|s| (word(pe, s + 12), word(pe, s + 8)))
+            .expect("section")
+    };
+    for target in WINDOWS {
+        let program = Compiler::with_target(src.into(), target)
+            .compile()
+            .expect("front end");
+        let pe = super::link_executable_with_runtime(&program, target, crate::NativeOptions::new())
+            .expect("link");
+        let x64 = target == Target::WindowsX64;
+        let opt = word(&pe, 0x3c) as usize + 24;
+        let directory = (word(&pe, opt + 112 + 24), word(&pe, opt + 112 + 28));
+        assert_eq!(directory, section(&pe, b".pdata\0"), "{target:?}");
+        let (rdata, rdata_size) = section(&pe, b".rdata\0");
+        let (start, count, entry) = exception_table(&pe, x64);
+        let mut records = 0;
+        for e in (0..count).map(|i| start + i * entry) {
+            let info = word(&pe, e + if x64 { 8 } else { 4 });
+            // An arm64 entry whose low bits are set packs its unwind data.
+            if !x64 && info & 3 != 0 {
+                continue;
+            }
+            assert!(
+                (rdata..rdata + rdata_size).contains(&info),
+                "{target:?}: the entry at {:#x} points to {info:#x}",
+                word(&pe, e)
+            );
+            records += 1;
+        }
+        assert!(records >= 3, "{target:?}: {records} records");
+    }
+}
+
 /// The header byte of each x64 unwind record with a handler flag.
 #[cfg(feature = "full")]
 fn pe_handler_flags(pe: &[u8]) -> alloc::vec::Vec<u8> {

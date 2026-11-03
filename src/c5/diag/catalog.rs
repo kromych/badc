@@ -170,7 +170,7 @@ catalog! {
     2024, "incomplete-element-type", [], Error, Hard,
         [], Live,
         "an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body";
-    3001, "int-conversion", [], Warning, Controllable,
+    3001, "int-conversion", [], Error, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
     3002, "incompatible-struct-types", [], Warning, Controllable,

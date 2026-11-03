@@ -1842,9 +1842,11 @@ impl Compiler {
                 let op_snap = self.lex.snapshot();
                 let op_data = self.data.len();
                 self.next()?;
-                let n = match self.parse_constant_int_folding_const_objects() {
-                    Ok(n) => n,
-                    Err(_) => {
+                // A pointer operand, a null one included, makes the
+                // expression a difference (`(char *)&g - (char *)0`).
+                let n = match self.parse_constant_folding_const_objects() {
+                    Ok(v) if !is_pointer_ty(v.expr_ty()) && v.addr().is_none() => v.as_int(),
+                    _ => {
                         self.rewind_speculation(op_snap, op_data);
                         break;
                     }

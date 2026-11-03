@@ -269,7 +269,7 @@ fn warn_int_to_pointer_assignment() {
 #[test]
 fn an_ignored_row_leaves_no_diagnostic_behind() {
     use crate::{CompileOptions, Compiler, Target};
-    let src = super::with_prelude(&super::load_fixture("type_warning_int_to_ptr.c"));
+    let src = super::with_prelude("int *p;\nint main(void) { p = 5; return 0; }\n");
     let mut config = crate::diag::Config::new();
     config.set_level(
         crate::diag::Code::INT_CONVERSION,
@@ -293,8 +293,8 @@ fn warnings_as_errors_do_not_stop_the_parse() {
     use crate::{CompileOptions, Compiler, Target};
     let mut config = crate::diag::Config::new();
     config.warnings_as_errors(true);
-    let src = "int *p; int *q;\n\
-               int main(void) { p = 1; q = 2; return 0; }\n";
+    let src = "const int *c; int *p; int *q;\n\
+               int main(void) { p = c; q = c; return 0; }\n";
     let p = Compiler::with_options(
         src.to_string(),
         Target::default_target(),
@@ -1564,7 +1564,7 @@ fn bool_target_accepts_a_pointer_in_every_assignment_context() {
 
     // The reverse direction is still a mismatch: only `_Bool` on the left
     // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "void f(_Bool b) { int *q; q = b; (void)q; }\n\
          int main(void) { return 0; }",
     );
@@ -3151,6 +3151,69 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     }
 }
 
+/// C99 6.5.16.1p1 admits an integer for a pointer, or a pointer for an
+/// integer, only as a null pointer constant or a `_Bool` target. Each other
+/// exchange -- an argument, an assignment, a static and an automatic
+/// initializer, a return, in both directions -- is an error by default, as
+/// gcc 14's and clang 15's `-Wint-conversion` is; `-Wno-error=` and
+/// `-fpermissive` lower it and the unit runs, an ignored row reports none.
+#[test]
+fn int_conversion_is_an_error_the_user_can_lower() {
+    use super::Vm;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let compile = |src: &str, config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        let src = super::with_prelude(src);
+        Compiler::with_options(src, Target::default_target(), opts).compile()
+    };
+    let main = "int main(void) { return 0; }\n";
+    for body in [
+        "void f(char *s) { (void)s; } void g(void) { f(42); }",
+        "void f(int n) { (void)n; } void g(int *p) { f(p); }",
+        "void g(int n) { int *q; q = n; (void)q; }",
+        "void g(int *p) { int x; x = p; (void)x; }",
+        "int *q = 1;",
+        "int g; long long q = &g;",
+        "void g(int *p) { long x = p; (void)x; }",
+        "void g(void) { char *c = 'a'; void (*fp)(void) = 2; (void)c; (void)fp; }",
+        "int *g(void) { return 1; }",
+        "int g(int *p) { return p; }",
+    ] {
+        let src = alloc::format!("{body}\n{main}");
+        let err = compile(&src, Config::new()).expect_err("an error by default");
+        assert!(
+            err.to_string().contains("error:") && err.to_string().contains("[B3001]"),
+            "{body}: {err}"
+        );
+        let mut lowered = Config::new();
+        lowered.error_for(Code::INT_CONVERSION, false);
+        let mut permissive = Config::new();
+        permissive.permissive(true);
+        for config in [lowered, permissive] {
+            let p = compile(&src, config).unwrap_or_else(|e| panic!("{body}: {e}"));
+            assert!(
+                p.warnings
+                    .iter()
+                    .any(|w| w.code == Code::INT_CONVERSION && w.level == Level::Warning),
+                "{body}: {:?}",
+                p.warnings
+            );
+            assert_eq!(Vm::new(p).run().unwrap(), 0, "{body}: runs");
+        }
+        let mut ignored = Config::new();
+        ignored.set_level(Code::INT_CONVERSION, Level::Ignore);
+        let p = compile(&src, ignored).unwrap_or_else(|e| panic!("{body}: {e}"));
+        assert!(p.warnings.is_empty(), "{body}: {:?}", p.warnings);
+    }
+    // Null pointer constants in every spelling, and a `_Bool` target.
+    let quiet = "int *a = 0, *b = 0L, *c = '\\0', *d = (1 - 1), *e = (void *)0;\n\
+                 int *g(void) { return 0; }\nvoid f(int *p) { (void)p; }\n\
+                 _Bool t(int *p) { _Bool b = p; f(0); a = 0; return b; }\n";
+    let p = compile(&alloc::format!("{quiet}{main}"), Config::new()).expect("compiles");
+    assert!(p.warnings.is_empty(), "{:?}", p.warnings);
+}
+
 /// C99 6.5.16.1p1, 6.7.5.3p15: a pointer to a function converts as if by
 /// assignment -- assigned, initialized at any storage duration or returned
 /// -- only to a pointer to a compatible function type, which gcc 14 and
@@ -3811,7 +3874,7 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
 
     // A bare non-zero integer is still the 6.5.16.1p1 mismatch, in both
     // the struct-pointer and the scalar-pointer spelling.
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "struct S { int x; };\n\
          static struct S *bad1 = 5;\n\
          static int *bad2 = 7;\n\
@@ -3836,7 +3899,7 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
     // null pointer constant, a `_Bool` target, the 128-bit integer --
     // quiet on both sides alike.
     use crate::diag::Code;
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "struct S { int x; };\n\
          static struct S *g1 = 5;\n\
          static int *g2 = 7;\n\
@@ -4984,7 +5047,7 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
             "int main(void) { return 0; }\n"
         };
         let src = alloc::format!("{pre}{body}\n{main}");
-        let p = compile_str(&src);
+        let p = super::compile_str_int_conversion_warnings(&src);
         let got: alloc::vec::Vec<Code> = p.warnings.iter().map(|w| w.code).collect();
         assert_eq!(
             got,
@@ -4992,7 +5055,9 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
             "{src}"
         );
     }
-    let p = compile_str("int g;\nlong long s = &g;\nint main(void) { return 0; }\n");
+    let p = super::compile_str_int_conversion_warnings(
+        "int g;\nlong long s = &g;\nint main(void) { return 0; }\n",
+    );
     let text = p.warnings[0].to_string();
     let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
     assert!(text.contains(row), "{text}");
@@ -6129,10 +6194,11 @@ fn a_call_through_any_callee_checks_its_arguments() {
         Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
     };
     let err = compile(Config::new()).err().map(|e| e.to_string());
-    let stops = ":15: error: incompatible pointer types in argument 1 of `v.cq`";
+    let stops = ":14: error: pointer assigned to integer in argument 1 of `s->cb`";
     assert!(err.as_deref().is_some_and(|e| e.contains(stops)), "{err:?}");
     let mut lowered = Config::new();
     lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    lowered.set_level(Code::INT_CONVERSION, Level::Warning);
     let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
     let got: alloc::vec::Vec<(u32, Code, Level, String)> = program
         .warnings

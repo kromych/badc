@@ -849,6 +849,10 @@ impl Parser {
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
+            // gcc 14 in C: the diagnostics that are errors by default for
+            // C99 constraint violations become warnings.
+            "-fpermissive" => self.front.diag.permissive(true),
+            "-fno-permissive" => self.front.diag.permissive(false),
             s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
             s if s.starts_with("-Wno-error=") => {
                 self.diag_error(&s["-Wno-error=".len()..], s, false)?
@@ -935,7 +939,13 @@ impl Parser {
                 }
             }
             sel => {
+                // As in gcc, `-W<sel>` enables a row at its default, so
+                // one that is an error by default stays one.
                 for code in sel.codes() {
+                    let level = match level {
+                        badc::diag::Level::Warning => level.max(code.default_level()),
+                        _ => level,
+                    };
                     self.front.diag.set_level(code, level);
                 }
             }
@@ -3237,11 +3247,11 @@ mod tests {
             Level::Warning
         );
         // `-w` silences what is on; `-Werror` raises it.
-        assert_eq!(level(&["a.c"], "int-conversion"), Level::Warning);
-        assert_eq!(level(&["-w", "a.c"], "int-conversion"), Level::Ignore);
-        assert_eq!(level(&["-Werror", "a.c"], "int-conversion"), Level::Error);
+        assert_eq!(level(&["a.c"], "pointer-sign"), Level::Warning);
+        assert_eq!(level(&["-w", "a.c"], "pointer-sign"), Level::Ignore);
+        assert_eq!(level(&["-Werror", "a.c"], "pointer-sign"), Level::Error);
         assert_eq!(
-            level(&["-Werror", "-Wno-error", "a.c"], "int-conversion"),
+            level(&["-Werror", "-Wno-error", "a.c"], "pointer-sign"),
             Level::Warning
         );
         // `-Werror=<sel>` enables the row as well as raising it; the
@@ -3250,13 +3260,53 @@ mod tests {
             level(&["-Werror=unused-variable", "a.c"], "unused-variable"),
             Level::Error
         );
-        assert_eq!(
-            level(
-                &["-Werror", "-Wno-error=int-conversion", "a.c"],
-                "int-conversion"
-            ),
-            Level::Warning
-        );
+        let one_back = ["-Werror", "-Wno-error=pointer-sign", "a.c"];
+        assert_eq!(level(&one_back, "pointer-sign"), Level::Warning);
+    }
+
+    /// A row that is an error by default, as `-Wint-conversion` is in gcc 14,
+    /// under each option combination, with the level gcc 16 gives it.
+    #[test]
+    fn a_default_error_follows_gccs_options() {
+        use badc::diag::Level::{Error, Ignore, Warning};
+        #[rustfmt::skip]
+        let cases = [
+            (&[][..], Error),
+            (&["-Wno-error=int-conversion"], Warning),
+            (&["-Wno-int-conversion"], Ignore),
+            (&["-Wno-error"], Error),
+            (&["-w"], Error),
+            (&["-fpermissive"], Warning),
+            (&["-fpermissive", "-fno-permissive"], Error),
+            (&["-fpermissive", "-Wint-conversion"], Warning),
+            (&["-fpermissive", "-Werror"], Error),
+            (&["-fpermissive", "-Werror=int-conversion"], Error),
+            (&["-fpermissive", "-w"], Ignore),
+            (&["-Werror", "-Wno-error=int-conversion"], Warning),
+            (&["-Wno-error=int-conversion", "-Werror"], Warning),
+            (&["-Wno-error=int-conversion", "-Werror=int-conversion"], Error),
+            (&["-Werror=int-conversion", "-Wno-error=int-conversion"], Warning),
+            (&["-Wno-error=int-conversion", "-Wint-conversion"], Warning),
+            (&["-Wno-int-conversion", "-Wint-conversion"], Error),
+            (&["-Wno-int-conversion", "-Werror"], Ignore),
+            (&["-Wno-error=int-conversion", "-w"], Ignore),
+            (&["-Wall", "-Wextra", "-Wpedantic"], Error),
+            (&["-pedantic-errors"], Error),
+            (&["-Wno-error=int-conversion", "-pedantic-errors"], Warning),
+        ];
+        for (args, want) in cases {
+            let args = [args, &["a.c"]].concat();
+            assert_eq!(level(&args, "int-conversion"), want, "{args:?}");
+        }
+        for row in [
+            "implicit-int",
+            "return-mismatch",
+            "incompatible-pointer-types",
+        ] {
+            assert_eq!(level(&["-fpermissive", "a.c"], row), Warning, "{row}");
+            let (off, on) = (format!("-Wno-{row}"), format!("-W{row}"));
+            assert_eq!(level(&[off.as_str(), on.as_str(), "a.c"], row), Error);
+        }
     }
 
     #[test]

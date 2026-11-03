@@ -298,6 +298,10 @@ Compile knobs:
                            at the end of the phase, as gcc does.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
+  -fpermissive             Report as warnings the diagnostics gcc 14
+                           makes errors by default: int-conversion,
+                           incompatible-pointer-types, implicit-int
+                           and return-mismatch.
   -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
                            <n> bytes (kB / KiB / MB / MiB suffixes
                            apply). The saved registers and the frame

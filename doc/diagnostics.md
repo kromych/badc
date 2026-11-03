@@ -19,6 +19,9 @@ a selector is accepted:
   wherever a name is. A gcc or clang warning badc does not implement is
   accepted, and turning it on reports B7012; any other unknown name is
   refused, except in `-Wno-<name>`, which gcc accepts for any name.
+  `-fpermissive` reports the rows gcc 14 makes errors by default
+  (`int-conversion`, `incompatible-pointer-types`, `implicit-int`,
+  `return-mismatch`) as warnings.
 * `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
   `pop`), `#pragma clang diagnostic ...` and MSVC's
   `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`
@@ -76,7 +79,7 @@ regenerates.
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
 | B2024 | `incomplete-element-type` | error | hard | - | an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body |
-| B3001 | `int-conversion` | warning | controllable | default | an integer and a pointer exchanged with no cast |
+| B3001 | `int-conversion` | error | controllable | default | an integer and a pointer exchanged with no cast |
 | B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
 | B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |

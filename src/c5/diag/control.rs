@@ -54,7 +54,18 @@ pub struct Config {
     errors: bool,
     /// `-Werror=<sel>` (true) and `-Wno-error=<sel>` (false).
     per_code_errors: BTreeMap<u16, bool>,
+    /// `-fpermissive`.
+    permissive: bool,
 }
+
+/// The rows gcc 14's `-fpermissive` lowers from their error default to
+/// warnings in C, as `-Wno-error=<row>` does.
+const PERMISSIVE: [Code; 4] = [
+    Code::IMPLICIT_INT,
+    Code::INT_CONVERSION,
+    Code::INCOMPATIBLE_POINTER_TYPES,
+    Code::RETURN_MISMATCH,
+];
 
 impl Config {
     /// The empty configuration: every row at its catalogue default.
@@ -66,6 +77,7 @@ impl Config {
             inhibit: false,
             errors: false,
             per_code_errors: BTreeMap::new(),
+            permissive: false,
         }
     }
 
@@ -75,6 +87,11 @@ impl Config {
         if is_settable(code) {
             self.levels.insert(code.value(), level);
         }
+    }
+
+    /// `-fpermissive`.
+    pub fn permissive(&mut self, on: bool) {
+        self.permissive = on;
     }
 
     /// `-Wall` / `-Wextra` / `-Wpedantic`: every row in the group that
@@ -118,7 +135,8 @@ impl Config {
             return Level::Error;
         }
         let mut level = self.stated_level(code);
-        if pinned == Some(false) && level == Level::Error {
+        let lowered = pinned == Some(false) || self.permissive && PERMISSIVE.contains(&code);
+        if lowered && level == Level::Error {
             level = Level::Warning;
         }
         if level != Level::Warning {

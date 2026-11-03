@@ -1347,6 +1347,14 @@ pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
 }
 
+/// [`compile_str`] with `-Wint-conversion`, an error by default, lowered
+/// to a warning, so every report the unit draws is read back.
+pub fn compile_str_int_conversion_warnings(src: &str) -> Program {
+    compile_str(&format!(
+        "#pragma GCC diagnostic warning \"-Wint-conversion\"\n{src}"
+    ))
+}
+
 /// Compile inline source WITHOUT the standard prelude. Used by the
 /// codegen tests that assert byte-for-byte equality on the emitted
 /// native code -- those tests can't tolerate the lazy-stream helper

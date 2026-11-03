@@ -77,12 +77,6 @@ fn ent_pc=11 n_params=0 variadic=false locals=2
     v39  LifetimeEnd(-1)                                  -> -
     v40  LifetimeEnd(-2)                                  -> -
     terminator Return(v38)   (exit_acc=v38)
-thread_local_per_thread.c:28: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
-    if (counter != 0) return 0xbad1;
-thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
-    if (counter != 99) return 0xbad2;
-thread_local_per_thread.c:31: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
-    return counter;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

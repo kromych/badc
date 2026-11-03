@@ -4201,11 +4201,15 @@ fn every_conversion_to_a_pointer_takes_the_same_null_pointer_constants() {
     // argument, a return and an initializer, as it does in `?:`; a value
     // read through a pointer cast is no integer constant expression, and a
     // floating constant cast to an integer type is one.
-    use crate::diag::Code;
+    use crate::diag::{Code, Config, Level};
+    // The row lowered to a warning, so each body's report is collected.
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INT_CONVERSION, Level::Warning);
     let warns = |body: &str| {
         let src =
             format!("int *ip; void take(int *); int x;\n{body}\nint main(void) {{ return 0; }}\n");
-        let program = Compiler::new(src)
+        let opts = crate::CompileOptions::default().with_diag(lowered.clone());
+        let program = Compiler::with_options(src, crate::Target::default_target(), opts)
             .compile()
             .unwrap_or_else(|e| panic!("{body}: {e}"));
         program
@@ -4695,7 +4699,7 @@ fn an_address_constant_initializes_only_an_object_that_holds_it() {
     for (decl, what) in [
         ("int x = (int)(long)&g;", "an object of type `int`"),
         (
-            "struct { int a, b, c; } x = {1, &g, 3};",
+            "struct { int a, b, c; } x = {1, (int)(long)&g, 3};",
             "an object of type `int`",
         ),
         (
@@ -6046,12 +6050,10 @@ fn value_builtins_check_their_operands() {
             .contains("argument 3 of `__builtin_prefetch` is 4, not 0 to 3"),
         "{w:?}"
     );
-    let w = warnings("long f(int *p) { return __builtin_expect(p, 0); }");
-    assert!(
-        w.iter()
-            .any(|(c, t)| *c == crate::c5::diag::Code::INT_CONVERSION
-                && t.contains("argument 1 of `__builtin_expect`")),
-        "{w:?}"
+    // -Wint-conversion is an error by default, as in gcc 14.
+    expect_compile_error(
+        &with_main("long f(int *p) { return __builtin_expect(p, 0); }"),
+        "pointer assigned to integer in argument 1 of `__builtin_expect`",
     );
     // gcc takes any alignment value, constant or not.
     assert!(

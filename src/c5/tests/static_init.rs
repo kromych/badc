@@ -479,7 +479,9 @@ const REJECTED: &[Reject] = &[
     reject!("writable_scalar", "int g = 1; int x = g;", "constant integer expected (got identifier `g`)"),
     reject!("function_call", "int f(void); int x = f();", "constant integer expected (got identifier `f`)"),
     reject!("address_in_int", "int g; int x = (int)(long)&g;", "an address constant does not fit an object of type `int`"),
-    reject!("address_in_int_member", "int g; struct { int a, b, c; } x = {1, &g, 3};", "an address constant does not fit an object of type `int`"),
+    reject!("address_in_int_member", "int g; struct { int a, b, c; } x = {1, (int)(long)&g, 3};", "an address constant does not fit an object of type `int`"),
+    // -Wint-conversion, an error by default as in gcc 14 and clang.
+    reject!("pointer_to_integer_without_cast", "int g; long x = &g;", "pointer assigned to integer in initializer"),
     reject!("address_in_short_element", "int g; short x[2] = {1, (short)(long)&g};", "an address constant does not fit an object of type `short`"),
     reject!("address_in_char", "char x = (char)(long)\"abc\";", "an address constant does not fit an object of type"),
     reject!("address_in_double", "int g; double x = (double)(long)&g;", "an address constant does not fit an object of type `double`"),
@@ -517,9 +519,9 @@ const ACCEPTED_ONLY_BY_BADC: &[Case] = &[
     // both forms.
     case!("string_minus_null", "long x = (char *)\"abc\" - (char *)0;", "0000000000000000", 0 => Data("61626300")),
     case!("address_minus_null", "int g; long x = (char *)&g - (char *)0;", "0000000000000000", 0 => Sym("g", 0)),
-    // badc reports the conversion as the B3001 warning an assignment gives;
-    // gcc and clang make -Wint-conversion an error.
-    case!("pointer_to_integer_without_cast", "int g; long x = &g;", "0000000000000000", 0 => Sym("g", 0)),
+    // The difference has an integer type (C99 6.5.6p9) when the address is
+    // a byte pointer without a cast too.
+    case!("byte_address_minus_null", "char c; long x = &c - (char *)0;", "0000000000000000", 0 => Sym("c", 0)),
 ];
 
 /// Initializers badc rejects where clang accepts them.

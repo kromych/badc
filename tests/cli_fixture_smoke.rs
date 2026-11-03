@@ -2293,7 +2293,7 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     let src = dir.join("main.c");
     std::fs::write(
         &src,
-        "int *p; int *q;\nint main(void) { p = 1; q = 2; return 0; }\n",
+        "const int *c; int *p; int *q;\nint main(void) { p = c; q = c; return 0; }\n",
     )
     .expect("write main");
     let out = Command::new(badc)
@@ -2307,12 +2307,12 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     assert!(!out.status.success(), "-Werror must fail the unit");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
-        stderr.matches("error: integer assigned to pointer").count(),
+        stderr.matches("error: discards `const` qualifier").count(),
         2,
         "both assignments must be reported, got: {stderr}"
     );
     assert!(
-        stderr.contains("[B3001] [-Wint-conversion]"),
+        stderr.contains("[B3031] [-Wdiscarded-qualifiers]"),
         "expected the code and option brackets, got: {stderr}"
     );
     assert!(
@@ -3802,6 +3802,61 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         silenced.status.success() && !stderr.contains("B3026"),
         "{stderr}"
     );
+}
+
+/// An integer and a pointer exchanged with no cast, in an argument, an
+/// assignment, an initializer and a return and in both directions, is an
+/// error by default, as gcc 14's and clang 15's `-Wint-conversion` is; a
+/// null pointer constant is none. `-Wno-error=int-conversion` and
+/// `-fpermissive` lower it to a warning the unit compiles under, and
+/// `-Wno-int-conversion` silences it.
+#[test]
+fn int_conversion_is_an_error_the_user_can_lower() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-int-conversion");
+    let compile = |name: &str, body: &str, flags: &[&str]| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, body).expect("write source");
+        let out = Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), err)
+    };
+    #[rustfmt::skip]
+    const CASES: &[(&str, &str, &str)] = &[
+        ("arg_ptr", "void f(char *);\nvoid g(void) { f(42); }\n", "integer assigned to pointer in argument 1 of `f`"),
+        ("arg_int", "void f(int);\nvoid g(int *p) { f(p); }\n", "pointer assigned to integer in argument 1 of `f`"),
+        ("assign_ptr", "void g(int n) { int *q; q = n; (void)q; }\n", "integer assigned to pointer in assignment"),
+        ("assign_int", "void g(int *p) { int x; x = p; (void)x; }\n", "pointer assigned to integer in assignment"),
+        ("init_ptr", "int *q = 1;\n", "integer assigned to pointer in initializer"),
+        ("init_int", "void g(int *p) { long x = p; (void)x; }\n", "pointer assigned to integer in initializer"),
+        ("ret_ptr", "int *g(void) { return 1; }\n", "integer assigned to pointer in return"),
+        ("ret_int", "int g(int *p) { return p; }\n", "pointer assigned to integer in return"),
+    ];
+    let row = "[B3001] [-Wint-conversion]";
+    for &(name, body, text) in CASES {
+        let (ok, err) = compile(name, body, &[]);
+        let reported = err.contains("error:") && err.contains(text) && err.contains(row);
+        assert!(!ok && reported, "{name}: {err}");
+        for flag in ["-Wno-error=int-conversion", "-fpermissive"] {
+            let (ok, err) = compile(name, body, &[flag]);
+            let lowered = err.contains("warning:") && err.contains(text);
+            assert!(ok && lowered, "{name} {flag}: {err}");
+        }
+        let (ok, err) = compile(name, body, &["-Wno-int-conversion"]);
+        assert!(ok && !err.contains("B3001"), "{name}: {err}");
+    }
+    let nulls = "int *a = 0, *b = 0L, *c = '\\0', *d = (1 - 1), *e = (void *)0;\n\
+                 int *g(void) { return 0; }\nvoid f(int *);\nvoid h(void) { f(0); a = 0; }\n";
+    let (ok, err) = compile("nulls", nulls, &[]);
+    assert!(ok && !err.contains("B3001"), "{err}");
 }
 
 /// A `void` expression used as a value fails the unit with a hard error at

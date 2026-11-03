@@ -4,7 +4,7 @@
 
 // pthread_create + pthread_join reached through dlopen/dlsym.
 int *thread_main(int *arg) {
-    return 11;
+    return (int *)11;
 }
 
 int main() {
@@ -23,5 +23,5 @@ int main() {
     join = dlsym(handle, "pthread_join");
     create(&tid, 0, thread_main, 0);
     join(tid, &retval);
-    return retval;                      // 11
+    return (int)(long long)retval;      // 11
 }

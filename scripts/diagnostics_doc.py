@@ -38,6 +38,9 @@ a selector is accepted:
   wherever a name is. A gcc or clang warning badc does not implement is
   accepted, and turning it on reports B7012; any other unknown name is
   refused, except in `-Wno-<name>`, which gcc accepts for any name.
+  `-fpermissive` reports the rows gcc 14 makes errors by default
+  (`int-conversion`, `incompatible-pointer-types`, `implicit-int`,
+  `return-mismatch`) as warnings.
 * `#pragma GCC diagnostic ignored "-W<name>"` (also `warning`, `error`, `push`,
   `pop`), `#pragma clang diagnostic ...` and MSVC's
   `#pragma warning(disable | error | default | once | suppress | push | pop : <number>)`

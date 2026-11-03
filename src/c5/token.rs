@@ -299,12 +299,8 @@ pub(crate) enum Token {
     /// fall-off-the-end diagnostic on a caller whose last statement
     /// is such a call.
     Noreturn,
-    /// `_Atomic` (C11 6.7.2.4 / 6.7.3). Two forms: the type
-    /// specifier `_Atomic ( type-name )` and the type qualifier
-    /// `_Atomic` preceding a type. c5 does not model atomicity, so
-    /// both reduce to the unqualified inner type; a distinct token
-    /// is needed only so the parser can recognize the parenthesized
-    /// specifier (the qualifier form is consumed like `const`).
+    /// `_Atomic` immediately followed by `(`: the type specifier of C11
+    /// 6.7.2.4. The qualifier of 6.7.3 lexes as [`Token::TypeQual`].
     Atomic,
     /// `asm` / `__asm__` / `__asm` (GCC inline assembly statement).
     /// c5 supports the operand-free forms: an empty template (a

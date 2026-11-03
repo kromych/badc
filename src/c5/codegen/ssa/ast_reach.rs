@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn a_walk_error_fails_the_compile_only_for_a_live_function() {
         let f = "typedef struct { long a, b; } pair;\n\
-                 static _Atomic pair shared;\n\
+                 static pair shared;\n\
                  static pair f(void) { return __atomic_load_n(&shared, 5); }\n";
         let external = f.replacen("static pair f", "pair f", 1);
         for target in [Target::LinuxX64, Target::LinuxAarch64] {

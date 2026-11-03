@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use super::super::preprocessor::builtins::library_prototype;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::ATOMIC_LIBCALLS;
 use super::types::{
     LONG_DOUBLE_BIT, UNSIGNED_BIT, add_ptr_level, is_struct_value_ty, plain_char_ty,
     pointer_to_const, void_ty,
@@ -39,6 +40,39 @@ impl Compiler {
             sym.defined_here = false;
         }
         Some(slot)
+    }
+
+    /// Declare the generic `__atomic_*` functions of gcc's and clang's
+    /// runtime, through which an `_Atomic` object no instruction covers is
+    /// accessed ([`super::types::AtomicAccess::Library`]), when the unit
+    /// formed such a type. Each takes a slot no source name reaches; the
+    /// walker finds it by [`ATOMIC_LIBCALLS`]' slot name.
+    pub(super) fn declare_atomic_libcalls(&mut self) {
+        let formed = core::mem::take(&mut self.atomic_types_formed);
+        let complete = |ty: i64| {
+            !is_struct_value_ty(ty)
+                || (self.structs.get(super::types::struct_id_of(ty))).is_some_and(|s| s.is_complete)
+        };
+        let library = formed.iter().any(|&ty| {
+            complete(ty) && self.atomic_layout_of(ty).access == super::types::AtomicAccess::Library
+        });
+        if !library {
+            return;
+        }
+        for &(name, slot_name, proto) in ATOMIC_LIBCALLS {
+            let slot = self.resolve_symbol_named(slot_name);
+            if self.symbols[slot].class != 0 {
+                continue;
+            }
+            let (ret, params, _) = self.prototype_types(proto);
+            let sym = &mut self.symbols[slot];
+            sym.class = Token::Fun as i64;
+            sym.type_ = ret;
+            sym.set_fn_params(params);
+            sym.asm_name = Some(name.into());
+            sym.linkage = crate::c5::symbol::Linkage::External;
+            sym.defined_here = false;
+        }
     }
 
     pub(super) fn library_param_types(&mut self, fn_name: &str) -> Vec<i64> {
@@ -105,6 +139,7 @@ impl Compiler {
     fn prototype_base(&mut self, words: &[&str]) -> i64 {
         match words.join(" ").as_str() {
             "void" | "FILE" | "struct tm" => void_ty(),
+            "_Bool" => Ty::Bool as i64,
             "char" => plain_char_ty(self.lex.char_signed),
             "int" | "pid_t" => Ty::Int as i64,
             "long" => Ty::Long as i64,

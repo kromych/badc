@@ -36,6 +36,10 @@
 //!     symbol the template names as undefined. It is registered in
 //!     `NATIVE_PE_X64_FIXTURES`, which links, and run by the CLI list
 //!     in `tests/cli_fixture_smoke.rs`.
+//!   * `atomic_operators_two_threads.c` in the ELF tables -- on Linux its
+//!     3-byte `_Atomic` structure calls the generic atomic functions, which
+//!     the single-image writer links no runtime to define; the CLI list
+//!     runs it.
 //!   * `byteswap_glibc.c`, `sysexits_codes.c`, `fd_set_macros.c`,
 //!     `posix_unix_headers.c`, `netinet_addr_class_macros.c`,
 //!     `get_cpuid_leaf_checks.c` and
@@ -1359,6 +1363,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("atomic_operand_in_working_regs.c", 0),
     ("atomic_orders.c", 0),
     ("atomic_contention.c", 0),
+    ("atomic_operators_two_threads.c", 0),
     ("setjmp_value_live_across.c", 0),
     ("setjmp_spill_slots_unshared.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),
@@ -4491,6 +4496,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("atomic_operand_in_working_regs.c", 0),
     ("atomic_orders.c", 0),
     ("atomic_contention.c", 0),
+    ("atomic_operators_two_threads.c", 0),
     ("setjmp_value_live_across.c", 0),
     ("setjmp_spill_slots_unshared.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),
@@ -5359,6 +5365,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("atomic_operand_in_working_regs.c", 0),
     ("atomic_orders.c", 0),
     ("atomic_contention.c", 0),
+    ("atomic_operators_two_threads.c", 0),
     ("setjmp_value_live_across.c", 0),
     ("setjmp_spill_slots_unshared.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),
@@ -6400,6 +6407,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("atomic_operand_in_working_regs.c", 0),
     ("atomic_orders.c", 0),
     ("atomic_contention.c", 0),
+    ("atomic_operators_two_threads.c", 0),
     ("setjmp_value_live_across.c", 0),
     ("setjmp_spill_slots_unshared.c", 0),
     ("mixed_sse_int_aggregate_args.c", 0),

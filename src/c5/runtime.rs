@@ -44,6 +44,7 @@ pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
         include_str!("../../libc/lib/stack_protector.c"),
     ),
     ("divti3.c", include_str!("../../libc/lib/divti3.c")),
+    ("atomic.c", include_str!("../../libc/lib/atomic.c")),
 ];
 
 /// C-library sources joined to the link the same way, for entry points a

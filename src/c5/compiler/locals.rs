@@ -473,7 +473,9 @@ impl Compiler {
         {
             is_extern = true;
         }
+        self.check_atomic_base(qual_bits)?;
         let lbt = apply_qual_bits(base, qual_bits);
+        self.check_atomic_type(lbt)?;
         let base_spelling = self.take_base_spelling();
         let base_enum_tag = self.pending.base_enum_tag.take();
         // A typedef-carried type alignment applies to every declarator of

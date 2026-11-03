@@ -1545,6 +1545,25 @@ impl Compiler {
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();
         let ty = self.symbols[sym as usize].type_;
+        // An array of `_Atomic` objects with lock words starts with every
+        // lock clear; the walker clears a single object's.
+        let elems = self.symbols[sym as usize].array_size;
+        let init = match init {
+            super::super::ast::LocalInit::None
+                if elems > 0
+                    && super::types::is_atomic_object_ty(ty)
+                    && matches!(
+                        self.atomic_layout_of(ty).access,
+                        super::types::AtomicAccess::LockWord(_)
+                    ) =>
+            {
+                super::super::ast::LocalInit::Fill {
+                    byte: 0,
+                    size_bytes: self.size_of_type(ty) as i64 * elems,
+                }
+            }
+            other => other,
+        };
         let decl_id = self.ast.push_decl(
             super::super::ast::Decl::Local {
                 sym,

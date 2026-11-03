@@ -2506,6 +2506,9 @@ pub struct Compiler {
     nostdinc: bool,
     /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
     freestanding: bool,
+    /// The `_Atomic` object types the unit forms, for
+    /// [`Self::declare_atomic_libcalls`].
+    atomic_types_formed: Vec<i64>,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
@@ -3242,6 +3245,7 @@ impl Compiler {
             no_builtin: opts.no_builtin,
             nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
+            atomic_types_formed: Vec::new(),
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
@@ -3594,6 +3598,7 @@ impl Compiler {
         #[cfg(feature = "codegen_test")]
         let parse_start = std::time::Instant::now();
         self.run_compile().map_err(|e| self.failed(e))?;
+        self.declare_atomic_libcalls();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3895,6 +3900,7 @@ impl Compiler {
             entry_pragma: self.pp_entrypoint.clone(),
             default_libs: core::mem::take(&mut self.pp_default_libs),
             auto_includes: Vec::new(),
+            freestanding: self.freestanding,
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.

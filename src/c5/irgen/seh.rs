@@ -246,6 +246,7 @@ impl<'a> Walker<'a> {
             optimize: self.optimize,
             jump_tables: self.jump_tables,
             named_refs: self.named_refs,
+            freestanding: self.freestanding,
         };
         match body {
             FuncletBody::Filter(e) => {

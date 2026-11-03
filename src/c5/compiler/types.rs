@@ -164,9 +164,10 @@ pub(crate) fn is_volatile_object_ty(ty: i64) -> bool {
 pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOL_LVL_MASK;
 
 /// The bits qualifying a tag's derivations level by level -- `const`,
-/// `volatile` and a named address space -- rather than naming its type.
+/// `volatile`, `_Atomic` and a named address space -- rather than naming
+/// its type.
 pub(crate) const DERIVATION_QUAL_MASK: i64 =
-    VOLATILE_MASK | CONST_LVL_MASK | SEG_MASK | SEG_LVL_MASK;
+    VOLATILE_MASK | CONST_LVL_MASK | ATOMIC_LVL_MASK | SEG_MASK | SEG_LVL_MASK;
 
 /// Add one pointer derivation level. The pointer object is unqualified
 /// until a post-`*` qualifier says otherwise.
@@ -185,9 +186,11 @@ pub(crate) fn absorb_function_level(ty: i64, level: i64) -> i64 {
         let below = levels & ((1 << level) - 1);
         ((below | ((levels >> (level + 1)) << level)) << shift) & mask
     };
-    let quals =
-        drop_level(CONST_LVL_MASK, CONST_LVL_SHIFT) | drop_level(VOL_LVL_MASK, VOL_LVL_SHIFT);
-    let mut out = ((ty & !(CONST_LVL_MASK | VOL_LVL_MASK)) - Ty::Ptr as i64) | quals;
+    let quals = drop_level(CONST_LVL_MASK, CONST_LVL_SHIFT)
+        | drop_level(VOL_LVL_MASK, VOL_LVL_SHIFT)
+        | drop_level(ATOMIC_LVL_MASK, ATOMIC_LVL_SHIFT);
+    let level_masks = CONST_LVL_MASK | VOL_LVL_MASK | ATOMIC_LVL_MASK;
+    let mut out = ((ty & !level_masks) - Ty::Ptr as i64) | quals;
     let seg_level = (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT;
     if ty & SEG_MASK != 0 && seg_level > level && seg_level < PTR32_CONFLICT {
         out = (out & !SEG_LVL_MASK) | ((seg_level - 1) << SEG_LVL_SHIFT);
@@ -206,11 +209,11 @@ pub(crate) fn pointee_ty(ty: i64) -> i64 {
     ty - Ty::Ptr as i64
 }
 
-/// Fold type-qualifier bits into a tag. A `const` or a `volatile` is
-/// recorded at the tag's current pointer depth in [`CONST_LVL_MASK`] or
-/// [`VOL_LVL_MASK`], the latter beside [`VOLATILE_BIT`]. A segment
-/// qualifier records the derivation it applies to by stamping the tag's
-/// current pointer depth into [`SEG_LVL_MASK`].
+/// Fold type-qualifier bits into a tag. A `const`, a `volatile` or an
+/// `_Atomic` is recorded at the tag's current pointer depth in
+/// [`CONST_LVL_MASK`], [`VOL_LVL_MASK`] (beside [`VOLATILE_BIT`]) or
+/// [`ATOMIC_LVL_MASK`], past which [`ATOMIC_BIT`] stays. A segment
+/// qualifier stamps the tag's current pointer depth into [`SEG_LVL_MASK`].
 pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
     let space = bits & SEG_MASK;
     let prior = ty & SEG_MASK;
@@ -221,9 +224,15 @@ pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
     if bits & CONST_BIT != 0 {
         ty = (ty & !CONST_BIT) | const_level_bit(ptr_depth_of(ty));
     }
+    let atomic = atomic_level_bit(ptr_depth_of(ty));
+    if bits & ATOMIC_BIT != 0 && atomic != 0 {
+        ty = (ty & !ATOMIC_BIT) | atomic;
+    }
     let depth = ptr_depth_of(ty);
     let level = match (space, prior) {
         (0, _) => return ty,
+        // TODO: a named address space past the field's levels.
+        _ if depth >= PTR32_CONFLICT => return ty,
         (PTR32_SPACE, 0) if depth == 0 => PTR32_MISPLACED,
         (PTR32_SPACE, 0) => depth - 1,
         (PTR32_SPACE, _) | (_, PTR32_SPACE) => PTR32_CONFLICT,
@@ -249,8 +258,8 @@ pub(crate) const PTR32_SPACE: i64 = SEG_GS_BIT | SEG_FS_BIT;
 /// The levels [`apply_qual_bits`] records for a `__ptr32` beside a segment
 /// qualifier and for one that follows no `*`, which [`ptr32_misplaced`]
 /// reports.
-const PTR32_CONFLICT: i64 = 0x1FE;
-const PTR32_MISPLACED: i64 = 0x1FF;
+const PTR32_CONFLICT: i64 = 0x1E;
+const PTR32_MISPLACED: i64 = 0x1F;
 
 /// Whether `ty` is a 32-bit (`__ptr32`) pointer.
 pub(crate) fn is_ptr32_ty(ty: i64) -> bool {
@@ -291,13 +300,123 @@ pub(crate) const SEG_GS_BIT: i64 = 1 << 31;
 pub(crate) const SEG_FS_BIT: i64 = 1 << 32;
 pub(crate) const SEG_MASK: i64 = SEG_GS_BIT | SEG_FS_BIT;
 
-/// Pointer level the segment qualifier applies at (9 bits, covering
-/// the deepest derivation any band encodes). Zero, and meaningless,
-/// when no segment bit is set.
+/// Pointer level the segment qualifier applies at (5 bits: levels below
+/// [`PTR32_CONFLICT`]). Zero, and meaningless, when no segment bit is set.
 /// TODO: one level field per tag, so qualifying two derivations
 /// (`int __seg_gs * __seg_gs p`) keeps only the outermost.
-const SEG_LVL_SHIFT: i64 = 34;
-const SEG_LVL_MASK: i64 = 0x1FF << SEG_LVL_SHIFT;
+const SEG_LVL_SHIFT: i64 = 38;
+const SEG_LVL_MASK: i64 = 0x1F << SEG_LVL_SHIFT;
+
+/// The request bit for `_Atomic`, which [`apply_qual_bits`] moves into
+/// [`ATOMIC_LVL_MASK`] as it does [`CONST_BIT`].
+pub(crate) const ATOMIC_BIT: i64 = 1 << 33;
+
+/// The derivation levels `_Atomic` qualifies (C11 6.7.3), as
+/// [`CONST_LVL_MASK`] counts them; bits 34..37.
+const ATOMIC_LVL_BITS: i64 = 4;
+const ATOMIC_LVL_SHIFT: i64 = 34;
+pub(crate) const ATOMIC_LVL_MASK: i64 = ((1 << ATOMIC_LVL_BITS) - 1) << ATOMIC_LVL_SHIFT;
+
+fn atomic_level_bit(level: i64) -> i64 {
+    if (0..ATOMIC_LVL_BITS).contains(&level) {
+        1 << (ATOMIC_LVL_SHIFT + level)
+    } else {
+        0
+    }
+}
+
+/// The object itself is `_Atomic` (`_Atomic(int *) p`, not `_Atomic int *p`).
+pub(crate) fn is_atomic_object_ty(ty: i64) -> bool {
+    ty & atomic_level_bit(ptr_depth_of(ty)) != 0
+}
+
+pub(crate) fn atomic_unrecorded(ty: i64) -> bool {
+    ty & ATOMIC_BIT != 0
+}
+
+/// The non-atomic version C11 6.3.2.1p2 gives an atomic lvalue's value.
+pub(crate) fn non_atomic_ty(ty: i64) -> i64 {
+    ty & !atomic_level_bit(ptr_depth_of(ty))
+}
+
+/// gcc's and clang's generic atomic functions: link name, declaring slot,
+/// prototype.
+pub(crate) const ATOMIC_LIBCALLS: &[(&str, &str, &str)] = &[
+    (
+        "__atomic_load",
+        "__atomic_load.libcall",
+        "void(size_t, void *, void *, int)",
+    ),
+    (
+        "__atomic_store",
+        "__atomic_store.libcall",
+        "void(size_t, void *, void *, int)",
+    ),
+    (
+        "__atomic_exchange",
+        "__atomic_exchange.libcall",
+        "void(size_t, void *, void *, void *, int)",
+    ),
+    (
+        "__atomic_compare_exchange",
+        "__atomic_compare_exchange.libcall",
+        "_Bool(size_t, void *, void *, void *, int, int)",
+    ),
+];
+
+/// How an `_Atomic` object is reached: the instructions over this many
+/// bytes, a spin on the lock word at this offset, or [`ATOMIC_LIBCALLS`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AtomicAccess {
+    Inline(u8),
+    LockWord(usize),
+    Library,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct AtomicLayout {
+    pub(crate) size: usize,
+    pub(crate) align: usize,
+    pub(crate) access: AtomicAccess,
+}
+
+/// An `_Atomic` object over a type of `size` bytes and alignment `align`
+/// (C11 6.2.5p27), laid out as the target's system compiler does: MSVC, and
+/// a freestanding unit, append a lock word as `struct { T v; int lock; }`;
+/// clang rounds below 16 up to a power of two; gcc keeps the size.
+pub(crate) fn atomic_layout(
+    size: usize,
+    align: usize,
+    target: crate::c5::codegen::Target,
+    freestanding: bool,
+) -> AtomicLayout {
+    let inline = |n: usize| AtomicLayout {
+        size: n,
+        align: align.max(n),
+        access: AtomicAccess::Inline(n as u8),
+    };
+    match size {
+        1 | 2 | 4 | 8 => inline(size),
+        _ if freestanding || target.is_windows() => {
+            let lock = round_up(size, 4);
+            let align = align.max(4);
+            AtomicLayout {
+                size: round_up(lock + 4, align),
+                align,
+                access: AtomicAccess::LockWord(lock),
+            }
+        }
+        16 => inline(16),
+        1..16 if target == crate::c5::codegen::Target::MacOSAarch64 => {
+            inline(size.next_power_of_two())
+        }
+        _ => AtomicLayout {
+            size,
+            align,
+            access: AtomicAccess::Library,
+        },
+    }
+}
 
 /// High-bit flag marking a type tag whose base type was spelled `void`.
 /// `void` keeps `unsigned char`'s representation (1-byte `sizeof` under
@@ -317,7 +436,7 @@ pub(crate) const VOID_BIT: i64 = 1 << 28;
 /// classifiers see a `double`; the layout, the load and store kinds and
 /// the identity-sensitive sites ([`is_long_double_ty`]) test the bit.
 ///
-/// Sits above [`SEG_LVL_MASK`]'s 9-bit field (bits 34..43).
+/// Sits above [`SEG_LVL_MASK`] (bits 38..42).
 pub(crate) const LONG_DOUBLE_BIT: i64 = 1 << 43;
 
 /// True when `ty`'s base type was spelled `long double`, at any
@@ -349,8 +468,9 @@ pub(crate) const VOL_LVL_MASK: i64 = ((1 << QUAL_LVL_BITS) - 1) << VOL_LVL_SHIFT
 /// the pointer derivations' own qualifiers, which a rebuilt
 /// aggregate-backed tag carries over while the element's level lives in
 /// the aggregate.
-pub(crate) const QUAL_PTR_LVL_MASK: i64 =
-    (CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT)) | (VOL_LVL_MASK & !(1 << VOL_LVL_SHIFT));
+pub(crate) const QUAL_PTR_LVL_MASK: i64 = (CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT))
+    | (VOL_LVL_MASK & !(1 << VOL_LVL_SHIFT))
+    | (ATOMIC_LVL_MASK & !(1 << ATOMIC_LVL_SHIFT));
 
 /// The qualifiers of the pointer derivations `ty` adds over an array
 /// element of `elem_depth` levels, numbered from level 1 as the
@@ -359,7 +479,9 @@ pub(crate) const QUAL_PTR_LVL_MASK: i64 =
 pub(crate) fn ptr_quals_over_array(ty: i64, elem_depth: i64) -> i64 {
     let rebase = |mask: i64, shift: i64| ((((ty & mask) >> shift) >> elem_depth) << shift) & mask;
     (ty & VOLATILE_BIT)
-        | (rebase(CONST_LVL_MASK, CONST_LVL_SHIFT) | rebase(VOL_LVL_MASK, VOL_LVL_SHIFT))
+        | (rebase(CONST_LVL_MASK, CONST_LVL_SHIFT)
+            | rebase(VOL_LVL_MASK, VOL_LVL_SHIFT)
+            | rebase(ATOMIC_LVL_MASK, ATOMIC_LVL_SHIFT))
             & QUAL_PTR_LVL_MASK
 }
 
@@ -368,9 +490,9 @@ pub(crate) fn ptr_quals_over_array(ty: i64, elem_depth: i64) -> i64 {
 /// [`CONST_LVL_MASK`] and clears it, so no stored tag carries it.
 pub(crate) const CONST_BIT: i64 = 1 << 60;
 
-/// `ty` without the `const` and `volatile` of derivation `level`.
+/// `ty` without the `const`, `volatile` and `_Atomic` of derivation `level`.
 pub(crate) fn unqualified_at_level(ty: i64, level: i64) -> i64 {
-    ty & !(const_level_bit(level) | volatile_level_bit(level))
+    ty & !(const_level_bit(level) | volatile_level_bit(level) | atomic_level_bit(level))
 }
 
 /// The [`CONST_LVL_MASK`] bit for `level`, 0 past the field.
@@ -398,18 +520,20 @@ pub(crate) fn is_const_object_ty(ty: i64) -> bool {
     ty & const_level_bit(ptr_depth_of(ty)) != 0
 }
 
-/// Drop the `const` on the type itself, keeping a pointee's: the
-/// conversion C99 6.3.2.1p2 applies to an lvalue's value, 6.5.4p5 to a
-/// cast's and 6.7.5.3p15 to a parameter's type, as far as the tag
-/// records it exactly. `volatile` stays for the accesses the value
-/// reaches; [`unqualified_version_ty`] drops it as well.
+/// Drop the `const` and the `_Atomic` on the type itself, keeping a
+/// pointee's: the conversion C11 6.3.2.1p2 applies to an lvalue's value,
+/// 6.5.4p5 to a cast's and 6.7.6.3p15 to a parameter's type, as far as
+/// the tag records it exactly. `volatile` stays for the accesses the
+/// value reaches; [`unqualified_version_ty`] drops it as well.
 pub(crate) fn strip_object_const(ty: i64) -> i64 {
-    ty & !const_level_bit(ptr_depth_of(ty))
+    let depth = ptr_depth_of(ty);
+    ty & !(const_level_bit(depth) | atomic_level_bit(depth))
 }
 
-/// The unqualified version of a type (C99 6.2.5p25) as C23 6.7.2.5
-/// `typeof_unqual` names it: no `const` or `volatile` on the type
-/// itself. The segment qualifier is kept. TODO: its lvalue conversion.
+/// The unqualified version of a type (C11 6.2.5p26) as C23 6.7.2.5
+/// `typeof_unqual` names it: no `const`, `volatile` or `_Atomic` on the
+/// type itself. The segment qualifier is kept. TODO: its lvalue
+/// conversion.
 pub(crate) fn unqualified_version_ty(ty: i64) -> i64 {
     let ty = strip_object_const(ty) & !volatile_level_bit(ptr_depth_of(ty));
     exact_volatile_ty(ty)
@@ -499,6 +623,7 @@ pub(crate) fn pointer_conversion_key(ty: i64) -> i64 {
     let depth = ptr_depth_of(ty);
     let outer = const_level_bit(depth)
         | volatile_level_bit(depth)
+        | atomic_level_bit(depth)
         | const_level_bit(depth - 1)
         | volatile_level_bit(depth - 1);
     let ty = ty & !(outer | VOLATILE_BIT | CONST_BIT);
@@ -546,11 +671,11 @@ pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
 /// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
 /// types, so a qualifier on the object itself never takes part in
 /// compatibility. `const` and `volatile` go at every level, the
-/// constraint on a pointee's qualification being undiagnosed (TODO); a
-/// named address space records its level and is dropped only when it
-/// qualifies the object.
+/// constraint on a pointee's qualification being undiagnosed (TODO); an
+/// `_Atomic` and a named address space are dropped only when they
+/// qualify the object, a pointee's being part of its type.
 pub(crate) fn unqualified_object_ty(ty: i64) -> i64 {
-    let ty = ty & !(VOLATILE_MASK | CONST_LVL_MASK);
+    let ty = non_atomic_ty(ty) & !(VOLATILE_MASK | CONST_LVL_MASK);
     if segment_of_object_ty(ty).is_some() {
         ty & !(SEG_MASK | SEG_LVL_MASK)
     } else {
@@ -615,8 +740,8 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 }
 
 /// Drop the qualifier bits (`UNSIGNED_BIT`, `PLAIN_CHAR_BIT`,
-/// `VOLATILE_BIT`, `VOID_BIT`, the segment, `const` and `volatile`
-/// fields, the enumerated-type identity).
+/// `VOLATILE_BIT`, `VOID_BIT`, the segment, `const`, `volatile` and
+/// `_Atomic` fields, the enumerated-type identity).
 /// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
@@ -633,7 +758,9 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
             | VOID_BIT
             | LONG_DOUBLE_BIT
             | CONST_LVL_MASK
-            | CONST_BIT)
+            | CONST_BIT
+            | ATOMIC_LVL_MASK
+            | ATOMIC_BIT)
 }
 
 /// `ty`, declared through an enum tag before its definition and so built on
@@ -684,13 +811,20 @@ pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
 /// The qualifier keywords `ty` records at derivation `level`, each
 /// followed by a space.
 fn level_quals(ty: i64, level: i64) -> &'static str {
-    let is_const = ty & const_level_bit(level) != 0;
-    match (is_const, ty & volatile_level_bit(level) != 0) {
-        (true, true) => "const volatile ",
-        (true, false) => "const ",
-        (false, true) => "volatile ",
-        (false, false) => "",
-    }
+    const SPELLED: [&str; 8] = [
+        "",
+        "const ",
+        "volatile ",
+        "const volatile ",
+        "_Atomic ",
+        "const _Atomic ",
+        "volatile _Atomic ",
+        "const volatile _Atomic ",
+    ];
+    let bit = |b: i64, n: usize| usize::from(ty & b != 0) << n;
+    SPELLED[bit(const_level_bit(level), 0)
+        | bit(volatile_level_bit(level), 1)
+        | bit(atomic_level_bit(level), 2)]
 }
 
 /// The `*` of each pointer level of `ty` in `levels`, each followed by the
@@ -698,7 +832,7 @@ fn level_quals(ty: i64, level: i64) -> &'static str {
 fn qualified_stars(ty: i64, levels: core::ops::Range<usize>) -> alloc::string::String {
     let mut s = alloc::string::String::new();
     for level in levels {
-        if s.ends_with("const") || s.ends_with("volatile") {
+        if s.ends_with("const") || s.ends_with("volatile") || s.ends_with("_Atomic") {
             s.push(' ');
         }
         s.push('*');

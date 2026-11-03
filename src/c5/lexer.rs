@@ -2135,6 +2135,12 @@ impl Lexer {
                     continue;
                 }
                 self.tk = Tok(symbols[self.curr_id_idx].token);
+                if self.tk == Token::TypeQual
+                    && symbols[self.curr_id_idx].name == "_Atomic"
+                    && self.peek_after_whitespace(b'(')
+                {
+                    self.tk = Tok(Token::Atomic as i64);
+                }
                 return Ok(());
             } else if c.is_ascii_digit() {
                 let int_start = self.pos - 1;
@@ -2853,7 +2859,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     ),
     ("__builtin_offsetof", Token::BuiltinOffsetof),
     // Type qualifiers -- consumed everywhere a type qualifier
-    // may appear; no semantic effect.
+    // may appear. `_Atomic` followed by `(` is instead the type
+    // specifier of C11 6.7.2.4.
+    ("_Atomic", Token::TypeQual),
     ("const", Token::TypeQual),
     ("__const", Token::TypeQual),
     ("__const__", Token::TypeQual),
@@ -2909,7 +2917,6 @@ const KEYWORDS: &[(&str, Token)] = &[
     // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
     // under the same token so source using the keyword without the
     // header still parses.
-    ("_Atomic", Token::Atomic),
     ("asm", Token::Asm),
     ("__asm__", Token::Asm),
     ("__asm", Token::Asm),

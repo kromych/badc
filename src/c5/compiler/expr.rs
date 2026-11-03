@@ -5315,6 +5315,14 @@ impl Compiler {
         // a member of a segment-qualified struct is reached through the
         // same segment.
         let obj_ty = if is_dot { lhs_ty } else { pointee_ty(lhs_ty) };
+        // C11 6.5.2.3p5: a member of an atomic structure or union is not
+        // accessed atomically, which is undefined; refused, as clang does.
+        if super::types::is_atomic_object_ty(obj_ty) {
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "accessing a member of an atomic structure or union",
+            ));
+        }
         let obj_seg_bits = object_segment_bits(obj_ty);
         if obj_seg_bits != 0 && segment_of_ty(field.ty).is_some() {
             return Err(self.compile_err(

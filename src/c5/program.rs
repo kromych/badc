@@ -495,6 +495,9 @@ pub struct Program {
     /// declared, in the order it force-included the headers. A re-compile
     /// of the unit force-includes the same headers.
     pub auto_includes: Vec<AutoInclude>,
+    /// `-ffreestanding`: an `_Atomic` object takes the freestanding layout
+    /// ([`crate::c5::compiler::types::atomic_layout`]).
+    pub(crate) freestanding: bool,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
@@ -819,6 +822,7 @@ impl DataOffsets for Program {
             entry_pragma: _,
             default_libs: _,
             auto_includes: _,
+            freestanding: _,
             subsystem: _,
             finished_functions,
             symbols,
@@ -962,6 +966,7 @@ mod data_offset_tests {
             entry_pragma: None,
             default_libs: Vec::new(),
             auto_includes: Vec::new(),
+            freestanding: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,

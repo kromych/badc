@@ -158,6 +158,7 @@ pub(crate) fn walk_program(
                 weak: program.weak_refs_by_name,
                 interposable: program.interposable_refs,
             },
+            program.freestanding,
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the

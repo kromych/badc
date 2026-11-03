@@ -9,9 +9,10 @@
 // provides the rest of the 7.17 surface: the `memory_order`
 // enumeration, the lock-free and flag types, and the atomic typedefs.
 //
-// Each operation is atomic against concurrent access when the object is
-// a naturally-aligned 1-, 2-, 4- or 8-byte scalar; a wider one is
-// rejected at compile time. Load and store carry the order named
+// On an `_Atomic` object of any type the operations take the access its
+// layout gives the operators (doc/std-conformance.md); on an object not
+// declared `_Atomic` they need a naturally-aligned 1-, 2-, 4- or 8-byte
+// scalar or a 16-byte integer. Load and store carry the order named
 // (7.17.1; `consume` is acquire): on aarch64 a relaxed access is a plain
 // `ldr` / `str`, an acquire or seq_cst load `ldar` and a release or
 // seq_cst store `stlr`; on x86-64 a load is a plain `mov` for every

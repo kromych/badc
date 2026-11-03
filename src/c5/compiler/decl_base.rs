@@ -315,16 +315,21 @@ impl Compiler {
         Ok(p)
     }
 
+    /// Whether the cursor is at C11 6.7.2.4's `_Atomic ( type-name )`: the
+    /// keyword followed by `(`, which is the specifier and not the
+    /// qualifier.
+    pub(super) fn lex_is_atomic_specifier(&self) -> bool {
+        self.lex.tk == Token::Atomic
+    }
+
     /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
-    /// current token is `_Atomic` immediately followed by `(`, consume the
-    /// whole specifier and return the inner type-name's type. c5 does not
-    /// model atomicity, so this is the unqualified inner type plus any
-    /// abstract pointer declarator inside the parentheses. Returns `None`
-    /// without consuming when the current token is not this specifier form
-    /// (e.g. the `_Atomic` qualifier). Shared by every base-type parser
-    /// (decl base, file-scope declaration, struct field).
+    /// cursor is at it, consume the whole specifier and return the atomic
+    /// version of the type-name's type, any abstract pointer declarator
+    /// inside the parentheses included. Returns `None` without consuming
+    /// otherwise (e.g. at the `_Atomic` qualifier). Shared by every
+    /// base-type parser (decl base, file-scope declaration, struct field).
     pub(super) fn try_parse_atomic_type_specifier(&mut self) -> Result<Option<i64>, C5Error> {
-        if self.lex.tk != Token::Atomic || !self.lex.peek_after_whitespace(b'(') {
+        if !self.lex_is_atomic_specifier() {
             return Ok(None);
         }
         self.next()?; // _Atomic
@@ -335,7 +340,36 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
         }
         self.next()?; // )
-        Ok(Some(inner))
+        let atomic = apply_qual_bits(inner, super::types::ATOMIC_BIT);
+        self.check_atomic_type(atomic)?;
+        Ok(Some(atomic))
+    }
+
+    /// Record an `_Atomic` type the unit forms, refusing a qualifier past
+    /// the levels the tag records. TODO: those levels.
+    pub(super) fn check_atomic_type(&mut self, ty: i64) -> Result<(), C5Error> {
+        if super::types::is_atomic_object_ty(ty) && !self.atomic_types_formed.contains(&ty) {
+            self.atomic_types_formed.push(ty);
+        }
+        if super::types::atomic_unrecorded(ty) {
+            return Err(self.compile_err(
+                Code::UNSUPPORTED,
+                "an `_Atomic` qualifier on a pointer derivation past the fourth is not supported",
+            ));
+        }
+        Ok(())
+    }
+
+    /// C11 6.7.3p3: `_Atomic` does not qualify an array type, which a base
+    /// type through an array typedef is. TODO: a function type.
+    pub(super) fn check_atomic_base(&self, qual_bits: i64) -> Result<(), C5Error> {
+        if qual_bits & types::ATOMIC_BIT != 0 && self.pending.typedef_base_array_size != 0 {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`_Atomic` qualifies an array type",
+            ));
+        }
+        Ok(())
     }
 
     /// Seed the base-type carriers a declarator through `typeof(type-name)`
@@ -1733,6 +1767,7 @@ impl Compiler {
         match self.symbols[self.lex.curr_id_idx].name.as_str() {
             "volatile" | "__volatile" | "__volatile__" => VOLATILE_BIT,
             "const" | "__const" | "__const__" => CONST_BIT,
+            "_Atomic" => super::types::ATOMIC_BIT,
             "__seg_gs" => SEG_GS_BIT,
             "__seg_fs" => SEG_FS_BIT,
             "__ptr32" => super::types::PTR32_SPACE,
@@ -1751,6 +1786,7 @@ impl Compiler {
     ) -> Result<i64, C5Error> {
         *uptr |= self.symbols[self.lex.curr_id_idx].name == "__uptr";
         let ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+        self.check_atomic_type(ty)?;
         if *uptr && super::types::is_ptr32_ty(ty) {
             return Err(self.compile_err(
                 Code::UNSUPPORTED,
@@ -1909,9 +1945,7 @@ impl Compiler {
             }
             saw_specifier = true;
             // C11 6.7.2.4 `_Atomic ( type-name )` names the type; the
-            // `_Atomic` qualifier below does not. c5 does not model
-            // atomicity, so the declared type is the unqualified inner
-            // type-name.
+            // `_Atomic` qualifier below qualifies the base type.
             if let Some(inner) = self.try_parse_atomic_type_specifier()? {
                 atomic_base = Some(inner);
                 continue;
@@ -2007,7 +2041,10 @@ impl Compiler {
         self.pending.base_enum_tag = enum_tag;
         self.pending.base_implicit_int = implicit_int;
 
-        Ok(apply_qual_bits(bt, qual_bits))
+        self.check_atomic_base(qual_bits)?;
+        let ty = apply_qual_bits(bt, qual_bits);
+        self.check_atomic_type(ty)?;
+        Ok(ty)
     }
 
     /// Clear the side channels one base-type parse writes, so a previous

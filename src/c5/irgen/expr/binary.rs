@@ -65,7 +65,7 @@ impl<'a> Walker<'a> {
     /// the widest of the common type and the two operand types. `None`
     /// for a non-divide op or a type wider than a register, which keep
     /// the divide.
-    pub(super) fn divmod_operand_width(
+    pub(in super::super) fn divmod_operand_width(
         &self,
         op: BinOp,
         ty: i64,
@@ -105,7 +105,13 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn operand_mask(&self, op: BinOp, ty: i64, lhs: ExprId, rhs: ExprId) -> i64 {
+    pub(in super::super) fn operand_mask(
+        &self,
+        op: BinOp,
+        ty: i64,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> i64 {
         super::super::types::const_operand_mask(self.ast, self.target, op, ty, (lhs, rhs))
     }
 
@@ -124,7 +130,13 @@ impl<'a> Walker<'a> {
     /// any f64 operand promotes the op and widens the other (6.3.1.5).
     /// The builder's f32 markers decide, not the operands' C types,
     /// which an intervening widening can leave behind.
-    fn walk_fp_binop(&self, b: &mut SsaBuilder, op: BinOp, lv: ValueId, rv: ValueId) -> ValueId {
+    pub(in super::super) fn walk_fp_binop(
+        &self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lv: ValueId,
+        rv: ValueId,
+    ) -> ValueId {
         if b.is_f32(lv) && b.is_f32(rv) {
             let res = b.binop(op, lv, rv);
             // A comparison produces an `int`, so only arithmetic is
@@ -279,7 +291,7 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         op: BinOp,
-        mut lv: ValueId,
+        lv: ValueId,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
@@ -288,13 +300,32 @@ impl<'a> Walker<'a> {
         let mask = self.operand_mask(op, ty, lhs, rhs);
         // An operand needing a mask takes the register path, since the
         // immediate fast paths skip the masking below.
-        let imm_safe_op = imm_safe_binop(op) && mask == 0;
-        if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(rhs) {
+        if imm_safe_binop(op)
+            && mask == 0
+            && let Expr::IntLit { val, .. } = self.ast.expr(rhs)
+        {
             return Ok(b.binop_imm(op, lv, *val));
         }
-        let mut rv = self.walk_expr_rvalue(b, rhs)?;
-        if imm_safe_op && let Some(v) = Self::binop_imm_form(b, op, lv, rv) {
-            return Ok(v);
+        let rv = self.walk_expr_rvalue(b, rhs)?;
+        Ok(Self::int_binop_values(b, op, lv, rv, width, mask))
+    }
+
+    /// Integer `lv op rv` over walked operands, under the divisor width
+    /// and the operand mask [`Self::divmod_operand_width`] and
+    /// [`Self::operand_mask`] give.
+    pub(in super::super) fn int_binop_values(
+        b: &mut SsaBuilder,
+        op: BinOp,
+        mut lv: ValueId,
+        mut rv: ValueId,
+        width: Option<u32>,
+        mask: i64,
+    ) -> ValueId {
+        if imm_safe_binop(op)
+            && mask == 0
+            && let Some(v) = Self::binop_imm_form(b, op, lv, rv)
+        {
+            return v;
         }
         if mask != 0 {
             lv = b.binop_imm(BinOp::And, lv, mask);
@@ -305,9 +336,9 @@ impl<'a> Walker<'a> {
         if let Some(w) = width
             && let Some(reduced) = b.divmod_const(op, lv, rv, w)
         {
-            return Ok(reduced);
+            return reduced;
         }
-        Ok(b.binop(op, lv, rv))
+        b.binop(op, lv, rv)
     }
 
     /// C99 6.5.16.1 assignment to a bitfield member.
@@ -345,6 +376,10 @@ impl<'a> Walker<'a> {
         rhs: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
+        let lhs_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
+        if is_atomic_object_ty(lhs_ty) {
+            return self.walk_atomic_assign(b, lhs, rhs, lhs_ty);
+        }
         // C99 6.5.16.1p1: a struct-typed assignment copies the bytes.
         // Both sides are address producers, and the expression's value
         // is the destination address.
@@ -448,6 +483,10 @@ impl<'a> Walker<'a> {
         op_ty: i64,
         nsw: bool,
     ) -> Result<ValueId, WalkError> {
+        let lhs_ty = expr_ty(self.ast.expr(lhs)).unwrap_or(ty);
+        if is_atomic_object_ty(lhs_ty) {
+            return self.walk_atomic_compound_assign(b, op, lhs, rhs, lhs_ty, op_ty);
+        }
         if self.is_int128_value_ty(ty) {
             return self.walk_int128_compound_assign(b, op, lhs, rhs, ty, op_ty);
         }

@@ -29,6 +29,7 @@ fn walk(
         false,
         true,
         Default::default(),
+        false,
     )
     .map(|(func, _)| func)
 }

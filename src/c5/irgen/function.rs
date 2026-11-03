@@ -13,6 +13,7 @@ use crate::c5::compiler::{StructDef, StructReturnAbi};
 /// threaded through the SSA emit so the post-link codegen resolves
 /// call-site fixups against the identifier the linker rebased. Returns
 /// the function and its filter funclets.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
     fun: &FinishedFunction,
     symbols: &[Symbol],
@@ -21,6 +22,7 @@ pub(crate) fn walk_function(
     optimize: bool,
     jump_tables: bool,
     named_refs: super::NamedRefs,
+    freestanding: bool,
 ) -> Result<(FunctionSsa, alloc::vec::Vec<FunctionSsa>), WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
@@ -84,6 +86,7 @@ pub(crate) fn walk_function(
         optimize,
         jump_tables,
         named_refs,
+        freestanding,
     };
     let terminated = match ast.body {
         Some(root) => {

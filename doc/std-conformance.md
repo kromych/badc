@@ -17,9 +17,9 @@ says nothing, badc follows C17. It records:
   - [Types and sizes](#types-and-sizes)
   - [`long double`](#long-double)
   - [Floating-point contraction](#floating-point-contraction)
+  - [`_Atomic` objects](#_atomic-objects)
   - [Standard predefined macros](#standard-predefined-macros)
 - [Divergences](#divergences)
-  - [`_Atomic` objects are accessed without atomicity](#_atomic-objects-are-accessed-without-atomicity)
   - [Features not implemented](#features-not-implemented)
   - [An inline definition serves the calls of its unit](#an-inline-definition-serves-the-calls-of-its-unit)
   - [`-O` defines `NDEBUG`](#-o-defines-ndebug)
@@ -120,6 +120,45 @@ the product has no other use.
 `#pragma STDC FENV_ACCESS` and `#pragma STDC CX_LIMITED_RANGE` are accepted
 and have no effect.
 
+### `_Atomic` objects
+
+`_Atomic` qualifies a type (C17 6.7.2.4, 6.7.3), so `_Atomic int` and `int`
+are different types: a pointer to one does not convert to a pointer to the
+other without a cast, as under gcc and clang. Reading an `_Atomic` object,
+assigning to it, `++`, `--` and compound assignment are seq_cst atomic
+operations (C17 6.2.6.1p9, 6.5.2.4p2, 6.5.16.2p3). They take the lowering of
+the `<stdatomic.h>` functions ([C11 and C23](#c11-and-c23)):
+
+- An object of 1, 2, 4 or 8 bytes, a structure included, is aligned to its
+  size. A read is a load (`mov` on x86-64, `ldar` on AArch64) and an assignment
+  a store (`xchg`, `stlr`). `++`, `--`, `+=`, `-=`, `&=`, `|=` and `^=` on an
+  integer or a pointer are one locked instruction or one LSE instruction. Any
+  other update is a compare-exchange retried after a load: `*=`, `/=`, `%=`, a
+  shift, a floating object, a `_Bool`, and an operation carried out in a
+  floating type.
+- An object of 16 bytes takes the paired compare-exchange (`cmpxchg16b`,
+  `casp`) on Linux and macOS.
+- Other sizes take the layout and the access of the target's system compiler.
+  The layout follows when the type is complete; `sizeof` and `_Alignof` report
+  it.
+
+  | target | layout | access |
+  |---|---|---|
+  | Linux (gcc) | the type's size and alignment | `__atomic_load`, `__atomic_store`, `__atomic_exchange` and `__atomic_compare_exchange`, gcc's and clang's generic functions. A libatomic on the link line supplies them, or else badc's runtime does: it holds one of 1024 spin locks, chosen by the object's address, around each copy |
+  | macOS (clang) | a size below 16 rounds up to a power of two, which the instructions above access; a larger one keeps its size | above 16 bytes, as on Linux |
+  | Windows (MSVC) | `round_up(n, 4) + 4` bytes aligned to at least 4: a 4-byte lock word follows the value, as in `struct { T v; int lock; }`. 16 bytes take this layout too | the code badc emits spins on the lock word |
+
+A unit compiled with `-ffreestanding` or `-fno-hosted` takes the Windows
+layout and access on every target, so a freestanding image needs no runtime
+function for its atomic objects. A freestanding unit and a hosted one lay out
+such an object differently and cannot share it. MSVC does not document the
+values of its lock word, so an `_Atomic` object of a size other than 1, 2, 4
+or 8 bytes cannot be shared with code MSVC compiled.
+
+An automatic object with a lock word starts with the lock clear. No array type
+and no bit-field is `_Atomic`. A member of an atomic structure or union is not
+accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
+
 ### Standard predefined macros
 
 | macro                                   | value                                                                     |
@@ -134,19 +173,10 @@ and have no effect.
 
 `-ffreestanding` also implies `-fno-builtin`. `--freestanding`, the link
 option that leaves out the startup runtime, does not change
-`__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` stays undefined although `_Atomic`
-objects are not yet atomic; see [Divergences](#divergences).
+`__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` is undefined: `_Atomic` objects are
+atomic ([`_Atomic` objects](#_atomic-objects)).
 
 ## Divergences
-
-### `_Atomic` objects are accessed without atomicity
-
-The `_Atomic` qualifier and the `_Atomic(type-name)` specifier (C11 6.7.2.4,
-6.7.3) are accepted and reduce to the unqualified type. A load, a store, a
-compound assignment or `++` / `--` on an `_Atomic` object is an ordinary
-access, where C11 6.5.2.4p2 and 6.5.16.2p3 require an atomic operation.
-`__STDC_NO_ATOMICS__` is not defined. The `<stdatomic.h>` functions and the
-`__atomic_*` and `__sync_*` builtins are atomic ([C11 and C23](#c11-and-c23)).
 
 ### Features not implemented
 
@@ -366,9 +396,11 @@ model; only `-fgnu89-inline` does.
     libSystem is linked when nothing else pulls it in.
 - C11 7.17 atomics through `<stdatomic.h>`. The non-`_explicit` functions are
   bound with `#pragma intrinsic`; the `_explicit` forms and the fences map to
-  the `__atomic_*` builtins. The object is a scalar of 1, 2, 4 or 8 bytes, or a
-  16-byte integer. A structure or union, or an object in a named address space,
-  is rejected at compile time. Each operation carries the order it names
+  the `__atomic_*` builtins. On an `_Atomic` object of any type an operation
+  takes the access the operators do ([`_Atomic` objects](#_atomic-objects)).
+  On another object, the object is a scalar of 1, 2, 4 or 8 bytes, or a 16-byte
+  integer. An object in a named address space is rejected at compile time.
+  Each operation carries the order it names
   (7.17.1). `consume` is treated as acquire. An order the operation may not
   take (7.17.7.1p2, 7.17.7.2p2), or one that is not a constant, is treated as
   seq_cst. `atomic_compare_exchange_weak` is the strong form. `atomic_flag` is

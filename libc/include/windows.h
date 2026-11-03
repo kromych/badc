@@ -2050,6 +2050,59 @@ BOOLEAN RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
                             DWORD64 BaseAddress);
 BOOLEAN RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
 
+// winnt.h's Interlocked names: the compiler's `_Interlocked` intrinsics,
+// full barriers on both targets. InterlockedAdd is arm64's intrinsic and,
+// on x64, the exchange-add plus the operand, as winnt.h defines it there.
+#define InterlockedIncrement _InterlockedIncrement
+#define InterlockedIncrement16 _InterlockedIncrement16
+#define InterlockedIncrement64 _InterlockedIncrement64
+#define InterlockedDecrement _InterlockedDecrement
+#define InterlockedDecrement16 _InterlockedDecrement16
+#define InterlockedDecrement64 _InterlockedDecrement64
+#define InterlockedExchange _InterlockedExchange
+#define InterlockedExchange8 _InterlockedExchange8
+#define InterlockedExchange16 _InterlockedExchange16
+#define InterlockedExchange64 _InterlockedExchange64
+#define InterlockedExchangeAdd _InterlockedExchangeAdd
+#define InterlockedExchangeAdd8 _InterlockedExchangeAdd8
+#define InterlockedExchangeAdd16 _InterlockedExchangeAdd16
+#define InterlockedExchangeAdd64 _InterlockedExchangeAdd64
+#define InterlockedCompareExchange _InterlockedCompareExchange
+#define InterlockedCompareExchange16 _InterlockedCompareExchange16
+#define InterlockedCompareExchange64 _InterlockedCompareExchange64
+#define InterlockedCompareExchange128 _InterlockedCompareExchange128
+#define InterlockedAnd _InterlockedAnd
+#define InterlockedAnd8 _InterlockedAnd8
+#define InterlockedAnd16 _InterlockedAnd16
+#define InterlockedAnd64 _InterlockedAnd64
+#define InterlockedOr _InterlockedOr
+#define InterlockedOr8 _InterlockedOr8
+#define InterlockedOr16 _InterlockedOr16
+#define InterlockedOr64 _InterlockedOr64
+#define InterlockedXor _InterlockedXor
+#define InterlockedXor8 _InterlockedXor8
+#define InterlockedXor16 _InterlockedXor16
+#define InterlockedXor64 _InterlockedXor64
+#define InterlockedExchangePointer _InterlockedExchangePointer
+#define InterlockedCompareExchangePointer _InterlockedCompareExchangePointer
+#define InterlockedBitTestAndSet _interlockedbittestandset
+#define InterlockedBitTestAndReset _interlockedbittestandreset
+#define InterlockedBitTestAndSet64 _interlockedbittestandset64
+#define InterlockedBitTestAndReset64 _interlockedbittestandreset64
+#ifdef __aarch64__
+#define InterlockedAdd _InterlockedAdd
+#define InterlockedAdd64 _InterlockedAdd64
+#else
+static __inline LONG InterlockedAdd(LONG volatile *Addend, LONG Value)
+{
+    return _InterlockedExchangeAdd(Addend, Value) + Value;
+}
+static __inline LONG64 InterlockedAdd64(LONG64 volatile *Addend, LONG64 Value)
+{
+    return _InterlockedExchangeAdd64(Addend, Value) + Value;
+}
+#endif
+
 // CreateThread returns a thread HANDLE (kernel object). Args
 // mirror the Win32 prototype: lpThreadAttributes, dwStackSize,
 // lpStartAddress, lpParameter, dwCreationFlags, lpThreadId.

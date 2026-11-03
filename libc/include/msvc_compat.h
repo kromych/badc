@@ -212,18 +212,4 @@ static int getpid(void) {
 // that uses the macro to mark its own functions; the visibility
 // check is what matters.
 
-// `InterlockedCompareExchange` is not an export on
-// modern Windows (Server 2019 / 2022 / 2025) -- in MSVC it's a
-// compiler intrinsic (`_InterlockedCompareExchange` from
-// <intrin.h>) that lowers inline to `lock cmpxchg`. A PE that
-//
-// The non-atomic implementation is *fine* for the single-threaded.
-static int InterlockedCompareExchange(
-    int volatile *dest, int exchange, int comparand
-) {
-    int original = *dest;
-    if (original == comparand) *dest = exchange;
-    return original;
-}
-
 #endif /* _WIN32 */

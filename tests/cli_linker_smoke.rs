@@ -354,7 +354,8 @@ fn windows_sdk_includes() -> Vec<PathBuf> {
 /// emits the `FORCEINLINE` helpers it references and merges them at link
 /// with the other's, so `RtlSecureZeroMemory` and `HandleToULong` are one
 /// function each across the program, and drops the rest along with what
-/// they call.
+/// they call. winnt.h's `InterlockedCompareExchange` over a `LONG volatile *`
+/// reaches the intrinsic, with nothing of msvc_compat.h's in its way.
 #[cfg(windows)]
 #[test]
 fn two_units_including_the_sdk_windows_h_link_and_run() {
@@ -383,8 +384,11 @@ fn two_units_including_the_sdk_windows_h_link_and_run() {
         &dir,
         "b.c",
         "#include <windows.h>\n\
+         static LONG volatile word = 3;\n\
          int b_side(PVOID (**zero)(PVOID, SIZE_T), unsigned long (*conv)(const void *)) {\n\
          *zero = RtlSecureZeroMemory;\n\
+         if (InterlockedCompareExchange(&word, 9, 3) != 3 || word != 9) return 1;\n\
+         if (InterlockedIncrement(&word) != 10 || InterlockedExchangeAdd(&word, 5) != 10) return 1;\n\
          return conv != HandleToULong || HandleToULong((HANDLE)(ULONG_PTR)7) != 7;\n\
          }\n",
     );

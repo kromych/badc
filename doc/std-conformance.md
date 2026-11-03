@@ -638,7 +638,13 @@ registers under either compiler.
   unreferenced. `__inline`, `_inline` and `__forceinline` (`always_inline`)
   are its keywords. On x64 the string intrinsics `__stosb`, `__stosw`,
   `__stosd`, `__stosq`, `__movsb`, `__movsw`, `__movsd` and `__movsq` lower
-  to `rep stos` and `rep movs`.
+  to `rep stos` and `rep movs`. The `_Interlocked` intrinsics are each one
+  atomic instruction, `lock`-prefixed on x64 and the FEAT_LSE form on arm64
+  (cl's under `/arch:armv8.1`; its default calls out-of-line helpers), with
+  the `_acq`, `_rel` and `_nf` orders there; `<windows.h>` maps winnt.h's
+  Interlocked names onto them. MSVC's `_InterlockedMax`, `_InterlockedMin`,
+  `_InterlockedUMax`, `_InterlockedUMin` and `_InterlockedNand` families
+  are not provided.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is
   opt-in per translation unit with `-include msvc_compat.h`.

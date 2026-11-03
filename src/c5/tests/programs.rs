@@ -1716,6 +1716,168 @@ fn msvc_instruction_intrinsics_encode_their_instructions() {
     }
 }
 
+/// Each `_Interlocked` intrinsic of the compare-exchange, exchange,
+/// exchange-add, increment, decrement, and, or and xor families, at every
+/// width it has, is one atomic instruction, as cl emits them: on x64 a
+/// `lock` cmpxchg or xadd, or xchg, with a cmpxchg loop where an and, or or
+/// xor returns the old value; on arm64 the FEAT_LSE form cl emits under
+/// /arch:armv8.1, acquire and release for the full barrier, acquire alone
+/// for `_acq`, release alone for `_rel` and neither for `_nf`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn msvc_interlocked_intrinsics_encode_atomic_instructions() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let object = |src: &str, t: Target| {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), t, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}\n{src}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        crate::emit_native_with_options(&program, t, opts).unwrap_or_else(|e| panic!("{t:?}: {e}"))
+    };
+    // (family, operands, x64 opcode after the prefixes for 1 byte and
+    // wider, x64 lock prefix, arm64 operation bits).
+    const CAS: u32 = 0x08a0_7c00;
+    const LSE: u32 = 0x3820_0000;
+    let families: [(&str, usize, u8, u8, bool, u32); 8] = [
+        ("CompareExchange", 3, 0xb0, 0xb1, true, CAS),
+        ("Exchange", 2, 0x86, 0x87, false, LSE | 0x8000),
+        ("ExchangeAdd", 2, 0xc0, 0xc1, true, LSE),
+        ("Increment", 1, 0xc0, 0xc1, true, LSE),
+        ("Decrement", 1, 0xc0, 0xc1, true, LSE),
+        ("And", 2, 0xb0, 0xb1, true, LSE | 0x1000),
+        ("Or", 2, 0xb0, 0xb1, true, LSE | 0x3000),
+        ("Xor", 2, 0xb0, 0xb1, true, LSE | 0x2000),
+    ];
+    let widths: [(&str, &str, u32); 4] = [
+        ("8", "char", 1),
+        ("16", "short", 2),
+        ("", "long", 4),
+        ("64", "long long", 8),
+    ];
+    // Whether `lock`, then 0x66 / REX prefixes saying the width, then the
+    // opcode (0x0f-escaped but for xchg) occur in `code`.
+    let x64_has = |code: &[u8], lock: bool, width: u32, op: u8| {
+        let opcode: &[u8] = if op & 0xfe == 0x86 {
+            &[op]
+        } else {
+            &[0x0f, op]
+        };
+        (0..code.len()).any(|i| {
+            let mut at = i;
+            if lock {
+                if code[at] != 0xf0 {
+                    return false;
+                }
+                at += 1;
+            }
+            let (mut opsize, mut rex_w) = (false, false);
+            while let Some(&b) = code.get(at) {
+                match b {
+                    0x66 => opsize = true,
+                    0x40..=0x4f => rex_w |= b & 8 != 0,
+                    _ => break,
+                }
+                at += 1;
+            }
+            code[at..].starts_with(opcode) && opsize == (width == 2) && rex_w == (width == 8)
+        })
+    };
+    for (family, operands, op_byte, op_wide, lock, arm64_op) in families {
+        for (suffix, ty, width) in widths {
+            if width == 1 && matches!(family, "Increment" | "Decrement") {
+                continue;
+            }
+            let args = ["p", "a", "b"][..operands].join(", ");
+            let call = |order: &str| {
+                format!(
+                    "{ty} f({ty} volatile *p, {ty} a, {ty} b) \
+                     {{ (void)a; (void)b; return _Interlocked{family}{suffix}{order}({args}); }}\n"
+                )
+            };
+            let x64 = object(&call(""), Target::WindowsX64);
+            let op = if width == 1 { op_byte } else { op_wide };
+            assert!(
+                x64_has(&x64, lock, width, op),
+                "x64 _Interlocked{family}{suffix}: lock={lock} {op:02x}"
+            );
+            let size = match width {
+                1 => 0u32,
+                2 => 1,
+                4 => 2,
+                _ => 3,
+            };
+            for (order, acquire, release) in [
+                ("", true, true),
+                ("_acq", true, false),
+                ("_rel", false, true),
+                ("_nf", false, false),
+            ] {
+                let bits = if arm64_op == CAS {
+                    u32::from(acquire) << 22 | u32::from(release) << 15
+                } else {
+                    u32::from(acquire) << 23 | u32::from(release) << 22
+                };
+                let want = arm64_op | size << 30 | bits;
+                let obj = object(&call(order), Target::WindowsAarch64);
+                let (words, _) = obj.as_chunks::<4>();
+                assert!(
+                    words
+                        .iter()
+                        .any(|w| u32::from_le_bytes(*w) & 0xffe0_fc00 == want),
+                    "arm64 _Interlocked{family}{suffix}{order}: {want:08x}"
+                );
+            }
+        }
+    }
+    // The pointer forms take the doubleword encodings.
+    let pointers = "void *x(void *volatile *p, void *a) { return _InterlockedExchangePointer(p, a); }\n\
+                    void *c(void *volatile *p, void *a, void *b) \
+                    { return _InterlockedCompareExchangePointer(p, a, b); }\n";
+    let x64 = object(pointers, Target::WindowsX64);
+    assert!(x64_has(&x64, false, 8, 0x87) && x64_has(&x64, true, 8, 0xb1));
+    let obj = object(pointers, Target::WindowsAarch64);
+    let (words, _) = obj.as_chunks::<4>();
+    for want in [0xf8e0_8000u32, 0xc8e0_fc00] {
+        assert!(
+            words
+                .iter()
+                .any(|w| u32::from_le_bytes(*w) & 0xffe0_fc00 == want),
+            "arm64 pointer form: {want:08x}"
+        );
+    }
+}
+
+/// msvc_compat.h defines no Interlocked function of its own: with it and
+/// `<windows.h>`, `InterlockedCompareExchange` over a `LONG volatile *` is
+/// the intrinsic, on both PE targets.
+#[test]
+fn msvc_compat_leaves_interlocked_to_the_intrinsics() {
+    use crate::{CompileOptions, Target};
+    let src = "#include <windows.h>\n\
+               LONG f(LONG volatile *p) { return InterlockedCompareExchange(p, 1, 0); }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_force_includes(vec!["msvc_compat.h".into()]);
+        let program = crate::Compiler::with_options(src.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        assert!(
+            !program
+                .symbols
+                .iter()
+                .any(|s| s.name == "InterlockedCompareExchange"),
+            "{t:?}"
+        );
+    }
+}
+
 #[test]
 fn msvc_intrinsics_check_their_operands() {
     use crate::Target;

@@ -143,6 +143,7 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.drop_operand_array_decay();
             self.unevaluated(|c| c.expr_or_void(lev))?;
+            self.take_register_decay(self.ast_acc);
             // C99 6.5.3.4p2: an operand of variable-length array type is
             // evaluated -- a cast in it stores the size -- and the size read
             // at run time.

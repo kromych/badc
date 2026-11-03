@@ -581,6 +581,8 @@ impl Compiler {
             }
             Ok(())
         })?;
+        // A `register` array operand is read for its type, not converted.
+        self.take_register_decay(self.ast_acc);
         let designator = self.value_is_fn_designator();
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the

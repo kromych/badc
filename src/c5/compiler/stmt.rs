@@ -3456,7 +3456,9 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
-        self.with_nesting("statement", |c| c.stmt_inner())
+        let decays = self.register_decays.len();
+        self.with_nesting("statement", |c| c.stmt_inner())?;
+        self.check_register_decays(decays)
     }
 
     fn stmt_inner(&mut self) -> Result<(), C5Error> {

@@ -2872,7 +2872,30 @@ impl Compiler {
         } else {
             self.load_scalar_variable(id_idx, identifier_is_local);
         }
+        if (is_vla_var || is_array_var)
+            && self.symbols[id_idx].binding.register_storage
+            && let Some(id) = self.ast_acc
+        {
+            self.register_decays.push((id, id_idx, self.lex.line));
+        }
         Ok(())
+    }
+
+    /// The `register` arrays (C99 6.3.2.1p3) converted since the parse was
+    /// `since` entries in, not taken by a subscript or read whole by
+    /// `sizeof` or `typeof`: each takes the array's address, which gcc and
+    /// clang reject.
+    pub(super) fn check_register_decays(&mut self, since: usize) -> Result<(), C5Error> {
+        match self.register_decays.get(since) {
+            Some(&(_, sym, line)) => Err(self.register_address_err(sym, line)),
+            None => Ok(()),
+        }
+    }
+
+    /// The operand `id` reads the `register` array it names, for a
+    /// subscript, `sizeof` or `typeof`, which does not convert it.
+    pub(super) fn take_register_decay(&mut self, id: Option<super::super::ast::ExprId>) {
+        self.register_decays.retain(|&(at, ..)| Some(at) != id);
     }
 
     /// The object a declared identifier designates, for
@@ -3265,6 +3288,9 @@ impl Compiler {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
         self.expr_or_void(Token::Inc as i64)?;
+        if let Some(sym) = self.ast_acc.and_then(|id| self.register_object(id)) {
+            return Err(self.register_address_err(sym, self.lex.line));
+        }
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -3361,6 +3387,40 @@ impl Compiler {
             self.pending.object_ref = Some(super::ObjectRef { addr: true, ..r });
         }
         Ok(())
+    }
+
+    /// The `register` object the lvalue `id` designates, or is a member or
+    /// an element of, by its symbol (C99 6.5.3.2p1).
+    fn register_object(&self, id: super::super::ast::ExprId) -> Option<usize> {
+        use super::super::ast::Expr;
+        match *self.ast.expr(id) {
+            Expr::Ident {
+                sym, class, val, ..
+            } if class == Token::Loc as i64 => {
+                let s = &self.symbols[sym as usize];
+                (s.binding.register_storage && s.val == val).then_some(sym as usize)
+            }
+            Expr::Member { obj, .. } if !is_pointer_ty(self.ast.expr_value_ty(obj)) => {
+                self.register_object(obj)
+            }
+            // An element of an array object; a pointer's pointee is elsewhere.
+            Expr::Index { array, .. } => match *self.ast.expr(array) {
+                Expr::Ident { array_size, .. } | Expr::Member { array_size, .. }
+                    if array_size != 0 =>
+                {
+                    self.register_object(array)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// gcc's and clang's error for the address of a `register` object.
+    fn register_address_err(&self, sym: usize, line: usize) -> C5Error {
+        let name = &self.symbols[sym].name;
+        let text = format!("address of `register` object `{name}` requested");
+        self.compile_err_at(Code::INVALID_OPERANDS, line, text)
     }
 
     /// C99 6.5.3.3p1; a GNU vector has its own rule.
@@ -5036,6 +5096,9 @@ impl Compiler {
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
         lhs_ty = base_ty;
+        // gcc subscripts a `register` array, either operand; clang rejects it.
+        self.take_register_decay(array_ast);
+        self.take_register_decay(idx_ast);
         if self.lex.tk == ']' {
             self.next()?;
         } else {

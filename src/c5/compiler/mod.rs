@@ -2391,6 +2391,11 @@ pub struct Compiler {
     /// `va_start` names (C99 7.15.1.4p4): its symbol, its slot, and whether
     /// it was declared `register`.
     current_func_last_param: Option<(usize, i64, bool)>,
+    /// `register` arrays the expressions under parse converted to a
+    /// pointer (C99 6.3.2.1p3), by the node that names each, its symbol and
+    /// line, until a subscript, `sizeof` or `typeof` takes the node whole
+    /// ([`Self::check_register_decays`]).
+    register_decays: Vec<(super::ast::ExprId, usize, usize)>,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
@@ -3230,6 +3235,7 @@ impl Compiler {
             current_func_returns_void: false,
             current_func_variadic: false,
             current_func_last_param: None,
+            register_decays: Vec::new(),
             current_func_conv: crate::c5::codegen::CallConv::Target,
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,

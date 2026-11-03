@@ -624,6 +624,7 @@ impl Compiler {
             self.symbols[param_idx].incomplete_enum_tag = base_enum_tag;
             self.symbols[param_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
             self.symbols[param_idx].binding.maybe_unused = param_maybe_unused;
+            self.symbols[param_idx].binding.register_storage = register;
             self.symbols[param_idx].array_size = 0;
             self.set_decl_site(param_idx);
             // Unconditional write: a regular scalar/pointer

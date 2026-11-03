@@ -424,6 +424,12 @@ impl Compiler {
     /// exit restores. The attributes the item led with are already on
     /// `pending.attrs`.
     pub(super) fn parse_local_decl(&mut self) -> Result<(), C5Error> {
+        let decays = self.register_decays.len();
+        self.parse_local_declarators()?;
+        self.check_register_decays(decays)
+    }
+
+    fn parse_local_declarators(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
@@ -581,6 +587,7 @@ impl Compiler {
             // extern naming an existing entity writes nothing to restore.
             if rebinds_slot {
                 self.save_scope_binding(loc_idx);
+                self.symbols[loc_idx].binding.register_storage = self.pending.saw_register_storage;
             }
             if self.pending.attrs.maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;

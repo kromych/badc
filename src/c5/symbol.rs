@@ -689,6 +689,10 @@ pub(crate) struct BindingInfo {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+
+    /// The object was declared `register` (C99 6.7.1): its address may
+    /// not be taken (6.5.3.2p1), nor an array of it converted (6.3.2.1p3).
+    pub register_storage: bool,
 }
 
 impl BindingInfo {

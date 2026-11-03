@@ -6683,3 +6683,58 @@ fn an_implicit_conversion_that_changes_a_constant_warns() {
         .collect();
     assert_eq!(lines, [13, 16, 17], "{:?}", program.warnings);
 }
+
+/// C99 6.5.3.2p1: the operand of `&` is not declared `register`, nor a
+/// member or element of such an object; 6.3.2.1p3 leaves a `register`
+/// array's conversion to a pointer undefined, and gcc 16 and clang 22
+/// reject it as the same request. gcc takes a `register` array as either
+/// operand of a subscript, which clang rejects; badc does as gcc does, and
+/// each outcome below is gcc 16's. A `register` struct's array member that
+/// converts is gcc's error and not clang's; badc accepts it, as clang does.
+#[test]
+fn the_address_of_a_register_object_is_an_error() {
+    use crate::{CompileOptions, Compiler, Target};
+    let pre = "struct S { int m; int a[2]; };\nvoid use(int *);\n";
+    let compile = |body: &str| {
+        let src = format!("{pre}int f(register int p, int *x, int n) {{ {body} return 0; }}\n");
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src, Target::LinuxX64, opts).compile()
+    };
+    let arr = "register int a[2] = {1, 2};";
+    let st = "register struct S s = {1, {2, 3}};";
+    let ptr = "register int *q = x;";
+    let one = "register int l = 1;";
+    let refused = [
+        ("p", String::from("int *r = &p; (void)r;")),
+        ("l", format!("{one} int *r = &l; (void)r;")),
+        ("l", format!("{one} (void)sizeof &l;")),
+        ("l", format!("{one} __typeof__(&l) r = 0; (void)r;")),
+        ("a", format!("{arr} int *r = a; (void)r;")),
+        ("a", format!("{arr} (void)*a;")),
+        ("a", format!("{arr} (void)(a + 1);")),
+        ("a", format!("{arr} use(a);")),
+        ("a", format!("{arr} (void)sizeof(a + 1);")),
+        ("a", format!("{arr} __typeof__(a + 1) r = 0; (void)r;")),
+        ("a", format!("{arr} (void)_Generic(a, int *: 1, int: 0);")),
+        ("a", format!("{arr} int *r = &a[1]; (void)r;")),
+        ("s", format!("{st} int *r = &s.m; (void)r;")),
+        ("s", format!("{st} int *r = &s.a[1]; (void)r;")),
+    ];
+    for (name, body) in &refused {
+        let err = compile(body).map(|_| ()).expect_err(body).to_string();
+        let want = format!("address of `register` object `{name}` requested");
+        assert!(err.contains(&want), "{body}\n{err}");
+    }
+    let accepted = [
+        format!("{arr} (void)a[0]; (void)(a)[1]; (void)1[a];"),
+        format!("{arr} (void)sizeof a; (void)sizeof(a); (void)sizeof((a));"),
+        format!("{arr} (void)_Alignof(a); (void)__alignof__ a; __typeof__(a) b = {{0}}; (void)b;"),
+        String::from("register int a[2][2] = {{1, 2}, {3, 4}}; (void)a[1][1];"),
+        String::from("register int a[n]; a[0] = 1;"),
+        format!("{st} (void)s.m; (void)s.a[1]; int *r = s.a; (void)r; struct S t = s; (void)t;"),
+        format!("{ptr} (void)q[1]; int *r = &q[1]; r = &*q; (void)r;"),
+    ];
+    for body in &accepted {
+        compile(body).unwrap_or_else(|e| panic!("{body}\n{e}"));
+    }
+}

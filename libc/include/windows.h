@@ -17,6 +17,15 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+// The SDK's winnt.h and mingw-w64's include <ctype.h> and <string.h>; the
+// SDK's ole2.h brings <stdlib.h> unless WIN32_LEAN_AND_MEAN, and
+// mingw-w64's includes it either way.
+#include <ctype.h>
+#include <string.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#include <stdlib.h>
+#endif
+
 // Windows SDK version constants. Real <windows.h> pulls these in so
 // version-gated API selection (condition variables, etc.) resolves.
 #include <sdkddkver.h>

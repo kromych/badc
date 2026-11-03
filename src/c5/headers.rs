@@ -990,6 +990,78 @@ mod tests {
         }
     }
 
+    /// `<windows.h>` alone declares what the SDK's and mingw-w64's bring:
+    /// <ctype.h> and <string.h> always, <stdlib.h> unless
+    /// WIN32_LEAN_AND_MEAN. A unit calling them needs no auto-included
+    /// header, and none of the orders with those headers and
+    /// msvc_compat.h collides.
+    #[test]
+    fn windows_h_brings_the_c_runtime_headers_the_sdk_does() {
+        use crate::{CompileOptions, Compiler, Target};
+        let calls = "unsigned long long f(char *d, const char *s, const wchar_t *w) {\n\
+                     memcpy(d, s, 4); memset(d, 0, 2);\n\
+                     return strlen(s) + wcslen(w) + (unsigned)isalpha(*s); }\n";
+        let stdlib = "void *g(void) { return malloc(8); }\n";
+        let compile = |src: &str, t: Target, force: &[&str]| {
+            let opts = CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_force_includes(force.iter().map(|s| (*s).into()).collect());
+            Compiler::with_options(src.to_string(), t, opts).compile()
+        };
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            let src = alloc::format!("#include <windows.h>\n{calls}{stdlib}");
+            for force in [&[][..], &["msvc_compat.h"]] {
+                let p = compile(&src, t, force).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(
+                    p.warnings.is_empty() && p.notes.is_empty(),
+                    "{t:?} {force:?}: {:?} {:?}",
+                    p.warnings,
+                    p.notes
+                );
+            }
+            let lean = alloc::format!("#define WIN32_LEAN_AND_MEAN\n#include <windows.h>\n{calls}");
+            let p = compile(&lean, t, &[]).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert!(p.notes.is_empty(), "{t:?}: {:?}", p.notes);
+            let lean = alloc::format!("{lean}{stdlib}");
+            let p = compile(&lean, t, &[]).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert!(
+                p.notes.iter().any(|n| n.contains("<stdlib.h>")),
+                "{t:?}: {:?}",
+                p.notes
+            );
+            let headers = [
+                "<string.h>",
+                "<stdlib.h>",
+                "<ctype.h>",
+                "<wchar.h>",
+                "<intrin.h>",
+            ];
+            for first in [true, false] {
+                let mut src = alloc::string::String::new();
+                if first {
+                    src += "#include <windows.h>\n";
+                }
+                for h in headers {
+                    src += &alloc::format!("#include {h}\n");
+                }
+                if !first {
+                    src += "#include <windows.h>\n";
+                }
+                src += calls;
+                src += stdlib;
+                for force in [&[][..], &["msvc_compat.h"]] {
+                    let p = compile(&src, t, force).unwrap_or_else(|e| panic!("{t:?}: {e}\n{src}"));
+                    assert!(
+                        p.warnings.is_empty() && p.notes.is_empty(),
+                        "{t:?} {force:?}: {:?} {:?}\n{src}",
+                        p.warnings,
+                        p.notes
+                    );
+                }
+            }
+        }
+    }
+
     /// On the PE targets `wcstok` is C99's three-argument function, defined by
     /// the runtime rather than bound to msvcrt.dll's two-argument export; the
     /// two-argument form is `_wcstok`, and `wcstok` only under the UCRT's

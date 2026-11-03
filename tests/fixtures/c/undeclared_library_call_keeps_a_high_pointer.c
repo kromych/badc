@@ -5,9 +5,11 @@
 // (C99 6.5.2.2p5), and the address malloc returns from above 4 GiB survives
 // the conversion to an integer. The free address space below 4 GiB is
 // reserved first, so the heap's large block has to come from above it.
+// WIN32_LEAN_AND_MEAN keeps <stdlib.h> out of <windows.h>, as in the SDK.
 // Elsewhere the program exits 0.
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #define FOUR_GIB 0x100000000ULL

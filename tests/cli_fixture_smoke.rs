@@ -1849,6 +1849,77 @@ fn interp_takes_the_target_and_jit_only_the_host() {
     }
 }
 
+// The interpreter's printf reads a `long double` in the target's format --
+// an x87 or binary128 image on the Linux targets, binary64 elsewhere -- and
+// writes `%La` as the target's C library does: the expected text is what the
+// native builds print with glibc, Apple's libc and the UCRT.
+#[test]
+fn interp_prints_long_double_in_the_target_format() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-long-double");
+    let src = dir.join("ld.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         static const long double half[] = {4.5L, -0.25L, 0.5L, 2.5L, 3.5L, -1.5L};\n\
+         static const long double wide[] = {1.96875L, 0x1p+1000L, 1e300, 0x1p-1000L,\n\
+                                            0x1p-1074L, -1e-300};\n\
+         int main(void) {\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%Lf %.0Lf %Lg %d\\n\", half[i], half[i], half[i], i);\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%.6Le %.17Lg\\n\", wide[i], wide[i]);\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%La %.0La|\", wide[i], wide[i]);\n\
+           printf(\"%La %+010.1LA\\n\", half[1], wide[0]);\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let decimal = "4.500000 4 4.5 0\n-0.250000 -0 -0.25 1\n0.500000 0 0.5 2\n\
+                   2.500000 2 2.5 3\n3.500000 4 3.5 4\n-1.500000 -2 -1.5 5\n\
+                   1.968750e+00 1.96875\n1.071509e+301 1.0715086071862673e+301\n\
+                   1.000000e+300 1.0000000000000001e+300\n9.332636e-302 9.3326361850321888e-302\n\
+                   4.940656e-324 4.9406564584124654e-324\n-1.000000e-300 -1e-300\n";
+    let x87 = "0xf.cp-3 0x1p+1|0x8p+997 0x8p+997|0xb.f21e44003acep+993 0xcp+993|\
+               0x8p-1003 0x8p-1003|0x8p-1077 0x8p-1077|-0xa.b70fe17c79ac8p-1000 -0xbp-1000|\
+               -0x8p-5 +0X0F.CP-3\n";
+    let ieee = |tail: &str| {
+        format!(
+            "0x1.f8p+0 0x2p+0|0x1p+1000 0x1p+1000|0x1.7e43c8800759cp+996 0x1p+996|\
+             0x1p-1000 0x1p-1000|0x1p-1074 0x1p-1074|-0x1.56e1fc2f8f359p-997 -0x1p-997|\
+             -0x1p-2 {tail}\n"
+        )
+    };
+    let ucrt = "0x1.f800000000000p+0 0x2p+0|0x1.0000000000000p+1000 0x1p+1000|\
+                0x1.7e43c8800759cp+996 0x1p+996|0x1.0000000000000p-1000 0x1p-1000|\
+                0x0.0000000000001p-1022 0x0p-1022|-0x1.56e1fc2f8f359p-997 -0x1p-997|\
+                -0x1.0000000000000p-2 +0X02.0P+0\n";
+    for (target, hex) in [
+        ("linux-x64", x87.to_string()),
+        ("linux-aarch64", ieee("+0X02.0P+0")),
+        // Apple's libc rounds a tail of 8 followed by an even digit down.
+        ("macos-aarch64", ieee("+0X01.FP+0")),
+        ("windows-x64", ucrt.to_string()),
+        ("windows-arm64", ucrt.to_string()),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            format!("{decimal}{hex}"),
+            "{spec}"
+        );
+    }
+}
+
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
 #[test]
 fn in_process_runs_keep_a_64k_alignment() {

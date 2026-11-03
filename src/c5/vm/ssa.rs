@@ -114,9 +114,9 @@ struct Memory {
     /// Base of the stdio block ([`STDIO_ERRNO`]), the first heap
     /// allocation.
     stdio: usize,
-    /// Width in bytes of the interpreted target's `long`, which the
-    /// library shims read an `l`-sized argument at: 4 under LLP64.
-    long_bytes: u8,
+    /// The interpreted target, whose `long` and `long double` formats and
+    /// libc conventions the library shims follow.
+    target: crate::c5::codegen::Target,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -150,7 +150,7 @@ impl AccessKind {
 }
 
 impl Memory {
-    fn new(data: &[u8]) -> Self {
+    fn new(data: &[u8], target: crate::c5::codegen::Target) -> Self {
         // Reserve a fixed 256 KiB stack region + 256 KiB heap.
         // C99 doesn't pin either limit; this sizing fits every
         // cargo fixture today.
@@ -173,7 +173,7 @@ impl Memory {
             next_alloc_id: 1,
             track_pointers: false,
             stdio: 0,
-            long_bytes: 8,
+            target,
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -670,8 +670,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
-    let mut mem = Memory::new(&data_with_argv).with_track_pointers(track_pointers);
-    mem.long_bytes = target.long_width_bytes() as u8;
+    let mut mem = Memory::new(&data_with_argv, target).with_track_pointers(track_pointers);
     // `__attribute__((constructor))` functions run before the entry, in
     // the native `.init_array` order the caller already sorted. An
     // `exit()` from a constructor short-circuits to the exit status.
@@ -2175,6 +2174,8 @@ struct PrintfSpec {
     width: Option<usize>,
     precision: Option<usize>,
     len: ArgLen,
+    /// `L`: a floating conversion's argument is a `long double`.
+    long_double: bool,
     conv: u8,
 }
 
@@ -2216,6 +2217,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             width: None,
             precision: None,
             len: ArgLen::Int,
+            long_double: false,
             conv: 0,
         };
         while let Some(&f) = fmt.get(i) {
@@ -2269,7 +2271,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             Some(b'l') => {
                 i += 1;
                 // `l` names the target's `long`, 32 bits under LLP64.
-                s.len = if mem.long_bytes == 4 {
+                s.len = if mem.target.long_width_bytes() == 4 {
                     ArgLen::Int
                 } else {
                     ArgLen::Long
@@ -2280,6 +2282,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 }
             }
             Some(b'j') | Some(b'z') | Some(b't') | Some(b'L') => {
+                s.long_double = fmt[i] == b'L';
                 i += 1;
                 s.len = ArgLen::Long;
             }
@@ -2360,24 +2363,29 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 let v = next_arg(&mut arg_idx)? as u64;
                 push_padded(&mut out, &s, format!("0x{v:x}").as_bytes());
             }
-            b'f' | b'F' | b'e' | b'E' | b'g' | b'G' => {
-                let v = f64::from_bits(next_arg(&mut arg_idx)? as u64);
-                let body = format_float(v, &s);
-                push_int(
-                    &mut out,
-                    &s,
-                    if v.is_sign_negative() && !v.is_nan() {
-                        "-"
-                    } else if s.plus {
-                        "+"
-                    } else if s.space {
-                        " "
-                    } else {
-                        ""
-                    },
-                    &body,
-                    false,
-                );
+            b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
+                let raw = next_arg(&mut arg_idx)?;
+                let (v, hex) = float_arg(mem, raw, s.long_double)?;
+                let sign = if v.is_sign_negative() && !v.is_nan() {
+                    "-"
+                } else if s.plus {
+                    "+"
+                } else if s.space {
+                    " "
+                } else {
+                    ""
+                };
+                let (prefix, body) = match hex {
+                    Some(h) if matches!(conv, b'a' | b'A') => {
+                        let radix = if conv == b'A' { "0X" } else { "0x" };
+                        let body = format_hex(h, &s, HexStyle::of(mem.target));
+                        (format!("{sign}{radix}"), body)
+                    }
+                    _ => (sign.into(), format_float(v, &s)),
+                };
+                // The `0` flag does not pad an infinity or NaN (7.19.6.1p6).
+                s.zero &= v.is_finite();
+                push_int(&mut out, &s, &prefix, &body, false);
             }
             b'n' => {
                 // Store the byte count written so far (7.19.6.1p8).
@@ -2424,8 +2432,12 @@ fn push_padded(out: &mut Vec<u8>, s: &PrintfSpec, body: &[u8]) {
 /// (7.19.6.1p6).
 fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_zero: bool) {
     let mut digits = alloc::string::String::from(digits);
+    let floating = matches!(
+        s.conv,
+        b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A'
+    );
     if let Some(p) = s.precision
-        && !matches!(s.conv, b'f' | b'F' | b'e' | b'E' | b'g' | b'G')
+        && !floating
     {
         if is_zero && p == 0 {
             digits.clear();
@@ -2436,9 +2448,7 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
     }
     let body_len = prefix.len() + digits.len();
     let pad = s.width.unwrap_or(0).saturating_sub(body_len);
-    let zero_pad = s.zero
-        && !s.minus
-        && (matches!(s.conv, b'f' | b'F' | b'e' | b'E' | b'g' | b'G') || s.precision.is_none());
+    let zero_pad = s.zero && !s.minus && (floating || s.precision.is_none());
     if zero_pad {
         out.extend_from_slice(prefix.as_bytes());
         out.resize(out.len() + pad, b'0');
@@ -2459,7 +2469,7 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
 /// (7.19.6.1p8); the caller prepends the sign and applies the
 /// field width. Uppercase conversions upper-case the result.
 fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
-    let upper = matches!(s.conv, b'F' | b'E' | b'G');
+    let upper = matches!(s.conv, b'F' | b'E' | b'G' | b'A');
     if v.is_nan() {
         return if upper { "NAN".into() } else { "nan".into() };
     }
@@ -2530,6 +2540,160 @@ fn decimal_exponent(av: f64, prec: usize) -> i32 {
     raw.split_once('e')
         .and_then(|(_, e)| e.parse().ok())
         .unwrap_or(0)
+}
+
+/// A finite value as `%a` writes it: leading hex digit `sig >> 4 * width`,
+/// `width` fraction digits below it, scaled by `2^exp`.
+#[derive(Clone, Copy)]
+struct HexForm {
+    sig: u128,
+    width: u32,
+    exp: i32,
+}
+
+/// The value of a floating argument `raw`: binary64 bits, or under `L`
+/// where `long double` is wider, the address of its 16-byte image. The
+/// interpreter computes `long double` in binary64, so narrowing an image
+/// it built is exact; the decimal conversions format any other image
+/// rounded to binary64. The `%a` form keeps the argument's own digits and
+/// is `None` for an infinity or NaN.
+fn float_arg(mem: &Memory, raw: i64, long_double: bool) -> Result<(f64, Option<HexForm>), C5Error> {
+    use crate::c5::codegen::LongDoubleKind;
+    let wide = if long_double {
+        mem.target.long_double()
+    } else {
+        LongDoubleKind::F64
+    };
+    let addr = usize::try_from(raw)
+        .map_err(|_| C5Error::Runtime(format!("vm_ssa: printf %L: bad ptr 0x{raw:x}")));
+    let (bits, sig, width, exp) = match wide {
+        LongDoubleKind::F64 => {
+            let (sig, exp) = ieee_digits(u128::from(raw as u64), 52, 11);
+            (raw as u64, sig, 13, exp)
+        }
+        LongDoubleKind::X87 => {
+            let addr = addr?;
+            let frac = load_from_memory(mem, addr, LoadKind::I64)? as u64;
+            let se = load_from_memory(mem, addr + 8, LoadKind::U16)? as u16;
+            // The explicit integer bit leads the first digit (glibc).
+            let exp = if frac == 0 {
+                0
+            } else {
+                i32::from(se & 0x7fff).max(1) - 16383 - 3
+            };
+            (
+                crate::c5::softfp::f80_to_f64(frac, se),
+                u128::from(frac),
+                15,
+                exp,
+            )
+        }
+        LongDoubleKind::Binary128 => {
+            let addr = addr?;
+            let lo = load_from_memory(mem, addr, LoadKind::I64)? as u64;
+            let hi = load_from_memory(mem, addr + 8, LoadKind::I64)? as u64;
+            let (sig, exp) = ieee_digits(u128::from(hi) << 64 | u128::from(lo), 112, 15);
+            (crate::c5::softfp::f128_to_f64(lo, hi), sig, 28, exp)
+        }
+    };
+    let v = f64::from_bits(bits);
+    Ok((v, v.is_finite().then_some(HexForm { sig, width, exp })))
+}
+
+/// Significand and exponent of an IEEE interchange encoding with `mant`
+/// fraction and `ebits` exponent bits; a subnormal leads with 0 at the
+/// minimum exponent.
+fn ieee_digits(bits: u128, mant: u32, ebits: u32) -> (u128, i32) {
+    let bias = (1 << (ebits - 1)) - 1;
+    let e = ((bits >> mant) & ((1 << ebits) - 1)) as i32;
+    let m = bits & ((1 << mant) - 1);
+    match (e, m) {
+        (0, 0) => (0, 0),
+        (0, _) => (m, 1 - bias),
+        _ => (1 << mant | m, e - bias),
+    }
+}
+
+/// The target libc's choices C99 7.19.6.1p8 leaves open for `%a`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HexStyle {
+    /// Subnormals as `0x0.` at the minimum exponent, trailing zeros
+    /// dropped, a halfway tail rounded to even.
+    Glibc,
+    /// Subnormals normalized; a dropped tail rounds up when its first
+    /// digit is above 8, or is 8 followed by an odd digit.
+    Apple,
+    /// As glibc, but without a precision every fraction digit is written.
+    Ucrt,
+}
+
+impl HexStyle {
+    fn of(target: crate::c5::codegen::Target) -> Self {
+        use crate::c5::codegen::Target;
+        match target {
+            Target::LinuxX64 | Target::LinuxAarch64 => HexStyle::Glibc,
+            Target::MacOSAarch64 => HexStyle::Apple,
+            Target::WindowsX64 | Target::WindowsAarch64 => HexStyle::Ucrt,
+        }
+    }
+
+    /// Whether dropping the low `shift` bits `rem` of a digit string ending
+    /// in `kept` rounds it up.
+    fn rounds_up(self, kept: u128, rem: u128, shift: u32) -> bool {
+        if self == HexStyle::Apple {
+            let d1 = rem >> (shift - 4);
+            let d2 = if shift >= 8 {
+                (rem >> (shift - 8)) & 0xf
+            } else {
+                0
+            };
+            return d1 > 8 || (d1 == 8 && d2 & 1 == 1);
+        }
+        let half = 1u128 << (shift - 1);
+        rem > half || (rem == half && kept & 1 == 1)
+    }
+}
+
+/// `h.hhhp±d` for `%a` / `%A` (7.19.6.1p8), without the sign and `0x`.
+fn format_hex(h: HexForm, s: &PrintfSpec, style: HexStyle) -> alloc::string::String {
+    let HexForm {
+        mut sig,
+        width,
+        mut exp,
+    } = h;
+    if style == HexStyle::Apple && sig != 0 {
+        while sig >> (4 * width) == 0 {
+            sig <<= 1;
+            exp -= 1;
+        }
+    }
+    let frac = sig & ((1 << (4 * width)) - 1);
+    let p = s.precision.unwrap_or(match style {
+        HexStyle::Ucrt => width as usize,
+        _ => (width - frac.trailing_zeros().min(4 * width) / 4) as usize,
+    });
+    let keep = width.min(p as u32);
+    let shift = 4 * (width - keep);
+    let mut kept = sig >> shift;
+    if shift > 0 && style.rounds_up(kept, sig & ((1 << shift) - 1), shift) {
+        kept += 1;
+    }
+    // A carry out of a leading `f` starts a new leading digit.
+    if kept >> (4 * keep) > 0xf {
+        kept >>= 4;
+        exp += 4;
+    }
+    let mut b = format!("{:x}", kept >> (4 * keep));
+    if p > 0 || s.alt {
+        b.push('.');
+    }
+    if keep > 0 {
+        let digits = keep as usize;
+        b += &format!("{:0digits$x}", kept & ((1 << (4 * keep)) - 1));
+    }
+    b.extend(core::iter::repeat_n('0', p - keep as usize));
+    b += &format!("p{}{}", if exp < 0 { '-' } else { '+' }, exp.unsigned_abs());
+    if s.conv == b'A' { b.to_uppercase() } else { b }
 }
 
 /// Parse `(dst/buf, src/buf, n)` argument triples used by
@@ -3823,20 +3987,20 @@ mod tests {
         // 0xC3 0xA9 (the UTF-8 encoding of U+00E9) must reach stdout as
         // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
         // the old path produced.
-        let mut mem = Memory::new(b"\xC3\xA9\x00");
+        let mut mem = Memory::new(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"%s", &[0], &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
     }
 
     #[test]
     fn printf_char_preserves_high_byte() {
-        let mut mem = Memory::new(b"\x00");
+        let mut mem = Memory::new(b"\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"%c", &[0x80], &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0x80u8]);
     }
 
     fn fmt1(fmt: &[u8], args: &[i64]) -> alloc::string::String {
-        let mut mem = Memory::new(b"abcdef\x00");
+        let mut mem = Memory::new(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(fmt, args, &mut mem).expect("format");
         alloc::string::String::from_utf8(out).expect("utf8")
     }
@@ -3891,12 +4055,72 @@ mod tests {
         assert_eq!(fmt1(b"%.3g", &[b(1234.5)]), "1.23e+03");
         assert_eq!(fmt1(b"%f", &[b(f64::NAN)]), "nan");
         assert_eq!(fmt1(b"%F", &[b(f64::INFINITY)]), "INF");
+        assert_eq!(
+            fmt1(b"%06f|%-6e|", &[b(f64::INFINITY), b(f64::NAN)]),
+            "   inf|nan   |"
+        );
+    }
+
+    fn fmt_on(target: crate::c5::codegen::Target, data: &[u8], fmt: &[u8], args: &[i64]) -> String {
+        let mut mem = Memory::new(data, target);
+        let out = format_printf(fmt, args, &mut mem).expect("format");
+        String::from_utf8(out).expect("utf8")
+    }
+
+    #[test]
+    fn printf_hex_float_follows_the_target_library() {
+        // C99 7.19.6.1p8 `%a`: glibc and the UCRT write a subnormal as `0x0.`
+        // and round a halfway tail to even; Apple's libc normalizes it.
+        use crate::c5::codegen::Target::{LinuxX64, MacOSAarch64, WindowsX64};
+        let on = |t, f: &[u8], v: f64| fmt_on(t, &[], f, &[v.to_bits() as i64]);
+        assert_eq!(on(LinuxX64, b"%a", 4.5), "0x1.2p+2");
+        assert_eq!(on(WindowsX64, b"%a", 4.5), "0x1.2000000000000p+2");
+        assert_eq!(on(LinuxX64, b"%a", 5e-324), "0x0.0000000000001p-1022");
+        assert_eq!(on(MacOSAarch64, b"%a", 5e-324), "0x1p-1074");
+        assert_eq!(on(LinuxX64, b"%.0a", 1.5), "0x2p+0");
+        assert_eq!(on(MacOSAarch64, b"%.0a", 1.5), "0x1p+0");
+        assert_eq!(on(MacOSAarch64, b"%.0a", 1.50390625), "0x2p+0");
+        assert_eq!(on(LinuxX64, b"%#.0A", 1.0), "0X1.P+0");
+        assert_eq!(on(LinuxX64, b"%010a", -1.0), "-0x0001p+0");
+        assert_eq!(on(LinuxX64, b"%010a", f64::INFINITY), "       inf");
+        assert_eq!(on(LinuxX64, b"%.3a", 0.0), "0x0.000p+0");
+    }
+
+    #[test]
+    fn printf_long_double_reads_the_target_image() {
+        // An `L` argument on the Linux targets is the address of the 16-byte
+        // image; `%La` writes every digit the format holds.
+        use crate::c5::codegen::Target::{LinuxAarch64, LinuxX64};
+        let x87 = |frac: u64, se: u16| {
+            let mut img = frac.to_le_bytes().to_vec();
+            img.extend(se.to_le_bytes());
+            img.resize(16, 0);
+            img
+        };
+        let (frac, se) = crate::c5::softfp::f64_to_f80(4.5f64.to_bits());
+        let f = b"%Lf %La %d";
+        assert_eq!(
+            fmt_on(LinuxX64, &x87(frac, se), f, &[0, 0, 7]),
+            "4.500000 0x9p-1 7"
+        );
+        let near_two = x87(u64::MAX, 0x3fff);
+        assert_eq!(
+            fmt_on(LinuxX64, &near_two, b"%La %.0La", &[0, 0]),
+            "0xf.fffffffffffffffp-3 0x1p+1"
+        );
+        let (lo, hi) = crate::c5::softfp::f64_to_f128((-0.25f64).to_bits());
+        let mut img = lo.to_le_bytes().to_vec();
+        img.extend(hi.to_le_bytes());
+        assert_eq!(
+            fmt_on(LinuxAarch64, &img, f, &[0, 0, 7]),
+            "-0.250000 -0x1p-2 7"
+        );
     }
 
     #[test]
     fn printf_percent_n_stores_count() {
         // C99 7.19.6.1p8: %n stores the bytes written so far.
-        let mut mem = Memory::new(&[0u8; 16]);
+        let mut mem = Memory::new(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
         let out = format_printf(b"abc%nd", &[8], &mut mem).expect("format");
         assert_eq!(out, b"abcd".to_vec());
         assert_eq!(load_from_memory(&mem, 8, LoadKind::I32).unwrap(), 3);
@@ -3965,7 +4189,7 @@ mod tests {
     fn frame_allocation_is_bounded_by_the_stack_region() {
         // A frame past `heap_base` would zero live heap
         // allocations; exhaustion must be a hard error instead.
-        let mut mem = Memory::new(&[]);
+        let mut mem = Memory::new(&[], crate::c5::codegen::Target::LinuxX64);
         let heap = mem.heap_alloc(16);
         mem.bytes[heap] = 7;
         let stack_bytes = mem.heap_base - mem.stack_base;
@@ -4049,7 +4273,7 @@ mod tests {
 
     #[test]
     fn every_function_the_interpreter_supplies_has_a_definition() {
-        let mut mem = Memory::new(&[0u8; 64]);
+        let mut mem = Memory::new(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
         let names = [
             "exit",
             "memcpy",

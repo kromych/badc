@@ -384,6 +384,34 @@ fn a_pragma_overrides_werror_where_it_covers_the_position() {
     );
 }
 
+/// Diagnostic pragmas an expansion produces govern the declaration or
+/// statement between them on their line, as in gcc 16 and clang: only
+/// the conversions outside the macro report.
+#[test]
+fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               QUIET(int *d1 = 1;) long *d2 = 2;\n\
+               int f(int *q) { return q != 0; }\n\
+               int main(void) { int *l; QUIET(l = 3;) l = 4; QUIET(f(5);) return f(6); }\n";
+    let p = super::compile_str_bare_with_diags(src, &["int-conversion"]);
+    let got: alloc::vec::Vec<(u32, alloc::string::String)> = p
+        .warnings
+        .iter()
+        .map(|d| (d.loc.as_ref().map_or(0, |l| l.line), d.to_string()))
+        .collect();
+    let want = [
+        (2, "declared=long*"),
+        (4, "in assignment"),
+        (4, "argument 1"),
+    ];
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((line, text), (want_line, needle)) in got.iter().zip(want) {
+        assert!(*line == want_line && text.contains(needle), "{got:?}");
+    }
+}
+
 /// The MSVC spelling reaches the same rows through the catalogue's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]

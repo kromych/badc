@@ -1437,6 +1437,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("sigaction_siginfo_handler.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
@@ -2562,6 +2563,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("sigaction_siginfo_handler.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
@@ -3671,6 +3673,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("sigaction_siginfo_handler.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
@@ -4545,6 +4548,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("return_low_word.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
@@ -4606,6 +4610,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
     ("search_tables_trees_and_queues.c", 0),
+    ("msvc_pragma_operator_in_place.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -5350,6 +5355,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("return_low_word.c", 0),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),
@@ -5409,6 +5415,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("bitfield_typedef_alignment.c", 0),
     ("inlined_struct_return_lifetime.c", 0),
     ("search_tables_trees_and_queues.c", 0),
+    ("msvc_pragma_operator_in_place.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -6441,6 +6448,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("mul_add_wide_result.c", 42),
     ("pragma_pack_bitfield_layout.c", 0),
     ("pragma_pack_push_pop_forms.c", 0),
+    ("pragma_operator_in_place.c", 0),
     ("bitnot_promoted_compare.c", 0),
     ("packed_bitfield_struct_by_value.c", 0),
     ("addr_compare_disjoint_blocks.c", 0),

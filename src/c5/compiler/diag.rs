@@ -577,7 +577,11 @@ impl Compiler {
     }
 
     fn loc_at(&self, file: &str, line: usize) -> Loc {
-        match self.lex.line_offset(file, line) {
+        // On the lexer's own line the diagnostic resolves at its token, so a
+        // `_Pragma` earlier on that line governs it (C99 6.10.9).
+        let here =
+            (file == self.lex.file && line == self.lex.line).then(|| self.lex.tok_start() as u32);
+        match here.or_else(|| self.lex.line_offset(file, line)) {
             Some(offset) => Loc::in_unit(alloc::string::String::from(file), line as u32, offset),
             None => Loc::new(alloc::string::String::from(file), line as u32),
         }

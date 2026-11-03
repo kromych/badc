@@ -19,7 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::text::{MAX_LITERAL_PREFIX, literal_prefix_len, pp_number_len, skip_literal};
-use super::{FnMacro, Preprocessor};
+use super::{FnMacro, Preprocessor, SavedMacro};
 use crate::c5::codegen::Target;
 use crate::c5::ident::{self, Dollar, key};
 
@@ -219,20 +219,36 @@ struct Exp<'a> {
     /// it, not from a replacement: a line joined for an invocation spans
     /// several source lines.
     src_pos: u32,
-    /// The line is an `#if` / `#elif` expression, where `defined` is an
-    /// operator (C99 6.10.1p1).
-    condition: bool,
+    /// Which operators the line has: `defined`, `_Pragma`.
+    what: LineUse,
+    /// Names a `push_macro` / `pop_macro` operator earlier in the scan
+    /// changed ([`Self::macro_state_operator`]).
+    shadows: Vec<Shadow>,
+}
+
+/// A name's state after the operators the scan executed: its definition,
+/// the saves they pushed, and how many of the preprocessor's saves they
+/// popped. The preprocessor changes when the caller applies the operators
+/// the expanded line carries.
+struct Shadow {
+    name: String,
+    def: SavedMacro,
+    pushed: Vec<SavedMacro>,
+    popped: usize,
 }
 
 /// Arena id of the line [`Exp`] substitutes, the first buffer it adds.
 const LINE_BUF: u32 = 0;
 
-/// What a substituted line is: program text, a header name, whose
-/// spellings join as the source spaced them, or an `#if` / `#elif`
-/// expression.
+/// What a substituted line is: program text, a directive's operand, a
+/// header name, whose spellings join as the source spaced them, or an
+/// `#if` / `#elif` expression, where `defined` is an operator (C99
+/// 6.10.1p1). `_Pragma` is an operator in program text only, as gcc
+/// reads it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LineUse {
     Text,
+    Operand,
     HeaderName,
     Condition,
 }
@@ -253,7 +269,7 @@ impl<'a> Exp<'a> {
         filename: &'a str,
         line_no: usize,
         ar: &'a mut ExpScratch,
-        condition: bool,
+        what: LineUse,
     ) -> Self {
         ar.bufs.clear();
         ar.hs_spans.clear();
@@ -265,7 +281,8 @@ impl<'a> Exp<'a> {
             ar,
             tail: Tail::Complete,
             src_pos: 0,
-            condition,
+            what,
+            shadows: Vec::new(),
         }
     }
 
@@ -702,6 +719,12 @@ impl<'a> Exp<'a> {
                     self.src_pos = tok.start;
                 }
             }
+            if depth == 0
+                && self.what == LineUse::Text
+                && self.macro_state_operator(tok, &mut rest, &mut out)
+            {
+                continue;
+            }
             if operand > 0 {
                 operand -= 1;
                 out.push(tok);
@@ -711,7 +734,7 @@ impl<'a> Exp<'a> {
                 out.push(tok);
                 continue;
             }
-            if self.condition && depth == 0 && self.text(tok) == "defined" {
+            if self.what == LineUse::Condition && depth == 0 && self.text(tok) == "defined" {
                 operand = self.defined_operand_len(&rest);
                 if operand > 0 && replaced != usize::MAX {
                     self.note_produced_defined();
@@ -731,10 +754,16 @@ impl<'a> Exp<'a> {
             let (is_fn, is_obj) = {
                 let name = key(self.text(tok));
                 pp.obs_note(&name);
-                (
-                    pp.fn_macros.contains_key(&*name),
-                    pp.macros.contains_key(&*name),
-                )
+                match self.shadowed(&name) {
+                    Some(def) => (
+                        matches!(def, SavedMacro::Function(_)),
+                        matches!(def, SavedMacro::Object(_)),
+                    ),
+                    None => (
+                        pp.fn_macros.contains_key(&*name),
+                        pp.macros.contains_key(&*name),
+                    ),
+                }
             };
             if !is_fn && !is_obj {
                 out.push(tok);
@@ -753,8 +782,12 @@ impl<'a> Exp<'a> {
                 let text = format!("macro `{name}` might prevent reproducible builds");
                 pp.park_warning(super::DATE_TIME, self.filename, line, text);
             }
+            let shadow = self.shadowed(name).cloned();
             if is_fn {
-                let def = pp.fn_macros.get(name).unwrap();
+                let def = match &shadow {
+                    Some(SavedMacro::Function(f)) => f,
+                    _ => pp.fn_macros.get(name).unwrap(),
+                };
                 // Function-like: an invocation only when `(` follows
                 // (C99 6.10.3p10) and closes within the line.
                 if rest.last().is_some_and(|&t| self.is_punct(t, "("))
@@ -785,7 +818,10 @@ impl<'a> Exp<'a> {
                 out.push(tok);
                 continue;
             }
-            let body = pp.macros.get(name).unwrap();
+            let body = match &shadow {
+                Some(SavedMacro::Object(body)) => body,
+                _ => pp.macros.get(name).unwrap(),
+            };
             let hs = self.hs_with_name(tok.hs, name);
             let (mut btoks, has_paste) = self.body_toks(name, body);
             if has_paste {
@@ -884,6 +920,106 @@ impl<'a> Exp<'a> {
             other => unreachable!("no expansion for dynamic predefine `{other}`"),
         }
         true
+    }
+
+    /// A C99 6.10.9 `_Pragma ( string-literal )`, or MSVC `__pragma (
+    /// tokens )`, whose pragma is `push_macro` or `pop_macro`: true when
+    /// `tok` opens one, which then moves to `out` whole. gcc and clang
+    /// execute such an operator where the rescan meets it, outside an
+    /// argument's own expansion, so the names after it expand under the
+    /// state it leaves.
+    fn macro_state_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
+        if tok.kind != TokKind::Ident || self.first_byte(tok) != b'_' {
+            return false;
+        }
+        let prefix = match self.text(tok) {
+            "_Pragma" => 7,
+            "__pragma" => 8,
+            _ => return false,
+        };
+        // The operator's tokens run to the `)` closing its `(`.
+        let mut open = 0usize;
+        let mut len = 0usize;
+        for &t in rest.iter().rev() {
+            if len == 0 && !self.is_punct(t, "(") {
+                return false;
+            }
+            len += 1;
+            if self.is_punct(t, "(") {
+                open += 1;
+            } else if self.is_punct(t, ")") {
+                open -= 1;
+                if open == 0 {
+                    break;
+                }
+            }
+        }
+        if len == 0 || open != 0 {
+            return false;
+        }
+        let mut text = String::from(self.text(tok));
+        for &t in rest[rest.len() - len..].iter().rev() {
+            if t.space {
+                text.push(' ');
+            }
+            text.push_str(self.text(t));
+        }
+        let args = if prefix == 7 {
+            super::pragma::parse_pragma_operator_args(&text, prefix)
+        } else {
+            super::pragma::parse_msvc_pragma_args(&text, prefix)
+        };
+        let Some((args, _)) = args else {
+            return false;
+        };
+        let directive = super::pragma::parse_pragma_directive(&args, self.pp.dollar());
+        let super::pragma::PragmaDirective::MacroStack(verb, operand) = directive else {
+            return false;
+        };
+        // A malformed operand changes nothing; applying the line reports it.
+        if let Some(name) = super::pragma::macro_stack_name(operand) {
+            self.shadow_macro_stack(verb, key(name).into_owned());
+        }
+        out.push(tok);
+        for _ in 0..len {
+            out.extend(rest.pop());
+        }
+        true
+    }
+
+    /// `name`'s definition after the operators the scan executed, when one
+    /// changed it.
+    fn shadowed(&self, name: &str) -> Option<&SavedMacro> {
+        self.shadows.iter().find(|s| s.name == name).map(|s| &s.def)
+    }
+
+    /// `push_macro` / `pop_macro` of `name` on the scan's [`Shadow`], as
+    /// `Preprocessor::parse_pragma_macro_stack` executes them on its state.
+    fn shadow_macro_stack(&mut self, verb: &str, name: String) {
+        let pp = self.pp;
+        let at = match self.shadows.iter().position(|s| s.name == name) {
+            Some(at) => at,
+            None => {
+                self.shadows.push(Shadow {
+                    def: pp.saved_macro(&name),
+                    name,
+                    pushed: Vec::new(),
+                    popped: 0,
+                });
+                self.shadows.len() - 1
+            }
+        };
+        let s = &mut self.shadows[at];
+        if verb == "push_macro" {
+            s.pushed.push(s.def.clone());
+        } else if let Some(def) = s.pushed.pop() {
+            s.def = def;
+        } else if let Some(saved) = pp.pushed_macros.get(&s.name)
+            && let Some(def) = saved.len().checked_sub(s.popped + 1).map(|i| &saved[i])
+        {
+            s.def = def.clone();
+            s.popped += 1;
+        }
     }
 
     /// The `__has_*` feature-test operators, which expand wherever they
@@ -1260,7 +1396,7 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) -> Cow<'l, str> {
-        self.substitute_serialized(line, filename, line_no, LineUse::Text)
+        self.substitute_serialized(line, filename, line_no, LineUse::Operand)
             .0
     }
 
@@ -1318,13 +1454,7 @@ impl Preprocessor {
         }
         let relex_safe = what != LineUse::HeaderName;
         let mut scratch = self.exp_scratch.borrow_mut();
-        let mut ex = Exp::new(
-            self,
-            filename,
-            line_no,
-            &mut scratch,
-            what == LineUse::Condition,
-        );
+        let mut ex = Exp::new(self, filename, line_no, &mut scratch, what);
         let bid = ex.add_buf(Rc::from(line));
         debug_assert_eq!(bid, LINE_BUF);
         let mut toks = ex.take_vec();
@@ -1371,7 +1501,12 @@ impl Preprocessor {
                 let name = key(&line[i..i + len]);
                 i += len;
                 self.obs_note(&name);
+                // An operator that changes macro state may define a name
+                // later on the line (`Exp::macro_state_operator`).
+                let state_operator = matches!(&*name, "_Pragma" | "__pragma")
+                    && (line.contains("push_macro") || line.contains("pop_macro"));
                 if is_dynamic_predefine(&name)
+                    || state_operator
                     || matches!(&*name, "__has_builtin" | "__has_attribute")
                     || self.macros.contains_key(&*name)
                     || self.fn_macros.contains_key(&*name)

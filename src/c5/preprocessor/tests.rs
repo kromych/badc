@@ -1294,6 +1294,96 @@ fn push_macro_and_pop_macro_leave_nothing_in_preprocessed_output() {
 }
 
 #[test]
+fn a_macro_stack_operator_applies_where_the_rescan_meets_it() {
+    // C99 6.10.9; gcc 16 and clang: the tokens after the operator on its
+    // line, from the source, a replacement or an argument, expand under the
+    // state it leaves. An argument's own expansion leaves the operator to
+    // the rescan, which meets it once per use of the parameter, and not at
+    // all for an unused or stringized one.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define ID(a) a\n\
+             #define TWICE(a) a a\n\
+             #define DROP(a)\n\
+             #define STR(a) #a\n\
+             #define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             _Pragma(\"pop_macro(\\\"X\\\")\") x1 = X;\n\
+             #define Y 2\n\
+             #pragma push_macro(\"Y\")\n\
+             #undef Y\n\
+             #define POP_Y _Pragma(\"pop_macro(\\\"Y\\\")\") Y\n\
+             y2 = POP_Y, Y;\n\
+             #define Z 3\n\
+             #pragma push_macro(\"Z\")\n\
+             #undef Z\n\
+             z3 = ID(_Pragma(\"pop_macro(\\\"Z\\\")\") Z);\n\
+             #define W 4\n\
+             #pragma push_macro(\"W\")\n\
+             #undef W\n\
+             #define W 5\n\
+             #pragma push_macro(\"W\")\n\
+             #undef W\n\
+             w4 = TWICE(_Pragma(\"pop_macro(\\\"W\\\")\")) W;\n\
+             #define V 6\n\
+             #pragma push_macro(\"V\")\n\
+             #undef V\n\
+             v = DROP(_Pragma(\"pop_macro(\\\"V\\\")\")) V;\n\
+             s = STR(_Pragma(\"pop_macro(\\\"V\\\")\")) V;\n\
+             v6 = __pragma(pop_macro(\"V\")) V;\n",
+        )
+        .expect("preprocessor failed");
+    let out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    for want in [
+        "x1 = 1;",
+        "y2 = 2, 2;",
+        "z3 = 3;",
+        "w4 = 4;",
+        "v = V;",
+        "s = \"_Pragma(\\\"pop_macro(\\\\\\\"V\\\\\\\")\\\")\" V;",
+        "v6 = 6;",
+    ] {
+        assert!(out.contains(want), "{want}: {out:?}");
+    }
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn preprocessed_output_writes_an_expanded_pragma_operator_where_it_stands() {
+    // gcc -E writes each operator of an expansion as a `#pragma` line at
+    // its position among the tokens around it.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_keep_pragmas(true);
+    let out = pp
+        .process(
+            "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+             _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+             _Pragma(\"GCC diagnostic pop\")\n\
+             QUIET(int *d1 = 1;) int *d2 = 2;\n",
+        )
+        .expect("preprocessor failed");
+    let mut from = 0;
+    for want in [
+        "\n#pragma GCC diagnostic push\n",
+        "\n#pragma GCC diagnostic ignored \"-Wint-conversion\"\n",
+        " int *d1 = 1;",
+        "\n#pragma GCC diagnostic pop\n",
+        " int *d2 = 2;",
+    ] {
+        let at = out[from..]
+            .find(want)
+            .unwrap_or_else(|| panic!("{want:?}: {out:?}"));
+        from += at + want.len();
+    }
+}
+
+#[test]
 fn named_rest_variadic_macro_binds_tail() {
     // `#define foo(rest...)` reaches the trailing args through `rest`.
     let out = process("#define F(args...) g(args)\nF(1, 2, 3);\n");
@@ -4765,6 +4855,23 @@ fn a_backslash_in_a_header_name_separates_directories_for_a_windows_target() {
         let err = linux.expect_err("a backslash is no separator off Windows");
         assert!(format!("{err}").contains("not found"), "{err}");
     }
+}
+
+/// `_Pragma("once")` from an expansion, with a declaration after it on its
+/// line, marks the header as the directive does (gcc 16, clang).
+#[test]
+fn a_pragma_once_operator_from_an_expansion_marks_its_header() {
+    let (mut pp, base) = pp_with_headers(
+        "once-expansion",
+        &[(
+            "o.h",
+            "#define ONCE _Pragma(\"once\")\nONCE int once_by_macro;\n",
+        )],
+    );
+    let out = pp.process("#include <o.h>\n#include <o.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.expect("preprocessor failed");
+    assert_eq!(out.matches("int once_by_macro;").count(), 1, "{out}");
 }
 
 /// `#pragma once` and the include-guard drop identify a file as gcc and

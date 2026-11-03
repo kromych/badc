@@ -62,7 +62,13 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
+                // The operator applies where it stands (C99 6.10.9), so a
+                // diagnostic pragma resolves on its own position in the line.
+                let at = Site {
+                    offset: site.offset + out.len() as u32,
+                    ..site
+                };
+                self.dispatch_pragma_operator(&args, at, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -78,7 +84,11 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
+                let at = Site {
+                    offset: site.offset + out.len() as u32,
+                    ..site
+                };
+                self.dispatch_pragma_operator(&args, at, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -107,9 +117,8 @@ impl Preprocessor {
                 let id = self.current_file_id(site.file);
                 self.pragma_once_files.insert(id);
             }
-            // TODO: the line is expanded before its operators apply, so a
-            // use of the name later on the same line sees the definition
-            // from before the pragma; gcc and clang apply it in place.
+            // The expansion already read the rest of the line under the
+            // state this leaves (`Exp::macro_state_operator`).
             PragmaDirective::MacroStack(verb, operand) => {
                 self.parse_pragma_macro_stack(verb, operand, site)?;
             }
@@ -850,11 +859,7 @@ impl Preprocessor {
         let name = ident::key(name).into_owned();
         self.obs_note(&name);
         if verb == "push_macro" {
-            let saved = match (self.macros.get(&name), self.fn_macros.get(&name)) {
-                (Some(body), _) => SavedMacro::Object(body.clone()),
-                (_, Some(f)) => SavedMacro::Function(f.clone()),
-                (None, None) => SavedMacro::Undefined,
-            };
+            let saved = self.saved_macro(&name);
             self.pushed_macros.entry(name).or_default().push(saved);
             return Ok(());
         }
@@ -882,6 +887,15 @@ impl Preprocessor {
             }
         }
         Ok(())
+    }
+
+    /// What `push_macro` saves for `name`: its definition or its absence.
+    pub(super) fn saved_macro(&self, name: &str) -> SavedMacro {
+        match (self.macros.get(name), self.fn_macros.get(name)) {
+            (Some(body), _) => SavedMacro::Object(body.clone()),
+            (_, Some(f)) => SavedMacro::Function(f.clone()),
+            (None, None) => SavedMacro::Undefined,
+        }
     }
 
     /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
@@ -1245,7 +1259,7 @@ impl WarningAction {
 
 /// The name a `push_macro` / `pop_macro` operand `("name")` spells: one
 /// string literal in parentheses, taken as written, as clang takes it.
-fn macro_stack_name(operand: &str) -> Option<&str> {
+pub(super) fn macro_stack_name(operand: &str) -> Option<&str> {
     let literal = operand.strip_prefix('(')?.strip_suffix(')')?.trim();
     let body = literal.strip_prefix('"')?;
     let bytes = body.as_bytes();

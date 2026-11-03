@@ -1,14 +1,15 @@
 # Standard conformance
 
-badc implements C99. Without `-std=` it compiles C11: `__STDC_VERSION__` is
-`201112L` and the C11 features listed below are available. Where this document
-says nothing, badc follows C99. It records:
+badc implements C17 (ISO/IEC 9899:2018, C11 with its corrections). Without
+`-std=` it compiles C17: `__STDC_VERSION__` is `201710L`. `-std=` selects C90,
+C99 or C11 instead, or C23, of which badc implements part. Where this document
+says nothing, badc follows C17. It records:
 
 - the implementation-defined choices badc makes;
-- the divergences, where badc departs from C99 or C11, or from gcc and clang
-  where the standard leaves the choice open;
-- the extensions badc implements: C11 and C23 features, POSIX interfaces, and
-  the GCC, MSVC and badc-specific ones.
+- the divergences, where badc departs from C17, or from gcc and clang where
+  the standard leaves the choice open;
+- the C11 features badc implements, and its extensions: C23 features, POSIX
+  interfaces, and the GCC, MSVC and badc-specific ones.
 
 ## Contents
 
@@ -125,17 +126,16 @@ and have no effect.
 |-----------------------------------------|---------------------------------------------------------------------------|
 | `__STDC__`                              | `1`                                                                       |
 | `__STDC_HOSTED__`                       | `1`; `0` under `-ffreestanding` or `-fno-hosted`, and `-fhosted` restores `1` |
-| `__STDC_VERSION__`                      | `201112L`; `-std=` selects another ([Command-line compatibility](#command-line-compatibility)) |
+| `__STDC_VERSION__`                      | `201710L`; `-std=` selects another ([Command-line compatibility](#command-line-compatibility)) |
 | `__DATE__`, `__TIME__`                  | the time of translation in UTC; `SOURCE_DATE_EPOCH` fixes it, as in gcc and clang |
-| `__STDC_NO_COMPLEX__`                   | `1`                                                                       |
+| `__STDC_NO_COMPLEX__`, `__STDC_NO_THREADS__` | `1`                                                                  |
 | `__STDC_UTF_16__`, `__STDC_UTF_32__`    | `1`                                                                       |
-| `__STDC_IEC_559__`, `__STDC_NO_ATOMICS__`, `__STDC_NO_THREADS__`, `__STDC_NO_VLA__` | not defined                  |
+| `__STDC_IEC_559__`, `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined                                         |
 
 `-ffreestanding` also implies `-fno-builtin`. `--freestanding`, the link
 option that leaves out the startup runtime, does not change
-`__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` and `__STDC_NO_THREADS__` stay
-undefined although `_Atomic` objects are not atomic and `<threads.h>` is
-absent; see [Divergences](#divergences).
+`__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` stays undefined although `_Atomic`
+objects are not yet atomic; see [Divergences](#divergences).
 
 ## Divergences
 
@@ -152,9 +152,12 @@ access, where C11 6.5.2.4p2 and 6.5.16.2p3 require an atomic operation.
 
 - `_Complex` and `_Imaginary` (C99 6.2.5), and `<complex.h>`.
   `__STDC_NO_COMPLEX__` is `1`.
-- Trigraphs (C99 5.2.1.1). `-trigraphs` is refused.
-- `<threads.h>` (C11 7.26). `__STDC_NO_THREADS__` is not defined;
+- Trigraphs (C17 5.2.1.1). `-trigraphs` is refused.
+- `<threads.h>` (C17 7.26), an optional feature: `__STDC_NO_THREADS__` is `1`.
   `_Thread_local` is implemented.
+- `timespec_get` and `TIME_UTC` (C17 7.27.2.5), on every target.
+- `aligned_alloc`, `quick_exit` and `at_quick_exit` (C17 7.22.3.1, 7.22.4.3,
+  7.22.4.7) on Windows. The other targets provide them.
 - `<uchar.h>`, `char16_t` and `char32_t` (C11 7.28). The `u` and `U` literal
   prefixes are implemented.
 - Most of C23. `-std=c23` sets the version macro and makes `bool`, `true` and
@@ -311,8 +314,8 @@ other. It sets `__STDC_VERSION__` as gcc does:
 | `c89`, `c90`, `gnu89`, `gnu90`, `iso9899:1990`                | not defined        |
 | `iso9899:199409`                                              | `199409L`          |
 | `c99`, `c9x`, `gnu99`, `gnu9x`, `iso9899:1999`                | `199901L`          |
-| `c11`, `c1x`, `gnu11`, `gnu1x`, `iso9899:2011`; the default   | `201112L`          |
-| `c17`, `c18`, `gnu17`, `gnu18`, `iso9899:2017`, `iso9899:2018`| `201710L`          |
+| `c11`, `c1x`, `gnu11`, `gnu1x`, `iso9899:2011`                | `201112L`          |
+| `c17`, `c18`, `gnu17`, `gnu18`, `iso9899:2017`, `iso9899:2018`; the default | `201710L` |
 | `c23`, `c2x`, `gnu23`, `gnu2x`, `iso9899:2024`                | `202311L`          |
 | `c2y`, `gnu2y`                                                | `202500L`          |
 

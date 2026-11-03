@@ -26,7 +26,7 @@ was run to verify it. This page lists what that takes.
 
 ## What a change looks like
 
-- Each change follows a rule: a C99 clause, the platform ABI, or the documented
+- Each change follows a rule: a C standard clause, the platform ABI, or the documented
   behavior of gcc, clang, MSVC, GNU ld or GNU as. Name the rule in the pull
   request.
 - Find the cause first. Decide whether the bug is a narrow case or a gap in the

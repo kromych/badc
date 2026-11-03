@@ -1891,7 +1891,7 @@ fn the_edition_sets_stdc_version_and_the_c23_if_keywords() {
         pp.process(src).expect("preprocessor failed")
     };
     let edition = |name| crate::c5::CStd::from_dialect(name);
-    assert!(run(None).contains("v = 201112L;"));
+    assert!(run(None).contains("v = 201710L;"));
     assert!(!run(edition("c90")).contains("v ="));
     assert!(run(edition("gnu99")).contains("v = 199901L;"));
     let c23 = run(edition("c23"));

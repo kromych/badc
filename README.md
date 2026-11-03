@@ -125,8 +125,8 @@ initializer.
 * [Diagnostics](./doc/diagnostics.md): every warning and error with its code
   and name, and the `-W` options and pragmas that select them.
 * [Standard conformance](./doc/std-conformance.md): implementation-defined
-  choices, divergences from C99, and the C11, C23, POSIX, GCC and MSVC
-  extensions badc implements.
+  choices, divergences from C17, and the C23, POSIX, GCC and MSVC extensions
+  badc implements.
 * [The Linux kernel](./doc/linux-kernel.md): what badc compiles, links and
   boots of the kernel, and how it is checked.
 * [`--interp` and `--jit`](./doc/interpreter.md): running C without writing

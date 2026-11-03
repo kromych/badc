@@ -4451,7 +4451,7 @@ mod tests {
         let lib = parse(&["-nostdlibinc", "a.c"]).front;
         assert!(lib.nostdlibinc && !lib.nostdinc);
         let edition = |s: &str| parse(&[s, "a.c"]).front.std.0;
-        assert_eq!(parse(&["a.c"]).front.std.0, Some(201112));
+        assert_eq!(parse(&["a.c"]).front.std.0, Some(201710));
         assert_eq!(edition("-std=gnu89"), None);
         assert_eq!(edition("-std=iso9899:199409"), Some(199409));
         assert_eq!(edition("-std=c9x"), Some(199901));

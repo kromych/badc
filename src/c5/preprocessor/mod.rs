@@ -982,22 +982,17 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     (
         PredefOn::Every,
         &[
-            // C99 6.10.8. `__STDC_HOSTED__` is 0 under `-ffreestanding`
-            // (`set_hosted`). `__STDC_VERSION__` reports C11 unless
-            // `-std=` selects another edition (`set_std`): the surface is
-            // C99 plus the C11 features real code gates on this macro. `__DATE__` / `__TIME__` come from
-            // [`install_translation_time`].
+            // C17 6.10.8. `__STDC_HOSTED__` is 0 under `-ffreestanding`
+            // (`set_hosted`); `__STDC_VERSION__` is C17's unless `-std=`
+            // selects another edition (`set_std`). `__DATE__` / `__TIME__`
+            // come from [`install_translation_time`].
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
-            ("__STDC_VERSION__", "201112L"),
-            // C11 6.10.8.3: one macro per optional feature the
-            // implementation lacks, which library code gates a portable
-            // fallback on. `__STDC_NO_THREADS__` stays undefined
-            // although badc ships no `<threads.h>`: real code gates
-            // `_Thread_local` on it, and that badc does support.
-            // `<stdatomic.h>` and C99 6.7.6.2 variable-length arrays are
-            // provided, so their macros stay undefined too.
+            ("__STDC_VERSION__", "201710L"),
+            // C17 6.10.8.3: the optional features badc does not provide.
+            // `<stdatomic.h>` and variable-length arrays are provided.
             ("__STDC_NO_COMPLEX__", "1"),
+            ("__STDC_NO_THREADS__", "1"),
             // C11 6.10.8.2: `char16_t` / `char32_t` hold the UTF-16 /
             // UTF-32 code units of the character, which is what `u"..."`
             // and `U"..."` encode here.

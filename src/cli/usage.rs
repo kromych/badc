@@ -363,12 +363,14 @@ Compile knobs:
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
-  -std=<dialect>           Language dialect. badc compiles C99 with the
-                           GNU extensions always available, so the name
-                           selects only whether __STRICT_ANSI__ is
-                           defined under --gnu: `gnu*` clears it, `c*` /
-                           `iso*` set it, as gcc and clang do. Without
-                           the flag --gnu reports strict conformance.
+  -std=<dialect>           Language dialect, by gcc's names: sets
+                           __STDC_VERSION__ (C17 by default) and, from
+                           c23 on, the bool/true/false keywords. The GNU
+                           extensions are available in every dialect.
+                           Under --gnu, `gnu*` clears __STRICT_ANSI__ and
+                           `c*` / `iso*` set it, as gcc and clang do;
+                           without the flag --gnu reports strict
+                           conformance.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99

@@ -691,13 +691,13 @@ pub struct CompileOptions {
 
 /// The edition of the C standard a unit is compiled to (`-std=`), held as
 /// the `__STDC_VERSION__` it predefines (C99 6.10.8): `None` for C90,
-/// which predefines none. Without `-std` badc compiles C11.
+/// which predefines none. Without `-std` badc compiles C17.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CStd(pub Option<u32>);
 
 impl Default for CStd {
     fn default() -> Self {
-        Self(Some(201112))
+        Self(Some(201710))
     }
 }
 

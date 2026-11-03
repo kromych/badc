@@ -211,8 +211,8 @@ Mach-O and ignored elsewhere, as gcc ignores it.
 
 ## Language and predefined macros
 
-badc covers most of C99, the C11 and C23 features in common use, and much of
-the GNU C extension set. [`std-conformance.md`](std-conformance.md) lists the
+badc compiles C17 by default, with part of C23 and much of the GNU C extension
+set. [`std-conformance.md`](std-conformance.md) lists the
 rejected constructs, the divergent behavior and badc's own extensions.
 
 Target macros:

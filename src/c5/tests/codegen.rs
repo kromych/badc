@@ -1793,6 +1793,58 @@ fn windows_time_h_leaves_struct_timeval_to_the_winsock_headers() {
     }
 }
 
+/// glibc's and the macOS SDK's `<time.h>` neither define `struct timeval`
+/// nor declare gettimeofday, so a program may define the tag after it.
+/// `<sys/time.h>`, `<sys/select.h>`, `<sys/resource.h>` and `<utmpx.h>` each
+/// define the struct alone, under the C library's own guard, so a definition
+/// under that guard before or after them stands.
+#[test]
+fn posix_time_h_leaves_struct_timeval_to_sys_time_h() {
+    use crate::{CompileOptions, Compiler, Target};
+    let compile = |src: &str, target: Target, opts: CompileOptions| {
+        let opts = opts.with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}\n{src}"))
+    };
+    const OWN: &str = "#include <time.h>\nstruct timeval { int x; };\n\
+        int main(void) { struct timeval t = {1}; return t.x - 1; }\n";
+    const GLIBC: (&str, &str) = (
+        "__timeval_defined",
+        "#define __timeval_defined 1\nstruct timeval { long tv_sec; long tv_usec; };",
+    );
+    const SDK: (&str, &str) = (
+        "_STRUCT_TIMEVAL",
+        "#define _STRUCT_TIMEVAL struct timeval\n_STRUCT_TIMEVAL { long tv_sec; int tv_usec; };",
+    );
+    const CALL: &str = "int f(struct timeval *tv) { return gettimeofday(tv, 0); }\n";
+    let plain = CompileOptions::default;
+    // Without the auto-include retry, a call needs the declaring header.
+    let no_retry = || CompileOptions::default().with_no_builtin(true);
+    for (target, (guard, guarded)) in [
+        (Target::LinuxX64, GLIBC),
+        (Target::LinuxAarch64, GLIBC),
+        (Target::MacOSAarch64, SDK),
+    ] {
+        compile(OWN, target, plain());
+        let opts = no_retry().with_no_entry_point(true);
+        let time_h = alloc::format!("#include <time.h>\nstruct timeval;\n{CALL}");
+        let refused = Compiler::with_options(time_h, target, opts).compile();
+        assert!(refused.is_err(), "{target:?}: gettimeofday");
+        let sys_time = alloc::format!("#include <sys/time.h>\n{CALL}");
+        compile(&sys_time, target, no_retry());
+        for header in ["sys/time.h", "sys/select.h", "sys/resource.h", "utmpx.h"] {
+            let size = "_Static_assert(sizeof(struct timeval) == 16, \"timeval\");";
+            let alone = alloc::format!("#include <{header}>\n{size}\n");
+            compile(&alone, target, plain());
+            let before = alloc::format!("{guarded}\n#include <{header}>\n");
+            compile(&before, target, plain());
+            let after = alloc::format!("#include <{header}>\n#ifndef {guard}\n{guarded}\n#endif\n");
+            compile(&after, target, plain());
+        }
+    }
+}
+
 /// `<windows.h>` includes `<wingdi.h>`, mingw-w64's gdi32 surface: the
 /// drawing, text, region and bitmap calls import gdi32.dll's entry points,
 /// AlphaBlend / GradientFill / TransparentBlt msimg32.dll's, and the

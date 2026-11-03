@@ -53,6 +53,9 @@ const WINDOWS: TargetSet =
     TargetSet::of(Target::WindowsX64).or(TargetSet::of(Target::WindowsAarch64));
 const POSIX: TargetSet = MACOS.or(LINUX);
 const ALL: TargetSet = POSIX.or(WINDOWS);
+/// A header only other bundled headers include: no reference toolchain ships
+/// the name, so a program's `#include` does not find it.
+const INTERNAL: TargetSet = TargetSet(0);
 const X86_64: TargetSet = TargetSet::of(Target::LinuxX64).or(TargetSet::of(Target::WindowsX64));
 const AARCH64: TargetSet = MACOS
     .or(TargetSet::of(Target::LinuxAarch64))
@@ -367,6 +370,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("share.h", WINDOWS),
     header!("corecrt.h", WINDOWS),
     header!("_timeval.h", WINDOWS),
+    header!("__badc_timeval.h", INTERNAL),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),

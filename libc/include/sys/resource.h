@@ -42,7 +42,7 @@ struct rlimit {
 #define RLIM_NLIMITS 16
 #endif
 
-#include <sys/time.h>
+#include <__badc_timeval.h>
 
 // getrusage's selectors and record, as glibc and the macOS SDK lay it out:
 // two `struct timeval` times and fourteen `long` counters.

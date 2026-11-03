@@ -170,7 +170,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=82
     v130 Imm(0)                                           -> x0
     v131 Imm(4)                                           -> x7
     v132 LocalAddr(-82)                                   -> x6
-    v133 CallExt { binding_idx=166, args=[v131, v132], fp_arg_mask=0x0 } -> x0
+    v133 CallExt { binding_idx=128, args=[v131, v132], fp_arg_mask=0x0 } -> x0
     v134 BinopI { op=ne, lhs=v133, rhs_imm=0 }            -> x1
     terminator Bz { cond=v133, target=b19, fall=b18 }   (exit_acc=v134)
   block 18  start_pc=0

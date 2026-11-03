@@ -2,10 +2,9 @@
 //
 // `time_t` is 8 bytes on every supported target -- `long` on LP64
 // (Linux/macOS), `long long` on LLP64 (Windows). The finer-grained
-// POSIX shapes (`struct timespec`, `struct timeval`) carry a
-// `time_t`-sized seconds count, so their layout matches the libc
-// view byte-for-byte and `clock_gettime`/`gettimeofday` can write
-// into them directly.
+// POSIX `struct timespec` carries a `time_t`-sized seconds count, so
+// its layout matches the libc view byte-for-byte and `clock_gettime`
+// can write into it directly.
 
 #pragma once
 
@@ -66,30 +65,14 @@ struct timespec {
 // theirs in either order. <sys/time.h> and <winsock2.h> take it from
 // <_timeval.h>; gettimeofday below needs only the tag.
 struct timeval;
-#elif defined(__APPLE__)
-struct timespec {
-    long tv_sec;
-    long tv_nsec;
-};
-
-// Darwin's `tv_usec` is `__darwin_suseconds_t` (`__int32_t`), not a
-// 64-bit field as on Linux. gettimeofday / select write only the
-// 4-byte value; declaring it `long` would read 4 bytes of adjacent
-// storage as the high half and yield a garbage microsecond count.
-struct timeval {
-    long tv_sec;
-    int tv_usec;
-};
 #else
 struct timespec {
     long tv_sec;
     long tv_nsec;
 };
-
-struct timeval {
-    long tv_sec;
-    long tv_usec;
-};
+// glibc's and the macOS SDK's <time.h> define no `struct timeval` either:
+// <sys/time.h>, <sys/select.h> and <sys/resource.h> take it from
+// <__badc_timeval.h>, and <sys/time.h> declares gettimeofday.
 #endif
 
 // `struct tm`. The host's localtime / gmtime fill this and the program
@@ -139,7 +122,6 @@ typedef long clock_t;
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::nanosleep,     "_nanosleep")
-#pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
 #pragma binding(libc::localtime,     "_localtime")
@@ -174,7 +156,6 @@ typedef long clock_t;
 #pragma binding(libc::timer_settime, "timer_settime")
 #pragma binding(libc::timer_gettime, "timer_gettime")
 #pragma binding(libc::timer_getoverrun, "timer_getoverrun")
-#pragma binding(libc::gettimeofday,  "gettimeofday")
 #pragma binding(libc::difftime,      "difftime")
 #pragma binding(libc::mktime,        "mktime")
 #pragma binding(libc::localtime,     "localtime")
@@ -261,9 +242,10 @@ int clock_nanosleep(clockid_t clk_id, int flags, const struct timespec *request,
 int clock_settime(clockid_t clk_id, const struct timespec *ts);
 int clock_getres(clockid_t clk_id, struct timespec *res);
 int nanosleep(const struct timespec *req, struct timespec *rem);
-// The zone argument is obsolete; glibc, libSystem and mingw-w64 all
-// spell it `void *`.
+#ifdef __BADC_WINDOWS__
+// The zone argument is obsolete; mingw-w64 spells it `void *`.
 int gettimeofday(struct timeval *restrict tv, void *restrict tz);
+#endif
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and

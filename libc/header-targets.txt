@@ -214,6 +214,7 @@ intsafe.h	-	-	-	y	y
 share.h	-	-	-	y	y
 corecrt.h	-	-	-	y	y
 _timeval.h	-	-	-	y	y
+__badc_timeval.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p

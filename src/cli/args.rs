@@ -78,6 +78,9 @@ pub(crate) enum Parsed {
     /// `--list-diagnostics` / `--explain <sel>`: rendered catalogue text
     /// for stdout, then exit 0. Neither reads a target or an input.
     Diagnostics(String),
+    /// gcc's `-print-file-name=<name>`: print the path for `name`, then
+    /// exit 0, whatever else the command line asks for.
+    PrintFileName(String),
 }
 
 /// Front-end options every translation unit preprocesses and compiles
@@ -103,6 +106,9 @@ pub(crate) struct FrontEnd {
     /// gcc `-fvisibility=`; `None` is default.
     pub(crate) default_visibility: Option<badc::SymVisibility>,
     pub(crate) nostdinc: bool,
+    pub(crate) nostdlibinc: bool,
+    /// The directory `-print-file-name=include` names.
+    pub(crate) compiler_include_dir: Option<String>,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
     /// gcc `-dM`: `-E` prints the macro definitions in place of the text.
@@ -570,6 +576,8 @@ struct Parser {
     print: Option<&'static str>,
     /// The `--explain` selector, resolved once the whole line is read.
     explain: Option<String>,
+    /// The `-print-file-name=` operand.
+    print_file_name: Option<String>,
     target_spec: Option<String>,
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
@@ -1058,6 +1066,9 @@ impl Parser {
                 self.sysroot = Some(PathBuf::from(&s["--sysroot=".len()..]));
             }
             "--dump-pp" | "-E" => self.claim(Mode::DumpPp)?,
+            s if s.starts_with("-print-file-name=") => {
+                self.print_file_name = Some(s["-print-file-name=".len()..].to_string());
+            }
             "--jit" => self.claim(Mode::Jit)?,
             "--shared" | "-shared" => self.claim(Mode::SharedLibrary)?,
             "--ar" | "--archive" => self.claim(Mode::BuildArchive)?,
@@ -1391,11 +1402,12 @@ impl Parser {
                     .no_builtin_fns
                     .push(s["-fno-builtin-".len()..].to_string());
             }
-            // gcc / clang `-nostdinc`: the standard headers leave the
+            // gcc / clang `-nostdinc`: the bundled headers leave the
             // `#include` search, so a name no `-I` / `-iquote` path
             // carries is an error rather than a bind to badc's bundled
-            // libc.
+            // libc. clang's `-nostdlibinc` keeps the compiler's own.
             "-nostdinc" => front.nostdinc = true,
+            "-nostdlibinc" => front.nostdlibinc = true,
             // gcc / clang `-P`: `-E` prints no line markers, for inputs
             // that are not C (linker scripts, generated headers). Without
             // `-E` it has no effect, as under gcc.
@@ -2130,6 +2142,9 @@ impl Parser {
     /// Resolve the target, check every flag combination the argument
     /// vector alone decides, and hand back the parsed command line.
     fn finish(mut self) -> Result<Parsed, ParseError> {
+        if let Some(name) = self.print_file_name.take() {
+            return Ok(Parsed::PrintFileName(name));
+        }
         let mode = self.mode.map(|(m, _)| m).unwrap_or(Mode::NativeExecutable);
         if mode == Mode::Install {
             return Ok(Parsed::Install {
@@ -2641,6 +2656,8 @@ impl FrontEnd {
             .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
+            .with_nostdlibinc(self.nostdlibinc)
+            .with_compiler_include_dir(self.compiler_include_dir.clone())
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
             .with_freestanding(self.freestanding)
@@ -2748,6 +2765,7 @@ mod tests {
             Ok(Parsed::Print(_)) => "printed text".to_string(),
             Ok(Parsed::Install { .. }) => "an install".to_string(),
             Ok(Parsed::Diagnostics(_)) => "catalogue text".to_string(),
+            Ok(Parsed::PrintFileName(_)) => "a file name".to_string(),
             Err(e) => format!("a rejection: {}", e.message),
         }
     }
@@ -3980,6 +3998,20 @@ mod tests {
     }
 
     #[test]
+    fn print_file_name_answers_whatever_else_the_line_asks() {
+        // gcc prints the name and exits, compiling nothing.
+        for args in [
+            &["-print-file-name=include"][..],
+            &["-c", "a.c", "--target=nonesuch", "-print-file-name=include"],
+        ] {
+            match parse_args(argv(args)) {
+                Ok(Parsed::PrintFileName(name)) => assert_eq!(name, "include"),
+                other => panic!("{args:?}: expected a file name, got {}", outcome(&other)),
+            }
+        }
+    }
+
+    #[test]
     fn install_is_decided_before_the_target() {
         match parse_args(argv(&["--install", "/tmp/dest"])) {
             Ok(Parsed::Install { dir, quiet }) => {
@@ -4328,6 +4360,8 @@ mod tests {
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
         assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
+        let lib = parse(&["-nostdlibinc", "a.c"]).front;
+        assert!(lib.nostdlibinc && !lib.nostdinc);
         let edition = |s: &str| parse(&[s, "a.c"]).front.std.0;
         assert_eq!(parse(&["a.c"]).front.std.0, Some(201112));
         assert_eq!(edition("-std=gnu89"), None);

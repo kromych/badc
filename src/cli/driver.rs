@@ -9,7 +9,8 @@ use super::native_link::link_image;
 use super::objects::{build_archive, check_syntax, compile_objects};
 use super::options::Mode;
 use super::paths::{
-    declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
+    compiler_include_dir, declared_home, declared_sysroot, install_dir, install_embedded,
+    print_file_name, sysroot_include_paths,
 };
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
@@ -52,6 +53,10 @@ pub(crate) fn run() {
             return;
         }
         Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
+        Ok(Parsed::PrintFileName(name)) => {
+            outln!("{}", print_file_name(&name));
+            return;
+        }
         Err(e) => e.report(),
     };
     // What the command line itself raised, before any input is opened.
@@ -153,6 +158,8 @@ fn resolve_search_paths(cli: &mut Cli) {
             }
         }
     }
+    cli.front.compiler_include_dir =
+        compiler_include_dir().map(|d| d.to_string_lossy().into_owned());
     cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
     cli.front.system_include_paths = match &cli.sysroot {
         Some(root) => sysroot_include_paths(cli.target, root),

@@ -1067,6 +1067,69 @@ fn ffreestanding_makes_stdc_hosted_zero() {
 // carries the same text whatever they report, and an error among them, or an
 // `#error`, fails the run. `-dM -E`, `-M`, `-MM` and `-fsyntax-only` report
 // the same rows.
+/// The compiler's own headers are one set on the `#include` search, as
+/// gcc's and clang's: `-nostdinc` drops them with the C library's,
+/// `-isystem $(badc -print-file-name=include)` restores them, and
+/// `-nostdlibinc` keeps them. Each outcome is clang 22's for the same unit
+/// and flags on Linux x86_64 and aarch64, and Apple clang 21's on macOS.
+/// On x86-64 a hosted `<xmmintrin.h>` includes `<mm_malloc.h>`, which
+/// reaches for `<stdlib.h>`; that is the C library's, and not found.
+#[test]
+fn nostdinc_takes_the_compiler_headers_off_and_its_include_dir_restores_them() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let out = Command::new(badc)
+        .arg("-print-file-name=include")
+        .output()
+        .expect("run badc");
+    let inc = String::from_utf8(out.stdout).expect("utf-8 path");
+    let inc = inc.trim_end();
+    let tail = std::path::Path::new("lib").join("badc").join("include");
+    assert!(std::path::Path::new(inc).ends_with(&tail), "{inc}");
+    let dir = TempDir::new("badc-nostdinc-modes");
+    let body = "#include <stdarg.h>\n#include <stdint.h>\n\
+                int f(int n, ...) { va_list ap; va_start(ap, n); int v = va_arg(ap, int); \
+                va_end(ap); return v; }\nint32_t g(void) { return 1; }\n";
+    // The target, the header ahead of that body, the flags, and what the
+    // run reports missing (`None`: it compiles). The directory serves the
+    // compiler's headers and nothing else, so `<stdio.h>` stays missing.
+    type Case<'a> = (&'a str, &'a str, &'a [&'a str], Option<&'a str>);
+    let (x64, a64, io) = ("immintrin.h", "arm_neon.h", "stdio.h");
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        ("linux-x64", x64, &["-nostdinc"], Some(x64)),
+        ("linux-x64", x64, &["-nostdinc", "-isystem", inc], Some("stdlib.h")),
+        ("linux-x64", x64, &["-nostdlibinc"], Some("stdlib.h")),
+        ("linux-x64", x64, &["-nostdinc", "-isystem", inc, "-ffreestanding"], None),
+        ("linux-x64", x64, &["-nostdlibinc", "-ffreestanding"], None),
+        ("linux-x64", io, &["-nostdinc", "-isystem", inc], Some(io)),
+        ("linux-x64", io, &["-nostdlibinc"], Some(io)),
+        ("macos-aarch64", a64, &["-nostdinc"], Some(a64)),
+        ("macos-aarch64", a64, &["-nostdinc", "-isystem", inc], None),
+        ("macos-aarch64", a64, &["-nostdinc", "-I", inc], None),
+        ("macos-aarch64", a64, &["-nostdlibinc"], None),
+    ];
+    let src = dir.join("unit.c");
+    for &(target, header, flags, missing) in cases {
+        std::fs::write(&src, format!("#include <{header}>\n{body}")).expect("write unit");
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(flags)
+            .arg("-fsyntax-only")
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        let what = format!("{target} <{header}> {flags:?}: {err}");
+        match missing {
+            None => assert!(out.status.success(), "{what}"),
+            Some(name) => assert!(
+                !out.status.success() && err.contains(&format!("`{name}` not found")),
+                "{what}"
+            ),
+        }
+    }
+}
+
 #[test]
 fn preprocessing_alone_reports_the_preprocessors_diagnostics() {
     let badc = env!("CARGO_BIN_EXE_badc");

@@ -239,10 +239,15 @@ pub(crate) struct Preprocessor {
     system_fallback_paths: SearchPaths,
     /// `-nostdinc`: the bundled set and `system_fallback_paths` leave
     /// the search, so a name no `-I` / `-iquote` path carries is an
-    /// error rather than badc's own libc. The compiler-owned headers
-    /// ([`crate::c5::headers::COMPILER_OWNED_HEADERS`]) stay, as gcc's
-    /// builtins do.
+    /// error rather than badc's own libc, as in gcc and clang.
     nostdinc: bool,
+    /// clang's `-nostdlibinc`: as `nostdinc`, but the compiler's own
+    /// headers ([`crate::c5::headers::compiler_header`]) stay.
+    nostdlibinc: bool,
+    /// The directory `-print-file-name=include` names. Wherever a search
+    /// path names it, the compiler's own headers resolve there from the
+    /// bundled set, and no other name does.
+    compiler_include_dir: Option<String>,
     /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
     /// call spelled with the library name lowers as a call rather than as
     /// the instruction badc has for it.
@@ -1292,6 +1297,8 @@ impl Preprocessor {
             isystem_paths: SearchPaths::default(),
             system_fallback_paths: SearchPaths::default(),
             nostdinc: false,
+            nostdlibinc: false,
+            compiler_include_dir: None,
             no_builtin: false,
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
@@ -1555,6 +1562,18 @@ impl Preprocessor {
     /// `#include` search. See [`Preprocessor::nostdinc`].
     pub fn set_nostdinc(&mut self, on: bool) {
         self.nostdinc = on;
+    }
+
+    /// clang's `-nostdlibinc`: the same, keeping the compiler's own
+    /// headers. See [`Preprocessor::nostdlibinc`].
+    pub fn set_nostdlibinc(&mut self, on: bool) {
+        self.nostdlibinc = on;
+    }
+
+    /// Name the directory `-print-file-name=include` prints. See
+    /// [`Preprocessor::compiler_include_dir`].
+    pub fn set_compiler_include_dir(&mut self, dir: &str) {
+        self.compiler_include_dir = Some(dir.to_string());
     }
 
     /// gcc / clang `-fno-builtin` / `-ffreestanding`, the preprocessor's

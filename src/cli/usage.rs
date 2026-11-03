@@ -240,15 +240,22 @@ Compile knobs:
   -ffreestanding           Compile for a freestanding implementation:
                            -fno-builtin, and `__STDC_HOSTED__` is 0.
                            -fhosted restores both.
-  -nostdinc                Drop the bundled standard headers and the
-                           system directories from the #include search,
-                           leaving only -I, -iquote and the including
-                           file's own directory. A name none of those
-                           carries is an error instead of resolving to
-                           badc's libc, and the auto-include retry is
-                           off. The compiler's own headers
-                           (`arm_neon.h`, `x86intrin.h` and the x86
-                           intrinsic headers) stay, as gcc's do.
+  -nostdinc                Drop the bundled headers and the system
+                           directories from the #include search, leaving
+                           only -I, -isystem, -iquote and the including
+                           file's own directory, as gcc and clang do. A
+                           name none of those carries is an error, and
+                           the auto-include retry is off.
+                           `-isystem $(badc -print-file-name=include)`
+                           restores the compiler's own headers.
+  -nostdlibinc             As -nostdinc, keeping the compiler's own
+                           headers (<stdarg.h>, <stddef.h>, <stdint.h>,
+                           the intrinsic headers, ...), as clang does.
+  -print-file-name=<name>  Print the full path of <name>, or <name> when
+                           badc has none. `include` names the directory
+                           of the compiler's own headers; on the
+                           #include search it serves them from the
+                           binary.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later

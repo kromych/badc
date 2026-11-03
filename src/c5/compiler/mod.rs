@@ -554,6 +554,13 @@ pub struct CompileOptions {
     /// retry is off with it: a unit that asked for no library headers must
     /// not be given one. See [`Preprocessor::set_nostdinc`].
     pub nostdinc: bool,
+    /// clang's `-nostdlibinc` -- as `nostdinc`, keeping the compiler's
+    /// own headers. See [`Preprocessor::set_nostdlibinc`].
+    pub nostdlibinc: bool,
+    /// The directory `-print-file-name=include` names, which serves the
+    /// compiler's own headers wherever a search path names it. See
+    /// [`Preprocessor::set_compiler_include_dir`].
+    pub compiler_include_dir: Option<String>,
     /// `-fno-builtin`, which `-ffreestanding` implies -- a call spelled
     /// with a library function's own name is an ordinary call, not a
     /// builtin the compiler may fold. The `__builtin_` spellings keep
@@ -818,6 +825,20 @@ impl CompileOptions {
         self.nostdinc = on;
         self
     }
+    /// The same, keeping the compiler's own headers (`-nostdlibinc`).
+    pub fn with_nostdlibinc(mut self, on: bool) -> Self {
+        self.nostdlibinc = on;
+        self
+    }
+    /// Name the compiler's include directory (`-print-file-name=include`).
+    pub fn with_compiler_include_dir(mut self, dir: Option<String>) -> Self {
+        self.compiler_include_dir = dir;
+        self
+    }
+    /// Whether the C library's headers are off the `#include` search.
+    fn library_headers_withdrawn(&self) -> bool {
+        self.nostdinc || self.nostdlibinc
+    }
     /// Stop treating a library function's own name as a builtin
     /// (`-fno-builtin`).
     pub fn with_no_builtin(mut self, on: bool) -> Self {
@@ -839,11 +860,12 @@ impl CompileOptions {
     /// 7.1.4p2's permission to use a library function without a
     /// declaration is a hosted one, so `-ffreestanding` withdraws it;
     /// `-fno-builtin` withdraws it for every library name and
-    /// `-fno-builtin-<name>` for that name; under `-nostdinc` the header
-    /// the retry would splice in is off the search, and a preprocessed
-    /// unit includes nothing. The undeclared-function error stands instead.
+    /// `-fno-builtin-<name>` for that name; under `-nostdinc` and
+    /// `-nostdlibinc` the header the retry would splice in is off the
+    /// search, and a preprocessed unit includes nothing. The
+    /// undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
-        self.nostdinc
+        self.library_headers_withdrawn()
             || self.freestanding
             || self.no_builtin
             || self.preprocessed
@@ -2482,7 +2504,8 @@ pub struct Compiler {
     /// Mirror of [`CompileOptions::std`].
     std: CStd,
     vla_larger_than: Option<u64>,
-    /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
+    /// The C library's headers are off the search (`-nostdinc`,
+    /// `-nostdlibinc`), read where `no_builtin` is.
     nostdinc: bool,
     /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
     freestanding: bool,
@@ -2877,6 +2900,10 @@ impl Compiler {
             pp.add_own_header_root(path);
         }
         pp.set_nostdinc(opts.nostdinc);
+        pp.set_nostdlibinc(opts.nostdlibinc);
+        if let Some(dir) = &opts.compiler_include_dir {
+            pp.set_compiler_include_dir(dir);
+        }
         pp.set_no_builtin(opts.no_builtin);
         pp.set_hosted(!opts.freestanding);
         for name in &opts.force_includes {
@@ -2923,7 +2950,10 @@ impl Compiler {
         // with a force-include, need a copy. Recording for pass reuse is
         // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
-        let record = !(opts.nostdinc || opts.freestanding || opts.no_builtin || opts.preprocessed);
+        let record = !(opts.library_headers_withdrawn()
+            || opts.freestanding
+            || opts.no_builtin
+            || opts.preprocessed);
         let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
@@ -3210,7 +3240,7 @@ impl Compiler {
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
-            nostdinc: opts.nostdinc,
+            nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,

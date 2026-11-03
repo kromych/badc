@@ -3277,11 +3277,12 @@ fn bundled_header_resolves_bundled_includes_over_search_paths() {
 }
 
 #[test]
-fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
-    // `-nostdinc` takes the standard library headers off the search, so a
-    // name only the bundled set carries stops resolving; a `-I` directory
-    // that carries it still does. The compiler's own headers stay
-    // reachable, since the flag withdraws the library, not the builtins.
+fn nostdinc_withdraws_the_bundled_headers_compilers_included() {
+    // `-nostdinc` takes the bundled headers off the search, so a name only
+    // the bundled set carries stops resolving; a `-I` directory that
+    // carries it still does. The compiler's own headers go too, as gcc's
+    // and clang's do; the directory `-print-file-name=include` names brings
+    // them back, and `-nostdlibinc` keeps them.
     let base = std::env::temp_dir().join(format!("badc-nostdinc-{}", std::process::id()));
     let sys = base.join("sys");
     std::fs::create_dir_all(&sys).unwrap();
@@ -3306,13 +3307,71 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
         .expect("a -I directory still resolves the name");
     assert!(out.contains("tree_types_marker"), "{out}");
 
-    let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
-    owned.set_nostdinc(true);
-    let out = owned
-        .process("#include <x86intrin.h>\n")
-        .expect("the compiler's intrinsic header stays reachable");
     std::fs::remove_dir_all(&base).ok();
-    assert!(out.contains("__bsfd"), "{out}");
+    let inc = "/opt/badc/lib/badc/include";
+    let run = |nostdinc: bool, nostdlibinc: bool, dir: Option<&str>, src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.set_nostdlibinc(nostdlibinc);
+        pp.set_hosted(false);
+        pp.set_compiler_include_dir(inc);
+        if let Some(dir) = dir {
+            pp.add_isystem_path(dir);
+        }
+        pp.process(src)
+    };
+    let compiler = "#include <x86intrin.h>\n#include <stdarg.h>\n#include <stdint.h>\n";
+    let err = run(true, false, None, compiler).expect_err("-nostdinc drops them");
+    assert!(not_found(&err, "x86intrin.h"), "{err:?}");
+    for (nostdinc, nostdlibinc, dir) in [
+        (true, false, Some(inc)),
+        (true, false, Some("/opt/badc/lib/badc/include/")),
+        (false, true, None),
+    ] {
+        let out = run(nostdinc, nostdlibinc, dir, compiler).expect("the compiler's headers");
+        assert!(out.contains("__bsfd") && out.contains("int32_t"), "{out}");
+        let err = run(nostdinc, nostdlibinc, dir, "#include <stdio.h>\n")
+            .expect_err("the C library's stay off");
+        assert!(not_found(&err, "stdio.h"), "{err:?}");
+    }
+}
+
+/// Whether `err` reports `name` as an include no search step resolves.
+fn not_found(err: &impl core::fmt::Debug, name: &str) -> bool {
+    format!("{err:?}").contains(&format!("`{name}` not found"))
+}
+
+#[test]
+fn a_compiler_header_under_nostdinc_searches_for_the_library_header_it_includes() {
+    // gcc's and clang's hosted `<xmmintrin.h>` includes `<mm_malloc.h>`,
+    // which includes `<stdlib.h>`; under `-nostdinc` with the compiler's
+    // directory restored, or `-nostdlibinc`, that is not found unless a
+    // search path carries it. Freestanding, `<mm_malloc.h>` is not included.
+    let base = std::env::temp_dir().join(format!("badc-nostdinc-lib-{}", std::process::id()));
+    std::fs::create_dir_all(&base).unwrap();
+    std::fs::write(base.join("stdlib.h"), "int tree_stdlib_marker;\n").unwrap();
+    std::fs::write(base.join("malloc.h"), "int tree_malloc_marker;\n").unwrap();
+    let inc = "/opt/badc/lib/badc/include";
+    let run = |hosted: bool, nostdlibinc: bool, tree: bool| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(!nostdlibinc);
+        pp.set_nostdlibinc(nostdlibinc);
+        pp.set_hosted(hosted);
+        pp.set_compiler_include_dir(inc);
+        pp.add_isystem_path(inc);
+        if tree {
+            pp.add_search_path(base.to_str().unwrap());
+        }
+        pp.process("#include <xmmintrin.h>\n")
+    };
+    for nostdlibinc in [false, true] {
+        let err = run(true, nostdlibinc, false).expect_err("hosted reaches <stdlib.h>");
+        assert!(not_found(&err, "stdlib.h"), "{err:?}");
+        let out = run(true, nostdlibinc, true).expect("a -I directory carries it");
+        assert!(out.contains("tree_stdlib_marker"), "{out}");
+        run(false, nostdlibinc, false).expect("freestanding includes no library header");
+    }
+    std::fs::remove_dir_all(&base).ok();
 }
 
 #[test]
@@ -4750,12 +4809,12 @@ fn has_include_matches_what_include_resolves() {
 }
 
 #[test]
-fn compiler_owned_header_resolves_embedded_before_search_paths() {
-    // A compiler-owned intrinsic header (arm_neon.h) resolves to the
-    // embedded copy even when a `-I` directory holds a same-named file (a
-    // foreign toolchain's private include directory folded onto the search
-    // path). An ordinary embedded name (stdarg.h) keeps `-I`-shadows-
-    // embedded, as gcc and clang do.
+fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
+    // An intrinsic header (arm_neon.h) resolves to the embedded copy where a
+    // `-I` directory holds a same-named file (a foreign toolchain's private
+    // include directory folded onto the search path), with or without
+    // `-nostdinc`. Any other name (stdarg.h) keeps `-I`-shadows-embedded,
+    // as gcc and clang do.
     use std::io::Write;
     let dir = std::env::temp_dir().join(format!("badc-owned-hdr-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -4767,25 +4826,28 @@ fn compiler_owned_header_resolves_embedded_before_search_paths() {
         .unwrap()
         .write_all(b"int shadow_stdarg_marker;\n")
         .unwrap();
-    let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
-    pp.add_search_path(dir.to_str().unwrap());
-    let out = pp
-        .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
-        .expect("owned + shadowed includes resolve");
+    for nostdinc in [false, true] {
+        let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.add_search_path(dir.to_str().unwrap());
+        let out = pp
+            .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
+            .expect("owned + shadowed includes resolve");
+        assert!(
+            !out.contains("foreign_neon_marker"),
+            "arm_neon.h must resolve to the embedded copy: {out}"
+        );
+        assert!(
+            out.contains("vld1q_u8"),
+            "embedded arm_neon.h body expected: {}",
+            &out[..out.len().min(400)]
+        );
+        assert!(
+            out.contains("shadow_stdarg_marker"),
+            "a -I shadow of stdarg.h must win, as in gcc/clang"
+        );
+    }
     std::fs::remove_dir_all(&dir).ok();
-    assert!(
-        !out.contains("foreign_neon_marker"),
-        "arm_neon.h must resolve to the embedded copy: {out}"
-    );
-    assert!(
-        out.contains("vld1q_u8"),
-        "embedded arm_neon.h body expected: {}",
-        &out[..out.len().min(400)]
-    );
-    assert!(
-        out.contains("shadow_stdarg_marker"),
-        "a -I shadow of stdarg.h must win, as in gcc/clang"
-    );
 }
 
 /// Scratch directory holding the given (name, body) headers, on the

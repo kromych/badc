@@ -118,20 +118,14 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     ),
 ];
 
-/// Header names whose contents are part of the compiler implementation:
-/// the intrinsic wrappers built on badc's own builtins and inline-asm
-/// encoders. Another compiler's copy of such
-/// a header is written against that compiler's builtins and can never
-/// compile here, so when a build line puts a foreign toolchain's private
-/// include directory on the search path (an `-isystem
-/// $(cc -print-file-name=include)` folded into `-I`), these names must still
-/// resolve to the embedded copy. They are also the set `-nostdinc` keeps:
-/// that flag withdraws the standard library headers, as it does in gcc,
-/// and leaves the compiler's own facilities in place. Ordinary headers keep
-/// the usual order (`-I` shadows the embedded set, as it does in gcc and
-/// clang). Each is served on the architecture whose instructions it wraps,
-/// as gcc installs it.
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
+/// The intrinsic wrappers, built on badc's own builtins and inline-asm
+/// encoders. Another compiler's copy is written against that compiler's
+/// builtins and can never compile here, so where a search directory
+/// carries one (a foreign toolchain's `-print-file-name=include` on the
+/// command line) the name binds badc's copy at that position. Each is
+/// served on the architecture whose instructions it wraps, as gcc installs
+/// it.
+pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "arm_neon.h",
     "x86intrin.h",
     "immintrin.h",
@@ -144,9 +138,40 @@ pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
     "wmmintrin.h",
 ];
 
-/// Whether `name` is a compiler-owned intrinsic header.
-pub(super) fn compiler_owned_header(name: &str) -> bool {
-    COMPILER_OWNED_HEADERS.contains(&name)
+/// The rest of the headers gcc and clang both install in the compiler's
+/// own include directory rather than with the C library: C99 4p6's
+/// freestanding set, C11's `<stdalign.h>`, `<stdnoreturn.h>` and
+/// `<stdatomic.h>`, `<mm_malloc.h>`, `<cpuid.h>`, and `<intrin.h>`, which
+/// MSVC and clang keep with the compiler. clang also keeps `<tgmath.h>` and
+/// `<inttypes.h>` there and gcc leaves them to glibc; badc's are built on
+/// its `<math.h>` and `<stdlib.h>` and stay with the library.
+const COMPILER_HEADERS: &[&str] = &[
+    "float.h",
+    "iso646.h",
+    "limits.h",
+    "stdalign.h",
+    "stdarg.h",
+    "stdatomic.h",
+    "stdbool.h",
+    "stddef.h",
+    "stdint.h",
+    "stdnoreturn.h",
+    "mm_malloc.h",
+    "cpuid.h",
+    "intrin.h",
+];
+
+/// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
+pub(super) fn intrinsic_header(name: &str) -> bool {
+    INTRINSIC_HEADERS.contains(&name)
+}
+
+/// Whether `name` is one of the compiler's own headers rather than the C
+/// library's: `-nostdinc` drops them with the library, `-nostdlibinc`
+/// keeps them, and the directory `-print-file-name=include` names serves
+/// them.
+pub(super) fn compiler_header(name: &str) -> bool {
+    intrinsic_header(name) || COMPILER_HEADERS.contains(&name)
 }
 
 /// All bundled headers, as `(name, targets, body)`. Public so the CLI's
@@ -567,6 +592,13 @@ pub(super) fn headers_declaring(name: &str) -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_compiler_header_is_in_the_registry() {
+        for name in INTRINSIC_HEADERS.iter().chain(COMPILER_HEADERS) {
+            assert!(registry_entry(name).is_some(), "{name}");
+        }
+    }
 
     #[test]
     fn header_declaring_finds_printf_in_stdio() {

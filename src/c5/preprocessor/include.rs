@@ -410,6 +410,14 @@ impl Preprocessor {
         }
     }
 
+    /// Whether search directory `dir` is the one `-print-file-name=include`
+    /// names ([`Preprocessor::set_compiler_include_dir`]).
+    #[cfg(feature = "std")]
+    fn is_compiler_include_dir(&self, dir: &str) -> bool {
+        let same = |c: &String| std::path::Path::new(c) == std::path::Path::new(dir);
+        self.compiler_include_dir.as_ref().is_some_and(same)
+    }
+
     /// The compiler's own copy of `name`: the body from an on-disk
     /// header root if one carries it, else the in-binary registry.
     /// The key is always `name`, so a header reached both directly and
@@ -437,9 +445,10 @@ impl Preprocessor {
 
     /// Look `name` up from `start`, visiting the [`SearchStep`]s in order:
     /// the including file's directory and the `-iquote` paths for the
-    /// quoted form, the `-I` paths, then, unless `-nostdinc`, the own set
-    /// and the sysroot's system directories. `#include_next` visits only
-    /// the steps past the one that supplied the current file.
+    /// quoted form, the `-I` and `-isystem` paths, then, unless `-nostdinc`,
+    /// the own set (its compiler headers alone under `-nostdlibinc`) and the
+    /// sysroot's system directories. `#include_next` visits only the steps
+    /// past the one that supplied the current file.
     fn find_include(&self, name: &str, start: SearchStart<'_>) -> Option<Resolved> {
         let after = match start {
             SearchStart::After(frame) => Some(frame.step),
@@ -484,14 +493,6 @@ impl Preprocessor {
                     }
                 }
             }
-            // A compiler-owned intrinsic header (built on badc's own inline-asm
-            // encoders) resolves to the embedded copy before the search paths:
-            // a foreign toolchain's copy on `-I` (an
-            // `-isystem $(cc -print-file-name=include)` folded into `-I`) is
-            // written against that compiler's builtins and can never compile
-            // here. The quoted source-directory step above still precedes it
-            // per C99 6.10.2p2. Ordinary headers keep `-I`-shadows-embedded.
-            //
             // One bundled header including another resolves within the
             // bundled set. The compiler's headers form a closed set
             // written against each other; a `-I` directory carrying the
@@ -502,35 +503,61 @@ impl Preprocessor {
             // provenance, not a registry lookup of its spelling: a
             // foreign header that happens to share a bundled name (an OS
             // tree's own `linux/cdrom.h`) is not part of the closed set,
-            // and its includes keep `-I`-shadows-bundled.
-            //
-            // Both run where the `-I` paths start, so a search resumed past
-            // the own set cannot return to it.
+            // and its includes keep `-I`-shadows-bundled. Under `-nostdinc`
+            // and `-nostdlibinc` the set is the compiler's own headers: a
+            // library header one includes is searched for like any other, as
+            // gcc's and clang's `<mm_malloc.h>` searches for `<stdlib.h>`. It
+            // runs where the `-I` paths start, so a search resumed past the
+            // own set cannot return to it.
+            let closed =
+                !(self.nostdinc || self.nostdlibinc) || crate::c5::headers::compiler_header(name);
             if runs(SearchStep::Path(0))
-                && (crate::c5::headers::compiler_owned_header(name) || from_own)
-                && let Some(found) = self.own_header(name, from_own)
+                && from_own
+                && closed
+                && let Some(found) = self.own_header(name, true)
             {
                 return Some(found);
             }
-            for (i, dir) in self.search_paths.iter().enumerate() {
-                if let Some(found) = probe(SearchStep::Path(i), dir) {
-                    return Some(found);
+            let paths = self.search_paths.iter().enumerate();
+            let isystem = self.isystem_paths.iter().enumerate();
+            let dirs = (paths.map(|(i, d)| (SearchStep::Path(i), d)))
+                .chain(isystem.map(|(i, d)| (SearchStep::Isystem(i), d)));
+            for (step, dir) in dirs {
+                // The directory `-print-file-name=include` names serves the
+                // compiler's own headers and nothing else.
+                if self.is_compiler_include_dir(dir) {
+                    if runs(step)
+                        && crate::c5::headers::compiler_header(name)
+                        && let Some(found) = self.own_header(name, false)
+                    {
+                        return Some(found);
+                    }
+                    continue;
                 }
-            }
-            for (i, dir) in self.isystem_paths.iter().enumerate() {
-                if let Some(found) = probe(SearchStep::Isystem(i), dir) {
-                    return Some(found);
+                let Some(found) = probe(step, dir) else {
+                    continue;
+                };
+                // Another compiler's intrinsic header is written against its
+                // builtins and can never compile here; the name binds badc's.
+                if crate::c5::headers::intrinsic_header(name)
+                    && let Some(own) = self.own_header(name, false)
+                {
+                    return Some(own);
                 }
+                return Some(found);
             }
         }
-        // `-nostdinc` withdraws the standard library headers and the system
-        // directories below, leaving only what the command line named. A
-        // name none of those paths carries is then a "not found" error,
-        // not a silent bind to badc's own libc.
+        // `-nostdinc` withdraws the bundled headers and the system
+        // directories below, leaving only what the command line named;
+        // `-nostdlibinc` keeps the compiler's own headers. A name none of
+        // the remaining steps carries is then a "not found" error, not a
+        // silent bind to badc's own libc.
         if self.nostdinc {
             return None;
         }
+        let ours = |n: &str| !self.nostdlibinc || crate::c5::headers::compiler_header(n);
         if runs(SearchStep::Own)
+            && ours(name)
             && let Some(found) = self.own_header(name, from_own)
         {
             return Some(found);
@@ -538,11 +565,13 @@ impl Preprocessor {
         // A header the embedded set lacks (a third-party `zlib.h`,
         // `libfdt.h`) falls back to the sysroot's system directories,
         // probed only here so a standard header still resolves to the
-        // embedded copy above.
+        // embedded copy above. They are the C library's.
         #[cfg(feature = "std")]
-        for (i, dir) in self.system_fallback_paths.iter().enumerate() {
-            if let Some(found) = probe(SearchStep::System(i), dir) {
-                return Some(found);
+        if !self.nostdlibinc {
+            for (i, dir) in self.system_fallback_paths.iter().enumerate() {
+                if let Some(found) = probe(SearchStep::System(i), dir) {
+                    return Some(found);
+                }
             }
         }
         // Windows resolves includes case-insensitively (its filesystems
@@ -554,7 +583,9 @@ impl Preprocessor {
             return crate::c5::headers::embedded_headers()
                 .iter()
                 .find(|(n, ts, _)| {
-                    n.eq_ignore_ascii_case(&lower) && (from_own || ts.contains(self.target))
+                    n.eq_ignore_ascii_case(&lower)
+                        && ours(n)
+                        && (from_own || ts.contains(self.target))
                 })
                 .map(|(n, _, body)| {
                     Resolved::own(body.to_string(), n, None, SearchStep::OwnFolded)

@@ -955,10 +955,10 @@ impl AsmRegion {
                     "aarch64 inline asm: operand place missing",
                 ));
             };
-            // A `w` input of up to 8 bytes captures its value's 64 bits, whose
-            // low bytes its view reads, and a 16-byte value its 128 bits; any
-            // other 16-byte operand captures its address. A scalar value
-            // operand captures its integer value.
+            // A `w` input or read-write value of up to 8 bytes captures its
+            // value's 64 bits, whose low bytes its view reads, and a 16-byte
+            // value its 128 bits; any other 16-byte operand captures its
+            // address. A scalar value operand captures its integer value.
             let op = &ops.asm.operands[i];
             if op.value && op.width == 16 {
                 let Some(q) = materialize_v128(code, place, 16, self.frame, Reg(16)) else {
@@ -968,7 +968,7 @@ impl AsmRegion {
                 };
                 self.str_q(code, q, self.cap_off(i));
             } else if matches!(ops.asm.operand_class(i), AsmConstraint::Fp)
-                && !op.is_output
+                && (!op.is_output || op.value)
                 && op.width <= 8
             {
                 let Some(d) = materialize_fp(code, place, 16, self.frame) else {
@@ -1011,7 +1011,7 @@ impl AsmRegion {
                         self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = operand address
                         emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
                     }
-                } else if !op.is_output {
+                } else if !op.is_output || (op.is_rw && op.value) {
                     self.ldr_d(code, r, self.cap_off(i));
                 } else if op.is_rw {
                     self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = destination address

@@ -793,7 +793,7 @@ pub(crate) fn asm_binds_directly(
             }
             match op.constraint {
                 C::Reg if op.width <= 8 => gp_out += 1,
-                C::Fp if op.width == 16 => fp_out += 1,
+                C::Fp => fp_out += 1,
                 _ => return false,
             }
             continue;

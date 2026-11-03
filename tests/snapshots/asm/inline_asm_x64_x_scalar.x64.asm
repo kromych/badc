@@ -26,51 +26,27 @@ Disassembly of section .text:
                	int3
 
 <twice>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movapd	%xmm0, %xmm1
                	addsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
                	retq
 
 <twicef>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movapd	%xmm0, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	%xmm0, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm0
-               	leave
                	retq
 
 <sub_second>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movapd	%xmm0, %xmm3
                	movapd	%xmm2, %xmm0
                	subsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	vfmadd231sd	%xmm15, %xmm3, %xmm0 # xmm0 = (xmm3 * xmm15) + xmm0
-               	leave
                	retq
 
 <root>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movapd	%xmm0, %xmm1
                	sqrtsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
                	retq
 
 <to_int>:
@@ -90,15 +66,7 @@ Disassembly of section .text:
                	retq
 
 <doubled>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	%xmm0, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
                	addsd	%xmm0, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
-               	movsd	-0x10(%rbp), %xmm0
-               	leave
                	retq
 
 <vadd>:

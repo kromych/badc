@@ -3021,6 +3021,64 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
     );
 }
 
+/// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
+/// values in SIMD registers, as gcc 16 and clang do: each function is its
+/// instructions and `ret`, with no frame.
+#[test]
+fn eight_byte_simd_values_take_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void axpy2(float *p, const float *q, float k) {\n\
+    float32x2_t a = vld1_f32(p), b = vld1_f32(q);\n\
+    vst1_f32(p, vadd_f32(vmul_f32(a, vdup_n_f32(k)), b));\n\
+}\n\
+void add1(double *p, const double *q) { vst1_f64(p, vadd_f64(vld1_f64(p), vld1_f64(q))); }\n\
+void round2(float *p, const float *q) { vst1_f32(p, vcvt_f32_s32(vcvt_s32_f32(vld1_f32(q)))); }\n\
+double sqrt_d(double x) { double r; __asm__(\"fsqrt %d0, %d1\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+float sqrt_s(float x) { float r; __asm__(\"fsqrt %s0, %s1\" : \"=w\"(r) : \"w\"(x)); return r; }\n";
+    const THREE: u32 = 0xFFE0_FC00;
+    const TWO: u32 = 0xFFFF_FC00;
+    const LDR_D: (u32, u32) = (0xFFC0_0000, 0xFD40_0000);
+    const STR_D: (u32, u32) = (0xFFC0_0000, 0xFD00_0000);
+    let mut m = Misses::default();
+    for (name, insns) in [
+        (
+            "axpy2",
+            &[
+                LDR_D,
+                LDR_D,
+                (TWO, 0x0E04_0400),
+                (THREE, 0x2E20_DC00),
+                (THREE, 0x0E20_D400),
+                STR_D,
+            ][..],
+        ),
+        ("add1", &[LDR_D, LDR_D, (THREE, 0x1E60_2800), STR_D][..]),
+        (
+            "round2",
+            &[LDR_D, (TWO, 0x0EA1_B800), (TWO, 0x0E21_D800), STR_D][..],
+        ),
+        ("sqrt_d", &[(TWO, 0x1E61_C000)][..]),
+        ("sqrt_s", &[(TWO, 0x1E21_C000)][..]),
+    ] {
+        let ws = a64(SRC, name);
+        let body = &ws[..ws.len().saturating_sub(1)];
+        m.expect(
+            body.len() == insns.len()
+                && body
+                    .iter()
+                    .zip(insns)
+                    .all(|(&w, &(mask, want))| w & mask == want),
+            || {
+                format!(
+                    "aarch64 {name}: not its {} instructions: {ws:08x?}",
+                    insns.len()
+                )
+            },
+        );
+    }
+    m.finish();
+}
+
 /// A constant read past a call by a contracted multiply-add, by a return
 /// and by a phi income through a split edge is set again after the call:
 /// no callee-saved register holds one, `ret` and `flag` save none, and

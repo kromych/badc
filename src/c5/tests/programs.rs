@@ -116,6 +116,13 @@ fn hex_float_literal() {
 }
 
 #[test]
+fn comparison_macros_raise_no_invalid() {
+    // C99 7.12.14: the interpreter's comparisons are quiet, and
+    // fetestexcept reads the flags its arithmetic raises.
+    assert_eq!(run_fixture("c99_comparison_macros_raise_no_invalid.c"), 0);
+}
+
+#[test]
 fn bool_normalize_c99() {
     // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
     assert_eq!(run_fixture("bool_normalize_c99.c"), 0);

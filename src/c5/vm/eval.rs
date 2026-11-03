@@ -3,7 +3,7 @@
 //! constant folder (`codegen::passes::constfold`) share one
 //! implementation of the operator semantics.
 
-use super::super::ir::{BinOp, BitCountOp, FpCastKind, LoadKind, eval_int_binop};
+use super::super::ir::{BinOp, BitCountOp, LoadKind, eval_int_binop};
 
 /// The interpreter's diagnosis of a zero divisor, named for the trapping
 /// op: it reports the division rather than invoking host-level UB. The VM
@@ -169,61 +169,9 @@ pub(crate) fn eval_bit_count(op: BitCountOp, raw: i64, width: u8) -> i64 {
     i64::from(n)
 }
 
-/// `Inst::FpCast`. A register carrying a single-precision value
-/// already holds the f64 bit pattern of that f32 (the F32 load widens
-/// on read). Widening to double is therefore a no-op; narrowing
-/// rounds the f64 to f32 then re-stores the f32-as-f64 bit pattern
-/// (C99 6.3.1.5). `result_f32` marks an `int -> float` result: the
-/// integer converts directly to single precision (one rounding, C99
-/// 6.3.1.4), matching the native `cvtsi2ss` / `scvtf s` rather than the
-/// double-rounding a convert-to-double-then-narrow would produce.
-pub(crate) fn eval_fpcast(kind: FpCastKind, raw: i64, result_f32: bool) -> i64 {
-    match kind {
-        FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
-        FpCastKind::UFpToInt => f64::from_bits(raw as u64) as u64 as i64,
-        FpCastKind::IntToFp if result_f32 => (raw as f32 as f64).to_bits() as i64,
-        FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
-        FpCastKind::UIntToFp if result_f32 => (raw as u64 as f32 as f64).to_bits() as i64,
-        FpCastKind::UIntToFp => (raw as u64 as f64).to_bits() as i64,
-        FpCastKind::F32ToF64 => raw,
-        FpCastKind::F64ToF32 => (f64::from_bits(raw as u64) as f32 as f64).to_bits() as i64,
-    }
-}
-
 /// `Inst::Fneg` on an f64 bit pattern.
 pub(crate) fn eval_fneg(raw: i64) -> i64 {
     (-f64::from_bits(raw as u64)).to_bits() as i64
-}
-
-/// `Inst::Fma`: single-rounding fused multiply-add (C99 6.5p8). Match
-/// the host fmadd / vfmadd: round once, at the result's width.
-/// `libm::fma` / `fmaf` give the same single rounding as the native
-/// instruction (and, unlike `f64::mul_add`, are available in the
-/// no_std build) so the VM reference agrees with native codegen on
-/// every target.
-pub(crate) fn eval_fma(
-    a_bits: i64,
-    b_bits: i64,
-    c_bits: i64,
-    neg_product: bool,
-    neg_addend: bool,
-    is_f32: bool,
-) -> i64 {
-    let mut av = f64::from_bits(a_bits as u64);
-    let bv = f64::from_bits(b_bits as u64);
-    let mut cv = f64::from_bits(c_bits as u64);
-    if neg_product {
-        av = -av;
-    }
-    if neg_addend {
-        cv = -cv;
-    }
-    let res = if is_f32 {
-        libm::fmaf(av as f32, bv as f32, cv as f32) as f64
-    } else {
-        libm::fma(av, bv, cv)
-    };
-    res.to_bits() as i64
 }
 
 #[cfg(test)]

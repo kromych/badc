@@ -1920,6 +1920,241 @@ fn interp_prints_long_double_in_the_target_format() {
     }
 }
 
+// C99 7.6 and Annex F under `--interp`: each operation rounds in the current
+// direction and raises what the target raises, and the environment
+// functions save and restore it. The expected text is what the native builds
+// print with glibc, Apple's libc and the UCRT; AArch64 detects tininess
+// before rounding, and only glibc on x86-64 raises overflow and underflow
+// without inexact.
+#[test]
+fn interp_rounds_and_raises_as_the_target() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("fenv_rounding_and_exceptions.c");
+    let x64 = FENV_LINUX_X64.to_string();
+    let tiny_before = |t: &str| {
+        t.replace(
+            "\ntiny-after 0010000000000000 x\n",
+            "\ntiny-after 0010000000000000 ux\n",
+        )
+        .replace("\nftiny-after 00800000 x\n", "\nftiny-after 00800000 ux\n")
+    };
+    let raise_inexact = |t: &str| {
+        t.replace("\nraise2 o\n", "\nraise2 ox\n")
+            .replace("\nraise3 u\n", "\nraise3 ux\n")
+    };
+    let aarch64 = raise_inexact(&tiny_before(&x64));
+    for (target, want) in [
+        ("linux-x64", x64.clone()),
+        ("linux-aarch64", aarch64.clone()),
+        ("macos-aarch64", aarch64.clone()),
+        ("windows-x64", raise_inexact(&x64)),
+        ("windows-arm64", aarch64),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{spec}");
+    }
+}
+
+/// What a native build of `fenv_rounding_and_exceptions.c` prints on Linux
+/// x86_64.
+const FENV_LINUX_X64: &str = "\
+nearest 0 1
+div 3fd5555555555555 x
+div- bfd5555555555555 x
+add 3ff0000000000000 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7ff0000000000000 ox
+ovf- fff0000000000000 ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaab x
+fovf 7f800000 ox
+fsub 002aaaab ux
+fsqrt 3fddb3d7 x
+ffma 33000000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccd x
+d2fovf 7f800000 ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff199999999999a x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40000000 x
+lrint -2 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.2 3.333e-01 -0.3333 0x1.55p-2 0.33333333333333331483
+upward 0 1
+div 3fd5555555555556 x
+div- bfd5555555555555 x
+add 3ff0000000000001 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7ff0000000000000 ox
+ovf- ffefffffffffffff ox
+max+ 7ff0000000000000 ox
+tiny/2 0000000000000001 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000001 ux
+subquot 0005555555555556 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584cab x
+fma 3ca0000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaab x
+fovf 7f800000 ox
+fsub 002aaaab ux
+fsqrt 3fddb3d8 x
+ffma 33000000 x
+i2f 4b800001 x
+ll2d 4340000000000001 x
+ll2f 5a000001 x
+ull2d 43e0000000000002 x
+d2f 3dcccccd x
+d2fovf 7f800000 ox
+d2fsub 00000001 ux
+ld 3fb999999999999a -
+ld+ 3ff199999999999a x
+d2i 2 x
+d2u 3 x
+rint 4008000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40400000 x
+lrint -2 x
+llrint 3 x
+lrintf 3 x
+printf 0.3 3 -0.2 3.334e-01 -0.3333 0x1.56p-2 0.33333333333333337035
+downward 0 1
+div 3fd5555555555555 x
+div- bfd5555555555556 x
+add 3ff0000000000000 x
+sum0 8000000000000000 -
+sum-0 8000000000000000 -
+ovf 7fefffffffffffff ox
+ovf- fff0000000000000 ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000001 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaaa x
+fovf 7f7fffff ox
+fsub 002aaaaa ux
+fsqrt 3fddb3d7 x
+ffma b3800000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccc x
+d2fovf 7f7fffff ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff1999999999999 x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c008000000000000 x
+nearbyint c008000000000000 -
+rintf 40000000 x
+lrint -3 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.3 3.333e-01 -0.3334 0x1.55p-2 0.33333333333333331482
+towardzero 0 1
+div 3fd5555555555555 x
+div- bfd5555555555555 x
+add 3ff0000000000000 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7fefffffffffffff ox
+ovf- ffefffffffffffff ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaaa x
+fovf 7f7fffff ox
+fsub 002aaaaa ux
+fsqrt 3fddb3d7 x
+ffma b3800000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccc x
+d2fovf 7f7fffff ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff1999999999999 x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40000000 x
+lrint -2 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.2 3.333e-01 -0.3333 0x1.55p-2 0.33333333333333331482
+tiny-after 0010000000000000 x
+to-min 0010000000000000 ux
+ftiny-after 00800000 x
+fegetenv 0 x
+fesetenv 0 1 x
+feholdexcept 0 1 -
+feupdateenv 0 vz
+fegetexceptflag 0 vz
+fesetexceptflag 0 z
+fesetenv-dfl 0 1 -
+fesetround-bad 1 1 -
+raise0 v
+raise1 z
+raise2 o
+raise3 u
+raise4 x
+snan+1 v
+snan== 0 v
+qnan 0 1 v
+1/0 7ff0000000000000 z
+inf-inf v
+sqrt-1 v
+d2ll-ovf v
+";
+
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
 #[test]
 fn in_process_runs_keep_a_64k_alignment() {

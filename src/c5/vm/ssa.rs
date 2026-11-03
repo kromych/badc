@@ -15,9 +15,10 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::host::Host;
 use super::super::ir::{
-    AtomicRmwOp, BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
+    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
 use super::eval::{self, round_if_f32};
+use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
 
@@ -128,6 +129,8 @@ struct Memory {
     /// The interpreted target, whose `long` and `long double` formats and
     /// libc conventions the library shims follow.
     target: crate::c5::codegen::Target,
+    /// The program's floating-point environment.
+    fp: FpEnv,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -185,6 +188,7 @@ impl Memory {
             track_pointers: false,
             stdio: 0,
             target,
+            fp: FpEnv::new(target),
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -1397,14 +1401,12 @@ fn run_inst<H: Host>(
         Inst::Binop { op, lhs, rhs } => {
             let lv = frame.regs[*lhs as usize];
             let rv = frame.regs[*rhs as usize];
-            let res = apply_binop(*op, lv, rv)?;
-            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
+            frame.regs[v as usize] = binop(&mut mem.fp, *op, lv, rv, format_of(frame, v))?;
             return Ok(());
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
             let lv = frame.regs[*lhs as usize];
-            let res = apply_binop(*op, lv, *rhs_imm)?;
-            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
+            frame.regs[v as usize] = binop(&mut mem.fp, *op, lv, *rhs_imm, format_of(frame, v))?;
             return Ok(());
         }
         Inst::Neg(src) => {
@@ -1432,16 +1434,11 @@ fn run_inst<H: Host>(
             neg_product,
             neg_addend,
         } => {
-            let is_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
-            let res = eval::eval_fma(
-                frame.regs[*a as usize],
-                frame.regs[*b as usize],
-                frame.regs[*c as usize],
-                *neg_product,
-                *neg_addend,
-                is_f32,
-            );
-            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
+            let negate = |x: i64, neg: bool| x as u64 ^ (u64::from(neg) << 63);
+            let a = negate(frame.regs[*a as usize], *neg_product);
+            let c = negate(frame.regs[*c as usize], *neg_addend);
+            let f = format_of(frame, v);
+            frame.regs[v as usize] = mem.fp.fma(a, frame.regs[*b as usize] as u64, c, f) as i64;
             return Ok(());
         }
         Inst::Udiv128 { hi, lo, divisor } => {
@@ -1506,8 +1503,16 @@ fn run_inst<H: Host>(
         }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
-            let result_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
-            frame.regs[v as usize] = eval::eval_fpcast(*kind, raw, result_f32);
+            let f = format_of(frame, v);
+            let fp = &mut mem.fp;
+            frame.regs[v as usize] = match kind {
+                FpCastKind::FpToInt => fp.float_to_int(raw as u64, true),
+                FpCastKind::UFpToInt => fp.float_to_int(raw as u64, false),
+                FpCastKind::IntToFp => fp.int_to_float(i128::from(raw), f) as i64,
+                FpCastKind::UIntToFp => fp.int_to_float(i128::from(raw as u64), f) as i64,
+                FpCastKind::F32ToF64 => raw,
+                FpCastKind::F64ToF32 => fp.narrow(raw as u64) as i64,
+            };
             return Ok(());
         }
         Inst::Call {
@@ -1748,7 +1753,106 @@ pub(super) fn interp_supplies(name: &str) -> bool {
             | "dlsym"
             | "dlclose"
             | "dlerror"
+            | "feraiseexcept"
+            | "feupdateenv"
     )
+}
+
+/// The `<fenv.h>` functions and the `<math.h>` functions that round in
+/// the current direction (C99 7.6, 7.12.9.3-5), over the program's
+/// floating-point environment; `None` for any other name. A `long double`
+/// variant is the `double` one where the two types share a format.
+fn fenv_call(name: &str, args: &[i64], mem: &mut Memory) -> Option<Result<i64, C5Error>> {
+    let arg = |i: usize| {
+        (args.get(i).copied())
+            .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {name}: missing argument")))
+    };
+    let narrow_long_double = mem.target.long_double() == crate::c5::codegen::LongDoubleKind::F64;
+    let call = || -> Result<i64, C5Error> {
+        let fp = &mut mem.fp;
+        Ok(match name {
+            "fegetround" => i64::from(fp.get_round()),
+            "fesetround" => i64::from(!fp.set_round(arg(0)? as i32)),
+            "feclearexcept" => {
+                fp.clear(arg(0)? as i32);
+                0
+            }
+            "feraiseexcept" => {
+                fp.raise(arg(0)? as i32);
+                0
+            }
+            "fetestexcept" => i64::from(fp.test(arg(0)? as i32)),
+            "fegetexceptflag" => {
+                let raised = fp.test(arg(1)? as i32).to_le_bytes();
+                let n = fp.except_size();
+                mem.write_bytes(arg(0)? as usize, &raised[..n])?;
+                0
+            }
+            "fesetexceptflag" => {
+                let n = fp.except_size();
+                let mut b = [0u8; 4];
+                b[..n].copy_from_slice(mem.read_bytes(arg(0)? as usize, n)?);
+                let fp = &mut mem.fp;
+                let excepts = fp.flags_of(arg(1)? as i32);
+                fp.flags = fp.flags & !excepts | fp.flags_of(i32::from_le_bytes(b)) & excepts;
+                0
+            }
+            "fegetenv" | "feholdexcept" => {
+                let img = fp.env_image();
+                if name == "feholdexcept" {
+                    fp.flags = 0;
+                }
+                mem.write_bytes(arg(0)? as usize, &img)?;
+                0
+            }
+            "fesetenv" | "feupdateenv" => {
+                let raised = if name == "feupdateenv" { fp.flags } else { 0 };
+                let (env, n) = (arg(0)?, fp.env_size());
+                // glibc's FE_DFL_ENV is `(const fenv_t *)-1`.
+                if env == -1 {
+                    fp.set_default_env();
+                } else {
+                    let img = mem.read_bytes(env as usize, n)?.to_vec();
+                    mem.fp.set_env_image(&img);
+                }
+                mem.fp.flags |= raised;
+                0
+            }
+            "rint" | "rintf" | "rintl" => fp.round_integral(arg(0)? as u64, true) as i64,
+            "nearbyint" | "nearbyintf" | "nearbyintl" => {
+                fp.round_integral(arg(0)? as u64, false) as i64
+            }
+            "lrint" | "lrintf" | "lrintl" => {
+                fp.lrint(arg(0)? as u64, mem.target.long_width_bytes() as u32 * 8)
+            }
+            "llrint" | "llrintf" | "llrintl" => fp.lrint(arg(0)? as u64, 64),
+            _ => unreachable!("{name} is no fenv_call name"),
+        })
+    };
+    let known = matches!(
+        name,
+        "fegetround"
+            | "fesetround"
+            | "feclearexcept"
+            | "feraiseexcept"
+            | "fetestexcept"
+            | "fegetexceptflag"
+            | "fesetexceptflag"
+            | "fegetenv"
+            | "feholdexcept"
+            | "fesetenv"
+            | "feupdateenv"
+            | "rint"
+            | "rintf"
+            | "nearbyint"
+            | "nearbyintf"
+            | "lrint"
+            | "lrintf"
+            | "llrint"
+            | "llrintf"
+    ) || (narrow_long_double
+        && matches!(name, "rintl" | "nearbyintl" | "lrintl" | "llrintl"));
+    known.then(call)
 }
 
 /// Dispatch a libc binding by name. Implementations land here
@@ -1762,6 +1866,9 @@ fn dispatch_callext<H: Host>(
     mem: &mut Memory,
     host: &mut H,
 ) -> Result<i64, C5Error> {
+    if let Some(r) = fenv_call(name, args, mem) {
+        return r;
+    }
     match name {
         // `exit(int code)` terminates the hosted program (C99
         // 7.20.4.3). The Err unwinds every interpreter frame;
@@ -2407,10 +2514,12 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 let (prefix, body) = match hex {
                     Some(h) if matches!(conv, b'a' | b'A') => {
                         let radix = if conv == b'A' { "0X" } else { "0x" };
-                        let body = format_hex(h, &s, HexStyle::of(mem.target));
+                        let style = HexStyle::of(mem.target);
+                        let neg = v.is_sign_negative();
+                        let body = format_hex(h, &s, style, mem.fp.round, neg);
                         (format!("{sign}{radix}"), body)
                     }
-                    _ => (sign.into(), format_float(v, &s)),
+                    _ => (sign.into(), format_float(v, &s, mem.fp.round)),
                 };
                 // The `0` flag does not pad an infinity or NaN (7.19.6.1p6).
                 s.zero &= v.is_finite();
@@ -2497,7 +2606,7 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
 /// Format `|v|` for the f / e / g conversion families
 /// (7.19.6.1p8); the caller prepends the sign and applies the
 /// field width. Uppercase conversions upper-case the result.
-fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
+fn format_float(v: f64, s: &PrintfSpec, round: Round) -> alloc::string::String {
     let upper = matches!(s.conv, b'F' | b'E' | b'G' | b'A');
     if v.is_nan() {
         return if upper { "NAN".into() } else { "nan".into() };
@@ -2505,28 +2614,33 @@ fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
     if v.is_infinite() {
         return if upper { "INF".into() } else { "inf".into() };
     }
-    let av = v.abs();
+    let dec = Decimal {
+        av: v.abs(),
+        neg: v.is_sign_negative(),
+        round,
+    };
     let p = s.precision.unwrap_or(6);
     let body = match s.conv {
         b'f' | b'F' => {
-            let mut b = format!("{av:.p$}");
+            let mut b = dec.fixed(p);
             if s.alt && p == 0 {
                 b.push('.');
             }
             b
         }
-        b'e' | b'E' => format_exp(av, p, s.alt),
+        b'e' | b'E' => format_exp(&dec, p, s.alt),
         _ => {
             // g/G: precision P counts significant digits (0 reads
             // as 1). Style e when the exponent X < -4 or X >= P,
             // else style f with precision P-1-X; trailing zeros
-            // drop unless `#`.
+            // drop unless `#`. X is the exponent after rounding, so a
+            // value rounding up a decade takes its style from the result.
             let pp = p.max(1);
-            let exp = decimal_exponent(av, pp - 1);
+            let exp = dec.scientific(pp - 1).1;
             let mut b = if exp < -4 || exp >= pp as i32 {
-                format_exp(av, pp - 1, s.alt)
+                format_exp(&dec, pp - 1, s.alt)
             } else {
-                format!("{:.*}", (pp as i32 - 1 - exp).max(0) as usize, av)
+                dec.fixed((pp as i32 - 1 - exp).max(0) as usize)
             };
             if !s.alt && b.contains('.') {
                 let frac_end = b.find(['e', 'E']).unwrap_or(b.len());
@@ -2539,14 +2653,95 @@ fn format_float(v: f64, s: &PrintfSpec) -> alloc::string::String {
     if upper { body.to_uppercase() } else { body }
 }
 
+/// The decimal digits of a finite magnitude `av`, rounded in the current
+/// direction as the targets' C libraries round them: Rust's formatting to
+/// nearest, the exact expansion cut and stepped otherwise.
+struct Decimal {
+    av: f64,
+    neg: bool,
+    round: Round,
+}
+
+impl Decimal {
+    /// The exact expansion: every digit, the point after `point` of them.
+    /// A binary64 value has at most 1074 fraction digits.
+    fn exact(&self) -> (Vec<u8>, usize) {
+        let s = format!("{:.1074}", self.av);
+        let (int, frac) = s.split_once('.').unwrap_or((s.as_str(), ""));
+        let digits = int.bytes().chain(frac.bytes()).map(|b| b - b'0').collect();
+        (digits, int.len())
+    }
+
+    /// `digits` cut to `keep` and stepped away from zero when the
+    /// direction asks; true when the step carried into a new digit.
+    fn cut(&self, digits: &mut Vec<u8>, keep: usize) -> bool {
+        let dropped = digits
+            .get(keep..)
+            .is_some_and(|t| t.iter().any(|&d| d != 0));
+        digits.resize(keep, 0);
+        let away = match self.round {
+            Round::Up => !self.neg && dropped,
+            Round::Down => self.neg && dropped,
+            Round::Nearest | Round::Zero => false,
+        };
+        if away {
+            for d in digits.iter_mut().rev() {
+                if *d < 9 {
+                    *d += 1;
+                    return false;
+                }
+                *d = 0;
+            }
+            digits.insert(0, 1);
+            return true;
+        }
+        false
+    }
+
+    /// `ddd.ddd` with `p` fraction digits (the f conversion).
+    fn fixed(&self, p: usize) -> alloc::string::String {
+        if self.round == Round::Nearest {
+            return format!("{:.p$}", self.av);
+        }
+        let (mut digits, mut point) = self.exact();
+        point += usize::from(self.cut(&mut digits, point + p));
+        let text: alloc::string::String = digits.iter().map(|&d| char::from(b'0' + d)).collect();
+        if p == 0 {
+            text
+        } else {
+            format!("{}.{}", &text[..point], &text[point..])
+        }
+    }
+
+    /// `d.ddd` with `prec` fraction digits and the decimal exponent (the
+    /// e conversion).
+    fn scientific(&self, prec: usize) -> (alloc::string::String, i32) {
+        if self.round == Round::Nearest || self.av == 0.0 {
+            let raw = format!("{:.prec$e}", self.av);
+            let (mantissa, exp) = raw.split_once('e').unwrap_or((raw.as_str(), "0"));
+            return (mantissa.into(), exp.parse().unwrap_or(0));
+        }
+        let (digits, point) = self.exact();
+        let lead = digits.iter().position(|&d| d != 0).unwrap_or(0);
+        let mut sig = digits[lead..].to_vec();
+        let mut exp = point as i32 - lead as i32 - 1;
+        if self.cut(&mut sig, prec + 1) {
+            exp += 1;
+            sig.truncate(prec + 1);
+        }
+        let mut m = alloc::string::String::from(char::from(b'0' + sig[0]));
+        if prec > 0 {
+            m.push('.');
+            m.extend(sig[1..].iter().map(|&d| char::from(b'0' + d)));
+        }
+        (m, exp)
+    }
+}
+
 /// `d.dddde+/-dd` with `prec` fraction digits (7.19.6.1p8, the e
-/// conversion). Rust's `{:e}` produces `d.ddddeN`; rewrite the
-/// exponent into the sign + minimum-two-digit C form.
-fn format_exp(av: f64, prec: usize, alt: bool) -> alloc::string::String {
-    let raw = format!("{av:.prec$e}");
-    let (mantissa, exp) = raw.split_once('e').unwrap_or((raw.as_str(), "0"));
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let mut mantissa = alloc::string::String::from(mantissa);
+/// conversion), the exponent in the sign + minimum-two-digit C form.
+fn format_exp(dec: &Decimal, prec: usize, alt: bool) -> alloc::string::String {
+    let (mut mantissa, exp) = dec.scientific(prec);
     if alt && prec == 0 {
         mantissa.push('.');
     }
@@ -2555,20 +2750,6 @@ fn format_exp(av: f64, prec: usize, alt: bool) -> alloc::string::String {
         if exp < 0 { '-' } else { '+' },
         exp.unsigned_abs(),
     )
-}
-
-/// Decimal exponent of `av` after rounding to `prec` fraction
-/// digits in e-style -- the X in C99 7.19.6.1p8's g rules.
-/// Deriving it from the rounded e form keeps the boundary cases
-/// (9.99... rounding up a decade) consistent with the output.
-fn decimal_exponent(av: f64, prec: usize) -> i32 {
-    if av == 0.0 {
-        return 0;
-    }
-    let raw = format!("{av:.prec$e}");
-    raw.split_once('e')
-        .and_then(|(_, e)| e.parse().ok())
-        .unwrap_or(0)
 }
 
 /// A finite value as `%a` writes it: leading hex digit `sig >> 4 * width`,
@@ -2649,8 +2830,9 @@ enum HexStyle {
     /// Subnormals as `0x0.` at the minimum exponent, trailing zeros
     /// dropped, a halfway tail rounded to even.
     Glibc,
-    /// Subnormals normalized; a dropped tail rounds up when its first
-    /// digit is above 8, or is 8 followed by an odd digit.
+    /// Subnormals normalized; a dropped tail rounds only when its first
+    /// digit is nonzero: to nearest when that digit is above 8, or is 8
+    /// followed by an odd digit.
     Apple,
     /// As glibc, but without a precision every fraction digit is written.
     Ucrt,
@@ -2667,24 +2849,44 @@ impl HexStyle {
     }
 
     /// Whether dropping the low `shift` bits `rem` of a digit string ending
-    /// in `kept` rounds it up.
-    fn rounds_up(self, kept: u128, rem: u128, shift: u32) -> bool {
-        if self == HexStyle::Apple {
-            let d1 = rem >> (shift - 4);
-            let d2 = if shift >= 8 {
-                (rem >> (shift - 8)) & 0xf
-            } else {
-                0
-            };
-            return d1 > 8 || (d1 == 8 && d2 & 1 == 1);
+    /// in `kept`, of a value of sign `neg`, steps it away from zero in
+    /// direction `r`.
+    fn rounds_up(self, r: Round, neg: bool, kept: u128, rem: u128, shift: u32) -> bool {
+        let d1 = rem >> (shift - 4);
+        let dropped = if self == HexStyle::Apple {
+            d1 != 0
+        } else {
+            rem != 0
+        };
+        match r {
+            Round::Up => !neg && dropped,
+            Round::Down => neg && dropped,
+            Round::Zero => false,
+            Round::Nearest if self == HexStyle::Apple => {
+                let d2 = if shift >= 8 {
+                    (rem >> (shift - 8)) & 0xf
+                } else {
+                    0
+                };
+                d1 > 8 || (d1 == 8 && d2 & 1 == 1)
+            }
+            Round::Nearest => {
+                let half = 1u128 << (shift - 1);
+                rem > half || (rem == half && kept & 1 == 1)
+            }
         }
-        let half = 1u128 << (shift - 1);
-        rem > half || (rem == half && kept & 1 == 1)
     }
 }
 
-/// `h.hhhp±d` for `%a` / `%A` (7.19.6.1p8), without the sign and `0x`.
-fn format_hex(h: HexForm, s: &PrintfSpec, style: HexStyle) -> alloc::string::String {
+/// `h.hhhp±d` for `%a` / `%A` (7.19.6.1p8) of a value of sign `neg`,
+/// without the sign and `0x`.
+fn format_hex(
+    h: HexForm,
+    s: &PrintfSpec,
+    style: HexStyle,
+    round: Round,
+    neg: bool,
+) -> alloc::string::String {
     let HexForm {
         mut sig,
         width,
@@ -2704,7 +2906,7 @@ fn format_hex(h: HexForm, s: &PrintfSpec, style: HexStyle) -> alloc::string::Str
     let keep = width.min(p as u32);
     let shift = 4 * (width - keep);
     let mut kept = sig >> shift;
-    if shift > 0 && style.rounds_up(kept, sig & ((1 << shift) - 1), shift) {
+    if shift > 0 && style.rounds_up(round, neg, kept, sig & ((1 << shift) - 1), shift) {
         kept += 1;
     }
     // A carry out of a leading `f` starts a new leading digit.
@@ -3538,14 +3740,13 @@ fn run_intrinsic(
             "vm_ssa: Intrinsic::ConstantP is resolved before execution".to_string(),
         )),
         Intrinsic::Sqrt | Intrinsic::Sqrtf => {
-            let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
-            let r = if matches!(intr, Intrinsic::Sqrtf) {
-                libm::sqrtf(x as f32) as f64
+            let x = frame.regs[args[0] as usize] as u64;
+            let f = if matches!(intr, Intrinsic::Sqrtf) {
+                BINARY32
             } else {
-                libm::sqrt(x)
+                BINARY64
             };
-            frame.regs[v as usize] =
-                round_if_f32(r.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            frame.regs[v as usize] = mem.fp.sqrt(x, f) as i64;
             Ok(())
         }
         Intrinsic::Fabs | Intrinsic::Fabsf => {
@@ -3999,11 +4200,35 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
     }
 }
 
-/// Binop dispatch, shared with the compile-time constant folder
-/// (`super::eval`); a division trap re-wraps as the VM's runtime
-/// error.
-fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
-    eval::apply_binop(op, lhs, rhs).map_err(|t| C5Error::Runtime(t.message().to_string()))
+/// Binop dispatch: floating arithmetic rounds and raises in the program's
+/// environment, which a comparison checks for a signaling NaN; the rest is
+/// shared with the compile-time constant folder (`super::eval`), whose
+/// division trap re-wraps as the VM's runtime error.
+fn binop(fp: &mut FpEnv, op: BinOp, lhs: i64, rhs: i64, f: Format) -> Result<i64, C5Error> {
+    let (a, b) = (lhs as u64, rhs as u64);
+    let r = match op {
+        BinOp::Fadd => fp.add(a, b, f),
+        BinOp::Fsub => fp.sub(a, b, f),
+        BinOp::Fmul | BinOp::FmulContractible => fp.mul(a, b, f),
+        BinOp::Fdiv => fp.div(a, b, f),
+        _ => {
+            if super::super::ir::is_fp_op(op) {
+                fp.compare_operands(a, b);
+            }
+            return eval::apply_binop(op, lhs, rhs)
+                .map_err(|t| C5Error::Runtime(t.message().to_string()));
+        }
+    };
+    Ok(r as i64)
+}
+
+/// The format value `v` of `frame`'s function rounds to.
+fn format_of(frame: &Frame<'_>, v: ValueId) -> Format {
+    if matches!(frame.func.f32_values.get(v as usize), Some(true)) {
+        BINARY32
+    } else {
+        BINARY64
+    }
 }
 
 #[cfg(test)]

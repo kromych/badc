@@ -7,6 +7,7 @@ use super::ir::FunctionSsa;
 use super::program::Program;
 
 pub(crate) mod eval;
+mod fenv;
 mod link;
 mod ssa;
 

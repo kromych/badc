@@ -620,7 +620,7 @@ impl<'a> PeWriter<'a> {
             &build.early_returns,
             &build.pe_unwind,
             seh,
-        );
+        )?;
         l.pdata_directory_size = pdata.directory_size;
         l.pdata_info_slots = pdata.info_slots;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
@@ -2548,7 +2548,7 @@ fn build_pdata(
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
     seh: Seh,
-) -> Pdata {
+) -> Result<Pdata, C5Error> {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
             text_rva,
@@ -2566,6 +2566,7 @@ fn build_pdata(
             pdata_rva,
             text_prologue_len,
             a64_unwind,
+            early_returns,
             foreign,
             seh,
         ),
@@ -2692,7 +2693,7 @@ fn build_x86_64_pdata(
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
     seh: Seh,
-) -> Pdata {
+) -> Result<Pdata, C5Error> {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
     if fn_unwind.is_empty() && foreign.is_empty() {
         let mut bytes = Vec::with_capacity(16);
@@ -2701,11 +2702,17 @@ fn build_x86_64_pdata(
         bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
         bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
         bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
-        return Pdata {
+        return Ok(Pdata {
             bytes,
             directory_size: RUNTIME_FUNCTION_SIZE,
             info_slots: Vec::new(),
-        };
+        });
+    }
+    if let Some(uw) = fn_unwind.iter().find(|u| !u.leaf && u.steps.is_empty()) {
+        return Err(C5Error::internal(format!(
+            "the function at {:#x} has a frame and no recorded unwind steps",
+            uw.begin
+        )));
     }
 
     // Sort by begin so the RUNTIME_FUNCTION array is ascending (the loader
@@ -2781,24 +2788,27 @@ fn build_x86_64_pdata(
         bytes.push(0);
     }
     bytes.extend_from_slice(&blobs);
-    Pdata {
+    Ok(Pdata {
         bytes,
         directory_size: array_size,
         info_slots,
-    }
+    })
 }
 
-/// AArch64 `.pdata`: an `.xdata` record after the array for each frame `a64`
-/// describes, the inputs' entries, packed frameless ones over the rest.
+/// AArch64 `.pdata`: an `.xdata` record after the array for each prologue
+/// `a64` describes, over the frame path alone where a return precedes the
+/// frame, the inputs' entries, packed frameless ones over the rest.
+#[allow(clippy::too_many_arguments)]
 fn build_aarch64_pdata(
     text_rva: u32,
     text_size: u32,
     pdata_rva: u32,
     text_prologue_len: u32,
     a64: &[super::A64Unwind],
+    early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
     seh: Seh,
-) -> Pdata {
+) -> Result<Pdata, C5Error> {
     enum Data {
         Packed(u32),
         Info(u64),
@@ -2815,15 +2825,26 @@ fn build_aarch64_pdata(
             (body + r.begin as u32, body + r.end as u32, data)
         })
         .collect();
-    rows.extend(a64.iter().filter_map(|u| {
-        let mut x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
+    for u in a64.iter().filter(|u| !u.steps.is_empty()) {
+        let Some(codes) = super::arm64_unwind::codes(&u.steps) else {
+            return Err(C5Error::internal(format!(
+                "no unwind code describes a step of the prologue at {:#x}: {:?}",
+                u.begin, u.steps
+            )));
+        };
+        let (begin, end) = (early_returns.iter())
+            .find(|e| e.begin == u.begin)
+            .map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
+        let Some(mut x) = super::arm64_unwind::xdata(end - begin, &codes) else {
+            continue;
+        };
         // The X bit (header bit 20): the language handler and its data follow.
         if let Some((_, language)) = seh.language_data(u.begin, body_rva) {
             x[2] |= 0x10;
             x.extend(language);
         }
-        Some((body + u.begin, body + u.end, Data::Xdata(x)))
-    }));
+        rows.push((body + begin, body + end, Data::Xdata(x)));
+    }
     rows.sort_by_key(|r| r.0);
     let mut entries: Vec<(u32, Data)> = Vec::new();
     let leaf = |entries: &mut Vec<(u32, Data)>, from: u32, to: u32| {
@@ -2863,11 +2884,11 @@ fn build_aarch64_pdata(
         bytes.extend_from_slice(&word.to_le_bytes());
     }
     bytes.extend_from_slice(&blobs);
-    Pdata {
+    Ok(Pdata {
         bytes,
         directory_size,
         info_slots,
-    }
+    })
 }
 
 /// Patch an IAT-lookup sequence: `call qword [rip+disp32]` on x86_64, or
@@ -3160,7 +3181,7 @@ mod tests {
             rows: &[],
             handler: 0,
         };
-        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[], seh);
+        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[], &[], seh).unwrap();
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
@@ -3937,13 +3958,10 @@ mod tests {
         );
     }
 
-    /// The two `FnUnwind` producers -- the structured single-TU path
-    /// (`emit_prologue`) and the link path's prologue-grammar decoder
-    /// (`decode_x86_64_prologue_unwind`) -- must agree, so a function
-    /// unwinds identically whether it is compiled in one unit or linked
-    /// from objects. The decoder reads the window the link path gives it,
-    /// up to the post-prologue anchor, on both x86-64 link targets. The
-    /// functions cover a leaf, the pushes as the whole frame (`saves`), an
+    /// The steps `emit_prologue` records agree with what the prologue
+    /// decoder (`decode_x86_64_prologue_unwind`) reads back from the
+    /// instructions, up to the post-prologue anchor, on both x86-64 link
+    /// targets. The functions cover a leaf, the pushes as the whole frame (`saves`), an
     /// imm8 and an imm32 `sub` ahead of pushes (`small`, `wide`), a probed
     /// allocation, and FP work, which on Win64 saves xmm scratch.
     #[test]
@@ -4030,6 +4048,211 @@ mod tests {
             assert!(
                 framed >= 5 && allocs >= 2 && bare > usize::from(optimize),
                 "{target:?} -O={optimize}: {framed} framed, {allocs} described, {bare} bare"
+            );
+        }
+    }
+
+    /// A record of a frame with no steps, or with a step no unwind code
+    /// states, is an internal error rather than a frameless entry.
+    #[test]
+    fn a_frame_the_steps_do_not_describe_is_an_internal_error() {
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let uw = super::super::FnUnwind {
+            begin: 0,
+            end: 16,
+            leaf: false,
+            steps: Vec::new(),
+        };
+        let x64 = build_x86_64_pdata(0x1000, 16, 0x2000, 0, &[uw], &[], &[], seh).map(|_| ());
+        let a64 = super::super::A64Unwind {
+            begin: 0,
+            end: 16,
+            steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
+        };
+        let arm64 = build_aarch64_pdata(0x1000, 16, 0x2000, 0, &[a64], &[], &[], seh).map(|_| ());
+        for (got, why) in [
+            (x64, "has a frame and no recorded unwind steps"),
+            (arm64, "no unwind code describes a step"),
+        ] {
+            let msg = got.expect_err(why).to_string();
+            assert!(
+                msg.contains("internal compiler error") && msg.contains(why),
+                "{msg}"
+            );
+        }
+    }
+
+    /// Two Win64 prologue shapes the instruction decoder misreads, recorded
+    /// as emitted: a variadic callee's `sub rsp` after its home-area stores
+    /// takes an allocation step at its end, where the decoder stops at the
+    /// first store; and a realigning frame's `sub rsp` ahead of `and rsp`
+    /// takes none, where the decoder reads it as the frame's allocation.
+    /// Either way rbp, set first, recovers rsp in the body.
+    #[test]
+    fn win64_variadic_and_realigned_frames_record_what_they_allocate() {
+        use crate::Compiler;
+        let src = "
+            void snk(char *); long ext(long);
+            long sum(int n, ...) {
+                __builtin_va_list ap; __builtin_va_start(ap, n);
+                long s = 0; for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);
+                __builtin_va_end(ap); return s + ext(s);
+            }
+            long aligned(long a) { _Alignas(64) char buf[64]; snk(buf); return ext(a) + buf[a & 7]; }
+            int main(void) { return (int)sum(2, 3L, 4L) + (int)aligned(5); }
+        ";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::WindowsX64,
+        )
+        .compile()
+        .expect("compile");
+        // The full register pool, so the pressure caps leave the frame an
+        // allocation below the home stores.
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || {
+                lower_for(
+                    &program,
+                    super::super::Target::WindowsX64,
+                    Default::default(),
+                )
+            },
+        )
+        .expect("lower");
+        let record = |name: &str| {
+            let i = build.func_names.iter().position(|n| n == name).expect(name);
+            let begin = build.pc_to_native[build.func_ent_pcs[i]] as u32;
+            let uw = build
+                .fn_unwind
+                .iter()
+                .find(|u| u.begin == begin)
+                .expect(name);
+            let anchor = build.func_prologue_native[&build.func_ent_pcs[i]] as u32;
+            let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
+                &build.text,
+                uw.begin,
+                uw.end,
+                anchor,
+                0,
+            );
+            (uw.clone(), decoded)
+        };
+        let is_alloc = |s: &(u32, PrologueStep)| matches!(s.1, PrologueStep::Alloc(_));
+        let (sum, decoded) = record("sum");
+        let set = sum
+            .steps
+            .iter()
+            .position(|s| matches!(s.1, PrologueStep::SetFrame(_)));
+        let set = set.expect("rbp");
+        // The four home stores lie between rbp and the allocation after it.
+        let (at, _) = *sum.steps[set..]
+            .iter()
+            .find(|s| is_alloc(s))
+            .expect("an allocation");
+        assert!(at >= sum.steps[set].0 + 16, "{:?}", sum.steps);
+        assert_eq!(decoded.steps, sum.steps[..=set], "{:?}", sum.steps);
+        let (aligned, decoded) = record("aligned");
+        assert!(!aligned.steps.iter().any(is_alloc), "{:?}", aligned.steps);
+        let end = (aligned.begin + aligned.steps.last().expect("steps").0) as usize;
+        // `sub rsp, n` then `and rsp, -64`.
+        assert_eq!(
+            build.text[end..end + 2],
+            [0x48, 0x83],
+            "{:x?}",
+            &build.text[end..]
+        );
+        assert!(decoded.steps.iter().any(is_alloc), "{:?}", decoded.steps);
+    }
+
+    /// The unwind codes of the steps the arm64 emitter records equal the
+    /// ones `prologue_codes` reads back from the instructions, from the frame
+    /// path's start up to the post-prologue anchor, for a leaf, a folded and
+    /// an unfolded frame, a Windows variadic callee and a return ahead of the
+    /// frame, with and without `bti` and `pac-ret` (leaves signed too); a
+    /// function the decoder finds no prolog in records no steps.
+    #[test]
+    fn structured_and_decoded_unwind_agree_arm64() {
+        use crate::Compiler;
+        use crate::c5::codegen::{A64Step, Hardening};
+        let src = "
+            void snk(char *); long ext(long); double fext(double);
+            int add(int a, int b) { return a + b; }
+            long saves(long a, long b) { return ext(a) + a + b; }
+            long wide(long a) { char buf[8192]; snk(buf); return ext(a) + a + buf[a & 7]; }
+            double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
+            long fib(long n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }
+            long sum(int n, ...) {
+                __builtin_va_list ap; __builtin_va_start(ap, n);
+                long s = 0; for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);
+                __builtin_va_end(ap); return s + ext(s);
+            }
+            int main(int argc, char **argv) {
+                (void)argv;
+                return add(argc, 2) + (int)saves(argc, 3) + (int)wide(argc)
+                    + (int)fpwork(1.5, argc) + (int)fib(argc) + (int)sum(2, 3L, 4L);
+            }
+        ";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::WindowsAarch64,
+        )
+        .compile()
+        .expect("compile");
+        let signed = Hardening {
+            bti: true,
+            pac_ret: true,
+            pac_ret_leaf: true,
+            ..Hardening::NONE
+        };
+        for (hardening, optimize) in [
+            (Hardening::NONE, false),
+            (Hardening::NONE, true),
+            (signed, false),
+            (signed, true),
+        ] {
+            let options = super::super::NativeOptions {
+                optimize,
+                hardening,
+                ..Default::default()
+            };
+            let build =
+                lower_for(&program, super::super::Target::WindowsAarch64, options).expect("lower");
+            let (mut framed, mut bare) = (0, 0);
+            for u in &build.a64_unwind {
+                let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+                let (start, stop) =
+                    early.map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
+                let anchor = (build.func_prologue_native.values())
+                    .map(|&p| p as u32)
+                    .filter(|p| (u.begin..u.end).contains(p))
+                    .min()
+                    .unwrap_or(u.begin);
+                let decoded = super::super::arm64_unwind::prologue_codes(
+                    &build.text,
+                    start,
+                    anchor.min(stop),
+                );
+                let recorded = (!u.steps.is_empty())
+                    .then(|| super::super::arm64_unwind::codes(&u.steps).expect("codes"));
+                assert_eq!(
+                    recorded, decoded,
+                    "{hardening:?} -O={optimize}: the function at {:#x}: {:?}",
+                    u.begin, u.steps
+                );
+                let sets_fp = |s: &A64Step| matches!(s, A64Step::SetFp | A64Step::AddFp(_));
+                framed += usize::from(u.steps.iter().any(sets_fp));
+                bare += usize::from(u.steps.is_empty());
+            }
+            // `-O` leaves `add` a full leaf, which `pac-ret+leaf` signs.
+            let leaf = optimize && hardening == Hardening::NONE;
+            assert!(
+                framed >= 5 && (bare > 0) == leaf,
+                "{hardening:?} -O={optimize}: {framed} framed, {bare} without a prolog"
             );
         }
     }

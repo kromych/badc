@@ -1,20 +1,58 @@
 //! The ARM64 unwind codes and `.xdata` record of a badc function's prologue
-//! (Microsoft, "ARM64 exception handling"). After the `bti c` landing pad and
-//! the `-fpatchable-function-entry` NOPs, each taking a `nop` code, an
-//! optional `paciasp` (all of a signed leaf's prolog) and a Windows variadic
-//! callee's register area, a frame is `stp x29, x30, [sp, #-16]!; mov x29,
-//! sp`, or a callee save pre-indexing it, the other saves, then `stp x29,
-//! x30, [sp, #k]; add x29, sp, #k`. The prolog ends where x29 is set:
-//! `set_fp` / `add_fp` recover sp from it, so what the body allocates after
-//! is undescribed. TODO: epilog scopes.
+//! (Microsoft, "ARM64 exception handling"), from the steps the emitter
+//! records ([`A64Step`]). After the `bti c` landing pad and the
+//! `-fpatchable-function-entry` NOPs, each taking a `nop` code, an optional
+//! `paciasp` (all of a signed leaf's prolog) and a Windows variadic callee's
+//! register area, a frame is `stp x29, x30, [sp, #-16]!; mov x29, sp`, or a
+//! callee save pre-indexing it, the other saves, then `stp x29, x30, [sp,
+//! #k]; add x29, sp, #k`. The prolog ends where x29 is set: `set_fp` /
+//! `add_fp` recover sp from it, so what the body allocates after is
+//! undescribed. The tests read the same codes back from the emitted
+//! instructions. TODO: epilog scopes.
 
+use crate::c5::codegen::A64Step;
+#[cfg(test)]
 use crate::c5::codegen::aarch64::encode::{BTI_C, NOP as NOP_INSN, PACIASP};
 use alloc::vec::Vec;
 
 const NOP: u8 = 0xE3;
 pub(crate) const END: u8 = 0xE4;
 
+/// The unwind codes of a prologue of `steps`, last first and `end`
+/// excluded; `None` for a step no code describes.
+pub(crate) fn codes(steps: &[A64Step]) -> Option<Vec<u8>> {
+    let scaled = |n: u32, max: u32| (n.is_multiple_of(8) && n / 8 <= max).then_some((n / 8) as u8);
+    let mut fwd: Vec<Vec<u8>> = Vec::with_capacity(steps.len());
+    for &step in steps {
+        fwd.push(match step {
+            A64Step::Nop => alloc::vec![NOP],
+            A64Step::PacSignLr => alloc::vec![0xFC],
+            A64Step::Alloc(n) => alloc(n)?,
+            A64Step::SaveFpLrX(n) => alloc::vec![0x80 | scaled(n, 64)?.checked_sub(1)?],
+            A64Step::SetFp => alloc::vec![0xE1],
+            A64Step::SaveReg {
+                fp,
+                reg,
+                reg2,
+                pre,
+                bytes,
+            } if pre => save(fp, reg, reg2, Some(bytes), 0)?,
+            A64Step::SaveReg {
+                fp,
+                reg,
+                reg2,
+                bytes,
+                ..
+            } => save(fp, reg, reg2, None, bytes)?,
+            A64Step::SaveFpLr(off) => alloc::vec![0x40 | scaled(off, 63)?],
+            A64Step::AddFp(off) => alloc::vec![0xE2, scaled(off, 255)?],
+        });
+    }
+    Some(fwd.into_iter().rev().flatten().collect())
+}
+
 /// One prologue instruction, as the unwinder sees it.
+#[cfg(test)]
 enum Insn {
     /// `bti c` or `nop`: no effect the unwinder reverses.
     Hint,
@@ -34,6 +72,7 @@ enum Insn {
     Other,
 }
 
+#[cfg(test)]
 impl Insn {
     /// The `stp x29, x30` of the frame record.
     fn fp_lr(&self) -> bool {
@@ -49,6 +88,7 @@ impl Insn {
     }
 }
 
+#[cfg(test)]
 fn classify(w: u32) -> Insn {
     let (rt, rn, rt2) = ((w & 31) as u8, (w >> 5) & 31, ((w >> 10) & 31) as u8);
     let simm =
@@ -149,8 +189,10 @@ fn save(fp: bool, rt: u8, rt2: Option<u8>, pre: Option<u32>, off: u32) -> Option
 }
 
 /// The unwind codes of the prologue at `start` in `text` before `limit`, last
-/// first and `end` excluded; `None` for an unsigned frameless function or
-/// another shape.
+/// first and `end` excluded, read from the instructions; `None` for an
+/// unsigned frameless function or another shape. The tests check [`codes`]
+/// against it.
+#[cfg(test)]
 pub(crate) fn prologue_codes(text: &[u8], start: u32, limit: u32) -> Option<Vec<u8>> {
     let mut at = start;
     let mut next = || -> Option<Insn> {

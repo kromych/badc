@@ -1161,6 +1161,9 @@ pub struct NativeObject {
     /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), offsets in this
     /// unit's `.text`.
     pub seh_rows: Vec<SehRowAt<u64>>,
+    /// Each function's prologue unwind steps (`NT_BADC_UNWIND`), by its
+    /// entry offset in this unit's `.text`.
+    pub(crate) unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     /// Names this unit defines `STB_GNU_UNIQUE`: the link resolves them as
     /// global definitions and states the binding in its symbol tables.
     pub unique: Vec<String>,
@@ -1426,6 +1429,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         prologue_ends: note.prologue_ends,
         early_returns: note.early_returns,
         seh_rows: note.seh_rows,
+        unwind: note.unwind,
         unique,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
@@ -2262,6 +2266,8 @@ fn decode_init_arrays(
 ///   type=13 NT_BADC_EARLY_RETURN -- (u64 entry_offset, u64
 ///                                  frame_offset, u64 return_offset)
 ///                                  `.text` triples.
+///   type=16 NT_BADC_UNWIND       -- (u64 entry_offset, unwind steps
+///                                  record) per function.
 /// Records under namesz != "badc\0" are skipped silently so future
 /// vendor extensions can coexist.
 #[derive(Default)]
@@ -2279,6 +2285,7 @@ struct BadcNote {
     prologue_ends: Vec<(u64, u64)>,
     early_returns: Vec<(u64, u64, u64)>,
     seh_rows: Vec<SehRowAt<u64>>,
+    unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     extern_data_names: Vec<String>,
 }
 
@@ -2468,6 +2475,19 @@ impl BadcNote {
                     let handler = (ntype == 15).then(|| word(c + 32)).and_then(some);
                     self.seh_rows.push((at, some(word(c + 24)), handler));
                     c += size;
+                }
+            }
+            16 => {
+                let mut c = cur;
+                while c + 8 <= desc_end {
+                    let entry = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                    let Some((steps, len)) =
+                        crate::c5::codegen::UnwindSteps::decode(&body[c + 8..desc_end])
+                    else {
+                        break;
+                    };
+                    self.unwind.push((entry, steps));
+                    c += 8 + len;
                 }
             }
             _ => {}

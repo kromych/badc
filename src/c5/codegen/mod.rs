@@ -51,10 +51,8 @@ pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
-/// Re-exported for the multi-TU link path, which recovers Win64
-/// unwind descriptors from merged `.text` bytes. Only the linker
-/// (gated on `full`) consumes it.
-#[cfg(feature = "full")]
+/// The link tests check the emitter's recorded unwind steps against it.
+#[cfg(all(test, feature = "full"))]
 pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 /// Which fields of a page-relative reference a fixup record covers;
@@ -2674,12 +2672,166 @@ pub(crate) enum PrologueStep {
     SetFrame(u32),
 }
 
-/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's codes.
-#[derive(Debug, Clone)]
+/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's
+/// steps as the emitter recorded them, one per instruction from `begin`,
+/// or from the frame path's start where an [`EarlyReturn`] precedes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct A64Unwind {
     pub begin: u32,
     pub end: u32,
-    pub codes: Vec<u8>,
+    pub steps: Vec<A64Step>,
+}
+
+/// One arm64 prologue instruction as an unwinder replays it (Microsoft,
+/// "ARM64 exception handling"): each takes one unwind code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum A64Step {
+    /// `bti c`, `nop` or an argument register's store into its home: no
+    /// effect the unwinder reverses.
+    Nop,
+    /// `paciasp`.
+    PacSignLr,
+    /// `sub sp, sp, #n`.
+    Alloc(u32),
+    /// `stp x29, x30, [sp, #-n]!`.
+    SaveFpLrX(u32),
+    /// `mov x29, sp`.
+    SetFp,
+    /// A store of `reg`, and of `reg2` for a pair, x or (`fp`) d registers,
+    /// at `[sp, #bytes]` or (`pre`) pre-indexing `bytes`.
+    SaveReg {
+        fp: bool,
+        reg: u8,
+        reg2: Option<u8>,
+        pre: bool,
+        bytes: u32,
+    },
+    /// `stp x29, x30, [sp, #off]`.
+    SaveFpLr(u32),
+    /// `add x29, sp, #off`.
+    AddFp(u32),
+}
+
+/// A function's recorded unwind steps as an object's `.note.badc` carries
+/// them to the link, keyed by its entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UnwindSteps {
+    /// [`FnUnwind::leaf`] and [`FnUnwind::steps`].
+    X64 {
+        leaf: bool,
+        steps: Vec<(u32, PrologueStep)>,
+    },
+    /// [`A64Unwind::steps`]; none for a frameless function.
+    A64(Vec<A64Step>),
+}
+
+impl UnwindSteps {
+    /// Append the record: its kind and step count, then 12 bytes per step,
+    /// `[offset u32, tag u8, a u8, b u8, flags u8, value u32]`.
+    pub(crate) fn encode(&self, out: &mut Vec<u8>) {
+        let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
+            out.extend(offset.to_le_bytes());
+            out.extend([tag, a, b, flags]);
+            out.extend(value.to_le_bytes());
+        };
+        match self {
+            UnwindSteps::X64 { leaf, steps } => {
+                step(0, u8::from(*leaf), 0, 0, 0, steps.len() as u32);
+                for &(at, s) in steps {
+                    match s {
+                        PrologueStep::Push(r) => step(at, 0, r, 0, 0, 0),
+                        PrologueStep::Alloc(n) => step(at, 1, 0, 0, 0, n),
+                        PrologueStep::SaveXmm { xmm, off } => step(at, 2, xmm, 0, 0, off),
+                        PrologueStep::SetFrame(off) => step(at, 3, 0, 0, 0, off),
+                    }
+                }
+            }
+            UnwindSteps::A64(steps) => {
+                step(0, 2, 0, 0, 0, steps.len() as u32);
+                for &s in steps {
+                    match s {
+                        A64Step::Nop => step(0, 0, 0, 0, 0, 0),
+                        A64Step::PacSignLr => step(0, 1, 0, 0, 0, 0),
+                        A64Step::Alloc(n) => step(0, 2, 0, 0, 0, n),
+                        A64Step::SaveFpLrX(n) => step(0, 3, 0, 0, 0, n),
+                        A64Step::SetFp => step(0, 4, 0, 0, 0, 0),
+                        A64Step::SaveReg {
+                            fp,
+                            reg,
+                            reg2,
+                            pre,
+                            bytes,
+                        } => {
+                            let pair = reg2.is_some();
+                            let flags = u8::from(fp) | u8::from(pair) << 1 | u8::from(pre) << 2;
+                            step(0, 5, reg, reg2.unwrap_or(0), flags, bytes)
+                        }
+                        A64Step::SaveFpLr(off) => step(0, 6, 0, 0, 0, off),
+                        A64Step::AddFp(off) => step(0, 7, 0, 0, 0, off),
+                    }
+                }
+            }
+        }
+    }
+
+    /// The record at the start of `bytes` and its length; `None` for a
+    /// truncated or unknown one.
+    pub(crate) fn decode(bytes: &[u8]) -> Option<(Self, usize)> {
+        let field = |at: usize| -> Option<(u32, [u8; 4], u32)> {
+            let b = bytes.get(at..at + 12)?;
+            let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+            Some((word(0), [b[4], b[5], b[6], b[7]], word(8)))
+        };
+        let (_, [kind, ..], count) = field(0)?;
+        let records = (1..=count as usize).map(|i| field(12 * i));
+        let len = 12 * (count as usize + 1);
+        let steps = match kind {
+            0 | 1 => UnwindSteps::X64 {
+                leaf: kind == 1,
+                steps: records
+                    .map(|r| {
+                        let (at, [tag, a, ..], value) = r?;
+                        Some((
+                            at,
+                            match tag {
+                                0 => PrologueStep::Push(a),
+                                1 => PrologueStep::Alloc(value),
+                                2 => PrologueStep::SaveXmm { xmm: a, off: value },
+                                3 => PrologueStep::SetFrame(value),
+                                _ => return None,
+                            },
+                        ))
+                    })
+                    .collect::<Option<_>>()?,
+            },
+            2 => UnwindSteps::A64(
+                records
+                    .map(|r| {
+                        let (_, [tag, reg, reg2, flags], value) = r?;
+                        Some(match tag {
+                            0 => A64Step::Nop,
+                            1 => A64Step::PacSignLr,
+                            2 => A64Step::Alloc(value),
+                            3 => A64Step::SaveFpLrX(value),
+                            4 => A64Step::SetFp,
+                            5 => A64Step::SaveReg {
+                                fp: flags & 1 != 0,
+                                reg,
+                                reg2: (flags & 2 != 0).then_some(reg2),
+                                pre: flags & 4 != 0,
+                                bytes: value,
+                            },
+                            6 => A64Step::SaveFpLr(value),
+                            7 => A64Step::AddFp(value),
+                            _ => return None,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            ),
+            _ => return None,
+        };
+        Some((steps, len))
+    }
 }
 
 /// An input's `RUNTIME_FUNCTION`: `[begin, end)` in `Build::text`, and its unwind data.

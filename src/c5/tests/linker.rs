@@ -7215,6 +7215,116 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     assert!(decode(0).leaf);
 }
 
+/// Every kind of unwind step reads back from its note record unchanged,
+/// and a record with an unknown kind or step, or cut short, reads as none.
+#[test]
+fn unwind_step_records_round_trip() {
+    use crate::c5::codegen::{A64Step, PrologueStep as P, UnwindSteps};
+    let records = [
+        UnwindSteps::X64 {
+            leaf: false,
+            steps: alloc::vec![
+                (1, P::Push(5)),
+                (2, P::Push(15)),
+                (9, P::Alloc(0x1_0000)),
+                (14, P::SaveXmm { xmm: 6, off: 32 }),
+                (19, P::SetFrame(48)),
+            ],
+        },
+        UnwindSteps::X64 {
+            leaf: true,
+            steps: alloc::vec::Vec::new(),
+        },
+        UnwindSteps::A64(alloc::vec![
+            A64Step::Nop,
+            A64Step::PacSignLr,
+            A64Step::Alloc(64),
+            A64Step::SaveReg {
+                fp: false,
+                reg: 19,
+                reg2: Some(20),
+                pre: true,
+                bytes: 96
+            },
+            A64Step::SaveReg {
+                fp: true,
+                reg: 8,
+                reg2: None,
+                pre: false,
+                bytes: 16
+            },
+            A64Step::SaveFpLr(80),
+            A64Step::AddFp(80),
+            A64Step::SaveFpLrX(16),
+            A64Step::SetFp,
+        ]),
+    ];
+    for r in &records {
+        let mut bytes = alloc::vec::Vec::new();
+        r.encode(&mut bytes);
+        assert_eq!(UnwindSteps::decode(&bytes), Some((r.clone(), bytes.len())));
+        assert_eq!(UnwindSteps::decode(&bytes[..bytes.len() - 1]), None);
+        let mut unknown = bytes.clone();
+        unknown[4] = 9;
+        assert_eq!(UnwindSteps::decode(&unknown), None);
+    }
+}
+
+/// A function's prologue unwind steps reach the PE link in its unit's note
+/// as the emitter recorded them, keyed by its entry, on both targets. A
+/// function with a prologue and no recorded steps is an internal error, not
+/// a frameless record.
+#[cfg(feature = "full")]
+#[test]
+fn the_pe_link_takes_the_recorded_unwind_steps() {
+    use crate::c5::codegen::UnwindSteps;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::{OutputKind, write_native_image_from_merged};
+    let src = "long g(long a) { return a * 3; }\n\
+               long f(long a, long b) { char buf[64]; buf[a & 63] = 1; return g(a) + b + buf[b & 63]; }\n\
+               void __c5_entry(void *sp, long off) { (void)sp; (void)f(off, 2); }\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let entry = |name: &str| {
+            (obj.symbols.iter().find(|s| s.name == name))
+                .expect(name)
+                .value
+        };
+        let steps = |name: &str| {
+            let at = entry(name);
+            let (_, steps) = obj.unwind.iter().find(|(e, _)| *e == at).expect(name);
+            steps.clone()
+        };
+        match (steps("f"), target) {
+            (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
+                assert!(!leaf && steps.len() >= 2, "{steps:?}")
+            }
+            (UnwindSteps::A64(steps), crate::Target::WindowsAarch64) => {
+                assert!(steps.len() >= 2, "{steps:?}")
+            }
+            other => panic!("{target:?}: {other:?}"),
+        }
+        let link = |obj| {
+            let mut merged = link_native_objects(&[obj]).expect("link");
+            let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
+            let kind = OutputKind::Executable;
+            write_native_image_from_merged(&merged, &plt, "__c5_entry", None, kind, target, None)
+        };
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        if let Err(e) = link(obj) {
+            panic!("{target:?}: {e}");
+        }
+        let mut obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        obj.unwind.clear();
+        let msg = link(obj).expect_err("no recorded steps").to_string();
+        assert!(
+            msg.contains("internal compiler error")
+                && msg.contains("has a prologue and no recorded unwind steps"),
+            "{target:?}: {msg}"
+        );
+    }
+}
+
 #[test]
 fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
     // A local label typed `@function` and sized is still kept out of
@@ -7353,6 +7463,7 @@ fn minimal_native_object(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
@@ -7670,6 +7781,7 @@ fn aarch64_data_ref_object_ex(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
@@ -7937,6 +8049,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),

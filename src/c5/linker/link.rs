@@ -342,6 +342,9 @@ pub struct MergedNative {
     /// The frame path and the early return of a function that returns ahead
     /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
     pub early_returns: HashMap<u64, (u64, u64)>,
+    /// Each function's prologue unwind steps, keyed as
+    /// [`Self::prologue_ends`] (`NT_BADC_UNWIND`).
+    pub(crate) unwind: HashMap<u64, crate::c5::codegen::UnwindSteps>,
     /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), merged-text offsets,
     /// a function's rows adjacent.
     pub seh_rows: Vec<super::object::SehRowAt<u32>>,
@@ -1277,6 +1280,8 @@ struct Link<'a> {
     prologue_ends: HashMap<u64, u64>,
     /// Function entry -> (frame path, early return), in merged text.
     early_returns: HashMap<u64, (u64, u64)>,
+    /// Function entry -> prologue unwind steps, in merged text.
+    unwind: HashMap<u64, crate::c5::codegen::UnwindSteps>,
     seh_rows: Vec<super::object::SehRowAt<u32>>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
@@ -1416,6 +1421,7 @@ impl<'a> Link<'a> {
             absolute_defined: HashMap::new(),
             prologue_ends: HashMap::new(),
             early_returns: HashMap::new(),
+            unwind: HashMap::new(),
             seh_rows: Vec::new(),
             local_funcs: Vec::new(),
             imports: Vec::new(),
@@ -2598,6 +2604,9 @@ impl<'a> Link<'a> {
             for &(entry, frame, exit) in &obj.early_returns {
                 self.early_returns
                     .insert(map.at(entry), (map.at(frame), map.at(exit)));
+            }
+            for (entry, steps) in &obj.unwind {
+                self.unwind.insert(map.at(*entry), steps.clone());
             }
             for &(row, target, handler) in &obj.seh_rows {
                 let at = |at: u64| map.at(at) as u32;
@@ -5178,6 +5187,7 @@ impl<'a> Link<'a> {
                 .collect(),
             prologue_ends: self.prologue_ends,
             early_returns: self.early_returns,
+            unwind: self.unwind,
             seh_rows: self.seh_rows,
             local_funcs: self.local_funcs,
             symbols,
@@ -6408,6 +6418,7 @@ mod tests {
             prologue_ends: Vec::new(),
             early_returns: Vec::new(),
             seh_rows: Vec::new(),
+            unwind: Vec::new(),
             extern_data_names: Vec::new(),
             alternate_names: Vec::new(),
             comdats: Vec::new(),
@@ -7813,6 +7824,7 @@ mod tests {
                 prologue_ends: alloc::vec::Vec::new(),
                 early_returns: alloc::vec::Vec::new(),
                 seh_rows: alloc::vec::Vec::new(),
+                unwind: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),

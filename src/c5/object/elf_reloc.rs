@@ -109,6 +109,9 @@ const NT_BADC_EXTERN_DATA: u32 = 12;
 const NT_BADC_EARLY_RETURN: u32 = 13;
 /// `(function, begin, end, target, handler)` per `__try` scope-table row.
 const NT_BADC_SEH_SCOPE: u32 = 15;
+/// `(u64 entry, record)` per function: its prologue's unwind steps
+/// (`UnwindSteps::encode`).
+const NT_BADC_UNWIND: u32 = 16;
 /// The target of a `__finally` row, the handler of a row whose filter is
 /// the constant `EXCEPTION_EXECUTE_HANDLER`.
 pub(crate) const SEH_NONE: u64 = u64::MAX;
@@ -1066,6 +1069,8 @@ struct Symtab<'a> {
     /// `(function, begin, end, target, handler)` `.text` offsets of each
     /// `__try` scope-table row, [`SEH_NONE`] for an absent one.
     seh_rows: Vec<[u64; 5]>,
+    /// Each function's `.text` entry offset and prologue unwind steps.
+    unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
     defined_tls_symidx: BTreeMap<&'a str, u64>,
@@ -2591,6 +2596,23 @@ impl<'a> RelocWriter<'a> {
             let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
             if [a, b, c] == [SHIDX_TEXT; 3] {
                 self.syms.early_returns.push((entry, frame, exit));
+            }
+        }
+        // The link reads the steps for a PE image's unwind table and for
+        // `.debug_frame`.
+        use crate::c5::codegen::UnwindSteps;
+        let pe = self.target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
+        let x64 = (build.fn_unwind.iter().filter(|_| pe || build.debug_info)).map(|u| {
+            let steps = UnwindSteps::X64 {
+                leaf: u.leaf,
+                steps: u.steps.clone(),
+            };
+            (u.begin, steps)
+        });
+        let a64 = (build.a64_unwind.iter()).map(|u| (u.begin, UnwindSteps::A64(u.steps.clone())));
+        for (begin, steps) in x64.chain(a64) {
+            if let (SHIDX_TEXT, entry) = self.text_place(u64::from(begin)) {
+                self.syms.unwind.push((entry, steps));
             }
         }
         for r in &build.seh_rows {
@@ -4287,6 +4309,7 @@ impl<'a> RelocWriter<'a> {
             &self.syms.prologue_end_pairs,
             &self.syms.early_returns,
             &self.syms.seh_rows,
+            &self.syms.unwind,
             &noted_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
@@ -5090,6 +5113,7 @@ fn build_badc_note(
     prologue_ends: &[(u64, u64)],
     early_returns: &[(u64, u64, u64)],
     seh_rows: &[[u64; 5]],
+    unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
@@ -5228,6 +5252,15 @@ fn build_badc_note(
             .flat_map(|at| at.to_le_bytes())
             .collect();
         push_note_record(&mut out, NT_BADC_SEH_SCOPE, &desc);
+    }
+
+    if !unwind.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (entry, steps) in unwind {
+            desc.extend_from_slice(&entry.to_le_bytes());
+            steps.encode(&mut desc);
+        }
+        push_note_record(&mut out, NT_BADC_UNWIND, &desc);
     }
 
     if !imports.data_bindings.is_empty() {

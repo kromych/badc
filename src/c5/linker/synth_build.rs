@@ -221,8 +221,8 @@ fn synth_program_and_build(
         &exports,
     );
     let functions = function_table(merged, pc_to_native);
-    let fn_unwind = x86_64_unwind(merged, target, &functions);
-    let a64_unwind = aarch64_unwind(merged, target, &functions);
+    let fn_unwind = x86_64_unwind(merged, target, &functions)?;
+    let a64_unwind = aarch64_unwind(merged, target, &functions)?;
     let mut early_returns: Vec<crate::c5::codegen::EarlyReturn> = merged
         .early_returns
         .iter()
@@ -540,69 +540,23 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
     table
 }
 
-/// Per-function x86_64 unwind descriptors, for the PE writer's unwind
-/// table and the DWARF `.debug_frame` rules. The merged image holds the
-/// final `.text` and each function's begin offset; the end is the next
-/// function's begin. The prologue layout is recovered from the emitted
-/// bytes by this backend's prologue-grammar decoder, keyed on the
-/// post-prologue anchor that survives the link. Other targets leave it
-/// empty.
-fn x86_64_unwind(
-    merged: &MergedNative,
-    target: Target,
+/// A function's `[begin, end)` in merged text and its recorded steps.
+type RecordedUnwind<'m> = (u32, u32, Option<&'m crate::c5::codegen::UnwindSteps>);
+
+/// Each function of `merged` that lies outside an input's own unwind table,
+/// as `[begin, end)` where the end is the next function's begin, with the
+/// prologue unwind steps its unit recorded. Code with no post-prologue
+/// anchor (assembly, a synthetic trampoline) has no prologue badc emitted
+/// and takes none; a function with an anchor and no steps is an internal
+/// error under `required`.
+fn recorded_unwind<'m>(
+    merged: &'m MergedNative,
     functions: &FunctionTable,
-) -> Vec<crate::c5::codegen::FnUnwind> {
-    if !matches!(target, Target::WindowsX64 | Target::LinuxX64) {
-        return Vec::new();
-    }
+    required: bool,
+) -> Result<Vec<RecordedUnwind<'m>>, C5Error> {
     let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
     // Code an input's own unwind table describes takes its entry from it;
     // its end still bounds the function before it.
-    begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
-    begins.sort_unstable();
-    begins.dedup();
-    let foreign =
-        |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
-    let text_len = merged.text.len() as u32;
-    begins
-        .iter()
-        .enumerate()
-        .filter(|&(_, &begin)| begin < text_len && !foreign(begin))
-        .map(|(i, &begin)| {
-            let end = begins.get(i + 1).copied().unwrap_or(text_len);
-            // No anchor (synthetic trampoline / no standard prologue)
-            // -> frameless leaf covering [begin, end).
-            let prologue_end = functions
-                .prologue_native
-                .get(&(begin as usize))
-                .map(|&p| p as u32)
-                .unwrap_or(begin);
-            let frame_start = merged
-                .early_returns
-                .get(&u64::from(begin))
-                .map_or(0, |&(frame, _)| frame as u32);
-            crate::c5::codegen::decode_x86_64_prologue_unwind(
-                &merged.text,
-                begin,
-                end,
-                prologue_end,
-                frame_start,
-            )
-        })
-        .collect()
-}
-
-/// The windows-arm64 functions of `merged` whose prologue `prologue_codes`
-/// describes; a return ahead of the frame stays out, as in `x86_64_unwind`.
-fn aarch64_unwind(
-    merged: &MergedNative,
-    target: Target,
-    functions: &FunctionTable,
-) -> Vec<crate::c5::codegen::A64Unwind> {
-    if target != Target::WindowsAarch64 {
-        return Vec::new();
-    }
-    let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
     begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
     begins.sort_unstable();
     begins.dedup();
@@ -615,25 +569,77 @@ fn aarch64_unwind(
             continue;
         }
         let end = begins.get(i + 1).copied().unwrap_or(text_len);
-        let Some(&anchor) = functions.prologue_native.get(&(begin as usize)) else {
-            continue;
-        };
-        let (start, stop) = match merged.early_returns.get(&u64::from(begin)) {
-            Some(&(frame, exit)) => (frame as u32, exit as u32),
-            None => (begin, end),
-        };
-        let limit = (anchor as u32).min(stop);
-        if let Some(codes) =
-            crate::c5::object::arm64_unwind::prologue_codes(&merged.text, start, limit)
+        let steps = merged.unwind.get(&u64::from(begin));
+        if steps.is_none() && required && functions.prologue_native.contains_key(&(begin as usize))
         {
-            out.push(crate::c5::codegen::A64Unwind {
-                begin: start,
-                end: stop,
-                codes,
-            });
+            return Err(internal_err(
+                MODULE,
+                &alloc::format!(
+                    "the function at {begin:#x} has a prologue and no recorded unwind steps"
+                ),
+            ));
         }
+        out.push((begin, end, steps));
     }
-    out
+    Ok(out)
+}
+
+/// Per-function x86_64 unwind descriptors, for the PE writer's unwind
+/// table and the DWARF `.debug_frame` rules, from the steps the emitter
+/// recorded. A function without them is a frameless leaf. Other targets
+/// leave it empty.
+fn x86_64_unwind(
+    merged: &MergedNative,
+    target: Target,
+    functions: &FunctionTable,
+) -> Result<Vec<crate::c5::codegen::FnUnwind>, C5Error> {
+    use crate::c5::codegen::{FnUnwind, UnwindSteps};
+    if !matches!(target, Target::WindowsX64 | Target::LinuxX64) {
+        return Ok(Vec::new());
+    }
+    let functions = recorded_unwind(merged, functions, target == Target::WindowsX64)?;
+    let mut out = Vec::with_capacity(functions.len());
+    for (begin, end, steps) in functions {
+        let (leaf, steps) = match steps {
+            Some(UnwindSteps::X64 { leaf, steps }) => (*leaf, steps.clone()),
+            Some(UnwindSteps::A64(_)) => {
+                return Err(internal_err(MODULE, "arm64 unwind steps in an x86-64 link"));
+            }
+            None => (true, Vec::new()),
+        };
+        out.push(FnUnwind {
+            begin,
+            end,
+            leaf,
+            steps,
+        });
+    }
+    Ok(out)
+}
+
+/// The windows-arm64 functions of `merged` and the prologue steps the
+/// emitter recorded; a frameless one states none.
+fn aarch64_unwind(
+    merged: &MergedNative,
+    target: Target,
+    functions: &FunctionTable,
+) -> Result<Vec<crate::c5::codegen::A64Unwind>, C5Error> {
+    use crate::c5::codegen::{A64Unwind, UnwindSteps};
+    if target != Target::WindowsAarch64 {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for (begin, end, steps) in recorded_unwind(merged, functions, true)? {
+        let steps = match steps {
+            Some(UnwindSteps::A64(steps)) if !steps.is_empty() => steps.clone(),
+            Some(UnwindSteps::X64 { .. }) => {
+                return Err(internal_err(MODULE, "x86-64 unwind steps in an arm64 link"));
+            }
+            _ => continue,
+        };
+        out.push(A64Unwind { begin, end, steps });
+    }
+    Ok(out)
 }
 
 /// Each data-import copy relocation against the merged symbol table.
@@ -1879,6 +1885,7 @@ mod tests {
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
             early_returns: hashbrown::HashMap::new(),
+            unwind: hashbrown::HashMap::new(),
             seh_rows: alloc::vec::Vec::new(),
             local_funcs: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),

@@ -1409,6 +1409,7 @@ fn emit_return_42() {
             mcount_sites: &mut alloc::vec::Vec::new(),
             early_returns: &mut alloc::vec::Vec::new(),
             seh_rows: &mut alloc::vec::Vec::new(),
+            a64_unwind: &mut alloc::vec::Vec::new(),
             funclet_frames: &mut alloc::collections::BTreeMap::new(),
         };
         emit_function(
@@ -2596,6 +2597,7 @@ fn emit_return_one_plus_two() {
             mcount_sites: &mut alloc::vec::Vec::new(),
             early_returns: &mut alloc::vec::Vec::new(),
             seh_rows: &mut alloc::vec::Vec::new(),
+            a64_unwind: &mut alloc::vec::Vec::new(),
             funclet_frames: &mut alloc::collections::BTreeMap::new(),
         };
         emit_function(
@@ -2696,6 +2698,7 @@ fn emit_if_else_returns() {
             mcount_sites: &mut alloc::vec::Vec::new(),
             early_returns: &mut alloc::vec::Vec::new(),
             seh_rows: &mut alloc::vec::Vec::new(),
+            a64_unwind: &mut alloc::vec::Vec::new(),
             funclet_frames: &mut alloc::collections::BTreeMap::new(),
         };
         emit_function(

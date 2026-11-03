@@ -150,6 +150,9 @@ struct FunctionEmitter<'a, 'b> {
     /// blocks end, for a function with a `__try` region.
     seh_placed: Vec<(BlockId, usize)>,
     seh_body_end: usize,
+    /// The prologue's unwind steps, one per instruction from where the
+    /// function's unwind record starts; none for a frameless function.
+    unwind: Vec<super::A64Step>,
 }
 
 /// Lower one function. Returns `true` when every block, instruction and
@@ -334,6 +337,7 @@ pub(crate) fn emit_function(
         deferred_regions: Vec::new(),
         seh_placed: Vec::new(),
         seh_body_end: 0,
+        unwind: Vec::new(),
     };
     em.emit_body()?;
     if func.has_seh() {
@@ -351,7 +355,13 @@ pub(crate) fn emit_function(
         frame.uses_x19,
         "x19 save and x19 writers disagree"
     );
-    em.resolve_layout()
+    em.resolve_layout()?;
+    em.cx.a64_unwind.push(super::A64Unwind {
+        begin: em.snapshot.code as u32,
+        end: em.cx.code.len() as u32,
+        steps: core::mem::take(&mut em.unwind),
+    });
+    Ok(())
 }
 
 /// Whether no two parameter homes name the same location, which is what
@@ -367,7 +377,7 @@ impl FunctionEmitter<'_, '_> {
     /// reach; the far set only grows, so the loop ends.
     fn emit_body(&mut self) -> Emit {
         loop {
-            self.emit_entry();
+            self.emit_entry()?;
             self.prebatched = alloc::vec![false; self.fcx.func.insts.len()];
             self.place_int_params()?;
             self.place_fp_params();
@@ -570,9 +580,11 @@ impl FunctionEmitter<'_, '_> {
     }
 
     /// The landing pad, patchable-entry NOPs, the test of the early return,
-    /// return-address signing and the prologue. A naked function's inline-asm
-    /// body is the whole function, so it takes only the NOPs.
-    fn emit_entry(&mut self) {
+    /// return-address signing and the prologue, with the unwind step of each
+    /// instruction the function's record covers. A naked function's
+    /// inline-asm body is the whole function, so it takes only the NOPs.
+    fn emit_entry(&mut self) -> Emit {
+        use super::A64Step as S;
         let FnCtx {
             func,
             alloc,
@@ -581,6 +593,7 @@ impl FunctionEmitter<'_, '_> {
             ..
         } = self.fcx;
         let signs = signs_return_address(func, frame, alloc, abi);
+        self.unwind.clear();
         if !func.is_naked {
             // The entry pays any realignment a preceding body left owing and
             // keeps the offset it was placed at, as a label does under GNU as.
@@ -592,12 +605,15 @@ impl FunctionEmitter<'_, '_> {
             let pad = self.entry.nops_after > 0 || !signs || self.early_exit.is_some();
             if abi.hardening.bti && pad {
                 emit(self.cx.code, super::encode::BTI_C);
+                self.unwind.push(S::Nop);
             }
         }
+        let mut from = self.snapshot.code;
         // The `-fpatchable-function-entry` NOPs follow the landing pad and
         // precede the rest of the entry, as gcc orders them.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
+            self.unwind.push(S::Nop);
         }
         if let Some(exit) = &self.early_exit {
             super::ssa::emit_common::record_test_src(
@@ -614,25 +630,46 @@ impl FunctionEmitter<'_, '_> {
             );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), self.cx.code.len());
+            // The record covers the frame path, which starts here.
+            self.unwind.clear();
+            from = self.cx.code.len();
         }
+        let mut described = None;
         if !func.is_naked {
             if signs {
                 emit(self.cx.code, super::encode::PACIASP);
+                self.unwind.push(S::PacSignLr);
+                described = Some(self.cx.code.len());
             }
-            emit_prologue(
+            let framed = emit_prologue(
                 self.cx.code,
                 func,
                 alloc,
                 frame,
                 abi,
                 self.cx.user_extern_data_refs,
+                &mut self.unwind,
             );
+            described = framed.or(described);
         }
         super::ssa::emit_common::record_post_prologue_pc(
             func,
             self.cx.prologue_native,
             self.cx.code.len(),
         );
+        // A frameless function's record states no prologue; otherwise one
+        // step describes each instruction up to where the frame is set.
+        match described {
+            None => self.unwind.clear(),
+            Some(end) if (end - from) / 4 == self.unwind.len() => {}
+            Some(_) => {
+                return Err(Unsupported::new(
+                    "internal compiler error: the prologue's unwind steps do not describe its \
+                     instructions",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Place the integer reads opening the entry block
@@ -1509,7 +1546,8 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
     }
 }
 
-/// Emit the function prologue.
+/// Emit the function prologue, with the unwind step of each instruction up to
+/// where fp is set, which is where it returns; `None` for a full leaf.
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1517,7 +1555,8 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) {
+    uw: &mut Vec<super::A64Step>,
+) -> Option<usize> {
     // A host-ABI variadic callee spills every argument register (a variadic
     // argument that landed in one must reach the save area for `va_arg`)
     // into the register save area above the saved fp/lr; see
@@ -1530,17 +1569,17 @@ fn emit_prologue(
             frame.va_save_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
-        emit_register_save_area(code, frame, abi, false);
+        emit_register_save_area(code, frame, abi, false, uw);
     } else if variadic {
         debug_assert_eq!(
             frame.va_save_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
-        emit_register_save_area(code, frame, abi, true);
+        emit_register_save_area(code, frame, abi, true, uw);
     } else if is_full_leaf(frame, alloc) {
-        return;
+        return None;
     }
-    emit_frame_and_saves(code, alloc, frame);
+    let described = emit_frame_and_saves(code, alloc, frame, uw);
     if frame.local_base {
         // x19 = the frame bottom: far locals and spills address from it
         // with a scaled offset, one instruction instead of the fp form's
@@ -1571,6 +1610,7 @@ fn emit_prologue(
         emit_param_homes(code, func, alloc, frame);
     }
     emit_struct_param_scatter(code, func, abi, frame);
+    Some(described)
 }
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
@@ -1578,10 +1618,18 @@ fn emit_prologue(
 /// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
-fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, vector: bool) {
+fn emit_register_save_area(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    vector: bool,
+    uw: &mut Vec<super::A64Step>,
+) {
     emit_sub_sp_imm(code, frame.va_save_bytes);
+    uw.push(super::A64Step::Alloc(frame.va_save_bytes));
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
+        uw.push(super::A64Step::Nop);
     }
     if vector && !abi.no_fp_regs {
         for i in 0..8u32 {
@@ -1593,6 +1641,7 @@ fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, ve
                 code,
                 super::encode::enc_str_q_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
+            uw.push(super::A64Step::Nop);
         }
     }
 }
@@ -1740,8 +1789,15 @@ fn emit_struct_param_scatter(
 /// allocation left free. With `pre != 0` the block starts at sp: the first
 /// save pre-indexes `pre` bytes, the folded frame (`frame_fold_bytes`) or
 /// the top block (`Frame::saves_top`) plus the fp/lr pair, in place of the
-/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`.
-fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, pre: u32) {
+/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`. With `uw`, each
+/// store's unwind step is pushed to it.
+fn emit_prologue_saved_regs(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    pre: u32,
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) {
     let plan = save_plan(alloc, frame);
     debug_assert!(
         pre == 0 || !plan.is_empty(),
@@ -1751,7 +1807,17 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
     for (i, s) in plan.into_iter().enumerate() {
         let off = s.off + shift;
         let neg = -(pre as i32);
-        let word = match (s.fp, s.r2, i == 0 && pre != 0) {
+        let first = i == 0 && pre != 0;
+        if let Some(uw) = uw.as_deref_mut() {
+            uw.push(super::A64Step::SaveReg {
+                fp: s.fp,
+                reg: s.r,
+                reg2: s.r2,
+                pre: first,
+                bytes: if first { pre } else { off },
+            });
+        }
+        let word = match (s.fp, s.r2, first) {
             (true, Some(r2), true) => enc_stp_d_pre(s.r, r2, Reg(31), neg),
             (true, None, true) => enc_str_d_pre(s.r, Reg(31), neg),
             (false, Some(r2), true) => enc_stp_pre(Reg(s.r), Reg(r2), Reg(31), neg),
@@ -1982,24 +2048,39 @@ pub(super) fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
 /// folded shape allocates everything with the first save's pre-index and
 /// keeps fp and every offset identical to the unfolded
 /// `stp fp/lr; mov fp, sp; sub sp` shape. A top save block is allocated
-/// the same way, and the rest of the frame after fp is set.
-fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
+/// the same way, and the rest of the frame after fp is set. Returns where
+/// fp is set, which ends the steps pushed to `uw`: the unwinder recovers
+/// sp from fp, so what follows is not described.
+fn emit_frame_and_saves(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    uw: &mut Vec<super::A64Step>,
+) -> usize {
     let block = frame_fold_bytes(alloc, frame).max(frame.saves_top);
     if block != 0 {
-        emit_prologue_saved_regs(code, alloc, frame, block + 16);
+        emit_prologue_saved_regs(code, alloc, frame, block + 16, Some(uw));
         emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), block as i32));
         emit(code, enc_add_imm(Reg(29), Reg(31), block));
+        uw.extend([
+            super::A64Step::SaveFpLr(block),
+            super::A64Step::AddFp(block),
+        ]);
+        let described = code.len();
         if frame.frame_bytes > block {
             emit_stack_alloc(code, frame.frame_bytes - block, Some(Reg(16)));
         }
-        return;
+        return described;
     }
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+    uw.extend([super::A64Step::SaveFpLrX(16), super::A64Step::SetFp]);
+    let described = code.len();
     if frame.frame_bytes > 0 {
         emit_stack_alloc(code, frame.frame_bytes, Some(Reg(16)));
     }
-    emit_prologue_saved_regs(code, alloc, frame, 0);
+    emit_prologue_saved_regs(code, alloc, frame, 0, None);
+    described
 }
 
 /// The `B.cond` condition for a comparison the allocator flagged as

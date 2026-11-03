@@ -2287,10 +2287,8 @@ fn apply_plt_call_fixups(
 }
 
 /// Recover a function's Win64 unwind descriptor from its emitted
-/// prologue bytes. Used by the multi-TU link path, which holds the
-/// merged `.text` and each function's `[begin, end)` extent but not
-/// the structured [`super::FnUnwind`] the single-TU lowering records
-/// directly. The decode matches this backend's own fixed prologue
+/// prologue bytes, which the tests check against the [`super::FnUnwind`]
+/// the emitter records. The decode matches this backend's own fixed prologue
 /// grammar, not arbitrary machine code: an optional `endbr64` and the
 /// patchable-entry NOPs and `-pg` call ahead of the frame, then `55`
 /// (push rbp) and either `48 89 E5` (mov rbp,rsp) or the Win64 save block
@@ -2305,6 +2303,7 @@ fn apply_plt_call_fixups(
 /// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
 /// at `frame_start` (0 when none), where the decode starts.
+#[cfg(test)]
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
@@ -2335,6 +2334,7 @@ pub(crate) fn decode_x86_64_prologue_unwind(
 
 /// The steps of the frame [`decode_x86_64_prologue_unwind`] reads in
 /// `window`, `frame` bytes in when an early return's test precedes it.
+#[cfg(test)]
 fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::PrologueStep)>> {
     use super::PrologueStep as S;
     let mut fp = frame;

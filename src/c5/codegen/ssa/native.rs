@@ -110,6 +110,7 @@ pub(crate) fn compile_function_to_bytes(
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
                     seh_rows: &mut alloc::vec::Vec::new(),
+                    a64_unwind: &mut alloc::vec::Vec::new(),
                     funclet_frames: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::aarch64::emit::emit_function(
@@ -223,6 +224,7 @@ pub(crate) fn compile_function_to_bytes(
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
                     seh_rows: &mut alloc::vec::Vec::new(),
+                    a64_unwind: &mut alloc::vec::Vec::new(),
                     funclet_frames: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::x86_64::emit::emit_function(

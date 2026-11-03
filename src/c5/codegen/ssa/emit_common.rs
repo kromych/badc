@@ -71,6 +71,8 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
     /// The `__try` scope tables.
     pub(crate) seh_rows: &'a mut alloc::vec::Vec<super::SehRow>,
+    /// Each arm64 function's prologue unwind steps.
+    pub(crate) a64_unwind: &'a mut alloc::vec::Vec<super::A64Unwind>,
     /// Per function with filter funclets, by `ent_pc`, where each of its
     /// `funclet_slots` lies relative to the frame value the language
     /// handler passes a funclet.
@@ -2054,6 +2056,7 @@ pub(crate) struct LowerState {
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
     pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
     pub(crate) seh_rows: alloc::vec::Vec<super::SehRow>,
+    pub(crate) a64_unwind: alloc::vec::Vec<super::A64Unwind>,
     pub(crate) funclet_frames: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
@@ -2093,6 +2096,7 @@ impl LowerState {
             mcount_sites: alloc::vec::Vec::new(),
             early_returns: alloc::vec::Vec::new(),
             seh_rows: alloc::vec::Vec::new(),
+            a64_unwind: alloc::vec::Vec::new(),
             funclet_frames: alloc::collections::BTreeMap::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
@@ -2149,6 +2153,7 @@ impl LowerState {
                 mcount_sites: &mut self.mcount_sites,
                 early_returns: &mut self.early_returns,
                 seh_rows: &mut self.seh_rows,
+                a64_unwind: &mut self.a64_unwind,
                 funclet_frames: &mut self.funclet_frames,
             },
             rodata: &mut self.rodata,
@@ -3351,7 +3356,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
-        a64_unwind: alloc::vec::Vec::new(),
+        // The PE unwind tables are their only reader.
+        a64_unwind: if target == super::Target::WindowsAarch64 {
+            st.a64_unwind
+        } else {
+            alloc::vec::Vec::new()
+        },
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs: st.user_extern_data_refs,

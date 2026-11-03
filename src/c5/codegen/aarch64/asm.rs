@@ -33,6 +33,9 @@ pub(crate) enum AsmOpndA64 {
     RefVecElem { idx: u8, size: u8, index: u8 },
     /// `%qN`: operand N's 128-bit `q` register view (`w` operands).
     RefQ(u8),
+    /// `%bN` / `%hN`: operand N's byte or half view (`size` 0 or 1) of a `w`
+    /// operand.
+    RefScalar { idx: u8, size: u8 },
     /// `{%N.T}`: a one-register table list whose register is operand N
     /// (the tbl/tbx table when the wrapper passes it as a `w` operand).
     RefVecList { idx: u8, size: u8, q: bool },
@@ -1155,6 +1158,19 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
                 .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
             return Ok(AsmOpndA64::RefQ(idx));
         }
+        // `%bN` / `%hN`: the byte and half views of a SIMD operand.
+        if let Some((size, digits)) = match rest.as_bytes().first() {
+            Some(b'b') => Some((0u8, &rest[1..])),
+            Some(b'h') => Some((1, &rest[1..])),
+            _ => None,
+        } && !digits.is_empty()
+            && digits.bytes().all(|c| c.is_ascii_digit())
+        {
+            let idx: u8 = digits
+                .parse()
+                .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
+            return Ok(AsmOpndA64::RefScalar { idx, size });
+        }
         // `%N` (natural width); the GP views `%wN` (32) / `%xN` (64); and the FP
         // scalar views `%sN` (single) / `%dN` (double). A view flag rides `is64`
         // (w/s = 32, x/d = 64) and the emitter resolves it against the operand's
@@ -2150,6 +2166,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // With x0 and x2 clobbered, three GP operands take x1, x3, x4.
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
@@ -3329,6 +3346,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // The LL/SC operand shape `=&r, =&r, +Q, r`: the `Q` operand takes a
         // pool register for its address, like `m`.
@@ -3357,6 +3375,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // A register-asm operand keeps its register; the pool operand
         // avoids it.

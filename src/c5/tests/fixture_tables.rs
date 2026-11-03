@@ -734,6 +734,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_lane_ext_pmull_high.c", 42),
     ("arm_neon_float_vectors.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
+    ("inline_asm_a64_w_operand_widths.c", 0),
     ("vector_register_chain.c", 42),
     ("inline_asm_rw_aggregate_param.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
@@ -2260,6 +2261,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_lane_ext_pmull_high.c", 42),
     ("arm_neon_float_vectors.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
+    ("inline_asm_a64_w_operand_widths.c", 0),
     ("vector_register_chain.c", 42),
     ("inline_asm_rw_aggregate_param.c", 42),
     ("inline_asm_a64_ld1_postindex.c", 42),
@@ -4612,6 +4614,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("arm_neon_float_vectors.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
+    ("inline_asm_a64_w_operand_widths.c", 0),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),

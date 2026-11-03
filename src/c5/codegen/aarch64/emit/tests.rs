@@ -20,6 +20,7 @@ mod asm_scratch_tests {
                 value: false,
                 volatile_object: false,
                 early_clobber: false,
+                fp_limit: 0,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,

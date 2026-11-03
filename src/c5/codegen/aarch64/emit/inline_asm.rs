@@ -600,10 +600,17 @@ impl AsmOperands<'_> {
             ));
         };
         Ok(match self.asm.operand_class(idx as usize) {
-            // `%sN` selects the single view, `%dN` / bare the double.
-            AsmConstraint::Fp => Opnd::VReg {
-                num: r,
-                is_d: is64.unwrap_or(true),
+            // `%sN` selects the single view and `%dN` the double; a bare `%N`
+            // is `vN`, as gcc and clang print it, which an instruction takes
+            // only with an arrangement.
+            AsmConstraint::Fp => match is64 {
+                Some(is_d) => Opnd::VReg { num: r, is_d },
+                None => {
+                    return Err(alloc::format!(
+                        "aarch64 inline asm: `%{idx}` names `v{r}`, which takes an arrangement \
+                         (`%{idx}.4s`) or a view (`%s{idx}`, `%d{idx}`, `%q{idx}`)"
+                    ));
+                }
             },
             // A memory operand (`m`, `Q`) substitutes as `[xN]`, the register
             // holding its address.
@@ -678,6 +685,10 @@ impl AsmOperands<'_> {
             AsmOpndA64::RefQ(idx) => {
                 let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::QReg(r)
+            }
+            AsmOpndA64::RefScalar { idx, size } => {
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
+                Opnd::VScalar { num: r, size }
             }
             AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
@@ -944,9 +955,10 @@ impl AsmRegion {
                     "aarch64 inline asm: operand place missing",
                 ));
             };
-            // A double `w` input captures its FP value and a 16-byte value its 128
-            // bits; any other 16-byte operand captures its address. A scalar
-            // value operand captures its integer value.
+            // A `w` input of up to 8 bytes captures its value's 64 bits, whose
+            // low bytes its view reads, and a 16-byte value its 128 bits; any
+            // other 16-byte operand captures its address. A scalar value
+            // operand captures its integer value.
             let op = &ops.asm.operands[i];
             if op.value && op.width == 16 {
                 let Some(q) = materialize_v128(code, place, 16, self.frame, Reg(16)) else {
@@ -957,7 +969,7 @@ impl AsmRegion {
                 self.str_q(code, q, self.cap_off(i));
             } else if matches!(ops.asm.operand_class(i), AsmConstraint::Fp)
                 && !op.is_output
-                && op.width == 8
+                && op.width <= 8
             {
                 let Some(d) = materialize_fp(code, place, 16, self.frame) else {
                     return Err(alloc::string::String::from(
@@ -1003,7 +1015,7 @@ impl AsmRegion {
                     self.ldr_d(code, r, self.cap_off(i));
                 } else if op.is_rw {
                     self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = destination address
-                    emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
+                    emit(code, fp_access(true, op.width, r));
                 }
                 continue;
             }
@@ -1046,11 +1058,7 @@ impl AsmRegion {
             let Some(r) = ops.op_reg[i] else { continue };
             self.ldr_x(code, Reg(16), self.cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
-                if op.width == 16 {
-                    emit(code, super::encode::enc_str_q_imm(r, Reg(16), 0));
-                } else {
-                    emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
-                }
+                emit(code, fp_access(false, op.width, r));
                 continue;
             }
             match op.width {
@@ -1223,6 +1231,22 @@ struct BoundOperands {
     op_reg: Vec<Option<u8>>,
     loads: Vec<BoundLoad>,
     out_scratch: bool,
+}
+
+/// The load (or store) of a `w` operand's `width` bytes in SIMD register `vt`
+/// at the address in x16: `b`, `h`, `s`, `d` or `q`.
+fn fp_access(load: bool, width: u8, vt: u8) -> u32 {
+    use super::encode::*;
+    match (load, width) {
+        (true, 1 | 2) => enc_ldr_bh_imm(u32::from(width), vt, Reg(16), 0),
+        (false, 1 | 2) => enc_str_bh_imm(u32::from(width), vt, Reg(16), 0),
+        (true, 4) => enc_ldr_s_imm(vt, Reg(16), 0),
+        (false, 4) => enc_str_s_imm(vt, Reg(16), 0),
+        (true, 16) => enc_ldr_q_imm(vt, Reg(16), 0),
+        (false, 16) => enc_str_q_imm(vt, Reg(16), 0),
+        (true, _) => enc_ldr_d_imm(vt, Reg(16), 0),
+        (false, _) => enc_str_d_imm(vt, Reg(16), 0),
+    }
 }
 
 /// Bind each input to the register its value occupies, or to a scratch;

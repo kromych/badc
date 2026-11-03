@@ -18,6 +18,7 @@ mod asm_scratch_tests {
                 value: false,
                 volatile_object: false,
                 early_clobber: false,
+                fp_limit: 0,
             }],
             clobber_regs,
             clobber_fp_regs: 0,
@@ -73,6 +74,7 @@ mod asm_scratch_tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         }];
         let op = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (0, 0)).unwrap();
         assert_eq!(op.0, 0);
@@ -127,6 +129,7 @@ mod asm_scratch_tests {
             value: is_output,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let statement = |operands: alloc::vec::Vec<AsmOperand>, clobber_regs: u32| {
             let n = operands.len();
@@ -289,6 +292,7 @@ mod asm_scratch_tests {
             value: is_output,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let asm = AsmBlock {
             template: b"nop".to_vec(),

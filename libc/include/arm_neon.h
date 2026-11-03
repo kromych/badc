@@ -452,11 +452,23 @@ static inline float32x4_t vcvt_high_f32_f64(float32x2_t __lo, float64x2_t __a) {
     return __r;
 }
 
-/* Every lane set to the scalar. */
-static inline float32x2_t vdup_n_f32(float32_t __x) { return (float32x2_t){__x, __x}; }
-static inline float32x4_t vdupq_n_f32(float32_t __x) { return (float32x4_t){__x, __x, __x, __x}; }
+/* Every lane set to the scalar, by `dup` from the scalar's register. */
+static inline float32x2_t vdup_n_f32(float32_t __x) {
+    float32x2_t __r;
+    __asm__("dup %0.2s, %1.s[0]" : "=w"(__r) : "w"(__x));
+    return __r;
+}
+static inline float32x4_t vdupq_n_f32(float32_t __x) {
+    float32x4_t __r;
+    __asm__("dup %0.4s, %1.s[0]" : "=w"(__r) : "w"(__x));
+    return __r;
+}
 static inline float64x1_t vdup_n_f64(float64_t __x) { return (float64x1_t){__x}; }
-static inline float64x2_t vdupq_n_f64(float64_t __x) { return (float64x2_t){__x, __x}; }
+static inline float64x2_t vdupq_n_f64(float64_t __x) {
+    float64x2_t __r;
+    __asm__("dup %0.2d, %1.d[0]" : "=w"(__r) : "w"(__x));
+    return __r;
+}
 static inline float32x2_t vmov_n_f32(float32_t __x) { return vdup_n_f32(__x); }
 static inline float32x4_t vmovq_n_f32(float32_t __x) { return vdupq_n_f32(__x); }
 static inline float64x1_t vmov_n_f64(float64_t __x) { return vdup_n_f64(__x); }

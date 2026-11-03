@@ -12,7 +12,7 @@ static int gp_clobber(int a, int b, int c) {
     __asm__("mov x2, #0\n\t"          /* trash x2 (a declared clobber) */
             "add %w0, %w1, %w2\n\t"   /* r = a + b; b must not alias x2 */
             "add %w0, %w0, %w3"       /* r += c                        */
-            : "=r"(r)
+            : "=&r"(r) /* written before %3 is read */
             : "r"(a), "r"(b), "r"(c)
             : "x2", "memory");
 #else
@@ -28,9 +28,9 @@ static int fp_clobber(int a, int b, int c) {
      * therefore not alias d1. */
     double x = a, y = b, z = c, s;
     __asm__("fmov d1, xzr\n\t" /* trash d1 (a declared clobber) */
-            "fadd %0, %1, %2\n\t"
-            "fadd %0, %0, %3"
-            : "=w"(s)
+            "fadd %d0, %d1, %d2\n\t"
+            "fadd %d0, %d0, %d3"
+            : "=&w"(s) /* written before %3 is read */
             : "w"(x), "w"(y), "w"(z)
             : "d1", "memory");
     r = (int) s;

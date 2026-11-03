@@ -7,7 +7,7 @@
 #if defined(__aarch64__)
 static int nonneg(double x) {
     int r;
-    __asm__("fcmp %1, #0.0\n\t"
+    __asm__("fcmp %d1, #0.0\n\t"
             "cset %w0, ge"
             : "=r"(r)
             : "w"(x)

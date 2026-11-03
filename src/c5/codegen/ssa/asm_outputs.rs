@@ -272,6 +272,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         }
     }
 

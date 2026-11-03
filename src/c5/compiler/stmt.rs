@@ -2143,11 +2143,29 @@ impl Compiler {
             // An x86 `x` operand is a 16-byte vector, moved whole, or a
             // `float` / `double` in the low lane, as the SysV ABI passes one;
             // a matching input takes the class of the output it names.
-            // AArch64 `w` has its own (scalar-double) width check in the
-            // emitter.
+            // An AArch64 `w` operand is a scalar of up to 8 bytes, floating
+            // or integer, or an 8- or 16-byte vector, as gcc takes it.
             let scalar_fp = matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && super::types::is_floating_scalar(self.ty);
+            let scalar = super::types::is_floating_scalar(self.ty)
+                || super::types::is_integer_scalar_ty(self.ty)
+                || super::types::is_pointer_ty(self.ty);
+            if matches!(class, AsmConstraint::Fp)
+                && self.target.is_aarch64()
+                && !(scalar && op_size <= 8
+                    || super::types::is_vector_ty(&self.structs, self.ty)
+                        && matches!(op_size, 8 | 16))
+            {
+                self.truncate_data(data_base);
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    alloc::format!(
+                        "inline asm: a `{cstr}` operand is a scalar of up to 8 bytes or an 8- or \
+                         16-byte vector"
+                    ),
+                ));
+            }
             if matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) != 16
@@ -2278,6 +2296,13 @@ impl Compiler {
                 .chars()
                 .take_while(|c| matches!(c, '=' | '+' | '&' | '%'))
                 .any(|c| c == '&');
+            // AArch64 `x` and `y` take v0-v15 and v0-v7; `w` beside them any.
+            let fp_limit = match constraint {
+                AsmConstraint::Fp if self.target.is_aarch64() && !cstr.contains('w') => {
+                    if cstr.contains('x') { 16 } else { 8 }
+                }
+                _ => 0,
+            };
             operands.push(AsmOperand {
                 constraint,
                 is_output: stores_back,
@@ -2289,6 +2314,7 @@ impl Compiler {
                 value: scalar_fp && !stores_back,
                 volatile_object,
                 early_clobber,
+                fp_limit,
             });
             if is_output {
                 n_outputs += 1;
@@ -2916,11 +2942,13 @@ impl Compiler {
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
-        // A SIMD/FP-register value: AArch64 `w`, or x86 `x` (an XMM register).
-        // Neither letter collides with the register/immediate/memory classes
-        // handled above, so the mapping is target-independent; the backend
-        // emitter reads the constraint to pick the v-register or xmm file.
-        if !has_general && (body.contains('w') || body.contains('x')) {
+        // A SIMD/FP-register value: AArch64 `w`, `x` (v0-v15) or `y` (v0-v7),
+        // or x86 `x` (an XMM register). None collides with the register,
+        // immediate and memory classes handled above; the backend emitter
+        // reads the constraint to pick the v-register or xmm file.
+        if !has_general
+            && (body.contains('w') || body.contains('x') || (!is_x86 && body.contains('y')))
+        {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {

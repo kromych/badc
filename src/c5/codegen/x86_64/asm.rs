@@ -7387,6 +7387,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
@@ -7414,6 +7415,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // SysV pool order is rax(0) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r10(10) r11(11) rbx(3) r12(12) r13(13) r14(14) r15(15). With
@@ -7466,6 +7468,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -7505,6 +7508,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
         let t = crate::c5::codegen::Target::LinuxX64;

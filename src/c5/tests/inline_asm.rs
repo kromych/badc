@@ -135,6 +135,7 @@ fn sp_block(template: &str) -> crate::c5::ir::AsmBlock {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         })
         .collect(),
         clobber_regs: 0,
@@ -1382,6 +1383,70 @@ fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
         .windows(4)
         .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == 0xD420_8020);
     assert!(found, "expected `brk #0x401` (0xD4208020)");
+}
+
+/// The AArch64 `w` class as gcc and clang have it: `<arm_neon.h>`'s float
+/// broadcasts are one `dup` from the scalar's `s` or `d` view; `x` and `y`
+/// operands take v0-v15 and v0-v7; a bare `%N` of a `w` operand names `vN`,
+/// which no scalar instruction takes; and a `w` operand is a scalar of up
+/// to 8 bytes or an 8- or 16-byte vector.
+#[cfg(feature = "native-emit")]
+#[test]
+fn aarch64_w_operands_take_gccs_widths_views_and_classes() {
+    use crate::{NativeOptions, Target};
+    let emit = |src: &str, t: Target| {
+        let program = crate::Compiler::with_target(src.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        crate::c5::object::emit_native_single_tu_for_test(&program, t, NativeOptions::default())
+    };
+    let words = |bytes: &[u8]| -> alloc::vec::Vec<u32> {
+        let (w, _) = bytes.as_chunks::<4>();
+        w.iter().map(|w| u32::from_le_bytes(*w)).collect()
+    };
+    let dup = "#include <arm_neon.h>\n\
+               float32x4_t q(float x) { return vdupq_n_f32(x); }\n\
+               float32x2_t d(float x) { return vdup_n_f32(x); }\n\
+               float64x2_t q2(double x) { return vdupq_n_f64(x); }\n\
+               int main(void) { return 0; }\n";
+    let xy = "#include <arm_neon.h>\n\
+              float f(float a, float b) { float r;\n\
+              __asm__(\"fadd %s0, %s1, %s2\" : \"=x\"(r) : \"x\"(a), \"y\"(b)); return r; }\n\
+              int main(void) { return 0; }\n";
+    for t in [Target::LinuxAarch64, Target::WindowsAarch64] {
+        let code = words(&emit(dup, t).expect("emit"));
+        // dup Vd.4s / .2s, Vn.s[0] and dup Vd.2d, Vn.d[0], any registers.
+        for (mask, bits) in [
+            (0xffff_fc00u32, 0x4e04_0400u32),
+            (0xffff_fc00, 0x0e04_0400),
+            (0xffff_fc00, 0x4e08_0400),
+        ] {
+            assert!(code.iter().any(|w| w & mask == bits), "{t:?}: {bits:08x}");
+        }
+        let code = words(&emit(xy, t).expect("emit"));
+        let fadd = code
+            .iter()
+            .find(|&&w| w & 0xffe0_fc00 == 0x1e20_2800)
+            .expect("fadd s");
+        let (d, n, m) = (fadd & 31, (fadd >> 5) & 31, (fadd >> 16) & 31);
+        assert!(d < 16 && n < 16 && m < 8, "{t:?}: {fadd:08x}");
+    }
+    let natural = "double f(double a) { double r;\n\
+                   __asm__(\"fneg %0, %1\" : \"=w\"(r) : \"w\"(a)); return r; }\n\
+                   int main(void) { return 0; }\n";
+    let err = emit(natural, Target::LinuxAarch64).expect_err("a bare `%0` of a `w` operand");
+    assert!(err.to_string().contains("names `v"), "{err}");
+    let wide = "struct three { char c[3]; };\n\
+                void f(struct three t) { __asm__(\"\" :: \"w\"(t)); }\n\
+                int main(void) { return 0; }\n";
+    let err = crate::Compiler::with_target(wide.to_string(), Target::LinuxAarch64)
+        .compile()
+        .expect_err("a 3-byte struct in `w`");
+    assert!(
+        err.to_string()
+            .contains("scalar of up to 8 bytes or an 8- or 16-byte vector"),
+        "{err}"
+    );
 }
 
 // Emits a native image, so it needs `native-emit`.

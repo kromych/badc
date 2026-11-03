@@ -8,12 +8,12 @@
 #if defined(__aarch64__)
 static long to_int(double d) {
     long r;
-    __asm__("fcvtzs %0, %1" : "=r"(r) : "w"(d));
+    __asm__("fcvtzs %0, %d1" : "=r"(r) : "w"(d));
     return r;
 }
 static double to_dbl(long i) {
     double r;
-    __asm__("scvtf %0, %1" : "=w"(r) : "r"(i));
+    __asm__("scvtf %d0, %1" : "=w"(r) : "r"(i));
     return r;
 }
 #else

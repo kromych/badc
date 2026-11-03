@@ -25,6 +25,7 @@ fn asm_operand(constraint: AsmConstraint, is_output: bool, width: u8) -> AsmOper
         value: false,
         volatile_object: false,
         early_clobber: false,
+        fp_limit: 0,
     }
 }
 

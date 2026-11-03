@@ -681,8 +681,8 @@ pub(super) fn asm_operand_regs(
 /// The GP / FP register masks a statement saves around its template: the
 /// registers it writes -- the clobber list (minus x16 / x17 and bit 31)
 /// plus every operand register -- that `preserve` names as holding
-/// something across the block. `w` operands are a double or a 16-byte
-/// vector. A `-ffixed-` register holds nothing of the compiler's and is
+/// something across the block. A `w` operand is a scalar of 1 to 8 bytes
+/// or a 16-byte vector. A `-ffixed-` register holds nothing of the compiler's and is
 /// never saved, as under gcc.
 pub(super) fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
@@ -696,9 +696,9 @@ pub(super) fn asm_save_masks(
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         if matches!(asm.operand_class(i), AsmConstraint::Fp) {
-            if op.width != 8 && op.width != 16 {
+            if !matches!(op.width, 1 | 2 | 4 | 8 | 16) {
                 return Err(alloc::string::String::from(
-                    "aarch64 inline asm: `w` operands must be 8 or 16 bytes",
+                    "aarch64 inline asm: a `w` operand is 1, 2, 4, 8 or 16 bytes",
                 ));
             }
             fp_used |= 1 << r;
@@ -783,6 +783,10 @@ pub(crate) fn asm_binds_directly(
     for (i, op) in asm.operands.iter().enumerate() {
         let arg = args.get(i).copied();
         let addressed = naked && matches!(op.constraint, C::Mem | C::MemBase);
+        // An `x` / `y` operand takes a staged register, all below v8.
+        if op.fp_limit != 0 {
+            return false;
+        }
         if op.is_output && !addressed {
             if !op.value || op.is_rw || op.early_clobber {
                 return false;
@@ -816,7 +820,7 @@ pub(crate) fn asm_binds_directly(
                     gp_in += 1;
                 }
             }
-            C::Fp if !op.static_arg && (op.width == 8 || (op.width == 16 && op.value)) => {
+            C::Fp if !op.static_arg && (op.width <= 8 || (op.width == 16 && op.value)) => {
                 fp_in += 1
             }
             _ => return false,

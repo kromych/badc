@@ -1635,6 +1635,9 @@ pub(crate) struct AsmOperand {
     /// `&` output: the template writes it before it has read every input,
     /// so it may not share a register with one.
     pub early_clobber: bool,
+    /// AArch64 `x` / `y`: the operand takes one of the first 16 / 8 SIMD
+    /// registers; 0 for any.
+    pub fp_limit: u8,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :

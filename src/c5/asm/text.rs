@@ -831,6 +831,7 @@ mod asm_noop_tests {
                     value: false,
                     volatile_object: false,
                     early_clobber: false,
+                    fp_limit: 0,
                 })
                 .collect(),
             clobber_regs: 0x8,

@@ -760,6 +760,8 @@ def self_test() -> int:
     slots = run_demos.slots(roster)
     after = [d for d in roster if d in run_demos.AFTER_POOL]
     assert after == ["demos/tcl/smoke.py@timed"], after
+    # The timer-bound entries start after this pool and another lane's.
+    assert run_demos.self_test() == 0
     assert qemu in slots and sum(map(len, slots)) + len(after) == len(roster), slots
     assert all(len({run_demos.script(e) for e in s}) == 1 for s in slots), slots
     assert " ".join(qemu) in demo_command(boxes[0], DEMO_JOBS, "python3")

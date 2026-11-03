@@ -90,6 +90,14 @@ Wrap every test suite, demo run and kernel build on the 7 GB box in
 `flock ~/.badc-kernel.lock <cmd>`; the coordinator's gate takes the same locks. A
 lane that fails with OOM or `echo: write error` is rerun alone.
 
+Run the suites, the demos and the kernel step through `scripts/cargo_test.py`,
+`scripts/run_demos.py` and `demos/linux/verify.py`, on every machine the Mac
+included: they hold `~/.badc-load.lock` shared, and the demo roster's timer-bound
+entry (`tcl@timed`, after the pool) holds it exclusively, so it runs with no lane's
+load beside it. Name tcl in the roster as the gate's `GATING_DEMOS` does,
+`demos/tcl/smoke.py@untimed demos/tcl/smoke.py@timed`; the runner splits a bare
+`demos/tcl/smoke.py` the same way.
+
 ## Validation per commit (before reporting)
 
 Build with `--features full`: without it `cargo build --release` does not rebuild

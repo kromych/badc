@@ -1737,4 +1737,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(_self_test() if sys.argv[1:] == ["--self-test"] else main())
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(_self_test())
+    # A kernel build loads the host; a timer-bound demo phase of another
+    # lane waits for it (scripts/host_load.py).
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import host_load
+
+    with host_load.held(exclusive=False):
+        sys.exit(main())

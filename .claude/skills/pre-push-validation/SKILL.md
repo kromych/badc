@@ -38,8 +38,13 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     smoke share its cache, so they run back to back in one slot, each with its
     own verdict. tcl runs as `tcl@untimed` in the pool and `tcl@timed`, its
     timer-bound tests, after the pool drains (the runner's `AFTER_POOL`), with
-    the host to itself. `--demo-jobs` bounds how many run at a time, never
-    which ones run; the runner prints its roster and its width.
+    the host to itself: the pool, every `cargo_test.py` suite and every
+    `demos/linux/verify.py` kernel build hold `~/.badc-load.lock` shared, and
+    the timed phase holds it exclusively (`scripts/host_load.py`), so another
+    lane's load on the same machine waits for it, and it for that load. Its
+    start line says how long it waited. `--demo-jobs` bounds how many run at a
+    time, never which ones run; the runner prints its roster and its width,
+    and `--dry-run` prints the schedule without running it.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
     median one. Both are ratios taken within the run, so the lane's own

@@ -60,7 +60,11 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
   * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
     `defconfig` release, on each Linux lane -- compile, link and boot. The
     boots are the ones CI runs, four plus a displacement probe per distinct
-    displacement, under the box's own `qemu-system-<arch>`; nothing else is
+    displacement. x86_64 cannot pin one, and its unpinned probe draws
+    displacement 0 on one boot in 479; such a probe is repeated, up to three
+    draws, and only a run with no displaced draw fails the coverage check
+    (`demos/linux/kaslr.py`). The boots run under the box's own
+    `qemu-system-<arch>`; nothing else is
     needed to reach them, since both machines take the emulator's `-kernel`
     loader and no firmware from elsewhere. Without them the step covers only
     what is decided at the vmlinux link, and an image that compiles and links

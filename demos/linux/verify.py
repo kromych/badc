@@ -1619,11 +1619,22 @@ def main() -> int:
         # would draw its own displacement, so the probe's is not the boots'.
         for seed in dict.fromkeys(plan):
             tag = f"{seed:016x}" if seed is not None else "unpinned"
-            out = Path(args.workdir) / f"probe-{args.arch}-{tag}.log"
-            text = boot(args, arch, image, out, PROBE_RDINIT, trees.get(seed))
-            offsets[seed] = kaslr.parse_kernel_offset(text)
-            log(f"probe seed={tag}: "
-                f"displacement={kaslr.format_offset(offsets[seed])} (see {out})")
+            logs: list[Path] = []
+
+            def probe() -> int | None:
+                again = f"-{len(logs) + 1}" if logs else ""
+                out = Path(args.workdir) / f"probe-{args.arch}-{tag}{again}.log"
+                logs.append(out)
+                text = boot(args, arch, image, out, PROBE_RDINIT, trees.get(seed))
+                off = kaslr.parse_kernel_offset(text)
+                log(f"probe seed={tag}: "
+                    f"displacement={kaslr.format_offset(off)} (see {out})")
+                return off
+
+            # A pinned seed draws the same displacement every time; an
+            # unpinned probe that drew slot 0 is probed again (kaslr.py).
+            offsets[seed] = (probe() if seed is not None
+                             else kaslr.unpinned_draws(probe)[-1])
         # A tree whose configuration names badc as the compiler must boot a
         # kernel whose banner -- and therefore /proc/version -- says so; the
         # banner embeds CONFIG_CC_VERSION_TEXT at build time, so a mismatch

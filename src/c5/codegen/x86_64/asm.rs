@@ -6308,6 +6308,56 @@ mod tests {
         }
     }
 
+    /// `umwait` and `tpause` take their implicit `edx:eax` deadline spelled
+    /// after the register, encoded as the one-operand form, in both modes.
+    /// The register is any 32-bit GPR, and the deadline only `%edx, %eax`.
+    /// Bytes and refusals measured with GNU as 2.46.1 (`--64` and `--32`);
+    /// llvm-mc 22.1.8 refuses the three-operand spelling.
+    #[test]
+    fn waitpkg_deadline_operands_match_gnu_as() {
+        use super::super::table::Mode::{Bits32, Bits64};
+        for (insn, prefix) in [("umwait", 0xF2u8), ("tpause", 0x66)] {
+            #[rustfmt::skip]
+            let cases: &[(super::super::table::Mode, &str, &[u8])] = &[
+                (Bits64, "%%ecx", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%ecx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%r9d, %%edx, %%eax", &[prefix, 0x41, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%r15d, %%edx, %%eax", &[prefix, 0x41, 0x0F, 0xAE, 0xF7]),
+                (Bits64, "%%edx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF2]),
+                (Bits64, "%%eax, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF0]),
+                (Bits32, "%%ecx", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits32, "%%ecx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits32, "%%edx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF2]),
+            ];
+            for (mode, ops, want) in cases {
+                let tmpl = alloc::format!("{insn} {ops}");
+                let got = mode_asm_bytes(*mode, tmpl.as_bytes()).unwrap();
+                assert_eq!(got.as_slice(), *want, "{mode:?} {tmpl}");
+            }
+            // A 64- or 16-bit register, a deadline in other registers, at
+            // another width or in the other order, two operands, and in
+            // 32-bit mode a register only long mode has.
+            #[rustfmt::skip]
+            let refused: &[(super::super::table::Mode, &str)] = &[
+                (Bits64, "%%rcx"), (Bits64, "%%cx"), (Bits64, "%%r9"),
+                (Bits64, "%%rcx, %%edx, %%eax"), (Bits64, "%%cx, %%edx, %%eax"),
+                (Bits64, "%%ecx, %%rdx, %%rax"), (Bits64, "%%rcx, %%rdx, %%rax"),
+                (Bits64, "%%ecx, %%dx, %%ax"), (Bits64, "%%ecx, %%eax, %%edx"),
+                (Bits64, "%%ecx, %%edx, %%ebx"), (Bits64, "%%ecx, %%ebx, %%eax"),
+                (Bits64, "%%ecx, %%edx"), (Bits64, "%%ecx, %%eax"),
+                (Bits32, "%%r9d"), (Bits32, "%%cx"), (Bits32, "%%r9d, %%edx, %%eax"),
+                (Bits32, "%%ecx, %%rdx, %%rax"), (Bits32, "%%ecx, %%eax, %%edx"),
+            ];
+            for (mode, ops) in refused {
+                let tmpl = alloc::format!("{insn} {ops}");
+                assert!(
+                    mode_asm_bytes(*mode, tmpl.as_bytes()).is_err(),
+                    "{mode:?} {tmpl}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn explicit_memory_operands() {
         // Every addressing shape vs clang: disp0 / disp8 / disp32, negative

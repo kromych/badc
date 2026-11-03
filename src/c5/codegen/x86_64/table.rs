@@ -899,8 +899,10 @@ fn encode_best(
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
 /// named in the opcode; `skinit` takes its SLB address in an implicit `eax`,
-/// and GNU as accepts `skinit %eax` the same way. `invlpga` is the two-operand
-/// member of the same class:
+/// and GNU as accepts `skinit %eax` the same way, as it accepts `umwait` and
+/// `tpause` with their implicit `edx:eax` deadline spelled after the register
+/// (`umwait %ecx, %edx, %eax`, Intel-ordered `eax, edx, ecx` here).
+/// `invlpga` is the two-operand member of the same class:
 /// the address rides an implicit `rax` and the ASID an implicit `ecx`, so the
 /// compilers emit `invlpga %rax, %ecx` (Intel-ordered `ecx, rax` here); like
 /// `vmsave` the registers are not named in the opcode. The descriptor-table
@@ -1334,6 +1336,42 @@ static FORMS_SUPPLEMENT: &[Form] = &[
         rexw: RexW::W0,
         reg: RegField::NoReg,
         rm: 255,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Umwait,
+        mnemonic: "umwait",
+        ops: &[
+            OpPat::Fixed(0, W::L),
+            OpPat::Fixed(2, W::L),
+            OpPat::Reg(W::L),
+        ],
+        pp: &[0xF2],
+        map: Map::Op0F,
+        opcode: &[0xAE],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(6),
+        rm: 2,
+        imm: None,
+        imm_op: 255,
+    },
+    Form {
+        mnem: Mnem::Tpause,
+        mnemonic: "tpause",
+        ops: &[
+            OpPat::Fixed(0, W::L),
+            OpPat::Fixed(2, W::L),
+            OpPat::Reg(W::L),
+        ],
+        pp: &[0x66],
+        map: Map::Op0F,
+        opcode: &[0xAE],
+        plus_r: false,
+        rexw: RexW::W0,
+        reg: RegField::Ext(6),
+        rm: 2,
         imm: None,
         imm_op: 255,
     },

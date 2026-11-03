@@ -1184,6 +1184,18 @@ pub(super) fn integer_promote(ty: i64) -> i64 {
     }
 }
 
+/// The type the default argument promotions (C99 6.5.2.2p6) give a value
+/// of type `ty`, where they change it: `int` for the types of rank below
+/// it, `double` for `float`.
+pub(super) fn argument_promotion(ty: i64) -> Option<i64> {
+    let base = strip_unsigned(unqualified_object_ty(ty));
+    if base == Ty::Float as i64 {
+        return Some(Ty::Double as i64);
+    }
+    let promoted = integer_promote(base);
+    (promoted != base).then_some(promoted)
+}
+
 /// C99 integer-conversion rank for the post-integer-promotion
 /// types c5 supports. Higher number = higher rank; the actual
 /// values are arbitrary, only ordering matters.

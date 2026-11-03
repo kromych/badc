@@ -263,6 +263,9 @@ catalog! {
     3033, "modifiable-lvalue", [], Error, Hard,
         [], Live,
         "an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member";
+    3034, "varargs", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `va_start` whose second operand is not the last named parameter, or is one declared `register` or of a type the default argument promotions change; a `va_arg` of such a type (C99 7.15.1)";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -533,6 +536,7 @@ impl Code {
     pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
     pub const POINTER_SIGN: Code = Code::new(3032);
     pub const MODIFIABLE_LVALUE: Code = Code::new(3033);
+    pub const VARARGS: Code = Code::new(3034);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

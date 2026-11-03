@@ -1406,6 +1406,10 @@ impl Compiler {
         if !naked {
             self.copy_by_value_parameters(&params)?;
         }
+        self.current_func_last_param = params
+            .indices
+            .last()
+            .map(|&idx| (idx, self.symbols[idx].val, params.last_register));
         self.parse_function_body_items(&params)?;
         self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
@@ -2003,6 +2007,7 @@ impl Compiler {
         self.current_function_name.clear();
         self.current_func_returns_void = false;
         self.current_func_variadic = false;
+        self.current_func_last_param = None;
 
         for name in &self.unresolved_gotos {
             if !self.label_is_defined(name) {

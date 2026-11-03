@@ -1612,6 +1612,80 @@ fn va_start_needs_a_variadic_function() {
     }
 }
 
+/// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
+/// 7.15.1.4p4): `va_start` naming other than the last named parameter
+/// (both compilers), one declared `register` (both) or one of a type the
+/// default argument promotions change (clang), and `va_arg` of such a type
+/// (clang; gcc warns with no flag). The lines are clang 22's for the same
+/// unit; an array parameter, a parenthesized one and the arm64 form of
+/// MSVC's `__va_start` draw nothing, as in clang. Every target, in the
+/// `<stdarg.h>`, `__builtin_` and x64 `__va_start` spellings; `-Wno-varargs`
+/// silences each.
+#[test]
+fn va_start_and_va_arg_operands_draw_varargs() {
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Target};
+    let lines = |src: &str, t: Target, varargs: Level| -> Vec<u32> {
+        let mut diag = Config::new();
+        diag.set_level(Code::VARARGS, varargs);
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(diag);
+        let program = crate::Compiler::with_options(src.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let ours = program.warnings.iter().filter(|w| w.code == Code::VARARGS);
+        ours.map(|w| w.loc.as_ref().map_or(0, |l| l.line)).collect()
+    };
+    let body = "int not_last(int a, int b, ...) { V ap; S(ap, a); E(ap); return b; }\n\
+                int reg(register int a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int ch(char a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int sh(unsigned short a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int fl(float a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int bo(_Bool a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int sum(int a, ...) { V ap; S(ap, a + 1); E(ap); return 0; }\n\
+                int arr(int a[], ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int par(int a, ...) { V ap; S(ap, (a)); E(ap); return 0; }\n\
+                int ok(double a, ...) { V ap; S(ap, a); E(ap); return 0; }\n";
+    let stdarg = format!(
+        "#include <stdarg.h>\n#define V va_list\n#define S va_start\n#define E va_end\n{body}\
+         int arg(int a, ...) {{ va_list ap; va_start(ap, a); short s = va_arg(ap, short);\n\
+         va_end(ap); return s; }}\n"
+    );
+    let builtin = format!(
+        "#define V __builtin_va_list\n#define S __builtin_va_start\n#define E __builtin_va_end\n\
+         {body}int arg(int a, ...) {{ V ap; S(ap, a); float f = __builtin_va_arg(ap, float);\n\
+         E(ap); return (int)f; }}\n"
+    );
+    let ms = format!(
+        "typedef char *V;\nvoid __va_start(V *, ...);\n#define S(ap, v) __va_start(&ap, v)\n\
+         #define E(ap) (void)(ap)\n{body}\
+         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, 1, 1, &a); return 0; }}\n"
+    );
+    // The first seven lines of `body` warn, and the `va_arg` line after it.
+    let want = |src: &str| -> Vec<u32> {
+        let first = src[..src.find(body).unwrap()].matches('\n').count() as u32 + 1;
+        let arg = src.contains("va_arg").then_some(first + 10);
+        (first..first + 7).chain(arg).collect()
+    };
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let mut units = alloc::vec![&stdarg, &builtin];
+        if t.is_windows() {
+            units.push(&ms);
+        }
+        for src in units {
+            assert_eq!(lines(src, t, Level::Warning), want(src), "{t:?}:\n{src}");
+            assert!(lines(src, t, Level::Ignore).is_empty(), "{t:?}:\n{src}");
+        }
+    }
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {

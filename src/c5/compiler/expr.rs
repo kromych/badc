@@ -1957,10 +1957,12 @@ impl Compiler {
                 ));
             }
             self.next()?;
+            let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
             if is(Intrinsic::VaCopy) {
                 self.va_list_operand_address();
             } else {
+                self.check_va_start_operand(self.ast_acc, line);
                 self.va_operand_take_address();
             }
             if let Some(a) = self.ast_acc {
@@ -2125,6 +2127,47 @@ impl Compiler {
         ))
     }
 
+    /// `-Wvarargs` on `va_start`'s second operand, read through casts and
+    /// parentheses as clang reads it: C99 7.15.1.4p4 makes it undefined
+    /// unless the operand is the last named parameter, neither `register`
+    /// nor of a type the default argument promotions change.
+    pub(super) fn check_va_start_operand(
+        &mut self,
+        operand: Option<super::super::ast::ExprId>,
+        line: usize,
+    ) {
+        use super::super::ast::Expr;
+        let mut node = operand;
+        while let Some(&Expr::Cast { child, .. }) = node.map(|id| self.ast.expr(id)) {
+            node = Some(child);
+        }
+        let named = node.and_then(|id| match *self.ast.expr(id) {
+            Expr::Ident {
+                sym, class, val, ..
+            } if class == Token::Loc as i64 => Some((sym as usize, val)),
+            _ => None,
+        });
+        let text = match (named, self.current_func_last_param) {
+            (Some(at), Some((sym, slot, register))) if at == (sym, slot) => {
+                let name = &self.symbols[sym].name;
+                let ty = self.symbols[sym].type_;
+                if register {
+                    format!("`va_start` on `{name}`, declared `register`, is undefined")
+                } else if super::types::argument_promotion(ty).is_some() {
+                    let t = super::types::format_type(ty, &self.structs);
+                    format!(
+                        "`va_start` on `{name}` of type `{t}`, which the default argument \
+                         promotions change, is undefined"
+                    )
+                } else {
+                    return;
+                }
+            }
+            _ => String::from("second operand of `va_start` is not the last named parameter"),
+        };
+        self.warn_at(Code::VARARGS, line, text);
+    }
+
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
     /// and the packed descriptor of `T`. Returns `T`.
     fn parse_va_arg_operands(
@@ -2152,9 +2195,20 @@ impl Compiler {
                 format!("intrinsic `{fn_name}` second operand must be a type name"),
             ));
         }
+        let line = self.lex.line;
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
+        // C99 7.15.1.1p2: the next argument arrived promoted, so a type the
+        // promotions change never matches it (clang's `-Wvarargs`).
+        if let Some(promoted) = super::types::argument_promotion(arg_ty).filter(|_| !is_pointer) {
+            let t = super::types::format_type(arg_ty, &self.structs);
+            let p = super::types::format_type(promoted, &self.structs);
+            let text = format!(
+                "`va_arg` of type `{t}` is undefined: the argument arrives promoted to `{p}`"
+            );
+            self.warn_at(Code::VARARGS, line, text);
+        }
         let arg_fn = self.type_name_fn(type_name);
         // C99 7.15.1.1p2: the type is an object type a pointer to which is
         // spelled by adding `*`.
@@ -5623,20 +5677,28 @@ impl Compiler {
     /// relocations and AST it emitted; the lexer stays past it. The value
     /// is the integer constant the expression is, if it is one.
     pub(super) fn discard_unevaluated_expr(&mut self) -> Result<Option<i64>, C5Error> {
+        let node = self.discard_unevaluated_node()?;
+        Ok(node.and_then(|e| self.expr_const_int(e)))
+    }
+
+    /// [`Self::discard_unevaluated_expr`], answering the node it parsed.
+    pub(super) fn discard_unevaluated_node(
+        &mut self,
+    ) -> Result<Option<super::super::ast::ExprId>, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
         let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
-        let constant = self.ast_acc.and_then(|e| self.expr_const_int(e));
+        let node = self.ast_acc;
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        result.map(|_| constant)
+        result.map(|_| node)
     }
 
     /// Parse one assignment-expression for its type only. The lexer

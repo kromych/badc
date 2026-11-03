@@ -52,6 +52,9 @@ pub(super) struct ParsedParams {
     /// The `-Wstrict-prototypes` record of a list that declares no
     /// prototype.
     pub(super) unprototyped: Option<u32>,
+    /// The last named parameter was declared `register`, which C99
+    /// 7.15.1.4p4 makes `va_start` on it undefined.
+    pub(super) last_register: bool,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -134,6 +137,7 @@ impl ParsedParams {
             tags: Vec::new(),
             enumerators: Vec::new(),
             unprototyped: None,
+            last_register: false,
         }
     }
 
@@ -324,6 +328,10 @@ impl Compiler {
         let mut enum_tags = Vec::new();
         let mut fn_types = Vec::new();
         let mut is_variadic = false;
+        // Each parameter's `register` is its own; the declaration around
+        // the list keeps the one it saw.
+        let outer_register = core::mem::take(&mut self.pending.saw_register_storage);
+        let mut last_register = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
         // spells a type.
@@ -379,6 +387,7 @@ impl Compiler {
             } else {
                 (Ty::Int as i64, false)
             };
+            let register = core::mem::take(&mut self.pending.saw_register_storage);
             let base_spelling = self.take_base_spelling();
             let base_enum_tag = self.pending.base_enum_tag.take();
             // `(void)` via a typedef alias. The early check above
@@ -633,12 +642,14 @@ impl Compiler {
                 .unwrap_or_default();
 
             args.push(param_idx);
+            last_register = register;
             enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
             types.push(full_ty);
             if !self.parameter_separator()? {
                 break;
             }
         }
+        self.pending.saw_register_storage = outer_register;
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
         // `__va_list_tag[1]` on the SysV/AAPCS ABIs) leaves the typedef-array
@@ -657,6 +668,7 @@ impl Compiler {
             tags: Vec::new(),
             enumerators: Vec::new(),
             unprototyped: None,
+            last_register,
         })
     }
 

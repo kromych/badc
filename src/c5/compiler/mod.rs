@@ -2387,6 +2387,10 @@ pub struct Compiler {
     /// ends in `...`, the only place `va_start` may appear (C99
     /// 7.15.1.4p1). Set at function-body entry, cleared at exit.
     current_func_variadic: bool,
+    /// The last named parameter of the function being defined, which
+    /// `va_start` names (C99 7.15.1.4p4): its symbol, its slot, and whether
+    /// it was declared `register`.
+    current_func_last_param: Option<(usize, i64, bool)>,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
@@ -3225,6 +3229,7 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             current_func_variadic: false,
+            current_func_last_param: None,
             current_func_conv: crate::c5::codegen::CallConv::Target,
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,

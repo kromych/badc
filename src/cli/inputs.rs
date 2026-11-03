@@ -644,12 +644,13 @@ impl Inputs {
         // than read off the link host (see `TargetCLibrary`), so the image
         // is a function of the sources, the flags and the target alone. The
         // set is materialized during symbol selection below, once the
-        // undefined names are known. An ELF or Mach-O shared library leaves
-        // such a name to the loader's global scope; a DLL's import names
-        // its DLL, so a PE shared link takes the library as gcc's does.
+        // undefined names are known. An ELF shared library leaves such a
+        // name to the loader's global scope; a DLL's import names its DLL,
+        // and ld64 reports a reference a dylib leaves unresolved, so a PE
+        // or Mach-O shared link takes the library as gcc's and clang's do.
         let hosted = match cli.mode {
             Mode::NativeExecutable => true,
-            Mode::SharedLibrary => cli.target.binary_format() == badc::BinaryFormat::Pe,
+            Mode::SharedLibrary => cli.target.binary_format() != badc::BinaryFormat::Elf,
             _ => false,
         };
         self.target_libc =

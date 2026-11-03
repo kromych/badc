@@ -212,9 +212,14 @@ def main() -> int:
             examples_dir,
         ),
     )
+    # A module calls the engine the qjs executable holds; ld64 links the
+    # reference for lookup at load time only under `-undefined dynamic_lookup`.
+    module_flags = ["--shared", "-D", "JS_SHARED_LIBRARY"]
+    if sys.platform == "darwin":
+        module_flags.append("-Wl,-undefined,dynamic_lookup")
     module_passed = 0
     for src, so, test, cwd in modules:
-        badc_build(badc, [src], so, extra=["--shared", "-D", "JS_SHARED_LIBRARY"])
+        badc_build(badc, [src], so, extra=module_flags)
         rt = run_js(qjs, ["--std", str(test)], cwd, timeout=120)
         if rt.returncode != 0:
             fail(f"{test.name} exit {rt.returncode}\n{(rt.stdout + rt.stderr)[-1500:]}")

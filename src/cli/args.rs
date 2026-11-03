@@ -272,6 +272,31 @@ pub(crate) struct Link {
     /// The last of `-pie` / `-no-pie`: whether an executable is
     /// position-independent. `None` keeps the link's default.
     pub(crate) pie: Option<bool>,
+    /// ld64's `-undefined <treatment>`, the last one given.
+    pub(crate) undefined: Option<Undefined>,
+}
+
+/// How a Mach-O link treats a reference no input defines, as ld64's
+/// `-undefined` names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Undefined {
+    /// `error`, the default: the link fails.
+    Error,
+    /// `warning`: a warning names the reference, which the image looks
+    /// up in the flat namespace at load time.
+    Warning,
+    /// `suppress`: the image looks the reference up in the flat
+    /// namespace, with no diagnostic.
+    Suppress,
+    /// `dynamic_lookup`: as `suppress`.
+    DynamicLookup,
+}
+
+impl Undefined {
+    /// Whether the image looks an undefined reference up at load time.
+    pub(crate) fn looks_up(self) -> bool {
+        self != Undefined::Error
+    }
 }
 
 impl Link {
@@ -335,6 +360,7 @@ impl Default for Link {
             map_path: None,
             print_map: false,
             pie: None,
+            undefined: None,
         }
     }
 }
@@ -457,6 +483,20 @@ impl Cli {
     /// table the `--ld` persona shares ([`badc::ZKeyword::in_script_link`],
     /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
     /// every local symbol of its inputs (`--discard-none`).
+    /// Whether a reference no input defines becomes a load-time import
+    /// rather than a link error: in an ELF shared library unless `-z defs`,
+    /// as GNU ld's default; in a Mach-O image under an `-undefined` other
+    /// than ld64's default `error`; never in a PE image.
+    pub(crate) fn allows_undefined(&self) -> bool {
+        match self.target.binary_format() {
+            badc::BinaryFormat::Elf => {
+                self.mode == Mode::SharedLibrary && self.link.z.defs() != Some(true)
+            }
+            badc::BinaryFormat::MachO => self.link.undefined.is_some_and(Undefined::looks_up),
+            badc::BinaryFormat::Pe => false,
+        }
+    }
+
     pub(crate) fn link_refusal(&self, script: bool) -> Option<(String, &'static str)> {
         let link = &self.link;
         let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
@@ -471,8 +511,14 @@ impl Cli {
                 kw.in_hosted_link(shared, !shared && self.exec_form().placed())
             }
         });
+        let mach_o = self.target.binary_format() == badc::BinaryFormat::MachO;
         let refusal = if !elf && elf_only {
             (String::from("-z / --build-id"), "it shapes an ELF image")
+        } else if !mach_o && link.undefined.is_some() {
+            (
+                String::from("-undefined"),
+                "it is ld64's, for a Mach-O image",
+            )
         } else if let Some((kw, why)) = z_refusal {
             (format!("-z {}", kw.name()), why)
         } else if script {
@@ -2001,6 +2047,21 @@ impl Parser {
             "--no-warn-execstack" => link.warn_execstack = Some(false),
             "--no-apply-dynamic-relocs" => link.apply_dynamic_relocs = false,
             "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
+            "-undefined" => {
+                let treatment = operand(iter, "badc: error: -undefined requires a treatment")?;
+                link.undefined = Some(match treatment.as_str() {
+                    "error" => Undefined::Error,
+                    "warning" => Undefined::Warning,
+                    "suppress" => Undefined::Suppress,
+                    "dynamic_lookup" => Undefined::DynamicLookup,
+                    other => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: -undefined `{other}`: expected error, warning, \
+                             suppress or dynamic_lookup"
+                        )));
+                    }
+                });
+            }
             "--fatal-warnings" => link.fatal_warnings = true,
             "-Bsymbolic" => (link.symbolic, link.symbolic_functions) = (true, false),
             "-Bsymbolic-functions" => (link.symbolic, link.symbolic_functions) = (false, true),
@@ -3966,6 +4027,33 @@ mod tests {
         ] {
             assert_eq!(reject(args).0, want, "{args:?}");
         }
+    }
+
+    /// A reference no input defines is a load-time import in an ELF shared
+    /// library unless `-z defs`, in a Mach-O image under the last
+    /// `-undefined` that is not `error`, and never in a PE image.
+    #[test]
+    fn each_format_allows_undefined_as_its_linker() {
+        const MAC: &str = "--target=macos-aarch64";
+        let allows = |args: &[&str]| parse(args).allows_undefined();
+        assert!(allows(&[X64, "-shared", "a.c"]));
+        assert!(!allows(&[X64, "-shared", "-Wl,-z,defs", "a.c"]));
+        assert!(!allows(&[X64, "a.c"]));
+        assert!(!allows(&[MAC, "-shared", "a.c"]));
+        assert!(!allows(&[MAC, "-shared", "-Wl,-undefined,error", "a.c"]));
+        for treatment in ["warning", "suppress", "dynamic_lookup"] {
+            assert!(allows(&[MAC, "-shared", "-undefined", treatment, "a.c"]));
+            let wl = format!("-Wl,-undefined,{treatment}");
+            assert!(allows(&[MAC, wl.as_str(), "a.c"]), "{treatment}");
+        }
+        let last = [MAC, "-Wl,-undefined,dynamic_lookup,-undefined,error", "a.c"];
+        assert!(!allows(&last));
+        assert!(!allows(&["--target=windows-x64", "-shared", "a.c"]));
+        let (msg, _) = reject(&[MAC, "-Wl,-undefined,lazy", "a.c"]);
+        assert_eq!(
+            msg,
+            "badc: error: -undefined `lazy`: expected error, warning, suppress or dynamic_lookup"
+        );
     }
 
     /// The last of `-pie` / `-no-pie` picks an ELF executable's form,

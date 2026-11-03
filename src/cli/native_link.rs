@@ -1241,10 +1241,9 @@ fn emit_link_warnings(cli: &Cli, warnings: impl IntoIterator<Item = (badc::diag:
 /// Merge the selected objects, lower the PLT, and write the image.
 fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // A shared library may reference symbols the host executable
-    // supplies at `dlopen` time; let an unresolved global become a
-    // load-time import instead of a link error, unless `--no-undefined`.
+    // supplies at load time, as the format's linker allows it.
     let opts = badc::LinkOptions {
-        allow_undefined: cli.mode == Mode::SharedLibrary && cli.link.z.defs() != Some(true),
+        allow_undefined: cli.allows_undefined(),
         shared: cli.mode == Mode::SharedLibrary,
         preemption: cli.preemption(),
         export_all: cli.link.export_all || cli.exports_definitions(),
@@ -1260,6 +1259,13 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     };
     stats.mark("merge");
     emit_link_warnings(cli, core::mem::take(&mut merged.warnings));
+    if cli.link.undefined == Some(super::args::Undefined::Warning) {
+        let looked_up = merged.flat_imports.iter().map(|name| {
+            let text = format!("undefined reference to `{name}`, looked up at load time");
+            (badc::diag::Code::UNDEFINED_LOOKUP, text)
+        });
+        emit_link_warnings(cli, looked_up);
+    }
     warn_freestanding_imports(cli, &merged);
     let (exec_stack, stack_warning) = badc::resolve_exec_stack(
         cli.link.z.exec_stack(),

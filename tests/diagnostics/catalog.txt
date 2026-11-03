@@ -84,6 +84,7 @@ B6004  execstack                                       warning  controllable  de
 B6005  rwx-segment                                     warning  controllable  default            live     a segment the image loads is readable, writable and executable, or its thread-local segment executable
 B6006  local-import                                    warning  controllable  default            live     a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition
 B6007  text-relocation                                 warning  controllable  default            live     a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`)
+B6008  undefined-lookup                                warning  controllable  default            live     a reference no input defines, which a Mach-O image looks up in the flat namespace at load time under `-undefined warning`
 B6010  undefined-symbol                                error    hard          -                  live     a reference no input object, archive or shared library defines
 B6011  duplicate-symbol                                error    hard          -                  live     more than one input defines the same symbol
 B6012  relocation                                      error    hard          -                  live     a relocation the linker cannot apply, or a value its field cannot hold

@@ -28,7 +28,12 @@ Output mode -- pick at most one (defaults to a native binary):
                            place; -Bsymbolic binds the library's
                            references to its own definitions,
                            -Bsymbolic-functions only those to its
-                           functions.
+                           functions. A reference no input defines
+                           links in an ELF library and fails a Mach-O
+                           or PE one; ld64's -undefined warning,
+                           suppress or dynamic_lookup (also as
+                           -Wl,-undefined,<value>) has a Mach-O image
+                           look it up at load time.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --list-diagnostics       Print the diagnostic catalogue -- code,

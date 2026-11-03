@@ -1994,6 +1994,110 @@ fn a_shared_library_exports_its_default_visibility_definitions() {
     }
 }
 
+/// A dylib's reference no input defines fails the link, as under ld64's
+/// default `-undefined error`. `-undefined warning`, `suppress` and
+/// `dynamic_lookup`, given with `-Wl,` or to the driver, leave it for a
+/// flat-namespace lookup at load time, `warning` naming it. An ELF shared
+/// library keeps GNU ld's default and links it; `-undefined` is ld64's and
+/// refused for an ELF or PE image.
+#[test]
+fn a_dylib_reference_no_input_defines_fails_as_under_ld64() {
+    let dir = tempdir("macho-undefined");
+    write_source(
+        &dir,
+        "bogus.c",
+        "int nosuch_function_xyz(void);\nint f(void) { return nosuch_function_xyz(); }\n",
+    );
+    let link = |target: &str, args: &[&str]| {
+        Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["--shared", "bogus.c", "-o", "out.lib"])
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let undefined = "undefined reference to `nosuch_function_xyz` [B6010]";
+    let looked_up = "undefined reference to `nosuch_function_xyz`, looked up at load time [B6008]";
+    for args in [&[][..], &["-Wl,-undefined,error"]] {
+        let out = link("macos-aarch64", args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(undefined),
+            "{args:?}: {err}"
+        );
+    }
+    for (args, warns) in [
+        (&["-Wl,-undefined,warning"][..], true),
+        (&["-Wl,-undefined,suppress"], false),
+        (&["-Wl,-undefined,dynamic_lookup"], false),
+        (&["-undefined", "dynamic_lookup"], false),
+    ] {
+        let out = link("macos-aarch64", args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{args:?}: {err}");
+        assert_eq!(err.contains(looked_up), warns, "{args:?}: {err}");
+    }
+    let out = link("linux-x64", &[]);
+    assert!(out.status.success(), "{out:?}");
+    for target in ["linux-x64", "windows-x64"] {
+        let out = link(target, &["-Wl,-undefined,dynamic_lookup"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("`-undefined` is not supported"),
+            "{target}: {err}"
+        );
+    }
+}
+
+/// A dylib linked under `-undefined dynamic_lookup` takes the function it
+/// leaves undefined from the program that loads it, through the flat
+/// namespace.
+#[test]
+fn a_dynamic_lookup_dylib_takes_its_function_from_the_program() {
+    let dir = tempdir("macho-dynamic-lookup");
+    write_source(
+        &dir,
+        "plugin.c",
+        "int host_value(void);\nint plugin_call(void) { return host_value() + 1; }\n",
+    );
+    write_source(
+        &dir,
+        "host.c",
+        "#include <dlfcn.h>\n\
+         int host_value(void) { return 41; }\n\
+         int main(void)\n\
+         { void *h = dlopen(\"./libplugin.dylib\", RTLD_NOW);\n\
+           if (!h) return 2;\n\
+           int (*call)(void) = (int (*)(void))dlsym(h, \"plugin_call\");\n\
+           return call && call() == 42 ? 0 : 1; }\n",
+    );
+    let build = |args: &[&str]| {
+        run(
+            Command::new(badc())
+                .arg("--target=macos-aarch64")
+                .args(args)
+                .current_dir(&dir),
+            &format!("{args:?}"),
+        )
+    };
+    build(&[
+        "--shared",
+        "plugin.c",
+        "-Wl,-undefined,dynamic_lookup",
+        "-o",
+        "libplugin.dylib",
+    ]);
+    build(&["host.c", "-o", "host"]);
+    if cfg!(target_os = "macos") {
+        let status = Command::new(dir.join("host"))
+            .current_dir(&dir)
+            .status()
+            .expect("run the program");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
 /// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
 /// versioned `libx.so.1`, is read by content, as gcc hands it to the linker;
 /// a text file or a missing one is still refused by name.

@@ -68,6 +68,7 @@ const BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: u8 = 0x20;
 const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
+const BIND_SYMBOL_FLAGS_WEAK_IMPORT: u8 = 0x01;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
 const BIND_OPCODE_SET_ADDEND_SLEB: u8 = 0x60;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
@@ -86,6 +87,7 @@ const N_UNDF: u8 = 0x0;
 const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
+const N_WEAK_REF: u16 = 0x0040;
 const N_WEAK_DEF: u16 = 0x0080;
 const EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION: u64 = 0x04;
 const DYNAMIC_LOOKUP_ORDINAL: u8 = 0xFE;
@@ -1278,7 +1280,13 @@ fn build_bind_opcodes(
             push_bind_source(&mut out, source);
             current_source = Some(source);
         }
-        out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
+        // A weak import dyld binds to 0 when no image defines the symbol.
+        let flags = if imp.weak {
+            BIND_SYMBOL_FLAGS_WEAK_IMPORT
+        } else {
+            0
+        };
+        out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM | flags);
         out.extend_from_slice(imp.real_symbol.as_bytes());
         out.push(0); // NUL terminator
         let slots = (data_binds.iter())
@@ -1333,17 +1341,20 @@ fn import_library_ordinal(imp: &super::ResolvedImport) -> u8 {
     }
 }
 
-/// One `nlist_64` for an undefined external symbol.
-fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
+/// One `nlist_64` for an undefined external symbol, `N_WEAK_REF` when
+/// `weak`.
+fn nlist_undef(n_strx: u32, ordinal: u8, weak: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
+    let weak_ref = if weak { N_WEAK_REF } else { 0 };
     write_struct(
         &mut out,
         &Nlist64 {
             n_strx,
             n_type: N_EXT | N_UNDF,
             n_sect: NO_SECT,
-            n_desc: (ordinal as u16) << 8, // library ordinal in the high 8 bits
-            n_value: 0,                    // undefined
+            // The library ordinal in the high 8 bits.
+            n_desc: (ordinal as u16) << 8 | weak_ref,
+            n_value: 0,
         },
     );
     debug_assert_eq!(out.len(), NLIST_64_SIZE);
@@ -2353,12 +2364,13 @@ impl<'a> MachOWriter<'a> {
         }
         for (j, imp) in build.imports.imports.iter().enumerate() {
             let n_strx = str_indices[n_locals + n_exports + j];
-            symtab.extend_from_slice(&nlist_undef(n_strx, import_library_ordinal(imp)));
+            let ordinal = import_library_ordinal(imp);
+            symtab.extend_from_slice(&nlist_undef(n_strx, ordinal, imp.weak));
         }
         if self.tls_present {
             let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
             let bootstrap_strx = str_indices[symbol_names.len() - 1];
-            symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
+            symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal, false));
         }
         let le = &mut self.linkedit;
         le.symbol_count = symbol_names.len();
@@ -2866,6 +2878,7 @@ mod tests {
                 real_symbol: "_write".into(),
                 dylib_index: 0,
                 flat_lookup: false,
+                weak: false,
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
@@ -3288,6 +3301,7 @@ mod tests {
             real_symbol: format!("_s{dylib_index}"),
             dylib_index,
             flat_lookup,
+            weak: false,
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
@@ -3336,7 +3350,7 @@ mod tests {
         // two-level ordinal pointing at the first dylib.
         let flat = sample_import(0, true);
         assert_eq!(import_library_ordinal(&flat), DYNAMIC_LOOKUP_ORDINAL);
-        let bytes = nlist_undef(0, import_library_ordinal(&flat));
+        let bytes = nlist_undef(0, import_library_ordinal(&flat), false);
         let n_desc = u16::from_le_bytes([bytes[6], bytes[7]]);
         assert_eq!((n_desc >> 8) as u8, DYNAMIC_LOOKUP_ORDINAL);
         let two_level = sample_import(0, false);

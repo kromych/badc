@@ -95,6 +95,37 @@ fn an_unbound_static_slot_in_a_single_image_is_reported() {
     assert!(err.contains("import address table"), "{err}");
 }
 
+/// A weak reference no input defines is 0 in an ELF single-file image, as
+/// GNU ld resolves it, and an undefined reference in a Mach-O one, as ld64
+/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF,
+/// as gcc ignores it.
+#[test]
+fn a_weak_reference_no_input_defines_is_undefined_in_a_mach_o_image() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (attr, name) in [("weak", "w_fn"), ("weak_import", "w_fn"), ("weak", "w_obj")] {
+        let src = format!(
+            "int w_fn(void) __attribute__(({attr}));\n\
+             extern int w_obj __attribute__(({attr}));\n\
+             int main(void) {{ return {name} ? 1 : 0; }}\n"
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+            let program = Compiler::with_target(super::with_prelude(&src), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("compile {target:?}: {e}"));
+            let emit = crate::emit_native_with_options(&program, target, NativeOptions::default());
+            let undefined = target == Target::MacOSAarch64 || attr == "weak_import";
+            match emit {
+                Err(e) if undefined => {
+                    let err = e.to_string();
+                    let want = format!("undefined reference to `{name}`");
+                    assert!(err.contains(&want), "{attr} {name} {target:?}: {err}");
+                }
+                r => assert!(!undefined && r.is_ok(), "{attr} {name} {target:?}: {r:?}"),
+            }
+        }
+    }
+}
+
 #[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};

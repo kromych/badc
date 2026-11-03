@@ -1071,6 +1071,12 @@ impl Compiler {
                 // GNU `weak`: the defined (or declared) symbol binds
                 // STB_WEAK in the object's symbol table.
                 f.weak = true;
+            } else if (n == "weak_import" || n == "__weak_import__")
+                && self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
+            {
+                // Darwin's `weak_import`, which gcc and clang take as a weak
+                // reference there; gcc ignores it on an ELF target.
+                f.weak = true;
             } else if n == "selectany" || n == "__selectany__" {
                 // MSVC and GCC: the link keeps any one unit's definition.
                 f.selectany = true;

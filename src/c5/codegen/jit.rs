@@ -900,7 +900,7 @@ mod jit_impl {
         }
         // The named slots bind as in an image.
         let mut remote_data = Vec::new();
-        crate::c5::codegen::bind_named_slots(&program, &mut build, &defs, &mut |build, r| {
+        super::super::bind_named_slots(&program, &mut build, &defs, true, &mut |build, r| {
             let bound =
                 (build.imports.data_bindings.iter()).find(|(local, ..)| *local == r.symbol_name);
             let to = remote(&r.symbol_name).filter(|_| bound.is_none());

@@ -1355,6 +1355,9 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
+    /// `true` when every reference to the import is weak: the Mach-O
+    /// writer binds it weak, so dyld sets it to 0 when no image defines it.
+    pub weak: bool,
     /// The ordinal a PE import names in place of [`Self::real_symbol`].
     pub ordinal: Option<u16>,
     /// What the symbol is; the ELF writer republishes it on the
@@ -1563,6 +1566,7 @@ impl ResolvedImports {
             real_symbol: NAME.into(),
             dylib_index,
             flat_lookup: false,
+            weak: false,
             ordinal: None,
             kind: ImportKind::Function,
             is_variadic: false,
@@ -1641,6 +1645,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
+            weak: false,
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
@@ -1668,6 +1673,7 @@ impl ResolvedImports {
             real_symbol: "exit".to_string(),
             dylib_index,
             flat_lookup: false,
+            weak: false,
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
@@ -1782,6 +1788,7 @@ impl ResolvedImports {
         // bindings.
         let mut dylibs: Vec<ResolvedDylib> = Vec::new();
         let mut imports: Vec<ResolvedImport> = Vec::new();
+        let weak = program.weak_link_names();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
                 return Err(C5Error::internal(format!(
@@ -1805,6 +1812,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
+                weak: weak.contains(b.local_name.as_str()),
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
@@ -3868,6 +3876,7 @@ impl DataImportSlots {
             real_symbol,
             dylib_index,
             flat_lookup: self.flat,
+            weak: false,
             ordinal: None,
             kind: if self.flat {
                 ImportKind::Function
@@ -5339,11 +5348,13 @@ pub(crate) fn bind_code_reloc_aliases(
 
 /// Bind each final-image slot naming what the unit's C does not define as a
 /// link does (C99 6.7.8p4): to the definition `defs` holds, else to what
-/// `import` binds; an undefined weak name holds 0 plus the offset.
+/// `import` binds; an undefined weak name holds 0 plus the offset under
+/// `weak_is_zero`, and is undefined otherwise (ld64).
 pub(crate) fn bind_named_slots(
     program: &Program,
     build: &mut Build,
     defs: &UnitDefs,
+    weak_is_zero: bool,
     import: &mut dyn FnMut(&mut Build, &program::ExternDataReloc) -> Result<bool, C5Error>,
 ) -> Result<(), C5Error> {
     use crate::c5::token::Token;
@@ -5378,7 +5389,7 @@ pub(crate) fn bind_named_slots(
                 text_offset: (off as u64).wrapping_add_signed(r.addend),
             }),
             None if import(build, &r)? => {}
-            None if weak(&r.symbol_name, false) => {
+            None if weak_is_zero && weak(&r.symbol_name, false) => {
                 let slot = build.data.get_mut(at..at + 8).ok_or_else(|| {
                     C5Error::internal(format!("extern data slot {at:#x} past its image"))
                 })?;
@@ -5430,7 +5441,7 @@ pub(crate) fn bind_named_slots(
                         ),
                     ));
                 }
-                None if weak(name, true) => {
+                None if weak_is_zero && weak(name, true) => {
                     let image = if tls {
                         &mut build.tls_data
                     } else {

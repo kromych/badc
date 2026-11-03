@@ -244,6 +244,11 @@ pub struct MergedNative {
     /// the host supplies at `dlopen`; a name in [`Self::import_dylib_map`]
     /// is never here.
     pub flat_imports: alloc::collections::BTreeSet<String>,
+    /// Import names every reference to which is weak. A Mach-O image binds
+    /// each with the weak-import flag, so dyld sets it to 0 when no image
+    /// defines it at load time; one strong reference makes the import
+    /// strong, ld64's default `-weak_reference_mismatches non-weak`.
+    pub weak_imports: alloc::collections::BTreeSet<String>,
     /// Source-declared export names, unioned across input objects
     /// from each unit's `NT_BADC_EXPORTS` note. The final-image
     /// writer promotes each to the export table when emitting a
@@ -1204,6 +1209,10 @@ struct Link<'a> {
     objs: &'a [NativeObject],
     machine: NativeMachine,
     allow_undefined: bool,
+    /// A weak reference no input defines resolves to 0, as GNU ld and
+    /// link.exe resolve it; ld64 resolves it only through a dylib that
+    /// exports it, else it is undefined (a Mach-O image).
+    weak_undefined_is_zero: bool,
     preemption: Preemption,
     export_all: bool,
     export_data: bool,
@@ -1373,6 +1382,7 @@ impl<'a> Link<'a> {
             objs,
             machine,
             allow_undefined: opts.allow_undefined && opts.format != BinaryFormat::Pe,
+            weak_undefined_is_zero: opts.format != BinaryFormat::MachO,
             preemption: opts.preemption,
             export_all: opts.export_all,
             export_data: opts.export_data,
@@ -1993,7 +2003,7 @@ impl<'a> Link<'a> {
         if !self.allow_undefined {
             self.library_thread_local(&sym.name)?;
         }
-        let idx = self.bind_import(sym, false, true);
+        let idx = self.bind_import(sym, false);
         self.tls_imports.insert(idx);
         Ok(TlsGotTarget::Import(idx))
     }
@@ -2007,7 +2017,7 @@ impl<'a> Link<'a> {
         rtype: u32,
         addend: i64,
     ) {
-        let idx = self.bind_import(sym, false, true);
+        let idx = self.bind_import(sym, false);
         self.tls_imports.insert(idx);
         self.pending_imports.push(PendingImportReloc {
             text_offset: text_offset as u64,
@@ -3250,11 +3260,7 @@ impl<'a> Link<'a> {
                 ),
             ));
         }
-        Ok(PointerSlot::Import(self.bind_import(
-            sym,
-            routed,
-            shlib_exported,
-        )))
+        Ok(PointerSlot::Import(self.bind_import(sym, routed)))
     }
 
     /// Where `symbol + addend` of `unit` lies in the merged streams.
@@ -3333,6 +3339,7 @@ impl<'a> Link<'a> {
             return true;
         }
         let unresolved_weak = sym.binding == 2
+            && self.weak_undefined_is_zero
             && section == NativeSymSection::Undef
             && !self.defined.contains_key(name)
             && !self.data_binding_locals.contains(name)
@@ -3749,7 +3756,12 @@ impl<'a> Link<'a> {
         if shlib_exported && !routed {
             self.refuse_library_thread_local(name)?;
         }
-        if sym.binding == 2 && !is_data_binding && !routed && !shlib_exported {
+        let unresolved_weak = sym.binding == 2 && !is_data_binding && !routed && !shlib_exported;
+        if unresolved_weak && !self.weak_undefined_is_zero && !self.allow_undefined {
+            self.note_undefined_at(&sym.name, "");
+            return Ok(());
+        }
+        if unresolved_weak && self.weak_undefined_is_zero {
             // A distance from the GOT base takes address 0 for the
             // symbol, as GNU ld resolves it; the site's guard skips it.
             if is_x86_64_got_distance(self.machine, reloc.rtype) {
@@ -3787,7 +3799,7 @@ impl<'a> Link<'a> {
             self.note_undefined_at(&sym.name, "");
             return Ok(());
         }
-        let idx = self.bind_import(sym, routed, shlib_exported);
+        let idx = self.bind_import(sym, routed);
         if is_branch_reloc(self.machine, reloc.rtype) {
             self.branch_imports.insert(idx);
         } else if self.extern_data_names.contains(name) {
@@ -3809,10 +3821,10 @@ impl<'a> Link<'a> {
     /// Record admitted `sym` as an import. A global UNDEF admitted has no
     /// dylib routing; it is marked flat so the writer emits a load-time
     /// flat-namespace import. A weak one admitted through a shared
-    /// library's export needs the same marking; a routed weak carries its
-    /// own dylib assignment.
-    fn bind_import(&mut self, sym: &'a NativeSymbol, routed: bool, shlib_exported: bool) -> usize {
-        if sym.binding == 1 || (sym.binding == 2 && shlib_exported && !routed) {
+    /// library's export, or (Mach-O) under `allow_undefined`, needs the same
+    /// marking; a routed weak carries its own dylib assignment.
+    fn bind_import(&mut self, sym: &'a NativeSymbol, routed: bool) -> usize {
+        if sym.binding == 1 || (sym.binding == 2 && !routed) {
             self.flat_imports.insert(sym.name.clone());
         }
         self.record_import(sym.name.as_str())
@@ -4148,6 +4160,7 @@ impl<'a> Link<'a> {
                     // name a `-l` shared library exports binds instead,
                     // in the arm below.
                     None if sym.binding == 2
+                        && self.weak_undefined_is_zero
                         && !self.is_routed_import(sym.name.as_str())
                         && !self.shlib_exports.contains(sym.name.as_str()) =>
                     {
@@ -5116,6 +5129,19 @@ impl<'a> Link<'a> {
             .into_iter()
             .filter(|name| !merged_dylibs.import_dylib_map.contains_key(name))
             .collect();
+        let (mut weak_refs, mut strong_refs) = (BTreeSet::new(), BTreeSet::new());
+        let undefined = (self.objs.iter()).flat_map(|o| &o.symbols);
+        for s in undefined.filter(|s| s.section == NativeSymSection::Undef) {
+            match s.binding {
+                1 => strong_refs.insert(s.name.as_str()),
+                2 => weak_refs.insert(s.name.as_str()),
+                _ => false,
+            };
+        }
+        let weak_imports = (self.imports.iter())
+            .filter(|n| weak_refs.contains(n.as_str()) && !strong_refs.contains(n.as_str()))
+            .cloned()
+            .collect();
         Ok(MergedNative {
             text: self.text,
             text_align: self.text_align,
@@ -5144,6 +5170,7 @@ impl<'a> Link<'a> {
             import_ordinals: merged_dylibs.import_ordinals,
             import_versions: merged_dylibs.import_versions,
             flat_imports,
+            weak_imports,
             exports,
             shared_names: (self.shared_libs.iter())
                 .flat_map(|l| l.exports.iter().chain(&l.references))

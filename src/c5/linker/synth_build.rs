@@ -1055,6 +1055,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
+            weak: merged.weak_imports.contains(name),
             ordinal: merged.import_ordinals.get(name).copied(),
             kind: if merged.tls_imports.contains(&i) {
                 ImportKind::ThreadLocal
@@ -1858,6 +1859,7 @@ mod tests {
             import_ordinals: alloc::collections::BTreeMap::new(),
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
+            weak_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],

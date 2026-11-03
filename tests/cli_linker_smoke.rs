@@ -2098,6 +2098,100 @@ fn a_dynamic_lookup_dylib_takes_its_function_from_the_program() {
     }
 }
 
+/// A weak reference no input defines fails a Mach-O link, an executable's
+/// or a dylib's, as ld64 reports it; under `-undefined dynamic_lookup` it
+/// is a flat-namespace weak import, which dyld sets to 0 when no loaded
+/// image defines it. An ELF link resolves it to 0, as GNU ld does.
+#[test]
+fn a_weak_reference_no_input_defines_fails_a_mach_o_link() {
+    let dir = tempdir("macho-weak-undefined");
+    write_source(
+        &dir,
+        "fn.c",
+        "int w_fn(void) __attribute__((weak));\nint main(void) { return w_fn ? 1 : 42; }\n",
+    );
+    write_source(
+        &dir,
+        "obj.c",
+        "extern int w_obj __attribute__((weak_import));\nint main(void) { return &w_obj ? 1 : 42; }\n",
+    );
+    let link = |target: &str, src: &str, args: &[&str]| {
+        Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args([src, "-o", "img"])
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    for (src, name) in [("fn.c", "w_fn"), ("obj.c", "w_obj")] {
+        let undefined = format!("undefined reference to `{name}` [B6010]");
+        for args in [&[][..], &["--shared"], &["-Wl,-undefined,error"]] {
+            let out = link("macos-aarch64", src, args);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && err.contains(&undefined),
+                "{src} {args:?}: {err}"
+            );
+        }
+        let out = link("macos-aarch64", src, &["-Wl,-undefined,dynamic_lookup"]);
+        assert!(out.status.success(), "{src}: {out:?}");
+        if cfg!(target_os = "macos") {
+            let status = Command::new(dir.join("img")).status().expect("run img");
+            assert_eq!(status.code(), Some(42), "{src}");
+        }
+    }
+    let out = link("linux-x64", "fn.c", &[]);
+    assert!(out.status.success(), "{out:?}");
+}
+
+/// A weak reference a linked dylib defines binds as a weak import, as
+/// under ld64: the program runs against the dylib, and against one of the
+/// same install name lacking the names, each reference reading 0.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_weak_import_from_a_dylib_reads_zero_when_the_dylib_lacks_it() {
+    let dir = tempdir("macos-weak-import");
+    let lacking = dir.join("lacking");
+    std::fs::create_dir_all(&lacking).expect("create the directory");
+    let dep = "int dep_fn(void) { return 7; }\nint dep_var = 9;\n";
+    write_source(&dir, "dep.c", dep);
+    write_source(&lacking, "dep.c", "int dep_other(void) { return 0; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "int dep_fn(void) __attribute__((weak_import));\n\
+         extern int dep_var __attribute__((weak));\n\
+         int main(void)\n\
+         { if (dep_fn && &dep_var) return dep_fn() == 7 && dep_var == 9 ? 0 : 1;\n\
+           return dep_fn || &dep_var ? 2 : 42; }\n",
+    );
+    let install_name = dir.join("libdep.dylib");
+    for d in [&*dir, &lacking] {
+        let ok = Command::new("cc")
+            .args(["-dynamiclib", "dep.c", "-o", "libdep.dylib"])
+            .arg("-install_name")
+            .arg(&install_name)
+            .current_dir(d)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !ok {
+            return; // no platform toolchain on this host
+        }
+    }
+    run(
+        Command::new(badc())
+            .args(["main.c", "-L.", "-ldep", "-o", "prog"])
+            .current_dir(&dir),
+        "link against the dylib",
+    );
+    let status = Command::new(dir.join("prog")).status().expect("run prog");
+    assert_eq!(status.code(), Some(0), "with the dylib's names");
+    std::fs::rename(lacking.join("libdep.dylib"), &install_name).expect("swap the dylib");
+    let status = Command::new(dir.join("prog")).status().expect("run prog");
+    assert_eq!(status.code(), Some(42), "without the dylib's names");
+}
+
 /// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
 /// versioned `libx.so.1`, is read by content, as gcc hands it to the linker;
 /// a text file or a missing one is still refused by name.

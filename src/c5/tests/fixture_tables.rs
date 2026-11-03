@@ -188,7 +188,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
-    ("function_slot_names_no_c_definition.c", 0),
+    // `function_slot_names_no_c_definition.c` and `weak_extern_data_address.c`
+    // take a weak reference no input defines as 0, which a Mach-O link
+    // refuses, as ld64 does; the ELF lists run them.
     ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("weak_definition_references_by_symbol.c", 0),
     ("const_through_a_pointer_typedef.c", 0),
@@ -214,7 +216,6 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Mach-O and faults; it runs on the ELF native paths and the
     // interpreter.
     ("zero_length_array_decay.c", 0),
-    ("weak_extern_data_address.c", 0),
     ("register_var_stack_pointer.c", 0),
     ("register_var_typeof_stmt_expr.c", 0),
     ("compound_literal_struct_field.c", 0),

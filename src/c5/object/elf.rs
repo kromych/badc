@@ -4483,6 +4483,7 @@ mod tests {
                 real_symbol: "exit".into(),
                 dylib_index: 0,
                 flat_lookup: false,
+                weak: false,
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,

@@ -1002,13 +1002,16 @@ __asm__(".text\n.globl ns_seven\n.p2align 2\nns_seven:\n\tmov w0, #7\n\tret\n");
 #endif
 extern const long long ns_words[];
 int ns_seven(void);
-extern int ns_weak_obj[] __attribute__((weak));
-extern void ns_weak_fn(void) __attribute__((weak));
 const long long *const words = ns_words;
 const long long *const second = &ns_words[1];
 int (*const seven)(void) = ns_seven;
+/* ld64 refuses a weak reference no input defines. */
+#ifndef __APPLE__
+extern int ns_weak_obj[] __attribute__((weak));
+extern void ns_weak_fn(void) __attribute__((weak));
 int *weak_obj = &ns_weak_obj[2];
 void (*weak_fn)(void) = ns_weak_fn;
+#endif
 #ifndef _WIN32
 #if defined(__APPLE__)
 #pragma binding(data libc::ns_opt, "_optind")
@@ -1024,8 +1027,10 @@ int main(void) {
     bad |= (words != ns_words || *words != 5) << 0;
     bad |= (second != ns_words + 1 || *second != 6) << 1;
     bad |= (seven != ns_seven || seven() != 7) << 2;
+#ifndef __APPLE__
     bad |= ((uintptr_t)weak_obj != 2 * sizeof(int)) << 3;
     bad |= (weak_fn != 0) << 4;
+#endif
 #ifndef _WIN32
     bad |= (opt != &optind || *opt != optind) << 5;
     bad |= (opt_bound != &optind) << 6;

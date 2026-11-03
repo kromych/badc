@@ -196,20 +196,19 @@ pub fn emit_native_with_options_owned(
 }
 
 /// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
-/// single-TU final image.
+/// single-TU final image; a name in `weak_names` no input defines is 0.
 #[cfg(feature = "native-emit")]
 fn resolve_single_image_asm_sym_fixups(
-    program: &Program,
     build: &mut Build,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    weak_names: &alloc::collections::BTreeSet<&str>,
     imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
         return Ok(());
     }
-    let weak_names = program.weak_link_names();
     let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     enum Loc {
         Def(UnitDef),
@@ -320,14 +319,14 @@ fn resolve_single_image_asm_sym_fixups(
 }
 
 /// Resolve or diagnose the external references still recorded on a
-/// single-TU final image.
+/// single-TU final image; a name in `weak_names` no input defines is 0.
 #[cfg(feature = "native-emit")]
 fn resolve_single_tu_extern_refs(
-    program: &Program,
     build: &mut Build,
     target: Target,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    weak_names: &alloc::collections::BTreeSet<&str>,
     imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     if build.output_kind == OutputKind::Relocatable
@@ -335,7 +334,6 @@ fn resolve_single_tu_extern_refs(
     {
         return Ok(());
     }
-    let weak_names = program.weak_link_names();
     let data_bindings: alloc::collections::BTreeSet<String> = build
         .imports
         .data_bindings
@@ -470,24 +468,28 @@ pub fn emit_native_reporting(
         crate::c5::codegen::DataImportSlots::new(&build, flat, "a single-file image")
     });
     let asm_labels = fold_asm_sections(program, &mut build, target, &defs, "a single-file image")?;
-    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels, &defs, &mut imports)?;
+    // ld64 resolves a weak reference only through a dylib that exports it.
+    let weak_is_zero = target.binary_format() != crate::c5::codegen::BinaryFormat::MachO;
+    let weak_names = (program.weak_link_names().into_iter()).filter(|_| weak_is_zero);
+    let weak_names: alloc::collections::BTreeSet<&str> = weak_names.collect();
+    resolve_single_image_asm_sym_fixups(&mut build, &asm_labels, &defs, &weak_names, &mut imports)?;
     resolve_single_tu_extern_refs(
-        program,
         &mut build,
         target,
         &asm_labels,
         &defs,
+        &weak_names,
         &mut imports,
     )?;
     if output_kind != OutputKind::Relocatable {
         let mut named = defs;
         named.extend(asm_labels.iter().map(|(n, at)| (n.clone(), at.as_def())));
-        crate::c5::codegen::bind_named_slots(program, &mut build, &named, &mut |build, r| {
-            match imports.as_mut() {
+        let mut bind =
+            |build: &mut Build, r: &crate::c5::program::ExternDataReloc| match imports.as_mut() {
                 Some(slots) => Ok(slots.bind_slot(build, r)),
                 None => refuse_pe_data_slot(build, r),
-            }
-        })?;
+            };
+        crate::c5::codegen::bind_named_slots(program, &mut build, &named, weak_is_zero, &mut bind)?;
     }
     if output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);

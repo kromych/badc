@@ -129,10 +129,6 @@ impl<'a> Walker<'a> {
         Ok(dst)
     }
 
-    /// Volatility of a read-modify-write access. A slot is the object's
-    /// own storage, so its top-level qualifier governs (C99 6.7.5.1p1);
-    /// a place reached through an address keeps the whole-tag reading,
-    /// which over-approximates the level the qualifier sits at.
     /// The 16-byte object a `long double` value `v` of `ty` crosses a call
     /// as where the ABI moves it that way (`long_double_agg_desc`): the
     /// value in the storage format. Yields its address.
@@ -152,6 +148,10 @@ impl<'a> Walker<'a> {
                 && crate::c5::compiler::long_double_agg_desc(self.target, conv).is_some())
     }
 
+    /// Volatility of a read-modify-write access. A slot is the object's
+    /// own storage, so its top-level qualifier governs (C99 6.7.5.1p1);
+    /// a place reached through an address keeps the whole-tag reading,
+    /// which over-approximates the level the qualifier sits at.
     pub(super) fn rmw_is_volatile(&self, place: &RmwPlace, ty: i64, lvalue: ExprId) -> bool {
         match place {
             RmwPlace::Slot(_) => is_volatile_object_ty(ty),

@@ -431,6 +431,59 @@ fn mmx_and_sse3_operations_follow_the_sdm() {
     );
 }
 
+/// The `__m64` forms of `<xmmintrin.h>`, `<emmintrin.h>` and `<tmmintrin.h>`
+/// give the result the SDM defines for each instruction, as the interpreter
+/// runs them on any host; the `sse_sse2_ssse3_m64_forms_follow_the_sdm`
+/// fixture checks every form natively, the MXCSR-rounded conversions with it.
+#[test]
+fn m64_forms_of_sse_sse2_and_ssse3_follow_the_sdm() {
+    let src = "#include <tmmintrin.h>\n\
+        #define Q(m) ((unsigned long long)_mm_cvtm64_si64(m))\n\
+        #define M(q) _mm_cvtsi64_m64((long long)(q))\n\
+        int main(void) {\n\
+            __m64 a = M(0x80FF7F0102FE10F0ULL), b = M(0x01FF80FF7F0203F1ULL);\n\
+            if (Q(_mm_avg_pu8(a, b)) != 0x41FF808041800AF1ULL) return 1;\n\
+            if (Q(_mm_sad_pu8(a, b)) != 0x0000000000000305ULL) return 2;\n\
+            if (_mm_movemask_pi8(a) != 0xC5 || _mm_extract_pi16(a, 3) != 0x80FF) return 3;\n\
+            if (Q(_mm_shuffle_pi16(a, 0x1B)) != 0x10F002FE7F0180FFULL) return 4;\n\
+            if (Q(_mm_insert_pi16(a, 0x1234, 1)) != 0x80FF7F01123410F0ULL) return 5;\n\
+            if (Q(_mm_max_pi16(a, b)) != 0x01FF7F017F0210F0ULL ||\n\
+                Q(_mm_min_pu8(a, b)) != 0x01FF7F01020203F0ULL) return 6;\n\
+            if (Q(_mm_mulhi_pu16(M(0xFFFF000200030004ULL), M(0xFFFF800080008000ULL))) !=\n\
+                0xFFFE000100010002ULL) return 7;\n\
+            char buf[8] = {0};\n\
+            _mm_maskmove_si64(M(0x0807060504030201ULL), M(0x80000080000080FFULL), buf);\n\
+            if (buf[0] != 1 || buf[1] != 2 || buf[2] || buf[4] != 5 || buf[7] != 8) return 8;\n\
+            if (Q(_mm_mul_su32(M(0xFFFFFFFF), M(0x1FFFFFFFFULL))) != 0xFFFFFFFE00000001ULL) return 9;\n\
+            __m128i x = _mm_set_epi64(M(1), _mm_movepi64_pi64(_mm_movpi64_epi64(M(5))));\n\
+            if (x[0] != 5 || x[1] != 1) return 10;\n\
+            __m128 f = _mm_cvtpu8_ps(M(0xFF80));\n\
+            if (f[0] != 128.f || f[1] != 255.f || f[2] != 0.f) return 11;\n\
+            __m128d d = _mm_cvtpi32_pd(_mm_set_pi32(-3, 7));\n\
+            if (d[0] != 7 || d[1] != -3) return 12;\n\
+            if (Q(_mm_abs_pi8(M(0x80FF7F01ULL))) != 0x80017F01ULL ||\n\
+                Q(_mm_sign_pi16(M(0x8000000500050005ULL), M(0xFFFF0000FFFF0001ULL))) !=\n\
+                0x80000000FFFB0005ULL) return 13;\n\
+            if (Q(_mm_hadds_pi16(M(0x7FFF7FFF00010002ULL), M(0x8000800000030004ULL))) !=\n\
+                0x800000077FFF0003ULL) return 14;\n\
+            if (Q(_mm_maddubs_pi16(M(0xFFFFFFFF0201ULL), M(0x7F7F7F7F0304ULL))) != 0x7FFF7FFF000AULL) return 15;\n\
+            if (Q(_mm_mulhrs_pi16(M(0x8000400000010000ULL), M(0x8000400040000000ULL))) !=\n\
+                0x8000200000010000ULL) return 16;\n\
+            if (Q(_mm_shuffle_pi8(M(0x0807060504030201ULL), M(0x80000F0700010203ULL))) !=\n\
+                0x0001080801020304ULL) return 17;\n\
+            if (Q(_mm_alignr_pi8(M(0x1111111122222222ULL), M(0x3333333344444444ULL), 4)) !=\n\
+                0x2222222233333333ULL ||\n\
+                Q(_mm_alignr_pi8(M(1), M(2), 16)) != 0) return 18;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the __m64 forms must give the instruction's result"
+    );
+}
+
 /// gcc's and clang's x86 system-instruction builtins, with gcc's prototypes,
 /// emit their instruction on both x86-64 targets, `__builtin_ia32_xgetbv`
 /// with its operand in ecx; on the AArch64 targets `__has_builtin` reports

@@ -1,11 +1,12 @@
-/* SSE2 intrinsics. Each operation below lowers to the instruction the
-** SDM documents for it, except the aligned transfers, which take the
-** unaligned move: a vector operand here is memory-resident at 8-byte
-** alignment, so no aligned form is emitted. The operations this build
-** does not carry are absent rather than emulated, so a unit that needs
-** one fails at the undeclared name. The forms whose last operand the
-** instruction encodes as an immediate are macros, as gcc's are without
-** -O: a function parameter is not an integer constant expression. */
+/* SSE2 intrinsics. Each operation on __m128i or __m128d below lowers to
+** the instruction the SDM documents for it, except the aligned transfers,
+** which take the unaligned move: a vector operand here is memory-resident
+** at 8-byte alignment, so no aligned form is emitted. The operations on
+** __m64 are written lane by lane, as <mmintrin.h>'s are. The operations
+** this build does not carry are absent rather than emulated, so a unit
+** that needs one fails at the undeclared name. The forms whose last
+** operand the instruction encodes as an immediate are macros, as gcc's are
+** without -O: a function parameter is not an integer constant expression. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
@@ -124,6 +125,60 @@ static inline __m128i _mm_castpd_si128(__m128d __A) {
 
 static inline __m128d _mm_castsi128_pd(__m128i __A) {
     return (__m128d)__A;
+}
+
+/* The operations on __m64, lane by lane over the vector extension as
+** <mmintrin.h>'s are. A double converts to an integer through CVTSD2SI,
+** which rounds by MXCSR, or CVTTSD2SI; both give 0x80000000 for a NaN or a
+** value out of range. */
+
+static inline __m64 _mm_movepi64_pi64(__m128i __A) {
+    return (__m64)__A[0];
+}
+
+static inline __m128i _mm_movpi64_epi64(__m64 __A) {
+    return (__m128i)(__v2di){(long long)__A, 0};
+}
+
+static inline __m128i _mm_set_epi64(__m64 __q1, __m64 __q0) {
+    return (__m128i)(__v2di){(long long)__q0, (long long)__q1};
+}
+
+static inline __m128i _mm_setr_epi64(__m64 __q0, __m64 __q1) {
+    return (__m128i)(__v2di){(long long)__q0, (long long)__q1};
+}
+
+static inline __m128i _mm_set1_epi64(__m64 __q) {
+    return (__m128i)(__v2di){(long long)__q, (long long)__q};
+}
+
+static inline __m64 _mm_mul_su32(__m64 __A, __m64 __B) {
+    return (__m64)((unsigned long long)((__v2su)__A)[0] * ((__v2su)__B)[0]);
+}
+
+static inline int __mm_cvtsd2si(double __d) {
+    int __r;
+    __asm__("cvtsd2si %1, %0" : "=r"(__r) : "x"(__d));
+    return __r;
+}
+
+static inline int __mm_cvttsd2si(double __d) {
+    int __r;
+    __asm__("cvttsd2si %1, %0" : "=r"(__r) : "x"(__d));
+    return __r;
+}
+
+static inline __m64 _mm_cvtpd_pi32(__m128d __A) {
+    return (__m64)(__v2si){__mm_cvtsd2si(__A[0]), __mm_cvtsd2si(__A[1])};
+}
+
+static inline __m64 _mm_cvttpd_pi32(__m128d __A) {
+    return (__m64)(__v2si){__mm_cvttsd2si(__A[0]), __mm_cvttsd2si(__A[1])};
+}
+
+static inline __m128d _mm_cvtpi32_pd(__m64 __A) {
+    __v2si __a = (__v2si)__A;
+    return (__m128d){__a[0], __a[1]};
 }
 
 /* 128-bit transfers. The quadword pair moves exactly 8 bytes, so it

@@ -10,6 +10,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 #pragma dylib(ucrtbase, "ucrtbase.dll")
@@ -38,12 +39,91 @@ static void *locale(void) {
     return __c5_ucrt_numeric_locale();
 }
 
+// An infinity or a NaN whose conversion carries the # flag with an empty
+// fraction comes out mangled: ucrtbase inserts a decimal point into the word
+// ("%#.0e" of INFINITY prints "i.nf", "%#.0f" of -INFINITY prints "-.inf",
+// "%#.0a" of -INFINITY prints "-0x.inf") and marks an indeterminate NaN with
+// "(ind)". C99 7.19.6.1p8 converts them to "[-]inf" or "[-]infinity" /
+// "[-]nan" or "[-]NAN", and the # flag only affects finite values, so the
+// words are rewritten in place. Every rewrite shrinks the text, which is why
+// the pass cannot overflow a caller's buffer.
+static void fix_nonfinite_narrow(char *s) {
+    static const struct { const char *from, *to; } words[] = {
+        // The hex-prefixed forms first, so their ".inf" is not rewritten into
+        // "0xinf": the hex prefix has no infinity or NaN spelling of its own.
+        {"0x.inf", "inf"}, {"0X.INF", "INF"},
+        {"0x.nan", "nan"}, {"0X.NAN", "NAN"},
+        {"i.nf", "inf"}, {"I.NF", "INF"},
+        {"n.an", "nan"}, {"N.AN", "NAN"},
+        {"-.inf", "-inf"}, {"-.INF", "-INF"},
+        {"-.nan", "-nan"}, {"-.NAN", "-NAN"},
+    };
+    for (size_t k = 0; k < sizeof words / sizeof *words; k++) {
+        size_t from = strlen(words[k].from), to = strlen(words[k].to);
+        for (char *p = strstr(s, words[k].from); p; p = strstr(p + to, words[k].from)) {
+            memmove(p + to, p + from, strlen(p + from) + 1);
+            memcpy(p, words[k].to, to);
+        }
+    }
+    // The indeterminate mark only ever follows a NaN word.
+    for (const char *nan = "nan"; ; nan = "NAN") {
+        for (char *p = strstr(s, nan); p; p = strstr(p + 3, nan)) {
+            char *tail = p + 3;
+            if ((tail[0] == '(') &&
+                (strncmp(tail, "(ind)", 5) == 0 || strncmp(tail, "(IND)", 5) == 0))
+                memmove(tail, tail + 5, strlen(tail + 5) + 1);
+        }
+        if (nan[0] == 'N')
+            break;
+    }
+}
+
+static void fix_nonfinite_wide(wchar_t *s) {
+    static const struct { const wchar_t *from, *to; } words[] = {
+        {L"0x.inf", L"inf"}, {L"0X.INF", L"INF"},
+        {L"0x.nan", L"nan"}, {L"0X.NAN", L"NAN"},
+        {L"i.nf", L"inf"}, {L"I.NF", L"INF"},
+        {L"n.an", L"nan"}, {L"N.AN", L"NAN"},
+        {L"-.inf", L"-inf"}, {L"-.INF", L"-INF"},
+        {L"-.nan", L"-nan"}, {L"-.NAN", L"-NAN"},
+    };
+    for (size_t k = 0; k < sizeof words / sizeof *words; k++) {
+        size_t from = wcslen(words[k].from), to = wcslen(words[k].to);
+        for (wchar_t *p = wcsstr(s, words[k].from); p; p = wcsstr(p + to, words[k].from)) {
+            wmemmove(p + to, p + from, wcslen(p + from) + 1);
+            wmemcpy(p, words[k].to, to);
+        }
+    }
+    for (const wchar_t *nan = L"nan"; ; nan = L"NAN") {
+        for (wchar_t *p = wcsstr(s, nan); p; p = wcsstr(p + 3, nan)) {
+            wchar_t *tail = p + 3;
+            if ((tail[0] == L'(') &&
+                (wcsncmp(tail, L"(ind)", 5) == 0 || wcsncmp(tail, L"(IND)", 5) == 0))
+                wmemmove(tail, tail + 5, wcslen(tail + 5) + 1);
+        }
+        if (nan[0] == L'N')
+            break;
+    }
+}
+
 int vsnprintf(char *restrict s, size_t n, const char *restrict format, va_list ap) {
-    return __c5_ucrt_vsprintf(STANDARD, s, n, format, locale(), ap);
+    int r = __c5_ucrt_vsprintf(STANDARD, s, n, format, locale(), ap);
+    // A truncated conversion keeps the would-be length; a fitted one reports
+    // the corrected word count.
+    if (r > 0 && s != NULL && (size_t)r < n) {
+        fix_nonfinite_narrow(s);
+        r = (int)strlen(s);
+    }
+    return r;
 }
 
 int vsprintf(char *restrict s, const char *restrict format, va_list ap) {
-    return __c5_ucrt_vsprintf(STANDARD, s, (size_t)-1, format, locale(), ap);
+    int r = __c5_ucrt_vsprintf(STANDARD, s, (size_t)-1, format, locale(), ap);
+    if (r > 0) {
+        fix_nonfinite_narrow(s);
+        r = (int)strlen(s);
+    }
+    return r;
 }
 
 int vfprintf(FILE *restrict stream, const char *restrict format, va_list ap) {
@@ -70,6 +150,12 @@ int vprintf(const char *restrict format, va_list ap) {
 // C99 7.24.2.7: negative when n or more wide characters were asked for.
 int vswprintf(wchar_t *restrict s, size_t n, const wchar_t *restrict format, va_list ap) {
     int r = __c5_ucrt_vswprintf(STANDARD, s, n, format, locale(), ap);
+    // A fitted conversion reports the corrected word count; a truncated one
+    // keeps the raw would-be length, which still asks for -1 here.
+    if (r > 0 && s != NULL && (size_t)r < n) {
+        fix_nonfinite_wide(s);
+        r = (int)wcslen(s);
+    }
     return r >= 0 && (size_t)r >= n ? -1 : r;
 }
 
@@ -78,8 +164,16 @@ int vfwprintf(FILE *restrict stream, const wchar_t *restrict format, va_list ap)
     va_list again;
     va_copy(again, ap);
     int n = __c5_ucrt_vswprintf(STANDARD, local, 256, format, locale(), ap);
+    if (n > 0 && n < 256) {
+        fix_nonfinite_wide(local);
+        n = (int)wcslen(local);
+    }
     if (n >= 256 && (buf = malloc(((size_t)n + 1) * sizeof *buf)))
         n = __c5_ucrt_vswprintf(STANDARD, buf, (size_t)n + 1, format, locale(), again);
+    if (n > 0 && buf != local) {
+        fix_nonfinite_wide(buf);
+        n = (int)wcslen(buf);
+    }
     va_end(again);
     if (!buf)
         return -1;

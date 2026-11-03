@@ -723,8 +723,9 @@ fn fixture_parity_native_optimized() {
 }
 
 /// `RtlVirtualUnwind` walks frames built under `-mbranch-protection=bti`,
-/// `standard` and `pac-ret+leaf+bti`, at -O0 and -O: each function's
-/// `.xdata` record describes its `bti c` and `paciasp`.
+/// `standard` and `pac-ret+leaf+bti`, at -O0 and -O, from a call and from
+/// each instruction of an epilogue: each function's `.xdata` record
+/// describes its `bti c` and `paciasp`, and each epilogue's `autiasp`.
 #[test]
 fn unwind_walks_branch_protected_frames() {
     if !host_can_run_pe() {
@@ -752,10 +753,11 @@ fn unwind_walks_branch_protected_frames() {
                 ..NativeOptions::new()
             };
             let suffix = format!("-{label}{}", if optimize { "-O" } else { "" });
-            let outcome =
-                build_and_run_fixture_with_options("unwind_restores_callee_saved.c", opts, &suffix);
-            if !outcome.matches(0) {
-                failures.push(format!("{suffix}: {outcome:?}"));
+            for fixture in ["unwind_restores_callee_saved.c", "unwind_from_epilogue.c"] {
+                let outcome = build_and_run_fixture_with_options(fixture, opts.clone(), &suffix);
+                if !outcome.matches(0) {
+                    failures.push(format!("{fixture}{suffix}: {outcome:?}"));
+                }
             }
         }
     }

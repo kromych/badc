@@ -451,6 +451,121 @@ fn pdata_holds_the_array_alone_and_the_unwind_records_lie_in_rdata() {
     }
 }
 
+/// In a linked Windows on ARM64 image, every `ret` of a function with an
+/// `.xdata` record ends an epilog scope as the unwinder locates it: one in
+/// the header (E bit) ends the function, one in the list starts at its
+/// offset, and either spans its codes up to `end` plus the `ret`. Folded,
+/// top-block, frame-only, large, dynamic and variadic frames, with one exit
+/// and several, at -O0 and -O, with and without `-mbranch-protection`.
+#[cfg(feature = "full")]
+#[test]
+fn every_arm64_return_ends_an_epilog_scope() {
+    let src = "long ext(long);\n\
+        long several(long a, long b) { if (a > b) return ext(a) * 2; if (a < 0) return ext(b) - a; return a + b; }\n\
+        long saves(long a) { long b = a * 3, c = b ^ 7; long r = ext(a); return r + b + c; }\n\
+        long wide(long a) { volatile char buf[600]; buf[a & 7] = 1; return ext(buf[a & 3]) + a; }\n\
+        long huge(long a) { volatile char buf[70000]; buf[a & 7] = 1; return ext(buf[a & 3]); }\n\
+        long vla(long n) { char buf[(n & 15) + 8]; buf[n & 7] = 1; return ext(buf[n & 3]) + n; }\n\
+        long sum(int n, ...) { __builtin_va_list ap; __builtin_va_start(ap, n); long s = 0;\n\
+            for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);\n\
+            __builtin_va_end(ap); return ext(s) + s; }\n\
+        long ext(long a) { return a + 1; }\n\
+        int main(int argc, char **argv) { (void)argv; return (int)(several(argc, 2) + saves(argc)\n\
+            + wide(argc) + huge(argc) + vla(argc) + sum(2, 1L, 2L)); }\n";
+    const RET: u32 = 0xD65F_03C0;
+    let program = Compiler::with_target(src.into(), Target::WindowsAarch64)
+        .compile()
+        .expect("front end");
+    let mut listed = 0;
+    let signed = crate::Hardening {
+        bti: true,
+        pac_ret: true,
+        ..crate::Hardening::NONE
+    };
+    for (hardening, optimize) in [
+        (crate::Hardening::NONE, false),
+        (crate::Hardening::NONE, true),
+        (signed, false),
+        (signed, true),
+    ] {
+        let opts = crate::NativeOptions {
+            hardening,
+            optimize,
+            ..crate::NativeOptions::new()
+        };
+        let pe = super::link_executable_with_runtime(&program, Target::WindowsAarch64, opts)
+            .expect("link");
+        let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+        let (start, count, entry) = exception_table(&pe, false);
+        let mut header = 0;
+        for e in (0..count).map(|i| start + i * entry) {
+            let (begin, info) = (word(e), word(e + 4));
+            if info & 3 != 0 {
+                continue;
+            }
+            let at = pe_rva_offset(&pe, info).expect("record");
+            let (len, scopes) = arm64_epilog_scopes(&pe[at..]);
+            let text = pe_rva_offset(&pe, begin).expect("function");
+            let rets: alloc::vec::Vec<u32> = (0..len)
+                .step_by(4)
+                .filter(|&r| word(text + r as usize) == RET)
+                .collect();
+            let ends: alloc::vec::Vec<u32> = scopes.iter().map(|&(s, size)| s + size - 4).collect();
+            assert_eq!(
+                rets, ends,
+                "{hardening:?} -O={optimize}: {begin:#x} {scopes:x?}"
+            );
+            let packed = word(at) & 1 << 21 != 0;
+            header += usize::from(packed);
+            listed += usize::from(!packed && scopes.len() >= 2);
+        }
+        assert!(
+            header >= 2,
+            "{hardening:?} -O={optimize}: {header} in the header"
+        );
+    }
+    assert!(listed >= 2, "{listed} lists of several scopes");
+}
+
+/// The function length of the ARM64 `.xdata` record at the start of `x`,
+/// and each epilog scope's offset and size in bytes, its `ret` included,
+/// as the unwinder computes them from the codes.
+#[cfg(feature = "full")]
+fn arm64_epilog_scopes(x: &[u8]) -> (u32, alloc::vec::Vec<(u32, u32)>) {
+    let word = |at: usize| u32::from_le_bytes(x[at..at + 4].try_into().unwrap());
+    let h = word(0);
+    let (len, packed) = ((h & 0x3FFFF) * 4, h & 1 << 21 != 0);
+    let (mut count, mut words, mut at) = ((h >> 22) & 31, h >> 27, 4);
+    if count == 0 && words == 0 {
+        (count, words, at) = (word(4) & 0xFFFF, (word(4) >> 16) & 0xFF, 8);
+    }
+    let list = if packed { 0 } else { count as usize };
+    let codes = &x[at + 4 * list..at + 4 * list + 4 * words as usize];
+    // The instructions from `index`: one per code up to `end`, then the `ret`.
+    let size = |mut index: usize| {
+        let mut n = 1;
+        while codes[index] & 0xFE != 0xE4 {
+            index += match codes[index] {
+                0x00..=0xBF | 0xE1 | 0xE3 | 0xE6 | 0xFC => 1,
+                0xC0..=0xDF | 0xE2 => 2,
+                0xE0 => 4,
+                c => panic!("unwind code {c:#x}"),
+            };
+            n += 1;
+        }
+        4 * n
+    };
+    if packed {
+        let s = size(count as usize);
+        return (len, alloc::vec![(len - s, s)]);
+    }
+    let scopes = (0..list)
+        .map(|i| word(at + 4 * i))
+        .map(|w| ((w & 0x3FFFF) * 4, size((w >> 22) as usize)))
+        .collect();
+    (len, scopes)
+}
+
 /// The header byte of each x64 unwind record with a handler flag.
 #[cfg(feature = "full")]
 fn pe_handler_flags(pe: &[u8]) -> alloc::vec::Vec<u8> {

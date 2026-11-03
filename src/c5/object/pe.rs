@@ -2842,16 +2842,29 @@ fn build_aarch64_pdata(
         })
         .collect();
     for u in a64.iter().filter(|u| !u.steps.is_empty()) {
-        let Some(codes) = super::arm64_unwind::codes(&u.steps) else {
-            return Err(C5Error::internal(format!(
-                "no unwind code describes a step of the prologue at {:#x}: {:?}",
-                u.begin, u.steps
-            )));
+        let describe = |what: &str, at: u32, steps: &[crate::c5::codegen::A64Step]| {
+            super::arm64_unwind::step_codes(steps).ok_or_else(|| {
+                C5Error::internal(format!(
+                    "no unwind code describes a step of the {what} at {at:#x}: {steps:?}"
+                ))
+            })
         };
+        let codes = describe("prologue", u.begin, &u.steps)?;
         let (begin, end) = (early_returns.iter())
             .find(|e| e.begin == u.begin)
             .map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
-        let Some(mut x) = super::arm64_unwind::xdata(end - begin, &codes) else {
+        let mut exits = Vec::with_capacity(u.exits.len());
+        for e in &u.exits {
+            let at = u.begin + e.at;
+            let ret = at + 4 * e.steps.len() as u32;
+            if at < begin || ret >= end {
+                return Err(C5Error::internal(format!(
+                    "the epilogue at {at:#x} lies outside its unwind record [{begin:#x}, {end:#x})"
+                )));
+            }
+            exits.push((at - begin, describe("epilogue", at, &e.steps)?));
+        }
+        let Some(mut x) = super::arm64_unwind::xdata(end - begin, &codes, &exits) else {
             continue;
         };
         // The X bit (header bit 20): the language handler and its data follow.
@@ -4087,6 +4100,7 @@ mod tests {
             begin: 0,
             end: 16,
             steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
+            exits: Vec::new(),
         };
         let arm64 = build_aarch64_pdata(0x1000, 16, 0, &[a64], &[], &[], seh).map(|_| ());
         for (got, why) in [
@@ -4190,11 +4204,14 @@ mod tests {
     /// path's start up to the post-prologue anchor, for a leaf, a folded and
     /// an unfolded frame, a Windows variadic callee and a return ahead of the
     /// frame, with and without `bti` and `pac-ret` (leaves signed too); a
-    /// function the decoder finds no prolog in records no steps.
+    /// function the decoder finds no prolog in records no steps. Each exit's
+    /// codes equal the ones `epilogue_codes` reads from its first
+    /// instruction to its `ret`, and every `ret` of the frame path ends one.
     #[test]
     fn structured_and_decoded_unwind_agree_arm64() {
         use crate::Compiler;
         use crate::c5::codegen::{A64Step, Hardening};
+        const RET: [u8; 4] = 0xD65F_03C0u32.to_le_bytes();
         let src = "
             void snk(char *); long ext(long); double fext(double);
             int add(int a, int b) { return a + b; }
@@ -4207,10 +4224,18 @@ mod tests {
                 long s = 0; for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);
                 __builtin_va_end(ap); return s + ext(s);
             }
+            long several(long a, long b) {
+                if (a > b) return ext(a) * 2;
+                if (a < 0) return ext(b) - a;
+                return a + b;
+            }
+            long vla(long n) { char buf[n + 1]; snk(buf); return ext(n) + buf[n]; }
+            long huge(long a) { char buf[70000]; snk(buf); return buf[a & 7]; }
             int main(int argc, char **argv) {
                 (void)argv;
                 return add(argc, 2) + (int)saves(argc, 3) + (int)wide(argc)
-                    + (int)fpwork(1.5, argc) + (int)fib(argc) + (int)sum(2, 3L, 4L);
+                    + (int)fpwork(1.5, argc) + (int)fib(argc) + (int)sum(2, 3L, 4L)
+                    + (int)several(argc, 1) + (int)vla(argc) + (int)huge(argc);
             }
         ";
         let program = Compiler::with_target(
@@ -4238,7 +4263,7 @@ mod tests {
             };
             let build =
                 lower_for(&program, super::super::Target::WindowsAarch64, options).expect("lower");
-            let (mut framed, mut bare) = (0, 0);
+            let (mut framed, mut bare, mut most_exits) = (0, 0, 0);
             for u in &build.a64_unwind {
                 let early = build.early_returns.iter().find(|e| e.begin == u.begin);
                 let (start, stop) =
@@ -4263,12 +4288,35 @@ mod tests {
                 let sets_fp = |s: &A64Step| matches!(s, A64Step::SetFp | A64Step::AddFp(_));
                 framed += usize::from(u.steps.iter().any(sets_fp));
                 bare += usize::from(u.steps.is_empty());
+                if u.steps.is_empty() {
+                    assert!(u.exits.is_empty(), "{:#x}: {:?}", u.begin, u.exits);
+                    continue;
+                }
+                let mut rets = Vec::new();
+                for e in &u.exits {
+                    let at = u.begin + e.at;
+                    let steps = super::super::arm64_unwind::step_codes(&e.steps).expect("codes");
+                    let ret = at + 4 * e.steps.len() as u32;
+                    assert_eq!(
+                        super::super::arm64_unwind::epilogue_codes(&build.text, at),
+                        Some((steps.concat(), ret)),
+                        "{hardening:?} -O={optimize}: the exit at {at:#x}: {:?}",
+                        e.steps
+                    );
+                    rets.push(ret);
+                }
+                let words = (start..stop).step_by(4);
+                let all: Vec<u32> =
+                    (words.filter(|&at| build.text[at as usize..][..4] == RET)).collect();
+                assert_eq!(all, rets, "{hardening:?} -O={optimize}: {:#x}", u.begin);
+                most_exits = most_exits.max(rets.len());
             }
             // `-O` leaves `add` a full leaf, which `pac-ret+leaf` signs.
             let leaf = optimize && hardening == Hardening::NONE;
             assert!(
-                framed >= 5 && (bare > 0) == leaf,
-                "{hardening:?} -O={optimize}: {framed} framed, {bare} without a prolog"
+                framed >= 5 && (bare > 0) == leaf && most_exits >= 2,
+                "{hardening:?} -O={optimize}: {framed} framed, {bare} without a prolog, \
+                 {most_exits} exits at most"
             );
         }
     }

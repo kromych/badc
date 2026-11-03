@@ -2609,7 +2609,13 @@ impl<'a> RelocWriter<'a> {
             };
             (u.begin, steps)
         });
-        let a64 = (build.a64_unwind.iter()).map(|u| (u.begin, UnwindSteps::A64(u.steps.clone())));
+        let a64 = (build.a64_unwind.iter()).map(|u| {
+            let steps = UnwindSteps::A64 {
+                steps: u.steps.clone(),
+                exits: u.exits.clone(),
+            };
+            (u.begin, steps)
+        });
         for (begin, steps) in x64.chain(a64) {
             if let (SHIDX_TEXT, entry) = self.text_place(u64::from(begin)) {
                 self.syms.unwind.push((entry, steps));

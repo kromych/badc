@@ -2672,33 +2672,47 @@ pub(crate) enum PrologueStep {
     SetFrame(u32),
 }
 
-/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's
+/// An arm64 function's `[begin, end)` in `Build::text`, its prologue's
 /// steps as the emitter recorded them, one per instruction from `begin`,
-/// or from the frame path's start where an [`EarlyReturn`] precedes it.
+/// or from the frame path's start where an [`EarlyReturn`] precedes it,
+/// and its exits.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct A64Unwind {
     pub begin: u32,
     pub end: u32,
     pub steps: Vec<A64Step>,
+    /// Empty for a frameless function, which states no prologue.
+    pub exits: Vec<A64Exit>,
 }
 
-/// One arm64 prologue instruction as an unwinder replays it (Microsoft,
-/// "ARM64 exception handling"): each takes one unwind code.
+/// An arm64 epilogue: the offset of its first instruction from
+/// [`A64Unwind::begin`] and one step per instruction before its `ret`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct A64Exit {
+    pub at: u32,
+    pub steps: Vec<A64Step>,
+}
+
+/// One arm64 prologue instruction, or the epilogue instruction that
+/// reverses it, as an unwinder replays it (Microsoft, "ARM64 exception
+/// handling"): each takes one unwind code. The epilogue's forms follow the
+/// prologue's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum A64Step {
-    /// `bti c`, `nop` or an argument register's store into its home: no
-    /// effect the unwinder reverses.
+    /// `bti c`, `nop`, an argument register's store into its home, or an
+    /// epilogue instruction leaving sp, x29 and the saved registers alone.
     Nop,
-    /// `paciasp`.
+    /// `paciasp`; `autiasp`.
     PacSignLr,
-    /// `sub sp, sp, #n`.
+    /// `sub sp, sp, #n`; `add sp, sp, #n`.
     Alloc(u32),
-    /// `stp x29, x30, [sp, #-n]!`.
+    /// `stp x29, x30, [sp, #-n]!`; `ldp x29, x30, [sp], #n`.
     SaveFpLrX(u32),
-    /// `mov x29, sp`.
+    /// `mov x29, sp`; an epilogue's write of x29 to sp.
     SetFp,
     /// A store of `reg`, and of `reg2` for a pair, x or (`fp`) d registers,
-    /// at `[sp, #bytes]` or (`pre`) pre-indexing `bytes`.
+    /// at `[sp, #bytes]` or (`pre`) pre-indexing `bytes`; the load, or
+    /// post-indexing load, of the same.
     SaveReg {
         fp: bool,
         reg: u8,
@@ -2706,9 +2720,9 @@ pub(crate) enum A64Step {
         pre: bool,
         bytes: u32,
     },
-    /// `stp x29, x30, [sp, #off]`.
+    /// `stp x29, x30, [sp, #off]`; `ldp x29, x30, [sp, #off]`.
     SaveFpLr(u32),
-    /// `add x29, sp, #off`.
+    /// `add x29, sp, #off`; an epilogue's write of `x29 - off` to sp.
     AddFp(u32),
 }
 
@@ -2721,13 +2735,18 @@ pub(crate) enum UnwindSteps {
         leaf: bool,
         steps: Vec<(u32, PrologueStep)>,
     },
-    /// [`A64Unwind::steps`]; none for a frameless function.
-    A64(Vec<A64Step>),
+    /// [`A64Unwind::steps`] and [`A64Unwind::exits`]; none for a frameless
+    /// function.
+    A64 {
+        steps: Vec<A64Step>,
+        exits: Vec<A64Exit>,
+    },
 }
 
 impl UnwindSteps {
-    /// Append the record: its kind and step count, then 12 bytes per step,
-    /// `[offset u32, tag u8, a u8, b u8, flags u8, value u32]`.
+    /// Append the record: its kind, step count and (arm64) exit count, then
+    /// 12 bytes per step, `[offset u32, tag u8, a u8, b u8, flags u8, value
+    /// u32]`; an arm64 exit is its offset and step count, then its steps.
     pub(crate) fn encode(&self, out: &mut Vec<u8>) {
         let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
             out.extend(offset.to_le_bytes());
@@ -2746,28 +2765,35 @@ impl UnwindSteps {
                     }
                 }
             }
-            UnwindSteps::A64(steps) => {
-                step(0, 2, 0, 0, 0, steps.len() as u32);
-                for &s in steps {
-                    match s {
-                        A64Step::Nop => step(0, 0, 0, 0, 0, 0),
-                        A64Step::PacSignLr => step(0, 1, 0, 0, 0, 0),
-                        A64Step::Alloc(n) => step(0, 2, 0, 0, 0, n),
-                        A64Step::SaveFpLrX(n) => step(0, 3, 0, 0, 0, n),
-                        A64Step::SetFp => step(0, 4, 0, 0, 0, 0),
-                        A64Step::SaveReg {
-                            fp,
-                            reg,
-                            reg2,
-                            pre,
-                            bytes,
-                        } => {
-                            let pair = reg2.is_some();
-                            let flags = u8::from(fp) | u8::from(pair) << 1 | u8::from(pre) << 2;
-                            step(0, 5, reg, reg2.unwrap_or(0), flags, bytes)
-                        }
-                        A64Step::SaveFpLr(off) => step(0, 6, 0, 0, 0, off),
-                        A64Step::AddFp(off) => step(0, 7, 0, 0, 0, off),
+            UnwindSteps::A64 { steps, exits } => {
+                step(exits.len() as u32, 2, 0, 0, 0, steps.len() as u32);
+                let exits = exits.iter().map(|e| (Some(e), &e.steps[..]));
+                for (exit, steps) in core::iter::once((None, &steps[..])).chain(exits) {
+                    if let Some(e) = exit {
+                        step(e.at, 8, 0, 0, 0, e.steps.len() as u32);
+                    }
+                    for &s in steps {
+                        let (tag, reg, reg2, flags, value) = match s {
+                            A64Step::Nop => (0, 0, 0, 0, 0),
+                            A64Step::PacSignLr => (1, 0, 0, 0, 0),
+                            A64Step::Alloc(n) => (2, 0, 0, 0, n),
+                            A64Step::SaveFpLrX(n) => (3, 0, 0, 0, n),
+                            A64Step::SetFp => (4, 0, 0, 0, 0),
+                            A64Step::SaveReg {
+                                fp,
+                                reg,
+                                reg2,
+                                pre,
+                                bytes,
+                            } => {
+                                let pair = reg2.is_some();
+                                let flags = u8::from(fp) | u8::from(pair) << 1 | u8::from(pre) << 2;
+                                (5, reg, reg2.unwrap_or(0), flags, bytes)
+                            }
+                            A64Step::SaveFpLr(off) => (6, 0, 0, 0, off),
+                            A64Step::AddFp(off) => (7, 0, 0, 0, off),
+                        };
+                        step(0, tag, reg, reg2, flags, value);
                     }
                 }
             }
@@ -2782,9 +2808,34 @@ impl UnwindSteps {
             let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
             Some((word(0), [b[4], b[5], b[6], b[7]], word(8)))
         };
-        let (_, [kind, ..], count) = field(0)?;
+        let (exit_count, [kind, ..], count) = field(0)?;
         let records = (1..=count as usize).map(|i| field(12 * i));
-        let len = 12 * (count as usize + 1);
+        let mut len = 12 * (count as usize + 1);
+        // `count` arm64 steps from record `first`.
+        let a64 = |first: usize, count: u32| -> Option<Vec<A64Step>> {
+            (first..first + count as usize)
+                .map(|i| {
+                    let (_, [tag, reg, reg2, flags], value) = field(12 * i)?;
+                    Some(match tag {
+                        0 => A64Step::Nop,
+                        1 => A64Step::PacSignLr,
+                        2 => A64Step::Alloc(value),
+                        3 => A64Step::SaveFpLrX(value),
+                        4 => A64Step::SetFp,
+                        5 => A64Step::SaveReg {
+                            fp: flags & 1 != 0,
+                            reg,
+                            reg2: (flags & 2 != 0).then_some(reg2),
+                            pre: flags & 4 != 0,
+                            bytes: value,
+                        },
+                        6 => A64Step::SaveFpLr(value),
+                        7 => A64Step::AddFp(value),
+                        _ => return None,
+                    })
+                })
+                .collect()
+        };
         let steps = match kind {
             0 | 1 => UnwindSteps::X64 {
                 leaf: kind == 1,
@@ -2804,30 +2855,22 @@ impl UnwindSteps {
                     })
                     .collect::<Option<_>>()?,
             },
-            2 => UnwindSteps::A64(
-                records
-                    .map(|r| {
-                        let (_, [tag, reg, reg2, flags], value) = r?;
-                        Some(match tag {
-                            0 => A64Step::Nop,
-                            1 => A64Step::PacSignLr,
-                            2 => A64Step::Alloc(value),
-                            3 => A64Step::SaveFpLrX(value),
-                            4 => A64Step::SetFp,
-                            5 => A64Step::SaveReg {
-                                fp: flags & 1 != 0,
-                                reg,
-                                reg2: (flags & 2 != 0).then_some(reg2),
-                                pre: flags & 4 != 0,
-                                bytes: value,
-                            },
-                            6 => A64Step::SaveFpLr(value),
-                            7 => A64Step::AddFp(value),
-                            _ => return None,
-                        })
-                    })
-                    .collect::<Option<_>>()?,
-            ),
+            2 => {
+                let steps = a64(1, count)?;
+                let mut exits = Vec::new();
+                for _ in 0..exit_count {
+                    let (at, [tag, ..], n) = field(len)?;
+                    if tag != 8 {
+                        return None;
+                    }
+                    exits.push(A64Exit {
+                        at,
+                        steps: a64(len / 12 + 1, n)?,
+                    });
+                    len += 12 * (n as usize + 1);
+                }
+                UnwindSteps::A64 { steps, exits }
+            }
             _ => return None,
         };
         Some((steps, len))

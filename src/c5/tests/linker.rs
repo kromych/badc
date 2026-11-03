@@ -7219,7 +7219,7 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
 /// and a record with an unknown kind or step, or cut short, reads as none.
 #[test]
 fn unwind_step_records_round_trip() {
-    use crate::c5::codegen::{A64Step, PrologueStep as P, UnwindSteps};
+    use crate::c5::codegen::{A64Exit, A64Step, PrologueStep as P, UnwindSteps};
     let records = [
         UnwindSteps::X64 {
             leaf: false,
@@ -7235,29 +7235,49 @@ fn unwind_step_records_round_trip() {
             leaf: true,
             steps: alloc::vec::Vec::new(),
         },
-        UnwindSteps::A64(alloc::vec![
-            A64Step::Nop,
-            A64Step::PacSignLr,
-            A64Step::Alloc(64),
-            A64Step::SaveReg {
-                fp: false,
-                reg: 19,
-                reg2: Some(20),
-                pre: true,
-                bytes: 96
-            },
-            A64Step::SaveReg {
-                fp: true,
-                reg: 8,
-                reg2: None,
-                pre: false,
-                bytes: 16
-            },
-            A64Step::SaveFpLr(80),
-            A64Step::AddFp(80),
-            A64Step::SaveFpLrX(16),
-            A64Step::SetFp,
-        ]),
+        UnwindSteps::A64 {
+            steps: alloc::vec![
+                A64Step::Nop,
+                A64Step::PacSignLr,
+                A64Step::Alloc(64),
+                A64Step::SaveReg {
+                    fp: false,
+                    reg: 19,
+                    reg2: Some(20),
+                    pre: true,
+                    bytes: 96
+                },
+                A64Step::SaveReg {
+                    fp: true,
+                    reg: 8,
+                    reg2: None,
+                    pre: false,
+                    bytes: 16
+                },
+                A64Step::SaveFpLr(80),
+                A64Step::AddFp(80),
+                A64Step::SaveFpLrX(16),
+                A64Step::SetFp,
+            ],
+            exits: alloc::vec![
+                A64Exit {
+                    at: 0x40,
+                    steps: alloc::vec![A64Step::AddFp(80), A64Step::SaveFpLr(80)],
+                },
+                A64Exit {
+                    at: 0x80,
+                    steps: alloc::vec::Vec::new(),
+                },
+                A64Exit {
+                    at: 0xC4,
+                    steps: alloc::vec![A64Step::SetFp, A64Step::SaveFpLrX(16)],
+                },
+            ],
+        },
+        UnwindSteps::A64 {
+            steps: alloc::vec![A64Step::PacSignLr],
+            exits: alloc::vec::Vec::new(),
+        },
     ];
     for r in &records {
         let mut bytes = alloc::vec::Vec::new();
@@ -7299,8 +7319,8 @@ fn the_pe_link_takes_the_recorded_unwind_steps() {
             (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
                 assert!(!leaf && steps.len() >= 2, "{steps:?}")
             }
-            (UnwindSteps::A64(steps), crate::Target::WindowsAarch64) => {
-                assert!(steps.len() >= 2, "{steps:?}")
+            (UnwindSteps::A64 { steps, exits }, crate::Target::WindowsAarch64) => {
+                assert!(steps.len() >= 2 && !exits.is_empty(), "{steps:?} {exits:?}")
             }
             other => panic!("{target:?}: {other:?}"),
         }

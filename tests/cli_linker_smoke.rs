@@ -9825,9 +9825,17 @@ fn arm64_pdata(image: &[u8]) -> Vec<(u32, Result<u32, Vec<u8>>)> {
             if data & 3 != 0 {
                 return (u32le(entry), Ok(data));
             }
-            let x = at(data);
-            let words = (u32le(x) >> 27) as usize;
-            (u32le(entry), Err(image[x + 4..x + 4 + words * 4].to_vec()))
+            let (x, header) = (at(data), u32le(at(data)));
+            let words = (header >> 27) as usize;
+            // The epilog scopes precede the codes unless the header holds
+            // the one epilog (the E bit).
+            let scopes = if header & 1 << 21 != 0 {
+                0
+            } else {
+                (header >> 22) as usize & 31
+            };
+            let codes = x + 4 + 4 * scopes;
+            (u32le(entry), Err(image[codes..codes + words * 4].to_vec()))
         })
         .collect()
 }

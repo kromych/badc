@@ -602,7 +602,7 @@ fn x86_64_unwind(
     for (begin, end, steps) in functions {
         let (leaf, steps) = match steps {
             Some(UnwindSteps::X64 { leaf, steps }) => (*leaf, steps.clone()),
-            Some(UnwindSteps::A64(_)) => {
+            Some(UnwindSteps::A64 { .. }) => {
                 return Err(internal_err(MODULE, "arm64 unwind steps in an x86-64 link"));
             }
             None => (true, Vec::new()),
@@ -617,8 +617,8 @@ fn x86_64_unwind(
     Ok(out)
 }
 
-/// The windows-arm64 functions of `merged` and the prologue steps the
-/// emitter recorded; a frameless one states none.
+/// The windows-arm64 functions of `merged` and the prologue and epilogue
+/// steps the emitter recorded; a frameless one states none.
 fn aarch64_unwind(
     merged: &MergedNative,
     target: Target,
@@ -630,14 +630,21 @@ fn aarch64_unwind(
     }
     let mut out = Vec::new();
     for (begin, end, steps) in recorded_unwind(merged, functions, true)? {
-        let steps = match steps {
-            Some(UnwindSteps::A64(steps)) if !steps.is_empty() => steps.clone(),
+        let (steps, exits) = match steps {
+            Some(UnwindSteps::A64 { steps, exits }) if !steps.is_empty() => {
+                (steps.clone(), exits.clone())
+            }
             Some(UnwindSteps::X64 { .. }) => {
                 return Err(internal_err(MODULE, "x86-64 unwind steps in an arm64 link"));
             }
             _ => continue,
         };
-        out.push(A64Unwind { begin, end, steps });
+        out.push(A64Unwind {
+            begin,
+            end,
+            steps,
+            exits,
+        });
     }
     Ok(out)
 }

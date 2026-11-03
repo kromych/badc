@@ -9,9 +9,10 @@ the command line runs, and the closing lines print the roster and the
 width.
 
 An entry `path@config` runs the smoke under that configuration's
-environment in `DEMO_ENV`. The configurations of one smoke share its
-cache, so they run one after another in one pool slot, each with its own
-verdict. An entry in `AFTER_POOL` runs once the pool has drained, one at a
+environment in `DEMO_ENV`, with the arguments in `DEMO_ARGS`. The
+configurations of one smoke share its cache, so they run one after another
+in one pool slot, each with its own verdict. `--lane KIND` takes the gate's
+roster for that lane kind instead of a list. An entry in `AFTER_POOL` runs once the pool has drained, one at a
 time, with the host to itself: the pool holds the host's load lock shared
 and those entries exclusively (`host_load.py`), so neither this run's pool
 nor another lane's suite, pool or kernel build runs beside them.
@@ -62,10 +63,14 @@ def slots(entries: list[str]) -> list[list[str]]:
     return list(by_script.values())
 
 
+def command(entry: str) -> list[str]:
+    return [sys.executable, script(entry), *DEMO_ARGS.get(entry, [])]
+
+
 def run_one(entry: str) -> tuple[str, int, float, str]:
     start = time.time()
     proc = subprocess.run(
-        [sys.executable, script(entry)],
+        command(entry),
         cwd=REPO_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -87,18 +92,39 @@ QEMU_BOOT = {
     "BADC_QEMU_BOOT_TIMEOUT": "90",
     "BADC_QEMU_REQUIRE_FIRMWARE": "1",
 }
-# The tcl suite without its timer-bound tests, which the pool's load
-# decides, and those tests alone once the pool has drained.
+# The tcl suite and OpenSSL's, C and --asm builds, without their timer-bound
+# tests, which the pool's load decides, and those tests alone once the pool
+# has drained.
+OPENSSL = "demos/openssl/smoke.py"
 DEMO_ENV = {
     "demos/qemu/smoke.py": {**QEMU_BOOT, "BADC_QEMU_OPT": "0", "BADC_QEMU_VERIFY_SSA": "0"},
     "demos/qemu/smoke.py@O": {**QEMU_BOOT, "BADC_QEMU_OPT": "1", "BADC_QEMU_VERIFY_SSA": "1"},
     "demos/tcl/smoke.py@untimed": {"BADC_TCL_TESTS": "untimed"},
     "demos/tcl/smoke.py@timed": {"BADC_TCL_TESTS": "timed"},
+    **{f"{OPENSSL}@{c}{t}": {"BADC_OPENSSL_TESTS": t} for c in ("", "asm-") for t in ("untimed", "timed")},
 }
-AFTER_POOL = {"demos/tcl/smoke.py@timed"}
+DEMO_ARGS = {f"{OPENSSL}@asm-{t}": ["--asm"] for t in ("untimed", "timed")}
+AFTER_POOL = {"demos/tcl/smoke.py@timed", f"{OPENSSL}@timed", f"{OPENSSL}@asm-timed"}
 # A smoke named bare runs as the configurations that divide its tests
 # between the pool and the phase after it.
-SPLIT = {"demos/tcl/smoke.py": ["demos/tcl/smoke.py@untimed", "demos/tcl/smoke.py@timed"]}
+SPLIT = {
+    "demos/tcl/smoke.py": ["demos/tcl/smoke.py@untimed", "demos/tcl/smoke.py@timed"],
+    OPENSSL: [f"{OPENSSL}@untimed", f"{OPENSSL}@timed"],
+    f"{OPENSSL}@asm": [f"{OPENSSL}@asm-untimed", f"{OPENSSL}@asm-timed"],
+}
+
+
+def openssl_config(entry: str) -> str | None:
+    """`c` or `asm` for an OpenSSL entry, None for any other."""
+    if script(entry) != OPENSSL:
+        return None
+    return "asm" if entry.partition("@")[2].startswith("asm") else "c"
+
+
+def only_openssl(entries: list[str], which: str) -> list[str]:
+    """The roster with the OpenSSL entries of configuration `which` (`c`,
+    `asm`, or `both`) and no others."""
+    return [e for e in entries if openssl_config(e) in (None, which) or which == "both"]
 
 
 def expand(entries: list[str]) -> list[str]:
@@ -152,6 +178,10 @@ def self_test() -> int:
     another lane's shared holder of the load lock has let it go; a smoke's
     configurations run in roster order in one slot."""
     roster = [
+        f"{OPENSSL}@untimed",
+        f"{OPENSSL}@asm-untimed",
+        f"{OPENSSL}@timed",
+        f"{OPENSSL}@asm-timed",
         "demos/qemu/smoke.py",
         "demos/tcl/smoke.py@untimed",
         "demos/tcl/smoke.py@timed",
@@ -159,10 +189,11 @@ def self_test() -> int:
         "demos/lua/smoke.py",
     ]
     spans: dict[str, tuple[float, float]] = {}
+    long = ("demos/tcl/smoke.py@untimed", f"{OPENSSL}@asm-untimed")
 
     def fake(entry: str) -> tuple[str, int, float, str]:
         start = time.time()
-        time.sleep(0.3 if entry == "demos/tcl/smoke.py@untimed" else 0.05)
+        time.sleep(0.3 if entry in long else 0.05)
         spans[entry] = (start, time.time())
         return entry, 0, time.time() - start, ""
 
@@ -184,15 +215,28 @@ def self_test() -> int:
         child.wait()
         let_go = float(released.read_text())
     assert not failures, failures
-    timed = spans["demos/tcl/smoke.py@timed"][0]
+    after = after_pool(roster)
+    assert after == [f"{OPENSSL}@timed", f"{OPENSSL}@asm-timed", "demos/tcl/smoke.py@timed"]
     pool_end = max(end for e, (_, end) in spans.items() if e not in AFTER_POOL)
-    assert timed >= pool_end, (timed, pool_end)
-    # Without fcntl (Windows) nothing locks.
-    assert host_load.fcntl is None or timed >= let_go, (timed, let_go)
+    # One at a time after the pool, in roster order.
+    for prev, entry in zip([None, *after], after):
+        start = spans[entry][0]
+        assert start >= (spans[prev][1] if prev else pool_end), (entry, spans)
+        # Without fcntl (Windows) nothing locks.
+        assert host_load.fcntl is None or start >= let_go, (entry, let_go)
     assert spans["demos/qemu/smoke.py"][1] <= spans["demos/qemu/smoke.py@O"][0], spans
-    assert after_pool(roster) == ["demos/tcl/smoke.py@timed"]
-    bare = expand(["demos/lua/smoke.py", "demos/tcl/smoke.py"])
-    assert bare == ["demos/lua/smoke.py", *SPLIT["demos/tcl/smoke.py"]], bare
+    assert spans[f"{OPENSSL}@untimed"][1] <= spans[f"{OPENSSL}@asm-untimed"][0], spans
+    for entry in roster:
+        asm = entry.startswith(f"{OPENSSL}@asm-")
+        assert command(entry)[1:] == [script(entry), *(["--asm"] if asm else [])], entry
+    # --openssl keeps one configuration's entries and every other demo.
+    for which, kept in (("c", SPLIT[OPENSSL]), ("asm", SPLIT[f"{OPENSSL}@asm"]), ("both", roster[:4])):
+        assert only_openssl(roster, which) == [*kept, *roster[4:]], which
+    bare = expand(["demos/lua/smoke.py", "demos/tcl/smoke.py", OPENSSL, f"{OPENSSL}@asm"])
+    assert bare == [
+        "demos/lua/smoke.py", "demos/tcl/smoke.py@untimed", "demos/tcl/smoke.py@timed",
+        f"{OPENSSL}@untimed", f"{OPENSSL}@timed", f"{OPENSSL}@asm-untimed", f"{OPENSSL}@asm-timed",
+    ], bare
     print("[run_demos] self-test OK")
     return 0
 
@@ -202,14 +246,25 @@ def main() -> int:
     p.add_argument("--jobs", type=int, default=4, help="concurrent demos")
     p.add_argument("--dry-run", action="store_true", help="print the schedule; run nothing")
     p.add_argument("demos", nargs="*", help="paths to smoke.py scripts, or path@config")
+    p.add_argument("--lane", choices=("linux", "windows", "macos"),
+                   help="the gate's roster for that lane kind, in place of a list")
+    p.add_argument("--openssl", choices=("c", "asm", "both"), default="both",
+                   help="the OpenSSL configuration whose entries run; the gate "
+                   "gives each Linux box one (validate_local_boxes.py --openssl-plan)")
     p.add_argument("--self-test", action="store_true", help="check the schedule and exit")
     args = p.parse_args()
     if args.self_test:
         return self_test()
+    if args.lane:
+        if args.demos:
+            p.error("--lane takes no demo list")
+        import validate_local_boxes
+
+        args.demos = [d for d, kinds in validate_local_boxes.GATING_DEMOS if args.lane in kinds]
     if not args.demos:
         p.error("no demo named")
 
-    roster = expand(args.demos)
+    roster = only_openssl(expand(args.demos), args.openssl)
     unknown = [e for e in roster if "@" in e and e not in DEMO_ENV]
     if unknown:
         p.error(f"no configuration in DEMO_ENV for {' '.join(unknown)}")

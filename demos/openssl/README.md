@@ -18,7 +18,7 @@ publishes), verifies its sha256, and extracts it under
 | `setup.py`  | yes      | Fetch + extract the pinned release, apply the one patch. Idempotent. |
 | `smoke.py`  | yes      | Configure, build and run the suite at each level.                  |
 | `badc.conf` | yes      | The Configure targets that name badc as the compiler.              |
-| `.cache/`   | no       | Cached archive, the extracted tree, one build directory per level. |
+| `.cache/`   | no       | Cached archive, the extracted tree, and a build directory (about 2 GB) per level and configuration until its suite passes. |
 
 ## Workflow
 
@@ -33,7 +33,11 @@ python demos/openssl/smoke.py --asm        # with the assembler modules
 every recipe passes, 1 with the failing recipes and subtests otherwise. It
 honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
 `HARNESS_JOBS` (default: the CPU count); `--keep-going` passes `-k` to
-`make` so every unit that fails is listed.
+`make` so every unit that fails is listed. `BADC_OPENSSL_TESTS=untimed`
+builds and runs every recipe but the timer-bound ones (step 3), and
+`=timed` runs only those over the builds an untimed run left from the same
+badc binary; the local gate runs the untimed set in its demo pool and the
+timed set after it, with the host to itself (`scripts/run_demos.py`).
 
 ## What the smoke does
 
@@ -54,8 +58,9 @@ honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
    badc's linker. The host's `ar` makes the archives: `badc --ar` writes a
    new archive per call, and the Makefile archives libcrypto in three
    calls.
-3. `make test` over every recipe but `test_quicapi`, `HARNESS_JOBS` at a
-   time, then `test_quicapi` alone. Its blocking-mode cases run the server
+3. `make test` over every recipe but `test_quicapi` and
+   `test_quic_multistream`, `HARNESS_JOBS` at a time, then those two alone.
+   `test_quicapi`'s blocking-mode cases run the server
    in a thread that advances the test's clock 1 ms per pass while the
    client handshakes in real time, so a loaded machine can let the
    server's idle timeout end the connection: with 12 recipes at a time on

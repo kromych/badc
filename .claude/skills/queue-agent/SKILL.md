@@ -93,10 +93,16 @@ lane that fails with OOM or `echo: write error` is rerun alone.
 Run the suites, the demos and the kernel step through `scripts/cargo_test.py`,
 `scripts/run_demos.py` and `demos/linux/verify.py`, on every machine the Mac
 included: they hold `~/.badc-load.lock` shared, and the demo roster's timer-bound
-entry (`tcl@timed`, after the pool) holds it exclusively, so it runs with no lane's
-load beside it. Name tcl in the roster as the gate's `GATING_DEMOS` does,
-`demos/tcl/smoke.py@untimed demos/tcl/smoke.py@timed`; the runner splits a bare
-`demos/tcl/smoke.py` the same way.
+entries (the box's `openssl@timed` or `openssl@asm-timed`, and `tcl@timed`,
+after the pool) hold it exclusively, so they run with no lane's load beside them.
+Take the roster from the gate: `python3 scripts/run_demos.py --jobs 4 --lane linux`
+(`windows`, `macos`) runs the gate's `GATING_DEMOS` for that lane kind, so a lane
+cannot miss an entry the gate has. On the Linux lanes add `--openssl c` or
+`--openssl asm`, the configuration `python3 scripts/validate_local_boxes.py
+--openssl-plan` (in your worktree, read-only) names for the box's architecture:
+each gate run builds one OpenSSL configuration per box, and that is the next
+run's. Its first run in a tree fetches the release (sha256-verified) from the
+vendor-deps mirror, which answers without a token.
 
 ## Validation per commit (before reporting)
 
@@ -105,13 +111,14 @@ the badc binary, and demos silently use a stale one (bundled headers are compile
 into it). Run the suites through `scripts/cargo_test.py`, and check that every
 binary's announced test count equals its reported count.
 - Mac (your worktree): fmt, clippy, the no_std lib build, the release and debug
-  suites, the demos (`scripts/run_demos.py`, in the worktree).
+  suites, the demos (`scripts/run_demos.py --lane macos`, in the worktree).
 - Linux boxes: release and debug suites; the pressure rerun
-  (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`); demos;
-  the throughput check; the snapshot-drift check; the kernel step
+  (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`); the
+  demos (`--lane linux --openssl <the plan's>`); the throughput check; the snapshot-drift check; the
+  kernel step
   (`demos/linux/verify.py`, boots included) when the change touches codegen, types,
   the ABI, the front end, the linker or the libc headers.
-- Windows boxes: build, the release and debug suites, the Windows demo set, for
+- Windows boxes: build, the release and debug suites, the demos (`--lane windows`), for
   anything touching codegen, types, the front end, the linker or the headers.
   Tests that compile for the host target need explicit targets (`run_fixture_for`)
   to cover the other formats.

@@ -5407,6 +5407,129 @@ fn a_native_image_takes_the_c_runtime_from_its_system_module() {
     }
 }
 
+/// A kernel32 function the unit declares itself, with no header or binding,
+/// imports from kernel32.dll, which a Windows image links by default as
+/// link.exe does through the C runtime library's `/DEFAULTLIB:kernel32.lib`.
+/// The image gains no other import, and runs on a host of its machine.
+#[test]
+fn a_self_declared_kernel32_function_imports_from_kernel32() {
+    let host = if cfg!(target_arch = "aarch64") {
+        "windows-arm64"
+    } else {
+        "windows-x64"
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let dir = tempdir(&format!("self-declared-kernel32-{target}"));
+        write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+        write_source(
+            &dir,
+            "own.c",
+            "typedef unsigned long DWORD;\ntypedef void *HMODULE;\n\
+             __declspec(dllimport) DWORD __stdcall GetLastError(void);\n\
+             __declspec(dllimport) HMODULE __stdcall GetModuleHandleA(const char *name);\n\
+             int __stdcall lstrlenA(const char *s);\n\
+             int main(void)\n\
+             { if (!GetModuleHandleA(0)) return 1;\n\
+               if (lstrlenA(\"abcd\") != 4) return 2;\n\
+               return (int)GetLastError() * 0; }\n",
+        );
+        let link = |src: &str| {
+            let exe = dir.join(src.replace(".c", ".exe"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args([src, "-o"])
+                    .arg(&exe)
+                    .current_dir(&dir),
+                &format!("link {src} for {target}"),
+            );
+            exe
+        };
+        let plain = pe_imports(&std::fs::read(link("plain.c")).unwrap());
+        let exe = link("own.c");
+        let mut own = pe_imports(&std::fs::read(&exe).unwrap());
+        for name in ["GetLastError", "GetModuleHandleA", "lstrlenA"] {
+            let import = ("kernel32.dll".to_string(), name.to_string());
+            assert!(own.contains(&import), "{target}: {own:?}");
+            if !plain.contains(&import) {
+                own.retain(|i| *i != import);
+            }
+        }
+        own.sort();
+        let mut plain = plain;
+        plain.sort();
+        assert_eq!(own, plain, "{target}: the imports besides the three");
+        if cfg!(windows) && target == host {
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "{target}");
+        }
+    }
+}
+
+/// A self-declared function kernel32.dll does not export stays an undefined
+/// reference: an unknown name, and a user32 one, which link.exe does not
+/// link by default either.
+#[test]
+fn a_name_kernel32_does_not_export_is_undefined() {
+    for target in ["windows-x64", "windows-arm64"] {
+        let dir = tempdir(&format!("kernel32-undefined-{target}"));
+        write_source(
+            &dir,
+            "u.c",
+            "int __stdcall MessageBoxA(void *, const char *, const char *, unsigned);\n\
+             void NotInKernel32(void);\n\
+             int main(void) { NotInKernel32(); return MessageBoxA(0, \"\", \"\", 0); }\n",
+        );
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["u.c", "-o", "u.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        for name in ["NotInKernel32", "MessageBoxA"] {
+            let want = format!("undefined reference to `{name}` [B6010]");
+            assert!(
+                !out.status.success() && err.contains(&want),
+                "{target}: {err}"
+            );
+        }
+    }
+}
+
+/// A driver or a native application cannot load kernel32.dll and takes none
+/// of its functions by default: a self-declared one is undefined.
+#[test]
+fn a_native_image_takes_no_kernel32_function() {
+    for target in ["windows-x64", "windows-arm64"] {
+        for kind in ["driver", "native"] {
+            let dir = tempdir(&format!("native-no-kernel32-{kind}-{target}"));
+            write_source(
+                &dir,
+                "image.c",
+                &format!(
+                    "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n\
+                     unsigned long __stdcall GetLastError(void);\n\
+                     long Entry(void *a, void *b) {{ (void)a; (void)b; \
+                     return (long)GetLastError(); }}\n"
+                ),
+            );
+            let out = Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["image.c", "-o", "image.sys"])
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success()
+                    && err.contains("undefined reference to `GetLastError` [B6010]"),
+                "{target} {kind}: {err}"
+            );
+        }
+    }
+}
+
 /// A C runtime name the system module of a native-subsystem image does not
 /// export is an undefined reference naming the module, unless an import
 /// library on the command line supplies it.

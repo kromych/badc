@@ -184,6 +184,11 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     {
         subsystem_override = Some(badc::Subsystem::Windows);
     }
+    if let Some(lib) = target_libc.as_mut()
+        && !loads_user_mode_crt(cli, subsystem_override)
+    {
+        lib.drop_default_dll();
+    }
     let mut runtime = Vec::new();
     embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
     slots[0] = Slot::Fixed(runtime);
@@ -238,6 +243,23 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         },
         &mut stats,
     );
+}
+
+/// Whether an image may import the user-mode C library: it is neither
+/// freestanding nor of a passthrough-entry subsystem (native / EFI).
+fn loads_user_mode_crt(cli: &Cli, subsystem: Option<badc::Subsystem>) -> bool {
+    !cli.freestanding
+        && !matches!(
+            subsystem,
+            Some(
+                badc::Subsystem::Native
+                    | badc::Subsystem::Driver
+                    | badc::Subsystem::EfiApplication
+                    | badc::Subsystem::EfiBootServiceDriver
+                    | badc::Subsystem::EfiRuntimeDriver
+                    | badc::Subsystem::EfiRom
+            )
+        )
 }
 
 /// The front end the driver's own sources compile under, as a C library is
@@ -299,20 +321,7 @@ impl EmbeddedSources<'_> {
         subsystem_override: Option<badc::Subsystem>,
         objs: &mut Vec<badc::NativeObject>,
     ) {
-        // An image may import the user-mode C library unless it is
-        // freestanding or a passthrough-entry subsystem (native / EFI).
-        let links_crt = !self.cli.freestanding
-            && !matches!(
-                subsystem_override,
-                Some(
-                    badc::Subsystem::Native
-                        | badc::Subsystem::Driver
-                        | badc::Subsystem::EfiApplication
-                        | badc::Subsystem::EfiBootServiceDriver
-                        | badc::Subsystem::EfiRuntimeDriver
-                        | badc::Subsystem::EfiRom
-                )
-            );
+        let links_crt = loads_user_mode_crt(self.cli, subsystem_override);
         // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
         // links only when the writer emits an entry stub -- not into
         // shared libraries.
@@ -1050,8 +1059,8 @@ fn select_archive_members(
                 }
             }
         }
-        if !lib.library().exports.is_empty() {
-            shared_libs.push(lib.library().clone());
+        for l in lib.libraries().filter(|l| !l.exports.is_empty()) {
+            shared_libs.push(l.clone());
         }
     }
     (native_objs, sel.inclusions)

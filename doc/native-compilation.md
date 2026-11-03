@@ -233,7 +233,17 @@ module does not export is an undefined reference. The check reads lists of the
 C runtime names each module exports on x64 and arm64, measured from Windows
 11's system images (`src/c5/object/nt_crt.rs`). An import library or DLL on
 the command line that supplies a name outranks the header's binding, on every
-PE image, as with link.exe and GNU ld. With `console`
+PE image, as with link.exe and GNU ld.
+
+A `console` or `windows` image links `kernel32.dll` by default, as link.exe
+does through the C runtime library's `/DEFAULTLIB:kernel32.lib` and the MinGW
+driver through `-lkernel32`: a function no input resolves, one the source
+declares itself with no header or binding, is imported from `kernel32.dll` when
+kernel32 exports it. The check reads kernel32's export lists on x64 and arm64,
+measured from Windows 11's system images (`src/c5/linker/kernel32.exports`);
+only referenced names are imported, and a native-subsystem or EFI image takes
+none. user32, advapi32 and shell32, which the MinGW driver also passes and
+link.exe does not, are not default libraries. With `console`
 / `windows`, `entrypoint(WinMain)` plus `subsystem(windows)` is what a Win32
 GUI app needs to skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the same source builds

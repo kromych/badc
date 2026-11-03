@@ -51,6 +51,8 @@ mod got_relax;
 #[cfg(feature = "std")]
 mod image;
 mod import_slots;
+#[cfg(feature = "std")]
+pub(crate) mod kernel32;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod lds;

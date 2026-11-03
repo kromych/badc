@@ -5727,8 +5727,7 @@ Disassembly of section .text:
                	movl	$0xa8, %eax
                	retq
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0xa, %eax
-               	movl	%eax, (%rcx)
+               	movl	$0xa, <rip> # <addr>
                	movl	$0x5, %esi
                	movq	%rsi, %rax
                	lock

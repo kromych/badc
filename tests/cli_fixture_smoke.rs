@@ -941,6 +941,53 @@ fn a_binding_alone_leaves_a_library_call_its_prototype() {
     }
 }
 
+/// Run `exe`, its exit code; `None` once it has run `secs` seconds, when the
+/// process is killed.
+fn run_with_deadline(exe: &std::path::Path, secs: u64) -> Option<i32> {
+    let mut child = Command::new(exe).spawn().expect("start the program");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        if let Some(status) = child.try_wait().expect("wait for the program") {
+            return status.code();
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+// C17 7.17.2.2: `atomic_init` gives allocated storage a valid state without
+// taking the lock word its 0xff bytes hold. Freestanding on every host, the
+// layout every target then takes, and hosted on Windows, at -O0 and -O.
+#[test]
+fn atomic_init_gives_allocated_storage_a_valid_state() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-atomic-init");
+    let src = fixtures_dir().join("atomic_init_gives_allocated_storage_a_valid_state.c");
+    let mut modes = vec!["-ffreestanding"];
+    if cfg!(windows) {
+        modes.push("-fhosted");
+    }
+    for mode in modes {
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("init{mode}{level}.exe"));
+            let out = Command::new(badc)
+                .args(["-q", mode, level])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{mode} {level}: {err}");
+            assert_eq!(run_with_deadline(&exe, 30), Some(0), "{mode} {level}");
+        }
+    }
+}
+
 // strtod and printf called with no header included. For windows-x64 and
 // windows-arm64 the bundled C library defines both and no header binds them
 // to a DLL, so the link resolves the calls without compiling the unit again.

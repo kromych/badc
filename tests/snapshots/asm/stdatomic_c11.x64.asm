@@ -90,9 +90,7 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rax
                	movl	$0xbfa00000, %ecx       # imm = 0xBFA00000
                	movq	%rcx, %xmm14
-               	movss	%xmm14, -0x8(%rbp)
-               	movl	-0x8(%rbp), %edx
-               	movl	%edx, (%rax)
+               	movss	%xmm14, -0x28(%rbp)
                	movl	(%rax), %edx
                	movl	%edx, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0
@@ -109,7 +107,6 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %edx
                	movq	%rdx, %r10
                	xchgl	%r10d, (%rax)
-               	leaq	-0x28(%rbp), %rax
                	movl	(%rax), %eax
                	movl	%eax, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0

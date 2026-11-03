@@ -88,6 +88,9 @@ pub(crate) fn walk_function(
         named_refs,
         freestanding,
     };
+    if !fun.is_naked {
+        ctx.release_param_lock_words(&mut b);
+    }
     let terminated = match ast.body {
         Some(root) => {
             ctx.label_scopes = ctx.label_scope_chains(root);

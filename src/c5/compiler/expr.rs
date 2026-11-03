@@ -873,6 +873,15 @@ impl Compiler {
                     order_at(self, 2).for_store(),
                 )
             }
+            "__c11_atomic_init" => {
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
+                (
+                    AtomicKind::Init,
+                    alloc::vec![ptr, v],
+                    int_ty,
+                    MemOrder::Relaxed,
+                )
+            }
             // Generic forms: the value moves through a pointer rather than
             // by value, so they work for any-size objects.
             "__atomic_load" => {
@@ -1723,7 +1732,10 @@ impl Compiler {
             if typed_overflow_builtin(name).is_some() {
                 return Some(BuiltinCall::Overflow);
             }
-            if name.starts_with("__atomic_") || name.starts_with("__sync_") {
+            if name.starts_with("__atomic_")
+                || name.starts_with("__sync_")
+                || name == "__c11_atomic_init"
+            {
                 return Some(BuiltinCall::GccAtomic);
             }
             if let Some(kind) = intrinsic_id.and_then(atomic_kind_from_intrinsic) {

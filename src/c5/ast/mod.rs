@@ -195,6 +195,9 @@ pub(crate) enum AtomicKind {
     /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
     /// `*val` into `*p`. `args` are `[p, val]`; no value.
     StoreFrom,
+    /// `atomic_init(p, v)` (C17 7.17.2.2), clang's `__c11_atomic_init`: the
+    /// non-atomic store of `v`, an object's lock word cleared. No value.
+    Init,
 }
 
 /// Storage-unit width + bit position for a bitfield reference. The

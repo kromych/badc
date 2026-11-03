@@ -83,14 +83,63 @@ impl<'a> Walker<'a> {
 
     /// An automatic object's lock word starts clear, as a static one's does.
     pub(super) fn release_atomic_lock_word(&self, b: &mut SsaBuilder, slot: i64, ty: i64) {
-        if !is_atomic_object_ty(ty) {
-            return;
-        }
-        if let AtomicAccess::LockWord(lock_off) = self.atomic_object_layout(ty).access {
+        if self.lock_word_of(ty).is_some() {
             let at = b.local_addr(slot);
+            self.clear_lock_word(b, at, ty);
+        }
+    }
+
+    fn lock_word_of(&self, ty: i64) -> Option<usize> {
+        if !is_atomic_object_ty(ty) {
+            return None;
+        }
+        match self.atomic_object_layout(ty).access {
+            AtomicAccess::LockWord(lock_off) => Some(lock_off),
+            _ => None,
+        }
+    }
+
+    fn clear_lock_word(&self, b: &mut SsaBuilder, at: ValueId, ty: i64) {
+        if let Some(lock_off) = self.lock_word_of(ty) {
             let lock = b.binop_imm(BinOp::Add, at, lock_off as i64);
             let zero = b.imm(0);
             b.store(lock, zero, StoreKind::I32);
+        }
+    }
+
+    /// C17 7.17.2.2 `atomic_init`: the object's non-atomic initialization,
+    /// which stores the value and clears a lock word without taking it.
+    pub(super) fn walk_atomic_init(
+        &mut self,
+        b: &mut SsaBuilder,
+        args: &[ExprId],
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let value_ty = non_atomic_ty(ty);
+        let addr = self.walk_expr_rvalue(b, args[0])?;
+        let mut value = self.walk_expr_rvalue(b, args[1])?;
+        if is_struct_value_ty(value_ty) {
+            let (size, align) = self.value_size_align(value_ty);
+            b.mcpy(addr, value, size as i64, align as u32);
+        } else {
+            let kind = store_kind_for(value_ty, self.target);
+            if matches!(kind, StoreKind::F32) {
+                value = b.fp_narrow_to_f32(value);
+            }
+            b.store(addr, value, kind);
+        }
+        self.clear_lock_word(b, addr, ty);
+        Ok(b.imm(0))
+    }
+
+    /// A parameter of an `_Atomic` type with a lock word: the caller passed
+    /// the non-atomic value (C17 6.5.2.2p7), which leaves the lock unset.
+    pub(super) fn release_param_lock_words(&self, b: &mut SsaBuilder) {
+        let fun = self.fun;
+        for (&ty, &slot) in fun.param_tys.iter().zip(&fun.param_local_slots) {
+            if slot < 0 {
+                self.release_atomic_lock_word(b, slot, ty);
+            }
         }
     }
 

@@ -58,10 +58,11 @@ typedef enum memory_order {
 
 #define kill_dependency(y) (y)
 
-// 7.17.2 initialization. 7.17.2.2 requires no synchronization of
-// `atomic_init`, so it is the relaxed store.
+// 7.17.2 initialization. `atomic_init` is the object's non-atomic
+// initialization (7.17.2.2p2): a plain store, clearing a lock word the
+// object's layout carries without taking it, as clang's builtin does.
 #define ATOMIC_VAR_INIT(value) (value)
-#define atomic_init(obj, value) __atomic_store_n((obj), (value), memory_order_relaxed)
+#define atomic_init(obj, value) __c11_atomic_init((obj), (value))
 
 // 7.17.5 lock-free property. Naturally-aligned scalars are lock-free.
 #define ATOMIC_BOOL_LOCK_FREE 2

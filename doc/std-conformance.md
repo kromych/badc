@@ -155,8 +155,13 @@ such an object differently and cannot share it. MSVC does not document the
 values of its lock word, so an `_Atomic` object of a size other than 1, 2, 4
 or 8 bytes cannot be shared with code MSVC compiled.
 
-An automatic object with a lock word starts with the lock clear. No array type
-and no bit-field is `_Atomic`. A member of an atomic structure or union is not
+A lock word starts clear in a static object (zero-initialized), an automatic
+object, a compound literal and a parameter, and `atomic_init` clears it
+without taking it, so an object in allocated storage becomes valid through
+`atomic_init` (C17 7.17.2.2). A copy of an atomic object's bytes, by `memcpy`
+or by assigning a structure holding one, copies its lock word, which is clear
+unless another thread holds the lock during the copy. No array type and no
+bit-field is `_Atomic`. A member of an atomic structure or union is not
 accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 
 ### Standard predefined macros
@@ -404,7 +409,8 @@ model; only `-fgnu89-inline` does.
   (7.17.1). `consume` is treated as acquire. An order the operation may not
   take (7.17.7.1p2, 7.17.7.2p2), or one that is not a constant, is treated as
   seq_cst. `atomic_compare_exchange_weak` is the strong form. `atomic_flag` is
-  a byte, and `atomic_init` is a relaxed store (7.17.2.2). The optimizer does
+  a byte, and `atomic_init` is a plain store that clears the object's lock
+  word without taking it (7.17.2.2). The optimizer does
   not forward, merge, hoist or remove an atomic access.
 
   | operation                               | x86-64                                   | AArch64                                    |

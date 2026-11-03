@@ -41,6 +41,9 @@ impl<'a> Walker<'a> {
         elem_ty: i64,
         order: MemOrder,
     ) -> Result<ValueId, WalkError> {
+        if kind == AtomicKind::Init {
+            return self.walk_atomic_init(b, args, elem_ty);
+        }
         if is_atomic_object_ty(elem_ty) && self.atomic_builtin_takes_object_path(elem_ty) {
             return self.walk_atomic_object_builtin(b, kind, args, elem_ty);
         }
@@ -69,6 +72,7 @@ impl<'a> Walker<'a> {
         }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
+            AtomicKind::Init => unreachable!("lowered ahead of the match"),
             AtomicKind::Load => {
                 let bits = b.atomic_load(addr, width, order);
                 Ok(self.atomic_value_from_bits(b, bits, elem_ty))
@@ -200,6 +204,7 @@ impl<'a> Walker<'a> {
         let addr = self.walk_expr_rvalue(b, args[0])?;
         let zero = |b: &mut SsaBuilder| (b.imm(0), b.imm(0));
         match kind {
+            AtomicKind::Init => unreachable!("lowered by walk_atomic"),
             AtomicKind::Load | AtomicKind::LoadInto => {
                 let prior = if matches!(kind, AtomicKind::Load) {
                     let z = zero(b);

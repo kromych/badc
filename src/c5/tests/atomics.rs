@@ -1241,6 +1241,57 @@ fn a_freestanding_large_atomic_needs_no_runtime_function() {
     );
 }
 
+/// Function `name`'s instructions in an `--dump-ssa` text.
+fn ssa_body(text: &str, name: &str) -> String {
+    let head = alloc::format!("; name={name}\n");
+    let start = text.find(&head).expect(name) + head.len();
+    let body = &text[start..];
+    String::from(body.split("\n; name=").next().unwrap_or(body))
+}
+
+/// `atomic_init` (C17 7.17.2.2) copies the value and clears the lock word
+/// with plain stores, taking no lock, wherever the object has one:
+/// freestanding on every target and hosted on Windows. A compound literal
+/// and a parameter start with theirs clear too.
+#[test]
+fn atomic_init_and_fresh_objects_take_no_lock() {
+    let src = "#include <stdatomic.h>\n\
+               struct s3 { char c[3]; };\n\
+               void f_init(_Atomic struct s3 *p, struct s3 v) { atomic_init(p, v); }\n\
+               int f_param(_Atomic struct s3 p) { struct s3 r = p; return r.c[0]; }\n\
+               int f_literal(void) { _Atomic struct s3 *p = &(_Atomic struct s3){{1, 2, 3}}; \
+                 struct s3 r = *p; return r.c[0]; }\n";
+    let cases = (Target::ALL.iter().map(|&t| (t, true)))
+        .chain([(Target::WindowsX64, false), (Target::WindowsAarch64, false)]);
+    for (target, freestanding) in cases {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding);
+        let program = Compiler::with_options(String::from(src), target, opts)
+            .compile()
+            .expect("compile");
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default().with_dump_ssa()
+        };
+        let text = crate::c5::codegen::lower_for(&program, target, nopts)
+            .expect("lower")
+            .ssa_dump;
+        let body = |name: &str| ssa_body(&text, name);
+        let init = body("f_init");
+        assert!(
+            !init.contains("Atomic") && init.contains("Mcpy") && init.contains("kind=I32"),
+            "{target:?} freestanding={freestanding}: {init}"
+        );
+        for name in ["f_param", "f_literal"] {
+            let f = body(name);
+            let clear = f.find("kind=I32").expect("a lock word store");
+            let acquire = f.find("AtomicRmw").expect("the lock acquired");
+            assert!(clear < acquire, "{target:?} {name}: {f}");
+        }
+    }
+}
+
 /// An automatic object with a lock word, alone or in an array, starts with
 /// its lock clear: the 4-byte store at offset 4 of a 3-byte structure, and
 /// a zero fill over the array.
@@ -1262,14 +1313,7 @@ fn automatic_lock_words_start_clear() {
     let text = crate::c5::codegen::lower_for(&program, Target::WindowsX64, nopts)
         .expect("lower")
         .ssa_dump;
-    let body = |name: &str| {
-        let start = text.find(&alloc::format!("; name={name}\n")).expect(name);
-        text[start..]
-            .split("\n; ---")
-            .next()
-            .unwrap_or("")
-            .to_string()
-    };
+    let body = |name: &str| ssa_body(&text, name);
     assert!(
         body("f_one").contains("disp=0, value=") && body("f_one").contains("kind=I32"),
         "{}",

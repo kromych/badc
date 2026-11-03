@@ -23,7 +23,6 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let ty = *ty;
                 let init_clone = init.clone();
-                self.release_atomic_lock_word(b, slot, ty);
                 self.emit_local_init(b, slot, ty, &init_clone)
             }
             Decl::Vla {
@@ -207,6 +206,7 @@ impl<'a> Walker<'a> {
         ty: i64,
         init: &LocalInit,
     ) -> Result<(), WalkError> {
+        self.release_atomic_lock_word(b, slot, ty);
         match init {
             LocalInit::None => Ok(()),
             LocalInit::Scalar(init_id) => {

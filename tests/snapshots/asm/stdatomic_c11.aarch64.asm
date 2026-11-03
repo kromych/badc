@@ -79,9 +79,7 @@ Disassembly of section .text:
                	ret
                	sub	x1, x29, #0x28
                	fmov	s0, #-1.25000000
-               	stur	s0, [x29, #-0x8]
-               	ldur	w2, [x29, #-0x8]
-               	str	w2, [x1]
+               	stur	s0, [x29, #-0x28]
                	ldar	w2, [x1]
                	stur	w2, [x29, #-0x8]
                	ldur	s1, [x29, #-0x8]

@@ -182,6 +182,16 @@ pub struct CodeReloc {
     pub addend: i64,
 }
 
+/// An undeclared library function the auto-include retry declared by
+/// force-including the standard header that declares it (C99 7.1.4p2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoInclude {
+    pub name: String,
+    pub header: String,
+    /// The header binds `name` to a library with `#pragma binding`.
+    pub bound: bool,
+}
+
 /// Compiled program ready for the VM.
 ///
 /// `data` is the static data segment (string literals plus zero-
@@ -481,12 +491,10 @@ pub struct Program {
     pub entry_pragma: Option<String>,
     /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
     pub default_libs: Vec<String>,
-    /// Function names the auto-include retry bound to a bundled
-    /// header during [`crate::c5::Compiler::compile`]. The driver
-    /// consults this in a multi-TU build: a name another input
-    /// defines is recompiled as an implicit extern so the user's
-    /// definition wins over the header's library binding.
-    pub auto_includes: Vec<String>,
+    /// What the auto-include retry of [`crate::c5::Compiler::compile`]
+    /// declared, in the order it force-included the headers. A re-compile
+    /// of the unit force-includes the same headers.
+    pub auto_includes: Vec<AutoInclude>,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE

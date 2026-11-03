@@ -3769,6 +3769,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("builtin_library_functions_need_no_declaration.c", 0),
+    ("undeclared_library_calls_keep_the_header_types.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
     ("x86_system_builtins_read_the_processor.c", 0),
@@ -4649,6 +4650,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_w_operand_widths.c", 0),
     ("inline_asm_a64_w_values_keep_their_bits.c", 0),
     ("builtin_library_functions_need_no_declaration.c", 0),
+    ("undeclared_library_calls_keep_the_header_types.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
     ("x86_system_builtins_read_the_processor.c", 0),

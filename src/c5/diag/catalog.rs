@@ -114,7 +114,7 @@ catalog! {
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
     2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a function used before a prototype declares it, so its return type is `int`";
     2006, "undefined-function", [], Warning, Controllable,
         [DEFAULT], Live,

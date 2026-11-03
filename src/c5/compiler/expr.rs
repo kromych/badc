@@ -1629,7 +1629,7 @@ impl Compiler {
         // A diagnostic about the call names it as written, `__builtin_strlen`
         // where that binds `strlen`, as gcc and clang do.
         let spelled = self.symbols[id_idx].name.clone();
-        let id_idx = self.bind_call_target(id_idx)?;
+        let id_idx = self.bind_call_target(id_idx);
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
                 let name = self.symbols[id_idx].name.clone();
@@ -1666,9 +1666,8 @@ impl Compiler {
     }
 
     /// The symbol a call binds to: a `__builtin_*` alias of a library
-    /// function binds to that function, and a name the driver listed for
-    /// C89 6.3.2.2 implicit declaration is declared here.
-    fn bind_call_target(&mut self, id_idx: usize) -> Result<usize, C5Error> {
+    /// function binds to that function.
+    fn bind_call_target(&mut self, id_idx: usize) -> usize {
         let mut id_idx = id_idx;
         // A `__builtin_*` alias of a library function binds to the function
         // itself, past any macro of the library name.
@@ -1686,28 +1685,7 @@ impl Compiler {
                 id_idx = self.builtin_library_symbol(id_idx);
             }
         }
-        // C89 6.3.2.2 implicit declaration, for the names the driver listed:
-        // the call binds `extern int name();` against the link set's own
-        // definition.
-        if self.symbols[id_idx].class == 0
-            && !self.implicit_extern_fns.is_empty()
-            && self
-                .implicit_extern_fns
-                .iter()
-                .any(|n| n == &self.symbols[id_idx].name)
-        {
-            // The declaration lands in the innermost block and unbinds at its
-            // exit; the entity stays on the slot for link resolution.
-            self.rebind_scoped(id_idx)?;
-            self.symbols[id_idx].class = Token::Fun as i64;
-            self.symbols[id_idx].scoped_fn_decl = true;
-            self.symbols[id_idx].type_ = Ty::Int as i64;
-            self.symbols[id_idx].fn_type.params.prototyped = false;
-            self.symbols[id_idx].implicit_return_int = true;
-            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
-            self.symbols[id_idx].defined_here = false;
-        }
-        Ok(id_idx)
+        id_idx
     }
 
     /// The builtin a call on `id_idx` lowers to, or `None` for a call to
@@ -2425,19 +2403,6 @@ impl Compiler {
             count_is_constraint: s.prototyped() && !is_sys_call,
             prototyped: s.prototyped(),
         };
-        // A callee left at a C89 implicit declaration's `int` truncates a
-        // wider return to 32 bits; warn once.
-        if self.symbols[id_idx].implicit_return_int && self.warned_implicit_ret.insert(id_idx) {
-            let name = self.symbols[id_idx].name.clone();
-            let line = self.lex.line;
-            self.warn_at(
-                Code::IMPLICIT_FUNCTION_DECLARATION,
-                line,
-                alloc::format!(
-                    "`{name}` is called without a return-type prototype; assuming `int`"
-                ),
-            );
-        }
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
         // the right-to-left re-push and the out-pointer push do not, so the

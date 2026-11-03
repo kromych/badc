@@ -80,13 +80,6 @@ pub(crate) struct Symbol {
     /// variadic call's ABI.
     pub h_fn_type: FnType,
 
-    /// True while the function's return type is the implicit `int` of a
-    /// C89 implicit declaration (6.3.2.2). A call site warns once (the
-    /// result is truncated to 32 bits if the function really returns a
-    /// pointer or wider type). Cleared when a declaration supplies an
-    /// explicit return type.
-    pub implicit_return_int: bool,
-
     /// The flat index of the `#pragma binding` that names this identifier.
     /// A binding declares nothing: a file-scope function declaration of the
     /// name makes it a `Token::Sys` symbol that calls through the binding.
@@ -968,7 +961,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
             fn_type: _,
             h_fn_type: _,
-            implicit_return_int: _,
             binding_slot: _,
             is_noreturn: _,
             is_thread_local,

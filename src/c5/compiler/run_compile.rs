@@ -961,8 +961,6 @@ impl Compiler {
         // For an object the spelling is the object's; for a function it is
         // the return type's.
         self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
-        // An explicit return type replaces a C89 implicit declaration's `int`.
-        self.symbols[id_idx].implicit_return_int = false;
 
         Ok(PriorDecl {
             was_sys,

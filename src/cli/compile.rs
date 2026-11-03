@@ -98,7 +98,7 @@ pub(crate) struct NativeTu {
     pub(crate) obj: badc::NativeObject,
     pub(crate) entry: Option<String>,
     pub(crate) subsystem: Option<badc::Subsystem>,
-    pub(crate) auto_includes: Vec<String>,
+    pub(crate) auto_includes: Vec<badc::AutoInclude>,
 }
 
 /// Compile `units` and return each payload in unit order. `compile`
@@ -218,22 +218,35 @@ pub(crate) fn read_tu_source(
     }
 }
 
+/// A second compile of a C unit, which the link needs when it defines a
+/// library function the unit's auto-included header binds. It keeps the
+/// first compile's declarations: the same headers are force-included.
+/// The include trace and the dependency rule are the first compile's.
+pub(crate) struct Recompile {
+    pub(crate) auto_headers: Vec<String>,
+    pub(crate) link_defined: Vec<String>,
+}
+
 /// The front-end options one translation unit compiles (or preprocesses)
-/// under. `implicit_externs` applies to the C front end only.
+/// under. `recompile` applies to the C front end only.
 pub(crate) fn tu_compile_options(
     src_path: &str,
-    implicit_externs: &[String],
+    recompile: Option<&Recompile>,
     cfg: &CompileCfg,
 ) -> badc::CompileOptions {
-    cfg.front
-        .compile_options(src_path)
+    let traced = recompile.is_none() && (cfg.front.show_includes || cfg.deps.is_some());
+    let mut opts = (cfg.front.compile_options(src_path))
         .with_asm_source(cfg.front.source_kind(src_path).is_asm())
-        .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
+        .with_track_includes(traced)
         .with_export_all_functions(cfg.export_all)
-        .with_implicit_extern_fns(implicit_externs.to_vec())
         .with_no_entry_point(true)
         .with_elf_class(cfg.reloc_opts.elf_class)
-        .with_code_model(cfg.reloc_opts.code_model)
+        .with_code_model(cfg.reloc_opts.code_model);
+    if let Some(r) = recompile {
+        opts.force_includes.extend(r.auto_headers.iter().cloned());
+        opts = opts.with_link_defined_fns(r.link_defined.clone());
+    }
+    opts
 }
 
 /// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
@@ -246,7 +259,7 @@ pub(crate) fn assemble_tu(
     log: &mut TuLog,
 ) -> Result<badc::Program, ()> {
     let src_bytes = read_tu_source(src_path, cfg, log)?;
-    let copts = tu_compile_options(src_path, &[], cfg);
+    let copts = tu_compile_options(src_path, None, cfg);
     let text = if cfg.front.source_kind(src_path) == (SourceKind::Asm { preprocess: true }) {
         let pp = badc::Compiler::preprocess_unit(src_bytes, cfg.target, copts.clone(), false);
         let unit = pp.map_err(|e| log.error(cfg.stderr_is_tty, "", &e))?;
@@ -286,7 +299,7 @@ pub(crate) fn assemble_tu(
 /// assembler.
 pub(crate) fn translate_tu(
     src_path: &str,
-    implicit_externs: &[String],
+    recompile: Option<&Recompile>,
     cfg: &CompileCfg,
     log: &mut TuLog,
 ) -> Result<badc::Program, ()> {
@@ -294,14 +307,14 @@ pub(crate) fn translate_tu(
         return assemble_tu(src_path, cfg, log);
     }
     let src_bytes = read_tu_source(src_path, cfg, log)?;
-    let copts = tu_compile_options(src_path, implicit_externs, cfg);
+    let copts = tu_compile_options(src_path, recompile, cfg);
     let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
-    if cfg.front.show_includes {
+    if cfg.front.show_includes && recompile.is_none() {
         for line in compiler.include_trace() {
             log.raw(line);
         }
     }
-    if let Some(d) = cfg.deps
+    if let Some(d) = cfg.deps.filter(|_| recompile.is_none())
         && compiler.preprocess_error().is_none()
         && emit_deps(
             src_path,
@@ -328,18 +341,16 @@ pub(crate) fn translate_tu(
 
 /// Compile one `.c` source to an in-memory relocatable object for the
 /// native-link path, capturing every diagnostic in the returned log.
-/// `implicit_externs` is empty on the first pass; the auto-include
-/// retry passes the names to rebind (and stays quiet about "compiling").
 pub(crate) fn compile_native_tu(
     src_path: &str,
-    implicit_externs: &[String],
+    recompile: Option<&Recompile>,
     cfg: &CompileCfg,
 ) -> (TuLog, Result<NativeTu, ()>) {
     let mut log = TuLog::default();
-    if cfg.multi_tu && !cfg.quiet && implicit_externs.is_empty() {
+    if cfg.multi_tu && !cfg.quiet && recompile.is_none() {
         log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
     }
-    let program = match translate_tu(src_path, implicit_externs, cfg, &mut log) {
+    let program = match translate_tu(src_path, recompile, cfg, &mut log) {
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };
@@ -388,7 +399,7 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     if cfg.multi_tu && !cfg.quiet {
         log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
     }
-    let program = match translate_tu(src_path, &[], cfg, &mut log) {
+    let program = match translate_tu(src_path, None, cfg, &mut log) {
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };

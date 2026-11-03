@@ -10637,19 +10637,13 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     // `__builtin_memcmp` is supplied by the compiler, so what the retry
     // recovers is the library name the builtin binds to.
     assert!(
-        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        retried.auto_includes.iter().any(|a| a.name == "memcmp"),
         "expected the retry to record the recovered name, got {:?}",
         retried.auto_includes
     );
 
-    let headers: Vec<String> = retried
-        .auto_includes
-        .iter()
-        .map(|n| {
-            crate::c5::headers::header_declaring(n, target)
-                .expect("the recovered name names a header")
-                .to_string()
-        })
+    let headers: Vec<String> = (retried.auto_includes.iter())
+        .map(|a| a.header.clone())
         .collect();
     let forced = CompileOptions::default().with_force_includes(headers);
     let direct = Compiler::with_options(src.to_string(), target, forced)
@@ -10711,7 +10705,7 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
             .expect("auto-include retry recovers the undeclared call")
     });
     assert!(
-        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        retried.auto_includes.iter().any(|a| a.name == "memcmp"),
         "expected a retry, got {:?}",
         retried.auto_includes
     );
@@ -10768,7 +10762,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
             .compile()
             .expect("auto-include retry recovers the undeclared call")
     });
-    assert!(retried.auto_includes.iter().any(|n| n == "memcmp"));
+    assert!(retried.auto_includes.iter().any(|a| a.name == "memcmp"));
     assert_eq!(
         passes, 2,
         "an observed-name collision must fall back to a full pass"
@@ -11012,7 +11006,7 @@ fn nostdinc_declines_the_auto_include_retry() {
         .compile()
         .expect("the retry recovers the undeclared library function");
     assert!(
-        hosted.auto_includes.iter().any(|n| n == "strlen"),
+        hosted.auto_includes.iter().any(|a| a.name == "strlen"),
         "expected the retry to record the recovered name, got {:?}",
         hosted.auto_includes
     );
@@ -11055,7 +11049,7 @@ fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
         .compile()
         .expect("an unlisted name keeps the recovery");
     assert!(
-        other.auto_includes.iter().any(|n| n == "puts"),
+        other.auto_includes.iter().any(|a| a.name == "puts"),
         "expected the retry to record the recovered name, got {:?}",
         other.auto_includes
     );

@@ -3452,40 +3452,31 @@ fn block_typedef_redeclaration_rules() {
     );
 }
 
+/// A library function another input defines loses the header's `#pragma
+/// binding` and keeps the header's declaration: an ordinary external
+/// function returning `double`.
 #[test]
-fn implicit_extern_fn_binding_unbinds_at_scope_exit() {
-    let opts = || {
-        crate::c5::compiler::CompileOptions::default()
-            .with_implicit_extern_fns(alloc::vec!["impfn".to_string()])
-    };
-    let target = super::super::codegen::Target::default_target();
-    // C89 6.3.2.2 puts the implicit declaration in the innermost block
-    // containing the call. Each caller re-binds; the calls resolve to
-    // the definition later in the unit.
-    let ok = "int f(void) { return impfn(4); }\n\
-              int h(void) { { return impfn(10); } }\n\
-              int impfn(int x) { return x + 1; }\n\
-              int main(void) { return f() + h() == 16 ? 0 : 1; }";
-    let prog = Compiler::with_options(ok.to_string(), target, opts())
-        .compile()
-        .unwrap();
-    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
-    // After the declaring function exits, the name is out of scope; a
-    // non-call use in the next function does not see it.
-    match Compiler::with_options(
-        "int f(void) { return impfn(4); } int g(void) { return impfn; } \
-         int impfn(int x) { return x + 1; } int main(void) { return 0; }"
-            .to_string(),
-        target,
-        opts(),
-    )
-    .compile()
-    {
-        Err(e) => assert!(
-            e.to_string().contains("undefined variable impfn"),
-            "unexpected error: {e}"
-        ),
-        Ok(_) => panic!("an out-of-scope implicit binding must not resolve"),
+fn a_link_defined_library_function_keeps_its_declaration_without_its_binding() {
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Target};
+    let src = "#include <time.h>\nint main(void) { return difftime(7, 2) == 5.0 ? 0 : 1; }";
+    for target in Target::ALL {
+        let id = target.id_str();
+        let compile = |opts: CompileOptions| {
+            let prog = (Compiler::with_options(src.into(), target, opts).compile())
+                .unwrap_or_else(|e| panic!("{id}: {e}"));
+            let s = (prog.symbols.iter().find(|s| s.name == "difftime")).expect("declared");
+            let binds =
+                (prog.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == "difftime"));
+            (s.class, s.type_, binds)
+        };
+        let (class, ty, binds) = compile(CompileOptions::default());
+        assert!(class == Token::Sys as i64 && binds, "{id}");
+        let defined =
+            CompileOptions::default().with_link_defined_fns(alloc::vec!["difftime".into()]);
+        let (class, link_ty, binds) = compile(defined);
+        assert!(class == Token::Fun as i64 && !binds, "{id}");
+        assert_eq!(link_ty, ty, "{id}: the declared return type");
     }
 }
 
@@ -4676,8 +4667,13 @@ fn the_include_hint_names_only_a_header_the_target_ships() {
         let hinted = err.to_string().contains("try `#include <sys/epoll.h>`");
         assert_eq!(hinted, linux, "{id}: {err}");
         let src = "int main(void) { return epoll_create1(0); }";
+        let recorded = crate::AutoInclude {
+            name: "epoll_create1".into(),
+            header: "sys/epoll.h".into(),
+            bound: true,
+        };
         match Compiler::with_options(src.into(), target, opts).compile() {
-            Ok(program) => assert!(linux && program.auto_includes == ["epoll_create1"], "{id}"),
+            Ok(program) => assert!(linux && program.auto_includes == [recorded], "{id}"),
             Err(e) => assert!(
                 !linux && !e.to_string().contains("sys/epoll.h"),
                 "{id}: {e}"

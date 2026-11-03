@@ -940,6 +940,48 @@ fn a_binding_alone_leaves_a_library_call_its_prototype() {
     }
 }
 
+// strtod and printf called with no header included. For windows-x64 and
+// windows-arm64 the bundled C library defines both and no header binds them
+// to a DLL, so the link resolves the calls without compiling the unit again.
+// Built from every host at -O0 and -O, and run on the Windows host of either.
+#[test]
+fn undeclared_library_calls_keep_the_header_types_on_windows() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-undeclared-library-calls");
+    let src = fixtures_dir().join("undeclared_library_calls_keep_the_header_types.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "aarch64") => Some("windows-arm64"),
+        ("windows", _) => Some("windows-x64"),
+        _ => None,
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let flag = format!("--target={target}");
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("{target}{level}.exe"));
+            let out = Command::new(badc)
+                .args([&flag, level])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {level}: {err}");
+            assert!(
+                err.contains("auto-including <stdlib.h>"),
+                "{target} {level}: {err}"
+            );
+            assert!(!err.contains("rebinding"), "{target} {level}: {err}");
+            if host == Some(target) {
+                let run = Command::new(&exe).output().expect("run the program");
+                assert_eq!(run.status.code(), Some(0), "{target} {level}");
+                let stdout = String::from_utf8_lossy(&run.stdout).replace('\r', "");
+                assert_eq!(stdout, "1.50\n", "{target} {level}");
+            }
+        }
+    }
+}
+
 // gcc and clang give each `__builtin_` library function its prototype with
 // no declaration in scope. Under `-nostdinc`, `-ffreestanding` and for a
 // preprocessed unit no header can be auto-included; the fixture still links

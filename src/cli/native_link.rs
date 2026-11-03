@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use badc::{Compiler, OutputKind};
 
 use super::args::Cli;
-use super::compile::{CompileCfg, compile_native_tu, compile_units, worker_count};
+use super::compile::{CompileCfg, Recompile, compile_native_tu, compile_units, worker_count};
 use super::diag::{eprint_diagnostic, eprint_error, rendered};
 
 use super::inputs::{
@@ -88,7 +88,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // it (the source-level pragma rides the in-memory `Program`,
     // not a section), then threaded to the PE writer.
     let mut subsystem_override: Option<badc::Subsystem> = cli.link.subsystem;
-    let mut source_auto_includes: Vec<Vec<String>> = Vec::with_capacity(sources.len());
+    let mut source_auto_includes: Vec<Vec<badc::AutoInclude>> = Vec::with_capacity(sources.len());
     // Compile every source (concurrently under `--jobs`), then fold
     // the per-unit facts in source order so entry / subsystem
     // resolution and object order stay scheduling-independent. A
@@ -97,7 +97,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // to stderr, as the JIT / interp paths do.
     let workers = worker_count(cli.jobs, sources.len());
     let tus = compile_units(&sources, workers, |_, src| {
-        compile_native_tu(src, &[], &cfg)
+        compile_native_tu(src, None, &cfg)
     });
     let mut source_objs: Vec<Option<badc::NativeObject>> = Vec::with_capacity(sources.len());
     for (i, mut tu) in tus.into_iter().enumerate() {
@@ -721,21 +721,25 @@ fn program_entry(slots: &mut [Slot], target: badc::Target) -> Option<&'static st
         .filter(|&n| n != "main")
 }
 
-/// C89 6.3.2.2 link semantics: a definition anywhere in the link set
-/// satisfies an implicitly declared call, so a name the auto-include
-/// retry bound to a header's library binding is recompiled as an
-/// implicit extern when an input defines it -- the user's definition
-/// wins over the binding.
+/// A definition anywhere in the link satisfies a call to a library
+/// function, as under gcc and clang. A unit whose auto-included header
+/// binds such a function to its library is compiled again with that
+/// binding dropped and the same headers included, so the call keeps the
+/// header's declaration and resolves to the link's definition.
 fn rebind_auto_includes(
     cfg: &CompileCfg,
     embedded: &mut EmbeddedSources,
     slots: &mut Vec<Slot>,
     source_slots: &[usize],
-    source_auto_includes: &[Vec<String>],
+    source_auto_includes: &[Vec<badc::AutoInclude>],
     sources: &[String],
     stats: &mut LinkStats,
 ) {
-    if source_auto_includes.iter().all(|a| a.is_empty()) {
+    let bound: Vec<&str> = (source_auto_includes.iter().flatten())
+        .filter(|a| a.bound)
+        .map(|a| a.name.as_str())
+        .collect();
+    if bound.is_empty() {
         return;
     }
     // The scan folds unpulled pool members into `defined_fns`, so the
@@ -743,12 +747,7 @@ fn rebind_auto_includes(
     if embedded.pool_slot.is_none() {
         embedded.push_pool(slots, stats);
     }
-    let autos: Vec<&str> = source_auto_includes
-        .iter()
-        .flatten()
-        .map(String::as_str)
-        .collect();
-    read_members_naming(slots, &autos, embedded.cli.target);
+    read_members_naming(slots, &bound, embedded.cli.target);
     let mut defined_fns = std::collections::HashSet::<String>::new();
     for slot in slots.iter() {
         for o in slot.objects() {
@@ -767,32 +766,37 @@ fn rebind_auto_includes(
         }
     }
     for (i, autos) in source_auto_includes.iter().enumerate() {
-        let redirect: Vec<String> = autos
-            .iter()
-            .filter(|n| defined_fns.contains(n.as_str()))
-            .cloned()
+        let link_defined: Vec<String> = (autos.iter())
+            .filter(|a| a.bound && defined_fns.contains(a.name.as_str()))
+            .map(|a| a.name.clone())
             .collect();
-        if redirect.is_empty() {
+        if link_defined.is_empty() {
             continue;
         }
         if !cfg.quiet {
-            for n in &redirect {
+            for n in &link_defined {
                 eprint_diagnostic(format!(
                     "info: the link defines `{n}`; rebinding the call in {} to it",
                     sources[i]
                 ));
             }
         }
-        // The retry is sequential (rare, and only for sources
-        // the link redefines); flush its log inline.
-        let (log, res) = compile_native_tu(&sources[i], &redirect, cfg);
-        log.flush();
+        let recompile = Recompile {
+            auto_headers: autos.iter().map(|a| a.header.clone()).collect(),
+            link_defined,
+        };
+        // The unit's diagnostics are its first compile's; this one reports
+        // only a failure.
+        let (log, res) = compile_native_tu(&sources[i], Some(&recompile), cfg);
         match res {
             Ok(mut tu) => {
                 tu.obj.source = sources[i].clone();
                 slots[source_slots[i]] = Slot::Fixed(vec![tu.obj]);
             }
-            Err(()) => std::process::exit(1),
+            Err(()) => {
+                log.flush();
+                std::process::exit(1)
+            }
         }
     }
 }

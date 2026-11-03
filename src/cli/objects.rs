@@ -119,7 +119,7 @@ pub(crate) fn check_syntax(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             return (log, res.map(drop));
         }
         let mut log = TuLog::default();
-        let res = translate_tu(src, &[], &cfg, &mut log).map(drop);
+        let res = translate_tu(src, None, &cfg, &mut log).map(drop);
         (log, res)
     });
 }

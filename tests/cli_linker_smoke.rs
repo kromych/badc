@@ -8448,6 +8448,49 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
     );
 }
 
+#[test]
+fn the_rebinding_compile_keeps_the_auto_included_declaration() {
+    // The caller takes <time.h>'s `double difftime(time_t, time_t)` with no
+    // header included. Another input defines difftime, so the caller is
+    // compiled again without the library binding; that compile includes
+    // <time.h> as the first did, the call reads a double, and the unit's
+    // diagnostics are reported once.
+    let dir = tempdir("auto-include-rebind-declaration");
+    write_source(
+        &dir,
+        "caller.c",
+        "int main(void) { int unused; return difftime(7, 2) == 2.5 ? 0 : 1; }\n",
+    );
+    write_source(
+        &dir,
+        "impl.c",
+        "#include <time.h>\ndouble difftime(time_t a, time_t b) { return (double)(a - b) / 2; }\n",
+    );
+    let exe = dir.join("prog");
+    let out = run(
+        Command::new(badc())
+            .args(["-Wall", "-o"])
+            .arg(&exe)
+            .arg(dir.join("caller.c"))
+            .arg(dir.join("impl.c"))
+            .current_dir(&dir),
+        "link with a user difftime",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("rebinding the call in"), "{stderr}");
+    assert_eq!(
+        stderr.matches("unused variable `unused`").count(),
+        1,
+        "{stderr}"
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "the call reads difftime's double"
+    );
+}
+
 // A program calling the GCC aarch64 outline-atomics helpers, one per op
 // family plus a 1-byte and a matching/non-matching compare-exchange.
 // Used only by the two tests below; gate the const to their combined cfg so

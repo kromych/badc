@@ -628,12 +628,10 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
-    /// Function names an undeclared call may bind as a C89 6.3.2.2
-    /// implicit `extern int name();` instead of triggering the
-    /// auto-include retry. The driver fills this in a multi-TU build
-    /// for auto-included names another input defines, so the user's
-    /// definition wins over the header's library binding.
-    pub implicit_extern_fns: Vec<String>,
+    /// Library functions another input of the link defines. A `#pragma
+    /// binding` of one is dropped, so the header declares an ordinary
+    /// external function and a call resolves to that definition.
+    pub link_defined_fns: Vec<String>,
     /// `-O` -- predefine `NDEBUG` and `__OPTIMIZE__`, both `1`, so a
     /// single flag selects release semantics (optimization passes plus
     /// asserts compiled out). Explicit `-D` / `-U` flags override.
@@ -1030,10 +1028,9 @@ impl CompileOptions {
         self.no_entry_point = on;
         self
     }
-    /// Replace the implicit-extern function-name list. See
-    /// [`Self::implicit_extern_fns`].
-    pub fn with_implicit_extern_fns(mut self, names: Vec<String>) -> Self {
-        self.implicit_extern_fns = names;
+    /// See [`Self::link_defined_fns`].
+    pub fn with_link_defined_fns(mut self, names: Vec<String>) -> Self {
+        self.link_defined_fns = names;
         self
     }
 }
@@ -2426,10 +2423,6 @@ pub struct Compiler {
     /// where.
     dylibs: Vec<DylibSpec>,
 
-    /// Symbol indices of callees already reported as used without a
-    /// return-type prototype (implicit int). Dedupes the diagnostic to
-    /// one per callee.
-    warned_implicit_ret: alloc::collections::BTreeSet<usize>,
     /// Source offsets of the string initializers reported as longer than
     /// their arrays: a literal read for its type and then for its value,
     /// as `__auto_type` reads it, is reported once.
@@ -2489,11 +2482,6 @@ pub struct Compiler {
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
     tls_align: usize,
-
-    /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
-    /// undeclared call to a listed name binds as a C89 6.3.2.2
-    /// implicit `extern int name();` resolved at link time.
-    implicit_extern_fns: Vec<String>,
 
     /// Mirror of [`CompileOptions::export_all_functions`]. When set,
     /// `resolve_exports` adds every non-static defined function to the
@@ -3051,7 +3039,10 @@ impl Compiler {
         if std::env::var("BADC_DUMP_PP").is_ok() {
             let _ = std::fs::write("/tmp/badc-pp.c", &preprocessed);
         }
-        let dylibs = pp.dylibs;
+        let mut dylibs = pp.dylibs;
+        for spec in &mut dylibs {
+            (spec.bindings).retain(|b| !opts.link_defined_fns.contains(&b.local_name));
+        }
         let pending_exports = pp.exports;
         let pragma_weak = pp.weak_pragmas;
         // The preprocessor's diagnostics head the unit's, and the pragmas
@@ -3135,7 +3126,6 @@ impl Compiler {
             param_list_scopes: 0,
             deferred_error,
             dylibs,
-            warned_implicit_ret: alloc::collections::BTreeSet::new(),
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             array_elem_fn: None,
@@ -3247,7 +3237,6 @@ impl Compiler {
             data_align: 8,
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
-            implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
@@ -3492,7 +3481,7 @@ impl Compiler {
         // force-include set only grows, and a header already in it ends
         // the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
-        let mut auto_names: Vec<String> = Vec::new();
+        let mut autos: Vec<crate::c5::program::AutoInclude> = Vec::new();
         loop {
             let e = match result {
                 Ok(mut prog) => {
@@ -3503,7 +3492,11 @@ impl Compiler {
                     for info in infos.into_iter().rev() {
                         prog.notes.insert(0, info);
                     }
-                    prog.auto_includes = auto_names;
+                    for a in &mut autos {
+                        a.bound = (prog.symbols.iter())
+                            .any(|s| s.name == a.name && s.class == Token::Sys as i64);
+                    }
+                    prog.auto_includes = autos;
                     return Ok(prog);
                 }
                 Err(e) => e,
@@ -3525,7 +3518,11 @@ impl Compiler {
             infos.push(format!(
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
-            auto_names.push(name);
+            autos.push(crate::c5::program::AutoInclude {
+                name,
+                header: header.to_string(),
+                bound: false,
+            });
             result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
                 .compile_one_pass();
         }

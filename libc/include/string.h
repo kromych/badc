@@ -334,11 +334,17 @@ wchar_t *wcsncpy(wchar_t *_Destination, const wchar_t *_Source, size_t _Count);
 wchar_t *wcspbrk(const wchar_t *_String, const wchar_t *_Control);
 #pragma binding(msvcrt::wcsspn, "wcsspn")
 size_t wcsspn(const wchar_t *_String, const wchar_t *_Control);
-#pragma binding(msvcrt::wcstok, "wcstok")
+// C99's wcstok and the two-argument `_wcstok` are libc/lib/string_ext.c's,
+// as the UCRT has them: msvcrt.dll's `wcstok` export is the two-argument
+// form. The UCRT and mingw-w64 spell `wcstok` as `_wcstok` for C under
+// _CRT_NON_CONFORMING_WCSTOK.
+#ifndef wcstok
 wchar_t *wcstok(wchar_t *_String, const wchar_t *_Delimiter, wchar_t **_Context);
-// The two-argument form, which keeps its position in the runtime.
-#pragma binding(msvcrt::_wcstok, "wcstok")
+#endif
 wchar_t *_wcstok(wchar_t *_String, const wchar_t *_Delimiter);
+#ifdef _CRT_NON_CONFORMING_WCSTOK
+#define wcstok _wcstok
+#endif
 #pragma binding(msvcrt::_wcserror, "_wcserror")
 wchar_t *_wcserror(int _ErrorNumber);
 #pragma binding(msvcrt::_wcserror_s, "_wcserror_s")

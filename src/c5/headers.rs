@@ -990,6 +990,52 @@ mod tests {
         }
     }
 
+    /// On the PE targets `wcstok` is C99's three-argument function, defined by
+    /// the runtime rather than bound to msvcrt.dll's two-argument export; the
+    /// two-argument form is `_wcstok`, and `wcstok` only under the UCRT's
+    /// `_CRT_NON_CONFORMING_WCSTOK`, with <string.h> and <wchar.h> in either
+    /// order.
+    #[test]
+    fn wcstok_is_c99s_and_the_two_argument_form_is_asked_for() {
+        use crate::c5::token::Token;
+        use crate::{CompileOptions, Compiler, Target};
+        let compile = |src: &str, t: Target| {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.to_string(), t, opts).compile()
+        };
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            for headers in [
+                "#include <string.h>\n#include <wchar.h>\n",
+                "#include <wchar.h>\n#include <string.h>\n",
+            ] {
+                let c99 = alloc::format!(
+                    "{headers}wchar_t *f(wchar_t *s, wchar_t **p) {{ return wcstok(s, L\" \", p); }}\n\
+                     wchar_t *g(wchar_t *s) {{ return _wcstok(s, L\" \"); }}\n"
+                );
+                let program = compile(&c99, t).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+                for name in ["wcstok", "_wcstok"] {
+                    let sym = program.symbols.iter().find(|s| s.name == name);
+                    assert!(
+                        sym.is_some_and(|s| s.class == Token::Fun as i64),
+                        "{t:?}: `{name}` is no runtime function"
+                    );
+                }
+                let two = alloc::format!(
+                    "{headers}wchar_t *f(wchar_t *s) {{ return wcstok(s, L\" \"); }}\n"
+                );
+                let err = compile(&two, t).expect_err("two arguments to C99's wcstok");
+                assert!(
+                    err.to_string().contains("too few arguments"),
+                    "{t:?}: {err}"
+                );
+                let legacy = alloc::format!("#define _CRT_NON_CONFORMING_WCSTOK\n{two}");
+                let program = compile(&legacy, t).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+            }
+        }
+    }
+
     /// The Windows CRT block declares its entry points with the SDK's
     /// prototypes -- a call with one argument too many is diagnosed against
     /// the declared count -- and msvcrt's `__argc`, `__argv` and `__wargv`

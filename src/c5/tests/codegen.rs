@@ -2183,8 +2183,10 @@ fn windows_tchar_bounds_checked_names_reach_msvcrt() {
 /// On the Windows targets `<string.h>` declares the wide-string functions the
 /// UCRT's declares through corecrt_wstring.h and vcruntime_string.h, with its
 /// prototypes, alone and beside `<wchar.h>`; each imports msvcrt.dll's entry
-/// point, the POSIX-style names the underscored one. The undeclared names
-/// take the hint of a header declaring them there.
+/// point, the POSIX-style names the underscored one, but for C99's `wcstok`
+/// and the two-argument `_wcstok`, which the runtime defines: msvcrt.dll's
+/// `wcstok` is the two-argument form, which the image does not import. The
+/// undeclared names take the hint of a header declaring them there.
 #[test]
 fn windows_string_h_declares_the_ucrt_wide_string_functions() {
     const M: &str = "msvcrt.dll";
@@ -2225,8 +2227,6 @@ fn windows_string_h_declares_the_ucrt_wide_string_functions() {
         ("wcsncpy", NCAT, "wcsncpy"),
         ("wcspbrk", FIND, "wcspbrk"),
         ("wcsspn", S, "wcsspn"),
-        ("wcstok", TOK, "wcstok"),
-        ("_wcstok", CAT, "wcstok"),
         ("_wcserror", "wchar_t *(*)(int)", "_wcserror"),
         (
             "_wcserror_s",
@@ -2300,7 +2300,8 @@ fn windows_string_h_declares_the_ucrt_wide_string_functions() {
         "_Static_assert(_Generic(&wcsnlen_s, size_t (*)(const wchar_t *, size_t): 1, \
          default: 0), \"wcsnlen_s\");\n",
     );
-    for (name, ty, _) in DECLS {
+    let runtime = [("wcstok", TOK, ""), ("_wcstok", CAT, "")];
+    for (name, ty, _) in DECLS.iter().chain(&runtime) {
         types += &alloc::format!(
             "_Static_assert(_Generic(&{name}, {ty}: 1, default: 0), \"{name}\");\n"
         );
@@ -2313,6 +2314,13 @@ fn windows_string_h_declares_the_ucrt_wide_string_functions() {
             "#include <wchar.h>\n#include <string.h>\n",
         ] {
             assert_windows_imports(target, &alloc::format!("{headers}{types}"), &imports);
+            let src = alloc::format!(
+                "{headers}typedef void (*fn)(void);\n\
+                 static const fn used[] = {{ (fn)wcstok, (fn)_wcstok }};\n\
+                 int main(void) {{ return used[0] == 0; }}\n"
+            );
+            let image = assert_windows_unit_imports(target, &src, &[]);
+            assert_eq!(pe_import_dll_of(&image, "wcstok"), None, "{target:?}");
         }
         for name in ["wcslen", "wcschr", "_wcsdup", "_wcsrev", "wcsicmp"] {
             assert!(

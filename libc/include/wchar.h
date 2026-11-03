@@ -171,7 +171,7 @@ struct __c5_FILE;
 #pragma binding(msvcrt::wcscat, "wcscat")
 #pragma binding(msvcrt::wcstol, "wcstol")
 #pragma binding(msvcrt::wcstoul, "wcstoul")
-#pragma binding(msvcrt::wcstok, "wcstok")
+// C99's wcstok and `_wcstok` are libc/lib/string_ext.c's (see <string.h>).
 #pragma binding(msvcrt::wcsicmp, "_wcsicmp")
 #pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
 #pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
@@ -212,6 +212,7 @@ int _wopen(const wchar_t *path, int oflag, ...);
 #pragma binding(msvcrt::wcstok_s, "wcstok_s")
 int wcsicmp(const wchar_t *a, const wchar_t *b);
 wchar_t *wcstok_s(wchar_t *str, const wchar_t *delim, wchar_t **context);
+wchar_t *_wcstok(wchar_t *str, const wchar_t *delim);
 #pragma binding(msvcrt::wcscpy_s, "wcscpy_s")
 int wcscpy_s(wchar_t *dst, size_t count, const wchar_t *src);
 #pragma binding(msvcrt::wcsncpy_s, "wcsncpy_s")
@@ -462,7 +463,12 @@ unsigned long long wcstoull(const wchar_t *restrict nptr, wchar_t **restrict end
 double wcstod(const wchar_t *nptr, wchar_t **endptr);
 float wcstof(const wchar_t *restrict nptr, wchar_t **restrict endptr);
 long double wcstold(const wchar_t *restrict nptr, wchar_t **restrict endptr);
+#ifndef wcstok
 wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
+#endif
+#if defined(_WIN32) && defined(_CRT_NON_CONFORMING_WCSTOK)
+#define wcstok _wcstok
+#endif
 
 // Conversion state (C99 7.24.6.2; on Windows the definition above) and
 // restartable multibyte / wide conversion (C99 7.24.6.3).

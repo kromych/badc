@@ -478,7 +478,7 @@ std::thread_local! {
 /// * `Console` / `Windows` take a CRT stub importing
 ///   `msvcrt!__getmainargs` / `msvcrt!exit`, which calls the entry with
 ///   `(argc, argv)` or the WinMain argument set.
-/// * `Native` (alias `driver`) and the `Efi*` kinds take no stub: the
+/// * `Native`, `Driver` and the `Efi*` kinds take no stub: the
 ///   loader invokes the entry directly with the platform signature
 ///   (`NtProcessStartup(PPEB)`, `DriverEntry(PDRIVER_OBJECT,
 ///   PUNICODE_STRING)`, `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`), so
@@ -489,10 +489,13 @@ pub enum Subsystem {
     Console,
     /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2) -- windowed subsystem.
     Windows,
-    /// `IMAGE_SUBSYSTEM_NATIVE` (1) -- NT-native usermode programs
-    /// and kernel-mode drivers (.sys files). `#pragma
-    /// subsystem(driver)` is an alias for this variant.
+    /// `IMAGE_SUBSYSTEM_NATIVE` (1) for an NT-native user-mode program,
+    /// which takes the C runtime from ntdll.dll.
     Native,
+    /// `IMAGE_SUBSYSTEM_NATIVE` (1) for a kernel-mode driver, as
+    /// `link.exe /DRIVER` builds one: its resident sections are not
+    /// paged, and it takes the C runtime from ntoskrnl.exe.
+    Driver,
     /// `IMAGE_SUBSYSTEM_EFI_APPLICATION` (10).
     EfiApplication,
     /// `IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER` (11).
@@ -505,8 +508,8 @@ pub enum Subsystem {
 
 impl Subsystem {
     /// The accepted spellings, for a diagnostic.
-    pub const KINDS: &'static str = "console (or cui), windows (or gui), native (or nt, \
-                                     driver), efi_application, efi_boot_service_driver, \
+    pub const KINDS: &'static str = "console (or cui), windows (or gui), native (or nt), \
+                                     driver, efi_application, efi_boot_service_driver, \
                                      efi_runtime_driver, efi_rom, in any case and with `-` \
                                      for `_`";
 
@@ -526,7 +529,8 @@ impl Subsystem {
         Some(match key.as_str() {
             "console" | "cui" => Self::Console,
             "windows" | "gui" => Self::Windows,
-            "native" | "nt" | "driver" => Self::Native,
+            "native" | "nt" => Self::Native,
+            "driver" => Self::Driver,
             "efi_application" => Self::EfiApplication,
             "efi_boot_service_driver" => Self::EfiBootServiceDriver,
             "efi_runtime_driver" => Self::EfiRuntimeDriver,

@@ -36,6 +36,8 @@ pub(crate) mod image;
 #[cfg(feature = "native-emit")]
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
+pub(crate) mod nt_crt;
+#[cfg(feature = "native-emit")]
 pub(crate) mod pe;
 #[cfg(feature = "native-emit")]
 pub(crate) mod relr;

@@ -337,12 +337,14 @@ during smss/csrss bringup.
 ## wdm_driver/
 
 Windows kernel-mode driver skeleton. Subsystem =
-`IMAGE_SUBSYSTEM_NATIVE (1)` via the `driver` pragma alias,
+`IMAGE_SUBSYSTEM_NATIVE (1)` via `#pragma subsystem(driver)`,
 entry = `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`,
 registers a `DRIVER_UNLOAD` callback so the service is
 stoppable via `sc stop`. Build-only; loading needs admin and
 test-signing on the target. Same compiler plumbing as
-`nt_hello`; differs only in entry signature.
+`nt_hello`, except that a driver's resident sections are not
+paged and it takes the C runtime from `ntoskrnl.exe`, where
+`nt_hello` takes it from `ntdll.dll`.
 
 ## simplevisor/
 

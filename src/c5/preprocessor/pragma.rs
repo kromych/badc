@@ -740,10 +740,13 @@ impl Preprocessor {
     ///     default). Entry signature `main(argc, argv)`.
     ///   * `windows` / `gui` -- `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2).
     ///     Entry signature `WinMain(hinst, prev, cmdline, show)`.
-    ///   * `native` / `nt` / `driver` -- `IMAGE_SUBSYSTEM_NATIVE`
-    ///     (1). NT-native usermode and kernel drivers share this
-    ///     subsystem byte; the entry signature is selected by the
-    ///     source, not the pragma.
+    ///   * `native` / `nt` -- `IMAGE_SUBSYSTEM_NATIVE` (1), an
+    ///     NT-native user-mode program taking the C runtime from
+    ///     ntdll.dll.
+    ///   * `driver` -- `IMAGE_SUBSYSTEM_NATIVE` (1), a kernel-mode
+    ///     driver as `link.exe /DRIVER` builds it, taking the C runtime
+    ///     from ntoskrnl.exe. The entry signature of both is the
+    ///     source's.
     ///   * `efi_application` -- `IMAGE_SUBSYSTEM_EFI_APPLICATION`
     ///     (10).
     ///   * `efi_boot_service_driver` --

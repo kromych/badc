@@ -12,7 +12,7 @@ use super::super::error::C5Error;
 use super::aarch64;
 use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
-use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image};
+use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image, nt_crt};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -289,6 +289,8 @@ struct PeWriter<'a> {
     target: super::Target,
     is_dll: bool,
     subsystem: u16,
+    /// A kernel-mode driver, as `link.exe /DRIVER` builds one.
+    driver: bool,
     passthrough_entry: bool,
     stub: EntryStub,
     /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
@@ -310,7 +312,7 @@ pub(super) fn write(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let mut w = PeWriter::new(program, build, machine, target);
+    let mut w = PeWriter::new(program, build, machine, target)?;
     w.layout_code_sections()?;
     w.layout_data_sections()?;
     w.layout_reloc_and_export_sections()?;
@@ -361,12 +363,12 @@ impl<'a> PeWriter<'a> {
         build: &'a Build,
         machine: Machine,
         target: super::Target,
-    ) -> Self {
+    ) -> Result<Self, C5Error> {
         use crate::c5::preprocessor::Subsystem;
         let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
         let subsystem = match program.subsystem {
             Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
-            Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
+            Some(Subsystem::Native | Subsystem::Driver) => IMAGE_SUBSYSTEM_NATIVE,
             Some(Subsystem::EfiApplication) => IMAGE_SUBSYSTEM_EFI_APPLICATION,
             Some(Subsystem::EfiBootServiceDriver) => IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
             Some(Subsystem::EfiRuntimeDriver) => IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER,
@@ -383,29 +385,23 @@ impl<'a> PeWriter<'a> {
         // Index N becomes IAT slot N. The CRT / kernel32 entries the stub
         // relies on ride the embedded runtime TU's `#pragma binding`, so
         // they already sit in `build.imports`.
-        let imports: Vec<(String, String, Option<u16>)> = build
-            .imports
-            .imports
-            .iter()
-            .map(|imp| {
-                let dll = &build.imports.dylibs[imp.dylib_index].path;
-                (
-                    imp.real_symbol.clone(),
-                    image_dll(dll, subsystem),
-                    imp.ordinal,
-                )
-            })
-            .collect();
+        let native = match program.subsystem {
+            Some(Subsystem::Driver) => Some(true),
+            Some(Subsystem::Native) => Some(false),
+            _ => None,
+        };
+        let imports = image_imports(build, native, machine == Machine::X86_64)?;
         let dlls = group_imports_by_dll(&imports);
         let text_align = build.text_align.max(16) as u32;
         let text_prologue_len = round_up(stub.bytes.len() as u32, text_align);
-        PeWriter {
+        Ok(PeWriter {
             program,
             build,
             machine,
             target,
             is_dll,
             subsystem,
+            driver: native == Some(true),
             passthrough_entry,
             stub,
             imports,
@@ -415,7 +411,7 @@ impl<'a> PeWriter<'a> {
             text_bytes: Vec::new(),
             jt_bytes: Vec::new(),
             out: Vec::new(),
-        }
+        })
     }
 
     fn internal(msg: String) -> C5Error {
@@ -1381,11 +1377,11 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// `IMAGE_SCN_MEM_NOT_PAGED` for a section of a native-subsystem image
-    /// named `name`: every resident section but a `PAGE*` one, as
-    /// `link.exe /DRIVER` marks them.
+    /// `IMAGE_SCN_MEM_NOT_PAGED` for a section of a driver named `name`:
+    /// every resident section but a `PAGE*` one, as `link.exe /DRIVER` marks
+    /// them; it marks none of a native application's.
     fn resident(&self, name: &[u8]) -> u32 {
-        if self.subsystem == IMAGE_SUBSYSTEM_NATIVE && !name.starts_with(b"PAGE") {
+        if self.driver && !name.starts_with(b"PAGE") {
             IMAGE_SCN_MEM_NOT_PAGED
         } else {
             0
@@ -2212,15 +2208,54 @@ struct DllGroup {
     members: Vec<usize>,
 }
 
-/// The DLL an import from `dll` binds to in an image of `subsystem`. A
-/// native-subsystem (kernel-mode) image cannot load the user-mode C library
-/// and takes the C runtime it calls, `__C_specific_handler` among it, from
-/// ntoskrnl.exe.
-fn image_dll(dll: &str, subsystem: u16) -> String {
-    if subsystem == IMAGE_SUBSYSTEM_NATIVE && dll.eq_ignore_ascii_case("msvcrt.dll") {
-        return "ntoskrnl.exe".into();
+/// `(name, DLL, ordinal)` per import of `build`. A native-subsystem image
+/// (`native`: `Some(driver)`) cannot load the user-mode C runtime and takes
+/// what it imports from msvcrt.dll or ucrtbase.dll, `__C_specific_handler`
+/// among it, by name from [`nt_crt::module`]; a name that module does not
+/// export is undefined.
+fn image_imports(
+    build: &Build,
+    native: Option<bool>,
+    x64: bool,
+) -> Result<Vec<(String, String, Option<u16>)>, C5Error> {
+    use crate::c5::diag::{Diagnostic, Level};
+    let mut undefined = Vec::new();
+    let mut refuse = |name: &str, driver: bool| {
+        let image = if driver {
+            "a driver"
+        } else {
+            "a native application"
+        };
+        let text = format!(
+            "undefined reference to `{name}`: {image} takes the C runtime from {}, which does \
+             not export it",
+            nt_crt::module(driver)
+        );
+        let error = Diagnostic::new(Code::UNDEFINED_SYMBOL, Level::Error, None, text);
+        undefined.push(error);
+    };
+    let imports = (build.imports.imports.iter())
+        .map(|imp| {
+            let dll = &build.imports.dylibs[imp.dylib_index].path;
+            let c_runtime = ["msvcrt.dll", "ucrtbase.dll"]
+                .iter()
+                .any(|d| dll.eq_ignore_ascii_case(d));
+            match native {
+                Some(driver) if c_runtime => {
+                    if !nt_crt::exports(driver, x64, &imp.real_symbol) {
+                        refuse(&imp.real_symbol, driver);
+                    }
+                    (imp.real_symbol.clone(), nt_crt::module(driver).into(), None)
+                }
+                _ => (imp.real_symbol.clone(), dll.clone(), imp.ordinal),
+            }
+        })
+        .collect();
+    if undefined.is_empty() {
+        Ok(imports)
+    } else {
+        Err(C5Error::Compile(undefined))
     }
-    dll.into()
 }
 
 fn group_imports_by_dll(imports: &[(String, String, Option<u16>)]) -> Vec<DllGroup> {
@@ -3238,17 +3273,22 @@ mod tests {
         write(&program, &build, Machine::X86_64, target).expect("write PE")
     }
 
-    /// A native-subsystem image marks every resident section non-paged but a
-    /// `PAGE*` one, as `link.exe /DRIVER` does, and stores the image checksum;
-    /// a console image keeps both clear. Neither leaves the IAT writable.
+    /// A driver marks every resident section non-paged but a `PAGE*` one, as
+    /// `link.exe /DRIVER` does, and a native application none, as
+    /// `link.exe /SUBSYSTEM:NATIVE` does; both store the image checksum. A
+    /// console image keeps both clear. None leaves the IAT writable.
     #[test]
     fn a_driver_image_is_resident_and_checksummed() {
-        let driver = windows_x64_image(
-            "#pragma subsystem(native)\n#pragma entrypoint(Entry)\n\
-             long Entry(long a, long b) { (void)a; (void)b; return 0; }",
-        );
+        let entry = "#pragma entrypoint(Entry)\n\
+                     long Entry(long a, long b) { (void)a; (void)b; return 0; }";
+        let driver = windows_x64_image(&format!("#pragma subsystem(driver)\n{entry}"));
+        let native = windows_x64_image(&format!("#pragma subsystem(native)\n{entry}"));
         let console = windows_x64_image("int main(void) { return 0; }");
-        for (bytes, native) in [(&driver, true), (&console, false)] {
+        for (bytes, driver, checksum) in [
+            (&driver, true, true),
+            (&native, false, true),
+            (&console, false, false),
+        ] {
             let flags = section_flags(bytes);
             for name in [&b"PAGEDATA"[..], b"mydata", b".idata"] {
                 assert!(flags.iter().any(|(n, _)| n.starts_with(name)));
@@ -3258,20 +3298,20 @@ mod tests {
                     assert_eq!(
                         flags & IMAGE_SCN_MEM_WRITE,
                         0,
-                        "native {native}: {flags:#x}"
+                        "driver {driver}: {flags:#x}"
                     );
                 }
                 let resident = flags & IMAGE_SCN_MEM_DISCARDABLE == 0 && !name.starts_with(b"PAGE");
                 assert_eq!(
                     flags & IMAGE_SCN_MEM_NOT_PAGED != 0,
-                    native && resident,
-                    "native {native}: {} {flags:#x}",
+                    driver && resident,
+                    "driver {driver}: {} {flags:#x}",
                     String::from_utf8_lossy(&name)
                 );
             }
             let field = checksum_field(bytes);
             let stored = u32::from_le_bytes(bytes[field..field + 4].try_into().unwrap());
-            assert_eq!(stored, if native { image_checksum(bytes) } else { 0 });
+            assert_eq!(stored, if checksum { image_checksum(bytes) } else { 0 });
         }
     }
 
@@ -3333,7 +3373,7 @@ mod tests {
                 .iter()
                 .find(|h| h.name.starts_with(b"full\0"))
                 .expect("full");
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
@@ -3377,7 +3417,7 @@ mod tests {
                 });
             }
             let bytes = write(&program, &build, machine, target).expect("write PE");
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             let l = &w.layout;
@@ -3454,7 +3494,7 @@ mod tests {
                 let rva = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
                 assert_eq!(rva % ALIGN, 0, "{target:?}: section {i} at {rva:#x}");
             }
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             for (what, off) in [("relro head", ALIGN + 8), ("zero-fill tail", 3 * ALIGN + 8)] {
@@ -4573,7 +4613,7 @@ mod tests {
     }
 
     #[test]
-    fn driver_pragma_aliases_native_subsystem() {
+    fn driver_subsystem_skips_stub() {
         passthrough_subsystem_skips_stub("driver", IMAGE_SUBSYSTEM_NATIVE);
     }
 

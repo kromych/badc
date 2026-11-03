@@ -209,7 +209,7 @@ bare `badc <file>`.
 #pragma export(my_api)             // promote a function to a shared-object export.
 #pragma pack(N) / pop / push       // override the default 8-byte struct alignment.
 #pragma entrypoint(WinMain)        // override the default `main` entry point.
-#pragma subsystem(windows)         // pick the PE subsystem (console | windows | native | efi_*).
+#pragma subsystem(windows)         // pick the PE subsystem (console | windows | native | driver | efi_*).
 ```
 
 `#pragma entrypoint(<name>)` lets the source declare a non-`main` entry without
@@ -217,12 +217,23 @@ a build-driver flag; the compiler resolves the name through the same
 symbol-table lookup it uses for `main`. `#pragma subsystem(<kind>)` drives the
 PE optional-header `Subsystem` byte. The accepted kinds are `console`
 (default, `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`), `windows`
-(`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`), `native` (`IMAGE_SUBSYSTEM_NATIVE = 1`,
-with `nt` / `driver` as aliases), and the EFI variants `efi_application`,
-`efi_boot_service_driver`, `efi_runtime_driver`, and `efi_rom`; `cui` and
-`gui` name `console` and `windows`, and every kind is taken in any case and
-with `-` for `_`. `--subsystem=<kind>` takes the same set through the same
-lookup and overrides the pragma. With `console`
+(`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`), `native` (`IMAGE_SUBSYSTEM_NATIVE = 1`
+for an NT-native user-mode program, with `nt` as an alias), `driver`
+(`IMAGE_SUBSYSTEM_NATIVE = 1` for a kernel-mode driver, as `link.exe /DRIVER`
+builds one: its resident sections are marked not paged), and the EFI variants
+`efi_application`, `efi_boot_service_driver`, `efi_runtime_driver`, and
+`efi_rom`; `cui` and `gui` name `console` and `windows`, and every kind is
+taken in any case and with `-` for `_`. `--subsystem=<kind>` takes the same
+set through the same lookup and overrides the pragma.
+
+A native-subsystem image cannot load the user-mode C runtime. What the bundled
+headers bind to `msvcrt.dll` or `ucrtbase.dll` a driver imports from
+`ntoskrnl.exe` and a native application from `ntdll.dll`, by name; a name that
+module does not export is an undefined reference. The check reads lists of the
+C runtime names each module exports on x64 and arm64, measured from Windows
+11's system images (`src/c5/object/nt_crt.rs`). An import library or DLL on
+the command line that supplies a name outranks the header's binding, on every
+PE image, as with link.exe and GNU ld. With `console`
 / `windows`, `entrypoint(WinMain)` plus `subsystem(windows)` is what a Win32
 GUI app needs to skip the loader's auto-attach to a console window. Non-PE
 targets keep the default and ignore the directive, so the same source builds

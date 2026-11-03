@@ -4538,7 +4538,17 @@ impl<'a> Link<'a> {
         let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
         let mut import_ordinals: BTreeMap<String, u16> = BTreeMap::new();
         for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
-            if let Some(&idx) = routing.get(name.as_str()) {
+            // A PE import names its DLL: an import library or a DLL the
+            // link read that exports the name supplies it ahead of a
+            // binding, as link.exe and GNU ld take the import from it.
+            let supplied = |lib: &SharedLibrary| {
+                self.pe_image
+                    && lib.from_image
+                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
+            };
+            if let Some(&idx) = routing.get(name.as_str())
+                && !self.shared_libs.iter().any(supplied)
+            {
                 bound[idx as usize] = true;
                 continue;
             }
@@ -4547,9 +4557,11 @@ impl<'a> Link<'a> {
             // That library becomes the import's routing -- a PE import
             // names its DLL and nothing else states which -- and its
             // spelling of the name is recorded where the two differ.
+            let routed = routing.contains_key(name.as_str());
             for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
                 if let Some(at) = at
                     && (lib.exports.contains(name) || lib.data_exports.contains(name))
+                    && (!routed || supplied(lib))
                 {
                     bound[*at] = true;
                     routing.insert(name.as_str(), *at as u32);

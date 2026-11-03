@@ -306,6 +306,7 @@ impl EmbeddedSources<'_> {
                 subsystem_override,
                 Some(
                     badc::Subsystem::Native
+                        | badc::Subsystem::Driver
                         | badc::Subsystem::EfiApplication
                         | badc::Subsystem::EfiBootServiceDriver
                         | badc::Subsystem::EfiRuntimeDriver

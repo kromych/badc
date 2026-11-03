@@ -5192,34 +5192,143 @@ fn an_image_relative_field_naming_an_import_takes_its_stub() {
 
 /// A kernel-mode (native-subsystem) image takes the language handler, and
 /// the rest of the C runtime it calls, from ntoskrnl.exe.
+/// A driver takes the C runtime it imports, `__C_specific_handler` among it,
+/// from ntoskrnl.exe and a native application from ntdll.dll; neither imports
+/// any other DLL.
 #[test]
-fn a_native_image_takes_the_language_handler_from_the_kernel() {
+fn a_native_image_takes_the_c_runtime_from_its_system_module() {
     for target in ["windows-x64", "windows-arm64"] {
-        let dir = tempdir(&format!("native-handler-{target}"));
-        let src = write_source(
+        for (kind, module) in [("driver", "ntoskrnl.exe"), ("native", "ntdll.dll")] {
+            let dir = tempdir(&format!("native-crt-{kind}-{target}"));
+            let src = write_source(
+                &dir,
+                "image.c",
+                &format!(
+                    "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n\
+                     #include <windows.h>\n#include <string.h>\n\
+                     long Entry(void *a, void *b)\n\
+                     {{ long r; (void)b;\n\
+                       __try {{ r = (long)strlen((const char *)a); }}\n\
+                       __except (EXCEPTION_EXECUTE_HANDLER) {{ r = -1; }}\n\
+                       return r; }}\n"
+                ),
+            );
+            let image = dir.join("image.sys");
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&image),
+                "link the image",
+            );
+            let pe = std::fs::read(&image).expect("read image");
+            let imports = pe_imports(&pe);
+            for name in ["__C_specific_handler", "strlen"] {
+                assert!(
+                    imports.contains(&(module.into(), name.into())),
+                    "{target} {kind}: {imports:?}"
+                );
+            }
+            assert_eq!(
+                pe_import_dll_names(&pe),
+                [module],
+                "{target} {kind}: {imports:?}"
+            );
+        }
+    }
+}
+
+/// A C runtime name the system module of a native-subsystem image does not
+/// export is an undefined reference naming the module, unless an import
+/// library on the command line supplies it.
+#[test]
+fn a_native_image_refuses_a_name_its_system_module_does_not_export() {
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("native-crt-refused-{target}"));
+        let source = |kind: &str, call: &str| {
+            format!(
+                "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n#include <stdlib.h>\n\
+                 long Entry(void *a, void *b) {{ (void)b; return (long){call}; }}\n"
+            )
+        };
+        write_source(
             &dir,
             "drv.c",
-            "#pragma subsystem(native)\n#pragma entrypoint(DriverEntry)\n#include <excpt.h>\n\
-             long DriverEntry(void *d, void *r)\n\
-             { (void)d; (void)r; return &__C_specific_handler != 0; }\n",
+            &source("driver", "strtol((const char *)a, 0, 10)"),
         );
-        let image = dir.join("drv.sys");
+        write_source(
+            &dir,
+            "app.c",
+            &source("native", "(long long)malloc((size_t)a)"),
+        );
+        let lib = short_import_library("ntoskrnl.exe", &[(machine, "strtol", None)]);
+        std::fs::write(dir.join("krnl.lib"), lib).unwrap();
+        let link = |args: &[&str]| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        for (src, want) in [
+            (
+                "drv.c",
+                "undefined reference to `strtol`: a driver takes the C runtime from \
+                 ntoskrnl.exe, which does not export it",
+            ),
+            (
+                "app.c",
+                "undefined reference to `malloc`: a native application takes the C runtime \
+                 from ntdll.dll, which does not export it",
+            ),
+        ] {
+            let out = link(&[src, "-o", "image.sys"]);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && err.contains(want),
+                "{target} {src}: {err}"
+            );
+        }
+        let out = link(&["drv.c", "krnl.lib", "-o", "drv.sys"]);
+        assert!(out.status.success(), "{target}: {out:?}");
+        let pe = std::fs::read(dir.join("drv.sys")).expect("read image");
+        let imports = pe_imports(&pe);
+        assert!(
+            imports.contains(&("ntoskrnl.exe".into(), "strtol".into())),
+            "{target}: {imports:?}"
+        );
+    }
+}
+
+/// An import library on the command line that supplies a name the bundled
+/// headers bind to the C runtime outranks the binding, as with link.exe and
+/// GNU ld: the image imports the name from the library's DLL.
+#[test]
+fn an_import_library_outranks_a_header_binding() {
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("pe-import-library-precedence-{target}"));
+        write_source(
+            &dir,
+            "main.c",
+            "#include <string.h>\n\
+             int main(int argc, char **argv) { (void)argc; return (int)strlen(argv[0]); }\n",
+        );
+        let lib = short_import_library("mycrt.dll", &[(machine, "strlen", None)]);
+        std::fs::write(dir.join("mycrt.lib"), lib).unwrap();
         run(
             Command::new(badc())
                 .arg(format!("--target={target}"))
-                .arg(&src)
-                .arg("-o")
-                .arg(&image),
-            "link the driver",
+                .args(["main.c", "mycrt.lib", "-o", "main.exe"])
+                .current_dir(&dir),
+            "link with the import library",
         );
-        let pe = std::fs::read(&image).expect("read image");
+        let pe = std::fs::read(dir.join("main.exe")).expect("read image");
         let imports = pe_imports(&pe);
         assert!(
-            imports.contains(&("ntoskrnl.exe".into(), "__C_specific_handler".into())),
-            "{target}: {imports:?}"
-        );
-        assert!(
-            !pe_import_dll_names(&pe).contains(&"msvcrt.dll".to_string()),
+            imports.contains(&("mycrt.dll".into(), "strlen".into()))
+                && !imports.contains(&("msvcrt.dll".into(), "strlen".into())),
             "{target}: {imports:?}"
         );
     }

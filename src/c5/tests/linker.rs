@@ -6602,9 +6602,8 @@ fn long_double_math_binds_the_platform_entry_points() {
 
 #[test]
 fn wdm_driver_demo_builds_as_native_subsystem_pe() {
-    // The WDM driver skeleton carries `#pragma subsystem(driver)`
-    // (an alias for the native subsystem) and `#pragma
-    // entrypoint(DriverEntry)`. The PE optional-header Subsystem must
+    // The WDM driver skeleton carries `#pragma subsystem(driver)` and
+    // `#pragma entrypoint(DriverEntry)`. The PE optional-header Subsystem must
     // be IMAGE_SUBSYSTEM_NATIVE (1) for both Windows targets; the
     // kernel's PE loader refuses a CUI/GUI subsystem.
     //

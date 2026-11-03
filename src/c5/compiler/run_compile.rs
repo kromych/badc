@@ -1170,6 +1170,7 @@ impl Compiler {
         // `static`-vs-external decision the inline model does not affect.
         let sym = &mut self.symbols[id_idx];
         sym.saw_static_decl |= static_seen;
+        sym.saw_extern_decl |= extern_seen;
         match (self.pending.attrs.saw_inline_specifier, extern_seen) {
             (false, _) => sym.saw_noninline_decl = true,
             (true, false) => sym.saw_plain_inline_decl = true,
@@ -3247,6 +3248,25 @@ impl Compiler {
         None
     }
 
+    /// gcc's `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default, as in gcc.
+    fn apply_default_visibility(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let Some(vis) = self.default_visibility else {
+            return;
+        };
+        for sym in self.symbols.iter_mut() {
+            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
+            if named
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.visibility_stated
+            {
+                sym.visibility = Some(vis);
+            }
+        }
+    }
+
     /// Settle every function's inline linkage once the unit's last
     /// file-scope declaration has been censused.
     ///
@@ -3277,31 +3297,16 @@ impl Compiler {
     /// the identifier stays an undefined external reference that every
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
-    /// On Windows an inline function's external definition is pick-any, as
-    /// MSVC and clang's `*-windows-msvc` emit an `IMAGE_COMDAT_SELECT_ANY`.
-    /// gcc's `-fvisibility=` for each external definition whose visibility no
-    /// attribute or pragma states; declarations keep default, as in gcc.
-    fn apply_default_visibility(&mut self) {
-        use crate::c5::symbol::Linkage;
-        let Some(vis) = self.default_visibility else {
-            return;
-        };
-        for sym in self.symbols.iter_mut() {
-            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
-            if named
-                && sym.defined_here
-                && sym.linkage == Linkage::External
-                && !sym.visibility_stated
-            {
-                sym.visibility = Some(vis);
-            }
-        }
-    }
-
+    ///
+    /// With the Microsoft extensions neither model applies, as for MSVC and
+    /// clang's `*-windows-msvc` in C: an inline function of external
+    /// linkage, unless `gnu_inline`, is emitted by each unit that references
+    /// it as an `IMAGE_COMDAT_SELECT_ANY` definition, kept unreferenced only
+    /// when a declaration says `extern`.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
-        let windows = self.target.is_windows();
+        let microsoft = self.target.ms_extensions();
         for sym in self.symbols.iter_mut() {
             if sym.pick_any && !(sym.class == Token::Glo as i64 && sym.defined_here) {
                 sym.pick_any = false;
@@ -3315,6 +3320,15 @@ impl Compiler {
             if sym.class != Token::Fun as i64 || sym.saw_static_decl || !declared {
                 continue;
             }
+            let inline = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+            if microsoft && inline && !sym.is_gnu_inline {
+                sym.is_inline_definition = false;
+                sym.linkage = Linkage::External;
+                sym.pick_any = sym.defined_here;
+                sym.is_weak |= sym.pick_any;
+                sym.discardable = sym.defined_here && !sym.saw_extern_decl;
+                continue;
+            }
             sym.is_inline_definition = inline_definition(sym, model);
             sym.linkage = if sym.is_inline_definition {
                 Linkage::Internal
@@ -3325,10 +3339,6 @@ impl Compiler {
             // collides with nothing the source can declare.
             if sym.is_inline_definition && sym.defined_here {
                 sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
-            }
-            if windows && sym.defined_here && !sym.is_inline_definition && !sym.is_gnu_inline {
-                sym.pick_any = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
-                sym.is_weak |= sym.pick_any;
             }
         }
     }

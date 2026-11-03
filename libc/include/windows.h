@@ -37,7 +37,7 @@
 // C runtime headers. None of them affect codegen on c5 -- the IAT routes
 // the call regardless of inline / dllimport tagging -- so they
 // expand to nothing. `__declspec(...)` swallows its argument
-// list; `__forceinline` / `__inline` collapse to nothing.
+// list.
 // UNICODE selects the W form of each generic Win32 name and a wide TEXT
 // literal, as mingw-w64's winnt.h and _mingw_unicode.h do; the generic
 // names are defined at the end of this header. `_T` / `_TEXT` are

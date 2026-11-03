@@ -327,6 +327,26 @@ impl<'a> Walker<'a> {
                 emit_asm(b, &format!("{name} #{imm}"), Vec::new(), 0, true);
                 b.imm(0)
             }
+            Op::RepStos { width } | Op::RepMovs { width } => {
+                // rdi, then rax or rsi, then rcx, as the instruction reads them.
+                let stos = matches!(op, Op::RepStos { .. });
+                let (second, second_width) = if stos { (0, width) } else { (6, 8) };
+                let fixed = |r, w| asm_operand(AsmConstraint::Fixed(r), false, w);
+                let operands = alloc::vec![
+                    (fixed(7, 8), v[0]),
+                    (fixed(second, second_width), v[1]),
+                    (fixed(1, 8), v[2]),
+                ];
+                let suffix = match width {
+                    1 => 'b',
+                    2 => 'w',
+                    4 => 'l',
+                    _ => 'q',
+                };
+                let insn = if stos { "stos" } else { "movs" };
+                emit_asm(b, &format!("rep {insn}{suffix}"), operands, 0, true);
+                b.imm(0)
+            }
             Op::Pause => b.intrinsic(Intrinsic::CpuRelax as i64, Vec::new()),
             Op::Cpuid { sub } => {
                 let fixed = |r, out| asm_operand(AsmConstraint::Fixed(r), out, 4);

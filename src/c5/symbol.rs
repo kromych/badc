@@ -155,6 +155,10 @@ pub(crate) struct Symbol {
     /// `IMAGE_COMDAT_SELECT_ANY`); the object states it by `is_weak`.
     pub pick_any: bool,
 
+    /// A pick-any definition the unit emits only when what it keeps
+    /// references it, as MSVC emits an inline function.
+    pub discardable: bool,
+
     /// `dllimport` on the declarations so far: references go through the
     /// import-address slot `__imp_<name>`.
     pub dllimport: bool,
@@ -503,6 +507,9 @@ pub(crate) struct Symbol {
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
     pub saw_extern_inline_decl: bool,
+    /// A declaration spelled `extern`, `inline` or not: under the Microsoft
+    /// model it keeps an inline function's definition unreferenced.
+    pub saw_extern_decl: bool,
 
     /// `__attribute__((gnu_inline))` on any declaration of this
     /// function: the GNU89 inline model applies to it whatever the
@@ -964,6 +971,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_asm_name: _, // scope-restore shadow
             is_weak: _,
             pick_any: _,
+            discardable: _,
             dllimport: _,
             is_used,
             visibility: _,
@@ -1026,6 +1034,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset
             saw_extern_inline_decl: _, // linkage model input, not an offset
+            saw_extern_decl: _,        // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector
             is_inline_definition: _,   // linkage model result
             inline_body_name: _,       // assembler name, not an offset

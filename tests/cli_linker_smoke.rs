@@ -261,6 +261,154 @@ fn a_headers_selectany_object_and_inline_function_link_once_per_program() {
     }
 }
 
+/// An inline function of external linkage on the Windows targets, as MSVC and
+/// clang's `*-windows-msvc` link one in C: each unit that references it emits
+/// a pick-any definition, one function program-wide; a unit that does not
+/// emits none, so what its body calls need not exist, even past a non-inline
+/// declaration; a declaration spelling `extern` keeps it for other units.
+#[test]
+fn msvc_inline_functions_link_once_and_drop_unreferenced() {
+    let dir = tempdir("msvc-inline");
+    write_source(
+        &dir,
+        "inl.h",
+        "void nowhere(void);\n\
+         __inline int unused_plain(void) { nowhere(); return 1; }\n\
+         __forceinline int unused_forced(void) { nowhere(); return 2; }\n\
+         int declared_first(int x);\n\
+         __inline int declared_first(int x) { nowhere(); return x; }\n\
+         __inline int shared(int x) { return x * 3; }\n\
+         __forceinline int forced(int x) { return x + 4; }\n\
+         int (*shared_there(void))(int);\n\
+         int (*forced_there(void))(int);\n\
+         int kept_there(void);\n",
+    );
+    write_source(
+        &dir,
+        "inl1.c",
+        "#include \"inl.h\"\n\
+         extern __inline int kept(int x) { return x + 100; }\n\
+         int main(void) {\n\
+         if (shared(2) != 6 || forced(1) != 5) return 1;\n\
+         if (shared_there() != shared || forced_there() != forced) return 2;\n\
+         return kept_there() == 107 ? 0 : 3; }\n",
+    );
+    write_source(
+        &dir,
+        "inl2.c",
+        "#include \"inl.h\"\n\
+         int kept(int x);\n\
+         int (*shared_there(void))(int) { return shared; }\n\
+         int (*forced_there(void))(int) { return forced; }\n\
+         int kept_there(void) { return kept(7); }\n",
+    );
+    let host = if cfg!(all(windows, target_arch = "x86_64")) {
+        Some("windows-x64")
+    } else if cfg!(windows) {
+        Some("windows-arm64")
+    } else {
+        None
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        for opt in ["-O0", "-O"] {
+            let badc_with = || {
+                let mut c = Command::new(badc());
+                c.args([&t, opt]).current_dir(&dir);
+                c
+            };
+            for unit in ["inl1", "inl2"] {
+                run(
+                    badc_with().args(["-c", &format!("{unit}.c"), "-o", &format!("{unit}.o")]),
+                    "compile -c",
+                );
+            }
+            for inputs in [["inl1.o", "inl2.o"], ["inl1.c", "inl2.c"]] {
+                let exe = dir.join(format!("inl{opt}-{target}-{}.exe", inputs[0]));
+                run(badc_with().args(inputs).arg("-o").arg(&exe), "link");
+                if host == Some(target) {
+                    let status = Command::new(&exe).status().expect("run the program");
+                    assert_eq!(status.code(), Some(0), "{target} {opt} {inputs:?}");
+                }
+            }
+        }
+    }
+}
+
+/// The Windows SDK include directories on this host holding the full
+/// `<windows.h>`, one per version, read in place.
+#[cfg(windows)]
+fn windows_sdk_includes() -> Vec<PathBuf> {
+    let root = Path::new(r"C:\Program Files (x86)\Windows Kits\10\Include");
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.join("um").join("windows.h").is_file())
+        .collect();
+    versions.sort();
+    versions
+}
+
+/// The SDK's full `<windows.h>` in two units with msvc_compat.h: each unit
+/// emits the `FORCEINLINE` helpers it references and merges them at link
+/// with the other's, so `RtlSecureZeroMemory` and `HandleToULong` are one
+/// function each across the program, and drops the rest along with what
+/// they call.
+#[cfg(windows)]
+#[test]
+fn two_units_including_the_sdk_windows_h_link_and_run() {
+    let sdks = windows_sdk_includes();
+    if sdks.is_empty() {
+        eprintln!("skip: no Windows SDK");
+    }
+    let dir = tempdir("sdk-windows-h");
+    write_source(
+        &dir,
+        "a.c",
+        "#include <windows.h>\n\
+         int b_side(PVOID (**zero)(PVOID, SIZE_T), unsigned long (*conv)(const void *));\n\
+         int main(void) {\n\
+         char buf[16];\n\
+         for (int i = 0; i < 16; i++) buf[i] = (char)(i + 1);\n\
+         if (SecureZeroMemory(buf, sizeof buf) != buf) return 1;\n\
+         for (int i = 0; i < 16; i++) if (buf[i]) return 2;\n\
+         if (HandleToULong((HANDLE)(ULONG_PTR)0x1234) != 0x1234) return 3;\n\
+         PVOID (*zero)(PVOID, SIZE_T) = 0;\n\
+         if (b_side(&zero, HandleToULong)) return 4;\n\
+         return zero != RtlSecureZeroMemory ? 5 : 0;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "#include <windows.h>\n\
+         int b_side(PVOID (**zero)(PVOID, SIZE_T), unsigned long (*conv)(const void *)) {\n\
+         *zero = RtlSecureZeroMemory;\n\
+         return conv != HandleToULong || HandleToULong((HANDLE)(ULONG_PTR)7) != 7;\n\
+         }\n",
+    );
+    for (k, sdk) in sdks.iter().enumerate() {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("sdk{k}{opt}.exe"));
+            let out = Command::new(badc())
+                .args([opt, "-include", "msvc_compat.h", "-I"])
+                .arg(sdk.join("um"))
+                .arg("-I")
+                .arg(sdk.join("shared"))
+                .args(["a.c", "b.c", "-o"])
+                .arg(&exe)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{} {opt}: {err}", sdk.display());
+            let status = Command::new(&exe).status().expect("run the program");
+            assert_eq!(status.code(), Some(0), "{} {opt}", sdk.display());
+        }
+    }
+}
+
 /// A call to another unit's function whose result the caller returns is a
 /// sibling call at -O where the target takes one: the callee returns
 /// straight to the caller's caller, with the arguments the caller set.
@@ -2992,6 +3140,9 @@ fn a_static_function_no_body_defines_is_an_undefined_reference() {
     }
 }
 
+/// C99 6.7.4p7: the address of an inline definition names the external
+/// definition, which no unit provides here. The PE targets take MSVC's
+/// linkage, where the address emits the unit's own pick-any definition.
 #[test]
 fn inline_definition_address_without_an_external_definition_fails_link() {
     let dir = tempdir("inline-addr-undef");
@@ -3002,23 +3153,36 @@ fn inline_definition_address_without_an_external_definition_fails_link() {
          int (*p)(int) = f;\n\
          int main(void) { return p(41); }\n",
     );
-    let result = Command::new(badc())
-        .arg("-o")
-        .arg(dir.join("prog"))
-        .arg(dir.join("only.c"))
-        .current_dir(&dir)
-        .output()
-        .expect("invoke badc");
-    assert!(
-        !result.status.success(),
-        "link should have failed: stderr={:?}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let stderr = String::from_utf8_lossy(&result.stderr);
-    assert!(
-        stderr.contains("undefined reference") && stderr.contains('f'),
-        "expected an undefined reference to `f`, got: {stderr}"
-    );
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let result = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("only.c"))
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            !result.status.success(),
+            "{target}: link should have failed: {stderr}"
+        );
+        assert!(
+            stderr.contains("undefined reference") && stderr.contains('f'),
+            "{target}: expected an undefined reference to `f`, got: {stderr}"
+        );
+    }
+    for target in ["windows-x64", "windows-arm64"] {
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(dir.join(format!("prog-{target}.exe")))
+                .arg(dir.join("only.c"))
+                .current_dir(&dir),
+            target,
+        );
+    }
 }
 
 // C99 6.7.9p23 + 6.2.2: a function-pointer initializer whose

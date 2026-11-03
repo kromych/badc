@@ -626,7 +626,7 @@ impl<'p> ReachGraph<'p> {
         };
         let mut renamed = alloc::collections::BTreeMap::new();
         for s in &program.symbols {
-            let keeps = matches!(s.linkage, Linkage::External) || s.is_used;
+            let keeps = (matches!(s.linkage, Linkage::External) && !s.discardable) || s.is_used;
             if s.class == Token::Glo as i64
                 && s.defined_here
                 && !s.is_thread_local

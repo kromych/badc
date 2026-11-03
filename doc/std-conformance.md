@@ -131,7 +131,8 @@ the function in the same translation unit"). That covers a call. A use of
 the function designator as a value -- `&f`, or passing `f` -- still
 references the external symbol, so a unit that takes the address and no
 unit supplies the external definition fails at the link, as it does under
-gcc and clang.
+gcc and clang. The PE targets take MSVC's inline linkage instead (see
+"MSVC-compatible").
 
 ### `__STDC_HOSTED__` is always 1, severity 5
 
@@ -629,6 +630,15 @@ registers under either compiler.
   code in either module. Unlike cl for ARM64 (C2702), an `__except` inside
   a `__finally` block is accepted there too.
 - `__COUNTER__` (also recognized by GCC), `__BASE_FILE__`.
+- On the PE targets, MSVC's inline linkage in place of C99 6.7.4p6-p7, as
+  MSVC and clang's `*-windows-msvc` have it in C: an inline function of
+  external linkage without `gnu_inline` is emitted by each unit that
+  references it as an `IMAGE_COMDAT_SELECT_ANY` definition, one function
+  program-wide, and by no other; a declaration spelling `extern` keeps it
+  unreferenced. `__inline`, `_inline` and `__forceinline` (`always_inline`)
+  are its keywords. On x64 the string intrinsics `__stosb`, `__stosw`,
+  `__stosd`, `__stosq`, `__movsb`, `__movsw`, `__movsd` and `__movsq` lower
+  to `rep stos` and `rep movs`.
 - On Windows targets, `__int8` / `__int16` / `__int32` / `__int64`. The
   wider MSVC / MinGW mimicry surface (`_MSC_VER`, `__MINGW32__`, ...) is
   opt-in per translation unit with `-include msvc_compat.h`.

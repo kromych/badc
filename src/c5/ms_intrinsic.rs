@@ -165,6 +165,14 @@ pub(crate) enum Op {
     WriteEflags,
     /// `dmb`, `dsb` or `isb` with the constant option.
     Barrier(&'static str),
+    /// `rep stos` of `(destination, value, count)` elements of the width.
+    RepStos {
+        width: u8,
+    },
+    /// `rep movs` of `(destination, source, count)` elements of the width.
+    RepMovs {
+        width: u8,
+    },
 }
 
 impl Op {
@@ -211,6 +219,14 @@ const fn pcv(to: Scalar) -> Param {
         to,
         konst: true,
         volatile: true,
+    }
+}
+
+const fn pc(to: Scalar) -> Param {
+    Param::Ptr {
+        to,
+        konst: true,
+        volatile: false,
     }
 }
 
@@ -329,6 +345,14 @@ const FIXED: &[Row] = &[
     ("_mul128", X64, Op::Mul128 { signed: true }, Some(LLong), &[V(LLong), V(LLong), p(LLong)]),
     ("__shiftleft128", X64, Op::Shift128 { left: true }, Some(ULLong), &[V(ULLong), V(ULLong), V(UChar)]),
     ("__shiftright128", X64, Op::Shift128 { left: false }, Some(ULLong), &[V(ULLong), V(ULLong), V(UChar)]),
+    ("__stosb", X64, Op::RepStos { width: 1 }, None, &[p(UChar), V(UChar), V(ULLong)]),
+    ("__stosw", X64, Op::RepStos { width: 2 }, None, &[p(UShort), V(UShort), V(ULLong)]),
+    ("__stosd", X64, Op::RepStos { width: 4 }, None, &[p(ULong), V(ULong), V(ULLong)]),
+    ("__stosq", X64, Op::RepStos { width: 8 }, None, &[p(ULLong), V(ULLong), V(ULLong)]),
+    ("__movsb", X64, Op::RepMovs { width: 1 }, None, &[p(UChar), pc(UChar), V(ULLong)]),
+    ("__movsw", X64, Op::RepMovs { width: 2 }, None, &[p(UShort), pc(UShort), V(ULLong)]),
+    ("__movsd", X64, Op::RepMovs { width: 4 }, None, &[p(ULong), pc(ULong), V(ULLong)]),
+    ("__movsq", X64, Op::RepMovs { width: 8 }, None, &[p(ULLong), pc(ULLong), V(ULLong)]),
     ("__yield", Arm64, Op::Pause, None, &[]),
     ("__wfe", Arm64, Op::Insn("wfe"), None, &[]),
     ("__wfi", Arm64, Op::Insn("wfi"), None, &[]),

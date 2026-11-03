@@ -79,14 +79,12 @@
 
 // MSVC decorator macros third-party headers expect to no-op when
 // their `_MSC_VER` branches are active. None of them affect
-// codegen on c5 (the IAT routes calls regardless of dllimport /
-// inline tagging), and headers emit them BEFORE any include
-// statement could provide them, so they have to be visible the
-// instant the translation unit starts -- hence the `-include`
-// shape.
-#define __forceinline
-#define __inline
-#define _inline
+// codegen on c5 (the IAT routes calls regardless of dllimport
+// tagging), and headers emit them BEFORE any include statement
+// could provide them, so they have to be visible the instant the
+// translation unit starts -- hence the `-include` shape.
+// `__inline`, `_inline` and `__forceinline` are keywords, with
+// MSVC's linkage on the Windows targets.
 #define __cdecl
 #define __stdcall
 #define __fastcall

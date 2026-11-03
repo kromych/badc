@@ -1,4 +1,5 @@
-//! The two inline linkage models, over the full declaration matrix.
+//! The inline linkage models, over the full declaration matrix: C99's and
+//! GNU89's, and on the PE targets MSVC's (see [`MICROSOFT`]).
 //!
 //! C99 6.7.4p6-p7: if every file-scope declaration of a function
 //! includes `inline` and none includes `extern`, the definition in that
@@ -45,6 +46,8 @@ use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_op
 enum Sym {
     /// `STB_GLOBAL` definition -- an external definition.
     External,
+    /// `STB_WEAK` definition -- a pick-any external definition.
+    PickAny,
     /// `STB_LOCAL` definition -- no external definition.
     Local,
     /// An undefined reference, to be satisfied by another unit.
@@ -70,6 +73,10 @@ const BODY: &str = "f.inline";
 /// the identifier's own entry is reported when it has one and the body
 /// fills in the row when nothing references the identifier.
 fn probe(src: &str, model: Model, optimize: bool) -> Sym {
+    probe_for(Target::LinuxX64, src, model, optimize)
+}
+
+fn probe_for(target: Target, src: &str, model: Model, optimize: bool) -> Sym {
     let copts = CompileOptions {
         no_entry_point: true,
         gnu: true,
@@ -77,7 +84,7 @@ fn probe(src: &str, model: Model, optimize: bool) -> Sym {
         optimize,
         ..Default::default()
     };
-    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+    let program = Compiler::with_options(src.to_string(), target, copts)
         .compile()
         .expect("compile");
     let opts = NativeOptions {
@@ -85,9 +92,10 @@ fn probe(src: &str, model: Model, optimize: bool) -> Sym {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
-    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let bytes = emit_native_with_options(&program, target, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     const STB_LOCAL: u8 = 0;
+    const STB_WEAK: u8 = 2;
     // A definition outranks an undefined entry for the same name.
     let defined = |name: &str| {
         obj.symbols
@@ -95,10 +103,10 @@ fn probe(src: &str, model: Model, optimize: bool) -> Sym {
             .find(|s| s.name == name && s.section != NativeSymSection::Undef)
     };
     if let Some(s) = defined("f") {
-        return if s.binding == STB_LOCAL {
-            Sym::Local
-        } else {
-            Sym::External
+        return match s.binding {
+            STB_LOCAL => Sym::Local,
+            STB_WEAK => Sym::PickAny,
+            _ => Sym::External,
         };
     }
     if obj.symbols.iter().any(|s| s.name == "f") {
@@ -327,6 +335,64 @@ fn static_inline_is_internal_in_both_models() {
     let src = "static inline int f(int x) { return x + 1; }\nint g(int x) { return f(x); }\n";
     assert_eq!(probe(src, Model::C99, false), Sym::Local);
     assert_eq!(probe(src, Model::Gnu89, false), Sym::Local);
+}
+
+/// The Microsoft model on the PE targets, from clang 21 in cl mode for
+/// x86_64- and aarch64-pc-windows-msvc at /Od and /O2: an inline function
+/// of external linkage is `linkonce_odr` in a COMDAT any group, emitted
+/// when referenced, and `weak_odr`, emitted unreferenced, once any
+/// declaration spells `extern`. badc's pick-any definition stands for
+/// both; clang's /Od emits the fourth row's unreferenced linkonce copy,
+/// which is discardable, where badc emits none.
+const MICROSOFT: &[(Sym, Sym, Sym)] = &[
+    (Sym::PickAny, Sym::PickAny, Sym::Absent),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::Local, Sym::Local, Sym::Absent),
+    (Sym::PickAny, Sym::PickAny, Sym::Absent),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+    (Sym::PickAny, Sym::PickAny, Sym::PickAny),
+];
+
+#[test]
+fn the_pe_targets_take_the_microsoft_inline_model() {
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        for model in [Model::C99, Model::Gnu89] {
+            for (attr, expect) in [("", MICROSOFT), (GNU_ATTR, GNU89)] {
+                for (shape_idx, (shape_name, shape)) in SHAPES.iter().enumerate() {
+                    let row = expect[shape_idx];
+                    let want = [row.0, row.1, row.2];
+                    for (use_idx, (use_name, use_src)) in USES.iter().enumerate() {
+                        let src = shape.replace("{A}", attr) + use_src;
+                        assert_eq!(
+                            probe_for(target, &src, model, false),
+                            want[use_idx],
+                            "{target:?} {model:?} {attr}/ {shape_name} / {use_name}\n{src}"
+                        );
+                    }
+                }
+            }
+        }
+        // A __forceinline call is inlined at both levels, as clang's is, so
+        // only the address emits the definition.
+        let forced = "__forceinline int f(int x) { return x + 1; }\n";
+        let called = alloc::format!("{forced}int g(int x) {{ return f(x); }}\n");
+        let taken = alloc::format!("{forced}int (*p)(int) = f;\n");
+        for optimize in [false, true] {
+            assert_eq!(probe_for(target, forced, Model::C99, optimize), Sym::Absent);
+            assert_eq!(
+                probe_for(target, &called, Model::C99, optimize),
+                Sym::Absent
+            );
+            assert_eq!(
+                probe_for(target, &taken, Model::C99, optimize),
+                Sym::PickAny
+            );
+        }
+    }
 }
 
 #[test]

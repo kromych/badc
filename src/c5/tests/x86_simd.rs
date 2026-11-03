@@ -556,6 +556,53 @@ fn the_x86_system_wrappers_emit_their_instruction() {
     }
 }
 
+/// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
+/// forms on windows-x64, whatever declares them; windows-arm64 has none.
+#[cfg(feature = "full")]
+#[test]
+fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "#include <intrin.h>\n\
+        void s(unsigned char *b, unsigned short *w, unsigned long *d, unsigned long long *q,\n\
+               unsigned long long n) {\n\
+            __stosb(b, 1, n); __stosw(w, 2, n); __stosd(d, 3, n); __stosq(q, 4, n);\n\
+            __movsb(b, b + 64, n); __movsw(w, w + 64, n); __movsd(d, d + 64, n);\n\
+            __movsq(q, q + 64, n);\n\
+        }\n\
+        int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.into(), Target::WindowsX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native");
+    for (needle, what) in [
+        (&[0xf3u8, 0xaa][..], "rep stosb"),
+        (&[0x66, 0xf3, 0xab][..], "rep stosw"),
+        (&[0xf3, 0xab][..], "rep stosl"),
+        (&[0xf3, 0x48, 0xab][..], "rep stosq"),
+        (&[0xf3, 0xa4][..], "rep movsb"),
+        (&[0x66, 0xf3, 0xa5][..], "rep movsw"),
+        (&[0xf3, 0xa5][..], "rep movsl"),
+        (&[0xf3, 0x48, 0xa5][..], "rep movsq"),
+    ] {
+        assert!(
+            bytes.windows(needle.len()).any(|w| w == needle),
+            "{what}: {needle:02x?} not in the emitted code"
+        );
+    }
+    let err = Compiler::with_target(
+        "void f(unsigned char *b) { __stosb(b, 0, 1); }\n".into(),
+        Target::WindowsAarch64,
+    )
+    .compile()
+    .expect_err("no __stosb on arm64");
+    assert!(err.to_string().contains("__stosb"), "{err}");
+}
+
 /// `<cpuid.h>` executes CPUID, as gcc's does: `__get_cpuid_max` emits the
 /// instruction on both x86-64 targets with the range's first leaf in eax,
 /// rather than folding to a constant. The interpreter runs CPUID as zero in

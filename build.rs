@@ -291,6 +291,8 @@ fn emit_version_minimums() -> String {
 ///     would just duplicate every entry.
 ///   * `msvc_compat.h` -- predefines + decorator macros, no real
 ///     library bindings to index.
+///   * `__badc_*.h` -- declaration blocks other headers include; their
+///     names count for each header that includes them.
 fn emit_binding_to_header_index() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR set by cargo");
     let dest = Path::new(&out_dir).join("binding_to_header.rs");
@@ -319,20 +321,41 @@ fn emit_binding_to_header_index() {
         ra.cmp(&rb).then_with(|| a.1.cmp(&b.1))
     });
 
+    let bodies: BTreeMap<&str, String> = headers
+        .iter()
+        .map(|(path, rel)| {
+            let body =
+                fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            (rel.as_str(), body)
+        })
+        .collect();
+    let block = |rel: &str| rel.starts_with("__badc_");
     let mut index: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (path, rel) in &headers {
-        if rel == "memory.h" || rel == "msvc_compat.h" {
+    for (_, rel) in &headers {
+        if rel == "memory.h" || rel == "msvc_compat.h" || block(rel) {
             continue;
         }
-        let body =
-            fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        for name in extract_binding_names(&body)
-            .into_iter()
-            .chain(extract_prototype_names(&body))
-        {
-            let hs = index.entry(name).or_default();
-            if !hs.iter().any(|h| h == rel) {
-                hs.push(rel.clone());
+        let mut texts: Vec<&str> = vec![bodies[rel.as_str()].as_str()];
+        let mut i = 0;
+        while i < texts.len() {
+            for inc in included_headers(texts[i]).filter(|h| block(h)) {
+                if let Some(b) = bodies.get(inc)
+                    && !texts.contains(&b.as_str())
+                {
+                    texts.push(b);
+                }
+            }
+            i += 1;
+        }
+        for body in texts {
+            for name in extract_binding_names(body)
+                .into_iter()
+                .chain(extract_prototype_names(body))
+            {
+                let hs = index.entry(name).or_default();
+                if !hs.iter().any(|h| h == rel) {
+                    hs.push(rel.clone());
+                }
             }
         }
     }
@@ -376,6 +399,18 @@ fn collect_headers(root: &Path, dir: &Path, out: &mut Vec<(PathBuf, String)>) {
             out.push((path, rel));
         }
     }
+}
+
+/// The `<name>` of each `#include <name>` line.
+fn included_headers(body: &str) -> impl Iterator<Item = &str> {
+    body.lines().filter_map(|line| {
+        let rest = line.trim_start().strip_prefix('#')?.trim_start();
+        let rest = rest
+            .strip_prefix("include")?
+            .trim_start()
+            .strip_prefix('<')?;
+        rest.split_once('>').map(|(name, _)| name)
+    })
 }
 
 fn extract_binding_names(body: &str) -> Vec<String> {

@@ -258,6 +258,39 @@ errno_t _ltoa_s(long _Val, char *_DstBuf, size_t _Size, int _Radix);
 errno_t _ultoa_s(unsigned long _Val, char *_DstBuf, size_t _Size, int _Radix);
 #pragma binding(msvcrt::_i64toa_s, "_i64toa_s")
 errno_t _i64toa_s(long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+// The number conversions under a locale object, with the UCRT's prototypes.
+// msvcrt.dll exports the double, long, unsigned long and 64-bit forms; the
+// long long ones bind to the 64-bit ones as strtoll does, and `long double`
+// is `double`. libc/lib/locale_ext.c defines _strtof_l.
+#pragma binding(msvcrt::_strtod_l, "_strtod_l")
+double _strtod_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+#pragma binding(msvcrt::_strtold_l, "_strtod_l")
+long double _strtold_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+float _strtof_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+#pragma binding(msvcrt::_strtol_l, "_strtol_l")
+long _strtol_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoul_l, "_strtoul_l")
+unsigned long _strtoul_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoi64_l, "_strtoi64_l")
+long long _strtoi64_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoll_l, "_strtoi64_l")
+long long _strtoll_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoui64_l, "_strtoui64_l")
+unsigned long long _strtoui64_l(const char *_String, char **_EndPtr, int _Radix,
+                                _locale_t _Locale);
+#pragma binding(msvcrt::_strtoull_l, "_strtoui64_l")
+unsigned long long _strtoull_l(const char *_String, char **_EndPtr, int _Radix,
+                               _locale_t _Locale);
+#pragma binding(msvcrt::_atof_l, "_atof_l")
+double _atof_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoi_l, "_atoi_l")
+int _atoi_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atol_l, "_atol_l")
+long _atol_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoi64_l, "_atoi64_l")
+long long _atoi64_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoll_l, "_atoi64_l")
+long long _atoll_l(const char *_String, _locale_t _Locale);
 #pragma binding(msvcrt::_ui64toa_s, "_ui64toa_s")
 errno_t _ui64toa_s(unsigned long long _Val, char *_DstBuf, size_t _Size, int _Radix);
 #pragma binding(msvcrt::getenv_s, "getenv_s")

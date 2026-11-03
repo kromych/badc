@@ -9,11 +9,21 @@
 #include <string.h>
 #include <windows.h>
 
-// ucrtbase.dll's _create_locale, found by name: an image imports a name from
-// one DLL, and <locale.h> binds msvcrt.dll's. The callers import from
-// ucrtbase.dll, so it is loaded.
+// ucrtbase.dll's export `name`, found by name: an image imports a name from
+// one DLL, and the headers bind msvcrt.dll's spelling of the ones both
+// export (_create_locale, _strtod_l, ...).
+void (*__c5_ucrt_proc(const char *name))(void) {
+    static HMODULE ucrt;
+    HMODULE m = __atomic_load_n(&ucrt, __ATOMIC_ACQUIRE);
+    if (!m) {
+        m = LoadLibraryW(L"ucrtbase.dll");
+        __atomic_store_n(&ucrt, m, __ATOMIC_RELEASE);
+    }
+    return m ? (void (*)(void))GetProcAddress(m, name) : NULL;
+}
+
 static void *ucrt_create_locale(int category, const char *locale) {
-    FARPROC f = GetProcAddress(GetModuleHandleW(L"ucrtbase.dll"), "_create_locale");
+    void (*f)(void) = __c5_ucrt_proc("_create_locale");
     return f ? ((void *(*)(int, const char *))f)(category, locale) : NULL;
 }
 

@@ -160,21 +160,10 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 struct __c5_FILE;
 
 #ifdef _WIN32
+#include <__badc_wstring.h>
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::wcslen, "wcslen")
-#pragma binding(msvcrt::wcscmp, "wcscmp")
-#pragma binding(msvcrt::wcsncmp, "wcsncmp")
-#pragma binding(msvcrt::wcschr, "wcschr")
-#pragma binding(msvcrt::wcsrchr, "wcsrchr")
-#pragma binding(msvcrt::wcscpy, "wcscpy")
-#pragma binding(msvcrt::wcsncpy, "wcsncpy")
-#pragma binding(msvcrt::wcscat, "wcscat")
 #pragma binding(msvcrt::wcstol, "wcstol")
 #pragma binding(msvcrt::wcstoul, "wcstoul")
-// C99's wcstok and `_wcstok` are libc/lib/string_ext.c's (see <string.h>).
-#pragma binding(msvcrt::wcsicmp, "_wcsicmp")
-#pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
-#pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
 #pragma binding(msvcrt::_wopen, "_wopen")
 #pragma binding(msvcrt::_itow,    "_itow")
 #pragma binding(msvcrt::_ltow,    "_ltow")
@@ -191,11 +180,6 @@ struct __c5_FILE;
 #pragma binding(msvcrt::putwchar, "putwchar")
 #pragma binding(msvcrt::fgetws,   "fgetws")
 #pragma binding(msvcrt::fputws,   "fputws")
-#pragma binding(msvcrt::wcsncat,  "wcsncat")
-#pragma binding(msvcrt::wcscspn,  "wcscspn")
-#pragma binding(msvcrt::wcspbrk,  "wcspbrk")
-#pragma binding(msvcrt::wcsspn,   "wcsspn")
-#pragma binding(msvcrt::wcsstr,   "wcsstr")
 #pragma binding(msvcrt::mbrlen,   "mbrlen")
 // msvcrt.dll spells wcstoll / wcstoull as it spells strtoll / strtoull.
 #pragma binding(msvcrt::wcstoll,  "_wcstoi64")
@@ -206,21 +190,9 @@ wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
 wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
 wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
 int _vscwprintf(const wchar_t *format, __builtin_va_list ap);
-int _wcsicmp(const wchar_t *a, const wchar_t *b);
-int _wcsnicmp(const wchar_t *a, const wchar_t *b, size_t n);
 int _wopen(const wchar_t *path, int oflag, ...);
-#pragma binding(msvcrt::wcstok_s, "wcstok_s")
-int wcsicmp(const wchar_t *a, const wchar_t *b);
-wchar_t *wcstok_s(wchar_t *str, const wchar_t *delim, wchar_t **context);
-wchar_t *_wcstok(wchar_t *str, const wchar_t *delim);
-#pragma binding(msvcrt::wcscpy_s, "wcscpy_s")
-int wcscpy_s(wchar_t *dst, size_t count, const wchar_t *src);
-#pragma binding(msvcrt::wcsncpy_s, "wcsncpy_s")
-int wcsncpy_s(wchar_t *dst, size_t dstsz, const wchar_t *src, size_t count);
-#pragma binding(msvcrt::wcscat_s, "wcscat_s")
-int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
-#pragma binding(msvcrt::wcscoll,  "wcscoll")
-#pragma binding(msvcrt::wcsxfrm,  "wcsxfrm")
+#pragma binding(msvcrt::_wsetlocale, "_wsetlocale")
+wchar_t *_wsetlocale(int _Category, const wchar_t *_Locale);
 #pragma binding(msvcrt::wcsftime, "wcsftime")
 #pragma binding(msvcrt::wcsrtombs, "wcsrtombs")
 #pragma binding(msvcrt::mbsrtowcs, "mbsrtowcs")
@@ -230,14 +202,12 @@ int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
 #pragma binding(msvcrt::wctob,     "wctob")
 
 // Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
-// functions (7.24.4.4 / 7.24.4.5) or wcsnlen_s; the Microsoft SDK defines
-// the first inline over the exported primitives. mingw-w64 defines fwide as a request granted, msvcrt streams having no
+// functions (7.24.4.4 / 7.24.4.5); the Microsoft SDK defines them inline
+// over the exported primitives. mingw-w64 defines fwide as a request granted, msvcrt streams having no
 // orientation, and mbsinit over msvcrt's int-sized conversion state.
 #include <stdarg.h>
 #pragma binding(msvcrt::_vsnwprintf, "_vsnwprintf")
-#pragma binding(msvcrt::wcsnlen,     "wcsnlen")
 int _vsnwprintf(wchar_t *buffer, size_t count, const wchar_t *format, va_list ap);
-size_t wcsnlen(const wchar_t *s, size_t maxlen);
 static inline int fwide(struct __c5_FILE *stream, int mode) {
     (void)stream;
     return mode;
@@ -301,24 +271,6 @@ int _snwscanf_s_l(const wchar_t *_Src, size_t _MaxCount, const wchar_t *_Format,
 errno_t _wfopen_s(struct __c5_FILE **_File, const wchar_t *_Filename, const wchar_t *_Mode);
 #pragma binding(msvcrt::_wtmpnam_s, "_wtmpnam_s")
 errno_t _wtmpnam_s(wchar_t *_DstBuf, size_t _SizeInWords);
-#pragma binding(msvcrt::__wcserror_s, "__wcserror_s")
-errno_t __wcserror_s(wchar_t *_Buffer, size_t _SizeInWords, const wchar_t *_ErrMsg);
-#pragma binding(msvcrt::_wcserror_s, "_wcserror_s")
-errno_t _wcserror_s(wchar_t *_Buf, size_t _SizeInWords, int _ErrNum);
-#pragma binding(msvcrt::_wcsnset_s, "_wcsnset_s")
-errno_t _wcsnset_s(wchar_t *_Dst, size_t _DstSizeInWords, wchar_t _Val, size_t _MaxCount);
-#pragma binding(msvcrt::_wcsset_s, "_wcsset_s")
-errno_t _wcsset_s(wchar_t *_Str, size_t _SizeInWords, wchar_t _Val);
-#pragma binding(msvcrt::_wcslwr_s, "_wcslwr_s")
-errno_t _wcslwr_s(wchar_t *_Str, size_t _SizeInWords);
-#pragma binding(msvcrt::_wcslwr_s_l, "_wcslwr_s_l")
-errno_t _wcslwr_s_l(wchar_t *_Str, size_t _SizeInWords, _locale_t _Locale);
-#pragma binding(msvcrt::_wcsupr_s, "_wcsupr_s")
-errno_t _wcsupr_s(wchar_t *_Str, size_t _Size);
-#pragma binding(msvcrt::_wcsupr_s_l, "_wcsupr_s_l")
-errno_t _wcsupr_s_l(wchar_t *_Str, size_t _Size, _locale_t _Locale);
-#pragma binding(msvcrt::wcsncat_s, "wcsncat_s")
-errno_t wcsncat_s(wchar_t *_Dst, size_t _DstSizeInChars, const wchar_t *_Src, size_t _MaxCount);
 #pragma binding(msvcrt::_wasctime_s, "_wasctime_s")
 errno_t _wasctime_s(wchar_t *_Buf, size_t _SizeInWords, const struct tm *_Tm);
 #pragma binding(msvcrt::_wctime32_s, "_wctime32_s")
@@ -354,13 +306,6 @@ errno_t _wsplitpath_s(const wchar_t *_FullPath, wchar_t *_Drive, size_t _DriveSi
 // mingw-w64 binds _wctime_s to _wctime64_s, time_t being 64-bit.
 #pragma binding(msvcrt::_wctime_s, "_wctime64_s")
 errno_t _wctime_s(wchar_t *_Buffer, size_t _SizeInWords, const __time64_t *_Time);
-// <string.h> defines it too.
-#ifndef __BADC_WCSNLEN_S
-#define __BADC_WCSNLEN_S
-static inline size_t wcsnlen_s(const wchar_t *s, size_t n) {
-    return s ? wcsnlen(s, n) : 0;
-}
-#endif
 static inline wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n) {
     for (; n; --n, ++s)
         if (*s == c)
@@ -465,9 +410,6 @@ float wcstof(const wchar_t *restrict nptr, wchar_t **restrict endptr);
 long double wcstold(const wchar_t *restrict nptr, wchar_t **restrict endptr);
 #ifndef wcstok
 wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
-#endif
-#if defined(_WIN32) && defined(_CRT_NON_CONFORMING_WCSTOK)
-#define wcstok _wcstok
 #endif
 
 // Conversion state (C99 7.24.6.2; on Windows the definition above) and

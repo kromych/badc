@@ -2015,6 +2015,58 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
     }
 }
 
+/// On the PE targets `<wchar.h>` alone declares every wide-string function
+/// the UCRT's corecrt_wstring.h does, as `<string.h>` does; `<locale.h>` and
+/// `<wchar.h>` declare `_wsetlocale`; `<stdlib.h>` declares the number
+/// conversions under a locale object. Each imports msvcrt.dll's entry, the
+/// long long and long double forms its 64-bit and double ones, and
+/// `_strtof_l` is the runtime's over `_strtod_l`, which links beside strtod.
+#[test]
+fn windows_wide_strings_wsetlocale_and_l_conversions_bind_msvcrt() {
+    const M: &str = "msvcrt.dll";
+    const BLOCK: &str = include_str!("../../../libc/include/__badc_wstring.h");
+    let wide: alloc::vec::Vec<(&str, &str, &str)> = BLOCK
+        .lines()
+        .filter_map(|l| l.strip_prefix("#pragma binding(msvcrt::"))
+        .filter_map(|l| {
+            let (name, rest) = l.split_once(", \"")?;
+            Some((name, rest.split_once('"')?.0, M))
+        })
+        .collect();
+    assert!(wide.len() > 50, "{wide:?}");
+    let locale = [("_wsetlocale", "_wsetlocale", M)];
+    let conversions = [
+        ("_strtod_l", "_strtod_l", M),
+        ("_strtold_l", "_strtod_l", M),
+        ("_strtol_l", "_strtol_l", M),
+        ("_strtoul_l", "_strtoul_l", M),
+        ("_strtoi64_l", "_strtoi64_l", M),
+        ("_strtoll_l", "_strtoi64_l", M),
+        ("_strtoui64_l", "_strtoui64_l", M),
+        ("_strtoull_l", "_strtoui64_l", M),
+        ("_atof_l", "_atof_l", M),
+        ("_atoi_l", "_atoi_l", M),
+        ("_atol_l", "_atol_l", M),
+        ("_atoi64_l", "_atoi64_l", M),
+        ("_atoll_l", "_atoi64_l", M),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <wchar.h>\n",
+            "#include <string.h>\n#include <wchar.h>\n",
+        ] {
+            assert_windows_imports(target, headers, &wide);
+        }
+        assert_windows_imports(target, "#include <locale.h>\n", &locale);
+        assert_windows_imports(target, "#include <wchar.h>\n", &locale);
+        assert_windows_imports(target, "#include <stdlib.h>\n", &conversions);
+        let src = "#include <stdlib.h>\n\
+                   int main(void) { char *e; return (int)(_strtof_l(\"1\", &e, 0) + strtod(\"2\", &e)); }\n";
+        let image = assert_windows_unit_imports(target, src, &[("_strtod_l", M)]);
+        assert_eq!(pe_import_dll_of(&image, "_strtof_l"), None, "{target:?}");
+    }
+}
+
 /// `<tchar.h>`'s bounds-checked generic-text names, as mingw-w64's
 /// `sec_api/tchar_s.h` maps them, each resolve for both Windows targets under
 /// `_UNICODE`, `_MBCS` (with and without `_MB_MAP_DIRECT`) and neither, and
@@ -2354,7 +2406,7 @@ fn windows_stdlib_minmax_and_wcreate_locale_follow_the_ucrt() {
     const IMPORTS: &[(&str, &str)] = &[
         ("_create_locale", "msvcrt.dll"),
         ("__stdio_common_vsprintf", "ucrtbase.dll"),
-        ("_strtod_l", "ucrtbase.dll"),
+        ("GetProcAddress", "kernel32.dll"),
     ];
     for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
         for headers in [
@@ -2408,13 +2460,15 @@ fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
 /// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
 /// not export reach the ones it does through the header's and the C-library
-/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
-/// does.
+/// sources' definitions; the floating conversions find ucrtbase.dll's
+/// `_strtod_l` family by name, importing none of it. `<unistd.h>` binds the
+/// exec family as `<process.h>` does.
 #[test]
 fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     use crate::Target;
     const M: &str = "msvcrt.dll";
     const U: &str = "ucrtbase.dll";
+    const K: &str = "kernel32.dll";
     const HEADERS: &str = "#include <io.h>\n#include <process.h>\n#include <wchar.h>\n\
         #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n#include <stdlib.h>\n";
     let common = [
@@ -2450,13 +2504,13 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wcstoull", "_wcstoui64", M),
         ("swprintf", "__stdio_common_vswprintf", U),
         ("vswprintf", "__stdio_common_vswprintf", U),
-        ("wcstod", "_wcstod_l", U),
-        ("wcstof", "_wcstof_l", U),
-        ("wcstold", "_wcstod_l", U),
-        ("strtod", "_strtod_l", U),
-        ("strtof", "_strtof_l", U),
-        ("strtold", "_strtod_l", U),
-        ("atof", "_strtod_l", U),
+        ("wcstod", "GetProcAddress", K),
+        ("wcstof", "GetProcAddress", K),
+        ("wcstold", "GetProcAddress", K),
+        ("strtod", "GetProcAddress", K),
+        ("strtof", "GetProcAddress", K),
+        ("strtold", "GetProcAddress", K),
+        ("atof", "GetProcAddress", K),
     ];
     for (target, own) in [
         (
@@ -2502,7 +2556,8 @@ fn windows_stream_scanners_take_the_stream_lock() {
 
 /// The twelve C99 scanners are libc/lib/scanf_ext.c's on Windows: an image
 /// taking each one's address imports no C-library scanner, and converts
-/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`.
+/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`, found
+/// by name, so it imports neither.
 #[test]
 fn windows_scanners_import_no_crt_scanner() {
     use crate::{Compiler, NativeOptions, Target};
@@ -2536,13 +2591,18 @@ fn windows_scanners_import_no_crt_scanner() {
                 "{target:?}: {symbol}"
             );
         }
-        for symbol in ["_strtod_l", "_strtof_l"] {
+        for symbol in ["_strtod_l", "_strtof_l", "_wcstod_l", "_wcstof_l"] {
             assert_eq!(
-                pe_import_dll_of(&image, symbol).as_deref(),
-                Some("ucrtbase.dll"),
+                pe_import_dll_of(&image, symbol),
+                None,
                 "{target:?}: {symbol}"
             );
         }
+        assert_eq!(
+            pe_import_dll_of(&image, "GetProcAddress").as_deref(),
+            Some("kernel32.dll"),
+            "{target:?}"
+        );
     }
 }
 

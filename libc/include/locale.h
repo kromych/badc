@@ -135,10 +135,13 @@ struct lconv {
 #pragma binding(msvcrt::_create_locale,      "_create_locale")
 #pragma binding(msvcrt::_free_locale,        "_free_locale")
 #pragma binding(msvcrt::_get_current_locale, "_get_current_locale")
+#pragma binding(msvcrt::_wsetlocale,         "_wsetlocale")
 #include <corecrt.h>
 _locale_t _create_locale(int category, const char *locale);
 void _free_locale(_locale_t locale);
 _locale_t _get_current_locale(void);
+// The UCRT's and mingw-w64's <wchar.h> declare it too.
+wchar_t *_wsetlocale(int _Category, const wchar_t *_Locale);
 // ucrtbase.dll exports it and msvcrt.dll does not; libc/lib/locale_ext.c
 // defines it over _create_locale and joins the link on demand.
 _locale_t _wcreate_locale(int _Category, const wchar_t *_Locale);

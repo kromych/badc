@@ -396,6 +396,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("corecrt.h", WINDOWS),
     header!("_timeval.h", WINDOWS),
     header!("__badc_timeval.h", INTERNAL),
+    header!("__badc_wstring.h", INTERNAL),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),
@@ -622,6 +623,16 @@ mod tests {
             header_declaring("strlen", Target::LinuxX64),
             Some("string.h")
         );
+    }
+
+    /// A `__badc_*.h` block's names count for the headers that include it.
+    #[test]
+    fn header_declaring_credits_a_block_to_its_includers() {
+        assert_eq!(headers_declaring("_wcsrev"), ["string.h", "wchar.h"]);
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            assert_eq!(header_declaring("_wcsrev", t), Some("string.h"));
+        }
+        assert_eq!(header_declaring("_wcsrev", Target::LinuxX64), None);
     }
 
     #[test]

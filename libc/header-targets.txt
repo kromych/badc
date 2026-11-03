@@ -215,6 +215,7 @@ share.h	-	-	-	y	y
 corecrt.h	-	-	-	y	y
 _timeval.h	-	-	-	y	y
 __badc_timeval.h	-	-	-	-	-
+__badc_wstring.h	-	-	-	-	-
 winioctl.h	-	-	-	p	p
 pathcch.h	-	-	-	y	y
 psapi.h	-	-	-	p	p

@@ -6100,6 +6100,77 @@ fn value_builtins_check_their_operands() {
     );
 }
 
+/// A diagnostic about a `__builtin_` call names the spelling the call used,
+/// as gcc 16 and clang 22 do: a library builtin (`__builtin_strlen` binds
+/// `strlen`, whether a header declares it or not) and an intrinsic one, for
+/// the argument count and an argument's type.
+#[test]
+fn a_builtin_call_is_named_as_written() {
+    use crate::{CompileOptions, Target};
+    let report = |src: &str, freestanding: bool| -> String {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding);
+        match Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile() {
+            Ok(p) => p.warnings.iter().map(|w| w.to_string() + "\n").collect(),
+            Err(e) => e.to_string(),
+        }
+    };
+    let s = "struct S { int x; };\n";
+    for (body, needle) in [
+        (
+            "unsigned long f(void) { return __builtin_strlen(\"a\", 1); }",
+            "too many arguments to `__builtin_strlen` (expected 1, got at least 2)",
+        ),
+        (
+            "unsigned long f(void) { return __builtin_strlen(); }",
+            "too few arguments to `__builtin_strlen` (expected 1, got 0)",
+        ),
+        (
+            "unsigned long f(void) { return __builtin_strlen(5); }",
+            "integer assigned to pointer in argument 1 of `__builtin_strlen`",
+        ),
+        (
+            "unsigned long f(struct S s) { return __builtin_strlen(s); }",
+            "incompatible struct types in argument 1 of `__builtin_strlen`",
+        ),
+        (
+            "int f(void *p) { return __builtin_memcmp(p, p); }",
+            "too few arguments to `__builtin_memcmp` (expected 3, got 2)",
+        ),
+        (
+            "int f(void) { return __builtin_printf(); }",
+            "too few arguments to `__builtin_printf` (expected at least 1, got 0)",
+        ),
+        (
+            "double f(void) { return __builtin_sqrt(); }",
+            "too few arguments to `__builtin_sqrt` (expected at least 1, got 0)",
+        ),
+        (
+            "double f(struct S s) { return __builtin_sqrt(s); }",
+            "incompatible struct types in argument 1 of `__builtin_sqrt`",
+        ),
+        (
+            "int f(void) { return __builtin_popcount(1, 2); }",
+            "too many arguments to `__builtin_popcount`",
+        ),
+        (
+            "int f(int *p) { return __builtin_popcount(p); }",
+            "pointer assigned to integer in argument 1 of `__builtin_popcount`",
+        ),
+        (
+            "double f(double x) { return __builtin_fma(x, x); }",
+            "too few arguments to `__builtin_fma` (expected 3, got 2)",
+        ),
+    ] {
+        for freestanding in [false, true] {
+            let got = report(&format!("{s}{body}\n"), freestanding);
+            let what = format!("{body} freestanding={freestanding}\n{got}");
+            assert!(got.contains(needle) && !got.contains(".builtin"), "{what}");
+        }
+    }
+}
+
 /// gcc's `-Wstrict-prototypes` under C99's rules: a function declarator
 /// whose empty or identifier list declares no prototype (C99 6.7.5.3p14),
 /// in a declaration, a pointer, a typedef, a parameter, a member and a

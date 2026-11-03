@@ -1626,6 +1626,9 @@ impl Compiler {
         {
             return self.parse_intrinsic_call(id_idx, kind as i64);
         }
+        // A diagnostic about the call names it as written, `__builtin_strlen`
+        // where that binds `strlen`, as gcc and clang do.
+        let spelled = self.symbols[id_idx].name.clone();
         let id_idx = self.bind_call_target(id_idx)?;
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
@@ -1658,7 +1661,7 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_ms_intrinsic(&name)
             }
-            None => self.parse_direct_call(id_idx),
+            None => self.parse_direct_call(id_idx, spelled),
         }
     }
 
@@ -1762,7 +1765,7 @@ impl Compiler {
         if self.lex.tk == ')' && !nullary {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("intrinsic `{fn_name}` requires one argument"),
+                format!("too few arguments to `{fn_name}` (expected at least 1, got 0)"),
             ));
         }
         let IntrinsicOperands {
@@ -1774,7 +1777,7 @@ impl Compiler {
         if self.lex.tk != ')' {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("intrinsic `{fn_name}` arity mismatch at close paren"),
+                format!("too many arguments to `{fn_name}`"),
             ));
         }
         self.next()?;
@@ -1887,7 +1890,7 @@ impl Compiler {
             };
             let mut count = 0;
             loop {
-                self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+                self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, count)?;
                 count += 1;
                 if self.lex.tk == ',' {
                     self.next()?;
@@ -1896,9 +1899,10 @@ impl Compiler {
                 break;
             }
             if count != 3 {
+                let few = if count < 3 { "few" } else { "many" };
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
-                    format!("intrinsic `{fn_name}` takes (x, y, z)"),
+                    format!("too {few} arguments to `{fn_name}` (expected 3, got {count})"),
                 ));
             }
         } else if is_fp_unary {
@@ -1909,7 +1913,7 @@ impl Compiler {
             } else {
                 Ty::Double as i64
             };
-            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, 0)?;
         } else if is_int_bit_unary || is_bswap {
             // `__builtin_clz` / `ctz` / `popcount` and `__builtin_bswap*`: one
             // integer operand, zero-extended to the operation width so the count
@@ -1935,7 +1939,7 @@ impl Compiler {
             } else {
                 Ty::Int as i64 | super::types::UNSIGNED_BIT
             };
-            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, 0)?;
         } else if is(Intrinsic::VaArg) {
             va_arg_result_ty = Some(self.parse_va_arg_operands(fn_name, &mut ast_intrinsic_args)?);
         } else if is(Intrinsic::VaStart) || is(Intrinsic::VaCopy) {
@@ -2028,8 +2032,24 @@ impl Compiler {
         &mut self,
         to_ty: i64,
         args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
+        fn_name: &str,
+        index: usize,
     ) -> Result<(), C5Error> {
+        let line = self.lex.line;
         self.expr(Token::Assign as i64)?;
+        // C99 6.5.2.2p7: the operand converts as if by assignment to the
+        // builtin's parameter type, as gcc and clang check it.
+        let zero = self.value_is_null_pointer_constant();
+        if let Some(m) = Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false) {
+            let want = super::types::format_type(to_ty, &self.structs);
+            let got = super::types::format_type(self.ty, &self.structs);
+            let (reason, n) = (m.reason, index + 1);
+            let text = format!("{reason} in argument {n} of `{fn_name}` (param={want}, arg={got})");
+            if m.no_conversion {
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+            }
+            self.report_mismatch(&m, line, text)?;
+        }
         if let Some(child) = self.ast_acc {
             let pos = self.ast_src_pos();
             let cast_id = self
@@ -2388,7 +2408,7 @@ impl Compiler {
         }
     }
 
-    fn parse_direct_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+    fn parse_direct_call(&mut self, id_idx: usize, spelled: String) -> Result<(), C5Error> {
         let s = &self.symbols[id_idx];
         let is_sys_call = s.class == Token::Sys as i64;
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
@@ -2396,7 +2416,7 @@ impl Compiler {
             params: s.params().to_vec(),
             param_fns: s.fn_type.params.fn_types.clone(),
             is_variadic: s.is_variadic(),
-            name: s.name.clone(),
+            name: spelled,
             is_sys_call,
             narrows_to_params: is_sys_call,
             ret_ty: s.type_,

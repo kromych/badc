@@ -55,11 +55,27 @@ pub(crate) fn dump_dependencies(
             }
         }
         // An unresolved `#include` leaves the prerequisite list
-        // incomplete, so report it and write nothing, as gcc does.
+        // incomplete, so report it and write nothing, as gcc does. Any
+        // other error (`#error`) leaves the list whole: gcc and clang write
+        // it and fail.
+        let unresolved = |r: &badc::IncludeRecord| r.status == badc::IncludeStatus::Missing;
+        let missing = compiler.include_records().iter().any(unresolved);
         let res = match compiler.preprocess_error() {
-            Some(e) => {
+            Some(e) if missing => {
                 log.error(stderr_is_tty, "", e);
                 Err(())
+            }
+            Some(e) => {
+                log.error(stderr_is_tty, "", e);
+                let written = emit_deps(
+                    src,
+                    compiler.include_records(),
+                    deps,
+                    cli.output_path.as_deref(),
+                    &mut log,
+                    stderr_is_tty,
+                );
+                written.and(Err(()))
             }
             None => emit_deps(
                 src,

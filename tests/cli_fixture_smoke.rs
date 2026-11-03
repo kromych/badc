@@ -1187,6 +1187,67 @@ fn preprocessing_alone_reports_the_preprocessors_diagnostics() {
     assert!(!out.status.success() && stopped, "{err}");
 }
 
+/// `-E` past a preprocessor error, as gcc 16 does: an `#error` (each one
+/// reported, from a header too) or an unterminated `#if` fails the run
+/// after the whole unit is written; a missing include ends the unit there,
+/// as gcc's fatal error does, after the text before it. An `#error` in a
+/// skipped group is no error. The text is gcc 16's `-E -P` output with its
+/// blank lines dropped; clang 22 writes the same, except that it goes on
+/// past a missing include. `-dM -E` and `-M` go on past an `#error` too,
+/// and a compile reports every `#error`.
+#[test]
+fn preprocessing_goes_past_an_error_directive_and_still_fails() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-pp-past-error");
+    std::fs::write(dir.join("h.h"), "#error in header\nint h;\n").expect("write h.h");
+    let run = |flags: &[&str], body: &str| {
+        let src = dir.join("u.c");
+        std::fs::write(&src, body).expect("write u.c");
+        let out = Command::new(badc)
+            .arg("--target=linux-x64")
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<String> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(str::to_string)
+            .collect();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let errors = stderr.matches("error:").count();
+        (out.status.success(), lines, errors)
+    };
+    // The unit, gcc's text, and the errors it reports.
+    type Case<'a> = (&'a str, &'a [&'a str], usize);
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        ("int a;\n#error first\nint b;\n", &["int a;", "int b;"], 1),
+        ("int a;\n#if 0\n#error skipped\n#endif\nint b;\n", &["int a;", "int b;"], 0),
+        ("int a;\n#error one\nint b;\n#error two\nint c;\n", &["int a;", "int b;", "int c;"], 2),
+        ("int a;\n#include \"missing.h\"\nint b;\n", &["int a;"], 1),
+        ("int a;\n#if 1\nint b;\n", &["int a;", "int b;"], 1),
+        ("int a;\n#include \"h.h\"\nint b;\n", &["int a;", "int h;", "int b;"], 1),
+        ("int a;\n#define X 1\n#error x is X\nint b = X;\n", &["int a;", "int b = 1;"], 1),
+        ("int a;\n#include \"missing.h\"\nint b;\n#error after\nint c;\n", &["int a;"], 1),
+    ];
+    for &(body, text, errors) in cases {
+        let (ok, lines, got) = run(&["-E", "-P"], body);
+        let same = ok == (errors == 0) && lines == text && got == errors;
+        assert!(same, "{body}\n{lines:?}");
+    }
+    let two = "#define BEFORE 1\n#error one\n#define AFTER 2\n#error two\nint c;\n";
+    let (ok, macros, errors) = run(&["-dM", "-E"], two);
+    let after = macros.iter().any(|l| l == "#define AFTER 2");
+    assert!(!ok && errors == 2 && after, "{macros:?}");
+    let (ok, rule, errors) = run(&["-M"], two);
+    let written = rule.iter().any(|l| l.contains("u.c"));
+    assert!(!ok && errors == 2 && written, "{rule:?}");
+    let (ok, _, errors) = run(&["-fsyntax-only"], two);
+    assert!(!ok && errors == 2);
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

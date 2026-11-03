@@ -1687,20 +1687,32 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
-        let out = self.process_to_end(source)?;
+        let mut out = String::with_capacity(source.len());
+        self.process_preamble(&mut out)
+            .map_err(|e| self.failed(e))?;
+        self.process_source(source, &mut out)
+            .map_err(|e| self.failed(e))?;
         self.fail_on_errors()?;
         Ok(out)
     }
 
     /// [`Self::process`] leaving the diagnostics in the sink, an error
     /// among them included: `-E` writes the whole text and then fails, as
-    /// gcc and clang do. A hard error still stops the pass.
+    /// gcc and clang do. An error the pass cannot go past ends it there,
+    /// as gcc's fatal errors do: the text before it is returned, and its
+    /// diagnostic joins the sink's.
     pub fn process_to_end(&mut self, source: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
-        self.process_preamble(&mut out)
-            .map_err(|e| self.failed(e))?;
-        self.process_source(source, &mut out)
-            .map_err(|e| self.failed(e))?;
+        let run = self.process_preamble(&mut out);
+        match run.and_then(|()| self.process_source(source, &mut out)) {
+            Err(C5Error::Compile(diagnostics)) => {
+                for d in diagnostics {
+                    self.sink.record(d);
+                }
+            }
+            Err(e) => return Err(self.failed(e)),
+            Ok(()) => {}
+        }
         Ok(out)
     }
 
@@ -1721,10 +1733,10 @@ impl Preprocessor {
         e.after(self.sink.take())
     }
 
-    /// Fail the pass when a diagnostic resolved to `Error`, which is
-    /// what a `#pragma`-raised level asks for. Reported at the end of
-    /// the pass rather than at the site, so the unit is read whole
-    /// first; the error carries every diagnostic the pass produced.
+    /// Fail the pass when a diagnostic resolved to `Error`: an `#error`, or
+    /// a level a `#pragma` raised. Reported at the end of the pass rather
+    /// than at the site, so the unit is read whole first; the error
+    /// carries every diagnostic the pass produced.
     fn fail_on_errors(&self) -> Result<(), C5Error> {
         if !self.sink.has_errors() {
             return Ok(());
@@ -2075,14 +2087,15 @@ impl Preprocessor {
             }
             Directive::Else => apply_else(cond_stack, filename, diag)?,
             Directive::Endif => apply_endif(cond_stack, filename, diag)?,
+            // The pass goes on to the end of the unit and then fails, as
+            // gcc's and clang's does, reporting every `#error` it reaches.
             Directive::Error(message) => {
                 if active {
-                    return Err(C5Error::at(
+                    self.warn(
                         Code::ERROR_DIRECTIVE,
-                        filename,
-                        diag,
+                        site,
                         format!("#error {}", message.trim()),
-                    ));
+                    );
                 }
                 active
             }
@@ -2400,12 +2413,10 @@ impl<'p, 's> LinePass<'p, 's> {
         self.pp.take_pending_error()?;
         let depth = self.cond.len();
         if depth > 0 {
-            return Err(C5Error::at(
-                Code::DIRECTIVE,
-                self.filename,
-                self.presumed,
-                "preprocessor: unterminated `#if` / `#ifdef` block",
-            ));
+            // The text is whole; the pass goes on, and fails at its end.
+            let site = self.site(self.presumed);
+            let text = String::from("preprocessor: unterminated `#if` / `#ifdef` block");
+            self.pp.warn(Code::DIRECTIVE, site, text);
         }
         // Only files reached through `#include` can be re-included.
         if !self.pp.include_stack.is_empty()

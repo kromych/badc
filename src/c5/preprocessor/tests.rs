@@ -6042,17 +6042,13 @@ fn the_front_end_installs_the_command_line_on_this_passs_sink() {
 fn a_hard_error_carries_the_diagnostics_reported_before_it() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let err = pp
-        .process("#pragma frobnicate\n#warning first\n#error stop\n")
-        .expect_err("#error fails the pass");
+        .process("#pragma frobnicate\n#warning first\n#include \"no-such-header.h\"\n")
+        .expect_err("a missing include fails the pass");
     let reported: Vec<Code> = err.diagnostics().iter().map(|d| d.code).collect();
     let row = |name: &str| Code::from_selector(name).expect("catalogued");
     assert_eq!(
         reported,
-        [
-            row("unknown-pragmas"),
-            row("#warnings"),
-            Code::ERROR_DIRECTIVE
-        ]
+        [row("unknown-pragmas"), row("#warnings"), Code::DIRECTIVE]
     );
     assert!(
         codes(&pp).is_empty(),

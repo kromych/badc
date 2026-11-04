@@ -20,8 +20,9 @@
 // `xchg`. The read-modify-write forms lower on x86-64 to `lock xadd`
 // (add, and sub with the operand negated), `xchg` (exchange, implicitly
 // locked), a `lock cmpxchg` retry loop (and / or / xor) and `lock
-// cmpxchg` (compare-exchange), and on aarch64 to an `ldaxr` / `stlxr`
-// retry loop: the seq_cst sequence whatever order they name.
+// cmpxchg` (compare-exchange), and on aarch64 to one LSE instruction
+// carrying the order they name (`ldadd`, `ldclr`, `ldset`, `ldeor`,
+// `swp`, `cas`).
 // `atomic_flag_test_and_set` is the byte-wide exchange and
 // `atomic_flag_clear` the byte-wide store.
 

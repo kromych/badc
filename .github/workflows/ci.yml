@@ -995,6 +995,10 @@ jobs:
         run: cargo build --locked --no-default-features --lib --verbose
       - name: --all-features
         run: cargo build --locked --all-features --verbose
+      # `cargo publish` verifies the tarball with default features only;
+      # this builds it with the feature-gated modules `cargo install` uses.
+      - name: cargo package --all-features
+        run: cargo package --locked --all-features
 
   snapshots-clean:
     name: snapshots clean

@@ -25,10 +25,15 @@
  * placed in AllocatePages'd executable memory (UEFI maps loaded data
  * execute-never), with the scheduler reached through TPIDR_EL1 since AArch64
  * inline asm has no symbol references.
+ *
+ * The threads share an `_Atomic` counter and an `_Atomic` record with a lock
+ * word, which `efi_main` checks once the scheduler stops (README.md).
  */
 
 #pragma subsystem(efi_application)
 #pragma entrypoint(efi_main)
+
+#include <stdatomic.h>
 
 typedef unsigned long long UINTN;
 typedef unsigned long long EFI_STATUS;
@@ -39,27 +44,56 @@ typedef void *EFI_HANDLE;
 #define NCTX (NTHREADS + 1) /* slot 0 is efi_main */
 #define STACK_WORDS 1024    /* 8 KiB per thread stack */
 #define MAX_TICKS 24        /* ~8 turns per thread, then stop */
+#define SPIN_ITERS 60000u   /* busy-loop iterations between printed lines */
+#define SNAPSHOT_EVERY 16u  /* busy-loop iterations per record copy */
 
 /* ---- Scheduler state (shared; the ISR runs with interrupts masked, so no
  *      concurrent mutation of these between ticks on a single core). ---- */
 
 static UINTN g_ctx_sp[NCTX]; /* saved stack pointer per context */
 static int g_cur;            /* running context (0 = efi_main) */
-static volatile unsigned g_ticks;
-static volatile unsigned g_done;
+static _Atomic unsigned g_ticks;
+static _Atomic unsigned g_done;
 static UINTN g_stacks[NTHREADS][STACK_WORDS];
 
 /* The serial port is shared by all threads; the lock keeps each printed line
  * from being split by a context switch mid-write. */
-static volatile unsigned g_print_lock;
+static atomic_flag g_print_lock = ATOMIC_FLAG_INIT;
 
-static void spin_lock(volatile unsigned *l) {
-    while (__atomic_test_and_set(l, __ATOMIC_ACQUIRE)) {
+static void spin_lock(atomic_flag *l) {
+    while (atomic_flag_test_and_set_explicit(l, memory_order_acquire)) {
     }
 }
 
-static void spin_unlock(volatile unsigned *l) {
-    __atomic_clear(l, __ATOMIC_RELEASE);
+static void spin_unlock(atomic_flag *l) {
+    atomic_flag_clear_explicit(l, memory_order_release);
+}
+
+/* With S the total, C the counted sum and F the raised in-flight flags,
+ * C <= S <= C + F; a lost update leaves S below C. The plain control calls
+ * between load and store: QEMU's TCG interrupts only between blocks. */
+#ifdef PREEMPT_PLAIN_COUNTER
+static volatile unsigned g_shared;
+__attribute__((noinline)) static unsigned plus_one(unsigned v) { return v + 1; }
+#define SHARED_INCREMENT() (g_shared = plus_one(g_shared))
+#else
+static _Atomic unsigned g_shared;
+#define SHARED_INCREMENT() (g_shared++)
+#endif
+static _Atomic unsigned g_counted[NTHREADS];
+static _Atomic unsigned g_inflight[NTHREADS];
+
+/* `check` ties the fields together. Only threads touch the record: neither
+ * the ISR nor `efi_main` can wait out a lock word a stopped thread holds. */
+struct snapshot {
+    unsigned turn, id, check;
+};
+static _Atomic struct snapshot g_snapshot;
+static _Atomic unsigned g_snapshot_reads;
+static _Atomic unsigned g_torn;
+
+static unsigned snapshot_check(unsigned turn, unsigned id) {
+    return turn * 2654435761u + id * 40503u;
 }
 
 /* Defined with the portable helpers below; forward-declared for the arch
@@ -255,11 +289,12 @@ static void install_fault_gates(unsigned short cs) {
  * stack pointer; returns the stack pointer to switch to. */
 UINTN schedule(UINTN sp) {
     g_ctx_sp[g_cur] = sp;
-    g_ticks++;
+    unsigned ticks = atomic_load_explicit(&g_ticks, memory_order_relaxed) + 1;
+    atomic_store_explicit(&g_ticks, ticks, memory_order_release);
     int next;
-    if (g_ticks >= MAX_TICKS) {
+    if (ticks >= MAX_TICKS) {
         pit_stop();
-        g_done = 1;
+        atomic_store_explicit(&g_done, 1, memory_order_release);
         next = 0; /* back to efi_main */
     } else {
         next = (g_cur >= NTHREADS) ? 1 : g_cur + 1;
@@ -401,11 +436,12 @@ static struct kstate g_state;
 
 UINTN schedule(UINTN sp) {
     g_ctx_sp[g_cur] = sp;
-    g_ticks++;
+    unsigned ticks = atomic_load_explicit(&g_ticks, memory_order_relaxed) + 1;
+    atomic_store_explicit(&g_ticks, ticks, memory_order_release);
     int next;
-    if (g_ticks >= MAX_TICKS) {
+    if (ticks >= MAX_TICKS) {
         mmio_w(GICD + 0x180, 1u << VTIMER_PPI); /* GICD_ICENABLER0: mask PPI 27 */
-        g_done = 1;
+        atomic_store_explicit(&g_done, 1, memory_order_release);
         next = 0;
     } else {
         next = (g_cur >= NTHREADS) ? 1 : g_cur + 1;
@@ -610,14 +646,55 @@ static void print_line(int id, unsigned turn) {
     spin_unlock(&g_print_lock);
 }
 
-/* Each thread prints its turn count, then burns a little time so the timer
+/* Each thread prints its turn count, then works the atomics so the timer
  * preempts it mid-loop and hands the CPU to the next thread. */
 static void thread_main(int id) {
-    unsigned turn = 0;
+    unsigned turn = 0, mine = 0;
     for (;;) {
         print_line(id, turn++);
-        for (volatile unsigned d = 0; d < 400000u; d++) {
+        for (unsigned d = 0; d < SPIN_ITERS; d++) {
+            g_inflight[id] = 1;
+            SHARED_INCREMENT();
+            g_counted[id] = ++mine;
+            g_inflight[id] = 0;
+            if (d % SNAPSHOT_EVERY) {
+                continue;
+            }
+            g_snapshot = (struct snapshot){mine, (unsigned)id, snapshot_check(mine, id)};
+            struct snapshot s = g_snapshot;
+            g_snapshot_reads++;
+            if (s.check != snapshot_check(s.turn, s.id)) {
+                g_torn++;
+            }
         }
+    }
+}
+
+static void report_atomics(void) {
+    unsigned counted = 0, inflight = 0;
+    for (int i = 0; i < NTHREADS; i++) {
+        counted += g_counted[i];
+        inflight += g_inflight[i];
+    }
+    unsigned shared = g_shared;
+    serial_puts("BADC-PREEMPT: shared=");
+    serial_putdec(shared);
+    serial_puts(" counted=");
+    serial_putdec(counted);
+    serial_puts(" inflight=");
+    serial_putdec(inflight);
+    serial_puts("\r\n");
+    if (counted <= shared && shared <= counted + inflight) {
+        serial_puts("BADC-PREEMPT: atomic counter ok\r\n");
+    }
+    unsigned torn = g_torn;
+    serial_puts("BADC-PREEMPT: snapshot reads=");
+    serial_putdec(g_snapshot_reads);
+    serial_puts(" torn=");
+    serial_putdec(torn);
+    serial_puts("\r\n");
+    if (torn == 0) {
+        serial_puts("BADC-PREEMPT: atomic snapshot ok\r\n");
     }
 }
 
@@ -635,11 +712,12 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, void *SystemTable) {
 
     /* The first tick saves this context and switches to thread 1; when the
      * scheduler has run MAX_TICKS it stops the timer and switches back here. */
-    while (!g_done) {
+    while (!atomic_load_explicit(&g_done, memory_order_acquire)) {
         halt();
     }
     cli();
     serial_puts("BADC-PREEMPT: scheduler done\r\n");
+    report_atomics();
     serial_puts("BADC-PREEMPT-OK\r\n");
 
     for (;;) {

@@ -14,7 +14,9 @@ end to end. x86_64 uses the 8259 PIC + 8254 PIT + an IDT (exercising naked
 prologue suppression, explicit-register operands, push/pop, immediate port I/O,
 and a direct `call` to a C symbol); AArch64 uses the GICv2 + the virtual generic
 timer + an EL1 vector table, reaching the scheduler through TPIDR_EL1 and a
-`blr`. A third lane rebuilds preempt.c with its fault injection enabled and
+`blr`. Its threads share an `_Atomic` counter and an `_Atomic` record with a
+lock word, which `efi_main` checks after the scheduler stops. A third lane
+rebuilds preempt.c with its fault injection enabled and
 requires the unhandled-vector diagnostic on the serial line. A fourth holds
 the 8259's ICW1..ICW2 window open past a firmware timer period, where an
 IRQ0 taken with interrupts still enabled arrives as vector 0, and requires
@@ -62,6 +64,12 @@ TARGETS = [
     ("windows-arm64", "aarch64", "qemu-system-aarch64"),
 ]
 
+# preempt.c's verdicts on its atomics once the scheduler stops: the shared
+# counter within the bracket its threads' own counts set, and no torn read of
+# the locked record.
+PREEMPT_ATOMICS = ["BADC-PREEMPT: atomic counter ok",
+                   "BADC-PREEMPT: atomic snapshot ok"]
+
 # (label, kernel source, extra badc flags, {arch: expected serial markers}).
 # An arch missing from the marker map is not built for that lane.
 KERNELS = [
@@ -84,7 +92,7 @@ KERNELS = [
         {
             arch: ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
                    "[thread 2]", "BADC-PREEMPT: scheduler done",
-                   "BADC-PREEMPT-OK"]
+                   *PREEMPT_ATOMICS, "BADC-PREEMPT-OK"]
             for arch in ("x64", "aarch64")
         },
     ),
@@ -111,7 +119,7 @@ KERNELS = [
         ["-DPREEMPT_PIC_WINDOW_STRESS"],
         {"x64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
                  "[thread 2]", "BADC-PREEMPT: scheduler done",
-                 "BADC-PREEMPT-OK"]},
+                 *PREEMPT_ATOMICS, "BADC-PREEMPT-OK"]},
     ),
     (
         # The vector-table hand-over. AllocatePages returns with IRQ unmasked,
@@ -126,7 +134,7 @@ KERNELS = [
         ["-DPREEMPT_VBAR_WINDOW_STRESS"],
         {"aarch64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
                      "[thread 2]", "BADC-PREEMPT: scheduler done",
-                     "BADC-PREEMPT-OK"]},
+                     *PREEMPT_ATOMICS, "BADC-PREEMPT-OK"]},
     ),
 ]
 

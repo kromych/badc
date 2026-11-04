@@ -1741,20 +1741,27 @@ fn dash_p_drops_the_line_markers() {
 }
 
 /// `-E` output compiles as its source does: the pragmas the preprocessor
-/// consumed, <stdatomic.h>'s `#pragma intrinsic` lines among them, are
-/// written where they stood.
+/// consumed, <math.h>'s `#pragma intrinsic` lines among them, are written
+/// where they stood, so `sqrt` stays the instruction and no reference.
 #[test]
 fn preprocessed_output_compiles_again() {
     let d = dir("pp-recompile");
     write(
         &d,
         "a.c",
-        "#include <stdatomic.h>\n\
+        "#include <math.h>\n#include <stdatomic.h>\n\
          int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
-         int main(void) { atomic_int x = 1; return f(&x) - 1; }\n",
+         double g(double x) { return sqrt(x); }\n",
     );
-    run_ok(&d, &["-q", "-E", "a.c", "-o", "a_pp.c"]);
-    run_ok(&d, &["-q", "-c", "a_pp.c", "-o", "a.o"]);
+    let t = "--target=linux-x64";
+    run_ok(&d, &["-q", t, "-E", "a.c", "-o", "a_pp.c"]);
+    run_ok(&d, &["-q", t, "-c", "a_pp.c", "-o", "a.o"]);
+    let undefined: Vec<String> = sym_bindings(&std::fs::read(d.join("a.o")).unwrap())
+        .into_iter()
+        .filter(|s| s.2 == 0)
+        .map(|s| s.0)
+        .collect();
+    assert!(undefined.is_empty(), "{undefined:?}");
 }
 
 /// A `.i` unit is C that needs no preprocessing, as in gcc's suffix

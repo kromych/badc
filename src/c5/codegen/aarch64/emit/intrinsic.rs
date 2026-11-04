@@ -154,18 +154,6 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => fail("intrinsic: bit builtin reached codegen"),
-        // C11 atomic operations are lowered to load / store /
-        // read-modify-write at the call site; they never reach codegen as
-        // an `Inst::Intrinsic`.
-        I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong => fail("intrinsic: atomic op reached codegen"),
     }
 }
 
@@ -242,15 +230,6 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64
-        | I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong
         | I::X87StoreControlWord
         | I::X87LoadControlWord
         | I::X86FxSave

@@ -126,21 +126,6 @@ pub enum Intrinsic {
     /// for correctness, so the interpreter ignores it. Takes no
     /// argument and produces no value.
     CpuRelax = 31,
-    /// C11 7.17 atomic generic operations. Declared by `<stdatomic.h>`
-    /// via `#pragma intrinsic` and lowered at the call site to an
-    /// ordinary load / store / read-modify-write on the pointee width
-    /// of the first argument (see `Compiler::parse_atomic_builtin` and
-    /// `ast::AtomicKind`), so they never reach the `Inst::Intrinsic`
-    /// dispatch -- the same arrangement as the bit-count builtins above.
-    AtomicLoad = 32,
-    AtomicStore = 33,
-    AtomicExchange = 34,
-    AtomicFetchAdd = 35,
-    AtomicFetchSub = 36,
-    AtomicFetchAnd = 37,
-    AtomicFetchOr = 38,
-    AtomicFetchXor = 39,
-    AtomicCompareExchangeStrong = 40,
     /// `asm("fnstcw %0" : "=m"(cw))` -- store the x87 FPU control word to
     /// the 16-bit memory operand. The op takes the operand's address;
     /// codegen emits `fnstcw m16` (x86_64 only). The interpreter writes
@@ -409,15 +394,6 @@ impl Intrinsic {
             29 => Some(Intrinsic::Bswap64),
             30 => Some(Intrinsic::FrameAddress),
             31 => Some(Intrinsic::CpuRelax),
-            32 => Some(Intrinsic::AtomicLoad),
-            33 => Some(Intrinsic::AtomicStore),
-            34 => Some(Intrinsic::AtomicExchange),
-            35 => Some(Intrinsic::AtomicFetchAdd),
-            36 => Some(Intrinsic::AtomicFetchSub),
-            37 => Some(Intrinsic::AtomicFetchAnd),
-            38 => Some(Intrinsic::AtomicFetchOr),
-            39 => Some(Intrinsic::AtomicFetchXor),
-            40 => Some(Intrinsic::AtomicCompareExchangeStrong),
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
             43 => Some(Intrinsic::AtomicThreadFence),

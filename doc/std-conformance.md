@@ -399,9 +399,10 @@ model; only `-fgnu89-inline` does.
     dyld binds to libSystem's `__tlv_bootstrap`. The per-thread image is
     `__thread_data`, or `__thread_bss` when no variable has an initializer.
     libSystem is linked when nothing else pulls it in.
-- C11 7.17 atomics through `<stdatomic.h>`. The non-`_explicit` functions are
-  bound with `#pragma intrinsic`; the `_explicit` forms and the fences map to
-  the `__atomic_*` builtins. On an `_Atomic` object of any type an operation
+- C11 7.17 atomics through `<stdatomic.h>`. The generic functions are macros:
+  the `_explicit` forms and the fences map to the `__atomic_*` builtins, and
+  the other forms to the `_explicit` ones with seq_cst order, so they work
+  under `-fno-builtin` and `-ffreestanding`. On an `_Atomic` object of any type an operation
   takes the access the operators do ([`_Atomic` objects](#_atomic-objects)).
   On another object, the object is a scalar of 1, 2, 4 or 8 bytes, or a 16-byte
   integer. An object in a named address space is rejected at compile time.
@@ -727,8 +728,9 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   struct passed to or returned from a bound import by value follows the
   platform ABI like any other call.
 - `#pragma intrinsic(<name>)` binds a library name to an intrinsic badc
-  lowers. The bundled headers reach `sqrt`, `fma`, `alloca` and the C11
-  atomics this way.
+  lowers. The bundled headers reach `sqrt` and `fma` this way. Under
+  `-fno-builtin` it binds only reserved names (7.1.3); `alloca` is a macro
+  over `__builtin_alloca`, as in the glibc and macOS headers.
 - `#pragma entrypoint(<name>)` replaces `main` as the entry point, for example
   with `WinMain`.
 - `#pragma subsystem(<kind>)` sets the PE optional header's `Subsystem` field

@@ -248,9 +248,9 @@ pub(crate) struct Preprocessor {
     /// path names it, the compiler's own headers resolve there from the
     /// bundled set, and no other name does.
     compiler_include_dir: Option<String>,
-    /// `-fno-builtin`: `#pragma intrinsic(name)` registers nothing, so a
-    /// call spelled with the library name lowers as a call rather than as
-    /// the instruction badc has for it.
+    /// `-fno-builtin`: `#pragma intrinsic(name)` registers no library
+    /// name, so a call spelled with it lowers as a call rather than as
+    /// the instruction badc has for it. A reserved name stays bound.
     no_builtin: bool,
     /// The `-include FILE` set: headers processed as if the user had
     /// written `#include "name"` at the top of the unit, resolved

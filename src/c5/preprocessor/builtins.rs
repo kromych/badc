@@ -22,9 +22,8 @@ pub(super) enum Supply {
     /// Supplied without the registry -- recognized by the parser at the
     /// call site, or predefined as a macro. Also usable with no header.
     Direct,
-    /// A library function that a bundled header binds with
-    /// `#pragma intrinsic`; it is not a builtin until that header is
-    /// included.
+    /// A function `#pragma intrinsic` binds, as a bundled header does; it
+    /// is not a builtin until a pragma names it.
     Library(Intrinsic),
 }
 
@@ -213,8 +212,8 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__sync_lock_test_and_set"),
     direct("__sync_lock_release"),
     direct("__sync_synchronize"),
-    // Library names a bundled header binds; a unit that has not included
-    // the header may define its own function under the same name.
+    // Names `#pragma intrinsic` binds; a unit that has not bound one may
+    // define its own function under the same name.
     library("alloca", Intrinsic::Alloca),
     library("fma", Intrinsic::Fma),
     library("fmaf", Intrinsic::Fmaf),
@@ -228,20 +227,6 @@ pub(super) const BUILTINS: &[Builtin] = &[
     library("ceilf", Intrinsic::Ceilf),
     library("trunc", Intrinsic::Trunc),
     library("truncf", Intrinsic::Truncf),
-    // C11 7.17 generic atomics, lowered at the call site to
-    // load / store / read-modify-write rather than to an intrinsic call.
-    library("atomic_load", Intrinsic::AtomicLoad),
-    library("atomic_store", Intrinsic::AtomicStore),
-    library("atomic_exchange", Intrinsic::AtomicExchange),
-    library("atomic_fetch_add", Intrinsic::AtomicFetchAdd),
-    library("atomic_fetch_sub", Intrinsic::AtomicFetchSub),
-    library("atomic_fetch_and", Intrinsic::AtomicFetchAnd),
-    library("atomic_fetch_or", Intrinsic::AtomicFetchOr),
-    library("atomic_fetch_xor", Intrinsic::AtomicFetchXor),
-    library(
-        "atomic_compare_exchange_strong",
-        Intrinsic::AtomicCompareExchangeStrong,
-    ),
     library("__c5_aarch64_setjmp", Intrinsic::SetjmpAArch64),
     library("__c5_aarch64_longjmp", Intrinsic::LongjmpAArch64),
     library("__c5_establisher_frame", Intrinsic::EstablisherFrame),

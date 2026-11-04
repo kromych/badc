@@ -207,80 +207,6 @@ impl Compiler {
         }
     }
 
-    /// Parse a C11 7.17 atomic builtin call. The opening `(` has
-    /// already been consumed. The first operand is the atomic-object
-    /// pointer; its pointee type sets the operand width. The result
-    /// type follows C11 7.17.7: the pointee value for the load /
-    /// exchange / fetch forms, `int` for compare-exchange (the
-    /// predicate) and for store (used in statement position).
-    fn parse_atomic_builtin(
-        &mut self,
-        kind: super::super::ast::AtomicKind,
-        id_idx: usize,
-    ) -> Result<(), C5Error> {
-        use super::super::ast::{AtomicKind, Expr};
-        let fn_name = self.symbols[id_idx].name.clone();
-        let want = atomic_arity(kind);
-        let mut args: Vec<super::super::ast::ExprId> = Vec::new();
-        self.expr(Token::Assign as i64)?;
-        let ptr_ty = self.ty;
-        if let Some(a) = self.ast_acc {
-            args.push(a);
-        }
-        if !is_pointer_ty(ptr_ty) {
-            return Err(self.compile_err(
-                Code::INVALID_ARGUMENTS,
-                format!("`{fn_name}` first argument must be a pointer to the atomic object"),
-            ));
-        }
-        let elem_ty = pointee_ty(ptr_ty);
-        // C11 7.17.7: the value operand -- the last one -- has the object's
-        // type; a compare-exchange's `expected` operand is a pointer.
-        while args.len() < want {
-            if self.lex.tk != ',' {
-                return Err(self.compile_err(
-                    Code::INVALID_ARGUMENTS,
-                    format!("`{fn_name}` takes {want} arguments"),
-                ));
-            }
-            self.next()?;
-            self.expr(Token::Assign as i64)?;
-            if args.len() + 1 == want {
-                self.convert_assign_rhs(elem_ty);
-            }
-            if let Some(a) = self.ast_acc {
-                args.push(a);
-            }
-        }
-        if self.lex.tk != ')' {
-            return Err(self.compile_err(
-                Code::INVALID_ARGUMENTS,
-                format!("`{fn_name}` takes {want} arguments"),
-            ));
-        }
-        self.next()?;
-        self.mark_emit_other();
-        let result_ty = match kind {
-            AtomicKind::Store | AtomicKind::CompareExchangeStrong => Ty::Int as i64,
-            _ => elem_ty,
-        };
-        self.ty = result_ty;
-        let pos = self.ast_src_pos();
-        // C11 7.17.7: the non-`_explicit` forms are seq_cst.
-        let id = self.ast.push_expr(
-            Expr::Atomic {
-                kind,
-                args,
-                elem_ty,
-                ty: result_ty,
-                order: MemOrder::SeqCst,
-            },
-            pos,
-        );
-        self.ast_acc = Some(id);
-        Ok(())
-    }
-
     /// A GCC atomic builtin's value operand, converted to the type of the
     /// object it is stored into or combined with (C11 7.17.7).
     fn gcc_atomic_value(
@@ -1660,7 +1586,6 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_gcc_atomic_builtin(&name, id_idx)
             }
-            Some(BuiltinCall::Atomic(kind)) => self.parse_atomic_builtin(kind, id_idx),
             Some(BuiltinCall::Value(kind)) => {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_value_builtin(kind, &name)
@@ -1737,9 +1662,6 @@ impl Compiler {
                 || name == "__c11_atomic_init"
             {
                 return Some(BuiltinCall::GccAtomic);
-            }
-            if let Some(kind) = intrinsic_id.and_then(atomic_kind_from_intrinsic) {
-                return Some(BuiltinCall::Atomic(kind));
             }
         }
         intrinsic_id.map(BuiltinCall::Intrinsic)
@@ -6718,7 +6640,6 @@ enum BuiltinCall {
     ObjectSize,
     Overflow,
     GccAtomic,
-    Atomic(super::super::ast::AtomicKind),
     Value(super::value_builtin::ValueBuiltin),
     Intrinsic(i64),
     /// One of the MSVC intrinsics the PE targets lower at the call site.
@@ -6885,28 +6806,6 @@ fn array_dims_match(a: &[i64], b: &[i64]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| *x < 0 || *y < 0 || x == y)
 }
 
-/// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)
-/// discriminant to its AST [`AtomicKind`](super::super::ast::AtomicKind).
-/// Returns `None` for any non-atomic intrinsic. The `#pragma intrinsic`
-/// registry stores the atomic operations under these discriminants; the
-/// call site converts them here for `parse_atomic_builtin`.
-fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> {
-    use super::super::ast::AtomicKind;
-    use crate::c5::op::Intrinsic;
-    Some(match Intrinsic::from_i64(id)? {
-        Intrinsic::AtomicLoad => AtomicKind::Load,
-        Intrinsic::AtomicStore => AtomicKind::Store,
-        Intrinsic::AtomicExchange => AtomicKind::Exchange,
-        Intrinsic::AtomicFetchAdd => AtomicKind::FetchAdd,
-        Intrinsic::AtomicFetchSub => AtomicKind::FetchSub,
-        Intrinsic::AtomicFetchAnd => AtomicKind::FetchAnd,
-        Intrinsic::AtomicFetchOr => AtomicKind::FetchOr,
-        Intrinsic::AtomicFetchXor => AtomicKind::FetchXor,
-        Intrinsic::AtomicCompareExchangeStrong => AtomicKind::CompareExchangeStrong,
-        _ => return None,
-    })
-}
-
 /// A type-specific checked-arithmetic builtin
 /// (`__builtin_{s,u}{add,sub,mul}{,l,ll}_overflow`), as
 /// `(op, unsigned, rank)`; `op` matches [`Expr::CheckedArith`] and `rank`
@@ -6943,15 +6842,4 @@ fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
         "__builtin_memset" => MemTransferOp::Fill,
         _ => return None,
     })
-}
-
-/// Argument count for each atomic operation: the object pointer
-/// plus the operation's value / expected / desired operands.
-fn atomic_arity(kind: super::super::ast::AtomicKind) -> usize {
-    use super::super::ast::AtomicKind;
-    match kind {
-        AtomicKind::Load => 1,
-        AtomicKind::CompareExchangeStrong => 3,
-        _ => 2,
-    }
 }

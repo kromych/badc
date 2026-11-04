@@ -4335,15 +4335,9 @@ fn builtin_table_answers_all_three_roles() {
     for b in builtins::BUILTINS {
         assert_eq!(builtins::library_alias(b.name), None, "`{}`", b.name);
     }
-    // Library names a header binds: not seeded and not reported by
-    // `__has_builtin`, but `#pragma intrinsic` registers them.
-    for name in [
-        "alloca",
-        "sqrt",
-        "fma",
-        "atomic_load",
-        "__c5_aarch64_setjmp",
-    ] {
+    // Names `#pragma intrinsic` binds: not seeded and not reported by
+    // `__has_builtin`, but the pragma registers them.
+    for name in ["alloca", "sqrt", "fma", "__c5_aarch64_setjmp"] {
         assert!(
             !pp.intrinsics.contains_key(name),
             "`{name}` must need its header"

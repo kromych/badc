@@ -6950,10 +6950,9 @@ fn a_disabled_warning_locates_no_source_line() {
 
 #[test]
 fn atomic_ops_require_stdatomic_header() {
-    // The C11 7.17 atomic operations are recognized only when declared
-    // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with
-    // no such declaration is an ordinary unresolved function reference,
-    // so a name like `atomic_load` is not silently intercepted.
+    // The C11 7.17 generic functions are `<stdatomic.h>` macros; without
+    // the header a call is an ordinary unresolved function reference, so
+    // a name like `atomic_load` is not silently intercepted.
     use crate::c5::Compiler;
     let src = "int main(void){int x=0; return atomic_load(&x);}\n";
     let err = Compiler::new(src.to_string())
@@ -8887,9 +8886,8 @@ fn builtin_nan_reads_its_payload_as_gcc_does() {
 fn preprocessed_output_compiles_to_the_same_program() {
     use crate::{CompileOptions, Compiler, Target, Vm};
     // `-E` output is a translation unit of its own: <stdatomic.h>'s
-    // generic functions exist only through the `#pragma intrinsic` lines
-    // the preprocessor consumes, so the output has to carry them for its
-    // compile to reach the same program.
+    // generic functions expand to the builtins, which need no declaration,
+    // so its compile reaches the same program.
     let src = "#include <stdatomic.h>\n\
                int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
                int main(void) { atomic_int x = 41; f(&x); return atomic_load(&x); }\n";

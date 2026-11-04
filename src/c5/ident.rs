@@ -195,6 +195,12 @@ pub(crate) fn is_ident(s: &str, dollar: Dollar) -> bool {
     !s.is_empty() && ident_len(s.as_bytes(), 0, dollar) == s.len()
 }
 
+/// Whether identifier `s` is reserved for any use (C99 7.1.3p1): an
+/// underscore followed by an uppercase letter or another underscore.
+pub(crate) fn is_reserved(s: &str) -> bool {
+    matches!(s.as_bytes(), [b'_', b'_' | b'A'..=b'Z', ..])
+}
+
 /// The name an identifier spelling denotes: a universal character name for
 /// an Annex D character stands for that character, so the name and the
 /// character's UTF-8 spelling key one macro and one symbol.

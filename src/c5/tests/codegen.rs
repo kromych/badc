@@ -10948,6 +10948,61 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
     );
 }
 
+/// The header operations no library defines stay inline under
+/// `-fno-builtin` and `-ffreestanding` on every target: the C11 7.17
+/// generic functions, `alloca`, and the frame a Windows `setjmp` records.
+/// A hosted POSIX unit calling `alloca` without its header gets the header
+/// from the auto-include recovery.
+#[test]
+#[cfg(feature = "full")]
+fn no_builtin_keeps_the_header_operations_no_library_defines() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    const SRC: &str = "#include <stdatomic.h>\n#include <setjmp.h>\n#include <malloc.h>\n\
+        atomic_int x;\n\
+        atomic_flag fl;\n\
+        jmp_buf jb;\n\
+        int f(void) { atomic_store(&x, 1); int e = 1; atomic_compare_exchange_strong(&x, &e, 2);\n\
+          atomic_compare_exchange_weak(&x, &e, 2); atomic_flag_clear(&fl);\n\
+          return atomic_load(&x) + atomic_fetch_add(&x, 1) + atomic_fetch_sub(&x, 1)\n\
+            + atomic_fetch_and(&x, 1) + atomic_fetch_or(&x, 1) + atomic_fetch_xor(&x, 1)\n\
+            + atomic_exchange(&x, 3) + atomic_flag_test_and_set(&fl); }\n\
+        int g(int n) { char *p = alloca(n); p[0] = 1; return p[0]; }\n\
+        int h(void) { if (setjmp(jb)) return 1; longjmp(jb, 1); }\n";
+    const BARE: &str = "int g(int n) { char *p = alloca(n); p[0] = 1; return p[0]; }\n";
+    for target in Target::ALL {
+        let src = match target.is_windows() {
+            true => SRC.to_string(),
+            false => SRC.replace("<malloc.h>", "<alloca.h>"),
+        };
+        let hosted = CompileOptions::default().with_no_entry_point(true);
+        let base = || hosted.clone().with_no_builtin(true);
+        let mut cases = alloc::vec![
+            ("-fno-builtin", src.clone(), base()),
+            ("-ffreestanding", src, base().with_freestanding(true)),
+        ];
+        if !target.is_windows() {
+            cases.push(("hosted, no header", BARE.to_string(), hosted.clone()));
+        }
+        for (mode, src, opts) in cases {
+            let program = Compiler::with_options(src, target, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?} {mode}: {e}"));
+            let reloc = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::default()
+            };
+            let object = crate::emit_native_with_options(&program, target, reloc).expect("emit");
+            let object = crate::parse_native_object(&object).expect("object");
+            let leaked: alloc::vec::Vec<&str> = (object.symbols.iter())
+                .filter(|s| s.section == NativeSymSection::Undef)
+                .map(|s| s.name.trim_start_matches('_'))
+                .filter(|n| n.starts_with("atomic_") || n.starts_with("c5_") || *n == "alloca")
+                .collect();
+            assert!(leaked.is_empty(), "{target:?} {mode}: {leaked:?}");
+        }
+    }
+}
+
 /// Names of the `SHT_SYMTAB` entries with `st_shndx == SHN_UNDEF`.
 #[cfg(feature = "full")]
 fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {

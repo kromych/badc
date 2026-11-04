@@ -363,18 +363,6 @@ pub(super) fn emit_intrinsic(
             // Lowered to `Inst::BitCount` / `Inst::Bswap` in the walker.
             fail("intrinsic: bit builtin reached codegen")
         }
-        I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong => {
-            // Lowered to load / store / read-modify-write at the call site.
-            fail("intrinsic: atomic op reached codegen")
-        }
         I::AArch64ReadCacheType
         | I::AArch64DcCvau
         | I::AArch64IcIvau
@@ -466,15 +454,6 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64
-        | I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong
         | I::AArch64ReadCacheType
         | I::AArch64DcCvau
         | I::AArch64IcIvau

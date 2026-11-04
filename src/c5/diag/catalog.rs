@@ -68,9 +68,9 @@ catalog! {
     1005, "pragma-syntax", [], Warning, Controllable,
         [DEFAULT], Live,
         "a diagnostic pragma badc implements whose operand is malformed";
-    1006, "pragma-pop-without-push", ["C4193"], Warning, Controllable,
+    1006, "pragma-pop-without-push", ["C4193", "C4602"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic-pragma pop with no matching push";
+        "a diagnostic-pragma pop or a `pop_macro` with no matching push";
     1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
@@ -98,6 +98,9 @@ catalog! {
     1015, "macro-redefined", ["C4005"], Warning, Controllable,
         [DEFAULT], Live,
         "a macro redefined with another kind, parameter list or replacement list (C99 6.10.3p2) outside a system header; the new definition replaces the old";
+    1016, "expansion-to-defined", [], Ignore, Controllable,
+        [EXTRA, PEDANTIC], Live,
+        "a `defined` in an `#if` expression that a macro replacement produced (C99 6.10.1p4 leaves it undefined), outside a system header; its operand is taken as written";
     2001, "unused-variable", ["C4101", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a variable declared and never used";
@@ -111,7 +114,7 @@ catalog! {
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
     2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a function used before a prototype declares it, so its return type is `int`";
     2006, "undefined-function", [], Warning, Controllable,
         [DEFAULT], Live,
@@ -152,6 +155,9 @@ catalog! {
     2018, "vla-larger-than", ["vla-larger-than="], Ignore, Controllable,
         [], Live,
         "under optimization, a variable-length array whose size the size expression does not bound by the `-Wvla-larger-than=` byte count";
+    2019, "main", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a hosted unit's file-scope declaration of `main` with `static`, which makes it no program entry point";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -167,7 +173,7 @@ catalog! {
     2024, "incomplete-element-type", [], Error, Hard,
         [], Live,
         "an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body";
-    3001, "int-conversion", [], Warning, Controllable,
+    3001, "int-conversion", [], Error, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
     3002, "incompatible-struct-types", [], Warning, Controllable,
@@ -260,6 +266,9 @@ catalog! {
     3033, "modifiable-lvalue", [], Error, Hard,
         [], Live,
         "an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member";
+    3034, "varargs", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `va_start` whose second operand is not the last named parameter, or is one declared `register` or of a type the default argument promotions change; a `va_arg` of such a type (C99 7.15.1)";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -302,6 +311,9 @@ catalog! {
     6007, "text-relocation", [], Warning, Controllable,
         [DEFAULT], Live,
         "a dynamic relocation writes into a read-only segment, which the loader makes writable to apply it (`DT_TEXTREL`)";
+    6008, "undefined-lookup", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a reference no input defines, which a Mach-O image looks up in the flat namespace at load time under `-undefined warning`";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -376,6 +388,7 @@ impl Code {
     pub const RWX_SEGMENT: Code = Code::new(6005);
     pub const LOCAL_IMPORT: Code = Code::new(6006);
     pub const TEXT_RELOCATION: Code = Code::new(6007);
+    pub const UNDEFINED_LOOKUP: Code = Code::new(6008);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);
@@ -484,6 +497,7 @@ impl Code {
     pub const MISSING_DECLARATIONS: Code = Code::new(2016);
     pub const IMPLICIT_FALLTHROUGH: Code = Code::new(2017);
     pub const VLA_LARGER_THAN: Code = Code::new(2018);
+    pub const MAIN: Code = Code::new(2019);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);
@@ -530,6 +544,7 @@ impl Code {
     pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
     pub const POINTER_SIGN: Code = Code::new(3032);
     pub const MODIFIABLE_LVALUE: Code = Code::new(3033);
+    pub const VARARGS: Code = Code::new(3034);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

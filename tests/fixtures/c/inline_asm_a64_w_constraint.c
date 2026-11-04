@@ -1,18 +1,18 @@
 /* AArch64 inline asm: the `w` (SIMD/FP register) operand constraint. A double is
  * reinterpreted to its integer bit pattern and back with fmov -- the common FP
- * inline-asm idiom, where the compiler allocates a d-register for the `w`
- * operand and resolves `%N` to it. Native-only on AArch64; on x86_64 the same
- * reinterpretation runs through a union. */
+ * inline-asm idiom, where the compiler allocates a SIMD register for the `w`
+ * operand and `%dN` names its double view. Native-only on AArch64; on x86_64
+ * the same reinterpretation runs through a union. */
 
 #if defined(__aarch64__)
 static long bits_of(double d) {
     long b;
-    __asm__("fmov %0, %1" : "=r"(b) : "w"(d));
+    __asm__("fmov %0, %d1" : "=r"(b) : "w"(d));
     return b;
 }
 static double from_bits(long b) {
     double d;
-    __asm__("fmov %0, %1" : "=w"(d) : "r"(b));
+    __asm__("fmov %d0, %1" : "=w"(d) : "r"(b));
     return d;
 }
 #else

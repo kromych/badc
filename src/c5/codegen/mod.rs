@@ -51,19 +51,33 @@ pub(crate) mod passes;
 pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
-/// Re-exported for the multi-TU link path, which recovers Win64
-/// unwind descriptors from merged `.text` bytes. Only the linker
-/// (gated on `full`) consumes it.
-#[cfg(feature = "full")]
+/// The link tests check the emitter's recorded unwind steps against it.
+#[cfg(all(test, feature = "full"))]
 pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 /// Which fields of a page-relative reference a fixup record covers;
 /// carried by [`DataFixup`], [`FuncFixup`] and [`GotFixup`].
 pub(crate) use aarch64::patch::AddrPart;
 
-/// Reject a split record on a machine whose references occupy a single
-/// field. x86_64 relocates a reference through one displacement, so
-/// only [`AddrPart::Whole`] has an encoding there.
+/// Reject any record but a `lea`'s on x86_64, for a reference whose
+/// instruction the writer rewrites or reads.
+/// The offset of the displacement an x86_64 address record at `site`
+/// covers: 3 bytes into a `lea` for [`AddrPart::Whole`], the site itself
+/// for [`AddrPart::Disp32`]. RIP is 4 bytes past it.
+pub(crate) fn x86_disp32_field(
+    site: u64,
+    part: AddrPart,
+    label: &str,
+) -> Result<u64, error::C5Error> {
+    match part {
+        AddrPart::Whole => Ok(site + 3),
+        AddrPart::Disp32 => Ok(site),
+        AddrPart::Page | AddrPart::InPage => Err(error::C5Error::internal(alloc::format!(
+            "{label}: x86_64 reference recorded as {part:?}"
+        ))),
+    }
+}
+
 pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), error::C5Error> {
     if part == AddrPart::Whole {
         return Ok(());
@@ -73,6 +87,8 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     )))
 }
 
+#[cfg(feature = "full")]
+pub use jit::jit_run_with_sources;
 pub use jit::{jit_run, jit_run_with_options};
 
 pub use crate::c5::object::elf_class::ElfClass;
@@ -112,8 +128,9 @@ pub enum Target {
 /// relocatable objects, shared libraries and the final image share the
 /// container -- so one value answers both what `-l` searches for and
 /// what an input is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BinaryFormat {
+    #[default]
     Elf,
     MachO,
     Pe,
@@ -341,6 +358,13 @@ impl Target {
         self.is_windows()
     }
 
+    /// Whether the OS ABI reserves x18, AAPCS64's platform register, so no
+    /// code may allocate it: Windows keeps the TEB pointer there and Darwin
+    /// reserves it. Linux leaves it a temporary.
+    pub fn reserves_platform_register(self) -> bool {
+        matches!(self, Target::WindowsAarch64 | Target::MacOSAarch64)
+    }
+
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.
@@ -422,22 +446,31 @@ impl Target {
         self.binary_format() != BinaryFormat::Pe
     }
 
-    /// Target matching the host this build of badc is running on.
-    /// The match is resolved at compile time via `cfg!`, so each
-    /// build only ever returns one value.
+    /// Target matching the host this build of badc is running on, or
+    /// `macos-aarch64` on a host no target matches. The match is resolved
+    /// at compile time via `cfg!`, so each build only ever returns one
+    /// value.
     pub fn host() -> Self {
+        Self::native_host().unwrap_or(Target::MacOSAarch64)
+    }
+
+    /// The target whose code this host runs: its architecture, and its OS,
+    /// which fixes the calling convention, the data model and the C
+    /// library. `None` on a host badc has no target for, such as an x86-64
+    /// Mac.
+    pub fn native_host() -> Option<Self> {
         if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Target::MacOSAarch64
+            Some(Target::MacOSAarch64)
         } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            Target::LinuxAarch64
+            Some(Target::LinuxAarch64)
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Target::LinuxX64
+            Some(Target::LinuxX64)
         } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            Target::WindowsX64
+            Some(Target::WindowsX64)
         } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            Target::WindowsAarch64
+            Some(Target::WindowsAarch64)
         } else {
-            Target::MacOSAarch64
+            None
         }
     }
 
@@ -515,15 +548,16 @@ impl ReturnExt {
 }
 
 /// The extension a call site applies to `v`, the result of an import
-/// returning `return_type_tag`: none for a result nothing reads, and none
-/// for a 32-bit widening whose high word nothing reads.
+/// returning `return_type_tag`: none for a result nothing reads, none for
+/// a 32-bit widening whose high word nothing reads, and none without a
+/// prototype on record.
 pub(crate) fn call_result_extension(
-    return_type_tag: i64,
+    return_type_tag: Option<i64>,
     target: Target,
     alloc: &ssa::reg_alloc::Allocation,
     v: crate::c5::ir::ValueId,
 ) -> ReturnExt {
-    let ext = return_extension(return_type_tag, target);
+    let ext = return_type_tag.map_or(ReturnExt::None, |tag| return_extension(tag, target));
     if alloc.is_unread(v) || (ext.high_word_only() && alloc.high_dead(v)) {
         return ReturnExt::None;
     }
@@ -1201,21 +1235,13 @@ pub(crate) fn plan_param_regs_aggs(
     plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false, widths)
 }
 
-/// Decide how to extend a libc return value into the c5
-/// accumulator. `target` is needed to decide the `long` width:
+/// Decide how to extend a return value of type `return_type_tag` into the
+/// c5 accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
 /// -- 4 bytes, extend per the unsigned bit.
 pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
     use crate::c5::compiler::types as ty_helpers;
     use crate::c5::token::Ty;
-    if return_type_tag == 0 {
-        // No prototype on file -- assume the binding's caller
-        // already produced a sane 64-bit value (legacy headers
-        // that haven't grown a `int foo(...);` declaration). The
-        // sites that need extension are the ones with a real
-        // prototype.
-        return ReturnExt::None;
-    }
     // `void` shares `unsigned char`'s band; the call leaves no value.
     if ty_helpers::is_void_ty(return_type_tag) {
         return ReturnExt::None;
@@ -1281,20 +1307,20 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
 /// extends it itself.
 ///
 /// `long` is excluded because its width is per-target (4 bytes on LLP64,
-/// 8 on LP64) and the mid-end asks this before the target is fixed. Tag
-/// 0 -- no recorded prototype, which `Ty::Char` also encodes -- is
-/// excluded for the same reason [`return_extension`] excludes it.
+/// 8 on LP64) and the mid-end asks this before the target is fixed.
 pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
     use crate::c5::compiler::types as ty_helpers;
     use crate::c5::token::Ty;
-    if return_type_tag == 0 || ty_helpers::is_void_ty(return_type_tag) {
+    if ty_helpers::is_void_ty(return_type_tag) {
         return false;
     }
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     if ty_helpers::is_pointer_ty(bare) {
         return false;
     }
-    bare == Ty::Bool as i64 || bare == Ty::Short as i64 || bare == Ty::Int as i64
+    [Ty::Bool, Ty::Char, Ty::Short, Ty::Int]
+        .iter()
+        .any(|&t| bare == t as i64)
 }
 
 /// One resolved external import: a binding the program reaches
@@ -1329,6 +1355,9 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
+    /// `true` when every reference to the import is weak: the Mach-O
+    /// writer binds it weak, so dyld sets it to 0 when no image defines it.
+    pub weak: bool,
     /// The ordinal a PE import names in place of [`Self::real_symbol`].
     pub ordinal: Option<u16>,
     /// What the symbol is; the ELF writer republishes it on the
@@ -1348,16 +1377,14 @@ pub(crate) struct ResolvedImport {
     pub fixed_args: usize,
     /// Return type tag (`Symbol::type_` encoding -- bare `Ty::Char`
     /// / `Ty::Int` / `Ty::Long` / ... possibly OR'd with the
-    /// unsigned bit). The codegen reads it after the call to decide
-    /// whether the host's return register holds a sub-word value
-    /// that needs sign- or zero-extension before becoming the c5
-    /// accumulator. Without the extension, msvcrt's `int` returns
-    /// (atoi, fclose, ...) leave the upper 32 bits of RAX
-    /// undefined, and a downstream 64-bit comparison against a
-    /// negative literal sees garbage. `0` (= `Ty::Char` = "no
-    /// prototype seen") falls through with no extension, as does
-    /// `void`, which the tag's void bit names.
-    pub return_type_tag: i64,
+    /// unsigned bit), `None` without a prototype on record. The codegen
+    /// reads it after the call to decide whether the host's return
+    /// register holds a sub-word value that needs sign- or zero-extension
+    /// before becoming the c5 accumulator. Without the extension, msvcrt's
+    /// `int` returns (atoi, fclose, ...) leave the upper 32 bits of RAX
+    /// undefined, and a downstream 64-bit comparison against a negative
+    /// literal sees garbage.
+    pub return_type_tag: Option<i64>,
     /// Per-fixed-parameter type tags from the prototype. Carried
     /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
@@ -1366,6 +1393,18 @@ pub(crate) struct ResolvedImport {
     /// signature in `bt`. Empty when the parser hasn't seen the
     /// prototype.
     pub param_types: Vec<i64>,
+}
+
+impl ResolvedImport {
+    /// True when the prototype on record returns `float` or `double`, which
+    /// arrive in the FP return register.
+    pub(crate) fn returns_fp(&self) -> bool {
+        use crate::c5::compiler::types as ty_helpers;
+        self.return_type_tag.is_some_and(|tag| {
+            let bare = ty_helpers::strip_unsigned(tag);
+            ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare)
+        })
+    }
 }
 
 /// What an import names.
@@ -1506,6 +1545,37 @@ pub(crate) struct ResolvedImports {
 }
 
 impl ResolvedImports {
+    /// The language handler a `__try` scope table names, from the target's
+    /// C runtime; no binding names it, so its binding index is none.
+    pub fn import_language_handler(&mut self, target: Target) {
+        const NAME: &str = "__C_specific_handler";
+        if self.imports.iter().any(|i| i.local_name == NAME) {
+            return;
+        }
+        let dll = ResolvedDylib::runtime_default(target);
+        let dylib_index = match self.dylibs.iter().position(|d| d.path == dll.path) {
+            Some(i) => i,
+            None => {
+                self.dylibs.push(dll);
+                self.dylibs.len() - 1
+            }
+        };
+        self.imports.push(ResolvedImport {
+            binding_idx: -1,
+            local_name: NAME.into(),
+            real_symbol: NAME.into(),
+            dylib_index,
+            flat_lookup: false,
+            weak: false,
+            ordinal: None,
+            kind: ImportKind::Function,
+            is_variadic: false,
+            fixed_args: 4,
+            return_type_tag: None,
+            param_types: Vec::new(),
+        });
+    }
+
     /// Look up the slot index for a given binding-flat index.
     /// `None` if the program doesn't reach for that binding --
     /// callers should treat that as a codegen bug (lowering
@@ -1575,6 +1645,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
+            weak: false,
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
@@ -1602,11 +1673,12 @@ impl ResolvedImports {
             real_symbol: "exit".to_string(),
             dylib_index,
             flat_lookup: false,
+            weak: false,
             ordinal: None,
             kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
             fixed_args: 1,
-            return_type_tag: 0,
+            return_type_tag: Some(crate::c5::compiler::types::void_ty()),
             param_types: alloc::vec![super::token::Ty::Int as i64],
         });
     }
@@ -1716,6 +1788,7 @@ impl ResolvedImports {
         // bindings.
         let mut dylibs: Vec<ResolvedDylib> = Vec::new();
         let mut imports: Vec<ResolvedImport> = Vec::new();
+        let weak = program.weak_link_names();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
                 return Err(C5Error::internal(format!(
@@ -1739,6 +1812,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
+                weak: weak.contains(b.local_name.as_str()),
                 ordinal: None,
                 kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
@@ -1816,8 +1890,8 @@ impl ResolvedImports {
 }
 
 /// Find the binding at flat-index `binding_idx` across all dylibs
-/// in declaration order. The lexer assigned this index when seeding
-/// each binding's local_name as a `Token::Sys` symbol.
+/// in declaration order: the `binding_slot` the lexer seeded each
+/// binding's local_name with, a `Token::Sys` symbol's `val`.
 fn lookup_binding(
     program: &Program,
     binding_idx: i64,
@@ -2180,6 +2254,8 @@ pub(crate) struct Build {
     pub mcount_sites: Vec<usize>,
     /// The functions that return ahead of their frame, in emission order.
     pub early_returns: Vec<EarlyReturn>,
+    /// The `__try` scope tables, in emission order.
+    pub seh_rows: Vec<SehRow>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded
@@ -2338,6 +2414,9 @@ pub(crate) struct Build {
     /// The exports of protected visibility, which an ELF image states as
     /// `STV_PROTECTED` in `.dynsym`.
     pub protected_exports: alloc::collections::BTreeSet<String>,
+    /// The definitions bound `STB_GNU_UNIQUE`, which an ELF image states in
+    /// both symbol tables and marks `ELFOSABI_GNU` for.
+    pub unique_symbols: alloc::collections::BTreeSet<String>,
     /// A linked image's static symbol table past its import trampolines,
     /// locals first. Empty where no link produced the build.
     pub image_symbols: Vec<ImageSymbol>,
@@ -2459,11 +2538,11 @@ pub(crate) struct Build {
     /// emitter consults this so a surviving local's `DW_OP_fbreg` location
     /// uses its post-coalesce offset. Slots coalesced onto shared storage are
     /// recorded in `promoted_local_slots` (empty location) instead.
-    /// Bytes the stack-protector region added to each protected function's
-    /// frame, by `ent_pc`. Every local slot sits that much lower, so the
-    /// debug-info emitter subtracts it from the slot's frame offset. Absent
-    /// for a function with no canary.
-    pub canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    /// Bytes the frame reserves between the frame base and the locals, by
+    /// `ent_pc`: the stack-protector region and the Win64 x86_64 save block.
+    /// Every local slot sits that much lower, so the debug-info emitter
+    /// subtracts it from the slot's frame offset. Absent where it is 0.
+    pub local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     /// Frame-base-relative byte offset of each parameter's memory home,
     /// by `ent_pc`, indexed by parameter number; the debug-info emitter
     /// places `DW_TAG_formal_parameter` locations with it. Absent for a
@@ -2568,11 +2647,9 @@ pub(crate) struct AsmTextLabel {
 /// `.debug_frame` builder installs its CFA rules at the same
 /// boundaries.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]` and the pushes
-/// of the callee-saved registers, which no field describes. The
-/// return address is at `[rsp]` on entry and at `[rbp + 8]` from the
-/// `mov` on. Each `*_end` field is the byte offset just past the
-/// matching instruction, which the unwind codes use as their
+/// The prologue's steps run in order; the return address is at `[rsp]`
+/// on entry and at `[rbp + 8]` once rbp is set. Each step's offset is the
+/// byte just past its instruction, which the unwind codes use as their
 /// `CodeOffset` (the offset of the next instruction).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FnUnwind {
@@ -2586,24 +2663,226 @@ pub(crate) struct FnUnwind {
     /// no codes and no frame register, and the unwinder treats it
     /// as a frameless body returning off the top-of-stack RA.
     pub leaf: bool,
-    /// Offset (from `begin`) past `push rbp`.
-    pub push_rbp_end: u32,
-    /// Offset (from `begin`) past `mov rbp,rsp`.
-    pub set_fpreg_end: u32,
-    /// Bytes the prologue's single `sub rsp,N` reserves: the frame
-    /// less the pushed callee-saved registers. 0 without that `sub`.
-    pub frame_bytes: u32,
-    /// Offset (from `begin`) past `sub rsp,N`. Set only when
-    /// `frame_bytes > 0`.
-    pub frame_alloc_end: u32,
+    /// The described steps, each with its offset from `begin`.
+    pub steps: alloc::vec::Vec<(u32, PrologueStep)>,
 }
 
-/// An arm64 function's `[begin, end)` in `Build::text` and its prologue's codes.
-#[derive(Debug, Clone)]
+/// One x86_64 prologue instruction an unwinder replays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrologueStep {
+    /// `push r`, r a register number.
+    Push(u8),
+    /// A single `sub rsp, n`.
+    Alloc(u32),
+    /// `movups [rsp + off], xmm`.
+    SaveXmm { xmm: u8, off: u32 },
+    /// `lea rbp, [rsp + off]`, or `mov rbp, rsp` for 0.
+    SetFrame(u32),
+}
+
+/// An arm64 function's `[begin, end)` in `Build::text`, its prologue's
+/// steps as the emitter recorded them, one per instruction from `begin`,
+/// or from the frame path's start where an [`EarlyReturn`] precedes it,
+/// and its exits.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct A64Unwind {
     pub begin: u32,
     pub end: u32,
-    pub codes: Vec<u8>,
+    pub steps: Vec<A64Step>,
+    /// Empty for a frameless function, which states no prologue.
+    pub exits: Vec<A64Exit>,
+}
+
+/// An arm64 epilogue: the offset of its first instruction from
+/// [`A64Unwind::begin`] and one step per instruction before its `ret`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct A64Exit {
+    pub at: u32,
+    pub steps: Vec<A64Step>,
+}
+
+/// One arm64 prologue instruction, or the epilogue instruction that
+/// reverses it, as an unwinder replays it (Microsoft, "ARM64 exception
+/// handling"): each takes one unwind code. The epilogue's forms follow the
+/// prologue's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum A64Step {
+    /// `bti c`, `nop`, an argument register's store into its home, or an
+    /// epilogue instruction leaving sp, x29 and the saved registers alone.
+    Nop,
+    /// `paciasp`; `autiasp`.
+    PacSignLr,
+    /// `sub sp, sp, #n`; `add sp, sp, #n`.
+    Alloc(u32),
+    /// `stp x29, x30, [sp, #-n]!`; `ldp x29, x30, [sp], #n`.
+    SaveFpLrX(u32),
+    /// `mov x29, sp`; an epilogue's write of x29 to sp.
+    SetFp,
+    /// A store of `reg`, and of `reg2` for a pair, x or (`fp`) d registers,
+    /// at `[sp, #bytes]` or (`pre`) pre-indexing `bytes`; the load, or
+    /// post-indexing load, of the same.
+    SaveReg {
+        fp: bool,
+        reg: u8,
+        reg2: Option<u8>,
+        pre: bool,
+        bytes: u32,
+    },
+    /// `stp x29, x30, [sp, #off]`; `ldp x29, x30, [sp, #off]`.
+    SaveFpLr(u32),
+    /// `add x29, sp, #off`; an epilogue's write of `x29 - off` to sp.
+    AddFp(u32),
+}
+
+/// A function's recorded unwind steps as an object's `.note.badc` carries
+/// them to the link, keyed by its entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UnwindSteps {
+    /// [`FnUnwind::leaf`] and [`FnUnwind::steps`].
+    X64 {
+        leaf: bool,
+        steps: Vec<(u32, PrologueStep)>,
+    },
+    /// [`A64Unwind::steps`] and [`A64Unwind::exits`]; none for a frameless
+    /// function.
+    A64 {
+        steps: Vec<A64Step>,
+        exits: Vec<A64Exit>,
+    },
+}
+
+impl UnwindSteps {
+    /// Append the record: its kind, step count and (arm64) exit count, then
+    /// 12 bytes per step, `[offset u32, tag u8, a u8, b u8, flags u8, value
+    /// u32]`; an arm64 exit is its offset and step count, then its steps.
+    pub(crate) fn encode(&self, out: &mut Vec<u8>) {
+        let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
+            out.extend(offset.to_le_bytes());
+            out.extend([tag, a, b, flags]);
+            out.extend(value.to_le_bytes());
+        };
+        match self {
+            UnwindSteps::X64 { leaf, steps } => {
+                step(0, u8::from(*leaf), 0, 0, 0, steps.len() as u32);
+                for &(at, s) in steps {
+                    match s {
+                        PrologueStep::Push(r) => step(at, 0, r, 0, 0, 0),
+                        PrologueStep::Alloc(n) => step(at, 1, 0, 0, 0, n),
+                        PrologueStep::SaveXmm { xmm, off } => step(at, 2, xmm, 0, 0, off),
+                        PrologueStep::SetFrame(off) => step(at, 3, 0, 0, 0, off),
+                    }
+                }
+            }
+            UnwindSteps::A64 { steps, exits } => {
+                step(exits.len() as u32, 2, 0, 0, 0, steps.len() as u32);
+                let exits = exits.iter().map(|e| (Some(e), &e.steps[..]));
+                for (exit, steps) in core::iter::once((None, &steps[..])).chain(exits) {
+                    if let Some(e) = exit {
+                        step(e.at, 8, 0, 0, 0, e.steps.len() as u32);
+                    }
+                    for &s in steps {
+                        let (tag, reg, reg2, flags, value) = match s {
+                            A64Step::Nop => (0, 0, 0, 0, 0),
+                            A64Step::PacSignLr => (1, 0, 0, 0, 0),
+                            A64Step::Alloc(n) => (2, 0, 0, 0, n),
+                            A64Step::SaveFpLrX(n) => (3, 0, 0, 0, n),
+                            A64Step::SetFp => (4, 0, 0, 0, 0),
+                            A64Step::SaveReg {
+                                fp,
+                                reg,
+                                reg2,
+                                pre,
+                                bytes,
+                            } => {
+                                let pair = reg2.is_some();
+                                let flags = u8::from(fp) | u8::from(pair) << 1 | u8::from(pre) << 2;
+                                (5, reg, reg2.unwrap_or(0), flags, bytes)
+                            }
+                            A64Step::SaveFpLr(off) => (6, 0, 0, 0, off),
+                            A64Step::AddFp(off) => (7, 0, 0, 0, off),
+                        };
+                        step(0, tag, reg, reg2, flags, value);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The record at the start of `bytes` and its length; `None` for a
+    /// truncated or unknown one.
+    pub(crate) fn decode(bytes: &[u8]) -> Option<(Self, usize)> {
+        let field = |at: usize| -> Option<(u32, [u8; 4], u32)> {
+            let b = bytes.get(at..at + 12)?;
+            let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+            Some((word(0), [b[4], b[5], b[6], b[7]], word(8)))
+        };
+        let (exit_count, [kind, ..], count) = field(0)?;
+        let records = (1..=count as usize).map(|i| field(12 * i));
+        let mut len = 12 * (count as usize + 1);
+        // `count` arm64 steps from record `first`.
+        let a64 = |first: usize, count: u32| -> Option<Vec<A64Step>> {
+            (first..first + count as usize)
+                .map(|i| {
+                    let (_, [tag, reg, reg2, flags], value) = field(12 * i)?;
+                    Some(match tag {
+                        0 => A64Step::Nop,
+                        1 => A64Step::PacSignLr,
+                        2 => A64Step::Alloc(value),
+                        3 => A64Step::SaveFpLrX(value),
+                        4 => A64Step::SetFp,
+                        5 => A64Step::SaveReg {
+                            fp: flags & 1 != 0,
+                            reg,
+                            reg2: (flags & 2 != 0).then_some(reg2),
+                            pre: flags & 4 != 0,
+                            bytes: value,
+                        },
+                        6 => A64Step::SaveFpLr(value),
+                        7 => A64Step::AddFp(value),
+                        _ => return None,
+                    })
+                })
+                .collect()
+        };
+        let steps = match kind {
+            0 | 1 => UnwindSteps::X64 {
+                leaf: kind == 1,
+                steps: records
+                    .map(|r| {
+                        let (at, [tag, a, ..], value) = r?;
+                        Some((
+                            at,
+                            match tag {
+                                0 => PrologueStep::Push(a),
+                                1 => PrologueStep::Alloc(value),
+                                2 => PrologueStep::SaveXmm { xmm: a, off: value },
+                                3 => PrologueStep::SetFrame(value),
+                                _ => return None,
+                            },
+                        ))
+                    })
+                    .collect::<Option<_>>()?,
+            },
+            2 => {
+                let steps = a64(1, count)?;
+                let mut exits = Vec::new();
+                for _ in 0..exit_count {
+                    let (at, [tag, ..], n) = field(len)?;
+                    if tag != 8 {
+                        return None;
+                    }
+                    exits.push(A64Exit {
+                        at,
+                        steps: a64(len / 12 + 1, n)?,
+                    });
+                    len += 12 * (n as usize + 1);
+                }
+                UnwindSteps::A64 { steps, exits }
+            }
+            _ => return None,
+        };
+        Some((steps, len))
+    }
 }
 
 /// An input's `RUNTIME_FUNCTION`: `[begin, end)` in `Build::text`, and its unwind data.
@@ -2632,6 +2911,24 @@ pub(crate) struct EarlyReturn {
     pub frame: u32,
     /// Where the early return starts; it runs to the function's end.
     pub exit: u32,
+}
+
+/// A row of a function's `__try` scope table, for `__C_specific_handler`:
+/// an exception raised in `[begin, end)` that the filter accepts enters
+/// `target`, and one that unwinds a `__finally` region, which has no
+/// target, runs its funclet. Byte offsets in `text`; a function's rows are
+/// adjacent, innermost region first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SehRow {
+    /// The function's first instruction.
+    pub func: u32,
+    pub begin: u32,
+    pub end: u32,
+    pub target: Option<u32>,
+    /// The filter or `__finally` funclet, `None` for the constant filter
+    /// `EXCEPTION_EXECUTE_HANDLER`. Its `ent_pc` until the unit's lowering
+    /// places it.
+    pub handler: Option<u32>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -3579,6 +3876,7 @@ impl DataImportSlots {
             real_symbol,
             dylib_index,
             flat_lookup: self.flat,
+            weak: false,
             ordinal: None,
             kind: if self.flat {
                 ImportKind::Function
@@ -3587,7 +3885,7 @@ impl DataImportSlots {
             },
             is_variadic: false,
             fixed_args: 0,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
         });
         self.slots.insert(name.into(), i);
@@ -3877,11 +4175,12 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
 
 /// Registers kept out of the allocator, one bit per architectural number:
 /// `gpr` / `fpr` the general / floating-point ones `-ffixed-REG` names,
-/// `frame` the GPRs the frame keeps for itself (`emit_common::region_base`).
-/// The ABI still passes arguments and results through a reserved register;
-/// only the allocator's own choices, the emitters' scratch picks and the
-/// inline-asm operand pools exclude it. An asm statement that writes a
-/// `frame` register saves and restores it, a `-ffixed-` one is the program's.
+/// `frame` the GPRs the function's code keeps for itself
+/// (`emit_common::fixed_for_function`). The ABI still passes arguments and
+/// results through a reserved register; only the allocator's own choices,
+/// the emitters' scratch picks and the inline-asm operand pools exclude it.
+/// An asm statement that writes the realigned frame's base saves and
+/// restores it, a `-ffixed-` register is the program's.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FixedRegs {
     pub gpr: u32,
@@ -4210,6 +4509,10 @@ pub struct NativeOptions {
     pub patchable_function_entry: PatchableEntry,
     /// `-pg` and its x86-64 modifiers.
     pub profiling: Profiling,
+    /// The image runs in this process (`--jit`), whose code no function
+    /// table describes to the unwinder (TODO #1860), so `setjmp` keeps a
+    /// `longjmp` from unwinding.
+    pub in_process: bool,
 }
 
 /// `-fpatchable-function-entry=N,M`: `nops` NOPs at a function's entry,
@@ -4566,6 +4869,16 @@ impl NativeOptions {
             && self.elf_class == ElfClass::Elf64
     }
 
+    /// As a toolchain builds its C library: no canary (its handler would
+    /// recurse), `-pg` call, patchable entry, or `-W` row.
+    pub fn for_embedded_sources(mut self) -> Self {
+        self.stack_protect = StackProtect::OFF;
+        self.profiling = Profiling::OFF;
+        self.patchable_function_entry = PatchableEntry::NONE;
+        self.diag = crate::c5::diag::Config::new();
+        self
+    }
+
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {
@@ -4595,6 +4908,7 @@ impl NativeOptions {
             freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
+            in_process: false,
         }
     }
 
@@ -4800,6 +5114,9 @@ pub(crate) fn lower_for_with_prebuilt(
         return Ok(build);
     }
     build.imports = imports;
+    if !build.seh_rows.is_empty() {
+        build.imports.import_language_handler(target);
+    }
     build.abi = target.abi();
     // The emitters build their per-function `Abi` from the same pair,
     // so the recorded one has to carry the mitigations too: the object
@@ -4833,7 +5150,7 @@ pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
-) -> Result<(), alloc::string::String> {
+) -> Result<(), crate::c5::asm::AsmErrors> {
     match target {
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::emit::encode_x86_file_asm_section_code(blocks, class)
@@ -5030,12 +5347,14 @@ pub(crate) fn bind_code_reloc_aliases(
 }
 
 /// Bind each final-image slot naming what the unit's C does not define as a
-/// link does (C99 6.7.8p4): to the definition `defs` holds, an object's else
-/// to what `import` binds; an undefined weak name holds 0 plus the offset.
+/// link does (C99 6.7.8p4): to the definition `defs` holds, else to what
+/// `import` binds; an undefined weak name holds 0 plus the offset under
+/// `weak_is_zero`, and is undefined otherwise (ld64).
 pub(crate) fn bind_named_slots(
     program: &Program,
     build: &mut Build,
     defs: &UnitDefs,
+    weak_is_zero: bool,
     import: &mut dyn FnMut(&mut Build, &program::ExternDataReloc) -> Result<bool, C5Error>,
 ) -> Result<(), C5Error> {
     use crate::c5::token::Token;
@@ -5070,7 +5389,7 @@ pub(crate) fn bind_named_slots(
                 text_offset: (off as u64).wrapping_add_signed(r.addend),
             }),
             None if import(build, &r)? => {}
-            None if weak(&r.symbol_name, false) => {
+            None if weak_is_zero && weak(&r.symbol_name, false) => {
                 let slot = build.data.get_mut(at..at + 8).ok_or_else(|| {
                     C5Error::internal(format!("extern data slot {at:#x} past its image"))
                 })?;
@@ -5102,11 +5421,17 @@ pub(crate) fn bind_named_slots(
                 continue;
             };
             let at = r.data_offset as usize;
+            let slot = || program::ExternDataReloc {
+                data_offset: r.data_offset,
+                symbol_name: name.into(),
+                addend: r.addend,
+            };
             match label_of(name) {
                 Some(off) if !tls => build.label_relocs.push(LabelReloc {
                     data_offset: r.data_offset,
                     text_offset: off.wrapping_add_signed(r.addend),
                 }),
+                None if !tls && import(build, &slot())? => {}
                 Some(_) => {
                     return Err(C5Error::hard(
                         Code::UNSUPPORTED,
@@ -5116,7 +5441,7 @@ pub(crate) fn bind_named_slots(
                         ),
                     ));
                 }
-                None if weak(name, true) => {
+                None if weak_is_zero && weak(name, true) => {
                     let image = if tls {
                         &mut build.tls_data
                     } else {

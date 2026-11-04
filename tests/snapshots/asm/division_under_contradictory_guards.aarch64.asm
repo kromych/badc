@@ -14,7 +14,6 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sdiv_dead>:
-               	cmp	w1, #0x5
                	mov	x0, #0x7                // =7
                	ret
 
@@ -27,7 +26,6 @@ Disassembly of section .text:
                	ret
 
 <urem_dead>:
-               	cmp	w1, #0x5
                	mov	x0, #0x7                // =7
                	ret
 

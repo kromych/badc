@@ -107,6 +107,14 @@ const NT_BADC_ELF_TPOFF: u32 = 10;
 const NT_BADC_PROLOGUE_END: u32 = 11;
 const NT_BADC_EXTERN_DATA: u32 = 12;
 const NT_BADC_EARLY_RETURN: u32 = 13;
+/// `(function, begin, end, target, handler)` per `__try` scope-table row.
+const NT_BADC_SEH_SCOPE: u32 = 15;
+/// `(u64 entry, record)` per function: its prologue's unwind steps
+/// (`UnwindSteps::encode`).
+const NT_BADC_UNWIND: u32 = 16;
+/// The target of a `__finally` row, the handler of a row whose filter is
+/// the constant `EXCEPTION_EXECUTE_HANDLER`.
+pub(crate) const SEH_NONE: u64 = u64::MAX;
 const RODATA_SECTION: &str = ".rodata";
 const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
@@ -1058,6 +1066,11 @@ struct Symtab<'a> {
     /// `(entry, frame path, early return)` `.text` offsets of each function
     /// that returns ahead of its frame.
     early_returns: Vec<(u64, u64, u64)>,
+    /// `(function, begin, end, target, handler)` `.text` offsets of each
+    /// `__try` scope-table row, [`SEH_NONE`] for an absent one.
+    seh_rows: Vec<[u64; 5]>,
+    /// Each function's `.text` entry offset and prologue unwind steps.
+    unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
     defined_tls_symidx: BTreeMap<&'a str, u64>,
@@ -1527,9 +1540,7 @@ impl<'a> RelocWriter<'a> {
                     b'S' => flags |= SHF_STRINGS,
                     b'o' => flags |= SHF_LINK_ORDER,
                     b'G' => flags |= SHF_GROUP,
-                    b'T' => {
-                        return Err(asm_section_err(&s.name, "the `T` (TLS) section flag"));
-                    }
+                    b'T' => flags |= SHF_TLS,
                     _ => {
                         return Err(asm_section_err(
                             &s.name,
@@ -1559,7 +1570,14 @@ impl<'a> RelocWriter<'a> {
                 .carve
                 .table
                 .get_or_insert_in(&s.name, s.group.as_ref(), sh_type, flags, align)
-                .map_err(Self::internal)?;
+                .map_err(|_| {
+                    // Two assembler statements that name the section with
+                    // different types, which gas refuses within one source.
+                    C5Error::hard(
+                        Code::OBJECT_FORMAT,
+                        alloc::format!("inline asm: changed section type for `{}`", s.name),
+                    )
+                })?;
             // The first block to give an entry size or an ordering section
             // sets it, as GNU as keeps a section's first attributes.
             let ent = &mut self.layout.carve.table.entries[e];
@@ -2221,6 +2239,7 @@ impl<'a> RelocWriter<'a> {
                 let shndx = carve.shndx[e];
                 let sec_sym = carve.sym_idx[e];
                 let merge = carve.table.entries[e].flags & SHF_MERGE != 0;
+                let tls = carve.table.entries[e].flags & SHF_TLS != 0;
                 s.labels.iter().map(move |l| {
                     let d = this.sym_decl(l.name.as_str());
                     let ty = match l.sym_type {
@@ -2244,7 +2263,8 @@ impl<'a> RelocWriter<'a> {
                             },
                         weak: l.weak || weak_names.contains(l.name.as_str()),
                         unique,
-                        st_type: st_type_of(ty),
+                        // bfd types every symbol in a thread-local section STT_TLS.
+                        st_type: if tls { STT_TLS } else { st_type_of(ty) },
                         st_size: l.size.or(d.and_then(|d| d.size)).unwrap_or(0),
                         merge,
                     }
@@ -2577,6 +2597,43 @@ impl<'a> RelocWriter<'a> {
             if [a, b, c] == [SHIDX_TEXT; 3] {
                 self.syms.early_returns.push((entry, frame, exit));
             }
+        }
+        // The link reads the steps for a PE image's unwind table and for
+        // `.debug_frame`.
+        use crate::c5::codegen::UnwindSteps;
+        let pe = self.target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
+        let x64 = (build.fn_unwind.iter().filter(|_| pe || build.debug_info)).map(|u| {
+            let steps = UnwindSteps::X64 {
+                leaf: u.leaf,
+                steps: u.steps.clone(),
+            };
+            (u.begin, steps)
+        });
+        let a64 = (build.a64_unwind.iter()).map(|u| {
+            let steps = UnwindSteps::A64 {
+                steps: u.steps.clone(),
+                exits: u.exits.clone(),
+            };
+            (u.begin, steps)
+        });
+        for (begin, steps) in x64.chain(a64) {
+            if let (SHIDX_TEXT, entry) = self.text_place(u64::from(begin)) {
+                self.syms.unwind.push((entry, steps));
+            }
+        }
+        for r in &build.seh_rows {
+            let place = |at: u32| self.text_place(u64::from(at));
+            let (target, handler) = (r.target.map(place), r.handler.map(place));
+            let at = [place(r.func), place(r.begin), place(r.end)];
+            if !(at.iter().chain(&target).chain(&handler)).all(|p| p.0 == SHIDX_TEXT) {
+                return Err(C5Error::hard(
+                    Code::OBJECT_FORMAT,
+                    "a `__try` region in a function placed outside `.text`",
+                ));
+            }
+            let [func, begin, end] = at.map(|p| p.1);
+            let [target, handler] = [target, handler].map(|p| p.map_or(SEH_NONE, |p| p.1));
+            self.syms.seh_rows.push([func, begin, end, target, handler]);
         }
         Ok(())
     }
@@ -3328,6 +3385,29 @@ impl<'a> RelocWriter<'a> {
         let mut table = core::mem::take(&mut self.relocs.text);
         for fx in &build.data_fixups {
             let (sym, addend) = self.data_section_ref(fx.data_offset as i64);
+            // An in-page half alone is a load or store whose size scales it.
+            if matches!(machine, Machine::Aarch64) && fx.part == AddrPart::InPage {
+                let size = (build.text.get(fx.instr_offset..fx.instr_offset + 4))
+                    .and_then(|w| w.try_into().ok())
+                    .and_then(|w| {
+                        crate::c5::codegen::aarch64::patch::lo12_access_size(u32::from_le_bytes(w))
+                    })
+                    .ok_or_else(|| {
+                        C5Error::internal(format!(
+                            "elf_reloc: in-page fixup at text+{:#x} is not a load or store",
+                            fx.instr_offset
+                        ))
+                    })?;
+                let rtype = a64_insn_reloc_type(crate::c5::asm::AsmRelocKind::A64LdstLo12(size))
+                    .expect("a load or store size names its relocation");
+                let rela = Elf64Rela {
+                    r_offset: fx.instr_offset as u64,
+                    r_info: (sym << 32) | rtype as u64,
+                    r_addend: addend + fx.addend,
+                };
+                write_struct(&mut table, &rela);
+                continue;
+            }
             emit_addr_fixup_relocs(
                 machine,
                 &mut table,
@@ -4234,6 +4314,8 @@ impl<'a> RelocWriter<'a> {
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
             &self.syms.early_returns,
+            &self.syms.seh_rows,
+            &self.syms.unwind,
             &noted_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
@@ -5036,6 +5118,8 @@ fn build_badc_note(
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
     prologue_ends: &[(u64, u64)],
     early_returns: &[(u64, u64, u64)],
+    seh_rows: &[[u64; 5]],
+    unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
@@ -5167,6 +5251,22 @@ fn build_badc_note(
             }
         }
         push_note_record(&mut out, NT_BADC_EARLY_RETURN, &desc);
+    }
+
+    if !seh_rows.is_empty() {
+        let desc: Vec<u8> = (seh_rows.iter().flatten())
+            .flat_map(|at| at.to_le_bytes())
+            .collect();
+        push_note_record(&mut out, NT_BADC_SEH_SCOPE, &desc);
+    }
+
+    if !unwind.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (entry, steps) in unwind {
+            desc.extend_from_slice(&entry.to_le_bytes());
+            steps.encode(&mut desc);
+        }
+        push_note_record(&mut out, NT_BADC_UNWIND, &desc);
     }
 
     if !imports.data_bindings.is_empty() {
@@ -5328,12 +5428,21 @@ fn emit_addr_fixup_relocs(
                              relocation type"
                     )));
                 }
+                AddrPart::Disp32 => {
+                    return Err(C5Error::internal(format!(
+                        "elf_reloc: x86_64 displacement fixup at text+{instr_offset:#x} on aarch64"
+                    )));
+                }
             }
         }
         Machine::X86_64 => {
-            crate::c5::codegen::require_whole_addr(part, "elf_reloc: address fixup")?;
+            let field = crate::c5::codegen::x86_disp32_field(
+                instr_offset,
+                part,
+                "elf_reloc: address fixup",
+            )?;
             let rela = Elf64Rela {
-                r_offset: instr_offset + 3,
+                r_offset: field,
                 r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
                 r_addend: addend - 4,
             };

@@ -538,73 +538,62 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	xorl	%edx, %edx
-               	movl	$0x1, %ecx
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rcx, %xmm0
+               	xorl	%ecx, %ecx
+               	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm0
-               	movl	$0x9, %esi
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
-               	addsd	%xmm1, %xmm0
                	movq	%rdx, %xmm14
+               	movq	%rax, %xmm15
+               	vdivsd	%xmm15, %xmm14, %xmm0
+               	movabsq	$0x4022000000000000, %rdx # imm = 0x4022000000000000
+               	movq	%rdx, %xmm15
+               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
                	vaddsd	%xmm0, %xmm14, %xmm0
-               	movl	$0x2, %edx
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdx, %xmm1
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movl	$0xb, %esi
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rsi, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vdivsd	%xmm15, %xmm14, %xmm1
+               	movabsq	$0x4026000000000000, %rcx # imm = 0x4026000000000000
+               	movq	%rcx, %xmm15
+               	addsd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
-               	movl	$0x3, %esi
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movl	$0xd, %esi
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rsi, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vdivsd	%xmm15, %xmm14, %xmm1
+               	movabsq	$0x402a000000000000, %rcx # imm = 0x402A000000000000
+               	movq	%rcx, %xmm15
+               	addsd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
-               	movl	$0x4, %esi
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movl	$0xf, %esi
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rsi, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vdivsd	%xmm15, %xmm14, %xmm1
+               	movabsq	$0x402e000000000000, %rcx # imm = 0x402E000000000000
+               	movq	%rcx, %xmm15
+               	addsd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
-               	movl	$0x5, %esi
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
+               	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movl	$0x11, %esi
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rsi, %xmm2
-               	addsd	%xmm2, %xmm1
+               	vdivsd	%xmm15, %xmm14, %xmm1
+               	movabsq	$0x4031000000000000, %rax # imm = 0x4031000000000000
+               	movq	%rax, %xmm15
+               	addsd	%xmm15, %xmm1
                	addsd	%xmm1, %xmm0
-               	movl	$0x6, %edi
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdi, %xmm1
+               	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
+               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
+               	vdivsd	%xmm15, %xmm14, %xmm1
+               	movabsq	$0x4033000000000000, %rax # imm = 0x4033000000000000
                	movq	%rax, %xmm15
-               	divsd	%xmm15, %xmm1
-               	movl	$0x13, %eax
-               	xorps	%xmm2, %xmm2
-               	cvtsi2sd	%rax, %xmm2
-               	addsd	%xmm2, %xmm1
+               	addsd	%xmm15, %xmm1
                	vaddsd	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0xd8(%rsp)
+               	movl	$0x6, %edi
                	movabsq	$0x3fd0000000000000, %rax # imm = 0x3FD0000000000000
-               	movb	%cl, -0x8(%rbp)
-               	movb	%dl, -0x7(%rbp)
+               	movb	$0x1, -0x8(%rbp)
+               	movb	$0x2, -0x7(%rbp)
                	movb	$0x3, -0x6(%rbp)
                	movb	$0x4, -0x5(%rbp)
                	movb	$0x5, -0x4(%rbp)

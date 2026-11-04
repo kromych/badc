@@ -554,26 +554,23 @@
 #pragma binding(ucrtbase::nexttowardl, "nexttoward")
 #endif
 
-// IEEE-754 sentinel values. The c5 lexer accepts the typical
-// `1e308 * 10.0` / `0.0 / 0.0` shapes so the math.h macros can
-// land their bit patterns without compiler intrinsics. Worth
-// noting that c5 widens both sides of the FP-overflow chain to
-// `double` automatically -- the resulting bit pattern is the
-// IEEE infinity and NaN that downstream code expects.
+// C99 7.12p3-5: HUGE_VAL, HUGE_VALF and HUGE_VALL have the type their name
+// gives; INFINITY and NAN are constant expressions of type float, NAN a quiet
+// NaN with a clear sign bit.
 #ifndef INFINITY
-#define INFINITY (1.0e+308 * 10.0)
+#define INFINITY __builtin_inff()
 #endif
 #ifndef NAN
-#define NAN (0.0 / 0.0)
+#define NAN __builtin_nanf("")
 #endif
 #ifndef HUGE_VAL
-#define HUGE_VAL INFINITY
+#define HUGE_VAL __builtin_huge_val()
 #endif
 #ifndef HUGE_VALF
-#define HUGE_VALF INFINITY
+#define HUGE_VALF __builtin_huge_valf()
 #endif
 #ifndef HUGE_VALL
-#define HUGE_VALL ((long double)INFINITY)
+#define HUGE_VALL __builtin_huge_vall()
 #endif
 
 #ifndef M_PI
@@ -678,16 +675,15 @@ static inline int isnormal(double x) {
 #define signbit(x) \
     (sizeof(x) == sizeof(float) ? __badc_signbitf(x) \
      : sizeof(x) == sizeof(double) ? signbit(x) : __badc_signbitl(x))
-// C99 7.12.14 relational macros. The standard forms avoid the "invalid"
-// FP exception on a NaN operand; the emitted code does not raise that
-// exception, so the plain relational operators yield the same result
-// value (a NaN comparison is false), which is what callers observe.
-#define isgreater(x, y) ((x) > (y))
-#define isgreaterequal(x, y) ((x) >= (y))
-#define isless(x, y) ((x) < (y))
-#define islessequal(x, y) ((x) <= (y))
-#define islessgreater(x, y) ((x) < (y) || (x) > (y))
-#define isunordered(x, y) (isnan(x) || isnan(y))
+// C99 7.12.14 relational macros over the builtins, as glibc's, the macOS
+// SDK's and mingw-w64's headers have them: each argument is evaluated
+// once, and a quiet NaN raises no invalid exception.
+#define isgreater(x, y) __builtin_isgreater(x, y)
+#define isgreaterequal(x, y) __builtin_isgreaterequal(x, y)
+#define isless(x, y) __builtin_isless(x, y)
+#define islessequal(x, y) __builtin_islessequal(x, y)
+#define islessgreater(x, y) __builtin_islessgreater(x, y)
+#define isunordered(x, y) __builtin_isunordered(x, y)
 // C99 7.12.11.1: copysign copies the sign bit; copysignf reuses the double
 // form, a float magnitude widening to double exactly.
 static inline double copysign(double x, double y) {

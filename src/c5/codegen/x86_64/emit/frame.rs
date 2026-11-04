@@ -27,6 +27,11 @@ pub(crate) struct Frame {
     /// Bytes of saved non-volatile xmm scratch (Win64), 16 per register;
     /// 0 on System V.
     pub saved_fpr_bytes: u32,
+    /// Win64: bytes of the callee-saved block directly below the saved
+    /// rbp, the pushed GPRs, a pad to 16 and the xmm saves at its bottom,
+    /// which `UNWIND_INFO` describes; every region below shifts by it. 0 on
+    /// System V, whose saves sit at the frame bottom.
+    pub saves_top: u32,
     /// rbp-relative base of the inline-asm scratch region (operand captures
     /// plus register saves); 0 when the function has no inline asm. Frame
     /// storage rather than pushes: a setjmp-style template may save rsp and
@@ -75,6 +80,19 @@ pub(crate) struct Frame {
     pub parts: super::ssa::emit_common::FrameStack,
 }
 
+impl Frame {
+    /// Bytes between rbp and the first local: the Win64 save block, then the
+    /// canary region.
+    pub(crate) fn locals_shift(&self) -> u32 {
+        self.saves_top + self.canary_bytes
+    }
+
+    /// rbp-relative offset of the canary slot, the top of its region.
+    pub(super) fn canary_slot_off(&self) -> i32 {
+        super::ssa::emit_common::CANARY_SLOT_OFF - self.saves_top as i32
+    }
+}
+
 pub(crate) fn compute_frame(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -87,7 +105,15 @@ pub(crate) fn compute_frame(
     // The canary region joins the top of the locals region, so every offset
     // measured down from rbp shifts by it and no other region formula changes.
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
-    let locals_bytes = declared_locals_bytes + canary_bytes;
+    // Win64 saves the callee-saved registers above every other region, where
+    // the unwind codes reach them (`emit_prologue`).
+    let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
+    let saves_top = if target == Target::WindowsX64 {
+        saved_gpr_bytes + saved_fpr_bytes
+    } else {
+        0
+    };
+    let locals_bytes = saves_top + declared_locals_bytes + canary_bytes;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
     let param_cells_bytes = param_cells_bytes(func, alloc, abi);
@@ -105,13 +131,10 @@ pub(crate) fn compute_frame(
     } else {
         0
     };
-    // Win64: the saved non-volatile xmm scratch, 16 bytes each, above the
-    // saved GPRs, which the prologue pushes at the frame bottom.
-    let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
     // The inline-asm scratch region, sized for the largest statement. A
     // naked function has no frame and stages nothing.
     let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
-    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let asm_bytes = if func.is_naked {
         0
     } else {
@@ -127,11 +150,11 @@ pub(crate) fn compute_frame(
     // instead.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
     let static_region_bytes = base.static_region;
+    let bottom_saves = saved_gpr_bytes + saved_fpr_bytes - saves_top;
     let frame_bytes = upper_bytes
         + alloc_spill_bytes
-        + saved_gpr_bytes
+        + bottom_saves
         + va_save_bytes
-        + saved_fpr_bytes
         + asm_bytes
         + static_region_bytes;
     // An automatic object aligned above 16 lives in a realigned region below
@@ -172,6 +195,7 @@ pub(crate) fn compute_frame(
         param_home_needed: param_home_needed(func, alloc, abi),
         va_reg_save_off,
         saved_fpr_bytes,
+        saves_top,
         asm_scratch_off,
         dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,
         realign_align,
@@ -184,8 +208,9 @@ pub(crate) fn compute_frame(
             0
         },
     };
-    // A full leaf has nothing to address and no rbp to restore rsp from.
-    frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(func, frame, alloc, abi);
+    // A full leaf or naked body has nothing to address, no rbp to restore rsp from.
+    frame.dynamic_sp |=
+        func.has_sp_moving_asm(target) && !func.is_naked && !is_full_leaf(func, frame, alloc, abi);
     frame
 }
 
@@ -471,7 +496,7 @@ pub(super) fn bound_shape(
 ) -> Option<BoundShape> {
     use super::super::ir::{AsmConstraint as C, AsmSeg};
     const RESERVED: u32 = (1 << 4) | (1 << 5);
-    if func.is_naked || func.has_sp_asm() || asm.clobber_regs & (RESERVED | fixed.frame) != 0 {
+    if func.has_sp_asm() || asm.clobber_regs & (RESERVED | fixed.frame) != 0 {
         return None;
     }
     let mut shape = BoundShape {

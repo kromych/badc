@@ -24,27 +24,25 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	mov	x0, #0x0                // =0
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	fmov	d0, #-2.00000000
                	fmul	d0, d0, d1
-               	scvtf	d2, x0
-               	fmul	d2, d0, d2
+               	mov	x0, #0x0                // =0
+               	fmov	d17, x0
+               	fmul	d2, d0, d17
                	fmov	d17, x0
                	fcmp	d2, d17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x1, #0x1                // =1
-               	scvtf	d2, x1
+               	fmov	d2, #1.00000000
                	fmul	d2, d0, d2
                	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x1, #0x2                // =2
-               	scvtf	d2, x1
+               	fmov	d2, #2.00000000
                	fmul	d0, d0, d2
                	fmov	d2, #-4.00000000
                	fmul	d1, d2, d1

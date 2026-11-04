@@ -15,7 +15,13 @@ tree also fixes `/chosen/rng-seed`, which the guest's RNG consumes.
 x86_64: the boot path mixes RDRAND, the TSC and the i8254 counter with a hash
 of `boot_params` (arch/x86/lib/kaslr.c). No part of that is settable by the
 boot loader, the command line or the firmware, so a displacement there cannot
-be pinned -- only observed.
+be pinned -- only observed. The virtual displacement is that draw modulo
+`1 + (KERNEL_IMAGE_SIZE - LOAD_PHYSICAL_ADDR - image) / CONFIG_PHYSICAL_ALIGN`
+slots, times the alignment (find_random_virt_addr in
+arch/x86/boot/compressed/kaslr.c); slot 0 is displacement 0. For the gate's
+defconfig image (52 MiB once aligned) that is 1 + (1024 - 16 - 52) / 2 = 479
+slots, so a correct kernel runs undisplaced on one probe in 479. An unpinned
+probe that reports 0 is therefore repeated, up to `UNPINNED_DRAWS` times.
 
 Both architectures print `Kernel Offset:` from the panic notifier, so a boot
 that ends in a panic reports the displacement it ran at.
@@ -38,6 +44,11 @@ DEFAULT_SEEDS = (
     0x0000000100000002,
     0xFFFFFFFFFFFFFFFF,
 )
+
+# Probes an unpinned boot takes while each reports displacement 0. A correct
+# x86_64 kernel fails all three with probability 479**-3, about 1e-8; one that
+# never randomizes fails them all every time.
+UNPINNED_DRAWS = 3
 
 FDT_MAGIC = 0xD00DFEED
 FDT_BEGIN_NODE = 1
@@ -205,6 +216,17 @@ def seed_plan(boots: int, requested: list[str] | None,
     return fixed + [random.getrandbits(64) for _ in range(boots - len(fixed))]
 
 
+def unpinned_draws(probe, limit: int = UNPINNED_DRAWS) -> list[int | None]:
+    """The displacements an unpinned probe reports: `probe()` again while it
+    reports 0, at most `limit` times. Its last entry stands for the probe."""
+    draws: list[int | None] = []
+    while len(draws) < limit:
+        draws.append(probe())
+        if draws[-1] != 0:
+            break
+    return draws
+
+
 def displacement_failures(configured: bool, booted: bool,
                           plan: list[int | None],
                           offsets: dict[int | None, int | None]) -> list[str]:
@@ -356,6 +378,20 @@ def _self_test() -> int:
     assert "no probe reported" in \
         displacement_failures(True, True, [1, 2], {1: None, 2: None})[0]
     assert displacement_failures(True, False, [1, 2], {1: None, 2: None}) == []
+    # An unpinned probe: a 0 draw is probed again, a displaced draw stands,
+    # a kernel that never randomizes runs undisplaced on every draw, and a
+    # probe that reported nothing is not repeated.
+    def judged(draws: list[int | None]) -> tuple[list[int | None], list[str]]:
+        seq = iter(draws)
+        got = unpinned_draws(lambda: next(seq))
+        return got, displacement_failures(True, True, [None], {None: got[-1]})
+
+    assert judged([0, 0x2F400000, 0x600000]) == ([0, 0x2F400000], [])
+    assert judged([0x21600000, 0]) == ([0x21600000], [])
+    never, failed = judged([0] * 9)
+    assert never == [0] * UNPINNED_DRAWS and "no boot ran displaced" in failed[0]
+    assert judged([None, 0x200000])[0] == [None]
+    assert "no probe reported" in judged([None])[1][0]
     print("linux kaslr: self-test ok", flush=True)
     return 0
 

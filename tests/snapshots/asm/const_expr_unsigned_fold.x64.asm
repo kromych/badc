@@ -26,46 +26,39 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0x5555555555555555, %r11 # imm = 0x5555555555555555
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0xfffffffffffffff, %r11 # imm = 0xFFFFFFFFFFFFFFF
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x8, %eax
                	retq

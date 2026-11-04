@@ -1,8 +1,13 @@
 name: kernel-packages
 
 # Distribution packages built from the badc-compiled Linux kernel, and a VM
-# that installs them. badc compiles every kernel C translation unit -- no
-# fallback to the reference compiler -- the kernel's own bindeb-pkg /
+# that installs them. Each lane builds the distribution's own kernel
+# configuration (`packages.py --config vendor`: the image's /boot/config,
+# mirrored on the vendor-deps release and carried to the pinned release by
+# olddefconfig), so the kernel has what the image boots and checks with --
+# Fedora's btrfs root, Ubuntu's multipath, the crypto modules. badc compiles
+# every kernel C translation unit -- no fallback to the reference compiler --
+# the kernel's own bindeb-pkg /
 # binrpm-pkg targets produce the package, the package is published as a run
 # artifact, and a stock distribution cloud image boots under qemu, installs
 # it, reboots into it and is probed: systemd reaches multi-user, the package
@@ -11,19 +16,25 @@ name: kernel-packages
 # against a stock-kernel baseline taken from the same image before the
 # install, and `/proc/version` names badc as the compiler.
 #
-# Not on the push path, and the reason is the accelerator. GitHub-hosted
-# runners expose no /dev/kvm, so the VM runs under TCG. Measured on the boxes
-# against the same packages and images, VM host cores capped at 4 to match a
-# runner:
+# Not on the push path: a distribution configuration is a full kernel. Measured
+# on the boxes at the pinned release (units and links are badc's, none falling
+# back; the VM phase under KVM with 4 guest cores):
 #
-#              build + package   vm phase, kvm   vm phase, tcg
-#   x86_64      5 min (12 cpu)       40 s            3 min
-#   aarch64    11 min  (8 cpu)      2.5 min         40 min
+#                     units   links   build + package    vm phase, kvm
+#   x86_64  ubuntu    26254   15644   63 min (12 cpu)        104 s
+#   x86_64  fedora    21767   11540   48 min (12 cpu)        103 s
+#   aarch64 ubuntu    30605   19112   64 min  (8 cpu)        195 s
+#   aarch64 fedora    23547   13097   41 min  (8 cpu)        126 s
 #
-# The aarch64 TCG figure is 28 min of `rpm -ivh` regenerating the initramfs
-# with dracut and 11 min of boots and probes, and a runner's cores are slower
-# than the box's, which is what --install-timeout below is sized for. Neither
-# lane fits a push, which is why this workflow is not on it.
+# GitHub-hosted runners have 4 cores and no /dev/kvm, so the VM runs under
+# TCG; with defconfig the TCG VM phase took 3 min (x86_64) and 40 min
+# (aarch64, 28 of them `rpm -ivh` regenerating the initramfs with dracut)
+# against 40 s and 2.5 min under KVM. The caps below scale those figures by
+# the core counts; a runner's cores are slower than the boxes', so they are
+# estimates, not measurements. With debug information on, as both
+# distributions configure it, a tree takes 43 GB and a deb lane's staging and
+# -dbg package 18 GB more, which is why the runner's unused toolchains are
+# removed first.
 #
 # It carries no schedule either. The corpus it builds is a pinned release at a
 # fixed configuration, so a run repeats the previous run's work unless a commit
@@ -38,13 +49,12 @@ name: kernel-packages
 # adds the distribution dimension on demand and on a labelled pull request.
 #
 # It is also the linker contrast, which is why the push path does not carry
-# one. This lane builds the same pinned release at the same `make defconfig`
-# but leaves LD to kbuild's default, so "GNU ld consumes badc's kernel
-# objects and the result boots" is gated here -- and boots further here, into
-# a stock distribution userspace rather than a marker initramfs. The two
-# lanes together separate a compiler defect from a linker one: a kernel that
-# boots reference-linked and not badc-linked is the linker's, and one that
-# boots neither way is the compiler's.
+# one. A `linker: reference` dispatch builds the same configuration but leaves
+# LD to kbuild's default, so "GNU ld consumes badc's kernel objects and the
+# result boots" is gated here -- into a stock distribution userspace rather
+# than a marker initramfs. The two separate a compiler defect from a linker
+# one: a kernel that boots reference-linked and not badc-linked is the
+# linker's, and one that boots neither way is the compiler's.
 #
 # What a TCG run does not cover, relative to KVM: the guest sees an emulated
 # CPU rather than the host's, so the kernel's KVM-guest paths (kvm-clock and
@@ -84,11 +94,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Floors just under the measured defconfig unit counts at the
-          # pinned release (2953 and 10489), so a build that compiled nothing
-          # cannot pass. x86_64 defconfig builds virtio, ext4 and most of the
-          # rest =y, aarch64 defconfig builds them =m -- which is why the
-          # module-autoload dimension is real only on the aarch64 lane.
+          # Floors just under the measured unit counts of each distribution
+          # configuration at the pinned release (in the table above), so a
+          # build that compiled nothing cannot pass.
           #
           # `cpu` is the guest CPU model, stated per lane rather than left to
           # the emulator's default. `max` exposes LA57 on x86_64, so the lane
@@ -101,18 +109,18 @@ jobs:
           # are stated rather than left to the architecture's default, which
           # is what previously fixed one format per architecture.
           - { os: ubuntu-24.04,     arch: x86_64,  distro: ubuntu, pkg: deb,
-              floor: 2900,  cpu: 'max' }
+              floor: 26000, cpu: 'max' }
           - { os: ubuntu-24.04,     arch: x86_64,  distro: fedora, pkg: rpm,
-              floor: 2900,  cpu: 'max' }
+              floor: 21500, cpu: 'max' }
           - { os: ubuntu-24.04-arm, arch: aarch64, distro: ubuntu, pkg: deb,
-              floor: 10000, cpu: 'max' }
+              floor: 30300, cpu: 'max' }
           - { os: ubuntu-24.04-arm, arch: aarch64, distro: fedora, pkg: rpm,
-              floor: 10000, cpu: 'max' }
+              floor: 23300, cpu: 'max' }
     runs-on: ${{ matrix.os }}
-    # Roughly 2x the measured wall time, so a hang is bounded well below the
-    # platform's 6-hour limit. Each VM boot is separately bounded by
+    # The platform's 6-hour limit: the build alone is estimated at three to
+    # four hours on a runner. Each VM boot is separately bounded by
     # --vm-timeout, and the build and VM steps carry their own caps.
-    timeout-minutes: ${{ matrix.arch == 'x86_64' && 60 || 240 }}
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -127,13 +135,23 @@ jobs:
         # package and the userspace that boots on it; the guest needs EFI
         # firmware, virtio and user networking, none of which the self-linked
         # emulator ci.yml's kernel lane boots under has a data directory for.
-        # `rpm` carries rpmbuild, which the kernel's binrpm-pkg target drives.
+        # `rpm` carries rpmbuild, which the kernel's binrpm-pkg target drives;
+        # `dwarves` carries pahole, without which olddefconfig drops the BTF
+        # both distributions configure; `libdw-dev` the `dwarf.h` and libdw
+        # headers of gendwarfksyms, the host tool Ubuntu's module versions
+        # select.
         env:
           EMU: ${{ matrix.arch == 'x86_64' && 'qemu-system-x86' || 'qemu-system-arm qemu-efi-aarch64' }}
         run: |
           ./scripts/apt_resilient_install.sh \
             flex bison bc libelf-dev libssl-dev xz-utils cpio kmod rsync \
-            dpkg-dev debhelper rpm genisoimage qemu-utils $EMU
+            dpkg-dev debhelper rpm genisoimage qemu-utils dwarves libdw-dev zstd $EMU
+      - name: free disk for the kernel tree
+        # Preinstalled toolchains this job does not use, about 30 GB.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: build badc
         run: cargo build --release --locked --features full --bin badc
       - name: fetch the pinned kernel release (sha256 verified)
@@ -147,7 +165,7 @@ jobs:
         # `linker: reference` on a manual dispatch gives the contrast run,
         # which separates a compiler fault from a linker one when a package
         # regresses.
-        timeout-minutes: ${{ matrix.arch == 'x86_64' && 30 || 120 }}
+        timeout-minutes: 280
         env:
           # The runner's reference compiler is not the one the pinned kernel
           # was released against; its warnings are not this gate's subject.
@@ -156,7 +174,8 @@ jobs:
           tarball=$(python demos/linux/setup.py --cache "$RUNNER_TEMP/lk" --print-tarball)
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
             --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \
-            --tarball "$tarball" --phases tree,build,package \
+            --tarball "$tarball" --phases config,tree,build,package \
+            --config vendor \
             --linker ${{ inputs.linker || 'badc' }} \
             --expect-units ${{ matrix.floor }} \
             --workdir "$RUNNER_TEMP/pkg" \
@@ -197,7 +216,7 @@ jobs:
         # grew a /dev/kvm should change this file, not silently change what
         # was measured. The cloud image is a vendor-deps release asset
         # verified against a pinned sha256 before it is booted.
-        timeout-minutes: ${{ matrix.arch == 'x86_64' && 25 || 110 }}
+        timeout-minutes: ${{ matrix.arch == 'x86_64' && 40 || 120 }}
         run: |
           python demos/linux/packages.py --arch ${{ matrix.arch }} \
             --distro ${{ matrix.distro }} --pkg ${{ matrix.pkg }} \

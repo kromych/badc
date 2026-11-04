@@ -79,26 +79,25 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi # <addr>
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0xb, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x16, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x16, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x21, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movl	0xc(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x4, %eax

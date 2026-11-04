@@ -20,9 +20,8 @@ Disassembly of section .text:
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	wobj-0x4
                	movq	(%rax), %rax
-               	leaq	(%rip), %rcx            # <addr>
+               	movq	(%rip), %rcx            # <addr>
 		R_X86_64_PC32	.data+0x1c
-               	movq	(%rcx), %rcx
                	movq	(%rcx), %rcx
                	addq	%rcx, %rax
                	cmpq	$0xa, %rax
@@ -33,9 +32,6 @@ Disassembly of section .text:
                	retq
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	ws-0x4
-               	leaq	0x10(%rax), %rcx
-               	cmpq	%rcx, %rcx
-               	jne	<addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x2, %rax
                	je	<addr>
@@ -43,9 +39,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	(%rip), %rax            # <addr>
+               	movq	(%rip), %rax            # <addr>
 		R_X86_64_PC32	.data+0x24
-               	movq	(%rax), %rax
                	callq	*%rax
                	movq	%rax, %rbx
                	callq	<addr>

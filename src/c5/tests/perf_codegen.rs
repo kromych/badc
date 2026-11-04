@@ -1445,6 +1445,7 @@ fn void_binding_asks_for_no_extension() {
             .find(|b| b.local_name == name)
             .unwrap_or_else(|| panic!("binding {name}"))
             .return_type_tag
+            .expect("prototype on record")
     };
     assert!(is_void_ty(tag("ext_void")));
     assert!(!is_void_ty(tag("ext_uchar")));
@@ -1460,16 +1461,49 @@ fn void_binding_asks_for_no_extension() {
     }
 }
 
+/// A binding's `signed char` prototype is recorded as that type and asks for
+/// a sign extension; a binding with no prototype records none.
+#[test]
+fn a_signed_char_binding_is_told_from_one_without_a_prototype() {
+    use crate::c5::codegen::{ReturnExt, return_extension};
+    use crate::c5::token::Ty;
+    let program = crate::Compiler::with_target(
+        "#pragma dylib(libc, \"libc.so.6\")\n\
+         #pragma binding(libc::ext_schar, \"ext_schar\")\n\
+         #pragma binding(libc::ext_unseen, \"ext_unseen\")\n\
+         signed char ext_schar(void);\n\
+         int main(void) { return ext_schar(); }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let tag = |name: &str| {
+        program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter())
+            .find(|b| b.local_name == name)
+            .unwrap_or_else(|| panic!("binding {name}"))
+            .return_type_tag
+    };
+    assert_eq!(tag("ext_schar"), Some(Ty::Char as i64));
+    assert_eq!(tag("ext_unseen"), None);
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::LinuxAarch64] {
+        assert_eq!(return_extension(Ty::Char as i64, target), ReturnExt::Sign8);
+    }
+}
+
 /// `long` is 4 bytes on LLP64 and 8 on LP64, and `return_is_low_word` is
 /// asked before the target is fixed, so it answers for the types that are
-/// narrow on every target and for no others. `char` shares tag 0 with "no
-/// prototype recorded", which is why it is out as well.
+/// narrow on every target and for no others.
 #[test]
 fn only_target_independent_narrow_returns_ride_the_low_word() {
     use crate::c5::codegen::return_is_low_word;
-    use crate::c5::compiler::types::{UNSIGNED_BIT, void_ty};
+    use crate::c5::compiler::types::{PLAIN_CHAR_BIT, UNSIGNED_BIT, void_ty};
     use crate::c5::token::Ty;
-    for ty in [Ty::Bool, Ty::Short, Ty::Int] {
+    assert!(return_is_low_word(Ty::Char as i64 | PLAIN_CHAR_BIT), "char");
+    for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
         assert!(return_is_low_word(ty as i64), "{ty:?}");
         assert!(
             return_is_low_word(ty as i64 | UNSIGNED_BIT),
@@ -1477,11 +1511,10 @@ fn only_target_independent_narrow_returns_ride_the_low_word() {
         );
         assert!(!return_is_low_word(ty as i64 + Ty::Ptr as i64), "{ty:?} *");
     }
-    for ty in [Ty::Char, Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
+    for ty in [Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
         assert!(!return_is_low_word(ty as i64), "{ty:?}");
     }
     assert!(!return_is_low_word(void_ty()));
-    assert!(!return_is_low_word(0));
 }
 
 /// Imports returning each narrow integer type, read (`read_*`) and called for
@@ -2986,6 +3019,64 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
         !ws.iter().any(|&w| sp_access(w)),
         "aarch64 step4: the frame is used: {ws:08x?}"
     );
+}
+
+/// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
+/// values in SIMD registers, as gcc 16 and clang do: each function is its
+/// instructions and `ret`, with no frame.
+#[test]
+fn eight_byte_simd_values_take_no_frame() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+void axpy2(float *p, const float *q, float k) {\n\
+    float32x2_t a = vld1_f32(p), b = vld1_f32(q);\n\
+    vst1_f32(p, vadd_f32(vmul_f32(a, vdup_n_f32(k)), b));\n\
+}\n\
+void add1(double *p, const double *q) { vst1_f64(p, vadd_f64(vld1_f64(p), vld1_f64(q))); }\n\
+void round2(float *p, const float *q) { vst1_f32(p, vcvt_f32_s32(vcvt_s32_f32(vld1_f32(q)))); }\n\
+double sqrt_d(double x) { double r; __asm__(\"fsqrt %d0, %d1\" : \"=w\"(r) : \"w\"(x)); return r; }\n\
+float sqrt_s(float x) { float r; __asm__(\"fsqrt %s0, %s1\" : \"=w\"(r) : \"w\"(x)); return r; }\n";
+    const THREE: u32 = 0xFFE0_FC00;
+    const TWO: u32 = 0xFFFF_FC00;
+    const LDR_D: (u32, u32) = (0xFFC0_0000, 0xFD40_0000);
+    const STR_D: (u32, u32) = (0xFFC0_0000, 0xFD00_0000);
+    let mut m = Misses::default();
+    for (name, insns) in [
+        (
+            "axpy2",
+            &[
+                LDR_D,
+                LDR_D,
+                (TWO, 0x0E04_0400),
+                (THREE, 0x2E20_DC00),
+                (THREE, 0x0E20_D400),
+                STR_D,
+            ][..],
+        ),
+        ("add1", &[LDR_D, LDR_D, (THREE, 0x1E60_2800), STR_D][..]),
+        (
+            "round2",
+            &[LDR_D, (TWO, 0x0EA1_B800), (TWO, 0x0E21_D800), STR_D][..],
+        ),
+        ("sqrt_d", &[(TWO, 0x1E61_C000)][..]),
+        ("sqrt_s", &[(TWO, 0x1E21_C000)][..]),
+    ] {
+        let ws = a64(SRC, name);
+        let body = &ws[..ws.len().saturating_sub(1)];
+        m.expect(
+            body.len() == insns.len()
+                && body
+                    .iter()
+                    .zip(insns)
+                    .all(|(&w, &(mask, want))| w & mask == want),
+            || {
+                format!(
+                    "aarch64 {name}: not its {} instructions: {ws:08x?}",
+                    insns.len()
+                )
+            },
+        );
+    }
+    m.finish();
 }
 
 /// A constant read past a call by a contracted multiply-add, by a return
@@ -5533,4 +5624,60 @@ fn leaf_atomics_are_one_instruction() {
         || format!("x86-64 cas: not one lock cmpxchgq off the stack: {insns:x?}"),
     );
     m.finish();
+}
+
+/// An access to a static object at a constant offset takes its address as a
+/// `disp32(%rip)` operand (ModRM mod=00 r/m=101), with no `lea` ahead of it:
+/// loads of each width, stores of a register and of an immediate, float
+/// accesses, a zero test that branches, and, at `-O` where the member
+/// offset folds into the access, struct members.
+#[test]
+fn static_object_access_is_rip_relative() {
+    let src = "long q; int w; short h; signed char b; double d; float f;\n\
+               struct { int a; long c; } s;\n\
+               long lq(void) { return q + w + h + b; }\n\
+               void st(long v) { q = v; w = (int)v; }\n\
+               void imm(void) { q = -1; w = 0x12345678; h = -2; b = 7; }\n\
+               int zt(void) { if (b) return 3; return 4; }\n\
+               double fp(void) { f = (float)d; d = 2.5; return d + f; }\n\
+               long mem(void) { s.a = 1; return s.c + s.a; }";
+    let rip = |i: &X64Insn| i.op != 0x8D && i.modrm.is_some_and(|m| m & 0xC7 == 0x05);
+    for optimize in [false, true] {
+        let members = if optimize { &["mem"][..] } else { &[] };
+        for &name in ["lq", "st", "imm", "zt", "fp"].iter().chain(members) {
+            let insns = x64_at(src, name, optimize);
+            assert!(
+                insns.iter().any(rip) && !insns.iter().any(|i| i.op == 0x8D),
+                "{name} (optimize {optimize}): {insns:x?}"
+            );
+        }
+    }
+}
+
+/// On aarch64 a static object read or written at its own address takes
+/// the `adrp` page alone, the access carrying the low 12 bits: no `add`
+/// of the page offset, the `adrp` hoisted out of a loop. A member at a
+/// displacement, and an address that escapes, keep the `add`.
+#[test]
+fn static_object_access_takes_the_page_offset_in_the_access() {
+    let src = "long q; int w; char b; double d; float f; struct { int a; long c; } s;\n\
+               long lq(void) { return q + w + b; }\n\
+               void st(long v) { q = v; w = 0; b = 1; }\n\
+               double fp(void) { f = (float)d; return d; }\n\
+               long lp(int n) { long t = 0; for (int i = 0; i < n; i++) t += q; return t; }\n\
+               long mem(void) { return s.c + s.a; }\n\
+               long *esc(void) { return &q; }";
+    let adrp = |w: &u32| w & 0x9F00_0000 == 0x9000_0000;
+    let page_add = |w: &u32| w & 0xFFC0_0000 == 0x9100_0000 && (w >> 10) & 0xFFF == 0;
+    for name in ["lq", "st", "fp", "lp"] {
+        let words = a64(src, name);
+        assert!(
+            words.iter().any(adrp) && !words.iter().any(page_add),
+            "{name}: {words:08x?}"
+        );
+    }
+    assert_eq!(a64(src, "lp").iter().filter(|w| adrp(w)).count(), 1);
+    for name in ["mem", "esc"] {
+        assert!(a64(src, name).iter().any(page_add), "{name}");
+    }
 }

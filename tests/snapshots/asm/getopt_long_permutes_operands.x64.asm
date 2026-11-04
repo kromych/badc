@@ -340,8 +340,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
                	movl	-0xf0(%rbp), %eax

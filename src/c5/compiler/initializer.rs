@@ -152,7 +152,7 @@ impl InitLeaf {
     }
 
     /// The arithmetic constant a leaf without a relocation holds.
-    fn arith(&self) -> Option<ConstVal> {
+    pub(super) fn arith(&self) -> Option<ConstVal> {
         match self.reloc {
             InitElemReloc::None => Some(ConstVal::Int {
                 val: self.value,
@@ -823,6 +823,15 @@ impl Compiler {
         self.intern_func_name_symbol(offset, &spelling, func.len() as i64 + 1);
         self.func_name_objects.push((func, spelling, offset));
         offset
+    }
+
+    /// [`Self::intern_func_name`] with the storage's symbol, which roots
+    /// its address as an address constant (C99 6.6p9), and its size.
+    pub(super) fn intern_func_name_object(&mut self) -> (i64, usize, i64) {
+        let off = self.intern_func_name();
+        let at = self.staged_literal_syms.partition_point(|&(v, _)| v < off);
+        let sym = self.staged_literal_syms[at].1;
+        (off, sym, self.symbols[sym].data_byte_size)
     }
 
     /// The type `__func__` decays to: a pointer to `const char`.
@@ -1630,6 +1639,7 @@ impl Compiler {
     /// offset accumulates the array-index strides and field offsets.
     pub(super) fn parse_const_address(&mut self) -> Result<Option<ConstAddress>, C5Error> {
         let snap = self.lex.snapshot();
+        let snap_start = self.lex.tok_start();
         // The speculative scan may lex a string literal (whose bytes are
         // appended to the data segment) before deciding this is not an
         // address constant; the lexer snapshot does not cover the data
@@ -1732,15 +1742,13 @@ impl Compiler {
                 break;
             }
         }
-        if self.lex.tk != Token::Id {
+        if self.lex.tk != Token::Id || self.symbols[self.lex.curr_id_idx].class != Token::Glo as i64
+        {
+            self.address_probe_miss = Some((snap_start, self.lex.tok_start()));
             self.rewind_speculation(snap, data_snap);
             return Ok(None);
         }
         let sym_idx = self.lex.curr_id_idx;
-        if self.symbols[sym_idx].class != Token::Glo as i64 {
-            self.rewind_speculation(snap, data_snap);
-            return Ok(None);
-        }
         let mut off = self.symbols[sym_idx].val;
         let mut cur_ty = self.symbols[sym_idx].type_;
         let base_zero_len = self.symbols[sym_idx].is_zero_len_array;
@@ -1834,9 +1842,11 @@ impl Compiler {
                 let op_snap = self.lex.snapshot();
                 let op_data = self.data.len();
                 self.next()?;
-                let n = match self.parse_constant_int_folding_const_objects() {
-                    Ok(n) => n,
-                    Err(_) => {
+                // A pointer operand, a null one included, makes the
+                // expression a difference (`(char *)&g - (char *)0`).
+                let n = match self.parse_constant_folding_const_objects() {
+                    Ok(v) if !is_pointer_ty(v.expr_ty()) && v.addr().is_none() => v.as_int(),
+                    _ => {
                         self.rewind_speculation(op_snap, op_data);
                         break;
                     }
@@ -2107,7 +2117,13 @@ impl Compiler {
         // `g.array_field`, `(&buf[i])->field`. Takes priority over the
         // integer / `&global` leaves below, which only handle a whole
         // symbol with no member or index chain.
-        if self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(' {
+        let at = self.lex.tok_start();
+        let known_miss = self
+            .address_probe_miss
+            .is_some_and(|(lo, hi)| lo <= at && at < hi);
+        if (self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(')
+            && !known_miss
+        {
             let snap = self.lex.snapshot();
             // A `:` or `)` terminator appears when this value is a
             // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
@@ -2323,17 +2339,21 @@ impl Compiler {
             }
             return Ok(leaf);
         }
-        // A parenthesised relocation-bearing leaf -- `(func)`,
-        // `(&global)`, possibly multiply parenthesised, as produced
-        // by the `(method_fn)(((void(*)(void))((fn))))` method-table
-        // idiom. Recurse on the inner value and consume the matching
-        // `)` when it carries a relocation; a parenthesised arithmetic
-        // constant rewinds and falls through to the folders below,
-        // which must start outside the parens to absorb trailing
-        // operators.
+        // The inner value, recursively: a relocation-bearing leaf --
+        // `(func)`, `(&global)`, possibly multiply parenthesised, as
+        // produced by the `(method_fn)(((void(*)(void))((fn))))`
+        // method-table idiom -- or an arithmetic constant, which seeds
+        // the operator chain past the `)`.
         {
             let inner_snap = self.lex.snapshot();
             let leaf = self.parse_constant_init_value()?;
+            if self.lex.tk == ')'
+                && let Some(seed) = leaf.arith()
+            {
+                self.next()?; // consume the matching `)`
+                let v = self.parse_const_expr_cond_from(seed)?;
+                return self.init_scalar_of(v);
+            }
             if !matches!(leaf.reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                 && self.lex.tk == ')'
             {
@@ -2526,13 +2546,11 @@ impl Compiler {
         let idx = self.lex.curr_id_idx;
         let class = self.symbols[idx].class;
         // C99 6.4.2.2: __func__ / __FUNCTION__ / __PRETTY_FUNCTION__
-        // decay to a pointer to the enclosing function's name; resolve
-        // them here so the undeclared name is not taken as a forward fn.
+        // decay to a pointer to the enclosing function's name, an address
+        // constant the evaluator folds with what follows (`__func__ + 1`),
+        // so the undeclared name is not taken as a forward fn.
         if self.is_func_name_ident() {
-            let off = self.intern_func_name();
-            self.next()?;
-            let ty = self.func_name_ptr_ty();
-            return Ok(InitLeaf::of(off as i128, InitElemReloc::Data(None), ty));
+            return self.parse_constant_init_scalar();
         }
         // A name with no declaration is either a builtin the constant
         // evaluator folds (C99 6.6p10) or undeclared; the evaluator
@@ -3800,11 +3818,21 @@ impl Compiler {
     }
 
     /// Whether a measuring fill took the next value whole as an expression
-    /// of structure `sid` (C99 6.7.8p13): one begun by a name, `*` or a `(`
-    /// that does not open a compound literal, which the fill parses itself.
+    /// of structure `sid`, which the fill parses itself.
     fn measured_struct_value(&mut self, sid: usize) -> Result<bool, C5Error> {
+        if !self.measuring_init || !self.next_is_struct_value(sid)? {
+            return Ok(false);
+        }
+        self.skip_init_element_value()?;
+        Ok(true)
+    }
+
+    /// Whether the next initializer is an expression of structure `sid`
+    /// (C99 6.7.8p13): one begun by a name, `*` or a `(` that does not
+    /// open a compound literal.
+    fn next_is_struct_value(&mut self, sid: usize) -> Result<bool, C5Error> {
         let starts = self.lex.tk == Token::Id || self.lex.tk == '(' || self.lex.tk == Token::MulOp;
-        if !self.measuring_init || !starts {
+        if !starts {
             return Ok(false);
         }
         if self.lex.tk == '(' {
@@ -3817,11 +3845,7 @@ impl Compiler {
             }
         }
         let ty = self.peek_expr_type().unwrap_or(0);
-        let whole = is_struct_value_ty(ty) && struct_id_of(ty) == sid;
-        if whole {
-            self.skip_init_element_value()?;
-        }
-        Ok(whole)
+        Ok(is_struct_value_ty(ty) && struct_id_of(ty) == sid)
     }
 
     /// The runtime twin of `init_struct_array_element`: fill one struct array
@@ -4607,7 +4631,13 @@ impl Compiler {
         // value parses like any scalar); the element it records is tagged
         // with the bitfield descriptor so the walker emits a
         // read-modify-write of the storage unit instead of a full store.
-        if field.array_size > 0 {
+        // At a brace-elided first array field, a value of the enclosing
+        // structure's type is the whole object's, which the leaf copies.
+        let whole = first_elided
+            && field.array_size > 0
+            && self.lex.tk != '{'
+            && self.next_is_struct_value(struct_id)?;
+        if field.array_size > 0 && !whole {
             // C99 6.7.8p14: a string fills a one-dimensional member, a store each.
             if field.inner_array_size == 0
                 && let Some(lit) = self.take_string_init(field.ty)?

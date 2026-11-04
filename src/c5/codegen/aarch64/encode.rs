@@ -1312,6 +1312,10 @@ pub(crate) enum Cond {
     /// N==0, the exact complement of `Mi`; taken by a `Bz`-fused FP
     /// `<` branch, including the unordered case FCMP leaves N clear.
     Pl = 0x5,
+    /// V==1; after FCMP, the operands are unordered.
+    Vs = 0x6,
+    /// V==0, the complement of `Vs`.
+    Vc = 0x7,
     /// Unsigned `>`. After SUBS, set when C==1 && Z==0.
     Hi = 0x8,
     /// FP "less than or equal" / unsigned `<=` -- C==0 || Z==1.
@@ -1353,8 +1357,19 @@ impl Cond {
             Cond::Ls => Cond::Hi,
             Cond::Mi => Cond::Pl,
             Cond::Pl => Cond::Mi,
+            Cond::Vs => Cond::Vc,
+            Cond::Vc => Cond::Vs,
         }
     }
+}
+
+/// `CSINC <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm + 1`.
+pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x9A80_0400
+        | ((rm.0 as u32) << 16)
+        | ((cond as u32) << 12)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
@@ -3152,6 +3167,8 @@ mod tests {
             Cond::Le,
             Cond::Mi,
             Cond::Pl,
+            Cond::Vs,
+            Cond::Vc,
         ] {
             assert_eq!(c.flip().flip(), c, "double flip should be identity");
             // The architectural inversion flips bit 0 of the encoding.
@@ -3162,6 +3179,9 @@ mod tests {
         assert_eq!(Cond::Lt.flip(), Cond::Ge);
         assert_eq!(Cond::Gt.flip(), Cond::Le);
         assert_eq!(Cond::Mi.flip(), Cond::Pl);
+        // cset w0, vs; csinc x0, x0, xzr, le
+        assert_eq!(enc_cset(r(0), Cond::Vs), 0x9A9F_77E0);
+        assert_eq!(enc_csinc(r(0), r(0), Reg::SP, Cond::Le), 0x9A9F_D400);
     }
 
     #[test]

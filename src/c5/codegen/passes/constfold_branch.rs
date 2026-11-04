@@ -125,6 +125,114 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// Fold a conditional branch whose arms do no work to a jump down its
+/// fall-through arm: both arms reach one block over blocks of pure values
+/// nothing outside them reads, and each phi there that is read takes the
+/// same value over either arm. Returns whether any terminator changed.
+pub(crate) fn fold_converging_arms(func: &mut FunctionSsa) -> bool {
+    use crate::c5::codegen::ssa::reg_alloc::{compute_use_counts, for_each_operand};
+    let block_of = block_index(func);
+    let n = func.insts.len();
+    // A value read outside its block other than by a phi on an edge out
+    // of that block.
+    let mut read_away = alloc::vec![false; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let mut note = |v: crate::c5::ir::ValueId, from: BlockId| {
+            if (v as usize) < n && block_of[v as usize] != from {
+                read_away[v as usize] = true;
+            }
+        };
+        for i in block.inst_range.clone() {
+            match &func.insts[i as usize] {
+                Inst::Phi { incoming, .. } => incoming.iter().for_each(|&(p, v)| note(v, p)),
+                inst => for_each_operand(inst, |v| note(v, b as BlockId)),
+            }
+        }
+        block.terminator.for_each_operand(|v| note(v, b as BlockId));
+    }
+    let forwards_to = |s: BlockId| -> Option<BlockId> {
+        let block = func.blocks.get(s as usize)?;
+        let (Terminator::Jmp(next) | Terminator::FallThrough(next)) = block.terminator else {
+            return None;
+        };
+        let quiet = block.inst_range.clone().all(|i| {
+            let inst = &func.insts[i as usize];
+            !matches!(inst, Inst::Phi { .. }) && inst.is_pure() && !read_away[i as usize]
+        });
+        (s != 0 && quiet).then_some(next)
+    };
+    // The block an arm entered from `b` reaches, and the edge it arrives on.
+    let reach = |b: BlockId, arm: BlockId| {
+        let (mut at, mut from) = (arm, b);
+        for _ in 0..func.blocks.len() {
+            match forwards_to(at) {
+                Some(next) if next != at => (from, at) = (at, next),
+                _ => break,
+            }
+        }
+        (at, from)
+    };
+    let uses = compute_use_counts(func);
+    let agree = |d: BlockId, p: BlockId, q: BlockId| {
+        let income = |incoming: &[(BlockId, crate::c5::ir::ValueId)], e: BlockId| {
+            incoming.iter().find(|&&(x, _)| x == e).map(|&(_, v)| v)
+        };
+        p == q
+            || func.blocks[d as usize]
+                .inst_range
+                .clone()
+                .all(|i| match &func.insts[i as usize] {
+                    Inst::Phi { incoming, .. } if uses[i as usize] > 0 => {
+                        match (income(incoming, p), income(incoming, q)) {
+                            (Some(x), Some(y)) => {
+                                x == y
+                                    || fold(&func.insts, x)
+                                        .is_some_and(|k| fold(&func.insts, y) == Some(k))
+                            }
+                            _ => false,
+                        }
+                    }
+                    _ => true,
+                })
+    };
+    let folds: alloc::vec::Vec<(usize, BlockId, BlockId)> = (0..func.blocks.len())
+        .filter_map(|b| {
+            let (Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            }) = func.blocks[b].terminator
+            else {
+                return None;
+            };
+            let (dt, from_t) = reach(b as BlockId, target);
+            let (df, from_f) = reach(b as BlockId, fall_through);
+            (dt == df && dt != b as BlockId && agree(dt, from_t, from_f)).then_some((
+                b,
+                target,
+                fall_through,
+            ))
+        })
+        .collect();
+    for &(b, target, fall_through) in &folds {
+        func.blocks[b].terminator = Terminator::Jmp(fall_through);
+        if target == fall_through {
+            continue;
+        }
+        for i in func.blocks[target as usize].inst_range.clone() {
+            if let Inst::Phi { incoming, .. } = &mut func.insts[i as usize] {
+                incoming.retain(|&(pred, _)| pred != b as BlockId);
+            }
+        }
+    }
+    !folds.is_empty()
+}
+
 /// Rewrite a branch testing `x == 0` / `x != 0` into the branch on `x`
 /// itself: `Bz(x != 0)` -> `Bz(x)`, `Bz(x == 0)` -> `Bnz(x)`, and the
 /// `Bnz` duals. The compare computes exactly the zero test the
@@ -349,7 +457,7 @@ pub(super) fn edge_truth(
 /// `block_of[inst] = owning block id`, for the edge lookup above.
 /// `BlockId::MAX` marks an instruction no block contains -- what a
 /// folded-away arm leaves behind in the flat array.
-pub(super) fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
+pub(crate) fn block_index(func: &FunctionSsa) -> alloc::vec::Vec<BlockId> {
     let mut of = alloc::vec![BlockId::MAX; func.insts.len()];
     for (b, blk) in func.blocks.iter().enumerate() {
         for i in blk.inst_range.clone() {
@@ -369,6 +477,9 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -403,7 +514,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -424,6 +535,95 @@ mod tests {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
         }
+    }
+
+    /// `b0: if (p0)` to `b1` or `b2`, each holding `arm` and jumping to
+    /// `b3`, whose phi merges `v1` (from `b1`) and `v2` (from `b2`) and
+    /// whose return reads `ret`.
+    fn diamond(arms: [Inst; 2], ret: ValueId) -> FunctionSsa {
+        use crate::c5::ir::LoadKind;
+        let [t, f] = arms;
+        let block = |range: core::ops::Range<u32>, terminator| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator,
+            exit_acc: NO_VALUE,
+        };
+        fresh(
+            vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                t,
+                f,
+                Inst::Phi {
+                    incoming: vec![(1, 1), (2, 2)],
+                    kind: LoadKind::I64,
+                },
+            ],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bnz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(1..2, Terminator::Jmp(3)),
+                block(2..3, Terminator::Jmp(3)),
+                block(3..4, Terminator::Return(ret)),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_branch_whose_arms_do_no_work_and_agree_becomes_a_jump() {
+        let store = Inst::StoreLocal {
+            disp: 0,
+            off: -1,
+            value: 0,
+            kind: crate::c5::ir::StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        };
+        for (arms, ret, folds) in [
+            ([Inst::Imm(7), Inst::Imm(7)], 3, true),
+            ([Inst::Imm(1), Inst::Imm(2)], 3, false),
+            // A phi nothing reads takes any values.
+            ([Inst::Imm(1), Inst::Imm(2)], 0, true),
+            ([store, Inst::Imm(7)], 0, false),
+        ] {
+            let mut f = diamond(arms.clone(), ret);
+            assert_eq!(
+                fold_converging_arms(&mut f),
+                folds,
+                "{arms:?} returning v{ret}"
+            );
+            if folds {
+                assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(2)));
+            }
+        }
+    }
+
+    #[test]
+    fn an_arm_that_is_the_merge_loses_its_phi_income() {
+        // `b0: if (p0)` straight to `b3` or through `b2`.
+        let mut f = diamond([Inst::Imm(7), Inst::Imm(7)], 3);
+        f.blocks[0].terminator = Terminator::Bnz {
+            cond: 0,
+            target: 3,
+            fall_through: 2,
+        };
+        if let Inst::Phi { incoming, .. } = &mut f.insts[3] {
+            incoming[0] = (0, 1);
+        }
+        f.blocks[0].inst_range = 0..2;
+        f.blocks[1].inst_range = 2..2;
+        assert!(fold_converging_arms(&mut f));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(2)));
+        assert!(matches!(&f.insts[3], Inst::Phi { incoming, .. } if incoming[..] == [(2, 2)]));
     }
 
     #[test]

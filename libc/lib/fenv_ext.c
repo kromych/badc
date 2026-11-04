@@ -1,5 +1,6 @@
-// feraiseexcept on the Windows targets, where no C runtime DLL exports it:
-// each exception is raised by a division that raises it, as the SDK's is.
+// feraiseexcept and feupdateenv on the Windows targets, where no C runtime
+// DLL exports them: each exception is raised by a division that raises it,
+// as the SDK's is.
 
 #ifdef _WIN32
 
@@ -23,6 +24,12 @@ int feraiseexcept(int excepts) {
         }
     }
     return 0;
+}
+
+// C99 7.6.4.4: install *envp, then raise the exceptions raised before.
+int feupdateenv(const fenv_t *envp) {
+    int raised = fetestexcept(FE_ALL_EXCEPT);
+    return fesetenv(envp) != 0 || feraiseexcept(raised) != 0;
 }
 
 #endif

@@ -17,16 +17,22 @@
 #include <wchar.h>
 #include <wctype.h>
 
-#pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::__c5_ucrt_strtod_l, "_strtod_l")
-#pragma binding(ucrtbase::__c5_ucrt_strtof_l, "_strtof_l")
-#pragma binding(ucrtbase::__c5_ucrt_wcstod_l, "_wcstod_l")
-#pragma binding(ucrtbase::__c5_ucrt_wcstof_l, "_wcstof_l")
-double __c5_ucrt_strtod_l(const char *s, char **end, void *locale);
-float __c5_ucrt_strtof_l(const char *s, char **end, void *locale);
-double __c5_ucrt_wcstod_l(const wchar_t *s, wchar_t **end, void *locale);
-float __c5_ucrt_wcstof_l(const wchar_t *s, wchar_t **end, void *locale);
 void *__c5_ucrt_numeric_locale(void);
+void (*__c5_ucrt_proc(const char *name))(void);
+
+// ucrtbase.dll's _strtod_l, _strtof_l, _wcstod_l or _wcstof_l, through
+// ucrt_locale.c: <stdlib.h> binds msvcrt.dll's _strtod_l.
+static void (*ucrt_conversion(int wide, int is_float))(void) {
+    static const char *const names[4] = {"_strtod_l", "_strtof_l", "_wcstod_l", "_wcstof_l"};
+    static void (*found[4])(void);
+    int k = wide * 2 + is_float;
+    void (*f)(void) = __atomic_load_n(&found[k], __ATOMIC_ACQUIRE);
+    if (!f) {
+        f = __c5_ucrt_proc(names[k]);
+        __atomic_store_n(&found[k], f, __ATOMIC_RELEASE);
+    }
+    return f;
+}
 
 static unsigned at(const void *s, int wide, size_t i) {
     return wide ? (unsigned)((const wchar_t *)s)[i] : ((const unsigned char *)s)[i];
@@ -170,14 +176,17 @@ static double convert(const void *s, int wide, int is_float, size_t *used) {
         return neg ? -v : v;
     }
     void *loc = __c5_ucrt_numeric_locale();
+    void (*f)(void) = ucrt_conversion(wide, is_float);
     double v;
     if (wide) {
         wchar_t *e;
-        v = is_float ? __c5_ucrt_wcstof_l(s, &e, loc) : __c5_ucrt_wcstod_l(s, &e, loc);
+        v = is_float ? ((float (*)(const void *, wchar_t **, void *))f)(s, &e, loc)
+                     : ((double (*)(const void *, wchar_t **, void *))f)(s, &e, loc);
         n = (size_t)(e - (const wchar_t *)s);
     } else {
         char *e;
-        v = is_float ? __c5_ucrt_strtof_l(s, &e, loc) : __c5_ucrt_strtod_l(s, &e, loc);
+        v = is_float ? ((float (*)(const void *, char **, void *))f)(s, &e, loc)
+                     : ((double (*)(const void *, char **, void *))f)(s, &e, loc);
         n = (size_t)(e - (const char *)s);
     }
     range(s, wide, n, fabs(v), is_float ? FLT_MIN : DBL_MIN);

@@ -29,68 +29,29 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x10]
-               	stur	x0, [x29, #-0x8]
-               	ldur	x2, [x29, #-0x10]
-               	tbnz	w2, #0x0, <addr>
+               	mov	x1, #0x1                // =1
+               	stur	x1, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	stur	xzr, [x29, #-0x10]
                	mov	x2, #0x2                // =2
                	stur	x2, [x29, #-0x8]
-               	stur	x0, [x29, #-0x10]
+               	stur	x1, [x29, #-0x10]
                	mov	x2, #0x3                // =3
                	stur	x2, [x29, #-0x8]
-               	tbnz	w0, #0x0, <addr>
-               	ldur	x2, [x29, #-0x10]
-               	tbnz	w2, #0x0, <addr>
                	stur	xzr, [x29, #-0x10]
-               	mov	x1, #0x4                // =4
-               	stur	x1, [x29, #-0x8]
-               	stur	x0, [x29, #-0x10]
-               	mov	x1, #0x5                // =5
-               	stur	x1, [x29, #-0x8]
-               	tbnz	w0, #0x0, <addr>
-               	ldur	x0, [x29, #-0x10]
-               	tbnz	w0, #0x0, <addr>
+               	mov	x0, #0x4                // =4
+               	stur	x0, [x29, #-0x8]
+               	stur	x1, [x29, #-0x10]
+               	mov	x0, #0x5                // =5
+               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x10]
                	mov	x1, #0x6                // =6
                	stur	x1, [x29, #-0x8]
                	mov	x1, #0x1                // =1
                	stur	x1, [x29, #-0x10]
-               	mov	x2, #0x7                // =7
-               	stur	x2, [x29, #-0x8]
-               	tbnz	w1, #0x0, <addr>
-               	ldur	x1, [x29, #-0x10]
-               	tbnz	w1, #0x0, <addr>
+               	mov	x1, #0x7                // =7
+               	stur	x1, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x8]
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x1
-               	b	<addr>
-               	ldur	x1, [x29, #-0x8]
-               	and	x1, x1, #0xff
-               	cmp	w1, #0x1
-               	b	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	and	x0, x0, #0xff
-               	cmp	w0, #0x1
-               	b	<addr>
-               	ldur	x0, [x29, #-0x8]
-               	and	x0, x0, #0xff
-               	cmp	w0, #0x1
-               	b	<addr>
-               	ldur	x2, [x29, #-0x8]
-               	and	x2, x2, #0xff
-               	cmp	w2, #0x1
-               	b	<addr>
-               	ldur	x2, [x29, #-0x8]
-               	and	x2, x2, #0xff
-               	cmp	w2, #0x1
-               	b	<addr>
-               	ldur	x2, [x29, #-0x8]
-               	and	x2, x2, #0xff
-               	cmp	w2, #0x1
-               	b	<addr>

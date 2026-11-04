@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	str	x1, [x0]
                	str	x2, [x0, #0x8]
-               	add	x6, x1, x2
                	mov	x0, #0x0                // =0
                	mov	x3, #0xa                // =10
                	adrp	x4, <page>
@@ -38,7 +37,7 @@ Disassembly of section .text:
                	ldr	x1, [x0]
                	ldr	x2, [x0, #0x8]
                	add	x1, x1, x2
-               	add	x2, x6, x1
+               	add	x2, x1, #0x7
                	add	x1, x0, #0x10
                	ldr	x3, [x1]
                	ldr	x1, [x1, #0x8]
@@ -53,15 +52,14 @@ Disassembly of section .text:
                	ldr	x2, [x0]
                	ldr	x0, [x0, #0x8]
                	add	x0, x2, x0
-               	add	x3, x1, x0
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x4                // =4
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x0, [x2]
-               	str	x1, [x2, #0x8]
-               	add	x0, x0, x1
-               	add	x0, x3, x0
+               	add	x1, x1, x0
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x2, [x0]
+               	str	x3, [x0, #0x8]
+               	add	x0, x1, #0x7
                	cmp	x0, #0x4e
                	b.ne	<addr>
                	mov	x0, #0x0                // =0

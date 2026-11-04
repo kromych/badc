@@ -92,8 +92,7 @@ Disassembly of section .text:
                	mov	x0, #0xb                // =11
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #-0xdb6d           // =-56173
                	movk	x17, #0x9249, lsl #16
                	cmp	x0, x17
@@ -113,15 +112,13 @@ Disassembly of section .text:
                	mov	x0, #0xe                // =14
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x80]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x88]
                	fmov	d1, #3.00000000
                	fcmp	d0, d1
                	b.eq	<addr>

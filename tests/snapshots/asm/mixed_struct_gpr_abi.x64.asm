@@ -33,13 +33,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movl	$0x3, %eax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movsd	-0x8(%rbp), %xmm1
-               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
+               	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
+               	movsd	-0x8(%rbp), %xmm0
+               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
+               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
                	cvttsd2si	%xmm0, %rax
                	addq	$0x2, %rax
                	cmpq	$0xe, %rax

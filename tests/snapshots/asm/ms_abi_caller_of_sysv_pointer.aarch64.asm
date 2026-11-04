@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <callee>:
                	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	str	x2, [x3]
+               	str	x2, [x3, #0x50]
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
                	add	x0, x0, x1
@@ -69,8 +68,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	cmp	x0, x1

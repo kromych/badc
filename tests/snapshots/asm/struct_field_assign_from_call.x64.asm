@@ -28,23 +28,25 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rsi
-               	movq	0x18(%rax), %rdi
-               	movl	$0x4, 0x14(%rax)
-               	movq	$0x1234abcd, 0x8(%rax)  # imm = 0x1234ABCD
-               	movl	$0x4, 0x24(%rax)
-               	movq	$0x1234abcd, 0x18(%rax) # imm = 0x1234ABCD
-               	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rsi # <addr>
+               	movl	$0x4, <rip> # <addr>
+               	movq	$0x1234abcd, <rip> # imm = 0x1234ABCD
+                                                # <addr>
+               	movl	$0x4, <rip> # <addr>
+               	movq	$0x1234abcd, <rip> # imm = 0x1234ABCD
+                                                # <addr>
+               	cmpq	$0x1234abcd, %rdx       # imm = 0x1234ABCD
                	jne	<addr>
-               	movl	$0x1, %esi
-               	testl	%esi, %esi
+               	movl	$0x1, %eax
+               	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	0x8(%rax), %rdx
-               	movq	0x18(%rax), %rcx
-               	movl	0x14(%rax), %r8d
-               	movl	0x24(%rax), %r9d
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	movl	<rip>, %r8d # <addr>
+               	movl	<rip>, %r9d # <addr>
+               	movq	%rax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
@@ -56,9 +58,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-               	cmpq	$0x1234abcd, %rdi       # imm = 0x1234ABCD
+               	cmpq	$0x1234abcd, %rsi       # imm = 0x1234ABCD
                	jne	<addr>
-               	movl	$0x2, %esi
+               	movl	$0x2, %eax
                	jmp	<addr>
-               	xorl	%esi, %esi
+               	xorl	%eax, %eax
                	jmp	<addr>

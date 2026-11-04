@@ -17,8 +17,8 @@ use super::ast::{
 use super::codegen::ssa::build::SsaBuilder;
 use super::codegen::{ArgPlacement, LongDoubleKind, Target, offset_align, plan_param_regs_aggs};
 use super::compiler::types::{
-    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_long_double_scalar, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty,
+    STRUCT_BASE, STRUCT_STRIDE, Segment, UNSIGNED_BIT, is_atomic_object_ty, is_long_double_scalar,
+    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty,
     is_volatile_object_ty, is_volatile_ty, load_kind, segment_of_object_ty, strip_unsigned,
     struct_id_of, struct_ptr_depth,
 };
@@ -32,6 +32,7 @@ use super::token::{Token, Ty};
 
 mod access;
 mod atomic;
+mod atomic_object;
 mod bitfield;
 mod builtin;
 mod decl;
@@ -39,6 +40,7 @@ mod expr;
 mod function;
 mod int128;
 mod ms_intrinsic;
+mod seh;
 mod stmt;
 #[cfg(test)]
 mod tests;
@@ -263,12 +265,23 @@ struct OpenScope<'a> {
 /// `LabelId -> BlockId` for cross-stmt gotos.
 struct Walker<'a> {
     ast: &'a Ast,
+    /// The definition the walk lowers, or whose filter funclet it lowers.
+    fun: &'a FinishedFunction,
+    /// The filter and `__finally` funclets lowered so far.
+    funclets: alloc::vec::Vec<FunctionSsa>,
+    /// Per `__try` statement with a `__finally` block, by its index, the
+    /// funclet's `ent_pc` and the region.
+    finally_calls: alloc::collections::BTreeMap<u32, (usize, u32)>,
     symbols: &'a [Symbol],
     structs: &'a [crate::c5::compiler::StructDef],
     target: Target,
     /// The enclosing loops / switches and open scopes, innermost last.
     loop_ctx: alloc::vec::Vec<LoopCtx>,
     scopes: alloc::vec::Vec<OpenScope<'a>>,
+    /// The enclosing `__try` and `__except` bodies, innermost last.
+    seh: alloc::vec::Vec<seh::SehCtx>,
+    /// The function moves sp at run time (`alloca`, a VLA).
+    dynamic_sp: bool,
     /// Per `LabelId`, the ids of the scopes enclosing it; `None` inside a
     /// statement expression.
     label_scopes: alloc::vec::Vec<Option<alloc::vec::Vec<StmtId>>>,
@@ -306,8 +319,10 @@ struct Walker<'a> {
     /// `Terminator::Return`.
     scalar_return_ty: i64,
     /// True in a `void` function other than `main`, whose returns name no
-    /// value (C99 6.8.6.4p1).
+    /// value (C99 6.8.6.4p1), and in a naked one, whose asm returns.
     returns_no_value: bool,
+    /// The function is naked: it keeps no frame record.
+    naked: bool,
     /// Body-local slot holding the saved x8 indirect-result pointer
     /// when `ret_indirect` is true; zero otherwise.
     indirect_result_slot: i64,
@@ -321,6 +336,8 @@ struct Walker<'a> {
     /// tree so the dispatch takes no indirect branch.
     jump_tables: bool,
     named_refs: NamedRefs,
+    /// `-ffreestanding`: the layout of an `_Atomic` object.
+    freestanding: bool,
 }
 
 /// Which of the unit's definitions a reference names by its symbol, so the

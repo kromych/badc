@@ -171,11 +171,11 @@ fn x64_code(src: &str, name: &str, wrapv: bool) -> Vec<super::perf_codegen::X64I
     super::perf_codegen::x64_insns(&super::codegen::function_bytes(&object, name))
 }
 
-/// Scans and strides of an `int` counter hold no register `movslq` in the
-/// loop, and under `-fwrapv` one.
+/// Scans and strides of an `int` counter, stepped on every path or on some,
+/// hold no register `movslq` in the loop, and under `-fwrapv` one.
 #[test]
 fn induction_steps_hold_no_extension_unless_wrapping() {
-    const SRCS: [&str; 5] = [
+    const SRCS: [&str; 7] = [
         "int f(const int *a, int p) { int i = 0; while (a[i] < p) i++; return i; }",
         "int f(const int *a, int p, int j) { while (a[j] > p) j--; return j; }",
         "long f(const int *a, int n) { long s = 0; for (int i = 0; i < n; i += 2) s += a[i]; return s; }",
@@ -183,6 +183,10 @@ fn induction_steps_hold_no_extension_unless_wrapping() {
          for (int i = 0, j = 0; i < n; i++, j += i) s += a[j]; return s; }",
         "long f(const unsigned char *c, int n) { long s = 0; int pc = 0;\n\
          while (pc < n) { s += c[pc++]; s -= c[pc++]; } return s; }",
+        "void f(int *a, int n, int p) { int k = -1;\n\
+         for (int i = 0; i < n; i++) if (a[i] < p) { k++; int t = a[k]; a[k] = a[i]; a[i] = t; } }",
+        "long f(const int *a, int n) { long s = 0; int k = 0;\n\
+         for (int i = 0; i < n; i++) { if (a[i] & 1) k--; else k += 2; s += a[k]; } return s; }",
     ];
     for src in SRCS {
         for wrapv in [false, true] {
@@ -194,6 +198,18 @@ fn induction_steps_hold_no_extension_unless_wrapping() {
             assert_eq!(extends, wrapv, "-fwrapv {wrapv}: `{src}`: {insns:x?}");
         }
     }
+}
+
+/// A counter one path sets to a value that is not a step keeps its extension.
+#[test]
+fn counter_a_path_resets_keeps_its_extension() {
+    let src = "long f(const int *a, int n, int x) { long s = 0; int k = 0;\n\
+               for (int i = 0; i < n; i++) { if (a[i] > x) k = a[i]; else k++; s += a[k]; }\n\
+               return s; }";
+    let insns = x64_code(src, "f", false);
+    let extends =
+        super::perf_codegen::x64_in_loop(&insns, super::perf_codegen::X64Insn::is_movsxd_rr);
+    assert!(extends, "`{src}`: {insns:x?}");
 }
 
 /// A `long` return of an `int` accumulator keeps its extension, stepped

@@ -23,7 +23,7 @@ enum FpCmpNanFix {
     /// and Cc::Ae both require CF=0, which NaN never satisfies).
     None,
     /// AND with `setnp` (PF=0) to clear the result when NaN.
-    /// Used by `==`, `<`, `<=` per C99 6.5.9p3 / 6.5.8p6.
+    /// Used by `==` per C99 6.5.9p3.
     AndNotP,
     /// OR with `setp` (PF=1) so the result is 1 on NaN. Used by
     /// `!=` per C99 6.5.9p3.
@@ -38,10 +38,12 @@ fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
     Some(match op {
         BinOp::Feq => (Cc::E, FpCmpNanFix::AndNotP),
         BinOp::Fne => (Cc::Ne, FpCmpNanFix::OrP),
-        BinOp::Flt => (Cc::B, FpCmpNanFix::AndNotP),
-        BinOp::Fgt => (Cc::A, FpCmpNanFix::None),
-        BinOp::Fle => (Cc::Be, FpCmpNanFix::AndNotP),
-        BinOp::Fge => (Cc::Ae, FpCmpNanFix::None),
+        // `Flt` / `Fle` compare the swapped operands (`fp_compare_swaps_operands`).
+        BinOp::Flt | BinOp::Fgt => (Cc::A, FpCmpNanFix::None),
+        BinOp::Fle | BinOp::Fge => (Cc::Ae, FpCmpNanFix::None),
+        // Unordered sets ZF, so `Ne` is the ordered inequality.
+        BinOp::Fone => (Cc::Ne, FpCmpNanFix::None),
+        BinOp::Funo => (Cc::P, FpCmpNanFix::None),
         _ => return None,
     })
 }
@@ -889,10 +891,10 @@ fn emit_fp_binop(
 }
 
 /// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signalling
-/// an unordered (NaN) compare. C99 6.5.9p3 / 6.5.8p6 require `==`, `<`,
-/// `<=` to yield 0 on NaN and `!=` to yield 1, so the cc-only `setcc`
-/// takes an explicit AND-with-`setnp` / OR-with-`setp` fixup. A fused
-/// branch reads the flags instead.
+/// an unordered (NaN) compare. C99 6.5.9p3 requires `==` to yield 0 on NaN
+/// and `!=` to yield 1, so the cc-only `setcc` takes an explicit
+/// AND-with-`setnp` / OR-with-`setp` fixup. A fused branch reads the flags
+/// instead.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_compare(
     code: &mut Vec<u8>,
@@ -914,10 +916,8 @@ fn emit_fp_compare(
     else {
         return fail("Fcmp: rhs not fp reg / spill / int reg");
     };
-    // A fused `Flt` / `Fle` compares with the operands swapped so the
-    // branch takes the parity-clean `A` / `Ae` shapes.
     let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
-    let (dn, dm) = if fused && fused_fp_swaps_operands(op) {
+    let (dn, dm) = if fp_compare_swaps_operands(op) {
         (dm, dn)
     } else {
         (dn, dm)

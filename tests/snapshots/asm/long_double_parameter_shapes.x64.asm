@@ -128,13 +128,12 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x28(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	movl	$0x1, %eax
-               	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rax, %xmm1
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	fldt	-0x20(%rbp)
                	fstpl	-0x8(%rsp)
-               	movsd	-0x8(%rsp), %xmm2
-               	addsd	%xmm2, %xmm1
+               	movsd	-0x8(%rsp), %xmm1
+               	movq	%rax, %xmm14
+               	vaddsd	%xmm1, %xmm14, %xmm1
                	vaddsd	%xmm0, %xmm1, %xmm0
                	fldt	-0x10(%rbp)
                	fstpl	-0x8(%rsp)

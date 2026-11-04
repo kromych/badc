@@ -34,7 +34,9 @@
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use crate::c5::ir::{
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId, is_comparison_op,
+};
 use crate::c5::vm::eval;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
@@ -77,7 +79,7 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
     }
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => *k == 0 || *k == 1,
-        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_compare_op(*op),
+        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => is_comparison_op(*op),
         Some(Inst::Extend { value, kind, .. }) => {
             !matches!(kind, LoadKind::F32 | LoadKind::F64) && is_bool_value(func, *value, depth - 1)
         }
@@ -92,36 +94,23 @@ fn is_bool_value(func: &FunctionSsa, v: ValueId, depth: u32) -> bool {
     }
 }
 
-/// Integer and FP comparisons; both produce an integer 0/1.
-fn is_compare_op(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
-    )
-}
-
 /// The operand an instruction reproduces bit for bit, if any: `x != 0`
 /// over a provably 0/1 `x` (`is_bool_value`) -- the short-circuit lowering
 /// re-normalizes an `&&` / `||` operand a comparison or `!` already
-/// normalized -- and an integer operation by its identity constant.
+/// normalized -- an integer operation by its identity constant, and
+/// `x & x` / `x | x`.
 fn forwarded_operand(func: &FunctionSsa, idx: usize) -> Option<ValueId> {
     if matches!(func.f32_values.get(idx), Some(true)) {
         return None;
+    }
+    if let Inst::Binop {
+        op: BinOp::And | BinOp::Or,
+        lhs,
+        rhs,
+    } = func.insts[idx]
+        && lhs == rhs
+    {
+        return Some(lhs);
     }
     let (op, lhs, imm) = match &func.insts[idx] {
         Inst::BinopI { op, lhs, rhs_imm } => (*op, *lhs, *rhs_imm),
@@ -217,6 +206,17 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// The constant the operation `v` computes from `l` and `r`: a comparison
+/// or a division marked for its 32-bit form reads the low words, as the
+/// emitted compare or division does, since its operands may have lost the
+/// extensions the mark made redundant.
+fn fold_binop_of(func: &FunctionSsa, v: ValueId, op: BinOp, l: i64, r: i64) -> Option<i64> {
+    if super::narrow::is_narrow_div(func, v) {
+        return super::narrow::fold_div32(op, l, r);
+    }
+    super::narrow::fold_at_width(op, l, r, super::narrow::is_cmp32(&func.cmp32, v))
+}
+
 /// Node budget for one per-incoming evaluation. A shared operand is
 /// re-evaluated per use, so the budget caps a wide expression tree
 /// rather than its depth alone; it also terminates the recursion.
@@ -257,13 +257,17 @@ fn eval_with(
             eval_with(func, value, pivot, bind, budget)?,
             width,
         )),
-        Inst::BinopI { op, lhs, rhs_imm } => {
-            eval::fold_binop(op, eval_with(func, lhs, pivot, bind, budget)?, rhs_imm)
-        }
+        Inst::BinopI { op, lhs, rhs_imm } => fold_binop_of(
+            func,
+            v,
+            op,
+            eval_with(func, lhs, pivot, bind, budget)?,
+            rhs_imm,
+        ),
         Inst::Binop { op, lhs, rhs } => {
             let l = eval_with(func, lhs, pivot, bind, budget)?;
             let r = eval_with(func, rhs, pivot, bind, budget)?;
-            eval::fold_binop(op, l, r)
+            fold_binop_of(func, v, op, l, r)
         }
         _ => None,
     }
@@ -768,6 +772,18 @@ fn low_mask_transparent(mask: i64, width: u8) -> bool {
     }
 }
 
+/// The constant an `Or` sets its bits with, when `v` is that `Or`.
+fn or_imm(func: &FunctionSsa, v: ValueId) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::BinopI {
+            op: BinOp::Or,
+            rhs_imm,
+            ..
+        } => Some(*rhs_imm),
+        _ => None,
+    }
+}
+
 /// The value an `And` masks, when `v` is that `And` and its mask keeps
 /// every bit a left shift by `k` keeps (bits `0..=63 - k`).
 fn masked_before_shl(func: &FunctionSsa, v: ValueId, k: i64) -> Option<ValueId> {
@@ -781,6 +797,40 @@ fn masked_before_shl(func: &FunctionSsa, v: ValueId, k: i64) -> Option<ValueId> 
     };
     let kept = u64::MAX.checked_shr(u32::try_from(k).ok()?)?;
     ((1..64).contains(&k) && rhs_imm as u64 & kept == kept).then_some(lhs)
+}
+
+/// The bits a conversion of the constant `k` gives (C99 6.3.1.4, 6.3.1.5),
+/// rounded once to nearest as the default floating environment does.
+/// `src_f32` / `dst_f32` say the operand / result is a `float`, held in the
+/// low word. A NaN keeps its runtime conversion, which quiets a signaling
+/// one, and so does a value out of the integer range, whose conversion is
+/// undefined.
+fn eval_fp_cast(kind: FpCastKind, k: i64, src_f32: bool, dst_f32: bool) -> Option<i64> {
+    const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+    let real = || {
+        let x = if src_f32 {
+            f64::from(f32::from_bits(k as u32))
+        } else {
+            f64::from_bits(k as u64)
+        };
+        (!x.is_nan()).then_some(x)
+    };
+    let float = |x: f32| i64::from(x.to_bits());
+    let double = |x: f64| x.to_bits() as i64;
+    Some(match kind {
+        FpCastKind::F32ToF64 if src_f32 && !dst_f32 => double(real()?),
+        FpCastKind::F64ToF32 if !src_f32 && dst_f32 => float(real()? as f32),
+        FpCastKind::IntToFp if !src_f32 && dst_f32 => float(k as f32),
+        FpCastKind::IntToFp if !src_f32 => double(k as f64),
+        FpCastKind::UIntToFp if !src_f32 && dst_f32 => float(k as u64 as f32),
+        FpCastKind::UIntToFp if !src_f32 => double(k as u64 as f64),
+        // `as` truncates toward zero, which in range is the C conversion.
+        FpCastKind::FpToInt if !dst_f32 => real().filter(|x| (-TWO_63..TWO_63).contains(x))? as i64,
+        FpCastKind::UFpToInt if !dst_f32 => {
+            real().filter(|&x| x > -1.0 && x < 2.0 * TWO_63)? as u64 as i64
+        }
+        _ => return None,
+    })
 }
 
 fn fold_round(func: &mut FunctionSsa) -> bool {
@@ -805,13 +855,26 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             changed = true;
             continue;
         }
+        if let Inst::FpCast { kind, value } = func.insts[idx]
+            && let Some(&Inst::Imm(k)) = func.insts.get(value as usize)
+            && let Some(folded) = eval_fp_cast(kind, k, f32(value as usize), f32(idx))
+        {
+            func.insts[idx] = Inst::Imm(folded);
+            changed = true;
+            continue;
+        }
         if f32(idx) {
             continue;
         }
         let new_inst = match &func.insts[idx] {
-            Inst::Extend { value, kind, .. } => {
-                imm_of(func, *value).map(|k| Inst::Imm(eval::eval_extend(k, *kind)))
-            }
+            // An extend reads the low bits of its operand, which an `Or`
+            // with all of them set fixes.
+            Inst::Extend { value, kind, .. } => imm_of(func, *value)
+                .or_else(|| {
+                    or_imm(func, *value)
+                        .filter(|&k| eval::eval_extend(k, *kind) == eval::eval_extend(-1, *kind))
+                })
+                .map(|k| Inst::Imm(eval::eval_extend(k, *kind))),
             Inst::Udiv128 { hi, lo, divisor } => {
                 match (imm_of(func, *hi), imm_of(func, *lo), imm_of(func, *divisor)) {
                     (Some(h), Some(l), Some(d)) => eval::udiv128(h, l, d).map(Inst::Imm),
@@ -927,6 +990,31 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             } if imm_of(func, *lhs) == Some(0) && imm_of(func, *rhs).is_none() => {
                 Some(Inst::Neg(*rhs))
             }
+            // All ones absorb an `Or`, and an `Or` that sets every bit of
+            // a mask fixes the masked value.
+            Inst::BinopI {
+                op: BinOp::Or,
+                rhs_imm: -1,
+                ..
+            } => Some(Inst::Imm(-1)),
+            Inst::Binop {
+                op: BinOp::Or,
+                lhs,
+                rhs,
+            } if imm_of(func, *lhs) == Some(-1) || imm_of(func, *rhs) == Some(-1) => {
+                Some(Inst::Imm(-1))
+            }
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs,
+                rhs_imm,
+            } if or_imm(func, *lhs).is_some_and(|k| rhs_imm & !k == 0) => Some(Inst::Imm(*rhs_imm)),
+            // A value less itself, or exclusive-ored with itself, is zero.
+            Inst::Binop {
+                op: BinOp::Sub | BinOp::Xor,
+                lhs,
+                rhs,
+            } if lhs == rhs => Some(Inst::Imm(0)),
             // No value is below zero unsigned.
             Inst::BinopI {
                 op: op @ (BinOp::Ult | BinOp::Uge),
@@ -946,13 +1034,13 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 })
             }
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
-                .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
+                .and_then(|l| fold_binop_of(func, idx as ValueId, *op, l, *rhs_imm))
                 .map(Inst::Imm),
             Inst::Binop { op, lhs, rhs } if lhs == rhs && same_operand_compare(*op).is_some() => {
                 same_operand_compare(*op).map(Inst::Imm)
             }
             Inst::Binop { op, lhs, rhs } => match (imm_of(func, *lhs), imm_of(func, *rhs)) {
-                (Some(l), Some(r)) => eval::fold_binop(*op, l, r).map(Inst::Imm),
+                (Some(l), Some(r)) => fold_binop_of(func, idx as ValueId, *op, l, r).map(Inst::Imm),
                 (None, Some(r)) if to_imm_form(*op, *rhs, r) => Some(Inst::BinopI {
                     op: *op,
                     lhs: *lhs,
@@ -999,6 +1087,9 @@ mod tests {
     fn fresh(insts: Vec<Inst>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -1036,7 +1127,7 @@ mod tests {
             param_local_slots: Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -1270,6 +1361,8 @@ mod tests {
         };
         assert_eq!(run(0x3f_ffff, 42), 0, "22 bits kept by a shift by 42");
         assert_eq!(run(0xff_ffff_ffff, 24), 0, "40 bits kept by a shift by 24");
+        // `(unsigned long long)hi << 32`: the zero extension of a 32-bit value.
+        assert_eq!(run(0xffff_ffff, 32), 0, "32 bits kept by a shift by 32");
         assert_eq!(run(-2, 63), 1, "bit 0 cleared");
         assert_eq!(run(0x1f_ffff, 42), 1, "bit 21 cleared");
         assert_eq!(run(0x7fff_ffff, 32), 1, "bit 31 cleared");
@@ -1346,6 +1439,8 @@ mod tests {
             BinOp::Fgt,
             BinOp::Fle,
             BinOp::Fge,
+            BinOp::Fone,
+            BinOp::Funo,
         ] {
             assert!(!binopi_safe(op), "{op:?}");
         }
@@ -1716,6 +1811,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
             Inst::Phi {
                 incoming: vec![(0, 0), (1, 1)],
@@ -1772,17 +1868,186 @@ mod tests {
                 "{op:?} -> {want}"
             );
         }
-        // Non-compare ops on a shared operand stay put.
-        let mut f = fresh(vec![
-            Inst::LocalAddr(0),
-            Inst::Binop {
-                op: BinOp::Sub,
-                lhs: 0,
-                rhs: 0,
-            },
-        ]);
-        run_one(&mut f);
-        assert!(matches!(f.insts[1], Inst::Binop { .. }));
+        // A shift or a product on a shared operand stays put.
+        for op in [BinOp::Shl, BinOp::Mul] {
+            let mut f = fresh(vec![Inst::LocalAddr(0), Inst::Binop { op, lhs: 0, rhs: 0 }]);
+            run_one(&mut f);
+            assert!(matches!(f.insts[1], Inst::Binop { .. }), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn a_conversion_of_a_constant_folds_in_range() {
+        let f64b = |x: f64| x.to_bits() as i64;
+        let f32b = |x: f32| i64::from(x.to_bits());
+        let folds = [
+            (
+                FpCastKind::F32ToF64,
+                f32b(1.5),
+                (true, false),
+                Some(f64b(1.5)),
+            ),
+            (
+                FpCastKind::F64ToF32,
+                f64b(0.1),
+                (false, true),
+                Some(f32b(0.1)),
+            ),
+            (FpCastKind::IntToFp, -7, (false, false), Some(f64b(-7.0))),
+            // One rounding to `float`, not two through `double`.
+            (
+                FpCastKind::IntToFp,
+                0x20_0000_2000_0001,
+                (false, true),
+                Some(0x5a00_0001),
+            ),
+            (
+                FpCastKind::UIntToFp,
+                -1,
+                (false, false),
+                Some(f64b(18_446_744_073_709_551_616.0)),
+            ),
+            (
+                FpCastKind::UIntToFp,
+                -1,
+                (false, true),
+                Some(f32b(18_446_744_073_709_551_616.0)),
+            ),
+            (FpCastKind::FpToInt, f64b(-2.75), (false, false), Some(-2)),
+            (FpCastKind::FpToInt, f32b(-2.75), (true, false), Some(-2)),
+            (
+                FpCastKind::FpToInt,
+                f64b(-9_223_372_036_854_775_808.0),
+                (false, false),
+                Some(i64::MIN),
+            ),
+            (
+                FpCastKind::UFpToInt,
+                f64b(3e9),
+                (false, false),
+                Some(3_000_000_000),
+            ),
+            (FpCastKind::UFpToInt, f64b(-0.5), (false, false), Some(0)),
+            // Out of range, a NaN, or an operand of the other width.
+            (
+                FpCastKind::FpToInt,
+                f64b(9_223_372_036_854_775_808.0),
+                (false, false),
+                None,
+            ),
+            (FpCastKind::UFpToInt, f64b(-1.0), (false, false), None),
+            (FpCastKind::F32ToF64, f32b(f32::NAN), (true, false), None),
+            (FpCastKind::F64ToF32, f64b(f64::NAN), (false, true), None),
+            (FpCastKind::F32ToF64, f64b(1.5), (false, false), None),
+            (FpCastKind::IntToFp, f32b(1.5), (true, false), None),
+        ];
+        for (kind, k, (src_f32, dst_f32), want) in folds {
+            assert_eq!(
+                eval_fp_cast(kind, k, src_f32, dst_f32),
+                want,
+                "{kind:?} {k:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_compare_marked_for_32_bits_folds_on_the_low_words() {
+        // The sign extension of 0xFEFE_FEFE against its zero extension:
+        // unequal as 64-bit values, equal in the low word a 32-bit compare
+        // reads.
+        for (marked, want) in [(true, 0), (false, 1)] {
+            let mut f = fresh(vec![
+                Inst::Imm(0xFEFE_FEFE_u32 as i32 as i64),
+                Inst::BinopI {
+                    op: BinOp::Ne,
+                    lhs: 0,
+                    rhs_imm: 0xFEFE_FEFE,
+                },
+            ]);
+            f.cmp32 = vec![false, marked];
+            run_one(&mut f);
+            assert!(
+                matches!(f.insts[1], Inst::Imm(k) if k == want),
+                "marked {marked}"
+            );
+        }
+    }
+
+    #[test]
+    fn same_operand_arithmetic_folds() {
+        for (op, zero) in [
+            (BinOp::Sub, true),
+            (BinOp::Xor, true),
+            (BinOp::And, false),
+            (BinOp::Or, false),
+        ] {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::Binop { op, lhs: 0, rhs: 0 },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs_imm: 8,
+                },
+            ]);
+            run_one(&mut f);
+            if zero {
+                assert!(
+                    matches!(f.insts[1], Inst::Imm(0)),
+                    "{op:?}: {:?}",
+                    f.insts[1]
+                );
+            } else {
+                assert!(
+                    matches!(f.insts[2], Inst::BinopI { lhs: 0, .. }),
+                    "{op:?} forwards its operand: {:?}",
+                    f.insts[2]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn set_bits_absorb_what_reads_only_them() {
+        let or_then = |k: i64, reader: Inst| {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op: BinOp::Or,
+                    lhs: 0,
+                    rhs_imm: k,
+                },
+                reader,
+            ]);
+            run_one(&mut f);
+            f.insts[if k == -1 { 1 } else { 2 }].clone()
+        };
+        let and = |m: i64| Inst::BinopI {
+            op: BinOp::And,
+            lhs: 1,
+            rhs_imm: m,
+        };
+        let extend = |kind: LoadKind| Inst::Extend {
+            value: 1,
+            kind,
+            nsw: false,
+        };
+        assert!(matches!(or_then(-1, and(7)), Inst::Imm(-1)));
+        assert!(matches!(or_then(0xff, and(0x0f)), Inst::Imm(0x0f)));
+        assert!(matches!(or_then(0xff, and(0x1ff)), Inst::BinopI { .. }));
+        assert!(matches!(
+            or_then(0xffff_ffff, and(0xffff_ffff)),
+            Inst::Imm(0xffff_ffff)
+        ));
+        assert!(matches!(
+            or_then(0xffff_ffff, extend(LoadKind::I32)),
+            Inst::Imm(-1)
+        ));
+        assert!(matches!(or_then(0xff, extend(LoadKind::I8)), Inst::Imm(-1)));
+        assert!(matches!(
+            or_then(0x7fff_ffff, extend(LoadKind::I32)),
+            Inst::Extend { .. }
+        ));
     }
 
     fn facts(nonnull_pcs: &[usize]) -> AddrFacts {

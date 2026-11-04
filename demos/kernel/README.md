@@ -110,6 +110,43 @@ set; the ISR faults with IRQ masked and the guest prints nothing after its
 first line. `-DPREEMPT_VBAR_WINDOW_STRESS` holds that window open for 40 ms,
 and the smoke boots it the same way.
 
+### Atomics under preemption
+
+The threads exercise C11 atomics, and `efi_main` checks them once the
+scheduler has stopped every thread:
+
+* **A shared counter.** Each thread increments an `_Atomic unsigned` with `++`
+  in its busy loop: `lock xadd` on x86_64, `ldaddal` on AArch64. Each thread
+  also stores its own count in a slot. Around the increment and that store it
+  raises an in-flight flag. A thread the last tick stops inside that bracket
+  may count in the total but not yet in its slot. So, with S the total, C the
+  sum of the slots and F the raised flags, `C <= S <= C + F` holds however the
+  ticks fell. The line `BADC-PREEMPT: shared=S counted=C inflight=F` reports the
+  three, and `BADC-PREEMPT: atomic counter ok` follows when the bracket holds.
+  A lost update leaves S below C.
+* **A record with a lock word.** Every sixteenth iteration a thread stores an
+  `_Atomic struct { unsigned turn, id, check; }` whole, with `check` computed
+  from the other two fields, and reads it back. On these PE targets the 12-byte
+  object carries the 4-byte lock word MSVC lays out, and badc spins on it:
+  `xchg` on x86_64, `swpa` on AArch64. A thread preempted while holding the
+  lock makes the others spin until it runs again. `BADC-PREEMPT: snapshot
+  reads=R torn=T` reports the reads, and `BADC-PREEMPT: atomic snapshot ok`
+  follows when no read was torn. The timer ISR never touches the record,
+  because it cannot wait for a lock held by the thread it interrupted.
+  `efi_main` never touches it either, because a thread stopped while holding
+  the lock never releases it.
+* **The C11 spellings.** The print lock is an `atomic_flag`, taken with
+  `atomic_flag_test_and_set_explicit(..., memory_order_acquire)` and released
+  with `atomic_flag_clear_explicit(..., memory_order_release)`. The tick count
+  and the done flag are `_Atomic`: the ISR stores them with release order, and
+  `efi_main` loads the flag with acquire order.
+
+The smoke requires both `ok` markers in every lane that boots to the end.
+`-DPREEMPT_PLAIN_COUNTER` makes the increment a plain load, call and store.
+That build reports S far below C. QEMU's TCG, which the smoke runs, takes an
+interrupt only between translation blocks, and the call ends one; a plain `++`
+compiled to a straight load, add and store is never split under TCG.
+
 All addresses and saved stack pointers use the pointer-width `UINTN`
 (`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64
 (`long` is 32-bit); a 32-bit IDT base or saved SP would fault on the first

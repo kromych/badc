@@ -1,16 +1,15 @@
 use std::io::IsTerminal;
 
-use badc::{Compiler, NativeOptions, Vm, jit_run_with_options};
+use badc::{Compiler, NativeOptions, OnDemandSources, Vm, jit_run_with_sources};
 
 use super::args::Cli;
 use super::diag::{colorize_diagnostic, eprint_diagnostic, eprint_error, rendered};
 use super::inputs::{Inputs, StdinSource};
 use super::options::Mode;
 
-/// `--jit` / `--interp` run one translation unit in-process. There
-/// is no link step: the first `.c` is the unit and must define
-/// `main` and resolve every symbol it references on its own. Either
-/// exits with the program's status.
+/// `--jit` / `--interp` run one translation unit in-process: the first
+/// `.c` is the unit and must define `main`; both join the on-demand
+/// sources to it. Either exits with the program's status.
 pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) -> ! {
     let Inputs {
         sources,
@@ -79,7 +78,8 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         c_args.extend(cli.positional[*prog_args_start..].iter().cloned());
     }
     if cli.mode == Mode::Jit {
-        // The JIT lowers for the host; --target plays no part.
+        // The JIT lowers for the host, which the parser holds `cli.target`
+        // to.
         let mut jit_opts = NativeOptions::new()
             .with_inline_cap(cli.codegen.inline_cap)
             .with_diag(cli.front.diag.clone());
@@ -91,7 +91,9 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         let mut report = |d: &badc::diag::Diagnostic| {
             eprintln!("{}", rendered(d, stderr_is_tty));
         };
-        match jit_run_with_options(&program, &c_args, jit_opts, &mut report) {
+        let front = super::native_link::embedded_compile_options(cli, "on-demand.c");
+        let sources = OnDemandSources::new(badc::Target::host(), front);
+        match jit_run_with_sources(&program, &c_args, jit_opts, &sources, &mut report) {
             Ok(code) => std::process::exit(code),
             Err(e) => {
                 eprint_diagnostic(e);
@@ -99,7 +101,9 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             }
         }
     }
-    let mut vm = Vm::new(program).with_args(c_args);
+    let front = super::native_link::embedded_compile_options(cli, "on-demand.c");
+    let sources = OnDemandSources::new(program.target, front);
+    let mut vm = Vm::with_sources(program, badc::StdHost::default(), &sources).with_args(c_args);
     if cli.track_pointers {
         vm = vm.with_pointer_tracking();
     }

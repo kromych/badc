@@ -958,6 +958,10 @@ impl<'a> Walker<'a> {
         post: bool,
         nsw: bool,
     ) -> Result<ValueId, WalkError> {
+        let lvalue_ty = crate::c5::ast::expr_ty(self.ast.expr(lvalue)).unwrap_or(ty);
+        if is_atomic_object_ty(lvalue_ty) {
+            return self.walk_atomic_inc(b, lvalue, by, lvalue_ty, post);
+        }
         if self.is_int128_value_ty(ty) {
             return self.walk_int128_inc(b, lvalue, by, post);
         }

@@ -56,12 +56,5 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	add	x0, x0, #0xc
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ret
                	mov	x0, #0x0                // =0
                	ret

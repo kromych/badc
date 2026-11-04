@@ -26,47 +26,45 @@ Disassembly of section .text:
                	int3
 
 <main>:
+               	movq	$0x1, <rip> # <addr>
+               	movq	$0x4, <rip> # <addr>
+               	movq	$0x7, <rip> # <addr>
+               	movq	$0xa, <rip> # <addr>
+               	movq	$0xd, <rip> # <addr>
+               	movq	$0x10, <rip> # <addr>
+               	movq	$0x13, <rip> # <addr>
                	leaq	<rip>, %rax # <addr>
-               	movq	$0x1, (%rax)
-               	movq	$0x4, 0x8(%rax)
-               	movq	$0x7, 0x10(%rax)
-               	movq	$0xa, 0x18(%rax)
-               	movq	$0xd, 0x20(%rax)
-               	movq	$0x10, 0x28(%rax)
-               	movq	$0x13, 0x30(%rax)
+               	movq	$0x16, <rip> # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	movq	$0x16, 0x38(%rcx)
-               	leaq	<rip>, %rax # <addr>
-               	movups	(%rcx), %xmm14
-               	movups	%xmm14, (%rax)
-               	movups	0x10(%rcx), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	movups	0x20(%rcx), %xmm14
-               	movups	%xmm14, 0x20(%rax)
-               	movups	0x30(%rcx), %xmm14
-               	movups	%xmm14, 0x30(%rax)
-               	movq	0x8(%rax), %rcx
-               	movq	0x10(%rax), %rdx
-               	shlq	%rdx
-               	addq	%rdx, %rcx
-               	movq	0x18(%rax), %rdx
-               	leaq	(%rdx,%rdx,2), %rdx
-               	addq	%rdx, %rcx
-               	movq	0x20(%rax), %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
-               	movq	0x28(%rax), %rax
-               	leaq	(%rax,%rax,4), %rax
-               	addq	%rax, %rcx
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x30(%rax), %rdx
-               	imulq	$0x6, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	movq	0x38(%rax), %rdx
-               	imulq	$0x7, %rdx, %rdx
-               	addq	%rdx, %rcx
-               	movq	(%rax), %rax
-               	shlq	$0x3, %rax
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
+               	movups	0x10(%rax), %xmm14
+               	movups	%xmm14, 0x10(%rcx)
+               	movups	0x20(%rax), %xmm14
+               	movups	%xmm14, 0x20(%rcx)
+               	movups	0x30(%rax), %xmm14
+               	movups	%xmm14, 0x30(%rcx)
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	shlq	%rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	shlq	$0x2, %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	leaq	(%rcx,%rcx,4), %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	imulq	$0x6, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	imulq	$0x7, %rcx, %rcx
+               	addq	%rcx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	shlq	$0x3, %rcx
                	addq	%rcx, %rax
                	cmpq	$0x1c8, %rax            # imm = 0x1C8
                	je	<addr>

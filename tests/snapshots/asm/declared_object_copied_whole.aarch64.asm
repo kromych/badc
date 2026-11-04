@@ -68,28 +68,23 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w1, [x0]
+               	ldrb	w1, [x0, #0x50]
                	and	x1, x1, #0xfffffffffffffffe
-               	strb	w1, [x0]
+               	strb	w1, [x0, #0x50]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w1, [x0]
+               	ldrb	w1, [x0, #0x58]
                	and	x1, x1, #0xfffffffffffffffe
-               	strb	w1, [x0]
+               	strb	w1, [x0, #0x58]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x50]
                	and	x0, x0, #0x1
                	cmp	w0, #0x1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x58]
                	and	x0, x0, #0x1
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -103,8 +98,7 @@ Disassembly of section .text:
                	str	x1, [x0]
                	str	w1, [x0, #0x50]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x28]
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -133,8 +127,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x20]
                	bl	<addr>
                	cmp	w0, #0x195
                	b.eq	<addr>
@@ -147,8 +140,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x48]
                	stur	w1, [x29, #-0x4]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0x30]
                	bl	<addr>
                	ldur	x0, [x29, #-0x48]
                	cbz	x0, <addr>

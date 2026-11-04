@@ -626,6 +626,10 @@ impl Compiler {
     /// width of `ty` and allows to be 0 only for an unnamed one, and the GNU
     /// attribute list that may follow it.
     fn parse_bitfield_width(&mut self, ty: i64, named: bool) -> Result<u32, C5Error> {
+        // C11 6.7.2.1p5: no atomic type is among the bit-field types.
+        if super::types::is_atomic_object_ty(ty) {
+            return Err(self.compile_err(Code::INVALID_DECLARATION, "bit-field has atomic type"));
+        }
         self.next()?; // `:`
         let n = self.parse_constant_int()?;
         if n < 0 || (named && n == 0) {
@@ -927,10 +931,10 @@ impl Compiler {
                 }
                 continue;
             }
-            if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+            if self.lex_is_atomic_specifier() {
                 // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`
-                // as a field base type (distinct from the `_Atomic`
-                // qualifier consumed as a no-op below).
+                // as a field base type, distinct from the `_Atomic`
+                // qualifier below.
                 atomic_field_base = self.try_parse_atomic_type_specifier()?;
                 continue;
             }
@@ -1046,6 +1050,7 @@ impl Compiler {
         // as for any other declaration, so a pointer declarator points to one.
         field_base = self.apply_pending_vector_size(field_base)?;
         field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
+        self.check_atomic_type(field_base)?;
         let base_spelling = self.take_base_spelling();
 
         // A GNU `aligned(N)` carried by a typedef base replaces the member's

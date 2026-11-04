@@ -97,7 +97,7 @@ Disassembly of section .text:
                	neg	x1, x0
                	cmp	w1, #0x0
                	b.ge	<addr>
-               	neg	x2, x1
+               	mov	x2, x0
                	and	x8, x2, #0x1
                	add	x2, x8, x2, lsl #1
                	add	x7, x7, x2

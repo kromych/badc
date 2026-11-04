@@ -36,6 +36,8 @@ pub(crate) mod image;
 #[cfg(feature = "native-emit")]
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
+pub(crate) mod nt_crt;
+#[cfg(feature = "native-emit")]
 pub(crate) mod pe;
 #[cfg(feature = "native-emit")]
 pub(crate) mod relr;
@@ -71,7 +73,8 @@ pub(crate) use crate::c5::codegen::{
     A64Unwind, Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
     MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
-    ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
+    PrologueStep, ResolvedImport, ResolvedImports, SehRow, Target, TlsIndexFixup, UnitDef,
+    UnitDefs, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -193,20 +196,19 @@ pub fn emit_native_with_options_owned(
 }
 
 /// Resolve function-body inline-asm symbol-operand sites (aarch64) on a
-/// single-TU final image.
+/// single-TU final image; a name in `weak_names` no input defines is 0.
 #[cfg(feature = "native-emit")]
 fn resolve_single_image_asm_sym_fixups(
-    program: &Program,
     build: &mut Build,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    weak_names: &alloc::collections::BTreeSet<&str>,
     imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
         return Ok(());
     }
-    let weak_names = program.weak_link_names();
     let err = |code: crate::c5::diag::Code, m: alloc::string::String| C5Error::hard(code, &m);
     enum Loc {
         Def(UnitDef),
@@ -308,7 +310,7 @@ fn resolve_single_image_asm_sym_fixups(
             (None, Loc::WeakUndef)
                 if matches!(r.kind, AsmRelocKind::A64Branch26 { .. })
                     && weak_undef::aarch64_branch_to_nop(&mut build.text, r.instr_offset) => {}
-            (None, _) | (Some(AddrPart::Whole), _) => {
+            (None, _) | (Some(AddrPart::Whole | AddrPart::Disp32), _) => {
                 return Err(refuse("a symbol operand"));
             }
         }
@@ -317,14 +319,14 @@ fn resolve_single_image_asm_sym_fixups(
 }
 
 /// Resolve or diagnose the external references still recorded on a
-/// single-TU final image.
+/// single-TU final image; a name in `weak_names` no input defines is 0.
 #[cfg(feature = "native-emit")]
 fn resolve_single_tu_extern_refs(
-    program: &Program,
     build: &mut Build,
     target: Target,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    weak_names: &alloc::collections::BTreeSet<&str>,
     imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     if build.output_kind == OutputKind::Relocatable
@@ -332,7 +334,6 @@ fn resolve_single_tu_extern_refs(
     {
         return Ok(());
     }
-    let weak_names = program.weak_link_names();
     let data_bindings: alloc::collections::BTreeSet<String> = build
         .imports
         .data_bindings
@@ -467,24 +468,28 @@ pub fn emit_native_reporting(
         crate::c5::codegen::DataImportSlots::new(&build, flat, "a single-file image")
     });
     let asm_labels = fold_asm_sections(program, &mut build, target, &defs, "a single-file image")?;
-    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels, &defs, &mut imports)?;
+    // ld64 resolves a weak reference only through a dylib that exports it.
+    let weak_is_zero = target.binary_format() != crate::c5::codegen::BinaryFormat::MachO;
+    let weak_names = (program.weak_link_names().into_iter()).filter(|_| weak_is_zero);
+    let weak_names: alloc::collections::BTreeSet<&str> = weak_names.collect();
+    resolve_single_image_asm_sym_fixups(&mut build, &asm_labels, &defs, &weak_names, &mut imports)?;
     resolve_single_tu_extern_refs(
-        program,
         &mut build,
         target,
         &asm_labels,
         &defs,
+        &weak_names,
         &mut imports,
     )?;
     if output_kind != OutputKind::Relocatable {
         let mut named = defs;
         named.extend(asm_labels.iter().map(|(n, at)| (n.clone(), at.as_def())));
-        crate::c5::codegen::bind_named_slots(program, &mut build, &named, &mut |build, r| {
-            match imports.as_mut() {
+        let mut bind =
+            |build: &mut Build, r: &crate::c5::program::ExternDataReloc| match imports.as_mut() {
                 Some(slots) => Ok(slots.bind_slot(build, r)),
                 None => refuse_pe_data_slot(build, r),
-            }
-        })?;
+            };
+        crate::c5::codegen::bind_named_slots(program, &mut build, &named, weak_is_zero, &mut bind)?;
     }
     if output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
@@ -790,6 +795,7 @@ pub(crate) mod test_support {
             entry_pragma: None,
             default_libs: Vec::new(),
             auto_includes: Vec::new(),
+            freestanding: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,
@@ -807,6 +813,7 @@ pub(crate) mod test_support {
         Build {
             elf: Default::default(),
             diagnostics: Vec::new(),
+            seh_rows: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
@@ -862,7 +869,7 @@ pub(crate) mod test_support {
             func_prologue_native: BTreeMap::new(),
             promoted_local_slots: BTreeMap::new(),
             coalesced_slot_remap: BTreeMap::new(),
-            canary_frame_bytes: BTreeMap::new(),
+            local_shift_bytes: BTreeMap::new(),
             param_frame_offsets: BTreeMap::new(),
             region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),
@@ -895,6 +902,7 @@ pub(crate) mod test_support {
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             protected_exports: Default::default(),
+            unique_symbols: Default::default(),
             image_symbols: Vec::new(),
             output_kind: OutputKind::Relocatable,
             shared_lib_name: None,

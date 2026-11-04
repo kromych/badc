@@ -119,10 +119,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	mov	x0, x1
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -136,7 +135,8 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mul	x2, x0, x4
                	lsr	x2, x2, #32
-               	msub	x0, x2, x3, x0
+               	mul	x5, x2, x3
+               	sub	x0, x0, x5
                	add	x1, x1, x0
                	mov	x0, x2
                	cmp	w0, #0x0

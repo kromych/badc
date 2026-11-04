@@ -53,6 +53,9 @@ const WINDOWS: TargetSet =
     TargetSet::of(Target::WindowsX64).or(TargetSet::of(Target::WindowsAarch64));
 const POSIX: TargetSet = MACOS.or(LINUX);
 const ALL: TargetSet = POSIX.or(WINDOWS);
+/// A header only other bundled headers include: no reference toolchain ships
+/// the name, so a program's `#include` does not find it.
+const INTERNAL: TargetSet = TargetSet(0);
 const X86_64: TargetSet = TargetSet::of(Target::LinuxX64).or(TargetSet::of(Target::WindowsX64));
 const AARCH64: TargetSet = MACOS
     .or(TargetSet::of(Target::LinuxAarch64))
@@ -115,33 +118,60 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     ),
 ];
 
-/// Header names whose contents are part of the compiler implementation:
-/// the intrinsic wrappers built on badc's own builtins and inline-asm
-/// encoders. Another compiler's copy of such
-/// a header is written against that compiler's builtins and can never
-/// compile here, so when a build line puts a foreign toolchain's private
-/// include directory on the search path (an `-isystem
-/// $(cc -print-file-name=include)` folded into `-I`), these names must still
-/// resolve to the embedded copy. They are also the set `-nostdinc` keeps:
-/// that flag withdraws the standard library headers, as it does in gcc,
-/// and leaves the compiler's own facilities in place. Ordinary headers keep
-/// the usual order (`-I` shadows the embedded set, as it does in gcc and
-/// clang). Each is served on the architecture whose instructions it wraps,
-/// as gcc installs it.
-pub(super) const COMPILER_OWNED_HEADERS: &[&str] = &[
+/// The intrinsic wrappers, built on badc's own builtins and inline-asm
+/// encoders. Another compiler's copy is written against that compiler's
+/// builtins and can never compile here, so where a search directory
+/// carries one (a foreign toolchain's `-print-file-name=include` on the
+/// command line) the name binds badc's copy at that position. Each is
+/// served on the architecture whose instructions it wraps, as gcc installs
+/// it.
+pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "arm_neon.h",
     "x86intrin.h",
     "immintrin.h",
+    "mmintrin.h",
     "xmmintrin.h",
     "emmintrin.h",
+    "pmmintrin.h",
     "tmmintrin.h",
     "smmintrin.h",
     "wmmintrin.h",
 ];
 
-/// Whether `name` is a compiler-owned intrinsic header.
-pub(super) fn compiler_owned_header(name: &str) -> bool {
-    COMPILER_OWNED_HEADERS.contains(&name)
+/// The rest of the headers gcc and clang both install in the compiler's
+/// own include directory rather than with the C library: C99 4p6's
+/// freestanding set, C11's `<stdalign.h>`, `<stdnoreturn.h>` and
+/// `<stdatomic.h>`, `<mm_malloc.h>`, `<cpuid.h>`, and `<intrin.h>`, which
+/// MSVC and clang keep with the compiler. clang also keeps `<tgmath.h>` and
+/// `<inttypes.h>` there and gcc leaves them to glibc; badc's are built on
+/// its `<math.h>` and `<stdlib.h>` and stay with the library.
+const COMPILER_HEADERS: &[&str] = &[
+    "float.h",
+    "iso646.h",
+    "limits.h",
+    "stdalign.h",
+    "stdarg.h",
+    "stdatomic.h",
+    "stdbool.h",
+    "stddef.h",
+    "stdint.h",
+    "stdnoreturn.h",
+    "mm_malloc.h",
+    "cpuid.h",
+    "intrin.h",
+];
+
+/// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
+pub(super) fn intrinsic_header(name: &str) -> bool {
+    INTRINSIC_HEADERS.contains(&name)
+}
+
+/// Whether `name` is one of the compiler's own headers rather than the C
+/// library's: `-nostdinc` drops them with the library, `-nostdlibinc`
+/// keeps them, and the directory `-print-file-name=include` names serves
+/// them.
+pub(super) fn compiler_header(name: &str) -> bool {
+    intrinsic_header(name) || COMPILER_HEADERS.contains(&name)
 }
 
 /// All bundled headers, as `(name, targets, body)`. Public so the CLI's
@@ -168,11 +198,17 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("arm_neon.h", AARCH64),
     header!("x86intrin.h", X86_64),
     header!("immintrin.h", X86_64),
+    header!("mmintrin.h", X86_64),
     header!("xmmintrin.h", X86_64),
     header!("emmintrin.h", X86_64),
+    header!("pmmintrin.h", X86_64),
     header!("tmmintrin.h", X86_64),
     header!("smmintrin.h", X86_64),
     header!("wmmintrin.h", X86_64),
+    header!(
+        "mm_malloc.h",
+        MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS)
+    ),
     header!("stdalign.h", ALL),
     header!("stddef.h", ALL),
     header!("stdint.h", ALL),
@@ -358,6 +394,17 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("intsafe.h", WINDOWS),
     header!("share.h", WINDOWS),
     header!("corecrt.h", WINDOWS),
+    header!("_timeval.h", WINDOWS),
+    header!("__badc_timeval.h", INTERNAL),
+    header!("__badc_wstring.h", INTERNAL),
+    header!("__badc_wstdlib.h", INTERNAL),
+    header!("__badc_wstdio.h", INTERNAL),
+    header!("__badc_wio.h", INTERNAL),
+    header!("__badc_wdirect.h", INTERNAL),
+    header!("__badc_wprocess.h", INTERNAL),
+    header!("__badc_wtime.h", INTERNAL),
+    header!("__badc_wconio.h", INTERNAL),
+    header!("__badc_wctype.h", INTERNAL),
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),
@@ -393,6 +440,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("wingdi.h", WINDOWS),
     header!("poppack.h", WINDOWS),
     header!("winternl.h", WINDOWS),
+    header!("excpt.h", WINDOWS),
     header!("wchar.h", ALL),
     // Opt-in MSVC-shape predefines: no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long
@@ -555,6 +603,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_compiler_header_is_in_the_registry() {
+        for name in INTRINSIC_HEADERS.iter().chain(COMPILER_HEADERS) {
+            assert!(registry_entry(name).is_some(), "{name}");
+        }
+    }
+
+    #[test]
     fn header_declaring_finds_printf_in_stdio() {
         assert_eq!(
             header_declaring("printf", Target::LinuxX64),
@@ -576,6 +631,16 @@ mod tests {
             header_declaring("strlen", Target::LinuxX64),
             Some("string.h")
         );
+    }
+
+    /// A `__badc_*.h` block's names count for the headers that include it.
+    #[test]
+    fn header_declaring_credits_a_block_to_its_includers() {
+        assert_eq!(headers_declaring("_wcsrev"), ["string.h", "wchar.h"]);
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            assert_eq!(header_declaring("_wcsrev", t), Some("string.h"));
+        }
+        assert_eq!(header_declaring("_wcsrev", Target::LinuxX64), None);
     }
 
     #[test]
@@ -972,6 +1037,124 @@ mod tests {
                     "{}: {name}: {warnings:?}",
                     target.id_str()
                 );
+            }
+        }
+    }
+
+    /// `<windows.h>` alone declares what the SDK's and mingw-w64's bring:
+    /// <ctype.h> and <string.h> always, <stdlib.h> unless
+    /// WIN32_LEAN_AND_MEAN. A unit calling them needs no auto-included
+    /// header, and none of the orders with those headers and
+    /// msvc_compat.h collides.
+    #[test]
+    fn windows_h_brings_the_c_runtime_headers_the_sdk_does() {
+        use crate::{CompileOptions, Compiler, Target};
+        let calls = "unsigned long long f(char *d, const char *s, const wchar_t *w) {\n\
+                     memcpy(d, s, 4); memset(d, 0, 2);\n\
+                     return strlen(s) + wcslen(w) + (unsigned)isalpha(*s); }\n";
+        let stdlib = "void *g(void) { return malloc(8); }\n";
+        let compile = |src: &str, t: Target, force: &[&str]| {
+            let opts = CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_force_includes(force.iter().map(|s| (*s).into()).collect());
+            Compiler::with_options(src.to_string(), t, opts).compile()
+        };
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            let src = alloc::format!("#include <windows.h>\n{calls}{stdlib}");
+            for force in [&[][..], &["msvc_compat.h"]] {
+                let p = compile(&src, t, force).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(
+                    p.warnings.is_empty() && p.notes.is_empty(),
+                    "{t:?} {force:?}: {:?} {:?}",
+                    p.warnings,
+                    p.notes
+                );
+            }
+            let lean = alloc::format!("#define WIN32_LEAN_AND_MEAN\n#include <windows.h>\n{calls}");
+            let p = compile(&lean, t, &[]).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert!(p.notes.is_empty(), "{t:?}: {:?}", p.notes);
+            let lean = alloc::format!("{lean}{stdlib}");
+            let p = compile(&lean, t, &[]).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+            assert!(
+                p.notes.iter().any(|n| n.contains("<stdlib.h>")),
+                "{t:?}: {:?}",
+                p.notes
+            );
+            let headers = [
+                "<string.h>",
+                "<stdlib.h>",
+                "<ctype.h>",
+                "<wchar.h>",
+                "<intrin.h>",
+            ];
+            for first in [true, false] {
+                let mut src = alloc::string::String::new();
+                if first {
+                    src += "#include <windows.h>\n";
+                }
+                for h in headers {
+                    src += &alloc::format!("#include {h}\n");
+                }
+                if !first {
+                    src += "#include <windows.h>\n";
+                }
+                src += calls;
+                src += stdlib;
+                for force in [&[][..], &["msvc_compat.h"]] {
+                    let p = compile(&src, t, force).unwrap_or_else(|e| panic!("{t:?}: {e}\n{src}"));
+                    assert!(
+                        p.warnings.is_empty() && p.notes.is_empty(),
+                        "{t:?} {force:?}: {:?} {:?}\n{src}",
+                        p.warnings,
+                        p.notes
+                    );
+                }
+            }
+        }
+    }
+
+    /// On the PE targets `wcstok` is C99's three-argument function, defined by
+    /// the runtime rather than bound to msvcrt.dll's two-argument export; the
+    /// two-argument form is `_wcstok`, and `wcstok` only under the UCRT's
+    /// `_CRT_NON_CONFORMING_WCSTOK`, with <string.h> and <wchar.h> in either
+    /// order.
+    #[test]
+    fn wcstok_is_c99s_and_the_two_argument_form_is_asked_for() {
+        use crate::c5::token::Token;
+        use crate::{CompileOptions, Compiler, Target};
+        let compile = |src: &str, t: Target| {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.to_string(), t, opts).compile()
+        };
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            for headers in [
+                "#include <string.h>\n#include <wchar.h>\n",
+                "#include <wchar.h>\n#include <string.h>\n",
+            ] {
+                let c99 = alloc::format!(
+                    "{headers}wchar_t *f(wchar_t *s, wchar_t **p) {{ return wcstok(s, L\" \", p); }}\n\
+                     wchar_t *g(wchar_t *s) {{ return _wcstok(s, L\" \"); }}\n"
+                );
+                let program = compile(&c99, t).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+                for name in ["wcstok", "_wcstok"] {
+                    let sym = program.symbols.iter().find(|s| s.name == name);
+                    assert!(
+                        sym.is_some_and(|s| s.class == Token::Fun as i64),
+                        "{t:?}: `{name}` is no runtime function"
+                    );
+                }
+                let two = alloc::format!(
+                    "{headers}wchar_t *f(wchar_t *s) {{ return wcstok(s, L\" \"); }}\n"
+                );
+                let err = compile(&two, t).expect_err("two arguments to C99's wcstok");
+                assert!(
+                    err.to_string().contains("too few arguments"),
+                    "{t:?}: {err}"
+                );
+                let legacy = alloc::format!("#define _CRT_NON_CONFORMING_WCSTOK\n{two}");
+                let program = compile(&legacy, t).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+                assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
             }
         }
     }

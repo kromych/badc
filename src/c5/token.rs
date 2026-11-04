@@ -299,12 +299,8 @@ pub(crate) enum Token {
     /// fall-off-the-end diagnostic on a caller whose last statement
     /// is such a call.
     Noreturn,
-    /// `_Atomic` (C11 6.7.2.4 / 6.7.3). Two forms: the type
-    /// specifier `_Atomic ( type-name )` and the type qualifier
-    /// `_Atomic` preceding a type. c5 does not model atomicity, so
-    /// both reduce to the unqualified inner type; a distinct token
-    /// is needed only so the parser can recognize the parenthesized
-    /// specifier (the qualifier form is consumed like `const`).
+    /// `_Atomic` immediately followed by `(`: the type specifier of C11
+    /// 6.7.2.4. The qualifier of 6.7.3 lexes as [`Token::TypeQual`].
     Atomic,
     /// `asm` / `__asm__` / `__asm` (GCC inline assembly statement).
     /// c5 supports the operand-free forms: an empty template (a
@@ -396,6 +392,12 @@ pub(crate) enum Token {
     /// whole function. Added at the end so the operator ordinals are
     /// unchanged.
     LocalLabel,
+    /// The Microsoft structured exception handling statements the PE targets
+    /// take: `__try`, `__except`, `__finally` and `__leave`.
+    SehTry,
+    SehExcept,
+    SehFinally,
+    SehLeave,
 }
 
 /// True when a token can end an operand, so a following `&&` is the binary
@@ -511,6 +513,10 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::BuiltinTypesCompatible as i64 => "`__builtin_types_compatible_p`",
         x if x == Token::BuiltinOffsetof as i64 => "`__builtin_offsetof`",
         x if x == Token::AutoType as i64 => "`__auto_type`",
+        x if x == Token::SehTry as i64 => "`__try`",
+        x if x == Token::SehExcept as i64 => "`__except`",
+        x if x == Token::SehFinally as i64 => "`__finally`",
+        x if x == Token::SehLeave as i64 => "`__leave`",
         x if x == Token::Void as i64 => "`void`",
         x if x == Token::Inline as i64 => "`inline`",
         x if x == Token::ForceInline as i64 => "`__forceinline`",

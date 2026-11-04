@@ -248,14 +248,47 @@ pub(crate) enum AsmSectionItem {
     },
 }
 
+/// A section item and the line, from 1, of the statement that wrote it, where
+/// its errors are reported; 0 when no statement did (a flushed literal pool).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AsmLineItem {
+    pub line: u32,
+    pub item: AsmSectionItem,
+}
+
+/// Replace a `Code` item with what `encode` makes of its text. A bad
+/// instruction's error goes to `errors` and leaves the item with no bytes.
+pub(crate) fn encode_code_item(
+    item: &mut AsmSectionItem,
+    line: u32,
+    errors: &mut alloc::vec::Vec<AsmError>,
+    encode: impl FnOnce(&str) -> Result<AsmSectionItem, alloc::string::String>,
+) {
+    let AsmSectionItem::Code(text) = item else {
+        return;
+    };
+    let encoded = encode(text).unwrap_or_else(|m| {
+        errors.push(AsmError::at(
+            line,
+            alloc::format!("{m} (instruction `{text}`)"),
+        ));
+        AsmSectionItem::CodeBytes {
+            bytes: alloc::vec::Vec::new(),
+            relocs: alloc::vec::Vec::new(),
+            short: None,
+        }
+    });
+    *item = encoded;
+}
+
 /// One branch of a deferred conditional. `tok` is the `.if`-family directive
-/// that opened the branch, empty for `.else`; `error` is the diagnostic the
-/// branch raises, absent when it raises none.
+/// that opened the branch, empty for `.else`; `error` is the line and the
+/// diagnostic the branch raises, absent when it raises none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmCondArm {
     pub tok: alloc::string::String,
     pub cond: alloc::string::String,
-    pub error: Option<alloc::string::String>,
+    pub error: Option<(u32, alloc::string::String)>,
 }
 
 /// One AArch64 literal-pool entry. `label` is the synthetic symbol the
@@ -318,7 +351,7 @@ pub(crate) struct AsmSectionBlock {
     /// space; layout orders a section's blocks by this number, so
     /// subsection 1 lands after every subsection-0 block.
     pub subsection: u32,
-    pub items: alloc::vec::Vec<AsmSectionItem>,
+    pub items: alloc::vec::Vec<AsmLineItem>,
 }
 
 /// A `G` section's group: its signature name, and whether the `comdat`
@@ -342,6 +375,10 @@ impl AsmSectionBlock {
             subsection: 0,
             items: alloc::vec::Vec::new(),
         }
+    }
+
+    pub(crate) fn push(&mut self, line: u32, item: AsmSectionItem) {
+        self.items.push(AsmLineItem { line, item });
     }
 }
 

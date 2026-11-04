@@ -474,6 +474,5 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

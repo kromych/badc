@@ -15,9 +15,8 @@ Disassembly of section .text:
 
 <bump>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0x2a               // =42
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	ret
 
 <main>:
@@ -30,8 +29,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ldur	x30, [x29, #-0x10]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x30]
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

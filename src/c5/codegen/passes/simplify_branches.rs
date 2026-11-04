@@ -51,6 +51,9 @@ struct Opts<'a> {
     /// Forward one-input phis and merge straight-line blocks
     /// ([`super::merge_blocks`]).
     merge_blocks: bool,
+    /// Fold a branch whose arms do no work and meet
+    /// ([`super::constfold_branch::fold_converging_arms`]).
+    converge_arms: bool,
 }
 
 /// The post-walk correctness cleanup, run at every optimization level.
@@ -67,6 +70,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 const_stores: false,
                 param_ranges: &[],
                 merge_blocks: false,
+                converge_arms: false,
             },
         );
     }
@@ -108,8 +112,25 @@ pub(crate) fn run_with_const_data_on(
                 const_stores: true,
                 param_ranges: ranges,
                 merge_blocks: true,
+                converge_arms: true,
             },
         );
+    }
+}
+
+/// The fold of what the value numbering and the forwarding leave: an
+/// operation reading one value twice or a constant, and a branch it
+/// decides. Blocks are only pruned, never merged or threaded, so the
+/// critical edges split before stay split.
+pub(crate) fn run_late(funcs: &mut [FunctionSsa]) {
+    for func in funcs {
+        for _ in 0..=func.blocks.len() {
+            super::constfold::run_one(func);
+            if !super::constfold_branch::run_one(func) {
+                break;
+            }
+            super::prune_unreachable::run_one(func);
+        }
     }
 }
 
@@ -143,7 +164,8 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
         let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
         let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
-        let folded = super::constfold_branch::run_one(func);
+        let folded = super::constfold_branch::run_one(func)
+            | (opts.converge_arms && super::constfold_branch::fold_converging_arms(func));
         let threaded = super::thread_phi_branches::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;

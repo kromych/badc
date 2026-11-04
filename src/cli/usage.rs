@@ -12,7 +12,10 @@ linker. `.i` is C that is preprocessed already: its line markers
 and pragmas apply and nothing in it is expanded again. `.S` (and
 `.sx`) run through the preprocessor with `__ASSEMBLER__`
 predefined before being assembled; `.s` is assembled verbatim, as
-in gcc's suffix table.
+in gcc's suffix table. `-x <language>` names the language of the
+inputs after it instead -- `c`, `cpp-output`, `assembler` or
+`assembler-with-cpp` -- until the next `-x`; `-x none` returns to
+the suffix.
 
 Output mode -- pick at most one (defaults to a native binary):
   --interp                 Run under the SSA interpreter.
@@ -25,7 +28,12 @@ Output mode -- pick at most one (defaults to a native binary):
                            place; -Bsymbolic binds the library's
                            references to its own definitions,
                            -Bsymbolic-functions only those to its
-                           functions.
+                           functions. A reference no input defines
+                           links in an ELF library and fails a Mach-O
+                           or PE one; ld64's -undefined warning,
+                           suppress or dynamic_lookup (also as
+                           -Wl,-undefined,<value>) has a Mach-O image
+                           look it up at load time.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --list-diagnostics       Print the diagnostic catalogue -- code,
@@ -202,8 +210,12 @@ Compile knobs:
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
-                           the host. Ignored under --interp / --jit
-                           (those always target the host).
+                           the host. --interp compiles for the target
+                           (its data model, predefined macros and
+                           headers) and interprets that program; its
+                           C library calls go to the interpreter's
+                           own library. --jit runs host code and
+                           takes no other target.
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate). A
@@ -224,22 +236,31 @@ Compile knobs:
                            headers; its headers are left out of -MM and
                            of the unused-binding warnings. Repeatable.
   -fno-builtin[-<name>]    Treat a call spelled with a library
-  -ffreestanding           function's own name as an ordinary call the
+                           function's own name as an ordinary call the
                            compiler may not fold, and drop the C99
                            7.1.4p2 recovery that declares an undeclared
                            library function by auto-including its
                            header. The `__builtin_` spellings keep
-                           folding. -fbuiltin / -fhosted restore the
-                           default.
-  -nostdinc                Drop the bundled standard headers and the
-                           system directories from the #include search,
-                           leaving only -I, -iquote and the including
-                           file's own directory. A name none of those
-                           carries is an error instead of resolving to
-                           badc's libc, and the auto-include retry is
-                           off. The compiler's own headers
-                           (`arm_neon.h`, `x86intrin.h` and the x86
-                           intrinsic headers) stay, as gcc's do.
+                           folding. -fbuiltin restores the default.
+  -ffreestanding           Compile for a freestanding implementation:
+                           -fno-builtin, and `__STDC_HOSTED__` is 0.
+                           -fhosted restores both.
+  -nostdinc                Drop the bundled headers and the system
+                           directories from the #include search, leaving
+                           only -I, -isystem, -iquote and the including
+                           file's own directory, as gcc and clang do. A
+                           name none of those carries is an error, and
+                           the auto-include retry is off.
+                           `-isystem $(badc -print-file-name=include)`
+                           restores the compiler's own headers.
+  -nostdlibinc             As -nostdinc, keeping the compiler's own
+                           headers (<stdarg.h>, <stddef.h>, <stdint.h>,
+                           the intrinsic headers, ...), as clang does.
+  -print-file-name=<name>  Print the full path of <name>, or <name> when
+                           badc has none. `include` names the directory
+                           of the compiler's own headers; on the
+                           #include search it serves them from the
+                           binary.
   -include FILE            Splice the named header in front of the
                            source as if `#include \"FILE\"` opened
                            the translation unit. Repeatable; later
@@ -289,6 +310,10 @@ Compile knobs:
                            at the end of the phase, as gcc does.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
+  -fpermissive             Report as warnings the diagnostics gcc 14
+                           makes errors by default: int-conversion,
+                           incompatible-pointer-types, implicit-int
+                           and return-mismatch.
   -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
                            <n> bytes (kB / KiB / MB / MiB suffixes
                            apply). The saved registers and the frame
@@ -338,12 +363,14 @@ Compile knobs:
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
-  -std=<dialect>           Language dialect. badc compiles C99 with the
-                           GNU extensions always available, so the name
-                           selects only whether __STRICT_ANSI__ is
-                           defined under --gnu: `gnu*` clears it, `c*` /
-                           `iso*` set it, as gcc and clang do. Without
-                           the flag --gnu reports strict conformance.
+  -std=<dialect>           Language dialect, by gcc's names: sets
+                           __STDC_VERSION__ (C17 by default) and, from
+                           c23 on, the bool/true/false keywords. The GNU
+                           extensions are available in every dialect.
+                           Under --gnu, `gnu*` clears __STRICT_ANSI__ and
+                           `c*` / `iso*` set it, as gcc and clang do;
+                           without the flag --gnu reports strict
+                           conformance.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99

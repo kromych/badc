@@ -95,6 +95,37 @@ fn an_unbound_static_slot_in_a_single_image_is_reported() {
     assert!(err.contains("import address table"), "{err}");
 }
 
+/// A weak reference no input defines is 0 in an ELF single-file image, as
+/// GNU ld resolves it, and an undefined reference in a Mach-O one, as ld64
+/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF,
+/// as gcc ignores it.
+#[test]
+fn a_weak_reference_no_input_defines_is_undefined_in_a_mach_o_image() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (attr, name) in [("weak", "w_fn"), ("weak_import", "w_fn"), ("weak", "w_obj")] {
+        let src = format!(
+            "int w_fn(void) __attribute__(({attr}));\n\
+             extern int w_obj __attribute__(({attr}));\n\
+             int main(void) {{ return {name} ? 1 : 0; }}\n"
+        );
+        for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+            let program = Compiler::with_target(super::with_prelude(&src), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("compile {target:?}: {e}"));
+            let emit = crate::emit_native_with_options(&program, target, NativeOptions::default());
+            let undefined = target == Target::MacOSAarch64 || attr == "weak_import";
+            match emit {
+                Err(e) if undefined => {
+                    let err = e.to_string();
+                    let want = format!("undefined reference to `{name}`");
+                    assert!(err.contains(&want), "{attr} {name} {target:?}: {err}");
+                }
+                r => assert!(!undefined && r.is_ok(), "{attr} {name} {target:?}: {r:?}"),
+            }
+        }
+    }
+}
+
 #[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};
@@ -1376,8 +1407,13 @@ fn assert_windows_imports(target: crate::Target, headers: &str, imports: &[(&str
 }
 
 /// Links `src` for `target`, which compiles with no diagnostic and no
-/// auto-included header, and checks that each `(symbol, dll)` is imported.
-fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&str, &str)]) {
+/// auto-included header, checks that each `(symbol, dll)` is imported, and
+/// returns the image.
+fn assert_windows_unit_imports(
+    target: crate::Target,
+    src: &str,
+    imports: &[(&str, &str)],
+) -> alloc::vec::Vec<u8> {
     use crate::{Compiler, NativeOptions};
     let program = Compiler::with_target(src.to_string(), target)
         .compile()
@@ -1397,6 +1433,7 @@ fn assert_windows_unit_imports(target: crate::Target, src: &str, imports: &[(&st
             "{target:?}: {symbol}"
         );
     }
+    image
 }
 
 /// The user32, gdi32, opengl32 and advapi32 functions `<windows.h>`
@@ -1697,9 +1734,9 @@ fn windows_sharing_opens_and_checked_conversions_import_msvcrt() {
 /// `<stdlib.h>`'s `__clear_cache` reaches kernel32's FlushInstructionCache
 /// through a reserved name, so a unit's own declaration of the Win32 name
 /// with the SDK's types, before or after the header, and `<windows.h>`'s
-/// agree; `<time.h>` shares `struct timeval` and its timer macros with
-/// `<winsock2.h>` and with a unit that defines it under `_TIMEVAL_DEFINED`,
-/// as mingw-w64's headers do.
+/// agree; `<winsock2.h>` shares `struct timeval` and its timer macros with
+/// a unit that defines it under `_TIMEVAL_DEFINED`, as mingw-w64's headers
+/// do.
 #[test]
 fn windows_crt_headers_leave_win32_names_to_their_headers() {
     const SRC: &str = "int FlushInstructionCache(void *hProcess, const void *lpBaseAddress,\n\
@@ -1730,6 +1767,112 @@ fn windows_crt_headers_leave_win32_names_to_their_headers() {
             ],
         );
         assert_windows_unit_imports(target, TIMER, &[]);
+    }
+}
+
+/// The SDK's winsock.h and winsock2.h define `struct timeval` and the timer
+/// macros unguarded, under `_WINSOCKAPI_`, and the UCRT's `<time.h>` defines
+/// neither. On the Windows targets `<time.h>` defines neither either, and
+/// `<sys/time.h>` defines them unless the SDK's headers did: both combine
+/// with the SDK's definitions in either order in every language mode, and
+/// gettimeofday takes the SDK's struct.
+#[test]
+fn windows_time_h_leaves_struct_timeval_to_the_winsock_headers() {
+    use crate::{CStd, CompileOptions, Compiler};
+    // The definitions as winsock2.h 10.0.26100.0 spells them.
+    const SDK: &str = "#define _WINSOCK2API_\n#define _WINSOCKAPI_\n\
+        struct timeval {\n        long    tv_sec;\n        long    tv_usec;\n};\n\
+        #define timerisset(tvp)         ((tvp)->tv_sec || (tvp)->tv_usec)\n\
+        #define timercmp(tvp, uvp, cmp) \\\n        ((tvp)->tv_sec cmp (uvp)->tv_sec || \\\n\
+        \x20        (tvp)->tv_sec == (uvp)->tv_sec && (tvp)->tv_usec cmp (uvp)->tv_usec)\n\
+        #define timerclear(tvp)         (tvp)->tv_sec = (tvp)->tv_usec = 0\n";
+    const USE: &str = "int main(void)\n{\n\
+        struct timeval a = {1, 2}, b = {1, 3};\n\
+        timerclear(&a);\n\
+        return !timerisset(&a) && timercmp(&a, &b, <) && gettimeofday(&b, 0) == 0 ? 0 : 1;\n\
+        }\n";
+    // Without the SDK's headers <time.h> leaves the tag free and
+    // <sys/time.h> defines the struct and the macros.
+    const UCRT: &str = "#include <time.h>\n#ifdef timerisset\n#error timerisset\n#endif\n\
+        struct timeval { char own; };\nint main(void) { return 0; }\n";
+    let units = [
+        alloc::format!("{SDK}#include <time.h>\n#include <sys/time.h>\n{USE}"),
+        alloc::format!("#include <time.h>\n{SDK}#include <sys/time.h>\n{USE}"),
+        alloc::format!("#include <sys/time.h>\n{USE}"),
+        UCRT.to_string(),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for std in ["c89", "c99", "c11", "c17", "c23", "gnu11", "gnu17", "gnu23"] {
+            for src in &units {
+                let opts = CompileOptions::default().with_std(CStd::from_dialect(std).unwrap());
+                let program = Compiler::with_options(src.clone(), target, opts)
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{target:?} {std}: {e}\n{src}"));
+                assert!(
+                    program.warnings.is_empty() && program.notes.is_empty(),
+                    "{target:?} {std}: {:?} {:?}\n{src}",
+                    program.warnings,
+                    program.notes
+                );
+            }
+        }
+        assert_windows_unit_imports(
+            target,
+            &units[1],
+            &[("GetSystemTimePreciseAsFileTime", "kernel32.dll")],
+        );
+    }
+}
+
+/// glibc's and the macOS SDK's `<time.h>` neither define `struct timeval`
+/// nor declare gettimeofday, so a program may define the tag after it.
+/// `<sys/time.h>`, `<sys/select.h>`, `<sys/resource.h>` and `<utmpx.h>` each
+/// define the struct alone, under the C library's own guard, so a definition
+/// under that guard before or after them stands.
+#[test]
+fn posix_time_h_leaves_struct_timeval_to_sys_time_h() {
+    use crate::{CompileOptions, Compiler, Target};
+    let compile = |src: &str, target: Target, opts: CompileOptions| {
+        let opts = opts.with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}\n{src}"))
+    };
+    const OWN: &str = "#include <time.h>\nstruct timeval { int x; };\n\
+        int main(void) { struct timeval t = {1}; return t.x - 1; }\n";
+    const GLIBC: (&str, &str) = (
+        "__timeval_defined",
+        "#define __timeval_defined 1\nstruct timeval { long tv_sec; long tv_usec; };",
+    );
+    const SDK: (&str, &str) = (
+        "_STRUCT_TIMEVAL",
+        "#define _STRUCT_TIMEVAL struct timeval\n_STRUCT_TIMEVAL { long tv_sec; int tv_usec; };",
+    );
+    const CALL: &str = "int f(struct timeval *tv) { return gettimeofday(tv, 0); }\n";
+    let plain = CompileOptions::default;
+    // Without the auto-include retry, a call needs the declaring header.
+    let no_retry = || CompileOptions::default().with_no_builtin(true);
+    for (target, (guard, guarded)) in [
+        (Target::LinuxX64, GLIBC),
+        (Target::LinuxAarch64, GLIBC),
+        (Target::MacOSAarch64, SDK),
+    ] {
+        compile(OWN, target, plain());
+        let opts = no_retry().with_no_entry_point(true);
+        let time_h = alloc::format!("#include <time.h>\nstruct timeval;\n{CALL}");
+        let refused = Compiler::with_options(time_h, target, opts).compile();
+        assert!(refused.is_err(), "{target:?}: gettimeofday");
+        let sys_time = alloc::format!("#include <sys/time.h>\n{CALL}");
+        compile(&sys_time, target, no_retry());
+        for header in ["sys/time.h", "sys/select.h", "sys/resource.h", "utmpx.h"] {
+            let size = "_Static_assert(sizeof(struct timeval) == 16, \"timeval\");";
+            let alone = alloc::format!("#include <{header}>\n{size}\n");
+            compile(&alone, target, plain());
+            let before = alloc::format!("{guarded}\n#include <{header}>\n");
+            compile(&before, target, plain());
+            let after = alloc::format!("#include <{header}>\n#ifndef {guard}\n{guarded}\n#endif\n");
+            compile(&after, target, plain());
+        }
     }
 }
 
@@ -1903,6 +2046,155 @@ fn windows_tchar_maps_generic_text_names_by_unicode() {
     }
 }
 
+/// On the PE targets `<wchar.h>` alone declares every wide-string function
+/// the UCRT's corecrt_wstring.h does, as `<string.h>` does; `<locale.h>` and
+/// `<wchar.h>` declare `_wsetlocale`; `<stdlib.h>` declares the number
+/// conversions under a locale object. Each imports msvcrt.dll's entry, the
+/// long long and long double forms its 64-bit and double ones, and
+/// `_strtof_l` is the runtime's over `_strtod_l`, which links beside strtod.
+#[test]
+fn windows_wide_strings_wsetlocale_and_l_conversions_bind_msvcrt() {
+    const M: &str = "msvcrt.dll";
+    const BLOCK: &str = include_str!("../../../libc/include/__badc_wstring.h");
+    let wide: alloc::vec::Vec<(&str, &str, &str)> = BLOCK
+        .lines()
+        .filter_map(|l| l.strip_prefix("#pragma binding(msvcrt::"))
+        .filter_map(|l| {
+            let (name, rest) = l.split_once(", \"")?;
+            Some((name, rest.split_once('"')?.0, M))
+        })
+        .collect();
+    assert!(wide.len() > 50, "{wide:?}");
+    let locale = [("_wsetlocale", "_wsetlocale", M)];
+    let conversions = [
+        ("_strtod_l", "_strtod_l", M),
+        ("_strtold_l", "_strtod_l", M),
+        ("_strtol_l", "_strtol_l", M),
+        ("_strtoul_l", "_strtoul_l", M),
+        ("_strtoi64_l", "_strtoi64_l", M),
+        ("_strtoll_l", "_strtoi64_l", M),
+        ("_strtoui64_l", "_strtoui64_l", M),
+        ("_strtoull_l", "_strtoui64_l", M),
+        ("_atof_l", "_atof_l", M),
+        ("_atoi_l", "_atoi_l", M),
+        ("_atol_l", "_atol_l", M),
+        ("_atoi64_l", "_atoi64_l", M),
+        ("_atoll_l", "_atoi64_l", M),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <wchar.h>\n",
+            "#include <string.h>\n#include <wchar.h>\n",
+        ] {
+            assert_windows_imports(target, headers, &wide);
+        }
+        assert_windows_imports(target, "#include <locale.h>\n", &locale);
+        assert_windows_imports(target, "#include <wchar.h>\n", &locale);
+        assert_windows_imports(target, "#include <stdlib.h>\n", &conversions);
+        let src = "#include <stdlib.h>\n\
+                   int main(void) { char *e; return (int)(_strtof_l(\"1\", &e, 0) + strtod(\"2\", &e)); }\n";
+        let image = assert_windows_unit_imports(target, src, &[("_strtod_l", M)]);
+        assert_eq!(pe_import_dll_of(&image, "_strtof_l"), None, "{target:?}");
+    }
+}
+
+/// On the PE targets `<wchar.h>` and each set's own header declare the
+/// functions of the UCRT's corecrt_w*.h sets that msvcrt.dll exports, as the
+/// UCRT's and mingw-w64's headers do, and each imports the entry its binding
+/// names; `<stdlib.h>` declares the `_atodbl` family with the UCRT's result
+/// types, and `_wcstof_l` is the runtime's over `_wcstod_l`.
+#[test]
+fn windows_ucrt_wide_sets_import_their_entry_points() {
+    const BLOCKS: &[(&str, &[&str])] = &[
+        (
+            include_str!("../../../libc/include/__badc_wstdlib.h"),
+            &["stdlib.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wstdio.h"),
+            &["stdio.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wio.h"),
+            &["io.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wdirect.h"),
+            &["direct.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wprocess.h"),
+            &["process.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wtime.h"),
+            &["time.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wconio.h"),
+            &["conio.h"],
+        ),
+        (
+            include_str!("../../../libc/include/__badc_wctype.h"),
+            &["ctype.h", "wctype.h"],
+        ),
+    ];
+    // The bindings outside a nested conditional, with their DLLs.
+    let bindings = |block: &'static str| {
+        let mut depth = 0usize;
+        let mut out: alloc::vec::Vec<(&str, &str, &str)> = alloc::vec::Vec::new();
+        for line in block.lines() {
+            if line.starts_with("#if") {
+                depth += 1;
+            } else if line.starts_with("#endif") {
+                depth -= 1;
+            } else if depth == 1
+                && let Some(rest) = line.strip_prefix("#pragma binding(")
+                && let Some((lib, rest)) = rest.split_once("::")
+                && let Some((name, rest)) = rest.split_once(", \"")
+                && let Some((symbol, _)) = rest.split_once('"')
+            {
+                let dll = if lib == "ucrtbase" {
+                    "ucrtbase.dll"
+                } else {
+                    "msvcrt.dll"
+                };
+                out.push((name, symbol, dll));
+            }
+        }
+        out
+    };
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for &(block, homes) in BLOCKS {
+            let imports = bindings(block);
+            assert!(imports.len() >= 5, "{imports:?}");
+            assert_windows_imports(target, "#include <wchar.h>\n", &imports);
+            for home in homes {
+                assert_windows_imports(target, &alloc::format!("#include <{home}>\n"), &imports);
+            }
+        }
+        assert_windows_imports(
+            target,
+            "#include <stdlib.h>\n\
+             _Static_assert(sizeof(_LDOUBLE) == 10 && sizeof(_CRT_DOUBLE) == 8 && \
+             sizeof(_CRT_FLOAT) == 4, \"\");\n",
+            &[
+                ("_atodbl", "_atodbl", M),
+                ("_atoldbl", "_atoldbl", M),
+                ("_atodbl_l", "_atodbl_l", M),
+                ("_atoflt_l", "_atoflt_l", M),
+                ("_atoldbl_l", "_atoldbl_l", M),
+                ("_atoflt", "_atoflt_l", M),
+            ],
+        );
+        let src = "#include <wchar.h>\n\
+                   int main(void) { wchar_t *e; return (int)(_wcstof_l(L\"1\", &e, 0) + wcstod(L\"2\", &e)); }\n";
+        let image = assert_windows_unit_imports(target, src, &[("_wcstod_l", M)]);
+        assert_eq!(pe_import_dll_of(&image, "_wcstof_l"), None, "{target:?}");
+    }
+}
+
 /// `<tchar.h>`'s bounds-checked generic-text names, as mingw-w64's
 /// `sec_api/tchar_s.h` maps them, each resolve for both Windows targets under
 /// `_UNICODE`, `_MBCS` (with and without `_MB_MAP_DIRECT`) and neither, and
@@ -2068,6 +2360,200 @@ fn windows_tchar_bounds_checked_names_reach_msvcrt() {
     }
 }
 
+/// On the Windows targets `<string.h>` declares the wide-string functions the
+/// UCRT's declares through corecrt_wstring.h and vcruntime_string.h, with its
+/// prototypes, alone and beside `<wchar.h>`; each imports msvcrt.dll's entry
+/// point, the POSIX-style names the underscored one, but for C99's `wcstok`
+/// and the two-argument `_wcstok`, which the runtime defines: msvcrt.dll's
+/// `wcstok` is the two-argument form, which the image does not import. The
+/// undeclared names take the hint of a header declaring them there.
+#[test]
+fn windows_string_h_declares_the_ucrt_wide_string_functions() {
+    const M: &str = "msvcrt.dll";
+    const S: &str = "size_t (*)(const wchar_t *, const wchar_t *)";
+    const CMP: &str = "int (*)(const wchar_t *, const wchar_t *)";
+    const NCMP: &str = "int (*)(const wchar_t *, const wchar_t *, size_t)";
+    const CMP_L: &str = "int (*)(const wchar_t *, const wchar_t *, _locale_t)";
+    const NCMP_L: &str = "int (*)(const wchar_t *, const wchar_t *, size_t, _locale_t)";
+    const CAT: &str = "wchar_t *(*)(wchar_t *, const wchar_t *)";
+    const NCAT: &str = "wchar_t *(*)(wchar_t *, const wchar_t *, size_t)";
+    const CAT_S: &str = "int (*)(wchar_t *, size_t, const wchar_t *)";
+    const NCAT_S: &str = "int (*)(wchar_t *, size_t, const wchar_t *, size_t)";
+    const FIND: &str = "wchar_t *(*)(const wchar_t *, const wchar_t *)";
+    const CHR: &str = "wchar_t *(*)(const wchar_t *, wchar_t)";
+    const TOK: &str = "wchar_t *(*)(wchar_t *, const wchar_t *, wchar_t **)";
+    const DUP: &str = "wchar_t *(*)(const wchar_t *)";
+    const MAP: &str = "wchar_t *(*)(wchar_t *)";
+    const MAP_L: &str = "wchar_t *(*)(wchar_t *, _locale_t)";
+    const MAP_S: &str = "int (*)(wchar_t *, size_t)";
+    const MAP_S_L: &str = "int (*)(wchar_t *, size_t, _locale_t)";
+    const XFRM: &str = "size_t (*)(wchar_t *, const wchar_t *, size_t)";
+    // (name, type, imported symbol)
+    const DECLS: &[(&str, &str, &str)] = &[
+        ("wcscat_s", CAT_S, "wcscat_s"),
+        ("wcscpy_s", CAT_S, "wcscpy_s"),
+        ("wcsncat_s", NCAT_S, "wcsncat_s"),
+        ("wcsncpy_s", NCAT_S, "wcsncpy_s"),
+        ("wcstok_s", TOK, "wcstok_s"),
+        ("_wcsdup", DUP, "_wcsdup"),
+        ("wcscat", CAT, "wcscat"),
+        ("wcscmp", CMP, "wcscmp"),
+        ("wcscpy", CAT, "wcscpy"),
+        ("wcscspn", S, "wcscspn"),
+        ("wcslen", "size_t (*)(const wchar_t *)", "wcslen"),
+        ("wcsnlen", "size_t (*)(const wchar_t *, size_t)", "wcsnlen"),
+        ("wcsncat", NCAT, "wcsncat"),
+        ("wcsncmp", NCMP, "wcsncmp"),
+        ("wcsncpy", NCAT, "wcsncpy"),
+        ("wcspbrk", FIND, "wcspbrk"),
+        ("wcsspn", S, "wcsspn"),
+        ("_wcserror", "wchar_t *(*)(int)", "_wcserror"),
+        (
+            "_wcserror_s",
+            "int (*)(wchar_t *, size_t, int)",
+            "_wcserror_s",
+        ),
+        ("__wcserror", DUP, "__wcserror"),
+        ("__wcserror_s", CAT_S, "__wcserror_s"),
+        ("_wcsicmp", CMP, "_wcsicmp"),
+        ("_wcsicmp_l", CMP_L, "_wcsicmp_l"),
+        ("_wcsnicmp", NCMP, "_wcsnicmp"),
+        ("_wcsnicmp_l", NCMP_L, "_wcsnicmp_l"),
+        (
+            "_wcsnset_s",
+            "int (*)(wchar_t *, size_t, wchar_t, size_t)",
+            "_wcsnset_s",
+        ),
+        (
+            "_wcsnset",
+            "wchar_t *(*)(wchar_t *, wchar_t, size_t)",
+            "_wcsnset",
+        ),
+        ("_wcsrev", MAP, "_wcsrev"),
+        (
+            "_wcsset_s",
+            "int (*)(wchar_t *, size_t, wchar_t)",
+            "_wcsset_s",
+        ),
+        ("_wcsset", "wchar_t *(*)(wchar_t *, wchar_t)", "_wcsset"),
+        ("_wcslwr_s", MAP_S, "_wcslwr_s"),
+        ("_wcslwr", MAP, "_wcslwr"),
+        ("_wcslwr_s_l", MAP_S_L, "_wcslwr_s_l"),
+        ("_wcslwr_l", MAP_L, "_wcslwr_l"),
+        ("_wcsupr_s", MAP_S, "_wcsupr_s"),
+        ("_wcsupr", MAP, "_wcsupr"),
+        ("_wcsupr_s_l", MAP_S_L, "_wcsupr_s_l"),
+        ("_wcsupr_l", MAP_L, "_wcsupr_l"),
+        ("wcsxfrm", XFRM, "wcsxfrm"),
+        (
+            "_wcsxfrm_l",
+            "size_t (*)(wchar_t *, const wchar_t *, size_t, _locale_t)",
+            "_wcsxfrm_l",
+        ),
+        ("wcscoll", CMP, "wcscoll"),
+        ("_wcscoll_l", CMP_L, "_wcscoll_l"),
+        ("_wcsicoll", CMP, "_wcsicoll"),
+        ("_wcsicoll_l", CMP_L, "_wcsicoll_l"),
+        ("_wcsncoll", NCMP, "_wcsncoll"),
+        ("_wcsncoll_l", NCMP_L, "_wcsncoll_l"),
+        ("_wcsnicoll", NCMP, "_wcsnicoll"),
+        ("_wcsnicoll_l", NCMP_L, "_wcsnicoll_l"),
+        ("wcschr", CHR, "wcschr"),
+        ("wcsrchr", CHR, "wcsrchr"),
+        ("wcsstr", FIND, "wcsstr"),
+        ("wcsdup", DUP, "_wcsdup"),
+        ("wcswcs", FIND, "wcsstr"),
+        ("wcsicmp", CMP, "_wcsicmp"),
+        ("wcsnicmp", NCMP, "_wcsnicmp"),
+        (
+            "wcsnset",
+            "wchar_t *(*)(wchar_t *, wchar_t, size_t)",
+            "_wcsnset",
+        ),
+        ("wcsrev", MAP, "_wcsrev"),
+        ("wcsset", "wchar_t *(*)(wchar_t *, wchar_t)", "_wcsset"),
+        ("wcslwr", MAP, "_wcslwr"),
+        ("wcsupr", MAP, "_wcsupr"),
+        ("wcsicoll", CMP, "_wcsicoll"),
+    ];
+    let mut types = alloc::string::String::from(
+        "_Static_assert(_Generic(&wcsnlen_s, size_t (*)(const wchar_t *, size_t): 1, \
+         default: 0), \"wcsnlen_s\");\n",
+    );
+    let runtime = [("wcstok", TOK, ""), ("_wcstok", CAT, "")];
+    for (name, ty, _) in DECLS.iter().chain(&runtime) {
+        types += &alloc::format!(
+            "_Static_assert(_Generic(&{name}, {ty}: 1, default: 0), \"{name}\");\n"
+        );
+    }
+    let imports: alloc::vec::Vec<_> = DECLS.iter().map(|&(n, _, s)| (n, s, M)).collect();
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <string.h>\n",
+            "#include <string.h>\n#include <wchar.h>\n",
+            "#include <wchar.h>\n#include <string.h>\n",
+        ] {
+            assert_windows_imports(target, &alloc::format!("{headers}{types}"), &imports);
+            let src = alloc::format!(
+                "{headers}typedef void (*fn)(void);\n\
+                 static const fn used[] = {{ (fn)wcstok, (fn)_wcstok }};\n\
+                 int main(void) {{ return used[0] == 0; }}\n"
+            );
+            let image = assert_windows_unit_imports(target, &src, &[]);
+            assert_eq!(pe_import_dll_of(&image, "wcstok"), None, "{target:?}");
+        }
+        for name in ["wcslen", "wcschr", "_wcsdup", "_wcsrev", "wcsicmp"] {
+            assert!(
+                matches!(
+                    crate::c5::headers::header_declaring(name, target),
+                    Some("string.h" | "wchar.h")
+                ),
+                "{target:?}: {name}"
+            );
+        }
+    }
+}
+
+/// On the Windows targets `<stdlib.h>` defines the UCRT's C `max` and `min`,
+/// which `NOMINMAX` leaves in place, alone and beside `<windows.h>`'s, and
+/// `<locale.h>` declares `_wcreate_locale` with the UCRT's type. msvcrt.dll
+/// exports no `_wcreate_locale`: the image imports its `_create_locale`, and
+/// links beside the formatting and conversion that run in a ucrtbase.dll
+/// locale.
+#[test]
+fn windows_stdlib_minmax_and_wcreate_locale_follow_the_ucrt() {
+    const CHECKS: &str = "#include <stdio.h>\n\
+        _Static_assert(max(3, 8) == 8 && min(3, 8) == 3, \"minmax\");\n\
+        _Static_assert(_Generic(&_wcreate_locale, _locale_t (*)(int, const wchar_t *): 1, \
+        default: 0), \"_wcreate_locale\");\n\
+        int main(void) {\n\
+        char b[8];\n\
+        return _wcreate_locale(LC_ALL, L\"C\") == 0 || _create_locale(LC_ALL, \"C\") == 0 ||\n\
+        snprintf(b, 8, \"%.1f\", strtod(\"1.5\", 0)) != 3;\n\
+        }\n";
+    const IMPORTS: &[(&str, &str)] = &[
+        ("_create_locale", "msvcrt.dll"),
+        ("__stdio_common_vsprintf", "ucrtbase.dll"),
+        ("GetProcAddress", "kernel32.dll"),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        for headers in [
+            "#include <stdlib.h>\n#include <locale.h>\n",
+            "#define NOMINMAX\n#include <windows.h>\n#include <stdlib.h>\n#include <locale.h>\n",
+            "#include <windows.h>\n#include <stdlib.h>\n#include <locale.h>\n",
+            "#include <stdlib.h>\n#include <windows.h>\n#include <locale.h>\n",
+        ] {
+            let src = alloc::format!("{headers}{CHECKS}");
+            let image = assert_windows_unit_imports(target, &src, IMPORTS);
+            assert_eq!(
+                pe_import_dll_of(&image, "_wcreate_locale"),
+                None,
+                "{target:?}"
+            );
+        }
+    }
+}
+
 /// C99 logb, lgamma, remquo and nexttoward in their three precisions import
 /// ucrtbase.dll's entry points (`long double` is `double` on Windows), and
 /// asctime msvcrt.dll's; asctime_r links from the C-library sources.
@@ -2102,13 +2588,15 @@ fn windows_math_and_asctime_import_the_entry_points_their_dlls_export() {
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
 /// target's msvcrt.dll lacks. The wide-character functions msvcrt.dll does
 /// not export reach the ones it does through the header's and the C-library
-/// sources' definitions. `<unistd.h>` binds the exec family as `<process.h>`
-/// does.
+/// sources' definitions; the floating conversions find ucrtbase.dll's
+/// `_strtod_l` family by name, importing none of it. `<unistd.h>` binds the
+/// exec family as `<process.h>` does.
 #[test]
 fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     use crate::Target;
     const M: &str = "msvcrt.dll";
     const U: &str = "ucrtbase.dll";
+    const K: &str = "kernel32.dll";
     const HEADERS: &str = "#include <io.h>\n#include <process.h>\n#include <wchar.h>\n\
         #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n#include <stdlib.h>\n";
     let common = [
@@ -2144,13 +2632,13 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
         ("wcstoull", "_wcstoui64", M),
         ("swprintf", "__stdio_common_vswprintf", U),
         ("vswprintf", "__stdio_common_vswprintf", U),
-        ("wcstod", "_wcstod_l", U),
-        ("wcstof", "_wcstof_l", U),
-        ("wcstold", "_wcstod_l", U),
-        ("strtod", "_strtod_l", U),
-        ("strtof", "_strtof_l", U),
-        ("strtold", "_strtod_l", U),
-        ("atof", "_strtod_l", U),
+        ("wcstod", "GetProcAddress", K),
+        ("wcstof", "GetProcAddress", K),
+        ("wcstold", "GetProcAddress", K),
+        ("strtod", "GetProcAddress", K),
+        ("strtof", "GetProcAddress", K),
+        ("strtold", "GetProcAddress", K),
+        ("atof", "GetProcAddress", K),
     ];
     for (target, own) in [
         (
@@ -2196,7 +2684,8 @@ fn windows_stream_scanners_take_the_stream_lock() {
 
 /// The twelve C99 scanners are libc/lib/scanf_ext.c's on Windows: an image
 /// taking each one's address imports no C-library scanner, and converts
-/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`.
+/// floating input through ucrtbase.dll's `_strtod_l` and `_strtof_l`, found
+/// by name, so it imports neither.
 #[test]
 fn windows_scanners_import_no_crt_scanner() {
     use crate::{Compiler, NativeOptions, Target};
@@ -2230,13 +2719,18 @@ fn windows_scanners_import_no_crt_scanner() {
                 "{target:?}: {symbol}"
             );
         }
-        for symbol in ["_strtod_l", "_strtof_l"] {
+        for symbol in ["_strtod_l", "_strtof_l", "_wcstod_l", "_wcstof_l"] {
             assert_eq!(
-                pe_import_dll_of(&image, symbol).as_deref(),
-                Some("ucrtbase.dll"),
+                pe_import_dll_of(&image, symbol),
+                None,
                 "{target:?}: {symbol}"
             );
         }
+        assert_eq!(
+            pe_import_dll_of(&image, "GetProcAddress").as_deref(),
+            Some("kernel32.dll"),
+            "{target:?}"
+        );
     }
 }
 
@@ -2366,6 +2860,93 @@ fn windows_header_declarations_resolve_at_link() {
     for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
         assert_header_declarations_resolve(target, &[]);
     }
+}
+
+/// Every function a bundled header binds with `#pragma binding` it also
+/// declares with a prototype, on every target the header serves and under
+/// the feature-test macros that hide or show its extensions, so a call
+/// takes the function's return type and parameter conversions. A PE import
+/// names an object as well as a function, so an object declaration serves
+/// too. A binding a header makes without a declaration routes the one the
+/// source makes itself, and agrees with the header that declares the name.
+#[test]
+fn bundled_bindings_come_with_a_prototype() {
+    use crate::c5::preprocessor::Preprocessor;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler};
+    use alloc::collections::BTreeSet;
+    use alloc::string::String;
+    const MACROS: [&str; 2] = [
+        "",
+        "#define _GNU_SOURCE 1\n#define _POSIX_C_SOURCE 200809L\n",
+    ];
+    type Route = (&'static str, &'static str, String, String, String);
+    let mut declared: BTreeSet<Route> = BTreeSet::new();
+    let mut routing: alloc::vec::Vec<(Route, &str)> = alloc::vec::Vec::new();
+    for (target, macros) in [
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+        crate::Target::MacOSAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::WindowsAarch64,
+    ]
+    .into_iter()
+    .flat_map(|t| MACROS.map(|m| (t, m)))
+    {
+        for (header, targets, _) in crate::embedded_headers() {
+            if !targets.contains(target) {
+                continue;
+            }
+            let src = alloc::format!("{macros}#include <{header}>\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let Ok(program) = Compiler::with_options(src.clone(), target, opts).compile() else {
+                continue;
+            };
+            let mut pp = Preprocessor::new(target.id_str(), target, "0");
+            pp.process(&src).expect("the unit compiled");
+            for spec in &pp.dylibs {
+                for binding in spec.bindings.iter().filter(|b| !b.is_data) {
+                    let name = binding.local_name.as_str();
+                    let route = (
+                        target.id_str(),
+                        macros,
+                        name.into(),
+                        spec.path.clone(),
+                        binding.real_symbol.clone(),
+                    );
+                    let has_prototype = program.symbols.iter().any(|s| {
+                        s.name == name
+                            && ((s.class == Token::Sys as i64 && s.prototyped())
+                                || s.class == Token::Glo as i64)
+                    });
+                    if has_prototype {
+                        declared.insert(route);
+                    } else {
+                        routing.push((route, header));
+                    }
+                }
+            }
+        }
+    }
+    let mut missing: alloc::vec::Vec<String> = (routing.iter())
+        .filter(|(route, _)| !declared.contains(route))
+        .map(|((target, macros, name, path, _), header)| {
+            let mode = if macros.is_empty() {
+                ""
+            } else {
+                " (feature macros)"
+            };
+            alloc::format!("{target} <{header}>{mode} {name} from {path}")
+        })
+        .collect();
+    missing.sort();
+    missing.dedup();
+    assert!(
+        missing.is_empty(),
+        "{} bound without a prototype:\n{}",
+        missing.len(),
+        missing.join("\n")
+    );
 }
 
 /// Every declaration a bundled header makes for macOS and the Linux targets
@@ -9742,6 +10323,233 @@ fn library_builtins_need_no_auto_include_retry() {
     );
 }
 
+/// gcc and clang give each `__builtin_` library function its prototype with
+/// no declaration in scope. Where no header can be auto-included -- under
+/// `-nostdinc`, `-ffreestanding` and for preprocessed input -- the unit
+/// compiles with no note; the absolute values and the functions a header
+/// binds to an instruction leave no reference, and the rest call the
+/// library function. `cli_fixture_smoke` links and runs it.
+#[cfg(feature = "full")]
+#[test]
+fn builtin_library_functions_need_no_declaration() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    let src = super::load_fixture("builtin_library_functions_need_no_declaration.c");
+    const INLINE: &[&str] = &[
+        "abs", "labs", "llabs", "imaxabs", "fabs", "fabsf", "fabsl", "sqrt", "floor",
+    ];
+    const CALLED: &[&str] = &[
+        "memset",
+        "memcpy",
+        "memmove",
+        "strlen",
+        "strcmp",
+        "strncmp",
+        "memcmp",
+        "strchr",
+        "vsnprintf",
+        "malloc",
+        "free",
+    ];
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let base = CompileOptions::default;
+        let nostdinc = base().with_nostdinc(true);
+        let text = Compiler::preprocess(src.clone(), target, nostdinc.clone()).expect("-E");
+        for (mode, text, opts) in [
+            ("-nostdinc", &src, nostdinc),
+            (
+                "-ffreestanding",
+                &src,
+                base().with_no_builtin(true).with_freestanding(true),
+            ),
+            (".i", &text, base().with_preprocessed(true)),
+        ] {
+            for optimize in [false, true] {
+                let what = alloc::format!("{target:?} {mode} optimize={optimize}");
+                let program = Compiler::with_options(text.clone(), target, opts.clone())
+                    .compile()
+                    .unwrap_or_else(|e| panic!("{what}: {e}"));
+                assert!(program.notes.is_empty(), "{what}: {:?}", program.notes);
+                let reloc = NativeOptions {
+                    optimize,
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::default()
+                };
+                let object = crate::emit_native_with_options(&program, target, reloc)
+                    .unwrap_or_else(|e| panic!("{what}: {e}"));
+                let object = crate::parse_native_object(&object).expect("object");
+                let undefined: alloc::vec::Vec<&str> = (object.symbols.iter())
+                    .filter(|s| s.section == NativeSymSection::Undef)
+                    .map(|s| s.name.as_str())
+                    .collect();
+                for name in INLINE {
+                    assert!(!undefined.contains(name), "{what}: {name} is called");
+                }
+                for name in CALLED {
+                    assert!(undefined.contains(name), "{what}: {name} is not called");
+                }
+            }
+        }
+    }
+}
+
+/// A freestanding unit that defines a library function after calling its
+/// builtin calls its own definition: the object holds the one symbol, defined.
+#[cfg(feature = "full")]
+#[test]
+fn a_builtin_calls_the_units_later_definition() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    const SRC: &str = "typedef __SIZE_TYPE__ size_t;\n\
+        size_t g(const char *s) { return __builtin_strlen(s); }\n\
+        void *h(void *d, const void *s, size_t n) { return __builtin_memcpy(d, s, n); }\n\
+        size_t strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }\n\
+        void *memcpy(void *d, const void *s, size_t n) {\n\
+            char *p = d; const char *q = s; while (n--) *p++ = *q++; return d; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default()
+            .with_no_builtin(true)
+            .with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let reloc = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let object = crate::emit_native_with_options(&program, target, reloc).expect("emit");
+        let object = crate::parse_native_object(&object).expect("object");
+        for name in ["strlen", "memcpy"] {
+            let entries: alloc::vec::Vec<_> = (object.symbols.iter())
+                .filter(|s| s.name == name)
+                .map(|s| s.section == NativeSymSection::Undef)
+                .collect();
+            assert_eq!(entries, [false], "{target:?} {name}");
+        }
+    }
+}
+
+/// Each basic `<arm_neon.h>` floating form is the AArch64 instruction gcc 16
+/// emits for it: in the intrinsic's body at -O0, in the caller once -O
+/// inlines it. The masks clear the register fields.
+#[cfg(feature = "full")]
+#[test]
+fn arm_neon_float_intrinsics_are_their_instructions() {
+    const SRC: &str = "#include <arm_neon.h>\n\
+        float32x4_t add(float32x4_t a, float32x4_t b) { return vaddq_f32(a, b); }\n\
+        float32x2_t add2(float32x2_t a, float32x2_t b) { return vadd_f32(a, b); }\n\
+        float64x2_t mul(float64x2_t a, float64x2_t b) { return vmulq_f64(a, b); }\n\
+        float64x1_t add1(float64x1_t a, float64x1_t b) { return vadd_f64(a, b); }\n\
+        float32x4_t fma4(float32x4_t a, float32x4_t b, float32x4_t c) { return vfmaq_f32(a, b, c); }\n\
+        uint32x4_t eq(float32x4_t a, float32x4_t b) { return vceqq_f32(a, b); }\n\
+        uint32x4_t lt(float32x4_t a, float32x4_t b) { return vcltq_f32(a, b); }\n\
+        int32x4_t cvt(float32x4_t a) { return vcvtq_s32_f32(a); }\n\
+        float32x4_t cvtf(uint32x4_t a) { return vcvtq_f32_u32(a); }\n\
+        float64x2_t wide(float32x2_t a) { return vcvt_f64_f32(a); }\n\
+        float32x4_t ld(const float *p) { return vld1q_f32(p); }\n\
+        void st(float *p, float32x4_t v) { vst1q_f32(p, v); }\n\
+        float32x4_t sel(uint32x4_t m, float32x4_t a, float32x4_t b) { return vbslq_f32(m, a, b); }\n";
+    const THREE: u32 = 0xFFE0_FC00;
+    const TWO: u32 = 0xFFFF_FC00;
+    for optimize in [false, true] {
+        for (caller, intrinsic, mask, want, insn) in [
+            ("add", "vaddq_f32", THREE, 0x4E20_D400u32, "fadd .4s"),
+            ("add2", "vadd_f32", THREE, 0x0E20_D400, "fadd .2s"),
+            ("mul", "vmulq_f64", THREE, 0x6E60_DC00, "fmul .2d"),
+            ("add1", "vadd_f64", THREE, 0x1E60_2800, "fadd d"),
+            ("fma4", "vfmaq_f32", THREE, 0x4E20_CC00, "fmla .4s"),
+            ("eq", "vceqq_f32", THREE, 0x4E20_E400, "fcmeq .4s"),
+            ("lt", "vcltq_f32", THREE, 0x6EA0_E400, "fcmgt .4s"),
+            ("cvt", "vcvtq_s32_f32", TWO, 0x4EA1_B800, "fcvtzs .4s"),
+            ("cvtf", "vcvtq_f32_u32", TWO, 0x6E21_D800, "ucvtf .4s"),
+            ("wide", "vcvt_f64_f32", TWO, 0x0E61_7800, "fcvtl .2d, .2s"),
+            ("ld", "vld1q_f32", 0xFFC0_0000, 0x3DC0_0000, "ldr q"),
+            ("st", "vst1q_f32", 0xFFC0_0000, 0x3D80_0000, "str q"),
+            ("sel", "vbslq_f32", THREE, 0x6E60_1C00, "bsl .16b"),
+        ] {
+            let name = if optimize { caller } else { intrinsic };
+            let words = super::perf_codegen::a64_at(SRC, name, optimize);
+            assert!(
+                words.iter().any(|w| w & mask == want),
+                "{name} optimize={optimize}: no {insn} in {words:08x?}"
+            );
+        }
+    }
+}
+
+/// C99 7.12.14's comparison builtins lower to the quiet compares, as gcc's
+/// and clang's do: `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64,
+/// never the signaling `comis*` or `fcmpe`, at -O0 and -O.
+#[cfg(feature = "full")]
+#[test]
+fn c99_comparison_builtins_compare_quietly() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "int gt(double a, double b) { return __builtin_isgreater(a, b); }\n\
+        int ge(double a, double b) { return __builtin_isgreaterequal(a, b); }\n\
+        int lt(double a, double b) { return __builtin_isless(a, b); }\n\
+        int le(double a, double b) { return __builtin_islessequal(a, b); }\n\
+        int lg(double a, double b) { return __builtin_islessgreater(a, b); }\n\
+        int un(double a, double b) { return __builtin_isunordered(a, b); }\n\
+        int gtf(float a, float b) { return __builtin_isgreater(a, b); }\n\
+        int main(void) { return 0; }\n";
+    let word = |w: &[u8]| u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+    ] {
+        for optimize in [false, true] {
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+            let opts = NativeOptions {
+                optimize,
+                ..NativeOptions::default()
+            };
+            let bytes = crate::c5::object::emit_native_single_tu_for_test(&program, target, opts)
+                .expect("emit_native");
+            let what = alloc::format!("{target:?} optimize={optimize}");
+            if target.is_x86_64() {
+                // ucomisd 66 0f 2e, ucomiss 0f 2e; comisd 66 0f 2f, comiss 0f 2f.
+                assert!(
+                    bytes.windows(3).any(|w| w == [0x66, 0x0f, 0x2e]),
+                    "{what}: ucomisd"
+                );
+                assert!(
+                    bytes
+                        .windows(3)
+                        .any(|w| w[0] != 0x66 && w[1..] == [0x0f, 0x2e]),
+                    "{what}: ucomiss"
+                );
+                assert!(
+                    !bytes.windows(2).any(|w| w == [0x0f, 0x2f]),
+                    "{what}: comis*"
+                );
+            } else {
+                // FCMP (register) is 0x1e202000 | ftype << 22, FCMPE sets bit 4.
+                let compare = |w: u32| w & 0xff20_fc0f == 0x1e20_2000;
+                assert!(
+                    bytes
+                        .windows(4)
+                        .any(|w| compare(word(w)) && word(w) & 0x10 == 0),
+                    "{what}: fcmp"
+                );
+                assert!(
+                    !bytes
+                        .windows(4)
+                        .any(|w| compare(word(w)) && word(w) & 0x10 != 0),
+                    "{what}: fcmpe"
+                );
+            }
+        }
+    }
+}
+
 /// The absolute-value builtins fold in a constant expression alongside
 /// the other library builtins.
 #[test]
@@ -9829,19 +10637,13 @@ fn auto_include_retry_emits_what_the_force_include_would() {
     // `__builtin_memcmp` is supplied by the compiler, so what the retry
     // recovers is the library name the builtin binds to.
     assert!(
-        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        retried.auto_includes.iter().any(|a| a.name == "memcmp"),
         "expected the retry to record the recovered name, got {:?}",
         retried.auto_includes
     );
 
-    let headers: Vec<String> = retried
-        .auto_includes
-        .iter()
-        .map(|n| {
-            crate::c5::headers::header_declaring(n, target)
-                .expect("the recovered name names a header")
-                .to_string()
-        })
+    let headers: Vec<String> = (retried.auto_includes.iter())
+        .map(|a| a.header.clone())
         .collect();
     let forced = CompileOptions::default().with_force_includes(headers);
     let direct = Compiler::with_options(src.to_string(), target, forced)
@@ -9903,7 +10705,7 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
             .expect("auto-include retry recovers the undeclared call")
     });
     assert!(
-        retried.auto_includes.iter().any(|n| n == "memcmp"),
+        retried.auto_includes.iter().any(|a| a.name == "memcmp"),
         "expected a retry, got {:?}",
         retried.auto_includes
     );
@@ -9960,7 +10762,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
             .compile()
             .expect("auto-include retry recovers the undeclared call")
     });
-    assert!(retried.auto_includes.iter().any(|n| n == "memcmp"));
+    assert!(retried.auto_includes.iter().any(|a| a.name == "memcmp"));
     assert_eq!(
         passes, 2,
         "an observed-name collision must fall back to a full pass"
@@ -10146,6 +10948,61 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
     );
 }
 
+/// The header operations no library defines stay inline under
+/// `-fno-builtin` and `-ffreestanding` on every target: the C11 7.17
+/// generic functions, `alloca`, and the frame a Windows `setjmp` records.
+/// A hosted POSIX unit calling `alloca` without its header gets the header
+/// from the auto-include recovery.
+#[test]
+#[cfg(feature = "full")]
+fn no_builtin_keeps_the_header_operations_no_library_defines() {
+    use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
+    const SRC: &str = "#include <stdatomic.h>\n#include <setjmp.h>\n#include <malloc.h>\n\
+        atomic_int x;\n\
+        atomic_flag fl;\n\
+        jmp_buf jb;\n\
+        int f(void) { atomic_store(&x, 1); int e = 1; atomic_compare_exchange_strong(&x, &e, 2);\n\
+          atomic_compare_exchange_weak(&x, &e, 2); atomic_flag_clear(&fl);\n\
+          return atomic_load(&x) + atomic_fetch_add(&x, 1) + atomic_fetch_sub(&x, 1)\n\
+            + atomic_fetch_and(&x, 1) + atomic_fetch_or(&x, 1) + atomic_fetch_xor(&x, 1)\n\
+            + atomic_exchange(&x, 3) + atomic_flag_test_and_set(&fl); }\n\
+        int g(int n) { char *p = alloca(n); p[0] = 1; return p[0]; }\n\
+        int h(void) { if (setjmp(jb)) return 1; longjmp(jb, 1); }\n";
+    const BARE: &str = "int g(int n) { char *p = alloca(n); p[0] = 1; return p[0]; }\n";
+    for target in Target::ALL {
+        let src = match target.is_windows() {
+            true => SRC.to_string(),
+            false => SRC.replace("<malloc.h>", "<alloca.h>"),
+        };
+        let hosted = CompileOptions::default().with_no_entry_point(true);
+        let base = || hosted.clone().with_no_builtin(true);
+        let mut cases = alloc::vec![
+            ("-fno-builtin", src.clone(), base()),
+            ("-ffreestanding", src, base().with_freestanding(true)),
+        ];
+        if !target.is_windows() {
+            cases.push(("hosted, no header", BARE.to_string(), hosted.clone()));
+        }
+        for (mode, src, opts) in cases {
+            let program = Compiler::with_options(src, target, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?} {mode}: {e}"));
+            let reloc = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::default()
+            };
+            let object = crate::emit_native_with_options(&program, target, reloc).expect("emit");
+            let object = crate::parse_native_object(&object).expect("object");
+            let leaked: alloc::vec::Vec<&str> = (object.symbols.iter())
+                .filter(|s| s.section == NativeSymSection::Undef)
+                .map(|s| s.name.trim_start_matches('_'))
+                .filter(|n| n.starts_with("atomic_") || n.starts_with("c5_") || *n == "alloca")
+                .collect();
+            assert!(leaked.is_empty(), "{target:?} {mode}: {leaked:?}");
+        }
+    }
+}
+
 /// Names of the `SHT_SYMTAB` entries with `st_shndx == SHN_UNDEF`.
 #[cfg(feature = "full")]
 fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
@@ -10204,7 +11061,7 @@ fn nostdinc_declines_the_auto_include_retry() {
         .compile()
         .expect("the retry recovers the undeclared library function");
     assert!(
-        hosted.auto_includes.iter().any(|n| n == "strlen"),
+        hosted.auto_includes.iter().any(|a| a.name == "strlen"),
         "expected the retry to record the recovered name, got {:?}",
         hosted.auto_includes
     );
@@ -10247,7 +11104,7 @@ fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
         .compile()
         .expect("an unlisted name keeps the recovery");
     assert!(
-        other.auto_includes.iter().any(|n| n == "puts"),
+        other.auto_includes.iter().any(|a| a.name == "puts"),
         "expected the retry to record the recovered name, got {:?}",
         other.auto_includes
     );
@@ -13649,6 +14506,105 @@ fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
     assert_eq!(opcode(&emit(false), "ext"), 0xE8, "the flag keeps the call");
 }
 
+/// A function returning a narrow integer returns a callee of its own
+/// return type with a jump: the callee leaves the register under the
+/// contract the caller's return states, so its result needs no extension
+/// first (System V AMD64 3.2.3 leaves the bits past the type unspecified).
+/// A return that converts to another type keeps the call and the
+/// extension.
+#[test]
+fn x64_a_returned_call_of_the_same_narrow_type_is_a_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "unsigned char uc(void); unsigned char r_uc(void) { return uc(); }\n\
+        signed char sc(void); signed char r_sc(void) { return sc(); }\n\
+        short sh(void); short r_sh(void) { return sh(); }\n\
+        unsigned short us(void); unsigned short r_us(void) { return us(); }\n\
+        _Bool bo(void); _Bool r_bo(void) { return bo(); }\n\
+        int in(int); int r_in(int x) { return in(x + 1); }\n\
+        unsigned char uc2(void); int r_widened(void) { return uc2(); }\n\
+        short sh2(void); signed char r_narrowed(void) { return sh2(); }\n";
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(SRC),
+        crate::Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let text = elf_text(&obj);
+    let relocs = x64_branch_relocs(&obj);
+    let opcode = |callee: &str| {
+        let (off, _, _) = relocs
+            .iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[*off as usize - 1]
+    };
+    for callee in ["uc", "sc", "sh", "us", "bo", "in"] {
+        assert_eq!(opcode(callee), 0xE9, "the call of {callee} is a jump");
+    }
+    for callee in ["uc2", "sh2"] {
+        assert_eq!(
+            opcode(callee),
+            0xE8,
+            "{callee}'s result converts, so it keeps its call"
+        );
+    }
+}
+
+/// A function that calls a returns-twice function keeps its returned call:
+/// `longjmp` back to the `setjmp` resumes in this function's frame (C99
+/// 7.13.2.1), which a sibling call would have torn down. gcc and clang
+/// make no sibling call there either.
+#[test]
+fn x64_a_function_calling_setjmp_makes_no_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "typedef long jmp_buf[8];\n\
+        int setjmp(jmp_buf);\n\
+        extern jmp_buf env;\n\
+        extern long ext(long);\n\
+        extern long ext2(long);\n\
+        long guarded(long x) { if (setjmp(env)) return -1; return ext(x); }\n\
+        long plain(long x) { return ext2(x); }\n";
+    let prog = crate::Compiler::with_options(
+        alloc::string::String::from(SRC),
+        crate::Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile: {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize()
+    };
+    let obj = emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+        .unwrap_or_else(|e| panic!("emit: {e}"));
+    let text = elf_text(&obj);
+    let relocs = x64_branch_relocs(&obj);
+    let opcode = |callee: &str| {
+        let (off, _, _) = relocs
+            .iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[*off as usize - 1]
+    };
+    assert_eq!(
+        opcode("ext"),
+        0xE8,
+        "after setjmp the returned call stays a call"
+    );
+    assert_eq!(opcode("ext2"), 0xE9, "without one it is a jump");
+}
+
 #[test]
 fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
     // A call in tail position becomes a direct `jmp` to the callee: it is
@@ -14335,6 +15291,49 @@ fn a_goto_chain_reserves_one_block_per_label() {
 
 /// The gotos and `asm goto` edges to one label leaving the same scopes and
 /// running the same cleanup functions share one exit block and its calls.
+/// Returns running one cleanup list from the same scopes share one exit,
+/// which runs the calls once and returns the value each assigned.
+#[test]
+fn returns_leaving_the_same_scopes_share_their_cleanup_calls() {
+    use crate::c5::ir::Inst;
+    const SRC: &str = "void end(int *p);\n\
+        #define CL __attribute__((cleanup(end)))\n\
+        int one_list(int a, int b) {\n\
+            int m CL = 0;\n\
+            if (a) return 1;\n\
+            if (b) return 2;\n\
+            if (a + b > 3) return 3;\n\
+            return 0;\n\
+        }\n\
+        int two_lists(int k) {\n\
+            int a CL = 0;\n\
+            if (k == 0) return 1;\n\
+            if (k == 1) return 2;\n\
+            int b CL = 0;\n\
+            if (k == 2) return 3;\n\
+            return 4;\n\
+        }\n\
+        void no_value(int k) {\n\
+            int m CL = 0;\n\
+            if (k) return;\n\
+            if (k + 1) return;\n\
+        }\n";
+    let calls = |name: &str| {
+        ssa_func_named(SRC, name)
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { .. } | Inst::CallExt { .. }))
+            .count()
+    };
+    assert_eq!(calls("one_list"), 1, "one exit for the four returns");
+    assert_eq!(
+        calls("two_lists"),
+        3,
+        "`a` for two returns, `b` `a` for two"
+    );
+    assert_eq!(calls("no_value"), 2, "one exit for the returns, one end");
+}
+
 #[test]
 fn jumps_leaving_the_same_scopes_share_their_cleanup_calls() {
     use crate::c5::ir::Inst;
@@ -15569,6 +16568,59 @@ fn a_zero_literal_assignment_through_a_pointer_keeps_no_frame() {
                 .iter()
                 .all(|d| !d.text.contains("function `zero`")),
             "{target:?}: `zero` keeps no frame: {:?}",
+            build.diagnostics
+        );
+    }
+}
+
+/// An aggregate returned through the hidden out-pointer (the System V
+/// MEMORY class, a Win64 oversize return) is written whole by the callee
+/// and dead after its copy, so each call's result temporary shares
+/// storage with the next one's. Thirty pairs of such calls, each result
+/// copied into an object whose address escapes, keep a frame of a few
+/// temporaries rather than one per call.
+#[test]
+fn out_pointer_result_temporaries_share_their_storage() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let cases: alloc::string::String = (0..30)
+        .map(|i| {
+            alloc::format!(
+                "case {i}: r = mk(d, {i}); h.x = {i}; add(d, &r, &h); \
+                 r = mk(d, {i} + 1); add(d, &r, &h); break;\n"
+            )
+        })
+        .collect();
+    let src = alloc::format!(
+        "struct rec {{ unsigned a[12]; unsigned char b, c; int d; }};\n\
+         struct hpd {{ int x, y; }};\n\
+         void add(void *d, struct rec *r, struct hpd *h);\n\
+         static __attribute__((noinline)) struct rec mk(void *d, int i)\n\
+         {{ struct rec r = {{{{0}}}}; r.d = i + (d != 0); return r; }}\n\
+         int f(void *d, int k) {{ struct rec r; struct hpd h = {{0, 0}};\n\
+         switch (k) {{\n{cases}}}\n return 0; }}\n"
+    );
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_options(
+            src.clone(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .expect("compile");
+        let mut opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        opts.frame_larger_than = Some(512);
+        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        assert!(
+            build
+                .diagnostics
+                .iter()
+                .all(|d| !d.text.contains("function `f`")),
+            "{target:?}: {:?}",
             build.diagnostics
         );
     }
@@ -17524,4 +18576,311 @@ fn a_block_typedef_leaves_the_outer_convention_after_its_block() {
         .filter_map(Inst::call_conv)
         .collect();
     assert_eq!(convs, [CallConv::Target]);
+}
+
+/// A member of an aggregate nested in a packed one, or of an element of a
+/// packed one's array, is only as aligned as the packed aggregate: each such
+/// load records the one-byte bound.
+#[test]
+fn a_member_reached_through_a_packed_aggregate_records_its_alignment() {
+    use crate::c5::ir::{Inst, LoadKind};
+    let src = "struct in { int a; short b; };\n\
+               #pragma pack(push, 1)\n\
+               struct out { char c; struct in i; struct in arr[2]; };\n\
+               #pragma pack(pop)\n\
+               struct out g;\n\
+               struct out g2[1][2];\n\
+               int f(int k) { return g.i.a + g.arr[1].a + g.i.b + g.arr[k].b + g2[0][k].i.a; }\n\
+               int main(void) { return 0; }\n";
+    let program = crate::Compiler::new(src.to_string())
+        .compile()
+        .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        crate::Target::host(),
+        true,
+        true,
+    )
+    .expect("ssa");
+    let f = funcs.iter().find(|f| f.name == "f").expect("f");
+    let aligns: Vec<u8> = (f.insts.iter())
+        .filter_map(|i| match i {
+            Inst::Load { kind, align, .. } if !matches!(kind, LoadKind::I8 | LoadKind::U8) => {
+                Some(*align)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !aligns.is_empty() && aligns.iter().all(|&a| a == 1),
+        "{aligns:?}"
+    );
+}
+
+/// The callee-saved registers the `save_*` codes in `codes` name, x19-x28
+/// as 19..=28 and d8-d15 as 108..=115 (Microsoft, "ARM64 exception
+/// handling").
+fn a64_codes_save(codes: &[u8]) -> alloc::vec::Vec<u8> {
+    let mut regs = alloc::vec::Vec::new();
+    let mut i = 0;
+    while i < codes.len() {
+        let b = codes[i];
+        let w = (u16::from(b) << 8) | u16::from(*codes.get(i + 1).unwrap_or(&0));
+        let save = match b {
+            0x20..=0x3F => Some((19, true)),
+            0xC8..=0xCF => Some((19 + ((w >> 6) & 15) as u8, true)),
+            0xD0..=0xD3 => Some((19 + ((w >> 6) & 15) as u8, false)),
+            0xD4..=0xD5 => Some((19 + ((w >> 5) & 15) as u8, false)),
+            0xD8..=0xDB => Some((108 + ((w >> 6) & 7) as u8, true)),
+            0xDC..=0xDD => Some((108 + ((w >> 6) & 7) as u8, false)),
+            0xDE => Some((108 + ((w >> 5) & 7) as u8, false)),
+            _ => None,
+        };
+        if let Some((r, pair)) = save {
+            regs.push(r);
+            if pair {
+                regs.push(r + 1);
+            }
+        }
+        i += match b {
+            0xC0..=0xDF | 0xE2 => 2,
+            0xE0 => 4,
+            _ => 1,
+        };
+    }
+    regs.sort_unstable();
+    regs
+}
+
+/// The callee-saved registers `w` stores through sp, numbered as in
+/// [`a64_codes_save`].
+fn a64_callee_stores(w: u32) -> alloc::vec::Vec<u8> {
+    let (rt, rn, rt2) = (w & 31, (w >> 5) & 31, (w >> 10) & 31);
+    let pair = w & 0x3A40_0000 == 0x2800_0000;
+    let single = w & 0x3B40_0000 == 0x3900_0000 || w & 0x3B60_0000 == 0x3800_0000;
+    let simd = w & (1 << 26) != 0;
+    let name = |r: u32| match (simd, r) {
+        (false, 19..=28) => Some(r as u8),
+        (true, 8..=15) => Some(100 + r as u8),
+        _ => None,
+    };
+    let regs = match (rn, pair, single) {
+        (31, true, _) => [name(rt), name(rt2)],
+        (31, false, true) => [name(rt), None],
+        _ => [None, None],
+    };
+    regs.into_iter().flatten().collect()
+}
+
+/// Windows on ARM64: the prolog stores every callee-saved register before
+/// `add x29`, and its unwind codes name each one; a frame that folds keeps
+/// the block at its bottom, a larger one directly below the frame record.
+#[test]
+fn win_arm64_unwind_codes_name_every_callee_save() {
+    const SRC: &str = "long h(long); double g(double); void snk(char *);\n\
+        long kept(long a, long b, double x, double y) {\n\
+          long c = h(a); double z = g(x);\n\
+          return c + a + b + (long)(x * y * z);\n\
+        }\n\
+        long wide(long a, long b, double x, double y) {\n\
+          char buf[8192]; snk(buf);\n\
+          long c = h(a); double z = g(x);\n\
+          return c + a + b + buf[a & 7] + (long)(x * y * z);\n\
+        }\n";
+    let obj = relocatable_object(SRC, crate::Target::WindowsAarch64);
+    for name in ["kept", "wide"] {
+        let code = function_bytes(&obj, name);
+        let words = function_words(&obj, name);
+        let codes = crate::c5::object::arm64_unwind::prologue_codes(&code, 0, code.len() as u32)
+            .unwrap_or_else(|| panic!("`{name}`: no codes for {words:08x?}"));
+        // `add x29, sp, #k` ends the prolog.
+        let end = (words.iter())
+            .position(|w| w & 0xFF80_001F == 0x9100_001D)
+            .unwrap_or_else(|| panic!("`{name}`: no add x29 in {words:08x?}"));
+        let mut stored: alloc::vec::Vec<u8> = words[..end]
+            .iter()
+            .flat_map(|&w| a64_callee_stores(w))
+            .collect();
+        stored.sort_unstable();
+        assert!(stored.len() >= 4, "`{name}`: {words:08x?}");
+        assert_eq!(a64_codes_save(&codes), stored, "`{name}`: {codes:02x?}");
+        let late: alloc::vec::Vec<u8> = words[end..]
+            .iter()
+            .flat_map(|&w| a64_callee_stores(w))
+            .collect();
+        assert!(
+            late.is_empty(),
+            "`{name}` saves {late:?} after x29: {words:08x?}"
+        );
+    }
+}
+
+/// Each `.pdata` entry of a windows-arm64 image: its begin RVA, its length
+/// in bytes and, for an `.xdata` record, its unwind codes.
+#[cfg(feature = "full")]
+fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::vec::Vec<u8>>)> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let hdr = word(0x3C) as usize;
+    let opt = hdr + 24;
+    let table = opt + usize::from(u16::from_le_bytes([pe[hdr + 20], pe[hdr + 21]]));
+    let sections = usize::from(u16::from_le_bytes([pe[hdr + 6], pe[hdr + 7]]));
+    let off = |rva: u32| {
+        (0..sections).map(|i| table + 40 * i).find_map(|s| {
+            let (va, raw) = (word(s + 12), word(s + 20));
+            (va..va + word(s + 8).max(word(s + 16)))
+                .contains(&rva)
+                .then(|| (raw + rva - va) as usize)
+        })
+    };
+    let (dir, size) = (word(opt + 112 + 24), word(opt + 112 + 28));
+    let start = off(dir).expect("exception directory");
+    (0..size as usize / 8)
+        .map(|i| {
+            let (begin, info) = (word(start + 8 * i), word(start + 8 * i + 4));
+            if info & 3 != 0 {
+                return (begin, 4 * ((info >> 2) & 0x7FF), None);
+            }
+            let at = off(info).expect("xdata");
+            let h = word(at);
+            let (words, epilogs, ext) = match (h >> 27, (h >> 22) & 31) {
+                (0, 0) => (word(at + 4) >> 16 & 0xFF, word(at + 4) & 0xFFFF, 4),
+                (w, e) => (w, if h >> 21 & 1 == 1 { 0 } else { e }, 0),
+            };
+            let codes = at + 4 + ext + 4 * epilogs as usize;
+            let codes = pe[codes..codes + 4 * words as usize].to_vec();
+            (begin, 4 * (h & 0x3_FFFF), Some(codes))
+        })
+        .collect()
+}
+
+/// Whether the unwind code opening `code` describes the instruction `w`
+/// (Microsoft, "ARM64 exception handling").
+#[cfg(feature = "full")]
+fn a64_code_describes(code: &[u8], w: u32) -> bool {
+    let z = |b: u8| u32::from(b);
+    match code[0] {
+        0xE3 => matches!(w, 0xD503_245F | 0xD503_201F) || w & 0xFFC0_03E0 == 0xF900_03E0,
+        0xFC => w == 0xD503_233F,
+        0xE1 => w == 0x9100_03FD,
+        0xE2 => w == 0x9100_03FD | (8 * z(code[1])) << 10,
+        0x81 => w == 0xA9BF_7BFD,
+        b @ 0x40..=0x7F => w == 0xA900_7BFD | z(b & 0x3F) << 15,
+        b @ 0x00..=0x1F => w == 0xD100_03FF | (16 * z(b)) << 10,
+        0xC8..=0xDF => !a64_callee_stores(w).is_empty(),
+        _ => false,
+    }
+}
+
+/// Windows on ARM64 under `-mbranch-protection`: each function of a linked
+/// image with a frame or a signed return address has its own `.xdata`
+/// record, one code per prolog instruction from the entry, or from the
+/// frame where the test of an early return precedes it. `bti c` takes `nop`
+/// and `paciasp` `pac_sign_lr`, as clang's `.seh_nop` and
+/// `.seh_pac_sign_lr`.
+#[cfg(feature = "full")]
+#[test]
+fn win_arm64_hardened_entries_take_their_own_unwind_records() {
+    use crate::{Hardening, NativeOptions, OutputKind, Target};
+    const SRC: &str = "#include <stdarg.h>\n\
+        __attribute__((noinline)) int g(int x) { return x * 3 + 1; }\n\
+        __attribute__((noinline)) int f(int x) { int a = g(x), b = g(a); return a + b + g(b); }\n\
+        __attribute__((noinline)) int e(int *p) { if (!p) return 0; return g(*p) + g(p[1]); }\n\
+        __attribute__((noinline)) int sum(int n, ...) {\n\
+          va_list ap; va_start(ap, n); int s = 0;\n\
+          while (n--) s += va_arg(ap, int);\n\
+          va_end(ap); return s;\n\
+        }\n\
+        int main(void) { int v[2] = {1, 2}; return f(1) + e(v) + sum(2, 3, 4) - 31; }\n";
+    let target = Target::WindowsAarch64;
+    let bti = Hardening {
+        bti: true,
+        ..Hardening::NONE
+    };
+    let standard = Hardening {
+        pac_ret: true,
+        ..bti
+    };
+    let leaf = Hardening {
+        pac_ret_leaf: true,
+        ..standard
+    };
+    for (label, hardening, optimize) in [
+        ("bti", bti, false),
+        ("bti", bti, true),
+        ("standard", standard, false),
+        ("standard", standard, true),
+        ("pac-ret+leaf+bti", leaf, true),
+    ] {
+        let program = crate::Compiler::with_target(SRC.into(), target)
+            .compile()
+            .expect("front end");
+        let opts = NativeOptions {
+            hardening,
+            optimize,
+            ..NativeOptions::new()
+        };
+        let case = alloc::format!("{label} -O={optimize}");
+        let obj = crate::emit_native_with_options(
+            &program,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..opts.clone()
+            },
+        )
+        .expect("object");
+        let pe = super::link_executable_with_runtime(&program, target, opts).expect("link");
+        let (text_rva, text) = pe_text_section(&pe).expect(".text");
+        let entries = a64_pe_unwind_entries(&pe);
+        // The program's object leads the image's text.
+        let first = function_bytes(&obj, "g");
+        let found = text.windows(first.len()).position(|w| w == first);
+        let base =
+            text_rva + found.expect("`g`") as u32 - elf_func_value(&obj, "g").unwrap() as u32;
+        for name in ["g", "f", "e", "sum", "main"] {
+            let words = function_words(&obj, name);
+            let at = base + elf_func_value(&obj, name).unwrap() as u32;
+            let span = at..at + 4 * words.len() as u32;
+            let x29 = words.iter().position(|w| w & 0xFFC0_03FF == 0x9100_03FD);
+            let last = x29.or_else(|| words.iter().position(|&w| w == 0xD503_233F));
+            let n = 4 * (last.unwrap_or(0) + 1);
+            let image = &text[(at - text_rva) as usize..][..n];
+            assert_eq!(image, &function_bytes(&obj, name)[..n], "{case}: `{name}`");
+            let own: alloc::vec::Vec<_> = (entries.iter())
+                .filter(|(b, _, c)| span.contains(b) && c.is_some())
+                .collect();
+            let Some(last) = last else {
+                assert!(own.is_empty(), "{case}: `{name}` unsigned leaf: {own:x?}");
+                continue;
+            };
+            assert_eq!(own.len(), 1, "{case}: `{name}` {words:08x?}: {entries:x?}");
+            let (begin, len, codes) = own[0];
+            let codes = codes.as_deref().unwrap();
+            let s = ((begin - at) / 4) as usize;
+            assert!(begin + len > at + 4 * last as u32, "{case}: `{name}`");
+            // The codes, last first, from the end of the prolog.
+            let mut prolog = alloc::vec::Vec::new();
+            let mut i = 0;
+            while i < codes.len() && codes[i] != 0xE4 {
+                prolog.push(&codes[i..]);
+                i += match codes[i] {
+                    0xC0..=0xDF | 0xE2 => 2,
+                    0xE0 => 4,
+                    _ => 1,
+                };
+            }
+            prolog.reverse();
+            let want = last + 1 - s;
+            assert_eq!(prolog.len(), want, "{case}: `{name}`: {codes:02x?}");
+            for (k, code) in prolog.iter().enumerate() {
+                assert!(
+                    a64_code_describes(code, words[s + k]),
+                    "{case}: `{name}` insn {} {:08x} takes {:02x}",
+                    s + k,
+                    words[s + k],
+                    code[0]
+                );
+            }
+        }
+    }
 }

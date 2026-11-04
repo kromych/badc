@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	incq	%rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <main>:
@@ -42,8 +41,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rsp, %rax
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x1, %eax

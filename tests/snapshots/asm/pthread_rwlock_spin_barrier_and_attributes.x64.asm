@@ -54,8 +54,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ebx
+               	movl	<rip>, %ebx # <addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
                	movl	$0xffffffff, -0x40(%rbp) # imm = 0xFFFFFFFF
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x7, (%rax)
+               	movl	$0x7, <rip> # <addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
                	callq	<addr>

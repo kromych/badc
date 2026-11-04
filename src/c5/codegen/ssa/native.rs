@@ -47,7 +47,9 @@ pub(crate) fn compile_function_to_bytes(
     // Single-function compile: no same-image callees are resolvable,
     // so the tail-call conversion sees no known return contracts.
     let ret_tags: alloc::collections::BTreeMap<usize, i64> =
-        core::iter::once((func.ent_pc, func.ret_type_tag)).collect();
+        (func.ret_type_tag.map(|tag| (func.ent_pc, tag)))
+            .into_iter()
+            .collect();
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; func.end_pc + 1];
     let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
@@ -101,12 +103,15 @@ pub(crate) fn compile_function_to_bytes(
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
-                    canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
                     frame_stack: &mut alloc::collections::BTreeMap::new(),
                     param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
+                    seh_rows: &mut alloc::vec::Vec::new(),
+                    a64_unwind: &mut alloc::vec::Vec::new(),
+                    funclet_frames: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::aarch64::emit::emit_function(
                     func,
@@ -212,12 +217,15 @@ pub(crate) fn compile_function_to_bytes(
                     text_align: &mut text_align,
                     label_relocs: &mut label_relocs,
                     text_data_ranges: &mut text_data_ranges,
-                    canary_frame_bytes: &mut alloc::collections::BTreeMap::new(),
+                    local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
                     frame_stack: &mut alloc::collections::BTreeMap::new(),
                     param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
                     early_returns: &mut alloc::vec::Vec::new(),
+                    seh_rows: &mut alloc::vec::Vec::new(),
+                    a64_unwind: &mut alloc::vec::Vec::new(),
+                    funclet_frames: &mut alloc::collections::BTreeMap::new(),
                 };
                 super::x86_64::emit::emit_function(
                     func,

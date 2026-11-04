@@ -24,10 +24,5 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x2a               // =42
                	str	w1, [x0]
-               	mov	x0, x1
-               	cmp	w0, #0x2a
-               	b.eq	<addr>
-               	mov	x0, #0x16               // =22
-               	ret
                	mov	x0, #0x0                // =0
                	ret

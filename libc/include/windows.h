@@ -17,12 +17,24 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+// The SDK's winnt.h and mingw-w64's include <ctype.h> and <string.h>; the
+// SDK's ole2.h brings <stdlib.h> unless WIN32_LEAN_AND_MEAN, and
+// mingw-w64's includes it either way.
+#include <ctype.h>
+#include <string.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#include <stdlib.h>
+#endif
+
 // Windows SDK version constants. Real <windows.h> pulls these in so
 // version-gated API selection (condition variables, etc.) resolves.
 #include <sdkddkver.h>
 
 // Win32 system error codes (GetLastError values) and the Winsock codes.
 #include <winerror.h>
+
+// Structured exception handling: the filter results and the intrinsics.
+#include <excpt.h>
 
 // Win32 API decoration macros. The runtime calls go through the
 // IAT (kernel32.dll already exports them by name) so the
@@ -34,7 +46,7 @@
 // C runtime headers. None of them affect codegen on c5 -- the IAT routes
 // the call regardless of inline / dllimport tagging -- so they
 // expand to nothing. `__declspec(...)` swallows its argument
-// list; `__forceinline` / `__inline` collapse to nothing.
+// list.
 // UNICODE selects the W form of each generic Win32 name and a wide TEXT
 // literal, as mingw-w64's winnt.h and _mingw_unicode.h do; the generic
 // names are defined at the end of this header. `_T` / `_TEXT` are
@@ -1598,9 +1610,6 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define CONTROL_C_EXIT                      STATUS_CONTROL_C_EXIT
 #define EXCEPTION_NONCONTINUABLE         0x1
 #define EXCEPTION_MAXIMUM_PARAMETERS     15
-#define EXCEPTION_EXECUTE_HANDLER        1
-#define EXCEPTION_CONTINUE_SEARCH        0
-#define EXCEPTION_CONTINUE_EXECUTION     (-1)
 
 typedef struct _EXCEPTION_RECORD {
     DWORD                     ExceptionCode;
@@ -2050,6 +2059,59 @@ BOOLEAN RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
                             DWORD64 BaseAddress);
 BOOLEAN RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
 
+// winnt.h's Interlocked names: the compiler's `_Interlocked` intrinsics,
+// full barriers on both targets. InterlockedAdd is arm64's intrinsic and,
+// on x64, the exchange-add plus the operand, as winnt.h defines it there.
+#define InterlockedIncrement _InterlockedIncrement
+#define InterlockedIncrement16 _InterlockedIncrement16
+#define InterlockedIncrement64 _InterlockedIncrement64
+#define InterlockedDecrement _InterlockedDecrement
+#define InterlockedDecrement16 _InterlockedDecrement16
+#define InterlockedDecrement64 _InterlockedDecrement64
+#define InterlockedExchange _InterlockedExchange
+#define InterlockedExchange8 _InterlockedExchange8
+#define InterlockedExchange16 _InterlockedExchange16
+#define InterlockedExchange64 _InterlockedExchange64
+#define InterlockedExchangeAdd _InterlockedExchangeAdd
+#define InterlockedExchangeAdd8 _InterlockedExchangeAdd8
+#define InterlockedExchangeAdd16 _InterlockedExchangeAdd16
+#define InterlockedExchangeAdd64 _InterlockedExchangeAdd64
+#define InterlockedCompareExchange _InterlockedCompareExchange
+#define InterlockedCompareExchange16 _InterlockedCompareExchange16
+#define InterlockedCompareExchange64 _InterlockedCompareExchange64
+#define InterlockedCompareExchange128 _InterlockedCompareExchange128
+#define InterlockedAnd _InterlockedAnd
+#define InterlockedAnd8 _InterlockedAnd8
+#define InterlockedAnd16 _InterlockedAnd16
+#define InterlockedAnd64 _InterlockedAnd64
+#define InterlockedOr _InterlockedOr
+#define InterlockedOr8 _InterlockedOr8
+#define InterlockedOr16 _InterlockedOr16
+#define InterlockedOr64 _InterlockedOr64
+#define InterlockedXor _InterlockedXor
+#define InterlockedXor8 _InterlockedXor8
+#define InterlockedXor16 _InterlockedXor16
+#define InterlockedXor64 _InterlockedXor64
+#define InterlockedExchangePointer _InterlockedExchangePointer
+#define InterlockedCompareExchangePointer _InterlockedCompareExchangePointer
+#define InterlockedBitTestAndSet _interlockedbittestandset
+#define InterlockedBitTestAndReset _interlockedbittestandreset
+#define InterlockedBitTestAndSet64 _interlockedbittestandset64
+#define InterlockedBitTestAndReset64 _interlockedbittestandreset64
+#ifdef __aarch64__
+#define InterlockedAdd _InterlockedAdd
+#define InterlockedAdd64 _InterlockedAdd64
+#else
+static __inline LONG InterlockedAdd(LONG volatile *Addend, LONG Value)
+{
+    return _InterlockedExchangeAdd(Addend, Value) + Value;
+}
+static __inline LONG64 InterlockedAdd64(LONG64 volatile *Addend, LONG64 Value)
+{
+    return _InterlockedExchangeAdd64(Addend, Value) + Value;
+}
+#endif
+
 // CreateThread returns a thread HANDLE (kernel object). Args
 // mirror the Win32 prototype: lpThreadAttributes, dwStackSize,
 // lpStartAddress, lpParameter, dwCreationFlags, lpThreadId.
@@ -2446,6 +2508,8 @@ LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwTy
 #pragma binding(kernel32::GetProcessId,            "GetProcessId")
 #pragma binding(kernel32::lstrcpyA,                "lstrcpyA")
 #pragma binding(kernel32::lstrcpyW,                "lstrcpyW")
+#pragma binding(kernel32::lstrlenA,                "lstrlenA")
+#pragma binding(kernel32::lstrlenW,                "lstrlenW")
 #pragma binding(kernel32::GetDiskFreeSpaceA,       "GetDiskFreeSpaceA")
 #pragma binding(kernel32::GetDiskFreeSpaceW,       "GetDiskFreeSpaceW")
 #pragma binding(kernel32::GetFileAttributesA,      "GetFileAttributesA")
@@ -2655,6 +2719,8 @@ HANDLE CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess,
 DWORD GetProcessId(HANDLE Process);
 LPSTR lstrcpyA(LPSTR lpString1, LPCSTR lpString2);
 LPWSTR lstrcpyW(LPWSTR lpString1, LPCWSTR lpString2);
+int lstrlenA(LPCSTR lpString);
+int lstrlenW(LPCWSTR lpString);
 HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner,
                     LPCWSTR lpName);
 BOOL DeleteFileA(LPCSTR lpFileName);
@@ -4690,6 +4756,7 @@ HICON CreateIconIndirect(PICONINFO piconinfo);
 #define WriteConsole __MINGW_NAME_AW(WriteConsole)
 #define WriteConsoleInput __MINGW_NAME_AW(WriteConsoleInput)
 #define lstrcpy __MINGW_NAME_AW(lstrcpy)
+#define lstrlen __MINGW_NAME_AW(lstrlen)
 __MINGW_TYPEDEF_AW(MONITORINFOEX)
 __MINGW_TYPEDEF_AW(LPMONITORINFOEX)
 __MINGW_TYPEDEF_AW(OSVERSIONINFO)

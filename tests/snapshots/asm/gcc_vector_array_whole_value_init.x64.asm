@@ -435,12 +435,12 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x10(%rax), %rcx
-               	movzbq	(%rcx), %rcx
-               	xorq	$0x9, %rcx
-               	testl	%ecx, %ecx
+               	addq	$0x10, %rax
+               	movzbq	(%rax), %rax
+               	xorq	$0x9, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0xf(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x17, %eax
                	leave

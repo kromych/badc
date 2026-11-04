@@ -857,6 +857,45 @@ int main(void){ do_invlpga(0, 0); return 0; }
 }
 
 #[test]
+fn inline_asm_umonitor_and_skinit_encode_as_gnu_as_does() {
+    // `umonitor` (F3 0F AE /6) takes the address in a register of the address
+    // size: a 64-bit one as written, a 32-bit one (`%k0`) under 0x67. `skinit`
+    // (0F 01 DE) takes its SLB address in an implicit `eax`, which a template
+    // may spell out.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void arm(void *p){ __asm__ volatile("umonitor %0" : : "a"(p) : "memory"); }
+void arm32(void *p){ __asm__ volatile("umonitor %k0" : : "c"(p) : "memory"); }
+void launch(unsigned int slb){ __asm__ volatile("skinit %0" : : "a"(slb) : "memory"); }
+int main(void){ arm(0); arm32(0); launch(0); return 0; }
+"#;
+    let program = Compiler::with_target(String::from(src), Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let text = &obj.text;
+    let has = |b: &[u8]| text.windows(b.len()).any(|w| w == b);
+    assert!(
+        has(&[0xF3, 0x0F, 0xAE, 0xF0]),
+        "umonitor %rax must encode F3 0F AE F0: {text:02x?}"
+    );
+    assert!(
+        has(&[0x67, 0xF3, 0x0F, 0xAE, 0xF1]),
+        "umonitor %ecx must encode 67 F3 0F AE F1: {text:02x?}"
+    );
+    assert!(
+        has(&[0x0F, 0x01, 0xDE]),
+        "skinit must encode 0F 01 DE: {text:02x?}"
+    );
+}
+
+#[test]
 fn inline_asm_section_operand_constant_survives_unpromoted_function() {
     // C99 6.5p6: an `"i"` operand is an integer constant expression. A computed
     // goto opts the function out of slot promotion, so the constant reaches the
@@ -1872,6 +1911,45 @@ fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec:
         ..Default::default()
     };
     emit_native_with_options(&program, target, opts).expect("emit")
+}
+
+/// At -O a static function whose one call site is the only way to reach it
+/// is spliced into its caller past the size cap, and its out-of-line copy
+/// goes (gcc's `-finline-functions-called-once`). A second call site, a
+/// taken address or external linkage keeps the copy, so those are not.
+#[test]
+fn a_static_function_called_once_is_spliced_past_the_size_cap() {
+    let body = "{ int s = 0; for (int i = 0; i < n; i++) { s += sink(s + i) * 3; \
+        s ^= sink(s & 7) + sink(s | 1) + sink(s - 2) + sink(s + 5) + sink(s * 7); \
+        s += sink(s ^ 9) + sink(s << 1) + sink(s >> 2) + sink(s + 11) + sink(s - 13); \
+        if (s > 1000) s -= sink(s); } return s; }";
+    let src = alloc::format!(
+        "extern int sink(int);\n\
+         static int once_big(int n) {body}\n\
+         static int twice_big(int n) {body}\n\
+         static int taken_big(int n) {body}\n\
+         int extern_big(int n) {body}\n\
+         int (*taken)(int) = taken_big;\n\
+         int api(int n) {{ return once_big(n) + twice_big(n) + twice_big(n + 1) \
+             + extern_big(n) + taken(n); }}\n"
+    );
+    for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
+        let has =
+            |bytes: &[u8], name: &str| bytes.windows(name.len()).any(|w| w == name.as_bytes());
+        let unoptimized = reloc_tu(&src, target, false);
+        assert!(
+            has(&unoptimized, "once_big"),
+            "{target:?}: -O0 keeps the call"
+        );
+        let bytes = reloc_tu(&src, target, true);
+        assert!(
+            !has(&bytes, "once_big"),
+            "{target:?}: the called-once copy is spliced"
+        );
+        for kept in ["twice_big", "taken_big", "extern_big"] {
+            assert!(has(&bytes, kept), "{target:?}: {kept} keeps its copy");
+        }
+    }
 }
 
 #[test]
@@ -6524,9 +6602,8 @@ fn long_double_math_binds_the_platform_entry_points() {
 
 #[test]
 fn wdm_driver_demo_builds_as_native_subsystem_pe() {
-    // The WDM driver skeleton carries `#pragma subsystem(driver)`
-    // (an alias for the native subsystem) and `#pragma
-    // entrypoint(DriverEntry)`. The PE optional-header Subsystem must
+    // The WDM driver skeleton carries `#pragma subsystem(driver)` and
+    // `#pragma entrypoint(DriverEntry)`. The PE optional-header Subsystem must
     // be IMAGE_SUBSYSTEM_NATIVE (1) for both Windows targets; the
     // kernel's PE loader refuses a CUI/GUI subsystem.
     //
@@ -6866,7 +6943,7 @@ fn cpuid_xgetbv_asm_emit_for_x86_64() {
     let uw = crate::c5::codegen::decode_x86_64_prologue_unwind(&code, 0, n, n, 0);
     assert!(!uw.leaf, "{code:02x?}");
     // `push rbx` directly after the frame allocation.
-    let saves_at = uw.frame_alloc_end.max(uw.set_fpreg_end) as usize;
+    let saves_at = uw.steps.last().map_or(0, |s| s.0) as usize;
     assert_eq!(
         code[saves_at], 0x53,
         "rbx (callee-saved, clobbered by cpuid) must be pushed: {code:02x?}"
@@ -7133,9 +7210,139 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     };
     let uw = decode(at as u32);
     assert!(!uw.leaf);
-    assert_eq!(uw.push_rbp_end, (at - entry) as u32 + 1);
+    assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1);
     // Without the anchor the entry reads as a frameless leaf.
     assert!(decode(0).leaf);
+}
+
+/// Every kind of unwind step reads back from its note record unchanged,
+/// and a record with an unknown kind or step, or cut short, reads as none.
+#[test]
+fn unwind_step_records_round_trip() {
+    use crate::c5::codegen::{A64Exit, A64Step, PrologueStep as P, UnwindSteps};
+    let records = [
+        UnwindSteps::X64 {
+            leaf: false,
+            steps: alloc::vec![
+                (1, P::Push(5)),
+                (2, P::Push(15)),
+                (9, P::Alloc(0x1_0000)),
+                (14, P::SaveXmm { xmm: 6, off: 32 }),
+                (19, P::SetFrame(48)),
+            ],
+        },
+        UnwindSteps::X64 {
+            leaf: true,
+            steps: alloc::vec::Vec::new(),
+        },
+        UnwindSteps::A64 {
+            steps: alloc::vec![
+                A64Step::Nop,
+                A64Step::PacSignLr,
+                A64Step::Alloc(64),
+                A64Step::SaveReg {
+                    fp: false,
+                    reg: 19,
+                    reg2: Some(20),
+                    pre: true,
+                    bytes: 96
+                },
+                A64Step::SaveReg {
+                    fp: true,
+                    reg: 8,
+                    reg2: None,
+                    pre: false,
+                    bytes: 16
+                },
+                A64Step::SaveFpLr(80),
+                A64Step::AddFp(80),
+                A64Step::SaveFpLrX(16),
+                A64Step::SetFp,
+            ],
+            exits: alloc::vec![
+                A64Exit {
+                    at: 0x40,
+                    steps: alloc::vec![A64Step::AddFp(80), A64Step::SaveFpLr(80)],
+                },
+                A64Exit {
+                    at: 0x80,
+                    steps: alloc::vec::Vec::new(),
+                },
+                A64Exit {
+                    at: 0xC4,
+                    steps: alloc::vec![A64Step::SetFp, A64Step::SaveFpLrX(16)],
+                },
+            ],
+        },
+        UnwindSteps::A64 {
+            steps: alloc::vec![A64Step::PacSignLr],
+            exits: alloc::vec::Vec::new(),
+        },
+    ];
+    for r in &records {
+        let mut bytes = alloc::vec::Vec::new();
+        r.encode(&mut bytes);
+        assert_eq!(UnwindSteps::decode(&bytes), Some((r.clone(), bytes.len())));
+        assert_eq!(UnwindSteps::decode(&bytes[..bytes.len() - 1]), None);
+        let mut unknown = bytes.clone();
+        unknown[4] = 9;
+        assert_eq!(UnwindSteps::decode(&unknown), None);
+    }
+}
+
+/// A function's prologue unwind steps reach the PE link in its unit's note
+/// as the emitter recorded them, keyed by its entry, on both targets. A
+/// function with a prologue and no recorded steps is an internal error, not
+/// a frameless record.
+#[cfg(feature = "full")]
+#[test]
+fn the_pe_link_takes_the_recorded_unwind_steps() {
+    use crate::c5::codegen::UnwindSteps;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::{OutputKind, write_native_image_from_merged};
+    let src = "long g(long a) { return a * 3; }\n\
+               long f(long a, long b) { char buf[64]; buf[a & 63] = 1; return g(a) + b + buf[b & 63]; }\n\
+               void __c5_entry(void *sp, long off) { (void)sp; (void)f(off, 2); }\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let entry = |name: &str| {
+            (obj.symbols.iter().find(|s| s.name == name))
+                .expect(name)
+                .value
+        };
+        let steps = |name: &str| {
+            let at = entry(name);
+            let (_, steps) = obj.unwind.iter().find(|(e, _)| *e == at).expect(name);
+            steps.clone()
+        };
+        match (steps("f"), target) {
+            (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
+                assert!(!leaf && steps.len() >= 2, "{steps:?}")
+            }
+            (UnwindSteps::A64 { steps, exits }, crate::Target::WindowsAarch64) => {
+                assert!(steps.len() >= 2 && !exits.is_empty(), "{steps:?} {exits:?}")
+            }
+            other => panic!("{target:?}: {other:?}"),
+        }
+        let link = |obj| {
+            let mut merged = link_native_objects(&[obj]).expect("link");
+            let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
+            let kind = OutputKind::Executable;
+            write_native_image_from_merged(&merged, &plt, "__c5_entry", None, kind, target, None)
+        };
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        if let Err(e) = link(obj) {
+            panic!("{target:?}: {e}");
+        }
+        let mut obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        obj.unwind.clear();
+        let msg = link(obj).expect_err("no recorded steps").to_string();
+        assert!(
+            msg.contains("internal compiler error")
+                && msg.contains("has a prologue and no recorded unwind steps"),
+            "{target:?}: {msg}"
+        );
+    }
 }
 
 #[test]
@@ -7238,6 +7445,7 @@ fn minimal_native_object(
     data_relocs: Vec<crate::c5::linker::object::NativeReloc>,
 ) -> crate::c5::linker::NativeObject {
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7274,6 +7482,8 @@ fn minimal_native_object(
         copy_relocs: alloc::vec::Vec::new(),
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
+        seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
@@ -7567,6 +7777,7 @@ fn aarch64_data_ref_object_ex(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7589,6 +7800,8 @@ fn aarch64_data_ref_object_ex(
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
+        seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
@@ -7832,6 +8045,7 @@ fn aarch64_lo12_relocations_link_through_the_elf64_image_writer() {
 fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
     use crate::c5::linker::NativeMachine;
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
@@ -7854,6 +8068,8 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         tls_align: 1,
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
+        seh_rows: alloc::vec::Vec::new(),
+        unwind: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
         comdats: alloc::vec::Vec::new(),
@@ -7906,6 +8122,7 @@ fn aarch64_pcrel_object(
         input_section: None,
     };
     crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "reloc_ref.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,
@@ -8012,6 +8229,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         input_section: None,
     };
     let obj = crate::c5::linker::NativeObject {
+        unique: Default::default(),
         source: "abs_in_text.o".to_string(),
         machine: NativeMachine::Aarch64,
         text,
@@ -9011,6 +9229,103 @@ fn init_array_stays_strictly_inside_data_at_bss_boundary() {
             start + size,
             merged.data.len(),
         );
+    }
+}
+
+#[test]
+fn init_and_fini_fragments_form_one_function_each_around_the_arrays() {
+    // gABI, Initialization and Termination Functions: each input's `.init`
+    // (`.fini`) is a fragment of one function that crti.o opens and crtn.o
+    // closes, in input order. DT_INIT runs before the init array and
+    // DT_FINI after the fini array. A `.section .init` without flags is
+    // placed by name, as GNU ld places it.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::link::MergedTarget;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let x64: (&[u8], &[u8]) = (&[0x48, 0x83, 0xec, 0x08], &[0x48, 0x83, 0xc4, 0x08, 0xc3]);
+    let a64: (&[u8], &[u8]) = (
+        &[0xfd, 0x7b, 0xbf, 0xa9, 0xfd, 0x03, 0x00, 0x91],
+        &[0xfd, 0x7b, 0xc1, 0xa8, 0xc0, 0x03, 0x5f, 0xd6],
+    );
+    for (target, call, (prologue, epilogue)) in [
+        (Target::LinuxX64, "call", x64),
+        (Target::LinuxAarch64, "bl", a64),
+    ] {
+        let unit = |src: String| {
+            let options = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(src, target, options)
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse")
+        };
+        let a = unit(alloc::format!(
+            "void step_a(void) {{}}\n\
+             __attribute__((constructor)) static void ctor(void) {{}}\n\
+             __attribute__((destructor)) static void dtor(void) {{}}\n\
+             asm(\".section .init\\n\\t{call} step_a\\n\
+             .section .fini,\\\"ax\\\"\\n\\t{call} step_a\\n.text\\n\");\n"
+        ));
+        let b = unit(alloc::format!(
+            "void step_b(void) {{}}\nint main(void) {{ return 0; }}\n\
+             asm(\".section .init,\\\"ax\\\"\\n\\t{call} step_b\\n.text\\n\");\n"
+        ));
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let at = |name: &str| merged.defined[name].value as usize;
+        // The call at `p` and its target.
+        let callee = |p: usize| -> (usize, usize) {
+            let t = &merged.text;
+            if target == Target::LinuxX64 {
+                assert_eq!(t[p], 0xe8, "{target:?}: a rel32 call at {p:#x}");
+                let rel = i32::from_le_bytes(t[p + 1..p + 5].try_into().unwrap());
+                (p + 5, (p as i64 + 5 + rel as i64) as usize)
+            } else {
+                let w = u32::from_le_bytes(t[p..p + 4].try_into().unwrap());
+                assert_eq!(w >> 26, 0b100101, "{target:?}: a `bl` at {p:#x}");
+                let imm = ((w << 6) as i32 >> 6) as i64 * 4;
+                (p + 4, (p as i64 + imm) as usize)
+            }
+        };
+        let init = at("_init");
+        assert_eq!(
+            &merged.text[init..init + prologue.len()],
+            prologue,
+            "{target:?}"
+        );
+        let (next, first) = callee(init + prologue.len());
+        let (next, second) = callee(next);
+        assert_eq!((first, second), (at("step_a"), at("step_b")), "{target:?}");
+        assert_eq!(
+            &merged.text[next..next + epilogue.len()],
+            epilogue,
+            "{target:?}"
+        );
+        let fini = at("_fini");
+        let (next, only) = callee(fini + prologue.len());
+        assert_eq!(only, at("step_a"), "{target:?}");
+        assert_eq!(
+            &merged.text[next..next + epilogue.len()],
+            epilogue,
+            "{target:?}"
+        );
+        // The first slot of each array: `_init` runs first, `_fini` (walked
+        // backward) last.
+        let slot = |start: u64| {
+            (merged.data_abs_relocs.iter())
+                .find(|r| r.slot_offset == start)
+                .map(|r| r.target)
+        };
+        let arrays = &merged.init_fini_arrays;
+        let (init_start, init_len) = arrays.init.expect("an init array");
+        let (fini_start, fini_len) = arrays.fini.expect("a fini array");
+        assert_eq!((init_len, fini_len), (16, 16), "{target:?}");
+        assert!(matches!(slot(init_start), Some(MergedTarget::Text(t)) if t as usize == init));
+        assert!(matches!(slot(fini_start), Some(MergedTarget::Text(t)) if t as usize == fini));
     }
 }
 
@@ -12106,7 +12421,7 @@ fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let merged = link_native_objects_with(&[unit(1), unit(2)], &[], &opts).expect("link");
@@ -12169,7 +12484,7 @@ fn a_coff_inputs_unwind_entries_join_the_exception_directory() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
@@ -12276,7 +12591,7 @@ fn coff_image_relative_addresses_take_their_rvas() {
     let opts = LinkOptions {
         allow_undefined: true,
         shared: true,
-        pe_image: true,
+        format: crate::c5::codegen::BinaryFormat::Pe,
         ..Default::default()
     };
     let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
@@ -15473,7 +15788,10 @@ asm(".section \".export_symbol\",\"a\"\n"
 int main(void) { return 0; }
 "#;
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let options = crate::c5::compiler::CompileOptions::default();
+        let program = Compiler::with_options(String::from(src), target, options)
+            .compile()
+            .expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()

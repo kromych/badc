@@ -28,8 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x5, %eax
                	jne	<addr>
@@ -38,6 +37,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%bh, 0x5(%rax)
 
 <fsa_fn>:
                	movl	$0x5, %eax

@@ -13,64 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<scalar_syndrome>:
-               	mov	x1, #0x0                // =0
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	adrp	x6, <page>
-               	add	x6, x6, <lo12>
-               	adrp	x7, <addr>
-               	add	x7, x7, <lo12>
-               	mov	x0, x1
-               	add	x3, x2, #0x800
-               	ldrb	w3, [x3, x0]
-               	tbz	w3, #0x7, <addr>
-               	mov	x4, #0x1d               // =29
-               	eor	x4, x4, x3, lsl #1
-               	and	x5, x4, #0xff
-               	add	x4, x2, #0x600
-               	ldrb	w4, [x4, x0]
-               	eor	x5, x5, x4
-               	eor	x8, x3, x4
-               	tbz	w5, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
-               	eor	x3, x3, x5, lsl #1
-               	and	x4, x3, #0xff
-               	add	x3, x2, #0x400
-               	ldrb	w3, [x3, x0]
-               	eor	x4, x4, x3
-               	eor	x5, x8, x3
-               	tbz	w4, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
-               	eor	x3, x3, x4, lsl #1
-               	and	x4, x3, #0xff
-               	add	x3, x2, #0x200
-               	ldrb	w3, [x3, x0]
-               	eor	x4, x4, x3
-               	eor	x5, x5, x3
-               	tbz	w4, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
-               	b	<addr>
-               	mov	x3, x1
-               	b	<addr>
-               	mov	x3, x1
-               	b	<addr>
-               	mov	x3, x1
-               	b	<addr>
-               	mov	x4, x1
-               	b	<addr>
-               	eor	x3, x3, x4, lsl #1
-               	and	x4, x3, #0xff
-               	ldrb	w3, [x2, x0]
-               	eor	x4, x4, x3
-               	eor	x3, x5, x3
-               	strb	w3, [x6, x0]
-               	strb	w4, [x7, x0]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x200
-               	b.lt	<addr>
-               	ret
-
 <neon8_gen_syndrome>:
                	stp	d8, d9, [sp, #-0x90]!
                	stp	d10, d11, [sp, #0x10]
@@ -303,7 +245,61 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, #0x7
                	b.lt	<addr>
-               	bl	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
+               	adrp	x7, <addr>
+               	add	x7, x7, <lo12>
+               	mov	x2, #0x0                // =0
+               	mov	x0, x2
+               	add	x3, x1, #0x800
+               	ldrb	w3, [x3, x0]
+               	tbz	w3, #0x7, <addr>
+               	mov	x4, #0x1d               // =29
+               	eor	x4, x4, x3, lsl #1
+               	and	x5, x4, #0xff
+               	add	x4, x1, #0x600
+               	ldrb	w4, [x4, x0]
+               	eor	x5, x5, x4
+               	eor	x8, x3, x4
+               	tbz	w5, #0x7, <addr>
+               	mov	x3, #0x1d               // =29
+               	eor	x3, x3, x5, lsl #1
+               	and	x4, x3, #0xff
+               	add	x3, x1, #0x400
+               	ldrb	w3, [x3, x0]
+               	eor	x4, x4, x3
+               	eor	x5, x8, x3
+               	tbz	w4, #0x7, <addr>
+               	mov	x3, #0x1d               // =29
+               	eor	x3, x3, x4, lsl #1
+               	and	x4, x3, #0xff
+               	add	x3, x1, #0x200
+               	ldrb	w3, [x3, x0]
+               	eor	x4, x4, x3
+               	eor	x5, x5, x3
+               	tbz	w4, #0x7, <addr>
+               	mov	x3, #0x1d               // =29
+               	b	<addr>
+               	mov	x3, x2
+               	b	<addr>
+               	mov	x3, x2
+               	b	<addr>
+               	mov	x3, x2
+               	b	<addr>
+               	mov	x4, x2
+               	b	<addr>
+               	eor	x3, x3, x4, lsl #1
+               	and	x4, x3, #0xff
+               	ldrb	w3, [x1, x0]
+               	eor	x4, x4, x3
+               	eor	x3, x5, x3
+               	strb	w3, [x6, x0]
+               	strb	w4, [x7, x0]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x200
+               	b.lt	<addr>
                	adrp	x21, <addr>
                	add	x21, x21, <lo12>
                	adrp	x22, <page>

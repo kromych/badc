@@ -228,7 +228,6 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x0, x0, #0x14
                	adrp	x24, <page>
-               	add	x24, x24, <lo12>
                	add	x1, x1, x2
                	add	x1, x1, x3
                	add	x1, x1, x4
@@ -248,7 +247,7 @@ Disassembly of section .text:
                	add	x1, x1, x22
                	add	x1, x1, x23
                	add	x0, x1, x0
-               	str	w0, [x24]
+               	str	w0, [x24, #0x330]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1

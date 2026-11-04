@@ -269,7 +269,8 @@ fn take(
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
-    for func in funcs {
+    // A `__try` region's stores are the handler's to read.
+    for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
         run_one(func);
     }
 }
@@ -467,6 +468,8 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::SegStore { .. }
                 | Inst::Imm(_)
                 | Inst::Undef
+                | Inst::ExceptionCode
+                | Inst::ParentLocalAddr { .. }
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -755,7 +758,10 @@ fn stored_const(
 /// recorded -- only a store seeds a constant here -- so a load left
 /// alone stays a load.
 pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
-    if func.blocks.is_empty()
+    // A funclet writes the frame while a call runs, with no address in
+    // the tape; the handler reads what the region left.
+    if func.has_seh()
+        || func.blocks.is_empty()
         || !func
             .insts
             .iter()
@@ -866,6 +872,8 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
                 | Inst::Undef
+                | Inst::ExceptionCode
+                | Inst::ParentLocalAddr { .. }
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -943,6 +951,9 @@ mod tests {
     fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -977,7 +988,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -1116,6 +1127,7 @@ mod tests {
             kind,
             volatile: false,
             align: 8,
+            pc_rel: false,
         };
         for (between, forwarded) in [
             (store(-4, 0, 0, StoreKind::I64), true),
@@ -1211,6 +1223,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1218,6 +1231,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1251,6 +1265,7 @@ mod tests {
                     kind: StoreKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1258,6 +1273,7 @@ mod tests {
                     kind: LoadKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1299,6 +1315,7 @@ mod tests {
                     kind: StoreKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1306,6 +1323,7 @@ mod tests {
                     kind: LoadKind::U8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1321,6 +1339,7 @@ mod tests {
                     kind: LoadKind::U8,
                     volatile: false,
                     align: 0,
+                    ..
                 }
             ),
             "an unsigned sub-width reload must not forward",
@@ -1350,6 +1369,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -1363,6 +1383,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),
@@ -1406,6 +1427,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::InlineAsm {
                     asm,
@@ -1417,6 +1439,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),
@@ -1450,6 +1473,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1457,6 +1481,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(3),
@@ -1491,6 +1516,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1498,6 +1524,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1505,6 +1532,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: true,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -1633,6 +1661,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -1843,6 +1872,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -1850,6 +1880,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Binop {
                     op: crate::c5::ir::BinOp::Add,
@@ -1994,6 +2025,7 @@ mod tests {
             kind: StoreKind::I8,
             volatile,
             align: 0,
+            pc_rel: false,
         };
         let barriers: Vec<Inst> = alloc::vec![
             store_indexed(0, 2, 1, 2, StoreKind::I8),
@@ -2060,6 +2092,7 @@ mod tests {
             kind: LoadKind::I8,
             volatile: true,
             align: 0,
+            pc_rel: false,
         };
         let (v, _) = indexed_reload(
             load_indexed(0, 1, 1, LoadKind::I8),
@@ -2082,6 +2115,7 @@ mod tests {
                     kind: LoadKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 store_indexed(1, 0, 1, 1, StoreKind::I8),
                 Inst::Load {
@@ -2090,6 +2124,7 @@ mod tests {
                     kind: LoadKind::I8,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             Terminator::Return(4),

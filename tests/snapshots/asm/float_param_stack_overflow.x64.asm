@@ -68,8 +68,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rax # <addr>
-               	movss	(%rax), %xmm14
+               	movss	<rip>, %xmm14 # <addr>
                	movsd	%xmm14, 0x8(%rsp)
                	subq	$0x10, %rsp
                	movq	0x18(%rsp), %r10

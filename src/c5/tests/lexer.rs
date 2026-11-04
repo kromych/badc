@@ -260,13 +260,11 @@ fn line_counter_advances_with_newlines() {
 }
 
 #[test]
-fn binding_names_seed_token_sys_when_dylibs_provided() {
-    // `init_symbols` no longer carries a fixed list of libc names;
-    // it walks the dylibs the preprocessor parsed and seeds each
-    // binding's `local_name` as a `Token::Sys` symbol with `val` set
-    // to the binding's flat-index. A program reaching for
-    // `malloc(...)` then lowers via `Inst::CallExt` with
-    // binding_idx 0 (or whichever index `malloc` ended up at).
+fn binding_names_seed_their_binding_slot_when_dylibs_provided() {
+    // `init_symbols` walks the dylibs the preprocessor parsed and seeds
+    // each binding's `local_name` undeclared, with `binding_slot` set to
+    // the binding's flat index; a function declaration of the name makes
+    // it the `Token::Sys` symbol a call lowers to `Inst::CallExt` with.
     use crate::c5::lexer::{Lexer, SymbolIndex, init_symbols};
     use crate::c5::preprocessor::{Binding, DylibSpec};
 
@@ -276,7 +274,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         bindings: vec![Binding {
             is_variadic: false,
             fixed_args: 1,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
             local_name: "malloc".into(),
             real_symbol: "malloc".into(),
@@ -298,8 +296,8 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         .iter()
         .find(|s| s.name == "malloc")
         .expect("malloc should be seeded from the dylibs list");
-    assert_eq!(sym.class, Token::Sys as i64);
-    assert_eq!(sym.val, 0, "first binding gets flat-index 0");
+    assert_eq!(sym.class, 0, "a binding alone declares nothing");
+    assert_eq!(sym.binding_slot, Some(0), "first binding gets flat-index 0");
 }
 
 #[test]
@@ -321,6 +319,45 @@ fn line_text_by_number_honours_line_markers() {
     assert_eq!(lex.line_text_by_number(&lex.file, 99), None);
     // One entry per marker, not per line.
     assert_eq!(lex.line_index_entries(), 3);
+}
+
+/// A line marker's file name is a narrow string literal's value, read as
+/// UTF-8: raw UTF-8 bytes, gcc's octal escapes for them, a hexadecimal
+/// escape, a universal character name and the simple escapes all spell
+/// the name they encode (C99 6.4.4.4, 6.4.3).
+#[test]
+fn a_line_marker_names_the_file_its_literal_spells() {
+    use crate::c5::lexer::parse_line_marker;
+    for (marker, file) in [
+        (" 1 \"caf\u{e9}.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\303\\251.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\xc3\\xa9.c\"", "caf\u{e9}.c"),
+        (" 1 \"caf\\u00e9.c\"", "caf\u{e9}.c"),
+        (" 1 \"a\\\\b \\\"c\\\".c\" 2", "a\\b \"c\".c"),
+        ("line 3 \"x\\ty.c\"", "x\ty.c"),
+    ] {
+        let m = parse_line_marker(marker.as_bytes()).unwrap_or_else(|| panic!("{marker}"));
+        assert_eq!(m.file.as_deref(), Some(file), "{marker}");
+    }
+    assert!(parse_line_marker(b" 1 \"open\\\"").is_none());
+}
+
+/// A line's text ends where the next line of its run starts, at the
+/// run's last newline, or at the buffer's end: the lookup reads no part
+/// of the line to find its end.
+#[test]
+fn a_line_lookup_ends_each_line_at_the_next_one() {
+    use crate::c5::lexer::Lexer;
+    let long = "x".repeat(100_000);
+    let src = format!("# 1 \"a.c\"\n{long};\nint b;\n# 9 \"h.h\"\nint h;\n# 3 \"a.c\"\nint c;");
+    let mut lex = Lexer::new(src);
+    lex.file = "a.c".into();
+    let first = format!("{long};");
+    assert_eq!(lex.line_text_by_number("a.c", 1), Some(first.as_str()));
+    assert_eq!(lex.line_text_by_number("a.c", 2), Some("int b;"));
+    assert_eq!(lex.line_text_by_number("h.h", 9), Some("int h;"));
+    assert_eq!(lex.line_text_by_number("a.c", 3), Some("int c;"));
+    assert_eq!(lex.line_text_by_number("a.c", 4), None);
 }
 
 #[test]

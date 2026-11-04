@@ -167,18 +167,17 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movq	(%rcx), %rcx
-               	movl	(%rcx), %ecx
-               	cmpl	$0x1, %ecx
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
+               	movl	(%rax), %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, (%rax)
-               	movq	(%rcx), %rax
+               	leaq	<rip>, %rax # <addr>
+               	movq	%rax, <rip> # <addr>
+               	movq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>

@@ -2,15 +2,18 @@
 //! whole -- 16-byte copies and zero fills, `V128` loads and stores, 16-byte
 //! SIMD asm operands -- becomes `V128` slot accesses for mem2reg to promote,
 //! provided something reads it and it meets a SIMD operand or a vector ABI
-//! piece directly or through whole copies. An asm output keeps its address
-//! for `asm_outputs`, which makes it a value stored to the slot.
+//! piece directly or through whole copies. A one-cell object an 8-byte SIMD
+//! operand meets becomes `F64` accesses the same way ([`cell_slots`]). An
+//! asm output keeps its address for `asm_outputs`, which makes it a value
+//! stored to the slot.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use super::super::abi_classify::ScalarKind;
 use super::super::ir::{
-    AsmConstraint, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    AsmBlock, AsmConstraint, AsmSeg, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
+    ValueId,
 };
 use super::tape::{At, Insertion, insert};
 
@@ -48,13 +51,36 @@ enum Side {
     Addr(ValueId),
 }
 
+/// The whole-object access kinds of a rewritten slot.
+#[derive(Clone, Copy)]
+struct Whole {
+    load: LoadKind,
+    store: StoreKind,
+}
+
+const QUAD: Whole = Whole {
+    load: LoadKind::V128,
+    store: StoreKind::V128,
+};
+
+const DOUBLE: Whole = Whole {
+    load: LoadKind::F64,
+    store: StoreKind::F64,
+};
+
 pub(crate) fn run(func: &mut FunctionSsa) -> BTreeSet<i64> {
     if !applies(func) {
         return BTreeSet::new();
     }
-    let slots = eligible(func, false);
+    let mut slots = eligible(func, false);
     if !slots.is_empty() {
-        rewrite(func, &slots);
+        rewrite(func, &slots, QUAD);
+    }
+    let cells = cell_slots(func);
+    if !cells.is_empty() {
+        retype_cells(func, &cells);
+        rewrite(func, &cells, DOUBLE);
+        slots.extend(cells);
     }
     slots
 }
@@ -69,21 +95,21 @@ pub(crate) fn spliced_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
     eligible(callee, true)
 }
 
-fn slot_load(off: i64) -> Inst {
+fn slot_load(off: i64, w: Whole) -> Inst {
     Inst::LoadLocal {
         off,
         disp: 0,
-        kind: LoadKind::V128,
+        kind: w.load,
         volatile: false,
     }
 }
 
-fn slot_store(off: i64, value: ValueId) -> Inst {
+fn slot_store(off: i64, value: ValueId, w: Whole) -> Inst {
     Inst::StoreLocal {
         off,
         disp: 0,
         value,
-        kind: StoreKind::V128,
+        kind: w.store,
         volatile: false,
         nsw: false,
     }
@@ -301,7 +327,7 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
     vector
 }
 
-fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
+fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
     let addr: BTreeMap<ValueId, i64> = func
         .insts
         .iter()
@@ -387,20 +413,21 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
             Edit::Copy { at, src, .. } => put(
                 *at,
                 match *src {
-                    Side::Slot(off) => slot_load(off),
+                    Side::Slot(off) => slot_load(off, w),
                     Side::Addr(a) => Inst::Load {
                         addr: a,
                         disp: 0,
-                        kind: LoadKind::V128,
+                        kind: w.load,
                         volatile: false,
                         align: 0,
+                        pc_rel: false,
                     },
                 },
             ),
             Edit::Zero { at, .. } => put(*at, Inst::Imm(0)),
             Edit::Asm { at, inputs } => {
                 for &(_, off) in inputs {
-                    put(*at, slot_load(off));
+                    put(*at, slot_load(off, w));
                 }
             }
             _ => {}
@@ -421,25 +448,28 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
                 func.insts[n as usize] = Inst::Imm(0);
                 gone.insert(n);
             }
-            Edit::Load { at, off } => func.insts[rw.remap[*at as usize] as usize] = slot_load(*off),
+            Edit::Load { at, off } => {
+                func.insts[rw.remap[*at as usize] as usize] = slot_load(*off, w)
+            }
             Edit::Store { at, off } => {
                 let n = rw.remap[*at as usize] as usize;
                 if let Inst::Store { value, .. } = func.insts[n] {
-                    func.insts[n] = slot_store(*off, value);
+                    func.insts[n] = slot_store(*off, value, w);
                 }
             }
             Edit::Copy { at, dst, .. } => {
                 let load = take();
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = match *dst {
-                    Side::Slot(off) => slot_store(off, load),
+                    Side::Slot(off) => slot_store(off, load, w),
                     Side::Addr(a) => Inst::Store {
                         addr: rw.remap[a as usize],
                         disp: 0,
                         value: load,
-                        kind: StoreKind::V128,
+                        kind: w.store,
                         volatile: false,
                         align: 0,
+                        pc_rel: false,
                     },
                 };
                 gone.insert(n);
@@ -447,7 +477,7 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
             Edit::Zero { at, off } => {
                 let zero = take();
                 let n = rw.remap[*at as usize];
-                func.insts[n as usize] = slot_store(*off, zero);
+                func.insts[n as usize] = slot_store(*off, zero, w);
                 gone.insert(n);
             }
             Edit::Asm { at, inputs } => {
@@ -465,6 +495,358 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
     for b in &mut func.blocks {
         if gone.contains(&b.exit_acc) {
             b.exit_acc = NO_VALUE;
+        }
+    }
+}
+
+/// Whether operand `i` reads 8 bytes into a SIMD register.
+fn simd8_input(asm: &AsmBlock, i: usize) -> bool {
+    let op = &asm.operands[i];
+    !op.is_output && !op.static_arg && op.width == 8 && asm.operand_class(i) == AsmConstraint::Fp
+}
+
+/// Whether operand `i` writes 8 bytes from a SIMD register through the
+/// address it is given, which `asm_outputs` may make a value.
+fn simd8_output(asm: &AsmBlock, i: usize) -> bool {
+    let op = &asm.operands[i];
+    op.is_output
+        && !op.value
+        && !op.volatile_object
+        && op.seg == AsmSeg::None
+        && op.width == 8
+        && op.constraint == AsmConstraint::Fp
+}
+
+fn natural(align: u8) -> bool {
+    align == 0 || align >= 8
+}
+
+fn slot_at(func: &FunctionSsa, a: ValueId) -> Option<i64> {
+    match func.insts.get(a as usize) {
+        Some(Inst::LocalAddr(off)) => Some(*off),
+        _ => None,
+    }
+}
+
+/// A whole read of a slot, directly or through its address: the slot and
+/// the kind.
+fn slot_read(func: &FunctionSsa, inst: &Inst) -> Option<(i64, LoadKind)> {
+    match *inst {
+        Inst::LoadLocal {
+            off,
+            disp: 0,
+            kind,
+            volatile: false,
+        } => Some((off, kind)),
+        Inst::Load {
+            addr,
+            disp: 0,
+            kind,
+            volatile: false,
+            ..
+        } => slot_at(func, addr).map(|off| (off, kind)),
+        _ => None,
+    }
+}
+
+/// A whole write of a slot, directly or through its address: the slot,
+/// the value and the kind.
+fn slot_write(func: &FunctionSsa, inst: &Inst) -> Option<(i64, ValueId, StoreKind)> {
+    match *inst {
+        Inst::StoreLocal {
+            off,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } => Some((off, value, kind)),
+        Inst::Store {
+            addr,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            ..
+        } if addr != value => slot_at(func, addr).map(|off| (off, value, kind)),
+        _ => None,
+    }
+}
+
+/// One-cell objects an 8-byte SIMD operand reads or writes: accessed only
+/// whole, every value read from one going to such an operand, into another
+/// such object or to memory, every value written to one a constant or read
+/// from such an object or memory. `F64` accesses carry their bits in the
+/// SIMD file. Objects joined by a value take part together, when one of
+/// them meets an operand.
+fn cell_slots(func: &FunctionSsa) -> BTreeSet<i64> {
+    let n = func.insts.len();
+    let mut by: Vec<Vec<ValueId>> = alloc::vec![Vec::new(); n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        inst.for_each_operand(|a| {
+            if let Some(u) = by.get_mut(a as usize) {
+                u.push(v as ValueId);
+            }
+        });
+    }
+    let mut ends = alloc::vec![false; n];
+    let mut covered = alloc::vec![false; n];
+    for b in &func.blocks {
+        b.terminator.for_each_operand(|a| {
+            if let Some(e) = ends.get_mut(a as usize) {
+                *e = true;
+            }
+        });
+        for v in b.inst_range.clone() {
+            covered[v as usize] = true;
+        }
+    }
+    let unread = |v: ValueId| by[v as usize].is_empty() && !ends[v as usize];
+    let goto_asm: BTreeSet<ValueId> = func
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.terminator, Terminator::AsmGoto { .. }) && !b.inst_range.is_empty())
+        .map(|b| b.inst_range.end - 1)
+        .collect();
+    let addr_use = |u: ValueId, a: ValueId| match &func.insts[u as usize] {
+        Inst::InlineAsm { asm, args } => {
+            !goto_asm.contains(&u)
+                && args
+                    .iter()
+                    .enumerate()
+                    .all(|(i, &x)| x != a || simd8_output(asm, i))
+        }
+        Inst::Mcpy {
+            dst,
+            src,
+            size: 8,
+            align,
+        } => *align >= 8 && (*dst == a) != (*src == a) && unread(u),
+        Inst::Mzero { dst, size: 8, .. } => *dst == a && unread(u),
+        inst => match (slot_read(func, inst), slot_write(func, inst)) {
+            (Some((_, kind)), _) => matches!(kind, LoadKind::I64 | LoadKind::F64),
+            (_, Some((_, value, kind))) => {
+                value != a && matches!(kind, StoreKind::I64 | StoreKind::F64)
+            }
+            _ => false,
+        },
+    };
+    let multi = |off: i64| {
+        func.multi_cell_slots
+            .iter()
+            .any(|&(b, c)| c > 1 && b <= off && off < b + c)
+    };
+    let (mut slots, mut reject) = (BTreeSet::new(), BTreeSet::new());
+    for (v, inst) in func.insts.iter().enumerate() {
+        let (off, ok) = match *inst {
+            Inst::LocalAddr(off) => (
+                off,
+                covered[v] && !ends[v] && by[v].iter().all(|&u| addr_use(u, v as ValueId)),
+            ),
+            Inst::LoadLocal {
+                off,
+                disp,
+                kind,
+                volatile,
+            } => (
+                off,
+                disp == 0 && !volatile && matches!(kind, LoadKind::I64 | LoadKind::F64),
+            ),
+            Inst::StoreLocal {
+                off,
+                disp,
+                kind,
+                volatile,
+                ..
+            } => (
+                off,
+                disp == 0 && !volatile && matches!(kind, StoreKind::I64 | StoreKind::F64),
+            ),
+            Inst::AllocaInit(off)
+            | Inst::Call {
+                ret_slot_local: off,
+                ..
+            }
+            | Inst::CallIndirect {
+                ret_slot_local: off,
+                ..
+            }
+            | Inst::CallExt {
+                ret_slot_local: off,
+                ..
+            } => {
+                reject.insert(off);
+                continue;
+            }
+            _ => continue,
+        };
+        if off < 0 && !multi(off) {
+            slots.insert(off);
+        }
+        if !ok {
+            reject.insert(off);
+        }
+    }
+    reject.extend(func.param_local_slots.iter().copied());
+    reject.insert(func.indirect_result_slot);
+    slots.retain(|s| !reject.contains(s));
+    // A read whose kind turns: every reader takes the bits in the SIMD file.
+    let load_use = |u: ValueId, v: ValueId, slots: &BTreeSet<i64>| match &func.insts[u as usize] {
+        Inst::InlineAsm { asm, args } => args
+            .iter()
+            .enumerate()
+            .all(|(i, &x)| x != v || simd8_input(asm, i)),
+        inst => match slot_write(func, inst) {
+            Some((off, value, _)) => value == v && slots.contains(&off),
+            None => matches!(*inst, Inst::Store {
+                addr,
+                value,
+                kind: StoreKind::I64 | StoreKind::F64,
+                volatile: false,
+                align,
+                ..
+            } if value == v && addr != v && natural(align) && unread(u)),
+        },
+    };
+    let bits = |v: ValueId, slots: &BTreeSet<i64>| {
+        !ends[v as usize] && by[v as usize].iter().all(|&u| load_use(u, v, slots))
+    };
+    let source = |value: ValueId, slots: &BTreeSet<i64>| {
+        let inst = &func.insts[value as usize];
+        match (slot_read(func, inst), inst) {
+            (Some((s, kind)), _) => kind == LoadKind::F64 || slots.contains(&s),
+            (
+                _,
+                Inst::Imm(_)
+                | Inst::Load {
+                    kind: LoadKind::F64,
+                    ..
+                },
+            ) => true,
+            (
+                _,
+                Inst::Load {
+                    kind: LoadKind::I64,
+                    align,
+                    volatile: false,
+                    ..
+                },
+            ) => natural(*align) && bits(value, slots),
+            _ => false,
+        }
+    };
+    loop {
+        let mut drop: Vec<i64> = Vec::new();
+        for (v, inst) in func.insts.iter().enumerate() {
+            let v = v as ValueId;
+            if let Some((off, LoadKind::I64)) = slot_read(func, inst)
+                && slots.contains(&off)
+                && !bits(v, &slots)
+            {
+                drop.push(off);
+            }
+            if let Some((off, value, StoreKind::I64)) = slot_write(func, inst)
+                && slots.contains(&off)
+                && !(unread(v) && source(value, &slots))
+            {
+                drop.push(off);
+            }
+        }
+        if drop.is_empty() {
+            break;
+        }
+        for s in drop {
+            slots.remove(&s);
+        }
+    }
+    // Objects one value passes between, or a copy joins, take part together.
+    let mut parent: BTreeMap<i64, i64> = slots.iter().map(|&s| (s, s)).collect();
+    let root = |p: &BTreeMap<i64, i64>, mut s: i64| {
+        while p[&s] != s {
+            s = p[&s];
+        }
+        s
+    };
+    let join = |p: &mut BTreeMap<i64, i64>, a: i64, b: i64| {
+        let (ra, rb) = (root(p, a), root(p, b));
+        p.insert(ra, rb);
+    };
+    let mut carrier: BTreeMap<ValueId, i64> = BTreeMap::new();
+    let mut touched: Vec<i64> = Vec::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        let (value, off) = match (slot_read(func, inst), slot_write(func, inst), inst) {
+            (Some((off, _)), ..) => (v as ValueId, off),
+            (_, Some((off, value, _)), _) => (value, off),
+            (.., Inst::Mcpy { dst, src, .. }) => {
+                if let (Some(d), Some(s)) = (slot_at(func, *dst), slot_at(func, *src))
+                    && slots.contains(&d)
+                    && slots.contains(&s)
+                {
+                    join(&mut parent, d, s);
+                }
+                continue;
+            }
+            (.., Inst::InlineAsm { asm, args }) => {
+                for (i, &a) in args.iter().enumerate() {
+                    let met = match func.insts.get(a as usize) {
+                        Some(Inst::LocalAddr(off)) if simd8_output(asm, i) => Some(*off),
+                        Some(r) if simd8_input(asm, i) => slot_read(func, r).map(|(s, _)| s),
+                        _ => None,
+                    };
+                    touched.extend(met.filter(|s| slots.contains(s)));
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        if !slots.contains(&off) {
+            continue;
+        }
+        match carrier.get(&value) {
+            Some(&s) => join(&mut parent, s, off),
+            None => {
+                carrier.insert(value, off);
+            }
+        }
+    }
+    let met: BTreeSet<i64> = touched.iter().map(|&s| root(&parent, s)).collect();
+    slots.retain(|&s| met.contains(&root(&parent, s)));
+    slots
+}
+
+/// The `I64` accesses of `slots`, the memory reads stored into them and
+/// the memory writes of what they hold, as `F64`.
+fn retype_cells(func: &mut FunctionSsa, slots: &BTreeSet<i64>) {
+    let mut bits: BTreeSet<ValueId> = BTreeSet::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        if let Some((off, LoadKind::I64)) = slot_read(func, inst)
+            && slots.contains(&off)
+        {
+            bits.insert(v as ValueId);
+        }
+        if let Some((off, value, _)) = slot_write(func, inst)
+            && slots.contains(&off)
+            && matches!(
+                func.insts[value as usize],
+                Inst::Load {
+                    kind: LoadKind::I64,
+                    ..
+                }
+            )
+        {
+            bits.insert(value);
+        }
+    }
+    for (v, inst) in func.insts.iter_mut().enumerate() {
+        match inst {
+            Inst::LoadLocal { kind, .. } | Inst::Load { kind, .. }
+                if bits.contains(&(v as ValueId)) =>
+            {
+                *kind = LoadKind::F64
+            }
+            Inst::StoreLocal { off, kind, .. } if slots.contains(off) => *kind = StoreKind::F64,
+            Inst::Store { value, kind, .. } if bits.contains(value) => *kind = StoreKind::F64,
+            _ => {}
         }
     }
 }

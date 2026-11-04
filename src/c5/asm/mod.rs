@@ -16,6 +16,7 @@ mod layout;
 mod operand;
 mod section;
 mod sink;
+mod source;
 mod template;
 mod text;
 
@@ -30,5 +31,6 @@ pub(crate) use layout::*;
 pub(crate) use operand::*;
 pub(crate) use section::*;
 pub(crate) use sink::*;
+pub(crate) use source::*;
 pub(crate) use template::*;
 pub(crate) use text::*;

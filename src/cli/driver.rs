@@ -7,9 +7,10 @@ use super::dump::{dump_bundled_headers, dump_native_link, print_predefined_symbo
 use super::inputs::{Inputs, StdinSource};
 use super::native_link::link_image;
 use super::objects::{build_archive, check_syntax, compile_objects};
-use super::options::{Mode, SourceKind};
+use super::options::Mode;
 use super::paths::{
-    declared_home, declared_sysroot, install_dir, install_embedded, sysroot_include_paths,
+    compiler_include_dir, declared_home, declared_sysroot, install_dir, install_embedded,
+    print_file_name, sysroot_include_paths,
 };
 use super::preprocess::{dump_dependencies, preprocess};
 use super::script_link::run_script_link;
@@ -44,14 +45,18 @@ pub(crate) fn run() {
     let mut cli = match parse_args(raw) {
         Ok(Parsed::Run(cli)) => cli,
         Ok(Parsed::Print(text)) => {
-            println!("{text}");
+            outln!("{text}");
             return;
         }
         Ok(Parsed::Diagnostics(text)) => {
-            print!("{text}");
+            out!("{text}");
             return;
         }
         Ok(Parsed::Install { dir, quiet }) => return install(dir, quiet),
+        Ok(Parsed::PrintFileName(name)) => {
+            outln!("{}", print_file_name(&name));
+            return;
+        }
         Err(e) => e.report(),
     };
     // What the command line itself raised, before any input is opened.
@@ -153,6 +158,8 @@ fn resolve_search_paths(cli: &mut Cli) {
             }
         }
     }
+    cli.front.compiler_include_dir =
+        compiler_include_dir().map(|d| d.to_string_lossy().into_owned());
     cli.sysroot = declared_sysroot(cli.sysroot.as_deref(), cli.target);
     cli.front.system_include_paths = match &cli.sysroot {
         Some(root) => sysroot_include_paths(cli.target, root),
@@ -189,7 +196,7 @@ fn dispatch(cli: Cli) {
 
     if cli.mode == Mode::DumpBindings {
         for (soname, symbol) in badc::library_bindings(cli.target) {
-            println!("{soname} {symbol}");
+            outln!("{soname} {symbol}");
         }
         return;
     }
@@ -227,7 +234,10 @@ fn dispatch(cli: Cli) {
     // section, so an asm unit would run as an empty program. Refuse it
     // rather than run nothing.
     if matches!(cli.mode, Mode::Jit | Mode::Interp)
-        && let Some(src) = inputs.sources.iter().find(|s| SourceKind::of(s).is_asm())
+        && let Some(src) = inputs
+            .sources
+            .iter()
+            .find(|s| cli.front.source_kind(s).is_asm())
     {
         eprint_diagnostic(format!(
             "badc: error: {} does not run assembly (`{src}`); assemble it with \
@@ -257,7 +267,11 @@ fn dispatch(cli: Cli) {
         let preprocess_only = cli.mode == Mode::DumpPp
             || cli.deps.as_ref().map(|d| d.kind) == Some(DepKind::Only) && !cli.compile_only;
         if !preprocess_only {
-            if let Some(src) = inputs.sources.iter().find(|s| !SourceKind::of(s).is_asm()) {
+            if let Some(src) = inputs
+                .sources
+                .iter()
+                .find(|s| !cli.front.source_kind(s).is_asm())
+            {
                 eprint_diagnostic(format!(
                     "badc: error: `{flag}` applies to assembly units only; `{src}` is a C source \
                      and badc emits no 32-bit code"

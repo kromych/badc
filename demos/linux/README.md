@@ -1281,49 +1281,27 @@ they name are ones this build produces itself: `CONFIG_INITRAMFS_SOURCE`,
 
 #### What a distribution configuration compiles today
 
-Neither architecture builds one yet. Surveyed at the 7.1.10 pin with
-`--keep-going`, so the counts are the whole corpus rather than the first
-defect:
+All four lanes build, package, install and boot at the 7.2.9 pin, every
+unit and every link badc's (none falling back), each image's checks and
+exercises passing under KVM:
 
-| | `badc` | `fail` | `badc-asm` | `gas` | image | wall |
-|---|---|---|---|---|---|---|
-| x86_64, Debian 13 | 5100 | 54 | 64 | 40 | none | 8m19s (12 jobs) |
-| aarch64, Fedora 44 | 17682 | 45 | 89 | 7 | none | 18m28s (8 jobs) |
+| | units | links | build + package | vm phase |
+|---|---|---|---|---|
+| x86_64, Ubuntu 26.04 (deb) | 26254 | 15644 | 63 min (12 jobs) | 104 s |
+| x86_64, Fedora 44 (rpm) | 21767 | 11540 | 48 min (12 jobs) | 103 s |
+| aarch64, Ubuntu 26.04 (deb) | 30605 | 19112 | 64 min (8 jobs) | 195 s |
+| aarch64, Fedora 44 (rpm) | 23547 | 13097 | 41 min (8 jobs) | 126 s |
 
-Two constructs the distribution configuration reaches and the defconfig one
-does not accounted for nearly the whole corpus until recently: the GNU
-asm-label symbol rename and the fortified `strlen` macro, both in
-`include/linux/fortify-string.h`, which `linux/string.h` includes and which is
-compiled only under `CONFIG_FORTIFY_SOURCE`. That option has no `default y`
-and no arch defconfig sets it, while both distributions enable it -- that
-single difference is what separates the defconfig corpus from a distribution
-one.
+Against the stock boot of each image, the badc kernel logs three error lines
+the stock one does not, each from the newer kernel or the fuller package, not
+the compiler: 7.2.9 reports every write to SELinux's `checkreqprot` and
+enables TDX at boot, which the host CPU lacks, and the package ships both
+`pcspkr` and `snd-pcsp`, which register the same platform driver name. On
+Ubuntu the storage exercise's direct-I/O read fails on any kernel: the
+image's Rust `dd` reads into an unaligned buffer.
 
-Ranked by normalized signature, what is left is:
-
-| units | signature | arch |
-|---|---|---|
-| 36 | `.global` in an inline-asm template (#722) | x86_64 |
-| 31 | `.size sym, .-sym` across asm statements (#724) | aarch64 |
-| 5 | inline asm: non-constant section data value | x86_64 |
-| 4 | inline asm: unsupported instruction `encls` | x86_64 |
-| 3 | `unknown function printk` | aarch64 |
-| 2 | `expected , or ; after declarator` | aarch64 |
-| 18 | 16 further signatures, one unit each | both |
-
-The `arch` column records where a configuration reaches the construct, not a
-target restriction: both inline-asm classes are rejected on either
-architecture, and each distribution's configuration selects a different set of
-subsystems that emit them.
-
-#715 (aarch64, a `.bss` allocation the vDSO's linker script discards) stops
-the arm64 build at `vdso_prepare`, which is a hard prerequisite, so measuring
-past it needs `--fallback` on `arch/arm64/kernel/vdso/vgetrandom.c`; that is
-the one `fallback` unit in the aarch64 row.
-
-No `vmlinux` is produced on either architecture, so the package and vm phases
-are unreachable and nothing is said here about installing or booting a
-distribution-configured kernel.
+With debug information on, as both distributions configure it, a tree takes
+43 GB and a deb lane 18 GB more for its staging and `-dbg` package.
 
 ### Surveying a kernel and configuration from a URL
 

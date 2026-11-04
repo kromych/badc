@@ -252,8 +252,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%edx, %edx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
@@ -266,8 +265,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%edx, %edx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
@@ -275,8 +273,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%edx, %edx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
@@ -284,8 +281,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x18(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	xorl	%edx, %edx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax

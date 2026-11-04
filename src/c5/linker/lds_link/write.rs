@@ -222,7 +222,21 @@ impl ImageWriter {
     }
 }
 
+/// `EI_OSABI` for an image that relies on the GNU extensions.
+const ELFOSABI_GNU: u8 = 3;
+
 impl<'a> LdsLinker<'a> {
+    /// Whether the image defines an `STB_GNU_UNIQUE` or `STT_GNU_IFUNC`
+    /// symbol, for which bfd marks the output `ELFOSABI_GNU`.
+    fn uses_gnu_osabi(&self) -> bool {
+        const STB_GNU_UNIQUE: u8 = 10;
+        const STT_GNU_IFUNC: u8 = 10;
+        self.globals.values().any(|&(obj_i, sym_i)| {
+            let sym = &self.objects[obj_i].symbols[sym_i];
+            sym.binding() == STB_GNU_UNIQUE || sym.kind() == STT_GNU_IFUNC
+        })
+    }
+
     /// `sh_link` of an `SHF_LINK_ORDER` output section: the output
     /// section holding what its inputs are ordered against, as bfd
     /// records in `assign_section_numbers`. Zero when the target went
@@ -318,6 +332,9 @@ impl<'a> LdsLinker<'a> {
             shnum,
             emit_order.len() + 3,
         );
+        if self.uses_gnu_osabi() {
+            w.image[7] = ELFOSABI_GNU;
+        }
         w.write_phdrs(&phdrs);
 
         // Section bodies.

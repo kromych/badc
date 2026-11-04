@@ -26,6 +26,8 @@ import subprocess
 import sys
 from typing import BinaryIO
 
+import host_load
+
 BINARY = re.compile(r"^\s+(Running|Doc-tests) (.+)$")
 RUNNING = re.compile(r"^running (\d+) tests?$")
 RESULT = re.compile(
@@ -130,7 +132,9 @@ def self_test() -> int:
 def main() -> int:
     if sys.argv[1:] == ["--self-test"]:
         return self_test()
-    return run(["cargo", "test", *sys.argv[1:]], sys.stdout.buffer)
+    # A suite loads the host; a timer-bound demo phase waits for it.
+    with host_load.held(exclusive=False):
+        return run(["cargo", "test", *sys.argv[1:]], sys.stdout.buffer)
 
 
 if __name__ == "__main__":

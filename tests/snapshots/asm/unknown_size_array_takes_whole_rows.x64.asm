@@ -25,67 +25,47 @@ Disassembly of section .text:
                	int3
                	int3
 
-<file_scope>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x3, %ecx
+<main>:
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x3, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0xc(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	0x7(%rax), %rcx
-               	cmpl	$0x66, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x66, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x9(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	0xc(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x2, %eax
+               	testq	%rax, %rax
+               	je	<addr>
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x10(%rax), %ecx
-               	cmpl	$0x5, %ecx
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpl	$0x0, 0x1c(%rax)
+               	cmpl	$0x0, <rip> # <addr>
+               	je	<addr>
+               	movl	$0x5, %eax
+               	jmp	<addr>
+               	xorl	%eax, %eax
+               	jmp	<addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x5, %eax
+               	jne	<addr>
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x3, %eax
-               	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0xc(%rax), %ecx
-               	cmpl	$0x4, %ecx
+               	jmp	<addr>
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x4, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x14(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
                	xorl	%eax, %eax
-               	retq
+               	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
                	movl	$0x1, %eax
-               	retq
-
-<block_scope>:
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, 0xc(%rax)
-               	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, 0xc(%rax)
-               	je	<addr>
-               	movl	$0x5, %eax
-               	retq
-               	xorl	%eax, %eax
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	movl	$0x9, %edi
-               	callq	<addr>
                	jmp	<addr>

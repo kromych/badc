@@ -30,8 +30,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x7777777777777777 // =8608480567731124087
                	cmp	x0, x17
                	b.eq	<addr>

@@ -35,14 +35,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x3               // =3
                	mul	x20, x0, x17
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	bl	<addr>
                	cmp	x0, #0x2a
                	b.eq	<addr>

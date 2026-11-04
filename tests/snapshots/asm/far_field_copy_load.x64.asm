@@ -54,11 +54,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi # <addr>
-               	movb	$0x9, (%rdi)
-               	movb	$0x2, 0x1(%rdi)
-               	movb	$0x3, 0x3(%rdi)
-               	movb	$0x5, 0x5(%rdi)
-               	movb	$0x7, 0x7(%rdi)
+               	movb	$0x9, <rip> # <addr>
+               	movb	$0x2, <rip> # <addr>
+               	movb	$0x3, <rip> # <addr>
+               	movb	$0x5, <rip> # <addr>
+               	movb	$0x7, <rip> # <addr>
                	leaq	0x2000(%rdi), %rax
                	movb	$0x28, (%rax)
                	leaq	0x9c40(%rdi), %rax

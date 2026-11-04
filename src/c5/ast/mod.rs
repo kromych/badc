@@ -195,6 +195,9 @@ pub(crate) enum AtomicKind {
     /// GCC generic `__atomic_store(p, val, memorder)` -- atomically store
     /// `*val` into `*p`. `args` are `[p, val]`; no value.
     StoreFrom,
+    /// `atomic_init(p, v)` (C17 7.17.2.2), clang's `__c11_atomic_init`: the
+    /// non-atomic store of `v`, an object's lock word cleared. No value.
+    Init,
 }
 
 /// Storage-unit width + bit position for a bitfield reference. The
@@ -649,6 +652,46 @@ pub(crate) enum Stmt {
     /// A `goto` or computed `goto` (`jump`) running `cleanups` first, after
     /// a computed `goto`'s target is read.
     CleanupJump { cleanups: Vec<StmtId>, jump: StmtId },
+    /// `__try body` with its `__except` or `__finally` handler (Microsoft
+    /// structured exception handling), the function's `index`th `__try`.
+    SehTry {
+        body: StmtId,
+        handler: SehHandler,
+        index: u32,
+    },
+    /// `__leave;`: to the end of the innermost `__try` body.
+    SehLeave,
+    /// A jump out of the body of `__try` statement `index` runs its
+    /// `__finally` block, abnormally; nothing for an `__except` handler.
+    SehFinallyCall(u32),
+}
+
+/// The handler of a `__try` statement.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SehHandler {
+    /// `__except (filter) body`: `body` runs when `filter` evaluates to
+    /// `EXCEPTION_EXECUTE_HANDLER`. A filter other than that constant is
+    /// evaluated by `funclet`.
+    Except {
+        filter: ExprId,
+        body: StmtId,
+        funclet: Option<SehFunclet>,
+    },
+    /// `__finally body`: runs whenever control leaves the `__try` body, as
+    /// `funclet`.
+    Finally { body: StmtId, funclet: SehFunclet },
+}
+
+/// The function a filter expression or a `__finally` block compiles to, as
+/// cl's `<f>$filt$<index>` or `<f>$fin$<index>`: the frame slots the parser
+/// numbered past `slot_base` while parsing it, up to `slot_end`, are its
+/// own, and it `allocates` on its stack (`alloca`, a VLA).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SehFunclet {
+    pub index: u32,
+    pub slot_base: i64,
+    pub slot_end: i64,
+    pub allocates: bool,
 }
 
 /// Value source of one runtime-initializer element: an expression to
@@ -886,6 +929,9 @@ pub(crate) struct FinishedFunction {
     /// label-address initializer.
     pub label_data_slots: alloc::vec::Vec<crate::c5::compiler::PendingLabelReloc>,
     pub name: alloc::string::String,
+    /// The `ent_pc` of each filter and `__finally` funclet, by
+    /// [`SehFunclet::index`].
+    pub funclet_pcs: alloc::vec::Vec<usize>,
 }
 
 /// Per-function AST. One instance lives on the active function in
@@ -1071,6 +1117,20 @@ impl Ast {
 
     pub(crate) fn stmt(&self, id: StmtId) -> &Stmt {
         &self.stmts[id as usize]
+    }
+
+    /// The value of an integer literal, cast or negated.
+    pub(crate) fn folded_int(&self, id: ExprId) -> Option<i64> {
+        match self.expr(id) {
+            Expr::IntLit { val, .. } => Some(*val),
+            Expr::Cast { child, .. } => self.folded_int(*child),
+            Expr::Unary {
+                op: UnOp::Neg,
+                child,
+                ..
+            } => self.folded_int(*child).map(i64::wrapping_neg),
+            _ => None,
+        }
     }
 
     /// Apply `f` to every data-segment byte offset stored on AST nodes.
@@ -1380,6 +1440,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             ssp: _,
             label_data_slots,
             name: _,
+            funclet_pcs: _,
         } = self;
         label_data_slots.retain_mut(|s| crate::c5::layout::remap_kept_u64(&mut s.data_offset, r));
         ast.remap_data_offsets(r);

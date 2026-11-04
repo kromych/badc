@@ -15,21 +15,17 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
-               	ldr	d1, [x0]
+               	ldr	d0, [x0, #0x40]
+               	ldr	d1, [x0, #0x40]
                	fdiv	d0, d0, d1
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d1, [x0]
+               	ldr	d1, [x0, #0x18]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s2, [x0]
-               	ldr	s3, [x0]
+               	ldr	s2, [x0, #0x48]
+               	ldr	s3, [x0, #0x48]
                	fdiv	s2, s2, s3
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	s3, [x0]
+               	ldr	s3, [x0, #0x20]
                	fcmp	d0, d1
                	b.pl	<addr>
                	mov	x0, #0x1                // =1

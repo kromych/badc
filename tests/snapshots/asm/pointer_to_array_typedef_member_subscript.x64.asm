@@ -27,24 +27,24 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax # <addr>
-               	movl	0x808(%rax), %ecx
+               	movl	<rip>, %ecx # <addr>
                	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
                	andq	%r11, %rcx
                	orq	$0x240, %rcx            # imm = 0x240
-               	movl	%ecx, 0x808(%rax)
-               	movl	0x80c(%rax), %ecx
+               	movl	%ecx, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
                	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
                	andq	%r11, %rcx
                	orq	$0x140, %rcx            # imm = 0x140
-               	movl	%ecx, 0x80c(%rax)
-               	leaq	0x800(%rax), %rcx
-               	movl	0x8(%rcx), %ecx
-               	sarq	$0x6, %rcx
-               	cmpl	$0x9, %ecx
+               	movl	%ecx, <rip> # <addr>
+               	addq	$0x800, %rax            # imm = 0x800
+               	movl	0x8(%rax), %eax
+               	sarq	$0x6, %rax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	0x80c(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	sarq	$0x6, %rax
                	cmpl	$0x5, %eax
                	je	<addr>

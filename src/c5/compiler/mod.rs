@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::codegen::Target;
-use super::diag::Code;
+use super::diag::{Code, Diagnostic, Level};
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
 use super::preprocessor::{DylibSpec, IncludeRecord, PpReuse, Preprocessor};
@@ -31,11 +31,13 @@ mod function;
 mod global_init;
 mod initializer;
 mod jumps;
+mod library_builtin;
 mod locals;
 mod loop_idiom;
 mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
+mod seh;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
@@ -43,6 +45,8 @@ mod value_builtin;
 mod vla_bound;
 #[cfg(test)]
 pub(crate) use emit::SCOPE_UNWIND;
+#[cfg(test)]
+pub(crate) use emit::TOKENS_ADVANCED;
 #[cfg(all(test, not(debug_assertions)))]
 pub(crate) use initializer::INIT_BOOKKEEPING;
 pub(crate) use initializer::PendingLabelReloc;
@@ -496,6 +500,18 @@ pub struct StructField {
     pub decl_spelling: crate::c5::symbol::DeclSpelling,
 }
 
+/// What [`Compiler::preprocess_unit`] returns for one unit.
+pub struct Preprocessed {
+    /// The expanded text.
+    pub text: String,
+    /// The headers the pass opened, when the options track them.
+    pub include_records: Vec<IncludeRecord>,
+    /// The `#define` lines the unit ends with, when asked for.
+    pub macros: Vec<String>,
+    /// The diagnostics the pass reported, in order.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// Optional preprocessor / driver knobs threaded through compiler
 /// construction. Everything here has a sensible default (empty
 /// vectors, empty label, tracing off); only callers that need to
@@ -538,15 +554,26 @@ pub struct CompileOptions {
     /// retry is off with it: a unit that asked for no library headers must
     /// not be given one. See [`Preprocessor::set_nostdinc`].
     pub nostdinc: bool,
-    /// `-fno-builtin` / `-ffreestanding` -- a call spelled with a library
-    /// function's own name is an ordinary call, not a builtin the compiler
-    /// may fold. The `__builtin_` spellings keep folding, as they do under
-    /// gcc's flag, and the auto-include retry is off with it: a
-    /// freestanding unit has no library to declare the name from.
+    /// clang's `-nostdlibinc` -- as `nostdinc`, keeping the compiler's
+    /// own headers. See [`Preprocessor::set_nostdlibinc`].
+    pub nostdlibinc: bool,
+    /// The directory `-print-file-name=include` names, which serves the
+    /// compiler's own headers wherever a search path names it. See
+    /// [`Preprocessor::set_compiler_include_dir`].
+    pub compiler_include_dir: Option<String>,
+    /// `-fno-builtin`, which `-ffreestanding` implies -- a call spelled
+    /// with a library function's own name is an ordinary call, not a
+    /// builtin the compiler may fold. The `__builtin_` spellings keep
+    /// folding, as they do under gcc's flag, and the auto-include retry
+    /// declares no library name.
     pub no_builtin: bool,
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-ffreestanding` -- a freestanding implementation (C99 4p6):
+    /// `__STDC_HOSTED__` is 0 (C99 6.10.8) and the auto-include retry,
+    /// whose permission (C99 7.1.4p2) is a hosted one, is off.
+    pub freestanding: bool,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
     /// The translation time `__DATE__` / `__TIME__` report, as seconds
@@ -601,12 +628,10 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
-    /// Function names an undeclared call may bind as a C89 6.3.2.2
-    /// implicit `extern int name();` instead of triggering the
-    /// auto-include retry. The driver fills this in a multi-TU build
-    /// for auto-included names another input defines, so the user's
-    /// definition wins over the header's library binding.
-    pub implicit_extern_fns: Vec<String>,
+    /// Library functions another input of the link defines. A `#pragma
+    /// binding` of one is dropped, so the header declares an ordinary
+    /// external function and a call resolves to that definition.
+    pub link_defined_fns: Vec<String>,
     /// `-O` -- predefine `NDEBUG` and `__OPTIMIZE__`, both `1`, so a
     /// single flag selects release semantics (optimization passes plus
     /// asserts compiled out). Explicit `-D` / `-U` flags override.
@@ -666,13 +691,13 @@ pub struct CompileOptions {
 
 /// The edition of the C standard a unit is compiled to (`-std=`), held as
 /// the `__STDC_VERSION__` it predefines (C99 6.10.8): `None` for C90,
-/// which predefines none. Without `-std` badc compiles C11.
+/// which predefines none. Without `-std` badc compiles C17.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CStd(pub Option<u32>);
 
 impl Default for CStd {
     fn default() -> Self {
-        Self(Some(201112))
+        Self(Some(201710))
     }
 }
 
@@ -798,8 +823,22 @@ impl CompileOptions {
         self.nostdinc = on;
         self
     }
+    /// The same, keeping the compiler's own headers (`-nostdlibinc`).
+    pub fn with_nostdlibinc(mut self, on: bool) -> Self {
+        self.nostdlibinc = on;
+        self
+    }
+    /// Name the compiler's include directory (`-print-file-name=include`).
+    pub fn with_compiler_include_dir(mut self, dir: Option<String>) -> Self {
+        self.compiler_include_dir = dir;
+        self
+    }
+    /// Whether the C library's headers are off the `#include` search.
+    fn library_headers_withdrawn(&self) -> bool {
+        self.nostdinc || self.nostdlibinc
+    }
     /// Stop treating a library function's own name as a builtin
-    /// (`-fno-builtin` / `-ffreestanding`).
+    /// (`-fno-builtin`).
     pub fn with_no_builtin(mut self, on: bool) -> Self {
         self.no_builtin = on;
         self
@@ -809,16 +848,23 @@ impl CompileOptions {
         self.no_builtin_fns = names;
         self
     }
+    /// Compile for a freestanding implementation (`-ffreestanding`).
+    pub fn with_freestanding(mut self, on: bool) -> Self {
+        self.freestanding = on;
+        self
+    }
 
     /// Whether the auto-include retry may not declare `name`. C99
     /// 7.1.4p2's permission to use a library function without a
-    /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
-    /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
-    /// under `-nostdinc` the header the retry would splice in is off the
+    /// declaration is a hosted one, so `-ffreestanding` withdraws it;
+    /// `-fno-builtin` withdraws it for every library name and
+    /// `-fno-builtin-<name>` for that name; under `-nostdinc` and
+    /// `-nostdlibinc` the header the retry would splice in is off the
     /// search, and a preprocessed unit includes nothing. The
     /// undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
-        self.nostdinc
+        self.library_headers_withdrawn()
+            || self.freestanding
             || self.no_builtin
             || self.preprocessed
             || self.no_builtin_fns.iter().any(|n| n == name)
@@ -982,10 +1028,9 @@ impl CompileOptions {
         self.no_entry_point = on;
         self
     }
-    /// Replace the implicit-extern function-name list. See
-    /// [`Self::implicit_extern_fns`].
-    pub fn with_implicit_extern_fns(mut self, names: Vec<String>) -> Self {
-        self.implicit_extern_fns = names;
+    /// See [`Self::link_defined_fns`].
+    pub fn with_link_defined_fns(mut self, names: Vec<String>) -> Self {
+        self.link_defined_fns = names;
         self
     }
 }
@@ -1003,6 +1048,11 @@ impl CompileOptions {
 /// and `-1` (deferred / flexible `T x[]`). The dimension expression
 /// rides on `Pending::vla_dim_expr`.
 pub(in crate::c5::compiler) const VLA_ARRAY_SIZE: i64 = -2;
+
+/// The size slot of a variable-length array type whose size a prototype
+/// leaves unspecified (C99 6.7.5.2p4); no frame holds it, and a
+/// definition gives the parameter its evaluated type on entry.
+pub(in crate::c5::compiler) const VLA_UNSPECIFIED_SLOT: i64 = i64::MIN;
 
 #[derive(Debug)]
 pub(in crate::c5::compiler) struct Pending {
@@ -1201,9 +1251,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// declarator's pointer points to, which run where the declaration is
     /// reached (C99 6.8p3). Consumed by the declaration's site.
     pub vm_bound_stores: alloc::vec::Vec<crate::c5::ast::ExprId>,
-    /// A parameter's variable first inner bound, which its declarator's
-    /// bounds then attach to the parameter.
-    pub vm_param_bound: Option<function::ParamSize>,
+    /// A parameter's variable inner bounds, by position among its inner
+    /// bounds, which its declarator then attaches to the parameter.
+    pub vm_param_bounds: alloc::vec::Vec<(usize, Option<function::ParamSize>)>,
     /// True when the declarator's leading dimension was spelled `[0]`.
     /// Both `T x[0]` and `T x[]` reach the object allocators as
     /// `array_size == -1`, but they declare different objects: `[0]` is
@@ -1687,7 +1737,7 @@ impl Default for Pending {
             vla_allowed: false,
             vla_dim_expr: None,
             vm_bound_stores: alloc::vec::Vec::new(),
-            vm_param_bound: None,
+            vm_param_bounds: alloc::vec::Vec::new(),
             declarator_zero_len_array: false,
             sizeof_vla_size_slot: None,
             sizeof_vla_store: None,
@@ -2011,6 +2061,11 @@ pub struct Compiler {
     /// the folding contexts raise this depth.
     const_object_fold: u32,
 
+    /// The source span, from its first token to its leaf, of the last
+    /// address-constant probe that failed at the leaf: a probe started
+    /// inside it reaches the same leaf and fails the same way.
+    address_probe_miss: Option<(usize, usize)>,
+
     /// Nesting depth of initializers for an object with static storage
     /// duration declared inside a function body. C99 6.7.8p4 requires
     /// those to be constant expressions; an automatic object's
@@ -2098,6 +2153,12 @@ pub struct Compiler {
     /// Number of currently-open `continue`-eligible scopes
     /// (loops only; `switch` doesn't open one).
     loop_continue_depth: usize,
+    /// The open parts of `__try` statements, outermost first.
+    seh_contexts: Vec<seh::SehContext>,
+    /// The filter and `__finally` funclets of the function being parsed.
+    seh_funclets: u32,
+    /// The `__try` statements of the function being parsed.
+    seh_trys: u32,
     /// Recursion depth shared by the recursive-descent entry points
     /// (statements, expressions, constant expressions, declarators,
     /// initializer lists). Bounded by `MAX_NEST_DEPTH` via
@@ -2319,6 +2380,19 @@ pub struct Compiler {
     /// `return;` is accepted and an operand of non-void type diagnosed
     /// (C99 6.8.6.4p1). Set at function-body entry, cleared at exit.
     current_func_returns_void: bool,
+    /// True while parsing the body of a function whose parameter list
+    /// ends in `...`, the only place `va_start` may appear (C99
+    /// 7.15.1.4p1). Set at function-body entry, cleared at exit.
+    current_func_variadic: bool,
+    /// The last named parameter of the function being defined, which
+    /// `va_start` names (C99 7.15.1.4p4): its symbol, its slot, and whether
+    /// it was declared `register`.
+    current_func_last_param: Option<(usize, i64, bool)>,
+    /// `register` arrays the expressions under parse converted to a
+    /// pointer (C99 6.3.2.1p3), by the node that names each, its symbol and
+    /// line, until a subscript, `sizeof` or `typeof` takes the node whole
+    /// ([`Self::check_register_decays`]).
+    register_decays: Vec<(super::ast::ExprId, usize, usize)>,
     /// Calling convention of the function body being parsed, taken off
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
@@ -2349,10 +2423,6 @@ pub struct Compiler {
     /// where.
     dylibs: Vec<DylibSpec>,
 
-    /// Symbol indices of callees already reported as used without a
-    /// return-type prototype (implicit int). Dedupes the diagnostic to
-    /// one per callee.
-    warned_implicit_ret: alloc::collections::BTreeSet<usize>,
     /// Source offsets of the string initializers reported as longer than
     /// their arrays: a literal read for its type and then for its value,
     /// as `__auto_type` reads it, is reported once.
@@ -2413,11 +2483,6 @@ pub struct Compiler {
     /// alignment among the objects reserved in it.
     tls_align: usize,
 
-    /// Mirror of [`CompileOptions::implicit_extern_fns`]. An
-    /// undeclared call to a listed name binds as a C89 6.3.2.2
-    /// implicit `extern int name();` resolved at link time.
-    implicit_extern_fns: Vec<String>,
-
     /// Mirror of [`CompileOptions::export_all_functions`]. When set,
     /// `resolve_exports` adds every non-static defined function to the
     /// export list so a `--shared` consumer can `dlsym` it.
@@ -2436,8 +2501,14 @@ pub struct Compiler {
     /// Mirror of [`CompileOptions::std`].
     std: CStd,
     vla_larger_than: Option<u64>,
-    /// Mirror of [`CompileOptions::nostdinc`], read where `no_builtin` is.
+    /// The C library's headers are off the search (`-nostdinc`,
+    /// `-nostdlibinc`), read where `no_builtin` is.
     nostdinc: bool,
+    /// Mirror of [`CompileOptions::freestanding`], read where `nostdinc` is.
+    freestanding: bool,
+    /// The `_Atomic` object types the unit forms, for
+    /// [`Self::declare_atomic_libcalls`].
+    atomic_types_formed: Vec<i64>,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
@@ -2504,6 +2575,9 @@ pub struct Compiler {
     /// an inner scope shadows the name, and an exit emitted inside such a
     /// scope must address the registered binding, not the current one.
     cleanup_scopes: Vec<jumps::CleanupScope>,
+    /// Per cleanup list a `return` runs, what the function's returns
+    /// running it share.
+    return_exits: alloc::collections::BTreeMap<stmt::ReturnExitKey, stmt::ReturnExit>,
     /// The function's scopes, labels and jumps; see [`jumps`].
     jumps: jumps::Jumps,
     /// `cleanup_scopes` depth at each enclosing `break` target (loop or
@@ -2721,17 +2795,60 @@ impl Compiler {
         Ok(pp.macro_definitions())
     }
 
+    /// One unit through the preprocessor to its end, for `-E`: the text, the
+    /// include records, the closing macro definitions when `macros` asks for
+    /// them (`-dM`), and every diagnostic the pass reported. An error among
+    /// those fails the unit after its text is written, as under gcc and
+    /// clang; a hard error stops the pass and carries the ones before it.
+    pub fn preprocess_unit(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+        macros: bool,
+    ) -> Result<Preprocessed, C5Error> {
+        let mut pp = Self::configure_preprocessor(target, &opts);
+        let text = pp.process_to_end(&source)?;
+        Ok(Preprocessed {
+            macros: if macros {
+                pp.macro_definitions()
+            } else {
+                Vec::new()
+            },
+            diagnostics: pp.sink.take(),
+            include_records: pp.include_records,
+            text,
+        })
+    }
+
     /// Assemble one GNU-as source unit for `target`, yielding the program the
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two
-    /// accept the same constructs and diagnose the rest identically.
+    /// accept the same constructs and diagnose the rest identically, each
+    /// error at its source line as gas reports it.
     pub fn assemble(text: &str, target: Target, opts: CompileOptions) -> Result<Program, C5Error> {
         let label = opts.source_label.clone();
+        let (text, lines) = crate::c5::asm::AsmSourceMap::read(text, &label);
         // No C source and no retry state: the auto-include retry rebuilds
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
-        this.ingest_file_scope_asm(text, false)
-            .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("{label}: {m}")))?;
+        this.ingest_file_scope_asm(&text, false).map_err(|errors| {
+            let diagnostic = |e: crate::c5::asm::AsmError| {
+                let text = crate::c5::asm::source_message(&e.text);
+                let d = match lines.loc(e.line) {
+                    Some(loc) => Diagnostic::new(Code::ASSEMBLER, Level::Error, Some(loc), text),
+                    None => Diagnostic::new(
+                        Code::ASSEMBLER,
+                        Level::Error,
+                        None,
+                        alloc::format!("{label}: {text}"),
+                    ),
+                };
+                e.invoked_at.iter().fold(d, |d, &line| {
+                    d.with_note(lines.loc(line), "macro invoked from here")
+                })
+            };
+            C5Error::Compile(errors.0.into_iter().map(diagnostic).collect())
+        })?;
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5
@@ -2783,7 +2900,12 @@ impl Compiler {
             pp.add_own_header_root(path);
         }
         pp.set_nostdinc(opts.nostdinc);
+        pp.set_nostdlibinc(opts.nostdlibinc);
+        if let Some(dir) = &opts.compiler_include_dir {
+            pp.set_compiler_include_dir(dir);
+        }
         pp.set_no_builtin(opts.no_builtin);
+        pp.set_hosted(!opts.freestanding);
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
@@ -2828,7 +2950,10 @@ impl Compiler {
         // with a force-include, need a copy. Recording for pass reuse is
         // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
-        let record = !(opts.nostdinc || opts.no_builtin || opts.preprocessed);
+        let record = !(opts.library_headers_withdrawn()
+            || opts.freestanding
+            || opts.no_builtin
+            || opts.preprocessed);
         let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
@@ -2917,7 +3042,10 @@ impl Compiler {
         if std::env::var("BADC_DUMP_PP").is_ok() {
             let _ = std::fs::write("/tmp/badc-pp.c", &preprocessed);
         }
-        let dylibs = pp.dylibs;
+        let mut dylibs = pp.dylibs;
+        for spec in &mut dylibs {
+            (spec.bindings).retain(|b| !opts.link_defined_fns.contains(&b.local_name));
+        }
         let pending_exports = pp.exports;
         let pragma_weak = pp.weak_pragmas;
         // The preprocessor's diagnostics head the unit's, and the pragmas
@@ -3001,7 +3129,6 @@ impl Compiler {
             param_list_scopes: 0,
             deferred_error,
             dylibs,
-            warned_implicit_ret: alloc::collections::BTreeSet::new(),
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             array_elem_fn: None,
@@ -3034,6 +3161,7 @@ impl Compiler {
             unprototyped_lists: Vec::new(),
             file_scope_fn_decls: hashbrown::HashMap::new(),
             const_object_fold: 0,
+            address_probe_miss: None,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
@@ -3047,6 +3175,9 @@ impl Compiler {
             pending_local_runtime_elements: Vec::new(),
             loop_break_depth: 0,
             loop_continue_depth: 0,
+            seh_contexts: Vec::new(),
+            seh_funclets: 0,
+            seh_trys: 0,
             nest_depth: 0,
             labels: hashbrown::HashMap::new(),
             unresolved_gotos: Vec::new(),
@@ -3095,6 +3226,9 @@ impl Compiler {
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
+            current_func_variadic: false,
+            current_func_last_param: None,
+            register_decays: Vec::new(),
             current_func_conv: crate::c5::codegen::CallConv::Target,
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,
@@ -3106,11 +3240,12 @@ impl Compiler {
             data_align: 8,
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
-            implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
-            nostdinc: opts.nostdinc,
+            nostdinc: opts.library_headers_withdrawn(),
+            freestanding: opts.freestanding,
+            atomic_types_formed: Vec::new(),
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
@@ -3133,6 +3268,7 @@ impl Compiler {
             variables: Vec::new(),
             pending_block_locals: Vec::new(),
             cleanup_scopes: Vec::new(),
+            return_exits: alloc::collections::BTreeMap::new(),
             jumps: jumps::Jumps::default(),
             break_cleanup_depths: Vec::new(),
             continue_cleanup_depths: Vec::new(),
@@ -3303,7 +3439,7 @@ impl Compiler {
     }
 
     fn failed(&mut self, e: C5Error) -> C5Error {
-        e.after(self.sink.take())
+        self.with_echoes(e).after(self.sink.take())
     }
 
     /// Recover the function name from a compile error whose
@@ -3349,7 +3485,7 @@ impl Compiler {
         // force-include set only grows, and a header already in it ends
         // the loop, so progress is monotone.
         let mut infos: Vec<String> = Vec::new();
-        let mut auto_names: Vec<String> = Vec::new();
+        let mut autos: Vec<crate::c5::program::AutoInclude> = Vec::new();
         loop {
             let e = match result {
                 Ok(mut prog) => {
@@ -3360,7 +3496,11 @@ impl Compiler {
                     for info in infos.into_iter().rev() {
                         prog.notes.insert(0, info);
                     }
-                    prog.auto_includes = auto_names;
+                    for a in &mut autos {
+                        a.bound = (prog.symbols.iter())
+                            .any(|s| s.name == a.name && s.class == Token::Sys as i64);
+                    }
+                    prog.auto_includes = autos;
                     return Ok(prog);
                 }
                 Err(e) => e,
@@ -3382,7 +3522,11 @@ impl Compiler {
             infos.push(format!(
                 "info: auto-including <{header}> for undeclared `{name}`"
             ));
-            auto_names.push(name);
+            autos.push(crate::c5::program::AutoInclude {
+                name,
+                header: header.to_string(),
+                bound: false,
+            });
             result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
                 .compile_one_pass();
         }
@@ -3446,7 +3590,7 @@ impl Compiler {
     /// retry branch inside the same method.
     fn compile_one_pass(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
-            return Err(e);
+            return Err(self.with_echoes(e));
         }
         // A hard error leaves with the diagnostics reported before it,
         // which the sink would otherwise keep for a caller that never
@@ -3454,6 +3598,7 @@ impl Compiler {
         #[cfg(feature = "codegen_test")]
         let parse_start = std::time::Instant::now();
         self.run_compile().map_err(|e| self.failed(e))?;
+        self.declare_atomic_libcalls();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -3755,6 +3900,7 @@ impl Compiler {
             entry_pragma: self.pp_entrypoint.clone(),
             default_libs: core::mem::take(&mut self.pp_default_libs),
             auto_includes: Vec::new(),
+            freestanding: self.freestanding,
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.

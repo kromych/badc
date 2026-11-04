@@ -1,10 +1,30 @@
-// sys/time.h -- `struct timeval` and gettimeofday are declared in
-// <time.h>; re-expose them here for sources that reach for the
-// historical BSD location.
+// sys/time.h -- `struct timeval` and gettimeofday in their POSIX location.
+// On Windows <time.h> declares gettimeofday, as mingw-w64's does.
 
 #pragma once
 
 #include <time.h>
+
+// The SDK's winsock.h and winsock2.h set _WINSOCKAPI_ and define the struct
+// and the timer macros themselves.
+#if defined(_WIN32) && !defined(_WINSOCKAPI_)
+#include <_timeval.h>
+#elif !defined(_WIN32)
+#include <__badc_timeval.h>
+#endif
+
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::gettimeofday, "_gettimeofday")
+#endif
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::gettimeofday, "gettimeofday")
+#endif
+#ifndef _WIN32
+// The zone argument is obsolete; glibc and libSystem spell it `void *`.
+int gettimeofday(struct timeval *restrict tv, void *restrict tz);
+#endif
 
 // The obsolete zone argument of gettimeofday, which glibc, libSystem and
 // mingw-w64 all define here.

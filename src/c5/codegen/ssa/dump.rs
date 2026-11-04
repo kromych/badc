@@ -96,23 +96,31 @@ fn fmt_inst(inst: &Inst) -> String {
     match inst {
         Imm(v) => format!("Imm({v})"),
         Undef => "Undef".into(),
+        ExceptionCode => "ExceptionCode".into(),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),
         BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
+        ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        } => format!("ParentLocalAddr(v{establisher}, parent={parent}, index={index})"),
         Load {
             addr,
             disp,
             kind,
             volatile,
             align,
+            pc_rel,
         } => format!(
-            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{} }}",
+            "Load {{ addr=v{addr}, disp={disp}, kind={}{}{}{} }}",
             fmt_load_kind(*kind),
             fmt_volatile(*volatile),
             fmt_align(*align),
+            fmt_pc_rel(*pc_rel),
         ),
         Store {
             addr,
@@ -121,11 +129,13 @@ fn fmt_inst(inst: &Inst) -> String {
             kind,
             volatile,
             align,
+            pc_rel,
         } => format!(
-            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{} }}",
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={}{}{}{} }}",
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
             fmt_align(*align),
+            fmt_pc_rel(*pc_rel),
         ),
         SegLoad {
             addr,
@@ -468,6 +478,11 @@ fn fmt_abs_base(abs: bool) -> &'static str {
     if abs { " abs" } else { "" }
 }
 
+/// ` pc_rel` for an address the access forms PC-relative.
+fn fmt_pc_rel(pc_rel: bool) -> &'static str {
+    if pc_rel { " pc_rel" } else { "" }
+}
+
 /// Follows the index operand; empty for a full-width index.
 fn fmt_index_ext(ext: super::super::ir::IndexExt) -> &'static str {
     use super::super::ir::IndexExt;
@@ -559,6 +574,8 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Fgt => "fgt",
         BinOp::Fle => "fle",
         BinOp::Fge => "fge",
+        BinOp::Fone => "fone",
+        BinOp::Funo => "funo",
     }
 }
 

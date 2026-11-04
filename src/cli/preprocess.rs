@@ -4,9 +4,8 @@ use badc::Compiler;
 
 use super::args::Cli;
 use super::deps::{DepKind, DepOptions, emit_deps};
-use super::diag::{TuLog, eprint_diagnostic, rendered};
+use super::diag::{TuLog, eprint_diagnostic, rendered, report_diagnostics};
 use super::inputs::{Inputs, StdinSource};
-use super::options::SourceKind;
 
 /// `-M` / `-MM` preprocess only: emit the rule and produce no
 /// object, as gcc does.
@@ -34,7 +33,7 @@ pub(crate) fn dump_dependencies(
         let copts = cli
             .front
             .compile_options(src)
-            .with_asm_source(SourceKind::of(src).is_asm())
+            .with_asm_source(cli.front.source_kind(src).is_asm())
             .with_track_includes(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
@@ -48,15 +47,35 @@ pub(crate) fn dump_dependencies(
         for w in compiler.preprocess_warnings() {
             log.diag(stderr_is_tty, w);
         }
-        for d in compiler.diagnostics() {
-            log.raw(rendered(d, stderr_is_tty));
+        // A failed pass's error carries the diagnostics reported before it,
+        // which the compiler's own list holds as well.
+        if compiler.preprocess_error().is_none() {
+            for d in compiler.diagnostics() {
+                log.raw(rendered(d, stderr_is_tty));
+            }
         }
         // An unresolved `#include` leaves the prerequisite list
-        // incomplete, so report it and write nothing, as gcc does.
+        // incomplete, so report it and write nothing, as gcc does. Any
+        // other error (`#error`) leaves the list whole: gcc and clang write
+        // it and fail.
+        let unresolved = |r: &badc::IncludeRecord| r.status == badc::IncludeStatus::Missing;
+        let missing = compiler.include_records().iter().any(unresolved);
         let res = match compiler.preprocess_error() {
-            Some(e) => {
-                log.diag(stderr_is_tty, e);
+            Some(e) if missing => {
+                log.error(stderr_is_tty, "", e);
                 Err(())
+            }
+            Some(e) => {
+                log.error(stderr_is_tty, "", e);
+                let written = emit_deps(
+                    src,
+                    compiler.include_records(),
+                    deps,
+                    cli.output_path.as_deref(),
+                    &mut log,
+                    stderr_is_tty,
+                );
+                written.and(Err(()))
             }
             None => emit_deps(
                 src,
@@ -115,7 +134,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     // it does for a compile.
     let dump_deps = cli.deps.as_ref().filter(|d| d.kind == DepKind::WithOutput);
     let stderr_is_tty = std::io::stderr().is_terminal();
-    let mut dep_failed = false;
+    let mut failed = false;
     for src_path in sources {
         let (label, contents) = if src_path == "-" {
             ("-".to_string(), stdin.read())
@@ -131,22 +150,29 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         let opts = cli
             .front
             .compile_options(&label)
-            .with_asm_source(SourceKind::of(src_path).is_asm())
+            .with_asm_source(cli.front.source_kind(src_path).is_asm())
             .with_track_includes(dump_deps.is_some())
             .with_keep_pragmas(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
-        let preprocessed = if cli.front.dump_macros {
-            Compiler::preprocess_macros(contents, cli.target, opts)
-                .map(|lines| (lines.iter().map(|l| format!("{l}\n")).collect(), Vec::new()))
-        } else {
-            Compiler::preprocess_tracked(contents, cli.target, opts)
-        };
+        let dump_macros = cli.front.dump_macros;
+        let preprocessed = Compiler::preprocess_unit(contents, cli.target, opts, dump_macros);
         match preprocessed {
-            Ok((s, records)) => {
+            Ok(unit) => {
                 if multi_tu {
                     eprintln!("--- {label} ---");
                 }
+                // The diagnostics go to stderr as a compile prints them, and
+                // one at the error level fails the run once the text is out.
+                let mut log = TuLog::default();
+                failed |= report_diagnostics(&mut log, stderr_is_tty, &unit.diagnostics).is_err();
+                log.flush();
+                let (s, records) = if dump_macros {
+                    let lines = unit.macros.iter().map(|l| format!("{l}\n"));
+                    (lines.collect(), Vec::new())
+                } else {
+                    (unit.text, unit.include_records)
+                };
                 let s = if cli.front.no_line_markers {
                     without_line_markers(&s)
                 } else {
@@ -162,7 +188,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                             std::process::exit(1);
                         }
                     }
-                    None => print!("{s}"),
+                    None => out!("{s}"),
                 }
                 if let Some(d) = dump_deps {
                     let mut log = TuLog::default();
@@ -175,7 +201,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                         stderr_is_tty,
                     );
                     log.flush();
-                    dep_failed |= res.is_err();
+                    failed |= res.is_err();
                 }
             }
             Err(e) => {
@@ -184,7 +210,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             }
         }
     }
-    if dep_failed {
+    if failed {
         std::process::exit(1);
     }
 }

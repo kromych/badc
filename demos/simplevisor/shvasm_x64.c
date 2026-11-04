@@ -39,6 +39,7 @@ __attribute__((naked)) VOID ShvVmxCleanup(UINT16 Data, UINT16 Teb) {
 /* Canonical windows-x64 CONTEXT layout (ntint.h mirrors it). The restore
  * routine below reaches these by numeric displacement, so a divergence
  * must fail at compile time rather than restore the wrong register. */
+_Static_assert(__builtin_offsetof(CONTEXT, MxCsr) == 0x34, "CONTEXT.MxCsr");
 _Static_assert(__builtin_offsetof(CONTEXT, EFlags) == 0x44, "CONTEXT.EFlags");
 _Static_assert(__builtin_offsetof(CONTEXT, Rax) == 0x78, "CONTEXT.Rax");
 _Static_assert(__builtin_offsetof(CONTEXT, Rsp) == 0x98, "CONTEXT.Rsp");
@@ -69,7 +70,7 @@ __attribute__((naked)) VOID ShvOsRestoreContext2(PCONTEXT ContextRecord,
                      "movaps 0x270(%rcx), %xmm13\n\t"
                      "movaps 0x280(%rcx), %xmm14\n\t"
                      "movaps 0x290(%rcx), %xmm15\n\t"
-                     "ldmxcsr 0x118(%rcx)\n\t"
+                     "ldmxcsr 0x34(%rcx)\n\t"
                      "mov 0x78(%rcx), %rax\n\t"
                      "mov 0x88(%rcx), %rdx\n\t"
                      "mov 0xb8(%rcx), %r8\n\t"

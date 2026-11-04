@@ -246,17 +246,16 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	leaq	(%rcx,%rcx,4), %r12
-               	movq	(%rax), %rcx
-               	movq	%rcx, %r13
+               	movq	<rip>, %rax # <addr>
+               	leaq	(%rax,%rax,4), %r12
+               	movq	<rip>, %rax # <addr>
+               	movq	%rax, %r13
                	xorq	$0x99, %r13
-               	movq	(%rax), %rcx
-               	leaq	0x4d(%rcx), %r14
-               	movq	(%rax), %rcx
-               	leaq	(%rcx,%rcx,2), %r15
-               	movq	(%rax), %rbx
+               	movq	<rip>, %rax # <addr>
+               	leaq	0x4d(%rax), %r14
+               	movq	<rip>, %rax # <addr>
+               	leaq	(%rax,%rax,2), %r15
+               	movq	<rip>, %rbx # <addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, 0x38(%rsp)

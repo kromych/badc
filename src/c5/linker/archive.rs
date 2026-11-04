@@ -99,13 +99,28 @@ enum MemberSource {
     External(String),
 }
 
+/// The symbol index forms: SysV `/` and `/SYM64/` (big-endian), BSD
+/// `__.SYMDEF` and `__.SYMDEF_64` (little-endian `ranlib` records).
+#[derive(Clone, Copy)]
+enum IndexForm {
+    SysV { wide: bool },
+    Bsd { wide: bool },
+}
+
+/// An archive's walk: each real member's name, the source of its bytes and
+/// the offset of its header, and the first symbol index's form and body.
+struct Walk<'a> {
+    members: Vec<(String, MemberSource, usize)>,
+    index: Option<(IndexForm, &'a [u8])>,
+}
+
 /// Walk an archive's member headers, handling both the regular
 /// `!<arch>` flavour (member bodies stored inline) and the GNU thin
 /// `!<thin>` flavour (member bodies live in external files; only the
-/// `/` symbol index and `//` name table are stored inline). Returns
-/// each real member's name and the source of its bytes. The SysV
-/// symbol index and GNU string table are consumed, not returned.
-fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5Error> {
+/// `/` symbol index and `//` name table are stored inline). The GNU
+/// string table is consumed; the first symbol index is returned beside
+/// the members.
+fn parse_archive_members(blob: &[u8]) -> Result<Walk<'_>, C5Error> {
     let thin = blob.len() >= 8 && &blob[..8] == b"!<thin>\n";
     if !thin && (blob.len() < 8 || &blob[..8] != b"!<arch>\n") {
         return Err(link_err(
@@ -116,7 +131,8 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
     }
     let mut cursor = 8usize;
     let mut long_names: Vec<u8> = Vec::new();
-    let mut out: Vec<(String, MemberSource)> = Vec::new();
+    let mut out: Vec<(String, MemberSource, usize)> = Vec::new();
+    let mut index: Option<(IndexForm, &[u8])> = None;
     while cursor < blob.len() {
         // Align to even byte boundary -- ar pads odd-size members.
         if !cursor.is_multiple_of(2) {
@@ -125,6 +141,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
                 break;
             }
         }
+        let header_at = cursor;
         let hdr = read_header(blob, cursor)?;
         if hdr.fmag != [0x60, 0x0a] {
             return Err(link_err(
@@ -169,6 +186,10 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         //   "name"         -- BSD short name.
         // MSVC repeats `/` (a little-endian index) and adds ARM64EC's `/<ECSYMBOLS>/`.
         if raw_name == "/" || raw_name == "/SYM64/" || raw_name == "/<ECSYMBOLS>/" {
+            if raw_name != "/<ECSYMBOLS>/" && index.is_none() {
+                let wide = raw_name == "/SYM64/";
+                index = Some((IndexForm::SysV { wide }, body));
+            }
             continue;
         }
         if raw_name == "//" {
@@ -201,17 +222,74 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         // The BSD symbol index is a named member, so it is only
         // recognisable once the name is decoded.
         if is_bsd_symbol_index(&name) {
+            if index.is_none() {
+                let wide = name.starts_with("__.SYMDEF_64");
+                index = Some((IndexForm::Bsd { wide }, body));
+            }
             continue;
         }
         if thin {
             // A thin member's `name` is its path relative to the
             // archive's directory (or absolute); the caller resolves it.
-            out.push((name.clone(), MemberSource::External(name)));
+            out.push((name.clone(), MemberSource::External(name), header_at));
         } else {
-            out.push((name, MemberSource::Inline(body.to_vec())));
+            out.push((name, MemberSource::Inline(body.to_vec()), header_at));
         }
     }
-    Ok(out)
+    Ok(Walk {
+        members: out,
+        index,
+    })
+}
+
+/// The names `body`, an index of `form`, lists for each member whose
+/// header lies at `headers[i]`. `None` for an empty index, a malformed
+/// one, or one with an entry that names no member's header.
+fn member_symbols(form: IndexForm, body: &[u8], headers: &[usize]) -> Option<Vec<Vec<String>>> {
+    let num = |at: usize, n: usize, big: bool| -> Option<u64> {
+        let b = body.get(at..at.checked_add(n)?)?;
+        Some(b.iter().enumerate().fold(0, |v, (i, &x)| {
+            v | (x as u64) << (8 * if big { n - 1 - i } else { i })
+        }))
+    };
+    let cstr = |at: usize| -> Option<String> {
+        let tail = body.get(at..)?;
+        let end = tail.iter().position(|&c| c == 0)?;
+        Some(String::from_utf8_lossy(&tail[..end]).into_owned())
+    };
+    // `(header offset, name)` per entry.
+    let mut entries: Vec<(u64, String)> = Vec::new();
+    match form {
+        IndexForm::SysV { wide } => {
+            let w = if wide { 8 } else { 4 };
+            let count = usize::try_from(num(0, w, true)?).ok()?;
+            let mut at = w.checked_mul(count.checked_add(1)?)?;
+            for k in 0..count {
+                let name = cstr(at)?;
+                at += name.len() + 1;
+                entries.push((num(w * (k + 1), w, true)?, name));
+            }
+        }
+        IndexForm::Bsd { wide } => {
+            let w = if wide { 8 } else { 4 };
+            let size = usize::try_from(num(0, w, false)?).ok()?;
+            let strings = w.checked_add(size)?.checked_add(w)?;
+            for k in 0..size / (2 * w) {
+                let at = w + 2 * w * k;
+                let strx = usize::try_from(num(at, w, false)?).ok()?;
+                entries.push((num(at + w, w, false)?, cstr(strings.checked_add(strx)?)?));
+            }
+        }
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    let mut out = alloc::vec![Vec::new(); headers.len()];
+    for (at, name) in entries {
+        let i = headers.binary_search(&usize::try_from(at).ok()?).ok()?;
+        out[i].push(name);
+    }
+    Some(out)
 }
 
 /// Read an archive's members. Skips the SysV symbol-index and
@@ -222,7 +300,7 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
 /// [`read_archive_at`] for those.
 pub fn read_archive(blob: &[u8]) -> Result<Vec<ArchiveMember>, C5Error> {
     let mut out = Vec::new();
-    for (name, src) in parse_archive_members(blob)? {
+    for (name, src, _) in parse_archive_members(blob)?.members {
         match src {
             MemberSource::Inline(bytes) => out.push(ArchiveMember { name, bytes }),
             MemberSource::External(_) => {
@@ -245,8 +323,31 @@ pub fn read_archive_at(
     blob: &[u8],
     base_dir: Option<&std::path::Path>,
 ) -> Result<Vec<ArchiveMember>, C5Error> {
+    Ok(read_indexed_archive_at(blob, base_dir)?.members)
+}
+
+/// An archive as a link reads it: the members and, when the archive
+/// carries a symbol index, the names it lists for each member.
+#[derive(Debug, Clone)]
+pub struct IndexedArchive {
+    pub members: Vec<ArchiveMember>,
+    /// `symbols[i]`: the index's names for `members[i]`. `None` when the
+    /// archive has no index, an empty one, or one naming no member.
+    pub symbols: Option<Vec<Vec<String>>>,
+}
+
+/// As [`read_archive_at`], with the symbol index: SysV `/` (the first
+/// of MSVC's two) or `/SYM64/`, or BSD `__.SYMDEF[_64][ SORTED]`.
+#[cfg(feature = "std")]
+pub fn read_indexed_archive_at(
+    blob: &[u8],
+    base_dir: Option<&std::path::Path>,
+) -> Result<IndexedArchive, C5Error> {
+    let walk = parse_archive_members(blob)?;
+    let headers: Vec<usize> = walk.members.iter().map(|m| m.2).collect();
+    let symbols = (walk.index).and_then(|(form, body)| member_symbols(form, body, &headers));
     let mut out = Vec::new();
-    for (name, src) in parse_archive_members(blob)? {
+    for (name, src, _) in walk.members {
         let bytes = match src {
             MemberSource::Inline(bytes) => bytes,
             MemberSource::External(path) => {
@@ -270,7 +371,10 @@ pub fn read_archive_at(
         };
         out.push(ArchiveMember { name, bytes });
     }
-    Ok(out)
+    Ok(IndexedArchive {
+        members: out,
+        symbols,
+    })
 }
 
 /// Build an archive from `members`, with a symbol index of the names
@@ -677,6 +781,96 @@ mod tests {
             [&1u64.to_be_bytes()[..], &headers[1].to_be_bytes()].concat()
         );
         assert_eq!(&body[16..], b"b\0\0\0\0\0\0\0");
+    }
+
+    /// An archive of `a.o` and `b.o` behind the index member `index`
+    /// writes for their header offsets, whose size does not depend on them.
+    fn behind_index(index: impl Fn(&mut Vec<u8>, &[u64])) -> Vec<u8> {
+        let members: [(&str, &[u8]); 2] = [("a.o", b"AAA"), ("b.o", b"B")];
+        let mut probe = b"!<arch>\n".to_vec();
+        index(&mut probe, &[0, 0]);
+        let mut at = probe.len() as u64;
+        let headers: Vec<u64> = (members.iter())
+            .map(|(_, body)| {
+                let header = at;
+                at += (AR_HEADER_SIZE + body.len() + (body.len() & 1)) as u64;
+                header
+            })
+            .collect();
+        let mut blob = b"!<arch>\n".to_vec();
+        index(&mut blob, &headers);
+        for (name, body) in members {
+            write_ar_header(&mut blob, name, body.len());
+            blob.extend_from_slice(body);
+            if body.len() % 2 == 1 {
+                blob.push(b'\n');
+            }
+        }
+        blob
+    }
+
+    /// `ranlib` records of `(string offset, header offset)`, `wide` bytes
+    /// each field, little-endian, then the string table.
+    fn ranlib_body(wide: usize, headers: &[u64]) -> Vec<u8> {
+        let field = |v: u64| v.to_le_bytes()[..wide].to_vec();
+        let mut body = field(3 * 2 * wide as u64);
+        for (strx, member) in [(0u64, 0), (3, 1), (6, 1)] {
+            body.extend(field(strx));
+            body.extend(field(headers[member]));
+        }
+        body.extend(field(9));
+        body.extend_from_slice(b"sa\0sb\0sc\0");
+        body
+    }
+
+    /// The index gives each member the names whose entries point at its
+    /// header: SysV `/` and `/SYM64/`, BSD `__.SYMDEF` and `__.SYMDEF_64`.
+    /// An empty index, or one with an entry at no member's header, gives
+    /// none.
+    #[test]
+    fn each_index_form_lists_its_members_names() {
+        let names = |n: &[&str]| n.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
+        let want = Some(alloc::vec![names(&["sa"]), names(&["sb", "sc"])]);
+        let entries = |h: &[u64]| [(h[0], "sa"), (h[1], "sb"), (h[1], "sc")];
+        let sysv = |wide: bool, at: u64| {
+            move |out: &mut Vec<u8>, h: &[u64]| {
+                let mut e = entries(h);
+                e[2].0 += at;
+                let (name, body) = symbol_index(wide, &e);
+                write_ar_header(out, name, body.len());
+                out.extend_from_slice(&body);
+                if body.len() % 2 == 1 {
+                    out.push(b'\n');
+                }
+            }
+        };
+        let bsd = |name: &'static str, wide: usize| {
+            move |out: &mut Vec<u8>, h: &[u64]| {
+                push_bsd_member(out, name, &ranlib_body(wide, h), 20)
+            }
+        };
+        let read = |blob: &[u8]| read_indexed_archive_at(blob, None).expect("read").symbols;
+        assert_eq!(read(&behind_index(sysv(false, 0))), want, "/");
+        assert_eq!(read(&behind_index(sysv(true, 0))), want, "/SYM64/");
+        assert_eq!(read(&behind_index(bsd("__.SYMDEF", 4))), want, "__.SYMDEF");
+        assert_eq!(
+            read(&behind_index(bsd("__.SYMDEF_64", 8))),
+            want,
+            "__.SYMDEF_64"
+        );
+        assert_eq!(
+            read(&behind_index(sysv(false, 1))),
+            None,
+            "an entry at no header"
+        );
+        let empty = write_archive(
+            &[ArchiveMember {
+                name: "a.o".into(),
+                bytes: alloc::vec![1],
+            }],
+            &[],
+        );
+        assert_eq!(read(&empty), None, "an empty index");
     }
 
     /// A regular `!<arch>` round-trips: write members, read them back.

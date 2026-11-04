@@ -47,19 +47,16 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x4(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x14(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x6, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x8(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movq	%rcx, %xmm0
                	callq	*%rax
@@ -71,23 +68,20 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x8(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
                	jne	<addr>
                	movl	$0x4, %edi
@@ -97,8 +91,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
                	xorl	%eax, %eax

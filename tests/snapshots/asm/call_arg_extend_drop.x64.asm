@@ -59,15 +59,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	$-0x7, %rax
-               	movl	%eax, -0x8(%rbp)
-               	movslq	%eax, %rax
-               	leaq	(%rax,%rax,2), %rax
-               	cmpq	$-0x15, %rax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
+               	movl	$0xfffffff9, -0x8(%rbp) # imm = 0xFFFFFFF9
                	xorl	%eax, %eax
                	leave
                	retq

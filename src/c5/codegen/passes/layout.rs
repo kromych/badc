@@ -995,8 +995,8 @@ mod tests {
     }
 
     /// b0 jumps to the dispatch block b4, which branches indirectly to the
-    /// labels b3, b1, b2 (recorded out of block order); b1 and b3 jump back
-    /// to b4, b2 returns.
+    /// labels b3, b1, b2 (recorded out of block order) through a static
+    /// table of their addresses; b1 and b3 jump back to b4, b2 returns.
     fn dispatch_loop() -> FunctionSsa {
         let mut f = func_with(
             vec![Inst::Imm(0), Inst::Imm(1), Inst::Imm(3), Inst::Imm(4)],
@@ -1009,6 +1009,12 @@ mod tests {
             ],
         );
         f.computed_goto_targets = vec![3, 1, 2];
+        f.label_data_relocs = (f.computed_goto_targets.iter().enumerate())
+            .map(|(i, &block)| crate::c5::ir::LabelDataReloc {
+                data_offset: 8 * i as u64,
+                block,
+            })
+            .collect();
         f
     }
 

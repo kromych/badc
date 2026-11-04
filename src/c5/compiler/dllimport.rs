@@ -83,7 +83,10 @@ impl Compiler {
             );
             return Err(self.compile_err(Code::INVALID_DECLARATION, text));
         }
-        let defined = d.definition || self.symbols[id_idx].defined_here;
+        // An `extern` object declaration reserves a placeholder and is no
+        // definition (C99 6.9.2); only a tentative or an initialized one is.
+        let sym = &self.symbols[id_idx];
+        let defined = d.definition || (sym.defined_here && !(is_object && sym.is_extern_decl));
         if defined && is_object {
             let text = format!("variable `{name}` definition is marked dllimport");
             return Err(self.compile_err(Code::INVALID_DECLARATION, text));

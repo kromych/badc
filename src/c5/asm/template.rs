@@ -298,6 +298,15 @@ pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
     })
 }
 
+/// [`data_directive_width`] with x86's `.value`, which GNU as defines for
+/// that architecture alone, a 2-byte element.
+pub(crate) fn x86_data_directive_width(tok: &str) -> Option<usize> {
+    match tok {
+        ".value" => Some(2),
+        _ => data_directive_width(tok),
+    }
+}
+
 /// The mapping class a `.byte`-family directive keyword lays down, or
 /// `None` when the keyword is not one. This is the keyword-level form of
 /// the rule [`step_map_state`] applies to a parsed section item: `.inst`

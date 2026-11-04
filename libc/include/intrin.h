@@ -117,8 +117,10 @@ void *_InterlockedCompareExchangePointer(void *volatile *dest, void *exchange,
                                          void *comparand);
 
 #if defined(__x86_64__)
-/* `__rdtsc` and `_mm_pause` stay undeclared: <x86intrin.h> and
-** <xmmintrin.h> define them, and the compiler lowers either call.
+/* `__rdtsc`, `__rdtscp`, `__readeflags`, `__writeeflags`, `_xgetbv` and
+** the `_mm_` fences and pause stay undeclared: <x86intrin.h>,
+** <immintrin.h>, <emmintrin.h> and <xmmintrin.h> define them, and the
+** compiler lowers each call.
 ** gcc's <cpuid.h> spells `__cpuid` as a five-operand macro. */
 #ifndef __cpuid
 void __cpuid(int info[4], int leaf);

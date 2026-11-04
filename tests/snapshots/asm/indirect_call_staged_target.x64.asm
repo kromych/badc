@@ -140,8 +140,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
+               	movq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
                	movl	$0x5, %edx
                	callq	<addr>

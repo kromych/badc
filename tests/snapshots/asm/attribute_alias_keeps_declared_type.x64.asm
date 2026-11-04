@@ -26,31 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	shlq	%rax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	incq	%rax
                	cmpl	$0xb, %eax
                	je	<addr>

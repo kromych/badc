@@ -392,6 +392,310 @@ fn the_interpreter_runs_the_builtins() {
     );
 }
 
+/// `<pmmintrin.h>` and the `<mmintrin.h>` it reaches give each MMX and SSE3
+/// operation the result the SDM defines for its instruction, saturation,
+/// out-of-range shift counts and the pair-sum wrap included, as the
+/// interpreter runs them on any host; the `mmx_sse3_and_mm_malloc_intrinsics`
+/// fixture runs them natively with EMMS, MXCSR and the allocator.
+#[test]
+fn mmx_and_sse3_operations_follow_the_sdm() {
+    let src = "#include <pmmintrin.h>\n\
+        #define Q(m) ((unsigned long long)_mm_cvtm64_si64(m))\n\
+        int main(void) {\n\
+            if (Q(_mm_packs_pi16(_mm_setr_pi16(300, -300, 5, -5), \
+                                 _mm_setr_pi16(127, -128, 32767, -32768))) != 0x807F807FFB05807FULL) return 1;\n\
+            if (Q(_mm_packs_pu16(_mm_setr_pi16(300, -300, 5, 255), _mm_setr_pi16(256, 0, 128, -1))) \
+                != 0x008000FFFF0500FFULL) return 2;\n\
+            if (Q(_mm_unpackhi_pi8(_mm_setr_pi8(1, 2, 3, 4, 5, 6, 7, 8), \
+                                   _mm_setr_pi8(11, 12, 13, 14, 15, 16, 17, 18))) != 0x1208110710060F05ULL) return 3;\n\
+            if (Q(_mm_adds_pi8(_mm_set1_pi8(100), _mm_set1_pi8(100))) != 0x7F7F7F7F7F7F7F7FULL) return 4;\n\
+            if (Q(_mm_subs_pu16(_mm_set1_pi16(5), _mm_set1_pi16(7))) != 0) return 5;\n\
+            if (Q(_mm_madd_pi16(_mm_set1_pi16(-32768), _mm_set1_pi16(-32768))) != 0x8000000080000000ULL) return 6;\n\
+            if (Q(_mm_mullo_pi16(_mm_set1_pi16(300), _mm_set1_pi16(300))) != 0x5F905F905F905F90ULL) return 7;\n\
+            if (Q(_mm_slli_pi16(_mm_set1_pi16(1), 16)) != 0 || \
+                Q(_mm_srai_pi16(_mm_set1_pi16(-32768), 20)) != 0xFFFFFFFFFFFFFFFFULL) return 8;\n\
+            if (Q(_mm_sll_si64(_mm_cvtsi64_m64(1), _mm_cvtsi64_m64(63))) != 0x8000000000000000ULL) return 9;\n\
+            if (Q(_mm_cmpgt_pi32(_mm_set_pi32(-1, 5), _mm_set_pi32(0, 4))) != 0x00000000FFFFFFFFULL) return 10;\n\
+            __m128 r = _mm_hadd_ps((__m128){1, 2, 3, 4}, (__m128){5, 6, 7, 8});\n\
+            if (r[0] != 3 || r[1] != 7 || r[2] != 11 || r[3] != 15) return 11;\n\
+            r = _mm_addsub_ps((__m128){1, 2, 3, 4}, (__m128){0.5f, 0.5f, 0.5f, 0.5f});\n\
+            if (r[0] != 0.5f || r[1] != 2.5f || r[2] != 2.5f || r[3] != 4.5f) return 12;\n\
+            __m128d d = _mm_hsub_pd((__m128d){1, 2}, (__m128d){3, 5});\n\
+            return d[0] == -1 && d[1] == -2 ? 0 : 13;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the MMX and SSE3 operations must give the instruction's result"
+    );
+}
+
+/// The `__m64` forms of `<xmmintrin.h>`, `<emmintrin.h>` and `<tmmintrin.h>`
+/// give the result the SDM defines for each instruction, as the interpreter
+/// runs them on any host; the `sse_sse2_ssse3_m64_forms_follow_the_sdm`
+/// fixture checks every form natively, the MXCSR-rounded conversions with it.
+#[test]
+fn m64_forms_of_sse_sse2_and_ssse3_follow_the_sdm() {
+    let src = "#include <tmmintrin.h>\n\
+        #define Q(m) ((unsigned long long)_mm_cvtm64_si64(m))\n\
+        #define M(q) _mm_cvtsi64_m64((long long)(q))\n\
+        int main(void) {\n\
+            __m64 a = M(0x80FF7F0102FE10F0ULL), b = M(0x01FF80FF7F0203F1ULL);\n\
+            if (Q(_mm_avg_pu8(a, b)) != 0x41FF808041800AF1ULL) return 1;\n\
+            if (Q(_mm_sad_pu8(a, b)) != 0x0000000000000305ULL) return 2;\n\
+            if (_mm_movemask_pi8(a) != 0xC5 || _mm_extract_pi16(a, 3) != 0x80FF) return 3;\n\
+            if (Q(_mm_shuffle_pi16(a, 0x1B)) != 0x10F002FE7F0180FFULL) return 4;\n\
+            if (Q(_mm_insert_pi16(a, 0x1234, 1)) != 0x80FF7F01123410F0ULL) return 5;\n\
+            if (Q(_mm_max_pi16(a, b)) != 0x01FF7F017F0210F0ULL ||\n\
+                Q(_mm_min_pu8(a, b)) != 0x01FF7F01020203F0ULL) return 6;\n\
+            if (Q(_mm_mulhi_pu16(M(0xFFFF000200030004ULL), M(0xFFFF800080008000ULL))) !=\n\
+                0xFFFE000100010002ULL) return 7;\n\
+            char buf[8] = {0};\n\
+            _mm_maskmove_si64(M(0x0807060504030201ULL), M(0x80000080000080FFULL), buf);\n\
+            if (buf[0] != 1 || buf[1] != 2 || buf[2] || buf[4] != 5 || buf[7] != 8) return 8;\n\
+            if (Q(_mm_mul_su32(M(0xFFFFFFFF), M(0x1FFFFFFFFULL))) != 0xFFFFFFFE00000001ULL) return 9;\n\
+            __m128i x = _mm_set_epi64(M(1), _mm_movepi64_pi64(_mm_movpi64_epi64(M(5))));\n\
+            if (x[0] != 5 || x[1] != 1) return 10;\n\
+            __m128 f = _mm_cvtpu8_ps(M(0xFF80));\n\
+            if (f[0] != 128.f || f[1] != 255.f || f[2] != 0.f) return 11;\n\
+            __m128d d = _mm_cvtpi32_pd(_mm_set_pi32(-3, 7));\n\
+            if (d[0] != 7 || d[1] != -3) return 12;\n\
+            if (Q(_mm_abs_pi8(M(0x80FF7F01ULL))) != 0x80017F01ULL ||\n\
+                Q(_mm_sign_pi16(M(0x8000000500050005ULL), M(0xFFFF0000FFFF0001ULL))) !=\n\
+                0x80000000FFFB0005ULL) return 13;\n\
+            if (Q(_mm_hadds_pi16(M(0x7FFF7FFF00010002ULL), M(0x8000800000030004ULL))) !=\n\
+                0x800000077FFF0003ULL) return 14;\n\
+            if (Q(_mm_maddubs_pi16(M(0xFFFFFFFF0201ULL), M(0x7F7F7F7F0304ULL))) != 0x7FFF7FFF000AULL) return 15;\n\
+            if (Q(_mm_mulhrs_pi16(M(0x8000400000010000ULL), M(0x8000400040000000ULL))) !=\n\
+                0x8000200000010000ULL) return 16;\n\
+            if (Q(_mm_shuffle_pi8(M(0x0807060504030201ULL), M(0x80000F0700010203ULL))) !=\n\
+                0x0001080801020304ULL) return 17;\n\
+            if (Q(_mm_alignr_pi8(M(0x1111111122222222ULL), M(0x3333333344444444ULL), 4)) !=\n\
+                0x2222222233333333ULL ||\n\
+                Q(_mm_alignr_pi8(M(1), M(2), 16)) != 0) return 18;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(
+        super::Vm::new(program).run().expect("interpreted run"),
+        0,
+        "the __m64 forms must give the instruction's result"
+    );
+}
+
+/// gcc's and clang's x86 system-instruction builtins, with gcc's prototypes,
+/// emit their instruction on both x86-64 targets, `__builtin_ia32_xgetbv`
+/// with its operand in ecx; on the AArch64 targets `__has_builtin` reports
+/// none of them and a call is to an unknown function, as gcc and clang have
+/// them.
+#[cfg(feature = "full")]
+#[test]
+fn the_x86_system_builtins_emit_their_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "void fences(void) {\n\
+            __builtin_ia32_sfence(); __builtin_ia32_lfence(); __builtin_ia32_mfence();\n\
+            __builtin_ia32_pause();\n\
+        }\n\
+        unsigned long long tsc(void) { return __builtin_ia32_rdtsc(); }\n\
+        unsigned long long xcr(unsigned int i) { return __builtin_ia32_xgetbv(i); }\n\
+        unsigned long long flags(void) { return __builtin_ia32_readeflags_u64(); }\n\
+        _Static_assert(_Generic(__builtin_ia32_rdtsc(), unsigned long long: 1, default: 0), \"rdtsc\");\n\
+        _Static_assert(_Generic(__builtin_ia32_xgetbv(0), unsigned long long: 1, default: 0), \"xgetbv\");\n\
+        int main(void) { return 0; }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        for (needle, what) in [
+            (&[0x0fu8, 0xae, 0xf8][..], "sfence"),
+            (&[0x0f, 0xae, 0xe8][..], "lfence"),
+            (&[0x0f, 0xae, 0xf0][..], "mfence"),
+            (&[0xf3, 0x90][..], "pause"),
+            (&[0x0f, 0x31][..], "rdtsc"),
+            (&[0x0f, 0x01, 0xd0][..], "xgetbv"),
+        ] {
+            assert!(
+                bytes.windows(needle.len()).any(|w| w == needle),
+                "{target:?}: {what}: {needle:02x?} not in the emitted code"
+            );
+        }
+        // pushfq, then a pop into a general register, REX.B or not.
+        let pop = |w: &[u8]| {
+            (0x58..=0x5f).contains(&w[0]) || (w[0] == 0x41 && (0x58..=0x5f).contains(&w[1]))
+        };
+        assert!(
+            bytes.windows(3).any(|w| w[0] == 0x9c && pop(&w[1..])),
+            "{target:?}: pushfq; pop not in the emitted code"
+        );
+    }
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let probe = "#if __has_builtin(__builtin_ia32_pause) || __has_builtin(__builtin_ia32_rdtsc)\n\
+            #error \"x86 builtin\"\n#endif\nint main(void) { return 0; }\n";
+        Compiler::with_target(probe.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let call = "void f(void) { __builtin_ia32_sfence(); }\nint main(void) { return 0; }\n";
+        let err = Compiler::with_target(call.to_string(), target)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{target:?}: the call compiled"));
+        assert!(
+            alloc::format!("{err}").contains("unknown function"),
+            "{target:?}: {err}"
+        );
+    }
+}
+
+/// gcc's and clang's wrappers over the system builtins emit their
+/// instruction on both x86-64 targets: the `_mm_` fences, `_xgetbv`,
+/// `__rdtscp` and the RFLAGS pair, with the builtins `rdtscp` and
+/// `writeeflags_u64`. `_xgetbv` is gcc's `long long` on Linux and MSVC's
+/// `unsigned __int64` intrinsic on Windows, where every name here is one.
+#[cfg(feature = "full")]
+#[test]
+fn the_x86_system_wrappers_emit_their_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    for (target, xgetbv_ty) in [
+        (Target::LinuxX64, "long long"),
+        (Target::WindowsX64, "unsigned long long"),
+    ] {
+        let src = alloc::format!(
+            "#include <x86intrin.h>\n\
+            void fences(void) {{ _mm_sfence(); _mm_lfence(); _mm_mfence(); }}\n\
+            unsigned long long tscp(unsigned *a) {{ return __rdtscp(a) + __builtin_ia32_rdtscp(a); }}\n\
+            unsigned long long xcr(void) {{ return _xgetbv(0); }}\n\
+            void flags(unsigned long long f) {{\n\
+                __writeeflags(f); __builtin_ia32_writeeflags_u64(__readeflags());\n\
+            }}\n\
+            _Static_assert(_Generic(_xgetbv(0), {xgetbv_ty}: 1, default: 0), \"xgetbv\");\n\
+            _Static_assert(_Generic(__readeflags(), unsigned long long: 1, default: 0), \"flags\");\n\
+            _Static_assert(_Generic(__rdtscp(0), unsigned long long: 1, default: 0), \"rdtscp\");\n\
+            int main(void) {{ return 0; }}\n"
+        );
+        let program = Compiler::with_target(src, target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        for (needle, what) in [
+            (&[0x0fu8, 0xae, 0xf8][..], "sfence"),
+            (&[0x0f, 0xae, 0xe8][..], "lfence"),
+            (&[0x0f, 0xae, 0xf0][..], "mfence"),
+            (&[0x0f, 0x01, 0xf9][..], "rdtscp"),
+            (&[0x0f, 0x01, 0xd0][..], "xgetbv"),
+            (&[0x9c][..], "pushfq"),
+            (&[0x9d][..], "popfq"),
+        ] {
+            assert!(
+                bytes.windows(needle.len()).any(|w| w == needle),
+                "{target:?}: {what}: {needle:02x?} not in the emitted code"
+            );
+        }
+    }
+}
+
+/// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
+/// forms on windows-x64, whatever declares them; windows-arm64 has none.
+#[cfg(feature = "full")]
+#[test]
+fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "#include <intrin.h>\n\
+        void s(unsigned char *b, unsigned short *w, unsigned long *d, unsigned long long *q,\n\
+               unsigned long long n) {\n\
+            __stosb(b, 1, n); __stosw(w, 2, n); __stosd(d, 3, n); __stosq(q, 4, n);\n\
+            __movsb(b, b + 64, n); __movsw(w, w + 64, n); __movsd(d, d + 64, n);\n\
+            __movsq(q, q + 64, n);\n\
+        }\n\
+        int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.into(), Target::WindowsX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let bytes = crate::c5::object::emit_native_single_tu_for_test(
+        &program,
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit_native");
+    for (needle, what) in [
+        (&[0xf3u8, 0xaa][..], "rep stosb"),
+        (&[0x66, 0xf3, 0xab][..], "rep stosw"),
+        (&[0xf3, 0xab][..], "rep stosl"),
+        (&[0xf3, 0x48, 0xab][..], "rep stosq"),
+        (&[0xf3, 0xa4][..], "rep movsb"),
+        (&[0x66, 0xf3, 0xa5][..], "rep movsw"),
+        (&[0xf3, 0xa5][..], "rep movsl"),
+        (&[0xf3, 0x48, 0xa5][..], "rep movsq"),
+    ] {
+        assert!(
+            bytes.windows(needle.len()).any(|w| w == needle),
+            "{what}: {needle:02x?} not in the emitted code"
+        );
+    }
+    let err = Compiler::with_target(
+        "void f(unsigned char *b) { __stosb(b, 0, 1); }\n".into(),
+        Target::WindowsAarch64,
+    )
+    .compile()
+    .expect_err("no __stosb on arm64");
+    assert!(err.to_string().contains("__stosb"), "{err}");
+}
+
+/// `<cpuid.h>` executes CPUID, as gcc's does: `__get_cpuid_max` emits the
+/// instruction on both x86-64 targets with the range's first leaf in eax,
+/// rather than folding to a constant. The interpreter runs CPUID as zero in
+/// every register, so there the maximum is 0 and `__get_cpuid` rejects the
+/// leaf, leaving its outputs as they were.
+#[cfg(feature = "full")]
+#[test]
+fn cpuid_h_executes_the_instruction() {
+    use crate::{Compiler, NativeOptions, Target};
+    let src = "#include <cpuid.h>\n\
+        unsigned int basic(unsigned int *sig) { return __get_cpuid_max(0, sig); }\n\
+        int main(void) {\n\
+            unsigned int sig = 7, a = 9, b = 9, c = 9, d = 9;\n\
+            if (basic(&sig) != 0 || sig != 0) return 1;\n\
+            if (__get_cpuid(1, &a, &b, &c, &d) || a != 9 || d != 9) return 2;\n\
+            return bit_SSE2 == (1 << 26) && signature_INTEL_ebx == 0x756e6547 ? 0 : 3;\n\
+        }\n";
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let bytes = crate::c5::object::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .expect("emit_native");
+        assert!(
+            bytes.windows(2).any(|w| w == [0x0f, 0xa2]),
+            "{target:?}: cpuid not in the emitted code"
+        );
+        let program = super::compile_str_bare_for(src, target);
+        assert_eq!(
+            super::Vm::new(program).run().expect("interpreted run"),
+            0,
+            "{target:?}: the interpreter's CPUID"
+        );
+    }
+}
+
 // ------------------------------------------------------------------
 // Operand rules.
 // ------------------------------------------------------------------

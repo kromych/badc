@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <fill>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	addq	%rdi, %rax
                	movl	%eax, %eax
                	retq
@@ -40,10 +39,8 @@ Disassembly of section .text:
                	testq	%rsi, %rsi
                	je	<addr>
                	xorl	%esi, %esi
-               	callq	<addr>
-               	testq	%rax, %rax
                	leave
-               	retq
+               	jmp	<addr>
                	movq	$-0x16, %rax
                	leave
                	retq
@@ -63,7 +60,6 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movq	%rsi, %rdx
                	callq	<addr>
-               	testq	%rax, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax

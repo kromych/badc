@@ -3,8 +3,8 @@
  * Builds a `.sys`-shaped PE that:
  *
  *   * Carries `IMAGE_SUBSYSTEM_NATIVE (1)` via
- *     `#pragma subsystem(driver)` -- an alias for `native`.
- *     The kernel's PE loader refuses anything with
+ *     `#pragma subsystem(driver)`, which also takes the C runtime
+ *     from ntoskrnl.exe. The kernel's PE loader refuses anything with
  *     `WINDOWS_CUI` / `WINDOWS_GUI`.
  *   * Uses `#pragma entrypoint(DriverEntry)`. The kernel calls
  *     the entry with the WDM `(PDRIVER_OBJECT, PUNICODE_STRING)`

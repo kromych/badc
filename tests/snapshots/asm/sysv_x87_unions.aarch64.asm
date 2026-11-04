@@ -174,7 +174,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	stur	q0, [x29, #-0x20]
-               	mov	x0, #0x3                // =3
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
@@ -250,7 +249,7 @@ Disassembly of section .text:
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	fmov	d1, #10.00000000
-               	scvtf	d2, x0
+               	fmov	d2, #3.00000000
                	fmadd	d0, d0, d1, d2
                	sub	x0, x29, #0x10
                	stp	x9, x10, [sp]
@@ -304,9 +303,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	stur	q0, [x29, #-0x20]
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x2bc              // =700
-               	scvtf	d0, x1
+               	adrp	x16, <page>
+               	ldr	d0, [x16]
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
@@ -383,7 +381,7 @@ Disassembly of section .text:
                	ldr	x15, [sp, #0x30]
                	fmov	d2, #10.00000000
                	fmadd	d0, d1, d2, d0
-               	scvtf	d1, x0
+               	fmov	d1, #3.00000000
                	fadd	d0, d0, d1
                	sub	x0, x29, #0x10
                	stp	x9, x10, [sp]
@@ -438,7 +436,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x60
                	stur	x0, [x29, #-0x20]
                	stur	x1, [x29, #-0x18]
-               	mov	x1, #0x2                // =2
                	sub	x0, x29, #0x10
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
@@ -514,7 +511,7 @@ Disassembly of section .text:
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
-               	scvtf	d1, x1
+               	fmov	d1, #2.00000000
                	fadd	d0, d0, d1
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
@@ -1462,7 +1459,7 @@ Disassembly of section .text:
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	adrp	x16, <page>
-               	ldr	d1, [x16]
+               	ldr	d1, [x16, #0x8]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

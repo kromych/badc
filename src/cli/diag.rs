@@ -95,15 +95,27 @@ pub(crate) fn report_unit_diagnostics(
     for line in &program.notes {
         log.diag(tty, line);
     }
-    for d in &program.warnings {
+    report_diagnostics(log, tty, &program.warnings)
+}
+
+/// Print a phase's catalogued diagnostics and report whether the unit may
+/// go on: one at the error level fails it here, at the phase boundary, and
+/// one a warning raised says so, as gcc's `-Werror` note does.
+pub(crate) fn report_diagnostics(
+    log: &mut TuLog,
+    tty: bool,
+    diagnostics: &[badc::diag::Diagnostic],
+) -> Result<(), ()> {
+    use badc::diag::Level;
+    for d in diagnostics {
         log.raw(rendered(d, tty));
     }
-    if program
-        .warnings
-        .iter()
-        .any(|d| d.level == badc::diag::Level::Error)
-    {
+    let error = |d: &&badc::diag::Diagnostic| d.level == Level::Error;
+    let raised = |d: &&badc::diag::Diagnostic| d.code.default_level() != Level::Error;
+    if diagnostics.iter().filter(error).any(|d| raised(&d)) {
         log.diag(tty, "badc: error: warnings treated as errors");
+    }
+    if diagnostics.iter().any(|d| error(&d)) {
         return Err(());
     }
     Ok(())

@@ -33,25 +33,20 @@ Disassembly of section .text:
                	retq
 
 <partition>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	movl	(%rdi,%rdx,4), %r8d
+               	movl	(%rdi,%rdx,4), %ecx
                	leaq	-0x1(%rsi), %rax
                	cmpl	%edx, %esi
                	jge	<addr>
-               	movl	(%rdi,%rsi,4), %ecx
-               	cmpl	%r8d, %ecx
+               	movl	(%rdi,%rsi,4), %r8d
+               	cmpl	%ecx, %r8d
                	jg	<addr>
                	incq	%rax
-               	movslq	%eax, %rcx
-               	movl	(%rdi,%rcx,4), %r9d
-               	movl	(%rdi,%rsi,4), %ebx
-               	movl	%ebx, (%rdi,%rcx,4)
-               	movl	%r9d, (%rdi,%rsi,4)
+               	movl	(%rdi,%rax,4), %r8d
+               	movl	(%rdi,%rsi,4), %r9d
+               	movl	%r9d, (%rdi,%rax,4)
+               	movl	%r8d, (%rdi,%rsi,4)
                	incq	%rsi
                	cmpl	%edx, %esi
                	jl	<addr>
@@ -61,8 +56,6 @@ Disassembly of section .text:
                	movl	(%rdi,%rdx,4), %r8d
                	movl	%r8d, (%rdi,%rcx,4)
                	movl	%esi, (%rdi,%rdx,4)
-               	popq	%rbx
-               	leave
                	retq
 
 <quicksort>:
@@ -74,35 +67,34 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movslq	%edx, %r12
-               	movslq	%esi, %rdi
-               	cmpl	%r12d, %edi
+               	movslq	%esi, %rcx
+               	cmpl	%r12d, %ecx
                	jge	<addr>
                	movl	(%rbx,%r12,4), %edx
-               	leaq	-0x1(%rdi), %rax
-               	movq	%rdi, %rsi
+               	leaq	-0x1(%rcx), %rax
+               	movq	%rcx, %rsi
                	cmpl	%r12d, %esi
                	jge	<addr>
-               	movl	(%rbx,%rsi,4), %ecx
-               	cmpl	%edx, %ecx
+               	movl	(%rbx,%rsi,4), %edi
+               	cmpl	%edx, %edi
                	jg	<addr>
                	incq	%rax
-               	movslq	%eax, %rcx
-               	movl	(%rbx,%rcx,4), %r8d
-               	movl	(%rbx,%rsi,4), %r9d
-               	movl	%r9d, (%rbx,%rcx,4)
-               	movl	%r8d, (%rbx,%rsi,4)
+               	movl	(%rbx,%rax,4), %edi
+               	movl	(%rbx,%rsi,4), %r8d
+               	movl	%r8d, (%rbx,%rax,4)
+               	movl	%edi, (%rbx,%rsi,4)
                	incq	%rsi
                	cmpl	%r12d, %esi
                	jl	<addr>
                	leaq	0x1(%rax), %r13
                	movslq	%r13d, %rax
-               	movl	(%rbx,%rax,4), %ecx
-               	movl	(%rbx,%r12,4), %edx
-               	movl	%edx, (%rbx,%rax,4)
-               	movl	%ecx, (%rbx,%r12,4)
+               	movl	(%rbx,%rax,4), %edx
+               	movl	(%rbx,%r12,4), %esi
+               	movl	%esi, (%rbx,%rax,4)
+               	movl	%edx, (%rbx,%r12,4)
                	leaq	-0x1(%r13), %rdx
-               	movq	%rdi, %rsi
                	movq	%rbx, %rdi
+               	movq	%rcx, %rsi
                	callq	<addr>
                	leaq	0x1(%r13), %rsi
                	movq	%rbx, %rdi

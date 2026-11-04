@@ -27,11 +27,10 @@ Disassembly of section .text:
 
 <touch>:
                	movb	%sil, (%rdi)
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	movsbq	%sil, %rdx
-               	addq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	movsbq	%sil, %rcx
+               	addq	%rcx, %rax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <with_alloca>:

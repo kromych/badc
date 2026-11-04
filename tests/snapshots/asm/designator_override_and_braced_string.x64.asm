@@ -46,44 +46,41 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x2, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movsbq	0xc(%rax), %rcx
-               	cmpl	$0x4, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x4, %eax
                	jne	<addr>
-               	movsbq	0xd(%rax), %rcx
-               	cmpl	$0x6, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x6, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0xe(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rcx
-               	cmpl	$0x68, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x68, %eax
                	jne	<addr>
-               	movsbq	0x4(%rax), %rcx
-               	cmpl	$0x6f, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x6f, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x5(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rcx
-               	cmpl	$0x68, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x68, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x2(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x5, %eax
                	leave

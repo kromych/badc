@@ -41,20 +41,15 @@ int main() {
     file_str = __FILE__;
     if (file_str[0] == 0) return 9;
 
-    // C11 6.10.8.3 conditional-feature macros. badc reports
-    // __STDC_VERSION__ == 201112L. It supports C99 6.7.6.2 variable
-    // length arrays, so __STDC_NO_VLA__ stays undefined; it does not
-    // provide _Complex, so __STDC_NO_COMPLEX__ is predefined to 1.
-    // __STDC_NO_THREADS__ stays undefined (badc supports the
-    // _Thread_local storage classifier that code gates on this macro),
-    // and __STDC_NO_ATOMICS__ stays undefined (<stdatomic.h> is provided).
+    // C17 6.10.8.3 conditional-feature macros: variable length arrays
+    // and <stdatomic.h> are provided; _Complex and <threads.h> are not.
 #ifdef __STDC_NO_VLA__
     return 10;
 #endif
 #if !defined(__STDC_NO_COMPLEX__) || (__STDC_NO_COMPLEX__ != 1)
     return 11;
 #endif
-#ifdef __STDC_NO_THREADS__
+#if !defined(__STDC_NO_THREADS__) || (__STDC_NO_THREADS__ != 1)
     return 12;
 #endif
 #ifdef __STDC_NO_ATOMICS__

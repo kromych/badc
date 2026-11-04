@@ -27,10 +27,9 @@ Disassembly of section .text:
 
 <touch>:
                	movb	%sil, (%rdi)
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	addq	%rsi, %rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	addq	%rsi, %rax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <element_aligned>:

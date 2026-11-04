@@ -38,74 +38,15 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movq	$-0x2, %rcx
-               	movl	%ecx, -0x8(%rbp)
-               	movslq	%ecx, %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3f, %rdx
-               	cmpl	$-0x2, %ecx
-               	je	<addr>
-               	movl	$0x3e, %ecx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movl	%eax, -0x8(%rbp)
-               	movq	$-0x1, %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	cmpq	$-0x1, %rcx
-               	je	<addr>
-               	movl	$0x44, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leave
-               	retq
-               	movq	$-0xf, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	cmpq	$-0xf, %rax
-               	je	<addr>
-               	movl	$0x47, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leave
-               	retq
+               	movl	$0x0, -0x8(%rbp)
+               	movl	$0xfffffffe, -0x8(%rbp) # imm = 0xFFFFFFFE
+               	movl	$0x0, -0x8(%rbp)
+               	movq	$-0x1, -0x8(%rbp)
+               	movq	$-0xf, -0x8(%rbp)
                	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movq	%rax, -0x8(%rbp)
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0x4a, %eax
-               	testq	%rax, %rax
-               	je	<addr>
-               	leave
-               	retq
                	xorl	%eax, %eax
                	leave
                	retq
-               	cmpl	$-0x1, %ecx
-               	je	<addr>
-               	movl	$0x4b, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	cmpl	$-0x1, %ecx
-               	je	<addr>
-               	movl	$0x48, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
-               	cmpl	$-0x1, %edx
-               	je	<addr>
-               	movl	$0x3f, %ecx
-               	jmp	<addr>
-               	movq	%rax, %rcx
-               	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

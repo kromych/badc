@@ -28,10 +28,9 @@ Disassembly of section .text:
 <make>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %r9d
-               	incq	%r9
-               	movl	%r9d, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	incq	%rax
+               	movl	%eax, <rip> # <addr>
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
                	jle	<addr>
                	decq	%r8
@@ -73,7 +72,6 @@ Disassembly of section .text:
                	testb	$0x1, %cl
                	jne	<addr>
                	movq	(%rax), %rcx
-               	testb	$0x40, %cl
                	jmp	<addr>
 
 <main>:
@@ -84,11 +82,9 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	movl	$0x7, %ecx
                	movl	$0x3, %r8d
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx), %ecx
+               	movl	<rip>, %ecx # <addr>
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax

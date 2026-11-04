@@ -70,12 +70,15 @@ fn split_label_addresses(func: &mut FunctionSsa) {
     let mut address: Vec<BlockId> = (0..func.blocks.len() as BlockId).collect();
     for l in labels {
         let e = func.blocks.len() as BlockId;
-        func.blocks.push(Block {
-            start_pc: 0,
-            inst_range: insts_end..insts_end,
-            terminator: Terminator::Jmp(l),
-            exit_acc: crate::c5::ir::NO_VALUE,
-        });
+        func.push_block_in_scope_of(
+            Block {
+                start_pc: 0,
+                inst_range: insts_end..insts_end,
+                terminator: Terminator::Jmp(l),
+                exit_acc: crate::c5::ir::NO_VALUE,
+            },
+            l,
+        );
         for id in func.blocks[l as usize].inst_range.clone() {
             let Inst::Phi { incoming, .. } = &mut func.insts[id as usize] else {
                 break;
@@ -149,12 +152,15 @@ fn run_one(func: &mut FunctionSsa) {
     let insts_end = func.insts.len() as u32;
     for (pred, original_succ) in splits {
         let new_id = func.blocks.len() as BlockId;
-        func.blocks.push(Block {
-            start_pc: 0,
-            inst_range: insts_end..insts_end,
-            terminator: Terminator::Jmp(original_succ),
-            exit_acc: crate::c5::ir::NO_VALUE,
-        });
+        func.push_block_in_scope_of(
+            Block {
+                start_pc: 0,
+                inst_range: insts_end..insts_end,
+                terminator: Terminator::Jmp(original_succ),
+                exit_acc: crate::c5::ir::NO_VALUE,
+            },
+            pred,
+        );
         // Rewire the predecessor's terminator: every reference to
         // `original_succ` becomes `new_id`. A predecessor may
         // legitimately reference the same successor via both arms
@@ -275,6 +281,9 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -309,7 +318,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),

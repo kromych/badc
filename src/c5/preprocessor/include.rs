@@ -80,6 +80,20 @@ impl SearchStep {
     }
 }
 
+/// What `#pragma once` and the include-guard registry key a file on, so
+/// that every spelling of one file is that file.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub(super) enum FileId {
+    /// A file on disk by device and inode, as gcc and clang identify it.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    Inode(u64, u64),
+    /// A file by its canonical path, where the platform reports no inode,
+    /// or by its name as spelled when it cannot be resolved.
+    Path(String),
+    /// A header of the compiler's own set, by its name.
+    Own(String),
+}
+
 /// A header being expanded, with the search step that supplied it.
 pub(super) struct IncludeFrame {
     /// The include spelling, for the nesting diagnostic.
@@ -88,6 +102,7 @@ pub(super) struct IncludeFrame {
     /// The directory `step` joined with the name; `None` for an
     /// in-binary body.
     dir: Option<String>,
+    pub(super) id: FileId,
 }
 
 impl IncludeFrame {
@@ -115,10 +130,10 @@ enum SearchStart<'a> {
 /// need once the search has picked a file.
 pub(super) struct Resolved {
     pub(super) body: String,
-    /// Identity for `#pragma once` and include-guard bookkeeping: the
-    /// filesystem path for a file, the bare name for an in-binary
-    /// header, so one header reached by two spellings stays one file.
+    /// The name the file goes by in line markers and diagnostics: the
+    /// filesystem path for a file, the bare name for an own header.
     pub(super) key: String,
+    pub(super) id: FileId,
     /// Filesystem path, `None` for an in-binary body.
     pub(super) path: Option<String>,
     pub(super) step: SearchStep,
@@ -127,13 +142,28 @@ pub(super) struct Resolved {
 
 impl Resolved {
     /// A body served from a file on disk.
-    fn file(body: String, path: String, step: SearchStep, dir: &str) -> Self {
+    #[cfg(feature = "std")]
+    fn file(body: String, path: String, id: FileId, step: SearchStep, dir: &str) -> Self {
         Resolved {
             body,
             key: path.clone(),
+            id,
             path: Some(path),
             step,
             dir: Some(dir.to_string()),
+        }
+    }
+
+    /// A body of the compiler's own set, from `path` on disk or, with
+    /// none, from the binary.
+    fn own(body: String, name: &str, path: Option<String>, step: SearchStep) -> Self {
+        Resolved {
+            body,
+            key: name.to_string(),
+            id: FileId::Own(name.to_string()),
+            dir: None,
+            path,
+            step,
         }
     }
 }
@@ -252,6 +282,12 @@ impl Preprocessor {
             }
             _ => SearchStart::Angle,
         };
+        // With the Microsoft extensions, which clang enables for a Windows
+        // target, a `\` in a header name separates directories as `/` does,
+        // on any host, as the target's file systems read it.
+        if self.target.ms_extensions() && name.contains('\\') {
+            return self.find_include(&name.replace('\\', "/"), start);
+        }
         self.find_include(name, start)
     }
 
@@ -282,16 +318,15 @@ impl Preprocessor {
             ));
         };
         if let Some(r) = self.reuse.as_deref_mut() {
-            r.consulted_includes.insert(found.key.clone());
+            r.consulted_includes.insert(found.id.clone());
         }
-        // Both drops key on the resolved path (file identity), not the
-        // include spelling, so two spellings of the same file are still
-        // included once; `process_named` records the same path.
-        // `#pragma once` drops unconditionally; the guard form drops only
-        // while its controlling macro is defined, since that is what makes
-        // the body inactive.
+        // Both drops key on the file's identity, not the include spelling,
+        // so every spelling of one file is included once. `#pragma once`
+        // drops unconditionally; the guard form drops only while its
+        // controlling macro is defined, since that is what makes the body
+        // inactive.
         let origin = found.step.origin();
-        if self.pragma_once_files.contains(&found.key) || self.include_is_guarded_out(&found.key) {
+        if self.pragma_once_files.contains(&found.id) || self.include_is_guarded_out(&found.id) {
             self.record_include(name, found.path.clone(), origin, IncludeStatus::Cached);
             return Ok(());
         }
@@ -325,6 +360,7 @@ impl Preprocessor {
             name: name.to_string(),
             step: found.step,
             dir: found.dir,
+            id: found.id,
         });
         let result = self.process_named(&found.body, &found.key, out);
         self.include_stack.pop();
@@ -353,15 +389,33 @@ impl Preprocessor {
         });
     }
 
-    /// Whether a repeat `#include` of `path` would produce nothing: the
+    /// Whether a repeat `#include` of file `id` would produce nothing: the
     /// file's whole content sits inside one `#ifndef X` / `#endif` pair
     /// and `X` is defined now, so every line of it takes the false arm.
     /// An `#undef X` in between makes this false again, which is why the
     /// answer is recomputed per inclusion rather than cached.
-    fn include_is_guarded_out(&self, path: &str) -> bool {
+    fn include_is_guarded_out(&self, id: &FileId) -> bool {
         self.include_guards
-            .get(path)
+            .get(id)
             .is_some_and(|m| self.is_defined_name(m))
+    }
+
+    /// The identity of the file whose lines are being read, `filename`
+    /// naming it: the frame's for a header, the file `filename` names for
+    /// the primary source.
+    pub(super) fn current_file_id(&self, filename: &str) -> FileId {
+        match self.include_stack.last() {
+            Some(frame) => frame.id.clone(),
+            None => path_file_id(filename),
+        }
+    }
+
+    /// Whether search directory `dir` is the one `-print-file-name=include`
+    /// names ([`Preprocessor::set_compiler_include_dir`]).
+    #[cfg(feature = "std")]
+    fn is_compiler_include_dir(&self, dir: &str) -> bool {
+        let same = |c: &String| std::path::Path::new(c) == std::path::Path::new(dir);
+        self.compiler_include_dir.as_ref().is_some_and(same)
     }
 
     /// The compiler's own copy of `name`: the body from an on-disk
@@ -380,29 +434,21 @@ impl Preprocessor {
         for root in self.own_header_roots.iter() {
             let candidate = join_include_path(root, name);
             if let Ok(body) = std::fs::read_to_string(&candidate) {
-                return Some(Resolved {
-                    body,
-                    key: name.to_string(),
-                    path: Some(candidate),
-                    step: SearchStep::Own,
-                    dir: Some(root.clone()),
-                });
+                let mut found = Resolved::own(body, name, Some(candidate), SearchStep::Own);
+                found.dir = Some(root.clone());
+                return Some(found);
             }
         }
-        embedded_header(name, self.target, from_own).map(|b| Resolved {
-            body: b.to_string(),
-            key: name.to_string(),
-            path: None,
-            step: SearchStep::Own,
-            dir: None,
-        })
+        embedded_header(name, self.target, from_own)
+            .map(|b| Resolved::own(b.to_string(), name, None, SearchStep::Own))
     }
 
     /// Look `name` up from `start`, visiting the [`SearchStep`]s in order:
     /// the including file's directory and the `-iquote` paths for the
-    /// quoted form, the `-I` paths, then, unless `-nostdinc`, the own set
-    /// and the sysroot's system directories. `#include_next` visits only
-    /// the steps past the one that supplied the current file.
+    /// quoted form, the `-I` and `-isystem` paths, then, unless `-nostdinc`,
+    /// the own set (its compiler headers alone under `-nostdlibinc`) and the
+    /// sysroot's system directories. `#include_next` visits only the steps
+    /// past the one that supplied the current file.
     fn find_include(&self, name: &str, start: SearchStart<'_>) -> Option<Resolved> {
         let after = match start {
             SearchStart::After(frame) => Some(frame.step),
@@ -447,14 +493,6 @@ impl Preprocessor {
                     }
                 }
             }
-            // A compiler-owned intrinsic header (built on badc's own inline-asm
-            // encoders) resolves to the embedded copy before the search paths:
-            // a foreign toolchain's copy on `-I` (an
-            // `-isystem $(cc -print-file-name=include)` folded into `-I`) is
-            // written against that compiler's builtins and can never compile
-            // here. The quoted source-directory step above still precedes it
-            // per C99 6.10.2p2. Ordinary headers keep `-I`-shadows-embedded.
-            //
             // One bundled header including another resolves within the
             // bundled set. The compiler's headers form a closed set
             // written against each other; a `-I` directory carrying the
@@ -465,35 +503,61 @@ impl Preprocessor {
             // provenance, not a registry lookup of its spelling: a
             // foreign header that happens to share a bundled name (an OS
             // tree's own `linux/cdrom.h`) is not part of the closed set,
-            // and its includes keep `-I`-shadows-bundled.
-            //
-            // Both run where the `-I` paths start, so a search resumed past
-            // the own set cannot return to it.
+            // and its includes keep `-I`-shadows-bundled. Under `-nostdinc`
+            // and `-nostdlibinc` the set is the compiler's own headers: a
+            // library header one includes is searched for like any other, as
+            // gcc's and clang's `<mm_malloc.h>` searches for `<stdlib.h>`. It
+            // runs where the `-I` paths start, so a search resumed past the
+            // own set cannot return to it.
+            let closed =
+                !(self.nostdinc || self.nostdlibinc) || crate::c5::headers::compiler_header(name);
             if runs(SearchStep::Path(0))
-                && (crate::c5::headers::compiler_owned_header(name) || from_own)
-                && let Some(found) = self.own_header(name, from_own)
+                && from_own
+                && closed
+                && let Some(found) = self.own_header(name, true)
             {
                 return Some(found);
             }
-            for (i, dir) in self.search_paths.iter().enumerate() {
-                if let Some(found) = probe(SearchStep::Path(i), dir) {
-                    return Some(found);
+            let paths = self.search_paths.iter().enumerate();
+            let isystem = self.isystem_paths.iter().enumerate();
+            let dirs = (paths.map(|(i, d)| (SearchStep::Path(i), d)))
+                .chain(isystem.map(|(i, d)| (SearchStep::Isystem(i), d)));
+            for (step, dir) in dirs {
+                // The directory `-print-file-name=include` names serves the
+                // compiler's own headers and nothing else.
+                if self.is_compiler_include_dir(dir) {
+                    if runs(step)
+                        && crate::c5::headers::compiler_header(name)
+                        && let Some(found) = self.own_header(name, false)
+                    {
+                        return Some(found);
+                    }
+                    continue;
                 }
-            }
-            for (i, dir) in self.isystem_paths.iter().enumerate() {
-                if let Some(found) = probe(SearchStep::Isystem(i), dir) {
-                    return Some(found);
+                let Some(found) = probe(step, dir) else {
+                    continue;
+                };
+                // Another compiler's intrinsic header is written against its
+                // builtins and can never compile here; the name binds badc's.
+                if crate::c5::headers::intrinsic_header(name)
+                    && let Some(own) = self.own_header(name, false)
+                {
+                    return Some(own);
                 }
+                return Some(found);
             }
         }
-        // `-nostdinc` withdraws the standard library headers and the system
-        // directories below, leaving only what the command line named. A
-        // name none of those paths carries is then a "not found" error,
-        // not a silent bind to badc's own libc.
+        // `-nostdinc` withdraws the bundled headers and the system
+        // directories below, leaving only what the command line named;
+        // `-nostdlibinc` keeps the compiler's own headers. A name none of
+        // the remaining steps carries is then a "not found" error, not a
+        // silent bind to badc's own libc.
         if self.nostdinc {
             return None;
         }
+        let ours = |n: &str| !self.nostdlibinc || crate::c5::headers::compiler_header(n);
         if runs(SearchStep::Own)
+            && ours(name)
             && let Some(found) = self.own_header(name, from_own)
         {
             return Some(found);
@@ -501,11 +565,13 @@ impl Preprocessor {
         // A header the embedded set lacks (a third-party `zlib.h`,
         // `libfdt.h`) falls back to the sysroot's system directories,
         // probed only here so a standard header still resolves to the
-        // embedded copy above.
+        // embedded copy above. They are the C library's.
         #[cfg(feature = "std")]
-        for (i, dir) in self.system_fallback_paths.iter().enumerate() {
-            if let Some(found) = probe(SearchStep::System(i), dir) {
-                return Some(found);
+        if !self.nostdlibinc {
+            for (i, dir) in self.system_fallback_paths.iter().enumerate() {
+                if let Some(found) = probe(SearchStep::System(i), dir) {
+                    return Some(found);
+                }
             }
         }
         // Windows resolves includes case-insensitively (its filesystems
@@ -517,14 +583,12 @@ impl Preprocessor {
             return crate::c5::headers::embedded_headers()
                 .iter()
                 .find(|(n, ts, _)| {
-                    n.eq_ignore_ascii_case(&lower) && (from_own || ts.contains(self.target))
+                    n.eq_ignore_ascii_case(&lower)
+                        && ours(n)
+                        && (from_own || ts.contains(self.target))
                 })
-                .map(|(n, _, body)| Resolved {
-                    body: body.to_string(),
-                    key: n.to_string(),
-                    path: None,
-                    step: SearchStep::OwnFolded,
-                    dir: None,
+                .map(|(n, _, body)| {
+                    Resolved::own(body.to_string(), n, None, SearchStep::OwnFolded)
                 });
         }
         None
@@ -544,13 +608,41 @@ fn join_include_path(dir: &str, name: &str) -> String {
     }
 }
 
-/// `name` in `dir`, as a resolved include keyed on the file it came
-/// from and supplied by `step`.
+/// `name` in `dir`, as a resolved include supplied by `step`.
 #[cfg(feature = "std")]
 fn probe_dir(name: &str, dir: &str, step: SearchStep) -> Option<Resolved> {
+    use std::io::Read;
     let candidate = join_include_path(dir, name);
-    let body = std::fs::read_to_string(&candidate).ok()?;
-    Some(Resolved::file(body, candidate, step, dir))
+    let mut file = std::fs::File::open(&candidate).ok()?;
+    let meta = file.metadata().ok();
+    let mut body = String::with_capacity(meta.as_ref().map_or(0, |m| m.len() as usize));
+    file.read_to_string(&mut body).ok()?;
+    let id = file_id(meta.as_ref(), &candidate);
+    Some(Resolved::file(body, candidate, id, step, dir))
+}
+
+/// The identity of the file at `path` whose metadata is `meta`: its
+/// device and inode where the platform reports them, else its canonical
+/// path, else `path` as spelled.
+#[cfg(feature = "std")]
+fn file_id(meta: Option<&std::fs::Metadata>, path: &str) -> FileId {
+    #[cfg(unix)]
+    if let Some(m) = meta {
+        use std::os::unix::fs::MetadataExt;
+        return FileId::Inode(m.dev(), m.ino());
+    }
+    #[cfg(not(unix))]
+    let _ = meta;
+    let canonical = std::fs::canonicalize(path).ok();
+    FileId::Path(canonical.map_or_else(|| path.to_string(), |p| p.to_string_lossy().into_owned()))
+}
+
+/// The identity of the file `path` names, read from the filesystem.
+fn path_file_id(path: &str) -> FileId {
+    #[cfg(feature = "std")]
+    return file_id(std::fs::metadata(path).ok().as_ref(), path);
+    #[cfg(not(feature = "std"))]
+    FileId::Path(path.to_string())
 }
 
 /// Parent directory of an include path, or `None` when the path has

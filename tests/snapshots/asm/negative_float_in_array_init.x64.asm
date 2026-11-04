@@ -26,44 +26,43 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm0
-               	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
-               	movq	%rdx, %xmm15
+               	movsd	<rip>, %xmm0 # <addr>
+               	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsd	0x8(%rax), %xmm0
-               	movabsq	$-0x3ffc000000000000, %rcx # imm = 0xC004000000000000
-               	movq	%rcx, %xmm15
+               	movsd	<rip>, %xmm0 # <addr>
+               	movabsq	$-0x3ffc000000000000, %rax # imm = 0xC004000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movsd	0x10(%rax), %xmm0
-               	movabsq	$-0x3de1bb656c000000, %rcx # imm = 0xC21E449A94000000
-               	movq	%rcx, %xmm15
+               	movsd	<rip>, %xmm0 # <addr>
+               	movabsq	$-0x3de1bb656c000000, %rax # imm = 0xC21E449A94000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	(%rax), %xmm0
-               	movsd	0x8(%rax), %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
-               	movsd	0x10(%rax), %xmm1
+               	movsd	<rip>, %xmm1 # <addr>
                	addsd	%xmm1, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rcx, %xmm14
-               	movq	%rax, %xmm15
+               	movabsq	$0x3fe0000000000000, %rdx # imm = 0x3FE0000000000000
+               	movq	%rax, %xmm14
+               	movq	%rdx, %xmm15
                	vaddsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm1, %xmm0
                	ja	<addr>
-               	movq	%rcx, %xmm14
-               	movq	%rdx, %xmm15
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
                	vsubsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jbe	<addr>

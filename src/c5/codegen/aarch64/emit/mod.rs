@@ -8,14 +8,15 @@
 //!   incoming stack arguments      [fp + 16 + off]
 //!   register save area            (host variadic callee, above the record)
 //!   saved fp, saved lr            [fp +  0]
-//!   canary                        [fp -  8]                   (protected frames)
-//!   locals area                   [fp - locals_bytes .. fp - canary]
+//!   top save block                [fp - saves_top ..]         (Windows, unfolded)
+//!   canary                        [fp + canary_slot_off()]    (protected frames)
+//!   locals area                   [fp - locals_bytes .. fp - locals_shift()]
 //!   parameter cells               [fp + param_cells_off ..]
 //!   allocator spill slots         ...
 //!   inline-asm scratch            [fp + asm_scratch_off ..]
 //!   over-aligned region           [fp + align_region_off ..]  (16-mode only)
-//!   saved callee-saved GPRs
-//!   saved callee-saved FP regs
+//!   saved callee-saved GPRs       (no top save block)
+//!   saved callee-saved FP regs    (no top save block)
 //!   outgoing argument area        [sp .. sp + outgoing_bytes]
 //! ```
 //!
@@ -77,7 +78,7 @@ use inst::*;
 use intrinsic::*;
 use mem::*;
 
-pub(crate) use arith::binop_imm_materializes;
+pub(crate) use arith::{binop_imm_materializes, compare_fuses};
 pub(crate) use frame::{
     Frame, asm_site_bound_values, asm_site_write_masks, asm_staged_hints, compute_frame,
 };

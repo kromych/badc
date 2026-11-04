@@ -28,6 +28,13 @@ python3 demos/tcl/smoke.py -v  # build + run the suite
 `cargo build --release --features full` must have produced
 `target/release/badc` first.
 
+A few tests race a timer against the host's scheduler (`TIMED` in
+`smoke.py`), so a loaded host decides them whatever compiled `tclsh`.
+`BADC_TCL_TESTS=untimed` runs the suite without them and
+`BADC_TCL_TESTS=timed` runs only them, reusing a `tclsh` built after the
+current badc binary; the gate's demo phase runs the first in its pool and
+the second once the pool has drained.
+
 ## Version
 
 The pin is the newest 8.6 release. TODO: Tcl 9.1.0 does not build with

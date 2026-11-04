@@ -27,11 +27,9 @@ use common::TempDir;
 /// fixture is excluded for a different reason on each target, both
 /// are named.
 const COMPILE_SKIPLIST: &[&str] = &[
-    // VLA fixtures that assert a clean rejection diagnostic rather
-    // than compiling; the constructs are unsupported by design (C99
-    // 6.7.6.2 corners left as TODO). The diagnostics are locked in
-    // `src/c5/tests/vla.rs`.
-    "vla_multidim_rejected.c",
+    // VLA fixtures that assert a C99 constraint's rejection
+    // (6.7.5.2p2 file scope, 6.7.8p3 initializer); the diagnostics are
+    // locked in `src/c5/tests/vla.rs`.
     "vla_file_scope_rejected.c",
     "vla_initializer_rejected.c",
     // x86-64 asm on both counts: aarch64 rejects `%c1(%%rip)`, and on
@@ -444,6 +442,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("call_result_in_place.c", 0),
     ("atomic_orders.c", 0),
     ("atomic_contention.c", 0),
+    ("atomic_operators_two_threads.c", 0),
     ("data_reloc_one_past_end.c", 10),
     ("constant_set_again_after_call.c", 0),
     ("asm_register_outputs.c", 0),
@@ -510,6 +509,12 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("param_incoming_reg_constant_clobber.c", 0),
     ("forward_enum_tag_redeclaration.c", 0),
     ("seh_context_record.c", 0),
+    ("unwind_restores_callee_saved.c", 0),
+    ("unwind_from_epilogue.c", 0),
+    ("seh_except_constant_filter.c", 0),
+    ("seh_except_filter.c", 0),
+    ("seh_finally.c", 0),
+    ("seh_nested_funclets.c", 0),
     ("unsigned_constant_to_floating.c", 0),
     ("string_literal_address_constant.c", 0),
     ("address_constant_through_cast.c", 0),
@@ -879,6 +884,458 @@ fn a_preprocessed_unit_calls_nan_for_a_runtime_payload() {
         let run = Command::new(&exe).output().expect("run program");
         assert_eq!(run.status.code(), Some(0), "{level}");
     }
+}
+
+// A `#pragma binding` declares nothing: with msvc_compat.h's bindings in
+// scope, a call to `malloc` the unit has not declared takes <stdlib.h>'s
+// prototype, and the pointer it returns from above 4 GiB survives. Built for
+// windows-x64 and windows-arm64 from every host at -O0 and -O, and run on
+// the Windows host of either. Where the header cannot be auto-included the
+// call is refused, not lowered as an `int` function.
+#[test]
+fn a_binding_alone_leaves_a_library_call_its_prototype() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-binding-prototype");
+    let src = fixtures_dir().join("undeclared_library_call_keeps_a_high_pointer.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "aarch64") => Some("windows-arm64"),
+        ("windows", _) => Some("windows-x64"),
+        _ => None,
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let flag = format!("--target={target}");
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("{target}{level}.exe"));
+            let out = Command::new(badc)
+                .args(["-q", &flag, level, "-include", "msvc_compat.h"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {level}: {err}");
+            assert!(!err.contains("B2005"), "{target} {level}: {err}");
+            if host == Some(target) {
+                let run = Command::new(&exe).output().expect("run the program");
+                assert_eq!(run.status.code(), Some(0), "{target} {level}");
+            }
+        }
+        let out = Command::new(badc)
+            .args([
+                "-q",
+                &flag,
+                "-ffreestanding",
+                "-include",
+                "msvc_compat.h",
+                "-c",
+            ])
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{target}.o")))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target} -ffreestanding");
+        assert!(err.contains("unknown function `malloc`"), "{target}: {err}");
+    }
+}
+
+/// Run `exe`, its exit code; `None` once it has run `secs` seconds, when the
+/// process is killed.
+fn run_with_deadline(exe: &std::path::Path, secs: u64) -> Option<i32> {
+    let mut child = Command::new(exe).spawn().expect("start the program");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        if let Some(status) = child.try_wait().expect("wait for the program") {
+            return status.code();
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+// C17 7.17.2.2: `atomic_init` gives allocated storage a valid state without
+// taking the lock word its 0xff bytes hold. Freestanding on every host, the
+// layout every target then takes, and hosted on Windows, at -O0 and -O.
+#[test]
+fn atomic_init_gives_allocated_storage_a_valid_state() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-atomic-init");
+    let src = fixtures_dir().join("atomic_init_gives_allocated_storage_a_valid_state.c");
+    let mut modes = vec!["-ffreestanding"];
+    if cfg!(windows) {
+        modes.push("-fhosted");
+    }
+    for mode in modes {
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("init{mode}{level}.exe"));
+            let out = Command::new(badc)
+                .args(["-q", mode, level])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{mode} {level}: {err}");
+            assert_eq!(run_with_deadline(&exe, 30), Some(0), "{mode} {level}");
+        }
+    }
+}
+
+// strtod and printf called with no header included. For windows-x64 and
+// windows-arm64 the bundled C library defines both and no header binds them
+// to a DLL, so the link resolves the calls without compiling the unit again.
+// Built from every host at -O0 and -O, and run on the Windows host of either.
+#[test]
+fn undeclared_library_calls_keep_the_header_types_on_windows() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-undeclared-library-calls");
+    let src = fixtures_dir().join("undeclared_library_calls_keep_the_header_types.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "aarch64") => Some("windows-arm64"),
+        ("windows", _) => Some("windows-x64"),
+        _ => None,
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let flag = format!("--target={target}");
+        for level in ["-O0", "-O"] {
+            let exe = dir.join(format!("{target}{level}.exe"));
+            let out = Command::new(badc)
+                .args([&flag, level])
+                .arg(&src)
+                .arg("-o")
+                .arg(&exe)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {level}: {err}");
+            assert!(
+                err.contains("auto-including <stdlib.h>"),
+                "{target} {level}: {err}"
+            );
+            assert!(!err.contains("rebinding"), "{target} {level}: {err}");
+            if host == Some(target) {
+                let run = Command::new(&exe).output().expect("run the program");
+                assert_eq!(run.status.code(), Some(0), "{target} {level}");
+                let stdout = String::from_utf8_lossy(&run.stdout).replace('\r', "");
+                assert_eq!(stdout, "1.50\n", "{target} {level}");
+            }
+        }
+    }
+}
+
+// gcc and clang give each `__builtin_` library function its prototype with
+// no declaration in scope. Under `-nostdinc`, `-ffreestanding` and for a
+// preprocessed unit no header can be auto-included; the fixture still links
+// for linux-x64 and windows-x64 from every host, at -O0 and -O, and runs to
+// 0 for the host's own target.
+#[test]
+fn builtin_library_functions_link_without_a_declaration() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-builtin-prototypes");
+    let src = fixtures_dir().join("builtin_library_functions_need_no_declaration.c");
+    let host = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", _) => "macos-aarch64",
+        ("windows", "aarch64") => "windows-arm64",
+        ("windows", _) => "windows-x64",
+        (_, "aarch64") => "linux-aarch64",
+        _ => "linux-x64",
+    };
+    let mut targets = vec!["linux-x64", "windows-x64"];
+    if !targets.contains(&host) {
+        targets.push(host);
+    }
+    let build = |args: &[&std::ffi::OsStr], what: &str| {
+        let out = Command::new(badc).arg("-q").args(args).output();
+        let out = out.expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{what}: {err}");
+    };
+    let suffix = std::env::consts::EXE_SUFFIX;
+    for target in targets {
+        let flag = format!("--target={target}");
+        let unit = dir.join(format!("{target}.i"));
+        let preprocess = [
+            flag.as_ref(),
+            "-nostdinc".as_ref(),
+            "-E".as_ref(),
+            src.as_ref(),
+            "-o".as_ref(),
+            unit.as_ref(),
+        ];
+        build(&preprocess, target);
+        for (mode, input) in [("-nostdinc", &src), ("-ffreestanding", &src), (".i", &unit)] {
+            for level in ["-O0", "-O"] {
+                let what = format!("{target} {mode} {level}");
+                let exe = dir.join(format!("{target}{mode}{level}{suffix}"));
+                let mut args = vec![flag.as_ref(), level.as_ref()];
+                if mode != ".i" {
+                    args.push(mode.as_ref());
+                }
+                args.extend([input.as_os_str(), "-o".as_ref(), exe.as_os_str()]);
+                build(&args, &what);
+                if target == host {
+                    let run = Command::new(&exe).output().expect("run the program");
+                    assert_eq!(run.status.code(), Some(0), "{what}");
+                }
+            }
+        }
+    }
+}
+
+// C99 6.10.8p1: `__STDC_HOSTED__` is 1 for a hosted implementation and 0
+// for a freestanding one. As under gcc, `-ffreestanding` (`-fno-hosted`)
+// selects the latter for `-E`, `-dM -E` and a compiled unit, a later
+// `-fhosted` (`-fno-freestanding`) restores the former, and `-fbuiltin` /
+// `-fno-builtin` leave it alone. A freestanding unit gets no auto-included
+// header for an undeclared library call, and `<xmmintrin.h>` declares
+// `_mm_malloc` from `<mm_malloc.h>` only when hosted.
+#[test]
+fn ffreestanding_makes_stdc_hosted_zero() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-stdc-hosted");
+    let src = dir.join("h.c");
+    std::fs::write(
+        &src,
+        "int hosted = __STDC_HOSTED__;\n\
+         int main(void) {\n\
+         #if __STDC_HOSTED__\n  return 3;\n#else\n  return 4;\n#endif\n}\n",
+    )
+    .expect("write h.c");
+    let badc_out = |args: &[&str], input: &std::path::Path| {
+        let out = Command::new(badc).arg("-q").args(args).arg(input).output();
+        let out = out.expect("run badc");
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), text, err)
+    };
+    let exe = dir.join(format!("h{}", std::env::consts::EXE_SUFFIX));
+    let exe_arg = exe.to_str().expect("path");
+    for (flags, hosted) in [
+        (&[][..], 1),
+        (&["-ffreestanding"][..], 0),
+        (&["-fno-hosted"][..], 0),
+        (&["-ffreestanding", "-fbuiltin"][..], 0),
+        (&["-ffreestanding", "-fhosted"][..], 1),
+        (&["-ffreestanding", "-fno-freestanding"][..], 1),
+        (&["-fno-builtin"][..], 1),
+    ] {
+        let (ok, text, err) = badc_out(&[flags, &["-E"]].concat(), &src);
+        let line = format!("int hosted = {hosted};");
+        assert!(ok && text.contains(&line), "{flags:?}: {err}");
+        let (ok, text, err) = badc_out(&[flags, &["-dM", "-E"]].concat(), &src);
+        let line = format!("#define __STDC_HOSTED__ {hosted}\n");
+        assert!(ok && text.contains(&line), "{flags:?} -dM: {err}");
+        let (ok, _, err) = badc_out(&[flags, &["-o", exe_arg]].concat(), &src);
+        assert!(ok, "{flags:?}: {err}");
+        let run = Command::new(&exe).output().expect("run h");
+        assert_eq!(run.status.code(), Some(4 - hosted), "{flags:?}");
+    }
+    let call = dir.join("call.c");
+    std::fs::write(&call, "int main(void) { return puts(\"x\") < 0; }\n").expect("write");
+    let (ok, _, err) = badc_out(&["-ffreestanding", "-fbuiltin", "-c", "-o", exe_arg], &call);
+    assert!(!ok && err.contains("puts"), "{err}");
+    let sse = dir.join("sse.c");
+    std::fs::write(&sse, "#include <xmmintrin.h>\n").expect("write sse.c");
+    for (flags, declared) in [(&[][..], true), (&["-ffreestanding"][..], false)] {
+        let args = [flags, &["--target=linux-x64", "-E"]].concat();
+        let (ok, text, err) = badc_out(&args, &sse);
+        assert!(ok, "{flags:?}: {err}");
+        assert_eq!(text.contains("mm_malloc.h"), declared, "{flags:?}");
+        assert_eq!(text.contains("_mm_malloc"), declared, "{flags:?}");
+    }
+}
+
+// gcc and clang print the preprocessor's diagnostics under `-E` to stderr as
+// a compile does, under the same `-W` controls, `-Werror` and `-w`; stdout
+// carries the same text whatever they report, and an error among them, or an
+// `#error`, fails the run. `-dM -E`, `-M`, `-MM` and `-fsyntax-only` report
+// the same rows.
+/// The compiler's own headers are one set on the `#include` search, as
+/// gcc's and clang's: `-nostdinc` drops them with the C library's,
+/// `-isystem $(badc -print-file-name=include)` restores them, and
+/// `-nostdlibinc` keeps them. Each outcome is clang 22's for the same unit
+/// and flags on Linux x86_64 and aarch64, and Apple clang 21's on macOS.
+/// On x86-64 a hosted `<xmmintrin.h>` includes `<mm_malloc.h>`, which
+/// reaches for `<stdlib.h>`; that is the C library's, and not found.
+#[test]
+fn nostdinc_takes_the_compiler_headers_off_and_its_include_dir_restores_them() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let out = Command::new(badc)
+        .arg("-print-file-name=include")
+        .output()
+        .expect("run badc");
+    let inc = String::from_utf8(out.stdout).expect("utf-8 path");
+    let inc = inc.trim_end();
+    let tail = std::path::Path::new("lib").join("badc").join("include");
+    assert!(std::path::Path::new(inc).ends_with(&tail), "{inc}");
+    let dir = TempDir::new("badc-nostdinc-modes");
+    let body = "#include <stdarg.h>\n#include <stdint.h>\n\
+                int f(int n, ...) { va_list ap; va_start(ap, n); int v = va_arg(ap, int); \
+                va_end(ap); return v; }\nint32_t g(void) { return 1; }\n";
+    // The target, the header ahead of that body, the flags, and what the
+    // run reports missing (`None`: it compiles). The directory serves the
+    // compiler's headers and nothing else, so `<stdio.h>` stays missing.
+    type Case<'a> = (&'a str, &'a str, &'a [&'a str], Option<&'a str>);
+    let (x64, a64, io) = ("immintrin.h", "arm_neon.h", "stdio.h");
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        ("linux-x64", x64, &["-nostdinc"], Some(x64)),
+        ("linux-x64", x64, &["-nostdinc", "-isystem", inc], Some("stdlib.h")),
+        ("linux-x64", x64, &["-nostdlibinc"], Some("stdlib.h")),
+        ("linux-x64", x64, &["-nostdinc", "-isystem", inc, "-ffreestanding"], None),
+        ("linux-x64", x64, &["-nostdlibinc", "-ffreestanding"], None),
+        ("linux-x64", io, &["-nostdinc", "-isystem", inc], Some(io)),
+        ("linux-x64", io, &["-nostdlibinc"], Some(io)),
+        ("macos-aarch64", a64, &["-nostdinc"], Some(a64)),
+        ("macos-aarch64", a64, &["-nostdinc", "-isystem", inc], None),
+        ("macos-aarch64", a64, &["-nostdinc", "-I", inc], None),
+        ("macos-aarch64", a64, &["-nostdlibinc"], None),
+    ];
+    let src = dir.join("unit.c");
+    for &(target, header, flags, missing) in cases {
+        std::fs::write(&src, format!("#include <{header}>\n{body}")).expect("write unit");
+        let out = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(flags)
+            .arg("-fsyntax-only")
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        let what = format!("{target} <{header}> {flags:?}: {err}");
+        match missing {
+            None => assert!(out.status.success(), "{what}"),
+            Some(name) => assert!(
+                !out.status.success() && err.contains(&format!("`{name}` not found")),
+                "{what}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn preprocessing_alone_reports_the_preprocessors_diagnostics() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-pp-diagnostics");
+    let src = dir.join("w.c");
+    std::fs::write(
+        &src,
+        "#warning hi\n#define A 1\n#define A 2\n#define D defined(X)\n#if D\n#endif\nint x = A;\n",
+    )
+    .expect("write w.c");
+    let run = |flags: &[&str], input: &std::path::Path| {
+        let mut cmd = Command::new(badc);
+        cmd.arg("--target=linux-x64").args(flags).arg(input);
+        cmd.output().expect("run badc")
+    };
+    let all = &["[B1002]", "[B1015]", "[B1016]"][..];
+    // The rows each stderr line reports at `level`.
+    let rows = |out: &std::process::Output, level: &str| -> Vec<&'static str> {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let at = |code: &str| err.lines().any(|l| l.contains(level) && l.contains(code));
+        all.iter().copied().filter(|c| at(c)).collect()
+    };
+    let text = run(&["-E", "-w"], &src).stdout;
+    assert!(String::from_utf8_lossy(&text).contains("int x = 2;"));
+    // The flags, whether the run succeeds, and the rows warned and failed.
+    type Case<'a> = (&'a [&'a str], bool, &'a [&'a str], &'a [&'a str]);
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        (&["-E"], true, &["[B1002]", "[B1015]"], &[]),
+        (&["-E", "-Wextra"], true, all, &[]),
+        (&["-E", "-Wextra", "-Werror"], false, &[], all),
+        (&["-E", "-Werror", "-Wno-error=#warnings"], false, &["[B1002]"], &["[B1015]"]),
+        (&["-E", "-Wno-#warnings", "-Wno-macro-redefined"], true, &[], &[]),
+        (&["-E", "-Wextra", "-w"], true, &[], &[]),
+        (&["-E", "-dM", "-Wextra"], true, all, &[]),
+        (&["-M", "-Wextra"], true, all, &[]),
+        (&["-MM", "-Wextra", "-Werror"], false, &[], all),
+        (&["-fsyntax-only", "-Wextra"], true, all, &[]),
+    ];
+    for &(flags, ok, warned, failed) in cases {
+        let out = run(flags, &src);
+        let what = format!("{flags:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(out.status.success(), ok, "{what}");
+        assert_eq!(rows(&out, "warning: "), warned, "{what}");
+        assert_eq!(rows(&out, "error: "), failed, "{what}");
+        if flags[0] == "-E" && !flags.contains(&"-dM") {
+            assert_eq!(out.stdout, text, "{what}");
+        }
+    }
+    let stop = dir.join("e.c");
+    std::fs::write(&stop, "#error stop here\nint x;\n").expect("write e.c");
+    let out = run(&["-E"], &stop);
+    let err = String::from_utf8_lossy(&out.stderr);
+    let stopped = err.contains("#error stop here");
+    assert!(!out.status.success() && stopped, "{err}");
+}
+
+/// `-E` past a preprocessor error, as gcc 16 does: an `#error` (each one
+/// reported, from a header too) or an unterminated `#if` fails the run
+/// after the whole unit is written; a missing include ends the unit there,
+/// as gcc's fatal error does, after the text before it. An `#error` in a
+/// skipped group is no error. The text is gcc 16's `-E -P` output with its
+/// blank lines dropped; clang 22 writes the same, except that it goes on
+/// past a missing include. `-dM -E` and `-M` go on past an `#error` too,
+/// and a compile reports every `#error`.
+#[test]
+fn preprocessing_goes_past_an_error_directive_and_still_fails() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-pp-past-error");
+    std::fs::write(dir.join("h.h"), "#error in header\nint h;\n").expect("write h.h");
+    let run = |flags: &[&str], body: &str| {
+        let src = dir.join("u.c");
+        std::fs::write(&src, body).expect("write u.c");
+        let out = Command::new(badc)
+            .arg("--target=linux-x64")
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<String> = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(str::to_string)
+            .collect();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let errors = stderr.matches("error:").count();
+        (out.status.success(), lines, errors)
+    };
+    // The unit, gcc's text, and the errors it reports.
+    type Case<'a> = (&'a str, &'a [&'a str], usize);
+    #[rustfmt::skip]
+    let cases: &[Case] = &[
+        ("int a;\n#error first\nint b;\n", &["int a;", "int b;"], 1),
+        ("int a;\n#if 0\n#error skipped\n#endif\nint b;\n", &["int a;", "int b;"], 0),
+        ("int a;\n#error one\nint b;\n#error two\nint c;\n", &["int a;", "int b;", "int c;"], 2),
+        ("int a;\n#include \"missing.h\"\nint b;\n", &["int a;"], 1),
+        ("int a;\n#if 1\nint b;\n", &["int a;", "int b;"], 1),
+        ("int a;\n#include \"h.h\"\nint b;\n", &["int a;", "int h;", "int b;"], 1),
+        ("int a;\n#define X 1\n#error x is X\nint b = X;\n", &["int a;", "int b = 1;"], 1),
+        ("int a;\n#include \"missing.h\"\nint b;\n#error after\nint c;\n", &["int a;"], 1),
+    ];
+    for &(body, text, errors) in cases {
+        let (ok, lines, got) = run(&["-E", "-P"], body);
+        let same = ok == (errors == 0) && lines == text && got == errors;
+        assert!(same, "{body}\n{lines:?}");
+    }
+    let two = "#define BEFORE 1\n#error one\n#define AFTER 2\n#error two\nint c;\n";
+    let (ok, macros, errors) = run(&["-dM", "-E"], two);
+    let after = macros.iter().any(|l| l == "#define AFTER 2");
+    assert!(!ok && errors == 2 && after, "{macros:?}");
+    let (ok, rule, errors) = run(&["-M"], two);
+    let written = rule.iter().any(|l| l.contains("u.c"));
+    assert!(!ok && errors == 2 && written, "{rule:?}");
+    let (ok, _, errors) = run(&["-fsyntax-only"], two);
+    assert!(!ok && errors == 2);
 }
 
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
@@ -1347,6 +1804,446 @@ fn jit_exits_with_the_status_exit_was_given() {
         assert_eq!(String::from_utf8_lossy(&out.stdout), "partial");
     }
 }
+
+// A program run in process takes the C-library sources its image links:
+// `strchrnul`, `memrchr`, and on Windows libc/lib's printf and strtod.
+#[test]
+fn in_process_runs_join_the_on_demand_sources() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-on-demand");
+    let src = dir.join("od.c");
+    std::fs::write(
+        &src,
+        "#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
+         int main(void) {\n\
+           const char *s = \"abc\";\n\
+           char buf[64];\n\
+           if (strchrnul(s, 'z') != s + 3 || memrchr(s, 'a', 3) != s) return 1;\n\
+           snprintf(buf, sizeof buf, \"%hhd %.1f %g\", 300, INFINITY, strtod(\"0x1p3\", NULL));\n\
+           if (strcmp(buf, \"44 inf 8\") != 0) { fputs(buf, stderr); return 2; }\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let exe = dir.join(format!("od{}", std::env::consts::EXE_SUFFIX));
+    let out = Command::new(badc)
+        .arg(&src)
+        .arg("-o")
+        .arg(&exe)
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let run = Command::new(&exe).output().expect("run image");
+    assert_eq!(
+        run.status.code(),
+        Some(0),
+        "image: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let out = Command::new(badc)
+        .arg("--jit")
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "--jit: {err}");
+    // The interpreter runs the C library of the target it interprets, its
+    // own printf and, where that library lacks them, `string_ext.c`'s.
+    let sc = dir.join("sc.c");
+    std::fs::write(
+        &sc,
+        "#include <stdio.h>\n#include <string.h>\n\
+         int main(void) {\n\
+           const char *s = \"abc\";\n\
+           char *p = strchrnul(s, 'z'), *q = memrchr(s, 'a', 3);\n\
+           printf(\"%d %d\\n\", (int)(p - s), (int)(q - s));\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for target in ["--target=macos-aarch64", "--target=windows-x64"] {
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(target)
+            .arg(&sc)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {target}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "3 0\n", "{target}");
+    }
+}
+
+// `--interp` compiles for the target it names and interprets that program:
+// the target's data model and predefined macros, and a library whose `%l`
+// reads the target's `long`. `--jit` runs host code and refuses any other
+// target before compiling.
+#[test]
+fn interp_takes_the_target_and_jit_only_the_host() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-target");
+    let src = dir.join("types.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <wchar.h>\n\
+         int main(void) {\n\
+           long m = -1L;\n\
+           int win = 0;\n\
+         #ifdef _WIN32\n\
+           win = 1;\n\
+         #endif\n\
+           printf(\"%zu %zu %d %lx\\n\", sizeof(long), sizeof(wchar_t), win, m);\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for (target, want) in [
+        ("macos-aarch64", "8 4 0 ffffffffffffffff\n"),
+        ("linux-aarch64", "8 4 0 ffffffffffffffff\n"),
+        ("linux-x64", "8 4 0 ffffffffffffffff\n"),
+        ("windows-x64", "4 2 1 ffffffff\n"),
+        ("windows-arm64", "4 2 1 ffffffff\n"),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{spec}");
+        let out = Command::new(badc)
+            .arg("--jit")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        if out.status.success() {
+            // The host C library's text-mode stdout ends a line with CR LF
+            // on Windows.
+            let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
+            assert_eq!(stdout, want, "--jit {spec}");
+        } else {
+            assert!(
+                err.contains("`--jit` runs the program in this process") && out.stdout.is_empty(),
+                "--jit {spec}: {err}"
+            );
+        }
+    }
+}
+
+// The interpreter's printf reads a `long double` in the target's format --
+// an x87 or binary128 image on the Linux targets, binary64 elsewhere -- and
+// writes `%La` as the target's C library does: the expected text is what the
+// native builds print with glibc, Apple's libc and the UCRT.
+#[test]
+fn interp_prints_long_double_in_the_target_format() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-long-double");
+    let src = dir.join("ld.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         static const long double half[] = {4.5L, -0.25L, 0.5L, 2.5L, 3.5L, -1.5L};\n\
+         static const long double wide[] = {1.96875L, 0x1p+1000L, 1e300, 0x1p-1000L,\n\
+                                            0x1p-1074L, -1e-300};\n\
+         int main(void) {\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%Lf %.0Lf %Lg %d\\n\", half[i], half[i], half[i], i);\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%.6Le %.17Lg\\n\", wide[i], wide[i]);\n\
+           for (int i = 0; i < 6; i++)\n\
+             printf(\"%La %.0La|\", wide[i], wide[i]);\n\
+           printf(\"%La %+010.1LA\\n\", half[1], wide[0]);\n\
+           return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let decimal = "4.500000 4 4.5 0\n-0.250000 -0 -0.25 1\n0.500000 0 0.5 2\n\
+                   2.500000 2 2.5 3\n3.500000 4 3.5 4\n-1.500000 -2 -1.5 5\n\
+                   1.968750e+00 1.96875\n1.071509e+301 1.0715086071862673e+301\n\
+                   1.000000e+300 1.0000000000000001e+300\n9.332636e-302 9.3326361850321888e-302\n\
+                   4.940656e-324 4.9406564584124654e-324\n-1.000000e-300 -1e-300\n";
+    let x87 = "0xf.cp-3 0x1p+1|0x8p+997 0x8p+997|0xb.f21e44003acep+993 0xcp+993|\
+               0x8p-1003 0x8p-1003|0x8p-1077 0x8p-1077|-0xa.b70fe17c79ac8p-1000 -0xbp-1000|\
+               -0x8p-5 +0X0F.CP-3\n";
+    let ieee = |tail: &str| {
+        format!(
+            "0x1.f8p+0 0x2p+0|0x1p+1000 0x1p+1000|0x1.7e43c8800759cp+996 0x1p+996|\
+             0x1p-1000 0x1p-1000|0x1p-1074 0x1p-1074|-0x1.56e1fc2f8f359p-997 -0x1p-997|\
+             -0x1p-2 {tail}\n"
+        )
+    };
+    let ucrt = "0x1.f800000000000p+0 0x2p+0|0x1.0000000000000p+1000 0x1p+1000|\
+                0x1.7e43c8800759cp+996 0x1p+996|0x1.0000000000000p-1000 0x1p-1000|\
+                0x0.0000000000001p-1022 0x0p-1022|-0x1.56e1fc2f8f359p-997 -0x1p-997|\
+                -0x1.0000000000000p-2 +0X02.0P+0\n";
+    for (target, hex) in [
+        ("linux-x64", x87.to_string()),
+        ("linux-aarch64", ieee("+0X02.0P+0")),
+        // Apple's libc rounds a tail of 8 followed by an even digit down.
+        ("macos-aarch64", ieee("+0X01.FP+0")),
+        ("windows-x64", ucrt.to_string()),
+        ("windows-arm64", ucrt.to_string()),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            format!("{decimal}{hex}"),
+            "{spec}"
+        );
+    }
+}
+
+// C99 7.6 and Annex F under `--interp`: each operation rounds in the current
+// direction and raises what the target raises, and the environment
+// functions save and restore it. The expected text is what the native builds
+// print with glibc, Apple's libc and the UCRT; AArch64 detects tininess
+// before rounding, and only glibc on x86-64 raises overflow and underflow
+// without inexact.
+#[test]
+fn interp_rounds_and_raises_as_the_target() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("fenv_rounding_and_exceptions.c");
+    let x64 = FENV_LINUX_X64.to_string();
+    let tiny_before = |t: &str| {
+        t.replace(
+            "\ntiny-after 0010000000000000 x\n",
+            "\ntiny-after 0010000000000000 ux\n",
+        )
+        .replace("\nftiny-after 00800000 x\n", "\nftiny-after 00800000 ux\n")
+    };
+    let raise_inexact = |t: &str| {
+        t.replace("\nraise2 o\n", "\nraise2 ox\n")
+            .replace("\nraise3 u\n", "\nraise3 ux\n")
+    };
+    let aarch64 = raise_inexact(&tiny_before(&x64));
+    for (target, want) in [
+        ("linux-x64", x64.clone()),
+        ("linux-aarch64", aarch64.clone()),
+        ("macos-aarch64", aarch64.clone()),
+        ("windows-x64", raise_inexact(&x64)),
+        ("windows-arm64", aarch64),
+    ] {
+        let spec = format!("--target={target}");
+        let out = Command::new(badc)
+            .arg("--interp")
+            .arg(&spec)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "--interp {spec}: {err}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{spec}");
+    }
+}
+
+/// What a native build of `fenv_rounding_and_exceptions.c` prints on Linux
+/// x86_64.
+const FENV_LINUX_X64: &str = "\
+nearest 0 1
+div 3fd5555555555555 x
+div- bfd5555555555555 x
+add 3ff0000000000000 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7ff0000000000000 ox
+ovf- fff0000000000000 ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaab x
+fovf 7f800000 ox
+fsub 002aaaab ux
+fsqrt 3fddb3d7 x
+ffma 33000000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccd x
+d2fovf 7f800000 ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff199999999999a x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40000000 x
+lrint -2 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.2 3.333e-01 -0.3333 0x1.55p-2 0.33333333333333331483
+upward 0 1
+div 3fd5555555555556 x
+div- bfd5555555555555 x
+add 3ff0000000000001 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7ff0000000000000 ox
+ovf- ffefffffffffffff ox
+max+ 7ff0000000000000 ox
+tiny/2 0000000000000001 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000001 ux
+subquot 0005555555555556 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584cab x
+fma 3ca0000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaab x
+fovf 7f800000 ox
+fsub 002aaaab ux
+fsqrt 3fddb3d8 x
+ffma 33000000 x
+i2f 4b800001 x
+ll2d 4340000000000001 x
+ll2f 5a000001 x
+ull2d 43e0000000000002 x
+d2f 3dcccccd x
+d2fovf 7f800000 ox
+d2fsub 00000001 ux
+ld 3fb999999999999a -
+ld+ 3ff199999999999a x
+d2i 2 x
+d2u 3 x
+rint 4008000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40400000 x
+lrint -2 x
+llrint 3 x
+lrintf 3 x
+printf 0.3 3 -0.2 3.334e-01 -0.3333 0x1.56p-2 0.33333333333333337035
+downward 0 1
+div 3fd5555555555555 x
+div- bfd5555555555556 x
+add 3ff0000000000000 x
+sum0 8000000000000000 -
+sum-0 8000000000000000 -
+ovf 7fefffffffffffff ox
+ovf- fff0000000000000 ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000001 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaaa x
+fovf 7f7fffff ox
+fsub 002aaaaa ux
+fsqrt 3fddb3d7 x
+ffma b3800000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccc x
+d2fovf 7f7fffff ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff1999999999999 x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c008000000000000 x
+nearbyint c008000000000000 -
+rintf 40000000 x
+lrint -3 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.3 3.333e-01 -0.3334 0x1.55p-2 0.33333333333333331482
+towardzero 0 1
+div 3fd5555555555555 x
+div- bfd5555555555555 x
+add 3ff0000000000000 x
+sum0 0000000000000000 -
+sum-0 0000000000000000 -
+ovf 7fefffffffffffff ox
+ovf- ffefffffffffffff ox
+max+ 7fefffffffffffff x
+tiny/2 0000000000000000 ux
+-tiny/2 8000000000000000 ux
+subprod 0000000000000000 ux
+subquot 0005555555555555 ux
+subdiff 0000000000000017 -
+sqrt 3ffbb67ae8584caa x
+fma bc90000000000000 x
+fmasub 0000000000000004 -
+fdiv 3eaaaaaa x
+fovf 7f7fffff ox
+fsub 002aaaaa ux
+fsqrt 3fddb3d7 x
+ffma b3800000 x
+i2f 4b800000 x
+ll2d 4340000000000000 x
+ll2f 5a000000 x
+ull2d 43e0000000000001 x
+d2f 3dcccccc x
+d2fovf 7f7fffff ox
+d2fsub 00000000 ux
+ld 3fb999999999999a -
+ld+ 3ff1999999999999 x
+d2i 2 x
+d2u 3 x
+rint 4000000000000000 x
+rint- c000000000000000 x
+nearbyint c000000000000000 -
+rintf 40000000 x
+lrint -2 x
+llrint 2 x
+lrintf 2 x
+printf 0.2 2 -0.2 3.333e-01 -0.3333 0x1.55p-2 0.33333333333333331482
+tiny-after 0010000000000000 x
+to-min 0010000000000000 ux
+ftiny-after 00800000 x
+fegetenv 0 x
+fesetenv 0 1 x
+feholdexcept 0 1 -
+feupdateenv 0 vz
+fegetexceptflag 0 vz
+fesetexceptflag 0 z
+fesetenv-dfl 0 1 -
+fesetround-bad 1 1 -
+raise0 v
+raise1 z
+raise2 o
+raise3 u
+raise4 x
+snan+1 v
+snan== 0 v
+qnan 0 1 v
+1/0 7ff0000000000000 z
+inf-inf v
+sqrt-1 v
+d2ll-ovf v
+";
 
 // A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
 #[test]
@@ -1979,7 +2876,7 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     let src = dir.join("main.c");
     std::fs::write(
         &src,
-        "int *p; int *q;\nint main(void) { p = 1; q = 2; return 0; }\n",
+        "const int *c; int *p; int *q;\nint main(void) { p = c; q = c; return 0; }\n",
     )
     .expect("write main");
     let out = Command::new(badc)
@@ -1993,12 +2890,12 @@ fn warnings_as_errors_fail_the_unit_after_the_whole_parse() {
     assert!(!out.status.success(), "-Werror must fail the unit");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
-        stderr.matches("error: integer assigned to pointer").count(),
+        stderr.matches("error: discards `const` qualifier").count(),
         2,
         "both assignments must be reported, got: {stderr}"
     );
     assert!(
-        stderr.contains("[B3001] [-Wint-conversion]"),
+        stderr.contains("[B3031] [-Wdiscarded-qualifiers]"),
         "expected the code and option brackets, got: {stderr}"
     );
     assert!(
@@ -3488,6 +4385,61 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
         silenced.status.success() && !stderr.contains("B3026"),
         "{stderr}"
     );
+}
+
+/// An integer and a pointer exchanged with no cast, in an argument, an
+/// assignment, an initializer and a return and in both directions, is an
+/// error by default, as gcc 14's and clang 15's `-Wint-conversion` is; a
+/// null pointer constant is none. `-Wno-error=int-conversion` and
+/// `-fpermissive` lower it to a warning the unit compiles under, and
+/// `-Wno-int-conversion` silences it.
+#[test]
+fn int_conversion_is_an_error_the_user_can_lower() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-int-conversion");
+    let compile = |name: &str, body: &str, flags: &[&str]| {
+        let src = dir.join(format!("{name}.c"));
+        std::fs::write(&src, body).expect("write source");
+        let out = Command::new(badc)
+            .arg("--target=linux-x64")
+            .arg("-c")
+            .args(flags)
+            .arg(&src)
+            .arg("-o")
+            .arg(dir.join(format!("{name}.o")))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.success(), err)
+    };
+    #[rustfmt::skip]
+    const CASES: &[(&str, &str, &str)] = &[
+        ("arg_ptr", "void f(char *);\nvoid g(void) { f(42); }\n", "integer assigned to pointer in argument 1 of `f`"),
+        ("arg_int", "void f(int);\nvoid g(int *p) { f(p); }\n", "pointer assigned to integer in argument 1 of `f`"),
+        ("assign_ptr", "void g(int n) { int *q; q = n; (void)q; }\n", "integer assigned to pointer in assignment"),
+        ("assign_int", "void g(int *p) { int x; x = p; (void)x; }\n", "pointer assigned to integer in assignment"),
+        ("init_ptr", "int *q = 1;\n", "integer assigned to pointer in initializer"),
+        ("init_int", "void g(int *p) { long x = p; (void)x; }\n", "pointer assigned to integer in initializer"),
+        ("ret_ptr", "int *g(void) { return 1; }\n", "integer assigned to pointer in return"),
+        ("ret_int", "int g(int *p) { return p; }\n", "pointer assigned to integer in return"),
+    ];
+    let row = "[B3001] [-Wint-conversion]";
+    for &(name, body, text) in CASES {
+        let (ok, err) = compile(name, body, &[]);
+        let reported = err.contains("error:") && err.contains(text) && err.contains(row);
+        assert!(!ok && reported, "{name}: {err}");
+        for flag in ["-Wno-error=int-conversion", "-fpermissive"] {
+            let (ok, err) = compile(name, body, &[flag]);
+            let lowered = err.contains("warning:") && err.contains(text);
+            assert!(ok && lowered, "{name} {flag}: {err}");
+        }
+        let (ok, err) = compile(name, body, &["-Wno-int-conversion"]);
+        assert!(ok && !err.contains("B3001"), "{name}: {err}");
+    }
+    let nulls = "int *a = 0, *b = 0L, *c = '\\0', *d = (1 - 1), *e = (void *)0;\n\
+                 int *g(void) { return 0; }\nvoid f(int *);\nvoid h(void) { f(0); a = 0; }\n";
+    let (ok, err) = compile("nulls", nulls, &[]);
+    assert!(ok && !err.contains("B3001"), "{err}");
 }
 
 /// A `void` expression used as a value fails the unit with a hard error at

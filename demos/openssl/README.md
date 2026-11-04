@@ -18,7 +18,7 @@ publishes), verifies its sha256, and extracts it under
 | `setup.py`  | yes      | Fetch + extract the pinned release, apply the one patch. Idempotent. |
 | `smoke.py`  | yes      | Configure, build and run the suite at each level.                  |
 | `badc.conf` | yes      | The Configure targets that name badc as the compiler.              |
-| `.cache/`   | no       | Cached archive, the extracted tree, one build directory per level. |
+| `.cache/`   | no       | Cached archive, the extracted tree, and a build directory (about 2 GB) per level and configuration until its suite passes. |
 
 ## Workflow
 
@@ -26,13 +26,18 @@ publishes), verifies its sha256, and extracts it under
 python demos/openssl/setup.py              # fetches into demos/openssl/.cache/
 python demos/openssl/smoke.py              # -O0 then -O, every recipe
 python demos/openssl/smoke.py --level O --tests 'test_evp test_ssl_new'
+python demos/openssl/smoke.py --asm        # with the assembler modules
 ```
 
 `smoke.py` prints one line per build and per suite pass and returns 0 when
 every recipe passes, 1 with the failing recipes and subtests otherwise. It
 honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
 `HARNESS_JOBS` (default: the CPU count); `--keep-going` passes `-k` to
-`make` so every unit that fails is listed.
+`make` so every unit that fails is listed. `BADC_OPENSSL_TESTS=untimed`
+builds and runs every recipe but the timer-bound ones (step 3), and
+`=timed` runs only those over the builds an untimed run left from the same
+badc binary; the local gate runs the untimed set in its demo pool and the
+timed set after it, with the host to itself (`scripts/run_demos.py`).
 
 ## What the smoke does
 
@@ -40,7 +45,11 @@ honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
    no-asm no-shared no-module`, out of tree in `.cache/build-<level>`, which
    is removed first: make does not track the compiler binary.
    * `no-asm`: the perlasm modules are assembler sources; the C
-     implementations they replace are what this compiles.
+     implementations they replace are what this compiles. `--asm` drops
+     it: Configure generates the modules for the host (the `elf` scheme
+     on Linux, `ios64` on macOS) and badc assembles them, in
+     `.cache/build-<level>-asm`, and the CPU-feature dispatch selects them
+     at run time.
    * `no-shared`: libcrypto and libssl are static archives and every
      program links them statically.
    * `no-module`: the legacy provider is linked into libcrypto rather than
@@ -49,8 +58,9 @@ honours `BADC=path/to/badc`; `--jobs N` sets both `make -j` and
    badc's linker. The host's `ar` makes the archives: `badc --ar` writes a
    new archive per call, and the Makefile archives libcrypto in three
    calls.
-3. `make test` over every recipe but `test_quicapi`, `HARNESS_JOBS` at a
-   time, then `test_quicapi` alone. Its blocking-mode cases run the server
+3. `make test` over every recipe but `test_quicapi` and
+   `test_quic_multistream`, `HARNESS_JOBS` at a time, then those two alone.
+   `test_quicapi`'s blocking-mode cases run the server
    in a thread that advances the test's clock 1 ms per pass while the
    client handshakes in real time, so a loaded machine can let the
    server's idle timeout end the connection: with 12 recipes at a time on
@@ -85,7 +95,19 @@ wall-clock timeouts a loaded host decides).
 | macOS arm64 (12)    | 10 s      | 192 + 38 s | 10 s     | 62 + 19 s  | 346 s |
 
 402 recipe files, 3294 tests on Linux and 3260 on macOS (the suite skips
-some per platform). The host compilers' builds of the same configuration
+some per platform).
+
+With `--asm`, measured at 7ef8d1da94 (the same columns; the x86-64 box
+has AVX2 and no AVX-512, so the dispatch runs the AVX2 paths there):
+
+| Lane (jobs)         | -O0 build | -O0 suite  | -O build | -O suite   | total |
+|---------------------|----------:|-----------:|---------:|-----------:|------:|
+| Linux x86_64 (12)   | 23 s      | 76 + 18 s  | 27 s     | 65 + 15 s  | 243 s |
+| Linux aarch64 (8)   | 18 s      | 67 + 20 s  | 20 s     | 52 + 15 s  | 204 s |
+| macOS arm64 (12)    | 21 s      | 66 + 19 s  | 15 s     | 46 + 16 s  | 206 s |
+
+The same 402 recipe files and test counts. CI's `openssl`
+job runs both configurations on both Linux runners. The host compilers' builds of the same configuration
 take 22 s (clang -O0, macOS), 32 s (gcc -O0, x86_64) and their suites
 264 s (clang -O0) and 300 s (gcc -O0); gcc -O3's suite takes 79 s.
 

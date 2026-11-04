@@ -15,10 +15,9 @@ Disassembly of section .text:
 
 <touched>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x40]
                	mov	x0, #-0x1               // =-1
                	ret
 
@@ -29,11 +28,7 @@ Disassembly of section .text:
 <main>:
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	w0, [x1]
-               	cbz	w0, <addr>
-               	mov	x0, #0x4                // =4
-               	ret
+               	str	w0, [x1, #0x40]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x2, [x1]
@@ -45,13 +40,11 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0x18]
                	cmp	w1, #0xa
                	b.ne	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x1, #0x20]
                	cmp	w1, #0x14
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

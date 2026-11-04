@@ -1373,3 +1373,42 @@ fn xsi_records_follow_each_c_library() {
         &[("sizeof(DBM)", 68), ("_Alignof(DBM)", 1)],
     );
 }
+
+/// msvc_compat.h leaves `__declspec` to the compiler, so the alignment a
+/// declaration asks for survives the header, as in MSVC's `M128A`.
+#[test]
+fn msvc_compat_keeps_the_declspec_alignment() {
+    let src = "#include <msvc_compat.h>\n#include <stddef.h>\n\
+               typedef struct __declspec(align(16)) { unsigned long long lo; long long hi; } m128a;\n\
+               struct ctx { char c; m128a x; };\n\
+               _Static_assert(_Alignof(m128a) == 16, \"align(16)\");\n\
+               _Static_assert(offsetof(struct ctx, x) == 16, \"member offset\");\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        compile(src, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
+/// msvc_compat.h presents MSVC under its default /Ze, so `_MSC_EXTENSIONS`
+/// is defined beside `_MSC_VER`, as cl and clang-cl define it. A header that
+/// names its unions only without it and completes a type only with it then
+/// compiles, each member reached directly; off Windows the header is a no-op.
+#[test]
+fn msvc_compat_defines_ms_extensions() {
+    let src = "#include <msvc_compat.h>\n\
+        #if !defined(_MSC_EXTENSIONS)\n#define ANON u\n#else\n#define ANON\n#endif\n\
+        #ifdef _MSC_EXTENSIONS\n\
+        struct tagged { unsigned short kind;\n\
+          union { union { int i; double d; } ANON; char pad[16]; }; };\n\
+        #else\nstruct tagged;\n#endif\n\
+        typedef union { struct { unsigned lo; int hi; } ANON; long long all; } split;\n\
+        int pick(unsigned n, struct tagged t[]) { return t[n].i + t[n].kind; }\n\
+        unsigned low(split s) { return s.lo; }\n\
+        _Static_assert(sizeof(struct tagged) == 24, \"tagged\");\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        compile(src, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+    let off = "#include <msvc_compat.h>\n#if defined(_MSC_EXTENSIONS)\n#error on\n#endif\n";
+    for target in [Target::LinuxX64, Target::MacOSAarch64] {
+        compile(off, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}

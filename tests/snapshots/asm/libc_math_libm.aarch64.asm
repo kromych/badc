@@ -96,21 +96,21 @@ Disassembly of section .text:
                	fmov	s0, #27.00000000
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	s1, #3.00000000
-               	fcvt	d2, s1
-               	fsub	d0, d0, d2
-               	movi	d2, #0000000000000000
-               	fcmp	d0, d2
+               	fmov	d1, #3.00000000
+               	fsub	d0, d0, d1
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
-               	ldr	d2, [x16]
-               	fcmp	d0, d2
+               	ldr	d1, [x16]
+               	fcmp	d0, d1
                	b.mi	<addr>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	s0, #5.00000000
+               	fmov	s1, #3.00000000
                	bl	<addr>
                	fcvt	d0, s0
                	fmov	d1, #-1.00000000

@@ -54,8 +54,7 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsd	%xmm0, (%rax)
+               	movsd	%xmm0, <rip> # <addr>
                	leaq	-0x80(%rbp), %rdx
                	xorl	%eax, %eax
                	movq	%rax, %rcx
@@ -107,8 +106,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x128, %rax            # imm = 0x128
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movsd	(%rax), %xmm0
+               	movsd	<rip>, %xmm0 # <addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

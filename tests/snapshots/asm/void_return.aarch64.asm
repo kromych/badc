@@ -85,12 +85,9 @@ Disassembly of section .text:
                	mov	x0, #-0x1               // =-1
                	stur	w0, [x29, #-0x8]
                	sub	x1, x29, #0x8
-               	cmp	w0, #0x0
-               	b.ge	<addr>
                	stur	wzr, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
-               	cbz	w0, <addr>
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x2                // =2
                	stur	w0, [x29, #-0x8]
@@ -107,10 +104,3 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x8]
-               	b	<addr>
-               	ldursw	x0, [x29, #-0x8]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x8]
-               	b	<addr>

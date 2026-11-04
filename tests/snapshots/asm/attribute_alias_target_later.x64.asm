@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <probe_generic>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	addq	%rdi, %rcx
-               	movl	%ecx, (%rax)
+               	movl	<rip>, %eax # <addr>
+               	addq	%rdi, %rax
+               	movl	%eax, <rip> # <addr>
                	retq
 
 <after_alias>:
@@ -41,8 +40,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x1, %edi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -50,17 +48,15 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x3, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movl	(%rax), %ecx
-               	addq	$0x4, %rcx
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rax
+               	movl	<rip>, %eax # <addr>
+               	addq	$0x4, %rax
+               	movl	%eax, <rip> # <addr>
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax

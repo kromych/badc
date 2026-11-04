@@ -461,6 +461,7 @@ fn the_named_codes_match_their_rows() {
         (Code::ORPHAN_SECTION, "orphan-section"),
         (Code::MISSING_ENTRY, "missing-entry"),
         (Code::MERGED_SECTION_ACCESS, "merged-section-access"),
+        (Code::UNDEFINED_LOOKUP, "undefined-lookup"),
         (Code::UNDEFINED_SYMBOL, "undefined-symbol"),
         (Code::DUPLICATE_SYMBOL, "duplicate-symbol"),
         (Code::RELOCATION, "relocation"),

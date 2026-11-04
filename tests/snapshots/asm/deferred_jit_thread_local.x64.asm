@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	%eax, (%rcx)
+               	movl	%eax, <rip> # <addr>
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
                	movl	(%rcx), %edx

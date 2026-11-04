@@ -698,16 +698,13 @@ pub(super) fn emit_call_ext(
     }
     // A sub-word integer return is extended into rax; an FP return arrives
     // in xmm0 and routes to the allocated place.
-    use crate::c5::compiler::types as ty_helpers;
-    let return_type_tag = imp.return_type_tag;
-    let bare = ty_helpers::strip_unsigned(return_type_tag);
-    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+    if imp.returns_fp() {
         // An f32 result is the single in the low 32 bits of xmm0, the form the
         // FP casts and `StoreLocal F32` consume, so it routes without widening.
         xmm0_result_to_dst(code, dst, frame);
         return Ok(());
     }
-    let ext = super::call_result_extension(return_type_tag, target, alloc, v);
+    let ext = super::call_result_extension(imp.return_type_tag, target, alloc, v);
     super::encode::emit_extend_rax_for_return(code, ext);
     mirror_int_dst(code, dst, Reg::RAX, frame);
     Ok(())
@@ -1063,7 +1060,7 @@ fn emit_va_arg_eightbytes(
 }
 
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of
-/// its last instruction, a direct `Inst::Call` the epilogue can replace by
+/// its last instruction that emits code, a direct `Inst::Call` the epilogue can replace by
 /// a jump (a sibling call, which `-fno-optimize-sibling-calls` turns off):
 /// the arguments fit the host argument-register window, this function is
 /// not variadic, the callee -- defined in this unit or declared with a
@@ -1074,6 +1071,7 @@ fn emit_va_arg_eightbytes(
 /// ones the epilogue restores.
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
+    alloc: &Allocation,
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -1083,13 +1081,18 @@ pub(super) fn detect_tail_call<'a>(
     let Terminator::Return(v) = block.terminator else {
         return None;
     };
-    if v == super::super::ir::NO_VALUE || !abi.sibling_calls {
+    // A second return of a returns-twice call (C99 7.13.2.1) resumes in this
+    // frame, which a jump to the callee would already have torn down.
+    if v == super::super::ir::NO_VALUE || !abi.sibling_calls || func.has_returns_twice_call {
         return None;
     }
     // The call ends the block but for lifetime markers, which the frame
-    // teardown makes moot.
+    // teardown makes moot, and values that emit no code.
     if !block.inst_range.contains(&v)
-        || !(v + 1..block.inst_range.end).all(|p| func.insts[p as usize].is_lifetime_marker())
+        || !(v + 1..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            inst.is_lifetime_marker() || super::ssa::emit_common::inst_emits_nothing(inst, p, alloc)
+        })
     {
         return None;
     }
@@ -1141,10 +1144,10 @@ pub(super) fn detect_tail_call<'a>(
         return None;
     }
     // The callee's return extension replaces this function's, so the two
-    // contracts must agree; an unknown callee has no recorded contract.
+    // contracts must agree; a function without a recorded type has none.
     let &callee_tag = ret_tags.get(&target_pc)?;
     if super::return_extension(callee_tag, target)
-        != super::return_extension(func.ret_type_tag, target)
+        != super::return_extension(func.ret_type_tag?, target)
     {
         return None;
     }
@@ -1203,7 +1206,7 @@ pub(super) fn emit_tail_call(
     // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
-    restore_callee_saved(code, alloc);
+    restore_callee_saved(code, frame, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
     // opcode is `jmp`.

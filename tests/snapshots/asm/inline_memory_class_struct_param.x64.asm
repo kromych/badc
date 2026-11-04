@@ -93,22 +93,21 @@ Disassembly of section .text:
                	retq
 
 <use_clobber>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	movq	0x10(%rax), %rsi
-               	movq	0x18(%rax), %rdi
-               	movq	0x20(%rax), %r8
-               	movq	$0x63, (%rax)
-               	movq	$0x4d, 0x20(%rax)
-               	imulq	$0x2710, %rcx, %rax     # imm = 0x2710
-               	imulq	$0x3e8, %rdx, %rcx      # imm = 0x3E8
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rdx # <addr>
+               	movq	<rip>, %rsi # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	movq	$0x63, <rip> # <addr>
+               	movq	$0x4d, <rip> # <addr>
+               	imulq	$0x2710, %rax, %rax     # imm = 0x2710
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
-               	imulq	$0x64, %rsi, %rcx
+               	imulq	$0x64, %rdx, %rcx
                	addq	%rcx, %rax
-               	imulq	$0xa, %rdi, %rcx
+               	imulq	$0xa, %rsi, %rcx
                	addq	%rcx, %rax
-               	addq	%r8, %rax
+               	addq	%rdi, %rax
                	retq
 
 <use_pick>:
@@ -180,14 +179,13 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	cmpq	$0x63, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x63, %rax
                	jne	<addr>
-               	movq	0x20(%rax), %rcx
-               	cmpq	$0x4d, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x4d, %rax
                	jne	<addr>
-               	movq	0x8(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x4, %eax

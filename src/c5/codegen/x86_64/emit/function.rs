@@ -1,3 +1,4 @@
+use super::super::PrologueStep;
 use super::*;
 
 /// The predecessor-exit moves for the `Inst::Phi`s at the head of every
@@ -217,15 +218,17 @@ pub(crate) fn emit_function(
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
     let frame = compute_frame(func, alloc, abi, target);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+        .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
+    {
         return fail(why);
     }
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
         return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
-    if frame.canary_bytes > 0 {
-        cx.canary_frame_bytes
-            .insert(func.ent_pc, frame.canary_bytes);
+    if frame.locals_shift() > 0 {
+        cx.local_shift_bytes
+            .insert(func.ent_pc, frame.locals_shift());
     }
     if func.n_params > 0 {
         cx.param_frame_offsets.insert(
@@ -240,6 +243,18 @@ pub(crate) fn emit_function(
             func.ent_pc,
             super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
         );
+    }
+    // A filter funclet gets the establisher frame, rbp less FrameOffset.
+    if !func.funclet_slots.is_empty() {
+        let mut offsets = Vec::with_capacity(func.funclet_slots.len());
+        for &slot in &func.funclet_slots {
+            let (base, disp) = super::mem::local_slot_base_disp(slot, func, frame, abi);
+            if base != Reg::RBP {
+                return fail("a filter funclet reaches an object off the frame pointer");
+            }
+            offsets.push(i64::from(frame.saves_top) + disp);
+        }
+        cx.funclet_frames.insert(func.ent_pc, offsets);
     }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
@@ -323,6 +338,7 @@ pub(crate) fn emit_function(
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
         branch_short: Vec::new(),
+        seh_placed: Vec::new(),
         block_addr_fixups: Vec::new(),
         jump_table_fixups: Vec::new(),
     };
@@ -374,6 +390,9 @@ struct FnEmit<'a, 'b> {
     /// or, under `abs32_addrs`, the load's displacement field; each table is
     /// materialized into the read-only blob once the layout is final.
     jump_table_fixups: Vec<(usize, u32)>,
+    /// `(block, start)` of each block placed, in order, in a function with
+    /// a `__try` region.
+    seh_placed: Vec<(super::super::ir::BlockId, usize)>,
 }
 
 impl FnEmit<'_, '_> {
@@ -403,6 +422,16 @@ impl FnEmit<'_, '_> {
         );
         self.place_entry_params()?;
         let body = self.emit_body()?;
+        if func.has_seh() {
+            let rows = super::ssa::emit_common::seh_rows(
+                func,
+                self.start,
+                &self.seh_placed,
+                self.out.cx.code.len(),
+                &self.block_offsets,
+            );
+            self.out.cx.seh_rows.extend(rows);
+        }
         self.emit_early_return();
         self.patch_block_addrs()?;
         for r in &func.label_data_relocs {
@@ -583,6 +612,7 @@ impl FnEmit<'_, '_> {
         loop {
             self.block_addr_fixups.clear();
             self.jump_table_fixups.clear();
+            self.seh_placed.clear();
             for block_idx in 0..self.fcx.func.blocks.len() {
                 if self.plan.is_skipped(block_idx) {
                     #[cfg(debug_assertions)]
@@ -590,6 +620,7 @@ impl FnEmit<'_, '_> {
                     continue;
                 }
                 if !self.plan.is_dead(block_idx) {
+                    self.place_in_seh_region(block_idx);
                     self.emit_block(block_idx)?;
                 }
             }
@@ -625,6 +656,26 @@ impl FnEmit<'_, '_> {
             self.branch_fixups.clear();
         }
         Ok(body)
+    }
+
+    /// Record where block `block_idx` starts for the scope table. Where the
+    /// region changes, a `nop` keeps the return address of a call ending
+    /// the previous block inside that block's region: the language handler
+    /// matches a frame's return address against the ranges.
+    fn place_in_seh_region(&mut self, block_idx: usize) {
+        let func = self.fcx.func;
+        if !func.has_seh() {
+            return;
+        }
+        let scope = func.seh_scope_of(block_idx as super::super::ir::BlockId);
+        if let Some(&(prev, _)) = self.seh_placed.last()
+            && func.seh_scope_of(prev) != scope
+        {
+            self.out.cx.code.push(0x90);
+        }
+        let at = self.out.cx.code.len();
+        self.seh_placed
+            .push((block_idx as super::super::ir::BlockId, at));
     }
 
     /// A block the plan leaves out writes nothing when lowered: its
@@ -666,6 +717,19 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let block = &func.blocks[block_idx];
         self.block_offsets[block_idx] = self.out.cx.code.len();
+        // A `__try` handler is entered with rsp where the exception left it:
+        // the prologue's rsp, realigned as the prologue realigns it.
+        if func.is_seh_target(block_idx as super::super::ir::BlockId) {
+            emit_lea_r_mem(
+                self.out.cx.code,
+                Reg::RSP,
+                Reg::RBP,
+                -(frame.frame_bytes as i32),
+            );
+            if frame.realign_align > 0 {
+                emit_realign_rsp(self.out.cx.code, frame);
+            }
+        }
         super::ssa::emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,
@@ -680,7 +744,15 @@ impl FnEmit<'_, '_> {
         }
         // A direct call whose result the block returns lowers as `marshal;
         // epilogue; jmp` in the terminator; see `detect_tail_call`.
-        let tail_call = detect_tail_call(func, block, abi, variadic_targets, self.ret_tags, target);
+        let tail_call = detect_tail_call(
+            func,
+            alloc,
+            block,
+            abi,
+            variadic_targets,
+            self.ret_tags,
+            target,
+        );
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;
@@ -712,10 +784,6 @@ impl FnEmit<'_, '_> {
         } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
-        // A naked function's machine code is exactly its inline asm.
-        if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
-            return Ok(());
-        }
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
@@ -864,12 +932,11 @@ impl FnEmit<'_, '_> {
                 // disp32 reaches into the blob; the writer patches it. A
                 // static link indexes the table by its address instead.
                 let site = if self.abs32_addrs {
-                    super::encode::emit_load_index_abs(
+                    super::encode::emit_load_disp32(
                         code,
                         LoadKind::I64,
                         SCRATCH_R10,
-                        rt,
-                        8,
+                        super::encode::Disp32Mem::Index(rt, 8),
                         true,
                     )
                 } else {
@@ -1266,11 +1333,48 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
     }
 }
 
+/// The Win64 callee-saved block, after `push rbp`: the GPRs pushed in
+/// `gpr_used` order, `sub rsp` for a pad to 16 and the xmm saves stored at
+/// its bottom, then `lea rbp, [rsp + saves_top]`, which puts rbp back on the
+/// saved rbp. Each step is one `UNWIND_CODE`: the unwinder replays
+/// `UWOP_SET_FPREG` (FrameOffset `saves_top / 16`) ahead of the xmm saves,
+/// so their offsets hold against rsp at any later rsp, and the pushes after
+/// it pop at the rsp it recovers (Microsoft, "x64 exception handling").
+fn emit_win64_saves(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    uw: &mut super::FnUnwind,
+    func_start: usize,
+) {
+    let rel = |code: &Vec<u8>| (code.len() - func_start) as u32;
+    for &r in &alloc.gpr_used {
+        emit_push_r(code, Reg(r));
+        uw.steps.push((rel(code), PrologueStep::Push(r)));
+    }
+    let below = frame.saves_top - pushed_gpr_bytes(alloc);
+    if below > 0 {
+        super::encode::emit_sub_rsp(code, below);
+        uw.steps.push((rel(code), PrologueStep::Alloc(below)));
+    }
+    for (j, &x) in alloc.fp_used.iter().enumerate() {
+        let off = j as u32 * 16;
+        emit_movups_mem_xmm(code, Reg::RSP, off as i32, Reg(x));
+        uw.steps
+            .push((rel(code), PrologueStep::SaveXmm { xmm: x, off }));
+    }
+    emit_lea_r_mem(code, Reg::RBP, Reg::RSP, frame.saves_top as i32);
+    uw.steps
+        .push((rel(code), PrologueStep::SetFrame(frame.saves_top)));
+}
+
 /// Whether the epilogue re-establishes `rsp = rbp - frame_bytes`: a
 /// dynamic-sp frame whose restores address from rsp. Without them `leave`
-/// takes rsp from rbp.
+/// takes rsp from rbp; the Win64 block restores through rbp.
 fn reestablishes_sp(frame: Frame, alloc: &Allocation) -> bool {
-    frame.dynamic_sp && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
+    frame.dynamic_sp
+        && frame.saves_top == 0
+        && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
 }
 
 /// Re-establish rsp ahead of the epilogue's rsp-relative restores where
@@ -1284,9 +1388,17 @@ pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Alloc
 
 /// Restore what [`save_callee_saved`] saved, with rsp at the frame bottom:
 /// the xmm loads, then the pops, which leave rsp `pushed_gpr_bytes` above it.
+/// The Win64 block's xmm loads go through rbp; its pops are the teardown's.
 /// No rsp-relative access may follow. Every return path routes through this
 /// so the saved-region offsets cannot drift.
-pub(super) fn restore_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
+pub(super) fn restore_callee_saved(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+    if frame.saves_top > 0 {
+        let base = -(frame.saves_top as i32);
+        for (j, &r) in alloc.fp_used.iter().enumerate() {
+            emit_movups_xmm_mem(code, Reg(r), Reg::RBP, base + j as i32 * 16);
+        }
+        return;
+    }
     let base = saved_xmm_off(alloc);
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         emit_movups_xmm_mem(code, Reg(r), Reg::RSP, base + (i as i32) * 16);
@@ -1324,9 +1436,13 @@ fn emit_prologue(
     }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
-    uw.push_rbp_end = rel(code);
-    emit_mov_rr(code, Reg::RBP, Reg::RSP);
-    uw.set_fpreg_end = rel(code);
+    uw.steps.push((rel(code), PrologueStep::Push(Reg::RBP.0)));
+    if frame.saves_top > 0 {
+        emit_win64_saves(code, alloc, frame, &mut uw, func_start);
+    } else {
+        emit_mov_rr(code, Reg::RBP, Reg::RSP);
+        uw.steps.push((rel(code), PrologueStep::SetFrame(0)));
+    }
     // Win64 variadic callee: rcx/rdx/r8/r9 spill into the 32-byte home area at
     // `[rbp + 16 + i*8]`, which joins the incoming stack into one 8-byte-stride
     // region the body reads through its cells (stride 8) and `va_arg` walks.
@@ -1338,18 +1454,22 @@ fn emit_prologue(
             emit_mov_mem_r(code, Reg::RBP, home_off, Reg(reg));
         }
     }
-    let alloc_bytes = frame.frame_bytes - pushed_gpr_bytes(alloc);
+    let bottom_pushes = if frame.saves_top > 0 {
+        0
+    } else {
+        pushed_gpr_bytes(alloc)
+    };
+    let alloc_bytes = frame.frame_bytes - frame.saves_top - bottom_pushes;
     if alloc_bytes > 0 {
         // A single `sub rsp, N` is describable with `UWOP_ALLOC`; a probed frame
-        // stays undescribed (`frame_alloc_end == 0`), the frame-pointer rule
-        // recovering rsp at any body fault.
+        // stays undescribed, the frame-pointer rule recovering rsp at any body
+        // fault.
         let single_sub = alloc_bytes <= MAX_UNPROBED_STACK_STEP;
         // r11 is caller-saved, is no target's argument register, and
         // carries no live value in the prologue.
         emit_stack_alloc(code, alloc_bytes, Some(Reg::R11));
         if single_sub {
-            uw.frame_bytes = alloc_bytes;
-            uw.frame_alloc_end = rel(code);
+            uw.steps.push((rel(code), PrologueStep::Alloc(alloc_bytes)));
         }
     }
     // System V variadic callee: rdi rsi rdx rcx r8 r9 spill into the gp area
@@ -1386,11 +1506,13 @@ fn emit_prologue(
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
     }
-    // The pushed GPRs, then the movups saves of the non-volatile xmms
-    // the allocator assigned (on Win64; System V allocates none), and
-    // of any callee-saved scratch a `-ffixed-` fallback moved off the
-    // Win64 volatile set.
-    save_callee_saved(code, alloc);
+    // The pushed GPRs, then the movups saves of the non-volatile xmms the
+    // allocator assigned (an `ms_abi` function off Win64; System V assigns
+    // none), and of any callee-saved scratch a `-ffixed-` fallback moved off
+    // the Win64 volatile set.
+    if frame.saves_top == 0 {
+        save_callee_saved(code, alloc);
+    }
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
     // C11 6.7.5: the over-aligned region below the static frame, after the
@@ -1475,9 +1597,28 @@ fn emit_struct_stack_param_copy(
             emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
             emit_mov_mem_r(code, dst_base, (dst_off + o) as i32, SCRATCH_R10);
         }
-        for b in (words * 8)..(size as i64) {
-            super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
-            super::encode::emit_mov_mem8_r(code, dst_base, (dst_off + b) as i32, SCRATCH_R10);
+        // The tail in the widest moves that end inside the object.
+        let mut o = words * 8;
+        for width in [4, 2, 1] {
+            if (size as i64) - o < width {
+                continue;
+            }
+            let (src, dst) = ((src_off + o) as i32, (dst_off + o) as i32);
+            match width {
+                4 => {
+                    super::encode::emit_mov_r32_mem(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem32_r(code, dst_base, dst, SCRATCH_R10);
+                }
+                2 => {
+                    super::encode::emit_movzx_r_mem16(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem16_r(code, dst_base, dst, SCRATCH_R10);
+                }
+                _ => {
+                    super::encode::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, src);
+                    super::encode::emit_mov_mem8_r(code, dst_base, dst, SCRATCH_R10);
+                }
+            }
+            o += width;
         }
     }
 }
@@ -1550,7 +1691,7 @@ fn emit_return(
         emit_parts_return(code, parts, fp_mask, alloc, frame)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, alloc);
+        restore_callee_saved(code, frame, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }
@@ -1621,7 +1762,7 @@ fn emit_return(
         }
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
         restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, alloc);
+        restore_callee_saved(code, frame, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }
@@ -1690,7 +1831,7 @@ fn emit_return(
     // ahead of the pops.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame, alloc);
-    restore_callee_saved(code, alloc);
+    restore_callee_saved(code, frame, alloc);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
     }
@@ -1775,6 +1916,17 @@ pub(super) fn emit_frame_teardown(
     abi: super::Abi,
 ) {
     if is_full_leaf(func, frame, alloc, abi) {
+        return;
+    }
+    // The Win64 block: `lea rsp` onto the last push, the pops, `pop rbp`, the
+    // epilogue form the unwinder recognizes; `leave` with no GPR to pop.
+    if frame.saves_top > 0 && !alloc.gpr_used.is_empty() {
+        let last = -(pushed_gpr_bytes(alloc) as i32);
+        emit_lea_r_mem(code, Reg::RSP, Reg::RBP, last);
+        for &r in alloc.gpr_used.iter().rev() {
+            emit_pop_r(code, Reg(r));
+        }
+        emit_pop_r(code, Reg::RBP);
         return;
     }
     let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
@@ -1862,12 +2014,7 @@ fn emit_canary_store(
         return;
     }
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
-    emit_mov_mem_r(
-        code,
-        Reg::RBP,
-        super::ssa::emit_common::CANARY_SLOT_OFF,
-        CANARY_SCRATCH,
-    );
+    emit_mov_mem_r(code, Reg::RBP, frame.canary_slot_off(), CANARY_SCRATCH);
     super::encode::emit_zero_r(code, CANARY_SCRATCH);
 }
 
@@ -1891,7 +2038,7 @@ pub(super) fn emit_canary_check(
         8,
         CANARY_SCRATCH,
         Reg::RBP,
-        super::ssa::emit_common::CANARY_SLOT_OFF,
+        frame.canary_slot_off(),
     );
     super::encode::emit_jcc_rel8(code, Cc::E, 0);
     let rel8_at = code.len() - 1;

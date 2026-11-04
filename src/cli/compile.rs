@@ -5,7 +5,7 @@ use badc::{NativeOptions, Target};
 use super::args::{Cli, FrontEnd};
 
 use super::deps::{DepOptions, emit_deps};
-use super::diag::{TuLog, rendered, report_unit_diagnostics};
+use super::diag::{TuLog, rendered, report_diagnostics, report_unit_diagnostics};
 use super::options::SourceKind;
 
 /// Native-stack reservation shared by the driver thread and every
@@ -21,8 +21,8 @@ pub(crate) const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
 /// `__ASSEMBLER__` for a `.S`, and a header shared with assembly gates its
 /// C-only content on it. It goes ahead of the command-line list so
 /// `-U__ASSEMBLER__` and an explicit `-D__ASSEMBLER__=<v>` both still win.
-pub(crate) fn tu_defines(src_path: &str, defines: &[(String, String)]) -> Vec<(String, String)> {
-    if !SourceKind::of(src_path).is_asm() {
+pub(crate) fn tu_defines(kind: SourceKind, defines: &[(String, String)]) -> Vec<(String, String)> {
+    if !kind.is_asm() {
         return defines.to_vec();
     }
     let mut out = Vec::with_capacity(defines.len() + 1);
@@ -98,7 +98,7 @@ pub(crate) struct NativeTu {
     pub(crate) obj: badc::NativeObject,
     pub(crate) entry: Option<String>,
     pub(crate) subsystem: Option<badc::Subsystem>,
-    pub(crate) auto_includes: Vec<String>,
+    pub(crate) auto_includes: Vec<badc::AutoInclude>,
 }
 
 /// Compile `units` and return each payload in unit order. `compile`
@@ -218,67 +218,54 @@ pub(crate) fn read_tu_source(
     }
 }
 
-/// The front-end options one translation unit compiles (or preprocesses)
-/// under. `implicit_externs` applies to the C front end only.
-pub(crate) fn tu_compile_options(
-    src_path: &str,
-    implicit_externs: &[String],
-    cfg: &CompileCfg,
-) -> badc::CompileOptions {
-    cfg.front
-        .compile_options(src_path)
-        .with_asm_source(SourceKind::of(src_path).is_asm())
-        .with_track_includes(cfg.front.show_includes || cfg.deps.is_some())
-        .with_export_all_functions(cfg.export_all)
-        .with_implicit_extern_fns(implicit_externs.to_vec())
-        .with_no_entry_point(true)
-        .with_elf_class(cfg.reloc_opts.elf_class)
-        .with_code_model(cfg.reloc_opts.code_model)
+/// A second compile of a C unit, which the link needs when it defines a
+/// library function the unit's auto-included header binds. It keeps the
+/// first compile's declarations: the same headers are force-included.
+/// The include trace and the dependency rule are the first compile's.
+pub(crate) struct Recompile {
+    pub(crate) auto_headers: Vec<String>,
+    pub(crate) link_defined: Vec<String>,
 }
 
-/// GNU line markers (`# <line> "<file>" [flags]`) blanked in place. gas reads
-/// them as line directives rather than as content, and on AArch64 `#` is not
-/// a comment introducer, so they cannot be left for the comment stripper.
-/// Blanking rather than deleting keeps every statement's line number.
-pub(crate) fn blank_line_markers(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for (i, line) in text.split('\n').enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        let t = line.trim_start();
-        let is_marker = t.strip_prefix('#').is_some_and(|r| {
-            let r = r.trim_start();
-            r.starts_with(|c: char| c.is_ascii_digit())
-                || r.strip_prefix("line")
-                    .is_some_and(|r| r.starts_with(char::is_whitespace))
-        });
-        if !is_marker {
-            out.push_str(line);
-        }
+/// The front-end options one translation unit compiles (or preprocesses)
+/// under. `recompile` applies to the C front end only.
+pub(crate) fn tu_compile_options(
+    src_path: &str,
+    recompile: Option<&Recompile>,
+    cfg: &CompileCfg,
+) -> badc::CompileOptions {
+    let traced = recompile.is_none() && (cfg.front.show_includes || cfg.deps.is_some());
+    let mut opts = (cfg.front.compile_options(src_path))
+        .with_asm_source(cfg.front.source_kind(src_path).is_asm())
+        .with_track_includes(traced)
+        .with_export_all_functions(cfg.export_all)
+        .with_no_entry_point(true)
+        .with_elf_class(cfg.reloc_opts.elf_class)
+        .with_code_model(cfg.reloc_opts.code_model);
+    if let Some(r) = recompile {
+        opts.force_includes.extend(r.auto_headers.iter().cloned());
+        opts = opts.with_link_defined_fns(r.link_defined.clone());
     }
-    out
+    opts
 }
 
 /// Assemble one `.s` / `.S` source to a `Program` the object writers consume,
 /// writing its dependency rule on the way. `.S` runs through the preprocessor
-/// first, as gcc's driver does; `.s` is taken verbatim.
+/// first, as gcc's driver does, and the assembler follows its line markers
+/// back to the original lines; `.s` is taken verbatim.
 pub(crate) fn assemble_tu(
     src_path: &str,
     cfg: &CompileCfg,
     log: &mut TuLog,
 ) -> Result<badc::Program, ()> {
     let src_bytes = read_tu_source(src_path, cfg, log)?;
-    let copts = tu_compile_options(src_path, &[], cfg);
-    let text = if SourceKind::of(src_path) == (SourceKind::Asm { preprocess: true }) {
-        let (text, records) =
-            match badc::Compiler::preprocess_tracked(src_bytes, cfg.target, copts.clone()) {
-                Ok(r) => r,
-                Err(e) => {
-                    log.error(cfg.stderr_is_tty, "", &e);
-                    return Err(());
-                }
-            };
+    let copts = tu_compile_options(src_path, None, cfg);
+    let text = if cfg.front.source_kind(src_path) == (SourceKind::Asm { preprocess: true }) {
+        let pp = badc::Compiler::preprocess_unit(src_bytes, cfg.target, copts.clone(), false);
+        let unit = pp.map_err(|e| log.error(cfg.stderr_is_tty, "", &e))?;
+        // The preprocessor's diagnostics, as a C unit's are reported.
+        report_diagnostics(log, cfg.stderr_is_tty, &unit.diagnostics)?;
+        let (text, records) = (unit.text, unit.include_records);
         if let Some(d) = cfg.deps
             && emit_deps(
                 src_path,
@@ -292,7 +279,7 @@ pub(crate) fn assemble_tu(
         {
             return Err(());
         }
-        blank_line_markers(&text)
+        text
     } else {
         // A `.s` unit opens no header, so its rule names only the source.
         if let Some(d) = cfg.deps
@@ -312,22 +299,22 @@ pub(crate) fn assemble_tu(
 /// assembler.
 pub(crate) fn translate_tu(
     src_path: &str,
-    implicit_externs: &[String],
+    recompile: Option<&Recompile>,
     cfg: &CompileCfg,
     log: &mut TuLog,
 ) -> Result<badc::Program, ()> {
-    if SourceKind::of(src_path).is_asm() {
+    if cfg.front.source_kind(src_path).is_asm() {
         return assemble_tu(src_path, cfg, log);
     }
     let src_bytes = read_tu_source(src_path, cfg, log)?;
-    let copts = tu_compile_options(src_path, implicit_externs, cfg);
+    let copts = tu_compile_options(src_path, recompile, cfg);
     let compiler = badc::Compiler::with_options(src_bytes, cfg.target, copts);
-    if cfg.front.show_includes {
+    if cfg.front.show_includes && recompile.is_none() {
         for line in compiler.include_trace() {
             log.raw(line);
         }
     }
-    if let Some(d) = cfg.deps
+    if let Some(d) = cfg.deps.filter(|_| recompile.is_none())
         && compiler.preprocess_error().is_none()
         && emit_deps(
             src_path,
@@ -354,18 +341,16 @@ pub(crate) fn translate_tu(
 
 /// Compile one `.c` source to an in-memory relocatable object for the
 /// native-link path, capturing every diagnostic in the returned log.
-/// `implicit_externs` is empty on the first pass; the auto-include
-/// retry passes the names to rebind (and stays quiet about "compiling").
 pub(crate) fn compile_native_tu(
     src_path: &str,
-    implicit_externs: &[String],
+    recompile: Option<&Recompile>,
     cfg: &CompileCfg,
 ) -> (TuLog, Result<NativeTu, ()>) {
     let mut log = TuLog::default();
-    if cfg.multi_tu && !cfg.quiet && implicit_externs.is_empty() {
+    if cfg.multi_tu && !cfg.quiet && recompile.is_none() {
         log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
     }
-    let program = match translate_tu(src_path, implicit_externs, cfg, &mut log) {
+    let program = match translate_tu(src_path, recompile, cfg, &mut log) {
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };
@@ -414,7 +399,7 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     if cfg.multi_tu && !cfg.quiet {
         log.diag(cfg.stderr_is_tty, format!("info: compiling {src_path}"));
     }
-    let program = match translate_tu(src_path, &[], cfg, &mut log) {
+    let program = match translate_tu(src_path, None, cfg, &mut log) {
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };

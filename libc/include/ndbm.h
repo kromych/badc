@@ -30,7 +30,6 @@ typedef struct {
 #pragma binding(libc::dbm_clearerr, "_dbm_clearerr")
 #pragma binding(libc::dbm_close, "_dbm_close")
 #pragma binding(libc::dbm_delete, "_dbm_delete")
-#pragma binding(libc::dbm_dirfno, "_dbm_dirfno")
 #pragma binding(libc::dbm_error, "_dbm_error")
 #pragma binding(libc::dbm_fetch, "_dbm_fetch")
 #pragma binding(libc::dbm_firstkey, "_dbm_firstkey")
@@ -42,6 +41,7 @@ int dbm_clearerr(DBM *db);
 void dbm_close(DBM *db);
 int dbm_delete(DBM *db, datum key);
 #if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#pragma binding(libc::dbm_dirfno, "_dbm_dirfno")
 int dbm_dirfno(DBM *db);
 #endif
 int dbm_error(DBM *db);

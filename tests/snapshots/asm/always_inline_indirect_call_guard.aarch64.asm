@@ -97,12 +97,6 @@ Disassembly of section .text:
                	sub	x2, x29, #0x8
                	mov	x1, #0xf                // =15
                	stur	x1, [x29, #-0x8]
-               	cmp	x1, #0xf
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
-               	ret
                	stur	x0, [x29, #-0x8]
                	mov	x1, #0x5                // =5
                	bl	<addr>

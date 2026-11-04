@@ -180,21 +180,25 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40a00000, %eax       # imm = 0x40A00000
-               	movl	$0x40400000, %ecx       # imm = 0x40400000
+               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rax, %xmm14
-               	cvtss2sd	%xmm14, %xmm0
-               	movq	%rcx, %xmm14
-               	cvtss2sd	%xmm14, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm14
                	ja	<addr>
-               	ucomisd	%xmm0, %xmm0
+               	movq	%rax, %xmm14
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	jne	<addr>
-               	ucomisd	%xmm1, %xmm1
+               	movq	%rcx, %xmm14
+               	movq	%rcx, %xmm15
+               	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	subsd	%xmm1, %xmm0
+               	movq	%rax, %xmm14
+               	movq	%rcx, %xmm15
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movq	%rax, %xmm15

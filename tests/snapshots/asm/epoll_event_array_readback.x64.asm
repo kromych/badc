@@ -70,7 +70,7 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rcx
                	movl	$0x1, %esi
                	movl	%esi, (%rcx)
-               	movq	%r12, -0x24(%rbp)
+               	movq	%r12, 0x4(%rcx)
                	movl	-0x38(%rbp), %edx
                	movq	%r14, %rdi
                	xorl	%eax, %eax
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x28(%rbp), %rcx
-               	movq	%r13, -0x24(%rbp)
+               	movq	%r13, 0x4(%rcx)
                	movl	$0x1, %esi
                	movl	-0x30(%rbp), %edx
                	movq	%r14, %rdi
@@ -206,6 +206,5 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>

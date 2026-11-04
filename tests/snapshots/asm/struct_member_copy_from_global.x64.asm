@@ -26,10 +26,9 @@ Disassembly of section .text:
                	int3
 
 <new_client>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	movl	$0x9, (%rax)
-               	cmpl	$-0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	movl	$0x9, <rip> # <addr>
+               	cmpl	$-0x1, %eax
                	jl	<addr>
                	movl	$0x1, %eax
                	incq	%rax
@@ -47,8 +46,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax

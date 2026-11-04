@@ -312,20 +312,8 @@ Disassembly of section .text:
                	xorl	%r11d, %r11d
                	leave
                	retq
-               	movl	$0x29, %eax
-               	movl	%eax, -0x18(%rbp)
-               	incq	%rax
-               	movl	%eax, -0x18(%rbp)
-               	cmpl	$0x2a, %eax
-               	je	<addr>
-               	movl	$0x9, %eax
-               	movq	%fs:0x28, %r11
-               	cmpq	-0x8(%rbp), %r11
-               	je	<addr>
-               	callq	<addr>
-               	xorl	%r11d, %r11d
-               	leave
-               	retq
+               	movl	$0x29, -0x18(%rbp)
+               	movl	$0x2a, -0x18(%rbp)
                	xorl	%eax, %eax
                	movq	%fs:0x28, %r11
                	cmpq	-0x8(%rbp), %r11

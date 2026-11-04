@@ -27,6 +27,9 @@ Each lane:
   5. Run the gating demos (`GATING_DEMOS` below) through
      `scripts/run_demos.py`, which runs them concurrently; every demo the
      lane's kind selects runs, `--demo-jobs` bounds only how many at once.
+     A Linux lane builds the OpenSSL configuration the run's
+     `OPENSSL_ASSIGNMENTS` entry gives its architecture; consecutive runs
+     alternate the entries (`--openssl-plan`, `--openssl-assignment`).
   6. Check the compile-throughput counters over the QuickJS corpus the
      demos just fetched, as CI's perf job does.
   7. On Linux lanes, regenerate `tests/snapshots/` and fail on drift, as
@@ -72,18 +75,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The pin lives with the script that fetches it, so the banner and the lane
-# step name one release rather than two that have to be kept equal. The kernel
-# scripts are a directory of siblings rather than a package, so the directory
-# is on the path only for the import: `setup` is a common enough name to bind
-# something else with it left there.
-sys.path.insert(0, str(REPO_ROOT / "demos" / "linux"))
-try:
-    import setup as linux_setup  # noqa: E402
-finally:
-    sys.path.pop(0)
 
-KERNEL_RELEASE = linux_setup.DEFCONFIG_KERNEL[0]
+def kernel_release() -> str:
+    """The pinned release, from the script that fetches it. The kernel
+    scripts are siblings rather than a package, so their directory is on the
+    path only for the import (`setup` is a common name). Imported on use:
+    they need fcntl, and run_demos.py reads the roster here on Windows too."""
+    sys.path.insert(0, str(REPO_ROOT / "demos" / "linux"))
+    try:
+        import setup as linux_setup
+    finally:
+        sys.path.pop(0)
+    return linux_setup.DEFCONFIG_KERNEL[0]
 
 # Lane kinds a demo runs on. Not every off-platform demo skips with a
 # zero status -- demos/chibicc exits 2 on Windows -- so the kinds are
@@ -100,13 +103,31 @@ DEMO_JOBS = 4
 # Longest first: the phase ends when the last long demo does, so one
 # that starts late after the pool drains extends the phase by its whole
 # duration. The four leading slots are the measured long poles; the two
-# qemu configurations share one (run_demos.slots).
+# configurations of qemu share one (run_demos.slots).
 GATING_DEMOS = (
+    # OpenSSL's own suite (`make test`, every recipe) over libcrypto, libssl
+    # and the programs badc compiled and linked, at -O0 and -O, in CI's two
+    # configurations: the C implementations, and with --asm the perlasm
+    # modules badc assembled behind the CPU-feature dispatch. A front-end
+    # defect that stopped this build reached CI while the board was green on
+    # all five lanes. A Linux lane runs one configuration, the one its
+    # architecture has in the run's OPENSSL_ASSIGNMENTS entry; its
+    # timer-bound recipes run after the pool (run_demos.AFTER_POOL). Alone,
+    # the C configuration takes 501 s on the x86_64 box and 457 s on the
+    # aarch64 one, --asm 243 s and 205 s; the demo phase, 155 s and 131 s
+    # without openssl, took 855 s and 253 s under assignment 0 and 338 s and
+    # 519 s under assignment 1.
+    ("demos/openssl/smoke.py@untimed", LINUX),
+    ("demos/openssl/smoke.py@asm-untimed", LINUX),
+    ("demos/openssl/smoke.py@timed", LINUX),
+    ("demos/openssl/smoke.py@asm-timed", LINUX),
     # The only demo that drives ./configure + make and replays the
     # Makefile's own compile lines through badc, and the only one
     # running an upstream suite (tests/all.tcl) against a zero-failure
     # baseline. The longest demo in the roster, so it sets the floor.
-    ("demos/tcl/smoke.py", POSIX),
+    # Its timer-bound tests run after the pool (run_demos.AFTER_POOL).
+    ("demos/tcl/smoke.py@untimed", POSIX),
+    ("demos/tcl/smoke.py@timed", POSIX),
     # PE32+ EFI applications for both Windows targets, --freestanding,
     # badc's own linker, no GenFw: the EFIAPI ABI surface and the
     # subsystem-10 header, which no hosted demo reaches. Boots the
@@ -228,6 +249,14 @@ KERNEL_FLOORS = {"aarch64": 4250, "x86_64": 2920}
 # kernel job passes. It bounds the phase when the image does not boot at all:
 # an image that boots reaches the marker and ends the emulator well inside it.
 KERNEL_BOOT_TIMEOUT = 90
+
+# The OpenSSL configuration each Linux box's architecture builds, by gate
+# run: one run takes an entry, the next the other, so two consecutive runs
+# cover CI's four (architecture, configuration) jobs. The entry the next run
+# takes is kept on the host, in the repository's common git directory, so
+# every worktree's runs share it and no box holds it.
+OPENSSL_ASSIGNMENTS = ({"x86_64": "c", "aarch64": "asm"}, {"x86_64": "asm", "aarch64": "c"})
+OPENSSL_STATE = "badc-gate-openssl"
 
 
 @dataclass
@@ -353,6 +382,46 @@ def lane_commit() -> str:
     """HEAD, or when tracked files differ from it, a commit of those changes
     that no ref names (`git stash create`): what `--allow-dirty` gates."""
     return git_out("stash", "create").stdout.strip() or git_out("rev-parse", "HEAD").stdout.strip()
+
+
+def openssl_state() -> Path:
+    return REPO_ROOT / git_out("rev-parse", "--git-common-dir").stdout.strip() / OPENSSL_STATE
+
+
+def openssl_next(state: Path) -> int | None:
+    """The OPENSSL_ASSIGNMENTS index the next run takes; None before any run
+    has advanced it."""
+    try:
+        return int(state.read_text().split()[1]) % len(OPENSSL_ASSIGNMENTS)
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def openssl_advance(state: Path, ran: int) -> int:
+    nxt = (ran + 1) % len(OPENSSL_ASSIGNMENTS)
+    tmp = state.with_name(state.name + ".tmp")
+    tmp.write_text(f"next {nxt}\n")
+    tmp.replace(state)
+    return nxt
+
+
+def openssl_advances(linux: list[str], corpus: dict[str, list[str]], override: bool) -> bool:
+    """A run moves to the other assignment once every Linux lane in it reached
+    the demo phase and so built its configuration, pass or fail. A lane that
+    stopped earlier built none, and the run's assignment stays for the next
+    one; an override leaves the state alone."""
+    return (not override and bool(linux) and
+            all(any(c.startswith("openssl ") for c in corpus.get(lane, ())) for lane in linux))
+
+
+def openssl_select(assignment: int) -> list[str]:
+    """Steps that set `$ossl` to the box architecture's configuration and name
+    it in the closing summary."""
+    arms = " ".join(f"{arch}) ossl={cfg};;" for arch, cfg in OPENSSL_ASSIGNMENTS[assignment].items())
+    return [
+        f"case $(uname -m) in {arms} *) ossl=c;; esac",
+        f'echo "{CORPUS_MARK} openssl $ossl on $(uname -m), assignment {assignment}"',
+    ]
 
 
 def box_remote(box: Box) -> bool:
@@ -523,19 +592,21 @@ def kernel_steps(nested: bool = False) -> list[str]:
     ]
 
 
-def demo_command(box: Box, jobs: int, runner: str) -> str:
+def demo_command(box: Box, jobs: int, runner: str, openssl: str = "") -> str:
     """The whole demo phase as one command.
 
     The demos are independent processes with per-demo cache directories, so
     `run_demos.py` runs them in a pool instead of a serial `&&` chain. It
-    prints its roster and pool width; `jobs` bounds concurrency only."""
+    prints its roster and pool width; `jobs` bounds concurrency only.
+    `openssl` names the OpenSSL configuration the lane keeps."""
     demos = " ".join(d for d, kinds in GATING_DEMOS if box.kind in kinds)
-    return f"{runner} scripts/run_demos.py --jobs {jobs} {demos}"
+    keep = f" --openssl {openssl}" if openssl else ""
+    return f"{runner} scripts/run_demos.py --jobs {jobs}{keep} {demos}"
 
 
 def posix_steps(
     box: Box, kernel: bool, demos: bool, snapshots: bool, jobs: int,
-    nested: bool = False,
+    nested: bool = False, openssl: int = 0,
 ) -> list[str]:
     """The step list both POSIX lane kinds run. The Linux-only steps are
     the ones CI runs on Linux only, plus the kernel corpus."""
@@ -570,7 +641,9 @@ def posix_steps(
             '--release --lib --features "codegen_test full"'
         )
     if demos:
-        steps.append("step " + demo_command(box, jobs, "python3"))
+        linux = box.kind == "linux"
+        steps += openssl_select(openssl) if linux else []
+        steps.append("step " + demo_command(box, jobs, "python3", "$ossl" if linux else ""))
         # After the demos, which fetch the QuickJS corpus the counters
         # measure. Both are ratios taken within the run, so the lane's
         # own speed cancels and one set of ceilings covers every box;
@@ -589,7 +662,7 @@ def posix_steps(
 
 def posix_script(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
-    jobs: int, nested: bool = False,
+    jobs: int, nested: bool = False, openssl: int = 0,
 ) -> str:
     """The step script both POSIX lane kinds run, read by `bash -s` from
     stdin. A `--box` path usually starts with `~`, which expands only
@@ -599,7 +672,7 @@ def posix_script(
         f"cd {path} && python3 scripts/lane_guard.py hold && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"{STEP_FN}; "
-        + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs, nested))
+        + " && ".join(posix_steps(box, kernel, demos, snapshots, jobs, nested, openssl))
         + " && python3 scripts/lane_guard.py release"
     )
 
@@ -639,7 +712,7 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
 
 def lane_invocation(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
-    jobs: int, nested: bool = False,
+    jobs: int, nested: bool = False, openssl: int = 0,
 ) -> tuple[list[str], str]:
     """The argv and the stdin text for a lane's test phase. The token is
     only ever in the stdin half: a command line is readable from the
@@ -654,7 +727,7 @@ def lane_invocation(
             ["ssh", box.host, f'cmd /c "{windows_inner(box, demos, jobs)}"'],
             github_token + "\n",
         )
-    script = posix_script(box, github_token, kernel, demos, snapshots, jobs, nested)
+    script = posix_script(box, github_token, kernel, demos, snapshots, jobs, nested, openssl)
     if box.kind == "macos":
         return ["bash", "-s"], script
     return ["ssh", box.host, "bash -s"], script
@@ -674,7 +747,7 @@ def sync_none(box: Box, github_token: str) -> int:
 
 def run_box(
     box: Box, github_token: str, kernel: bool, demos: bool, snapshots: bool,
-    jobs: int, nested: bool = False,
+    jobs: int, nested: bool = False, openssl: int = 0,
 ) -> int:
     sync = sync_none if box.kind == "macos" else sync_git
     rc = sync(box, github_token)
@@ -683,7 +756,7 @@ def run_box(
         return rc
     start = time.time()
     argv, stdin_text = lane_invocation(
-        box, github_token, kernel, demos, snapshots, jobs, nested
+        box, github_token, kernel, demos, snapshots, jobs, nested, openssl
     )
     rc = stream(box.short, argv, stdin_text=stdin_text)
     sys.stdout.write(f"[{box.short}] lane wall clock {time.time() - start:.0f}s\n")
@@ -756,7 +829,66 @@ def self_test() -> int:
         assert (REPO_ROOT / run_demos.script(d)).is_file(), d
         assert "@" not in d or d in run_demos.DEMO_ENV, d
     slots = run_demos.slots(roster)
-    assert qemu in slots and sum(map(len, slots)) == len(roster), slots
+    after = [d for d in roster if d in run_demos.AFTER_POOL]
+    openssl = "demos/openssl/smoke.py"
+    assert after == [f"{openssl}@timed", f"{openssl}@asm-timed", "demos/tcl/smoke.py@timed"], after
+    # OpenSSL runs on the Linux lanes in CI's two configurations, C and
+    # --asm, each split as tcl is; the untimed builds share one slot, first.
+    assert slots[0] == [f"{openssl}@untimed", f"{openssl}@asm-untimed"], slots
+    for c in ("", "asm-"):
+        for t in ("untimed", "timed"):
+            e = f"{openssl}@{c}{t}"
+            assert run_demos.DEMO_ENV[e] == {"BADC_OPENSSL_TESTS": t}, e
+            assert run_demos.command(e)[2:] == (["--asm"] if c else []), e
+    for box in boxes[1:]:
+        assert openssl not in demo_command(box, DEMO_JOBS, "python3"), box.kind
+    # `run_demos.py --lane KIND` schedules this roster, `--openssl` one
+    # configuration of it.
+    for kind, keep in (("linux", "both"), ("linux", "asm"), ("linux", "c"), ("windows", "both"),
+                       ("macos", "both")):
+        dry = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "run_demos.py"), "--lane", kind,
+             "--openssl", keep, "--dry-run"],
+            capture_output=True, text=True,
+        )
+        assert dry.returncode == 0, dry.stderr
+        for cfg, timed in (("c", "openssl@timed"), ("asm", "openssl@asm-timed")):
+            ran = f"alone, the load lock exclusive: {timed}\n" in dry.stdout
+            assert ran == (kind == "linux" and keep in (cfg, "both")), (kind, keep, cfg)
+    # Each run gives each architecture one configuration, the other run the
+    # other: two runs cover CI's four openssl jobs. The Linux lane picks its
+    # own by `uname -m` and names it in the closing summary.
+    assert {(a, m[a]) for m in OPENSSL_ASSIGNMENTS for a in m} == {
+        (a, c) for a in ("x86_64", "aarch64") for c in ("c", "asm")
+    }
+    for n, m in enumerate(OPENSSL_ASSIGNMENTS):
+        steps = posix_steps(boxes[0], True, True, True, DEMO_JOBS, False, n)
+        demo = [s for s in steps if "run_demos.py" in s]
+        assert len(demo) == 1 and " --openssl $ossl " in demo[0], demo
+        assert steps.index(demo[0]) == steps.index(openssl_select(n)[1]) + 1, steps
+        for arch, cfg in m.items():
+            pick = subprocess.run(
+                ["bash", "-c", f"uname() {{ echo {arch}; }}; " + " && ".join(openssl_select(n))],
+                capture_output=True, text=True,
+            )
+            assert pick.stdout == f"{CORPUS_MARK} openssl {cfg} on {arch}, assignment {n}\n", pick
+    # The state advances only when every Linux lane reached its demo phase,
+    # and never under an override; it lives in the common git directory.
+    reached = {"lin": ["openssl c on x86_64, assignment 0"], "arm": ["openssl asm on aarch64, assignment 0"]}
+    assert openssl_advances(["lin", "arm"], reached, False)
+    assert not openssl_advances(["lin", "arm"], reached, True)
+    assert not openssl_advances(["lin", "arm"], {"lin": reached["lin"]}, False)
+    assert not openssl_advances([], reached, False)
+    common = Path(git_out("rev-parse", "--git-common-dir").stdout.strip())
+    assert openssl_state() == REPO_ROOT / common / OPENSSL_STATE
+    with tempfile.TemporaryDirectory() as tmp:
+        state = Path(tmp) / OPENSSL_STATE
+        assert openssl_next(state) is None
+        assert openssl_advance(state, 0) == 1 and openssl_next(state) == 1
+        assert openssl_advance(state, 1) == 0 and openssl_next(state) == 0
+    # The timer-bound entries start after this pool and another lane's.
+    assert run_demos.self_test() == 0
+    assert qemu in slots and sum(map(len, slots)) + len(after) == len(roster), slots
     assert all(len({run_demos.script(e) for e in s}) == 1 for s in slots), slots
     assert " ".join(qemu) in demo_command(boxes[0], DEMO_JOBS, "python3")
 
@@ -769,7 +901,7 @@ def self_test() -> int:
     assert len(resolve) == 1 and resolve[0].startswith("ktree=$("), kernel
     assert "--print-tree) || {" in resolve[0], resolve
     assert any(s.startswith(f'echo "{CORPUS_MARK} kernel ') for s in kernel), kernel
-    assert KERNEL_RELEASE == linux_setup.DEFCONFIG_KERNEL[0]
+    assert kernel_release()
 
     # Every lane's tests run through scripts/cargo_test.py, which fails a
     # binary that ends before reporting the tests it announced.
@@ -905,9 +1037,36 @@ def main() -> int:
         "working tree; off by default, so what is gated is the commit that "
         "will be pushed",
     )
+    p.add_argument(
+        "--openssl-assignment",
+        choices=("0", "1", "repeat"),
+        help="run this OPENSSL_ASSIGNMENTS entry, or `repeat` the one the "
+        "last run that advanced the state took, and leave the state alone: "
+        "the rerun of a failed run",
+    )
+    p.add_argument(
+        "--openssl-plan",
+        action="store_true",
+        help="print the OpenSSL configuration each architecture's Linux lane "
+        "builds in the next run, and exit",
+    )
     args = p.parse_args()
     if args.self_test:
         return self_test()
+    state = openssl_state()
+    nxt = openssl_next(state)
+    override = args.openssl_assignment is not None
+    if args.openssl_assignment == "repeat":
+        if nxt is None:
+            print(f"--openssl-assignment repeat: no run has advanced {state}", file=sys.stderr)
+            return 2
+        assignment = (nxt - 1) % len(OPENSSL_ASSIGNMENTS)
+    else:
+        assignment = int(args.openssl_assignment or nxt or 0)
+    plan = ", ".join(f"{arch} builds {cfg}" for arch, cfg in OPENSSL_ASSIGNMENTS[assignment].items())
+    if args.openssl_plan:
+        print(f"openssl assignment {assignment}: {plan}")
+        return 0
     selected: list[Box] = args.box
     if not selected:
         print("no boxes selected", file=sys.stderr)
@@ -939,7 +1098,7 @@ def main() -> int:
                   "where CI's kernel gate finds regressions that compile and "
                   "link clean, boot or not")
         else:
-            print(f"kernel step: {KERNEL_RELEASE} defconfig, compile + link "
+            print(f"kernel step: {kernel_release()} defconfig, compile + link "
                   "+ boot; adds "
                   "4.5-11 min per Linux lane for the build (measured on an idle "
                   "box and on one shared with five other jobs) and 12 s "
@@ -973,6 +1132,11 @@ def main() -> int:
                   "tests/snapshots/ and fails on drift, as CI's `snapshots "
                   "clean` job does. Needs llvm-objdump. Skip with "
                   "--no-snapshots.")
+        if not args.no_demos:
+            how = "named by --openssl-assignment" if override else f"from {state}"
+            print(f"openssl: assignment {assignment} ({how}): {plan}; a run in "
+                  "which every Linux lane reaches its demo phase hands the "
+                  "next run the other assignment.")
 
     # Remotes first and one at a time: lanes run in parallel, and two
     # `git remote add` calls race for the repository's config lock.
@@ -1003,6 +1167,7 @@ def main() -> int:
             not args.no_snapshots,
             args.demo_jobs,
             args.nested_kvm,
+            assignment,
         )
 
     threads = [threading.Thread(target=worker, args=(b,)) for b in selected]
@@ -1010,6 +1175,16 @@ def main() -> int:
         t.start()
     for t in threads:
         t.join()
+
+    linux = [b.short for b in selected if b.kind == "linux"]
+    if linux and not args.no_demos:
+        if openssl_advances(linux, LANE_CORPUS, override):
+            print(f"openssl: assignment {assignment} ran; the next run takes "
+                  f"{openssl_advance(state, assignment)}")
+        else:
+            why = ("--openssl-assignment leaves the state" if override else
+                   "a Linux lane stopped before its demo phase")
+            print(f"openssl: the next run takes assignment {nxt or 0}; {why}")
 
     print()
     for box in selected:

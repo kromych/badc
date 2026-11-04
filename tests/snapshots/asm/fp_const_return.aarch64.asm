@@ -81,10 +81,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	fmov	s0, #0.25000000
-               	fcvt	d0, s0
-               	fmov	d1, #0.25000000
-               	fcmp	d0, d1
+               	fmov	d0, #0.25000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x50

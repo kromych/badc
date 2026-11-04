@@ -36,9 +36,8 @@ Disassembly of section .text:
 <main>:
                	callq	*<rip> # <addr>
                	movq	%rax, %rcx
-               	leaq	<rip>, %rax # <addr>
-               	leaq	-<rip>, %rdx # <addr>
-               	movq	%rdx, 0x8(%rax)
+               	leaq	-<rip>, %rax # <addr>
+               	movq	%rax, <rip> # <addr>
                	callq	*<rip> # <addr>
                	addq	%rcx, %rax
                	retq

@@ -34,6 +34,9 @@ fn keyed(func: &mut FunctionSsa) -> Keyed<'_> {
         end_pc: _,
         locals: _,
         ssp: _,
+        seh_scopes: _,
+        block_seh: _,
+        funclet_slots: _,
         n_params: _,
         is_variadic: _,
         is_inline: _,
@@ -538,6 +541,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 8,
+                    pc_rel: false
                 },
             ],
             alloc::vec![block(0..2, Terminator::Return(1))],

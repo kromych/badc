@@ -1,32 +1,34 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=twice
-fn ent_pc=0 n_params=1 variadic=false locals=1
+fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x0
+    v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   InlineAsm { template="addsd %1, %0", ops=3, args=[v3, v1, v1] } -> -
-    v6   LoadLocal { off=-1, kind=F64 }                   -> d0
-    terminator Return(v6)   (exit_acc=v6)
+    v5   InlineAsm { template="addsd %1, %0", ops=3, args=[-, v1, v1] } -> d0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=twicef
-fn ent_pc=1 n_params=1 variadic=false locals=1
+fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F32)                            -> d0 [f32]
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x0
+    v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0 [f32]
-    v5   InlineAsm { template="addss %1, %0", ops=3, args=[v3, v1, v1] } -> -
-    v6   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
-    terminator Return(v6)   (exit_acc=v6)
+    v5   InlineAsm { template="addss %1, %0", ops=3, args=[-, v1, v1] } -> d0 [f32]
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0 [f32]
+    terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=sub_second
-fn ent_pc=2 n_params=3 variadic=false locals=1
+fn ent_pc=2 n_params=3 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -36,29 +38,31 @@ fn ent_pc=2 n_params=3 variadic=false locals=1
     v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=F64)                            -> d2
     v6   Imm(0)                                           -> x0
-    v7   LocalAddr(-1)                                    -> x0
+    v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  InlineAsm { template="subsd %2, %0", ops=3, args=[v7, v5, v3] } -> -
-    v11  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v10  InlineAsm { template="subsd %2, %0", ops=3, args=[-, v5, v3] } -> d0
+    v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
-    v14  Binop { op=fmul.c, lhs=v1, rhs=v13 }             -> d1
-    v15  Fma { a=v1, b=v13, c=v11, neg_product=false, neg_addend=false } -> d0
-    terminator Return(v15)   (exit_acc=v15)
+    v14  Imm(0)                                           -> x0
+    v15  Binop { op=fmul.c, lhs=v1, rhs=v14 }             -> d1
+    v16  Fma { a=v1, b=v14, c=v10, neg_product=false, neg_addend=false } -> d0
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=root
-fn ent_pc=3 n_params=1 variadic=false locals=1
+fn ent_pc=3 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
-    v3   LocalAddr(-1)                                    -> x0
+    v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   InlineAsm { template="sqrtsd %1, %0", ops=2, args=[v3, v1] } -> -
-    v6   LoadLocal { off=-1, kind=F64 }                   -> d0
-    terminator Return(v6)   (exit_acc=v6)
+    v5   InlineAsm { template="sqrtsd %1, %0", ops=2, args=[-, v1] } -> d0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=to_int
 fn ent_pc=4 n_params=1 variadic=false locals=0
@@ -108,10 +112,12 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=F64)                            -> d0
-    v2   StoreLocal { off=2, value=v1, kind=F64 }         -> -
-    v3   LocalAddr(2)                                     -> x0
-    v4   InlineAsm { template="addsd %0, %0", ops=1, args=[v3] } -> -
-    v5   LoadLocal { off=2, kind=F64 }                    -> d0
+    v2   Imm(0)                                           -> x0
+    v3   Imm(0)                                           -> x0
+    v4   Imm(0)                                           -> x0
+    v5   InlineAsm { template="addsd %0, %0", ops=1, args=[v1] } -> d0
+    v6   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=vadd
@@ -407,12 +413,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

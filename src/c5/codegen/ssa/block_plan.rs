@@ -545,6 +545,10 @@ fn pinned_blocks(func: &FunctionSsa) -> Vec<bool> {
     pin(0);
     func.computed_goto_targets.iter().for_each(|&b| pin(b));
     func.label_data_relocs.iter().for_each(|r| pin(r.block));
+    func.seh_scopes
+        .iter()
+        .filter_map(|s| s.target)
+        .for_each(&mut pin);
     for block in &func.blocks {
         // Row entry 0 is the fall-through, a direct edge.
         if let Terminator::AsmGoto { table } = block.terminator {
@@ -976,6 +980,7 @@ mod tests {
             kind: LoadKind::I32,
             volatile,
             align: 0,
+            pc_rel: false,
         };
         let (f, a) = rotated(alloc::vec![load(false), compare()]);
         assert_eq!(repeats(&BlockPlan::build(&f, &a, true, None)), [(0, 2)]);
@@ -1106,6 +1111,7 @@ mod tests {
             kind: LoadKind::I32,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let (f, a) = counted(Inst::Imm(0), alloc::vec![load, lt()]);
         assert_eq!(decided(&f, &a), None);

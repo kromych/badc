@@ -222,25 +222,34 @@ pub(crate) fn split_asm_statements(text: &str) -> alloc::vec::Vec<&str> {
     if !text.contains('"') {
         return text.split([';', '\n']).collect();
     }
+    split_asm_statement_lines(text)
+        .into_iter()
+        .map(|(_, s)| s)
+        .collect()
+}
+
+/// [`split_asm_statements`] with the line each statement is on, from 1.
+pub(crate) fn split_asm_statement_lines(text: &str) -> alloc::vec::Vec<(u32, &str)> {
     let b = text.as_bytes();
     let mut out = alloc::vec::Vec::new();
-    let (mut start, mut quoted) = (0usize, false);
+    let (mut start, mut quoted, mut line) = (0usize, false, 1u32);
     for (i, &c) in b.iter().enumerate() {
         match c {
             b'"' => quoted = !quoted,
             b'\n' => {
-                out.push(&text[start..i]);
+                out.push((line, &text[start..i]));
                 start = i + 1;
                 quoted = false;
+                line += 1;
             }
             b';' if !quoted => {
-                out.push(&text[start..i]);
+                out.push((line, &text[start..i]));
                 start = i + 1;
             }
             _ => {}
         }
     }
-    out.push(&text[start..]);
+    out.push((line, &text[start..]));
     out
 }
 
@@ -493,6 +502,7 @@ pub(crate) enum AsmComments {
 /// Strip assembler comments from an inline-asm template. A block comment
 /// becomes one space so the tokens around it stay separate; a line comment
 /// runs to the newline, which is kept because it separates statements.
+/// A block comment's newlines follow the line it ends on, as gas emits them.
 /// Returns `None` when the template has no comment character.
 ///
 /// Comments go before statement splitting: a line comment swallows any `;`
@@ -512,6 +522,7 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
     // Everything seen since the statement start is label text or whitespace,
     // so a `:` here closes a label definition rather than ending the start.
     let mut in_label_prefix = true;
+    let mut held_newlines = 0usize;
     while i < b.len() {
         let c = b[i];
         if c == b'"' {
@@ -528,7 +539,9 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
         }
         if c == b'/' && b.get(i + 1) == Some(&b'*') {
             // An unterminated block comment runs to the end of the template.
-            i = text[i + 2..].find("*/").map_or(b.len(), |p| i + 2 + p + 2);
+            let end = text[i + 2..].find("*/").map_or(b.len(), |p| i + 2 + p + 2);
+            held_newlines += b[i..end].iter().filter(|&&c| c == b'\n').count();
+            i = end;
             out.push(' ');
             continue;
         }
@@ -550,6 +563,12 @@ pub(crate) fn strip_asm_comments(text: &str, syntax: AsmComments) -> Option<allo
             in_label_prefix &= c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
         }
         out.push(char::from(c));
+        if c == b'\n' {
+            out.extend(core::iter::repeat_n(
+                '\n',
+                core::mem::take(&mut held_newlines),
+            ));
+        }
         i += 1;
     }
     Some(out)
@@ -812,6 +831,7 @@ mod asm_noop_tests {
                     value: false,
                     volatile_object: false,
                     early_clobber: false,
+                    fp_limit: 0,
                 })
                 .collect(),
             clobber_regs: 0x8,
@@ -868,4 +888,67 @@ mod asm_noop_tests {
         bound.operands[0].is_output = true;
         assert!(asm_statement_is_noop(&bound, AsmComments::X86));
     }
+}
+
+/// Apple's assembly names a C symbol with a leading underscore, which badc's
+/// objects do not carry: its Mach-O writer adds one to every name, as its
+/// Mach-O reader strips one. Strip one from each identifier of `text` that
+/// starts with one. String literals, comments, operand references
+/// (`%[name]`) and a `.section` statement's segment and section names are
+/// not symbols and keep their spelling.
+pub(crate) fn mach_o_symbol_names(text: &str) -> alloc::string::String {
+    let b = text.as_bytes();
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$' | b'\\');
+    let mut out = alloc::vec::Vec::with_capacity(b.len());
+    let mut i = 0;
+    let mut stmt_start = true;
+    while i < b.len() {
+        let c = b[i];
+        let skip_to = |from: usize, end: &[u8]| {
+            (b[from..].windows(end.len()).position(|w| w == end))
+                .map_or(b.len(), |p| from + p + end.len())
+        };
+        let next = match c {
+            b'"' => {
+                let mut j = i + 1;
+                while j < b.len() && b[j] != b'"' {
+                    j += if b[j] == b'\\' { 2 } else { 1 };
+                }
+                Some((j + 1).min(b.len()))
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => Some(skip_to(i, b"\n").min(b.len())),
+            b'/' if b.get(i + 1) == Some(&b'*') => Some(skip_to(i + 2, b"*/")),
+            b'%' if b.get(i + 1) == Some(&b'[') => Some(skip_to(i, b"]")),
+            b'.' if stmt_start && text[i..].starts_with(".section") => Some(
+                b[i..]
+                    .iter()
+                    .position(|&c| matches!(c, b'\n' | b';'))
+                    .map_or(b.len(), |p| i + p),
+            ),
+            b'_' if i == 0 || !ident(b[i - 1]) => {
+                stmt_start = false;
+                i += 1;
+                continue;
+            }
+            _ => None,
+        };
+        match next {
+            Some(j) => {
+                out.extend_from_slice(&b[i..j]);
+                i = j;
+                stmt_start = false;
+            }
+            None => {
+                out.push(c);
+                i += 1;
+                if matches!(c, b'\n' | b';') {
+                    stmt_start = true;
+                } else if !c.is_ascii_whitespace() {
+                    stmt_start = false;
+                }
+            }
+        }
+    }
+    // Only ASCII bytes were dropped, so the result is still UTF-8.
+    alloc::string::String::from_utf8(out).unwrap_or_default()
 }

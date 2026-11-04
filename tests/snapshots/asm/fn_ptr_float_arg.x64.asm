@@ -26,34 +26,19 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movl	$0x40200000, %eax       # imm = 0x40200000
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movl	$0x40200000, %ecx       # imm = 0x40200000
+               	movl	$0x40000000, %eax       # imm = 0x40000000
+               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm15
                	vmulss	%xmm15, %xmm14, %xmm0
-               	cvttss2si	%xmm0, %rdx
-               	cmpl	$0x5, %edx
+               	cvttss2si	%xmm0, %rcx
+               	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x40900000, %edx       # imm = 0x40900000
-               	movq	%rdx, %xmm14
-               	cvttss2si	%xmm14, %rdx
-               	addq	$0x3, %rdx
-               	cmpl	$0x7, %edx
-               	je	<addr>
-               	movl	$0x2, %eax
-               	retq
-               	movq	%rax, %xmm14
-               	cvttss2si	%xmm14, %rax
-               	addq	$0xa, %rax
-               	cmpl	$0xc, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	retq
-               	movl	$0x40600000, %eax       # imm = 0x40600000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
+               	movl	$0x40600000, %ecx       # imm = 0x40600000
+               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm15
                	vmulss	%xmm15, %xmm14, %xmm0
                	cvttss2si	%xmm0, %rax
                	cmpl	$0x7, %eax

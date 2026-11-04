@@ -6,8 +6,10 @@ title: Performance
 The page shows the controls, a block per machine and the charts, and no prose:
 what the text below said is kept here, where it is read with the code.
 
-Each fixture under `tests/perf/` is compiled by every compiler present on the
-machine and run three times; a bar is the median of the three. Shorter is
+Each fixture under `tests/perf/` is compiled once by every compiler
+`tests/perf/run.py` finds on the machine and run three times. A run-time bar is
+the median of the three times the program reports; a compile-time bar is the
+one compile; a size bar is the binary's size. Shorter is
 better in each chart. A bar carries its measured value and its multiple of
 `badc -O` in the same chart, the column `tests/perf/run.py` prints as
 `vs badc -O`; a chart that has no `badc -O` row takes its smallest bar as the
@@ -17,8 +19,9 @@ runner and the page draws each of them, with the machine named above its
 charts.
 
 A record lists the compilers that ran on its machine, so the set differs by
-platform: gcc where gcc exists, a `-march` baseline leg where the compiler
-takes one, `ccc` on a Linux runner, `cl` on a Windows runner. The page draws
+platform: `tcc` on a Linux runner, gcc where it is not clang under another
+name, a `-march` baseline leg where the compiler takes one, `ccc` on a Linux
+runner, `cl` and no clang or gcc on a Windows runner. The page draws
 what a record carries, badc first.
 
 The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
@@ -694,10 +697,10 @@ serves the runs as files.
 
 <!--
 The measurements come from the JSON mode of `tests/perf/run.py`, which
-compiles each fixture, runs it three times and records the median
-wall-clock, the compile wall-clock and the size of the binary; the
-`benches` section beside it holds
-what the demo comparisons measure, CPython first. `scripts/perf_publish.py`
+compiles each fixture once, runs it three times and records the median of the
+run times the program reports, the compile's wall-clock and the size of the
+binary; the `benches` section beside it holds
+the CPython comparison's benchmark, on the Linux runners. `scripts/perf_publish.py`
 files a run under `runs/<sha[0:2]>/<sha[2:4]>/<sha>/<runner>.json` in the data
 repository, points `branches/<name>` at it and adds it to `index.json`.
 `tests/perf/*.c` states what each fixture exercises, and why the shape it takes

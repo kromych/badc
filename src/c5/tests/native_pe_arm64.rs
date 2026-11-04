@@ -208,6 +208,30 @@ fn return_42() {
     assert_exit("int main() { return 42; }", "ret42", &[], 42);
 }
 
+/// Windows on AArch64 keeps the TEB pointer in x18, which a file-scope
+/// register variable reads as mingw-w64's `NtCurrentTeb` does; `__getReg(18)`
+/// is the MSVC spelling of the same read. The TEB's `NtTib.Self` (offset 0x30)
+/// points back at it, and its `ClientId` (0x40, 0x48) names this process and
+/// thread, as kernel32 reports them.
+#[test]
+fn a_platform_register_variable_reads_the_teb() {
+    let src = r#"
+#include <windows.h>
+#include <intrin.h>
+register char *teb_x18 __asm__("x18");
+int main(void) {
+    char *teb = teb_x18;
+    if (teb == 0) return 1;
+    if (*(char **)(teb + 0x30) != teb) return 2;
+    if ((char *)__getReg(18) != teb) return 3;
+    if ((DWORD)*(unsigned long long *)(teb + 0x40) != GetCurrentProcessId()) return 4;
+    if ((DWORD)*(unsigned long long *)(teb + 0x48) != GetCurrentThreadId()) return 5;
+    return 0;
+}
+"#;
+    assert_exit(src, "teb_x18", &[], 0);
+}
+
 #[test]
 fn arithmetic_and_locals() {
     let src = r#"
@@ -696,6 +720,48 @@ fn fixture_parity_native_optimized() {
         NATIVE_PE_ARM64_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// `RtlVirtualUnwind` walks frames built under `-mbranch-protection=bti`,
+/// `standard` and `pac-ret+leaf+bti`, at -O0 and -O, from a call and from
+/// each instruction of an epilogue: each function's `.xdata` record
+/// describes its `bti c` and `paciasp`, and each epilogue's `autiasp`.
+#[test]
+fn unwind_walks_branch_protected_frames() {
+    if !host_can_run_pe() {
+        eprintln!("skip unwind_walks_branch_protected_frames: no PE runner on this host");
+        return;
+    }
+    let bti = crate::Hardening {
+        bti: true,
+        ..crate::Hardening::NONE
+    };
+    let standard = crate::Hardening {
+        pac_ret: true,
+        ..bti
+    };
+    let leaf = crate::Hardening {
+        pac_ret_leaf: true,
+        ..standard
+    };
+    let mut failures = Vec::new();
+    for (label, hardening) in [("bti", bti), ("standard", standard), ("leaf", leaf)] {
+        for optimize in [false, true] {
+            let opts = NativeOptions {
+                hardening,
+                optimize,
+                ..NativeOptions::new()
+            };
+            let suffix = format!("-{label}{}", if optimize { "-O" } else { "" });
+            for fixture in ["unwind_restores_callee_saved.c", "unwind_from_epilogue.c"] {
+                let outcome = build_and_run_fixture_with_options(fixture, opts.clone(), &suffix);
+                if !outcome.matches(0) {
+                    failures.push(format!("{fixture}{suffix}: {outcome:?}"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// [`BADC_FIXTURES`], at -O0 and -O.

@@ -1,6 +1,8 @@
-//! The MSVC intrinsics the PE targets lower at the call site, whatever
-//! declares them, as MSVC and clang for a windows-msvc triple do: a name's
-//! signature, which the parser converts to, and the operation it performs.
+//! The intrinsics lowered at the call site, whatever declares them: the MSVC
+//! ones on the PE targets, as MSVC and clang for a windows-msvc triple do,
+//! and gcc's and clang's x86 system-instruction builtins on every x86-64
+//! target. Each is a name's signature, which the parser converts to, and the
+//! operation it performs.
 
 use alloc::vec::Vec;
 
@@ -54,8 +56,19 @@ pub(crate) enum Op {
     Assume,
     /// `__noop(...)`: the arguments are unevaluated and the value is 0.
     Noop,
+    /// `__va_start(&ap, ...)`: `__builtin_va_start` on the `va_list` the
+    /// first argument addresses; the rest are unevaluated.
+    VaStart,
     /// No instruction; no memory access moves across it.
     CompilerBarrier,
+    /// `_exception_code()`: the code of the exception a filter or an
+    /// `__except` body handles.
+    ExceptionCode,
+    /// `_exception_info()`: the `EXCEPTION_POINTERS` a filter receives.
+    ExceptionInfo,
+    /// `_abnormal_termination()`: whether a `__finally` body runs because an
+    /// exception or a jump left its `__try` body.
+    AbnormalTermination,
     ReturnAddress,
     /// The return address's slot, one pointer above the saved frame pointer.
     AddressOfReturnAddress,
@@ -142,8 +155,24 @@ pub(crate) enum Op {
         sub: bool,
     },
     Rdtsc,
+    /// `rdtscp`: the counter, and IA32_TSC_AUX stored through the pointer.
+    Rdtscp,
+    /// XCR[ecx] from `xgetbv`, edx:eax as one value.
+    Xgetbv,
+    /// RFLAGS, through `pushfq` and `popq`.
+    ReadEflags,
+    /// RFLAGS from the operand, through `pushq` and `popfq`.
+    WriteEflags,
     /// `dmb`, `dsb` or `isb` with the constant option.
     Barrier(&'static str),
+    /// `rep stos` of `(destination, value, count)` elements of the width.
+    RepStos {
+        width: u8,
+    },
+    /// `rep movs` of `(destination, source, count)` elements of the width.
+    RepMovs {
+        width: u8,
+    },
 }
 
 impl Op {
@@ -193,6 +222,14 @@ const fn pcv(to: Scalar) -> Param {
     }
 }
 
+const fn pc(to: Scalar) -> Param {
+    Param::Ptr {
+        to,
+        konst: true,
+        volatile: false,
+    }
+}
+
 const fn bits(op: Op, width: u8) -> Op {
     match op {
         Op::Popcount { .. } => Op::Popcount { width },
@@ -239,9 +276,16 @@ type Row = (&'static str, Arch, Op, Option<Scalar>, &'static [Param]);
 const FIXED: &[Row] = &[
     ("__assume", Both, Op::Assume, None, &[]),
     ("__noop", Both, Op::Noop, Some(Int), &[]),
+    ("__va_start", Both, Op::VaStart, None, &[]),
     ("_ReadWriteBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_ReadBarrier", Both, Op::CompilerBarrier, None, &[]),
     ("_WriteBarrier", Both, Op::CompilerBarrier, None, &[]),
+    ("_exception_code", Both, Op::ExceptionCode, Some(ULong), &[]),
+    ("__exception_code", Both, Op::ExceptionCode, Some(ULong), &[]),
+    ("_exception_info", Both, Op::ExceptionInfo, Some(VoidPtr), &[]),
+    ("__exception_info", Both, Op::ExceptionInfo, Some(VoidPtr), &[]),
+    ("_abnormal_termination", Both, Op::AbnormalTermination, Some(Int), &[]),
+    ("__abnormal_termination", Both, Op::AbnormalTermination, Some(Int), &[]),
     ("_ReturnAddress", Both, Op::ReturnAddress, Some(VoidPtr), &[]),
     ("_AddressOfReturnAddress", Both, Op::AddressOfReturnAddress, Some(VoidPtr), &[]),
     ("__debugbreak", Both, Op::DebugBreak, None, &[]),
@@ -277,8 +321,15 @@ const FIXED: &[Row] = &[
     ("__cpuid", X64, Op::Cpuid { sub: false }, None, &[p(Int), V(Int)]),
     ("__cpuidex", X64, Op::Cpuid { sub: true }, None, &[p(Int), V(Int), V(Int)]),
     ("__rdtsc", X64, Op::Rdtsc, Some(ULLong), &[]),
+    ("__rdtscp", X64, Op::Rdtscp, Some(ULLong), &[p(UInt)]),
+    ("__readeflags", X64, Op::ReadEflags, Some(ULLong), &[]),
+    ("__writeeflags", X64, Op::WriteEflags, None, &[V(ULLong)]),
+    ("_xgetbv", X64, Op::Xgetbv, Some(ULLong), &[V(UInt)]),
     ("__halt", X64, Op::Insn("hlt"), None, &[]),
     ("_mm_pause", X64, Op::Pause, None, &[]),
+    ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
+    ("_mm_mfence", X64, Op::Insn("mfence"), None, &[]),
+    ("_mm_sfence", X64, Op::Insn("sfence"), None, &[]),
     ("__lzcnt16", X64, bits(LZ, 2), Some(UShort), &[V(UShort)]),
     ("__lzcnt", X64, bits(LZ, 4), Some(UInt), &[V(UInt)]),
     ("__lzcnt64", X64, bits(LZ, 8), Some(ULLong), &[V(ULLong)]),
@@ -294,6 +345,14 @@ const FIXED: &[Row] = &[
     ("_mul128", X64, Op::Mul128 { signed: true }, Some(LLong), &[V(LLong), V(LLong), p(LLong)]),
     ("__shiftleft128", X64, Op::Shift128 { left: true }, Some(ULLong), &[V(ULLong), V(ULLong), V(UChar)]),
     ("__shiftright128", X64, Op::Shift128 { left: false }, Some(ULLong), &[V(ULLong), V(ULLong), V(UChar)]),
+    ("__stosb", X64, Op::RepStos { width: 1 }, None, &[p(UChar), V(UChar), V(ULLong)]),
+    ("__stosw", X64, Op::RepStos { width: 2 }, None, &[p(UShort), V(UShort), V(ULLong)]),
+    ("__stosd", X64, Op::RepStos { width: 4 }, None, &[p(ULong), V(ULong), V(ULLong)]),
+    ("__stosq", X64, Op::RepStos { width: 8 }, None, &[p(ULLong), V(ULLong), V(ULLong)]),
+    ("__movsb", X64, Op::RepMovs { width: 1 }, None, &[p(UChar), pc(UChar), V(ULLong)]),
+    ("__movsw", X64, Op::RepMovs { width: 2 }, None, &[p(UShort), pc(UShort), V(ULLong)]),
+    ("__movsd", X64, Op::RepMovs { width: 4 }, None, &[p(ULong), pc(ULong), V(ULLong)]),
+    ("__movsq", X64, Op::RepMovs { width: 8 }, None, &[p(ULLong), pc(ULLong), V(ULLong)]),
     ("__yield", Arm64, Op::Pause, None, &[]),
     ("__wfe", Arm64, Op::Insn("wfe"), None, &[]),
     ("__wfi", Arm64, Op::Insn("wfi"), None, &[]),
@@ -341,8 +400,31 @@ const FIXED: &[Row] = &[
     ("__crc32cd", Arm64, crc(8, true), Some(UInt), &[V(UInt), V(ULLong)]),
 ];
 
+/// gcc's and clang's builtins of these names, with gcc's prototypes.
+#[rustfmt::skip]
+const GNU_X64: &[(&str, Op, Option<Scalar>, &[Param])] = &[
+    ("__builtin_ia32_sfence", Op::Insn("sfence"), None, &[]),
+    ("__builtin_ia32_lfence", Op::Insn("lfence"), None, &[]),
+    ("__builtin_ia32_mfence", Op::Insn("mfence"), None, &[]),
+    ("__builtin_ia32_pause", Op::Pause, None, &[]),
+    ("__builtin_ia32_rdtsc", Op::Rdtsc, Some(ULLong), &[]),
+    ("__builtin_ia32_rdtscp", Op::Rdtscp, Some(ULLong), &[p(UInt)]),
+    ("__builtin_ia32_xgetbv", Op::Xgetbv, Some(ULLong), &[V(UInt)]),
+    ("__builtin_ia32_readeflags_u64", Op::ReadEflags, Some(ULLong), &[]),
+    ("__builtin_ia32_writeeflags_u64", Op::WriteEflags, None, &[V(ULLong)]),
+];
+
 /// The intrinsic `name` is on `target`, or `None`.
 pub(crate) fn lookup(name: &str, target: Target) -> Option<Intrinsic> {
+    if target.is_x86_64()
+        && let Some(&(_, op, ret, params)) = GNU_X64.iter().find(|r| r.0 == name)
+    {
+        return Some(Intrinsic {
+            op,
+            ret,
+            params: params.to_vec(),
+        });
+    }
     if !target.ms_extensions() || !name.starts_with('_') {
         return None;
     }

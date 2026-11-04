@@ -219,12 +219,14 @@ SMP_TOTAL_RE = re.compile(r"Total of (\d+) processors activated")
 # figure and is reported only.
 UNPACK_BOUNDS = {"aarch64": 7.5}
 # Budgets over the linked image's functions, per architecture: the largest
-# `STT_FUNC` size and the count over 4 KiB. The boxes' badc-built 7.1.10
-# defconfig images measure 22680 and 89 (aarch64, of 88394 functions) and
-# 44352 and 115 (x86_64, of 158838); the budgets clear those by about 30%
-# and 15%.
-TEXT_BUDGETS = {"aarch64": {"largest": 29696, "over_4k": 103},
-                "x86_64": {"largest": 57344, "over_4k": 133}}
+# `STT_FUNC` size and the count over 4 KiB. The boxes' badc-built 7.2.9
+# defconfig images, with a static function one call site reaches inlined,
+# measure 21104 and 139 (aarch64, of 73488 functions) and 49252 and 189
+# (x86_64, of 139955); gcc 16.2.1 builds the same configuration at 20584
+# and 135, and 20860 and 194. The counts' budgets clear badc's by about
+# 15%; the largest-function budgets stand as set for 7.1.10.
+TEXT_BUDGETS = {"aarch64": {"largest": 29696, "over_4k": 160},
+                "x86_64": {"largest": 57344, "over_4k": 218}}
 
 # objtool's own verdict on the objects the build produced, one line per
 # site. A kernel build does not fail on them unless CONFIG_OBJTOOL_WERROR
@@ -1617,11 +1619,22 @@ def main() -> int:
         # would draw its own displacement, so the probe's is not the boots'.
         for seed in dict.fromkeys(plan):
             tag = f"{seed:016x}" if seed is not None else "unpinned"
-            out = Path(args.workdir) / f"probe-{args.arch}-{tag}.log"
-            text = boot(args, arch, image, out, PROBE_RDINIT, trees.get(seed))
-            offsets[seed] = kaslr.parse_kernel_offset(text)
-            log(f"probe seed={tag}: "
-                f"displacement={kaslr.format_offset(offsets[seed])} (see {out})")
+            logs: list[Path] = []
+
+            def probe() -> int | None:
+                again = f"-{len(logs) + 1}" if logs else ""
+                out = Path(args.workdir) / f"probe-{args.arch}-{tag}{again}.log"
+                logs.append(out)
+                text = boot(args, arch, image, out, PROBE_RDINIT, trees.get(seed))
+                off = kaslr.parse_kernel_offset(text)
+                log(f"probe seed={tag}: "
+                    f"displacement={kaslr.format_offset(off)} (see {out})")
+                return off
+
+            # A pinned seed draws the same displacement every time; an
+            # unpinned probe that drew slot 0 is probed again (kaslr.py).
+            offsets[seed] = (probe() if seed is not None
+                             else kaslr.unpinned_draws(probe)[-1])
         # A tree whose configuration names badc as the compiler must boot a
         # kernel whose banner -- and therefore /proc/version -- says so; the
         # banner embeds CONFIG_CC_VERSION_TEXT at build time, so a mismatch
@@ -1735,4 +1748,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(_self_test() if sys.argv[1:] == ["--self-test"] else main())
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(_self_test())
+    # A kernel build loads the host; a timer-bound demo phase of another
+    # lane waits for it (scripts/host_load.py).
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import host_load
+
+    with host_load.held(exclusive=False):
+        sys.exit(main())

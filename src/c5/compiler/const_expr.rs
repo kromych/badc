@@ -1761,46 +1761,6 @@ impl Compiler {
             self.skip_balanced_to_close_paren()?;
             return Ok(ConstVal::int(0));
         }
-        if self.lex.tk == Token::Id
-            && matches!(
-                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                "__builtin_abs" | "__builtin_labs" | "__builtin_llabs"
-            )
-        {
-            // GCC integer absolute-value builtins fold with a constant
-            // argument. The operand narrows to the parameter type first,
-            // and the most negative value wraps, matching the runtime
-            // behavior of the corresponding library functions.
-            let ty = match self.symbols[self.lex.curr_id_idx].name.as_str() {
-                "__builtin_abs" => Ty::Int as i64,
-                "__builtin_labs" => Ty::Long as i64,
-                _ => Ty::LongLong as i64,
-            };
-            self.next()?;
-            if self.lex.tk != '(' {
-                return Err(
-                    self.compile_err(Code::SYNTAX, "`(` expected after absolute-value builtin")
-                );
-            }
-            self.next()?;
-            let arg = self.parse_const_expr_cond_val()?.as_i128();
-            if self.lex.tk != ')' {
-                return Err(
-                    self.compile_err(Code::SYNTAX, "`)` expected to close absolute-value builtin")
-                );
-            }
-            self.next()?;
-            let val = if self.size_of_type(ty) == 4 {
-                (arg as i32).wrapping_abs() as i128
-            } else {
-                (arg as i64).wrapping_abs() as i128
-            };
-            return Ok(ConstVal::Int {
-                val,
-                ty,
-                enumeration: None,
-            });
-        }
         if let Some(v) = self.try_fold_value_builtin()? {
             return Ok(v);
         }
@@ -2612,6 +2572,19 @@ impl Compiler {
                 }),
             };
         }
+        // `__func__` is an array lvalue of static storage duration too.
+        if self.is_func_name_ident() {
+            let (off, sym, bytes) = self.intern_func_name_object();
+            self.next()?;
+            let elem_ty = super::types::pointee_ty(self.func_name_ptr_ty());
+            return Ok(ConstDesig {
+                value: off,
+                ty: self.array_desig_ty(elem_ty, &[], bytes),
+                is_lvalue: true,
+                root: ConstRoot::Data(sym),
+                function: false,
+            });
+        }
         // A string literal is an unnamed array lvalue of static storage
         // duration, so `&"..."` and `"..."[i]` are address constants.
         if self.lex.tk == '"' {
@@ -3222,6 +3195,21 @@ impl Compiler {
             // staged: an enclosing checkpoint may span them.
             let (off, elem_ty, bytes) = self.stage_const_string()?;
             return Ok(ConstVal::Addr(self.const_string_addr(off, elem_ty, bytes)));
+        }
+        // C99 6.4.2.2: `__func__` names a `static const char` array, which
+        // decays the same way.
+        if self.is_func_name_ident() {
+            let (off, sym, _) = self.intern_func_name_object();
+            self.next()?;
+            let ty = self.func_name_ptr_ty();
+            return Ok(ConstVal::Addr(ConstAddr {
+                value: off,
+                root: ConstRoot::Data(sym),
+                elem_size: 1,
+                pointee: Some(super::types::pointee_ty(ty)),
+                ty,
+                function: false,
+            }));
         }
         if self.lex.tk == Token::FloatNum {
             // Floating literal -- the lexer staged the f64 bit

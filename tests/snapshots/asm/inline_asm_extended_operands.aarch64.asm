@@ -15,7 +15,6 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x0, #0x0                // =0
-               	str	x0, [x1]
+               	str	x0, [x1, #0x30]
                	ret

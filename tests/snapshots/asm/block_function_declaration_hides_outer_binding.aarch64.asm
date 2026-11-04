@@ -61,37 +61,32 @@ Disassembly of section .text:
                	fmov	d1, #2.25000000
                	fmov	d2, #4.00000000
                	bl	<addr>
-               	mov	x0, #0x7                // =7
-               	scvtf	d1, x0
+               	fmov	d1, #7.00000000
                	fadd	d0, d0, d1
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <declared_in_an_outer_block>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	mov	x17, #0x3e8             // =1000
                	mul	x0, x0, x17
                	add	x0, x0, #0x3
                	ret
 
 <outer_block_double>:
-               	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x1, [x1]
-               	scvtf	d0, x1
+               	adrp	x0, <page>
+               	ldrsw	x0, [x0, #0x18]
+               	scvtf	d0, x0
                	fmov	d1, #2.00000000
                	fdiv	d0, d0, d1
-               	scvtf	d1, x0
+               	fmov	d1, #1.00000000
                	fadd	d0, d0, d1
                	ret
 
 <outer_block_pointer>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	sub	x0, x0, #0x4
                	sxtw	x0, w0
                	adrp	x1, <page>

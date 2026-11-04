@@ -32,6 +32,13 @@
 // call.
 #define _MSC_VER 1900
 
+// MSVC defines `_MSC_EXTENSIONS` under its default /Ze, and clang does for a
+// windows-msvc triple with -fms-extensions; badc's Windows targets always
+// take the Microsoft extensions. The SDK headers make their unions and
+// structures nameless (`DUMMYUNIONNAME`) and define types such as
+// `PROPVARIANT` only under it.
+#define _MSC_EXTENSIONS 1
+
 // Target-architecture macros MSVC predefines and the Windows SDK headers
 // gate on. <winnt.h> selects its per-arch register/context definitions from
 // the `_<ARCH>_` form and errors ("No Target Architecture") if none is set;
@@ -72,14 +79,12 @@
 
 // MSVC decorator macros third-party headers expect to no-op when
 // their `_MSC_VER` branches are active. None of them affect
-// codegen on c5 (the IAT routes calls regardless of dllimport /
-// inline tagging), and headers emit them BEFORE any include
-// statement could provide them, so they have to be visible the
-// instant the translation unit starts -- hence the `-include`
-// shape.
-#define __forceinline
-#define __inline
-#define _inline
+// codegen on c5 (the IAT routes calls regardless of dllimport
+// tagging), and headers emit them BEFORE any include statement
+// could provide them, so they have to be visible the instant the
+// translation unit starts -- hence the `-include` shape.
+// `__inline`, `_inline` and `__forceinline` are keywords, with
+// MSVC's linkage on the Windows targets.
 #define __cdecl
 #define __stdcall
 #define __fastcall
@@ -102,11 +107,9 @@
 #define _Outptr_
 #define _Outptr_opt_
 
-// Function-like decorator macros (`__declspec(x)`, `__pragma(x)`,
-// `_Pre_satisfies_(x)`, ...) expand to nothing. The 1-arg shape
-// covers every form the bundled CRT headers emit; none of them
-// rely on argument concatenation or stringification.
-#define __declspec(x)
+// Function-like decorator macros (`__pragma(x)`, `_Pre_satisfies_(x)`,
+// ...) expand to nothing. `__declspec` is left to the compiler, which
+// honours align, thread, selectany, noreturn and dllimport / dllexport.
 #define __pragma(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
@@ -117,9 +120,9 @@
 #define _CRT_BEGIN_C_HEADER
 #define _CRT_END_C_HEADER
 
-// CRT import decorators. These expand to `__declspec(dllimport)` -- already
-// a no-op above -- but the SDK spells the import surface with per-library
-// aliases, so name them empty for the declarations that carry them.
+// CRT import decorators. The SDK spells the import surface with per-library
+// aliases expanding to `__declspec(dllimport)`; badc binds these names
+// itself, so they are empty for the declarations that carry them.
 #define _ACRTIMP
 #define _ACRTIMP_ALT
 #define _DCRTIMP
@@ -143,7 +146,9 @@
 // f(...)` rely on a separate link step to wire the IAT.
 // badc routes calls through `#pragma binding(<dylib>::<sym>,
 // "<real>")`; the bindings below cover the kernel32 / msvcrt
-// surface MSVC-shaped sources commonly reach for.
+// surface MSVC-shaped sources commonly reach for. A binding
+// declares nothing: the source's declaration, or that of the
+// SDK or CRT header which binds the name too, gives the type.
 
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma dylib(msvcrt,   "msvcrt.dll")
@@ -206,19 +211,5 @@ static int getpid(void) {
 // `localtime` path. A no-op definition would serve only a source
 // that uses the macro to mark its own functions; the visibility
 // check is what matters.
-
-// `InterlockedCompareExchange` is not an export on
-// modern Windows (Server 2019 / 2022 / 2025) -- in MSVC it's a
-// compiler intrinsic (`_InterlockedCompareExchange` from
-// <intrin.h>) that lowers inline to `lock cmpxchg`. A PE that
-//
-// The non-atomic implementation is *fine* for the single-threaded.
-static int InterlockedCompareExchange(
-    int volatile *dest, int exchange, int comparand
-) {
-    int original = *dest;
-    if (original == comparand) *dest = exchange;
-    return original;
-}
 
 #endif /* _WIN32 */

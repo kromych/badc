@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	addq	$-0x8, %rcx
                	movq	(%rcx), %rax
-               	leaq	<rip>, %rsi # <addr>
-               	movq	(%rsi), %rsi
+               	movq	<rip>, %rsi # <addr>
                	cmpq	%rsi, %rax
                	sete	%sil
                	movzbq	%sil, %rsi
@@ -56,8 +55,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpq	$0x2, %rax
                	sete	%cl

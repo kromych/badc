@@ -172,13 +172,19 @@ impl Compiler {
             Stmt::DoWhile { body, cond } => {
                 falls(!self.always_true(Some(*cond)) && self.exit_of(*body) == Exit::Falls)
             }
-            Stmt::Switch { body, .. } => {
-                falls(self.breaks_out(*body) || self.exit_of(*body) == Exit::Falls)
-            }
+            // A switch completes when no label matches, when a `break` that
+            // control reaches leaves it, or when its body runs off its end.
+            Stmt::Switch { body, .. } => falls(
+                !self.has_default(*body)
+                    || self.reaches_break(*body, false)
+                    || self.exit_of(*body) == Exit::Falls,
+            ),
             Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
                 self.exit_of(*body)
             }
             Stmt::Break | Stmt::Continue | Stmt::Return(_) | Stmt::Goto(_) => Exit::Leaves,
+            // A `return` leaving `cleanup` scopes runs their calls and jumps.
+            Stmt::CleanupJump { jump, .. } => self.exit_of(*jump),
             Stmt::GotoIndirect(_) => Exit::Leaves,
             _ => Exit::Falls,
         }
@@ -203,19 +209,60 @@ impl Compiler {
         cond.is_none_or(|c| self.expr_const_int(c).is_some_and(|v| v != 0))
     }
 
-    /// A `break` in the switch body `id` that leaves the switch.
-    fn breaks_out(&self, id: StmtId) -> bool {
+    /// A `break` in the switch body `id` that leaves the switch and that
+    /// control reaches: `reach` says whether it reaches `id`, a label makes
+    /// what it labels reachable, and a statement that leaves makes what
+    /// follows it unreachable up to the next label.
+    fn reaches_break(&self, id: StmtId, reach: bool) -> bool {
         match self.ast.stmt(id) {
-            Stmt::Break => true,
+            Stmt::Break => reach,
+            Stmt::Compound(items) => {
+                let mut reach = reach;
+                for item in items {
+                    let BlockItem::Stmt(s) = item else {
+                        continue;
+                    };
+                    let here = reach || self.is_label(*s);
+                    if self.reaches_break(*s, here) {
+                        return true;
+                    }
+                    reach = here && self.exit_of(*s) != Exit::Leaves;
+                }
+                false
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                self.reaches_break(*then_s, reach)
+                    || else_s.is_some_and(|e| self.reaches_break(e, reach))
+            }
+            Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
+                self.reaches_break(*body, true)
+            }
+            _ => false,
+        }
+    }
+
+    fn is_label(&self, id: StmtId) -> bool {
+        matches!(
+            self.ast.stmt(id),
+            Stmt::Case { .. } | Stmt::Default { .. } | Stmt::Labeled { .. }
+        )
+    }
+
+    /// A `default` label of the switch whose body is `id`, not of a switch
+    /// nested in it.
+    fn has_default(&self, id: StmtId) -> bool {
+        match self.ast.stmt(id) {
+            Stmt::Default { .. } => true,
             Stmt::Compound(items) => items.iter().any(|i| match i {
-                BlockItem::Stmt(s) => self.breaks_out(*s),
+                BlockItem::Stmt(s) => self.has_default(*s),
                 BlockItem::Decl(_) => false,
             }),
             Stmt::If { then_s, else_s, .. } => {
-                self.breaks_out(*then_s) || else_s.is_some_and(|e| self.breaks_out(e))
+                self.has_default(*then_s) || else_s.is_some_and(|e| self.has_default(e))
             }
-            Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
-                self.breaks_out(*body)
+            Stmt::Case { body, .. } | Stmt::Labeled { body, .. } => self.has_default(*body),
+            Stmt::While { body, .. } | Stmt::DoWhile { body, .. } | Stmt::For { body, .. } => {
+                self.has_default(*body)
             }
             _ => false,
         }

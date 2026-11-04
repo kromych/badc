@@ -44,78 +44,67 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	leaq	-<rip>, %rdx # <addr>
-               	cmpq	%rdx, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	leaq	-<rip>, %rdx # <addr>
-               	cmpq	%rdx, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
+               	movq	<rip>, %rcx # <addr>
                	leaq	-<rip>, %rax # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x8, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
+               	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
+               	movq	<rip>, %rcx # <addr>
                	leaq	-<rip>, %rax # <addr>
                	subq	%rax, %rcx
                	cmpq	$0xc, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rdx
-               	cmpq	%rax, %rdx
+               	movq	<rip>, %rcx # <addr>
+               	cmpq	%rax, %rcx
                	jne	<addr>
-               	movq	(%rcx), %rax
+               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
+               	movq	<rip>, %rcx # <addr>
                	leaq	-<rip>, %rax # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x2, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movq	0x8(%rcx), %rcx
+               	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x2, %rcx
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x5, %eax

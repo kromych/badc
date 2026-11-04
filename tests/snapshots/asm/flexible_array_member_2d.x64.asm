@@ -26,43 +26,42 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x3, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movzbq	0x5(%rax), %rcx
-               	xorq	$0x7, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0x7, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0x7(%rax), %rcx
-               	xorq	$0xc, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0xc, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movzbq	0xa(%rax), %rcx
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0x1, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0xb(%rax), %rcx
-               	xorq	$0x16, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0x16, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movzbq	0xc(%rax), %rcx
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0x1, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0xd(%rax), %rcx
-               	xorq	$0x5, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	<rip>, %rax # <addr>
+               	xorq	$0x5, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movzbq	0xf(%rax), %rax
+               	movzbq	<rip>, %rax # <addr>
                	xorq	$0xa, %rax
                	testl	%eax, %eax
                	je	<addr>

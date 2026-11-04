@@ -17,8 +17,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x58]
                	add	x0, x0, #0xe
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	ldr	x26, [x0, #0x30]
                	ldr	x27, [x0, #0x38]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x58]
                	bl	<addr>
                	sxtw	x0, w0
                	add	x0, x0, x20
@@ -114,11 +112,10 @@ Disassembly of section .text:
 
 <fcl>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1]
+               	ldrsw	x2, [x1, #0x70]
                	ldrsw	x0, [x0]
                	add	x0, x2, x0
-               	str	w0, [x1]
+               	str	w0, [x1, #0x70]
                	ret
 
 <cleanup_hidden>:
@@ -169,8 +166,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x70]
                	cmp	w0, #0x2
                	cset	x0, ne
                	orr	x0, x20, x0, lsl #6

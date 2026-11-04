@@ -240,8 +240,6 @@ Disassembly of section .text:
 
 <negneg>:
                	movq	%rdi, %rax
-               	negq	%rax
-               	negq	%rax
                	retq
 
 <sub_of_neg>:

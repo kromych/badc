@@ -31,7 +31,8 @@ use super::object::{
     NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
 };
 use crate::c5::codegen::{
-    CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget, PointerSlot,
+    BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
+    PointerSlot,
 };
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
@@ -64,6 +65,9 @@ use crate::c5::object::elf_reloc_types::{
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
+
+/// The language handler a `__try` scope table names (PE).
+pub(crate) const LANGUAGE_HANDLER: &str = "__C_specific_handler";
 
 pub(crate) use crate::c5::object::elf_reloc_types::{GOT_BASE_SYMBOL, IMAGE_BASE_SYMBOL};
 
@@ -197,6 +201,10 @@ pub struct MergedNative {
     pub data_import_refs: Vec<DataImportBind>,
     /// The same for `_Thread_local` template slots.
     pub tls_data_import_refs: Vec<DataImportBind>,
+    /// 4-byte image-relative fields in [`Self::data`] naming an imported
+    /// function, such as a `.xdata` record's language handler: the PLT
+    /// pass points each at the import's stub inside the image.
+    pub data_import_rva_refs: Vec<DataImportBind>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
@@ -236,6 +244,11 @@ pub struct MergedNative {
     /// the host supplies at `dlopen`; a name in [`Self::import_dylib_map`]
     /// is never here.
     pub flat_imports: alloc::collections::BTreeSet<String>,
+    /// Import names every reference to which is weak. A Mach-O image binds
+    /// each with the weak-import flag, so dyld sets it to 0 when no image
+    /// defines it at load time; one strong reference makes the import
+    /// strong, ld64's default `-weak_reference_mismatches non-weak`.
+    pub weak_imports: alloc::collections::BTreeSet<String>,
     /// Source-declared export names, unioned across input objects
     /// from each unit's `NT_BADC_EXPORTS` note. The final-image
     /// writer promotes each to the export table when emitting a
@@ -334,6 +347,12 @@ pub struct MergedNative {
     /// The frame path and the early return of a function that returns ahead
     /// of its frame, keyed as [`Self::prologue_ends`] (`NT_BADC_EARLY_RETURN`).
     pub early_returns: HashMap<u64, (u64, u64)>,
+    /// Each function's prologue unwind steps, keyed as
+    /// [`Self::prologue_ends`] (`NT_BADC_UNWIND`).
+    pub(crate) unwind: HashMap<u64, crate::c5::codegen::UnwindSteps>,
+    /// `__try` scope-table rows (`NT_BADC_SEH_SCOPE`), merged-text offsets,
+    /// a function's rows adjacent.
+    pub seh_rows: Vec<super::object::SehRowAt<u32>>,
     /// Defined `STT_FUNC STB_LOCAL` (static) functions as
     /// `(name, merged_text_offset)`, rebased by the per-unit text base.
     /// Kept as a flat list separate from `defined` -- which is
@@ -677,6 +696,15 @@ impl BlobMap {
         }
     }
 
+    /// The contiguous run holding blob offset `off`: its merged-stream
+    /// start, its blob start and its length.
+    fn run(&self, off: u64) -> (u64, u64, u64) {
+        match (self.moved.iter()).find(|m| off >= m.offset && off < m.offset + m.size) {
+            Some(m) => (m.merged, m.offset, m.size),
+            None => (self.base, 0, self.prefix_len),
+        }
+    }
+
     /// Merged-stream offset of section `k`, at blob offset `offset`.
     fn section_at(&self, k: u32, offset: u64) -> u64 {
         match self.moved.iter().find(|m| m.section == k) {
@@ -690,12 +718,43 @@ impl BlobMap {
 /// The parse sorted the sections grouped by name last, so they form a
 /// suffix starting at the lowest such section's offset.
 fn named_prefix_len(obj: &NativeObject, fam: SectionFamily, blob_len: u64) -> u64 {
+    moved_prefix_len(obj, fam, blob_len, super::object::grouped_by_name)
+}
+
+/// Blob length below which this unit's `fam` sections stay in place, the
+/// rest being the sections `moves` names, which the parse sorted last.
+fn moved_prefix_len(
+    obj: &NativeObject,
+    fam: SectionFamily,
+    blob_len: u64,
+    moves: fn(&str) -> bool,
+) -> u64 {
     obj.sections
         .iter()
-        .filter(|s| s.family == fam && super::object::grouped_by_name(&s.name))
+        .filter(|s| s.family == fam && moves(&s.name))
         .map(|s| s.offset)
         .min()
         .unwrap_or(blob_len)
+}
+
+/// The prologue and epilogue crti.o and crtn.o put around the `.init` /
+/// `.fini` fragments, and the no-op that fills between fragments.
+fn init_fini_frame(machine: NativeMachine) -> (&'static [u8], &'static [u8], &'static [u8]) {
+    match machine {
+        // `sub $8, %rsp` keeps the fragments' calls 16-byte aligned;
+        // `add $8, %rsp; ret`.
+        NativeMachine::X86_64 => (
+            &[0x48, 0x83, 0xec, 0x08],
+            &[0x48, 0x83, 0xc4, 0x08, 0xc3],
+            &[0x90],
+        ),
+        // `stp x29, x30, [sp, #-16]!; mov x29, sp`; `ldp x29, x30, [sp], #16; ret`.
+        NativeMachine::Aarch64 => (
+            &[0xfd, 0x7b, 0xbf, 0xa9, 0xfd, 0x03, 0x00, 0x91],
+            &[0xfd, 0x7b, 0xc1, 0xa8, 0xc0, 0x03, 0x5f, 0xd6],
+            &crate::c5::asm::A64_NOP,
+        ),
+    }
 }
 
 /// Every unit's `fam` sections grouped by name. Name order, then link
@@ -996,16 +1055,19 @@ pub enum Preemption {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LinkOptions {
+    /// An unresolved reference is a load-time import the loader's global
+    /// scope resolves, where the format has one: ELF and Mach-O. A PE
+    /// import names the DLL exporting it, so a PE link reports the
+    /// reference undefined.
     pub allow_undefined: bool,
     /// The image is a shared library.
     pub shared: bool,
     pub preemption: Preemption,
     pub export_all: bool,
     pub export_data: bool,
-    /// The format has no copy relocation (Mach-O, PE).
-    pub no_copy_relocs: bool,
-    /// The image is PE: the link defines `__ImageBase`.
-    pub pe_image: bool,
+    /// The image's container: Mach-O and PE have no copy relocation, a
+    /// PE link defines `__ImageBase`, and `.init` / `.fini` are ELF's.
+    pub format: BinaryFormat,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1020,7 +1082,7 @@ pub fn link_native_objects_with<'a>(
     link.lay_out_tls()?;
     link.lay_out_sections();
     if let Some(s) = &slot_reads {
-        let at = |&(unit, offset): &(usize, u64)| link.text_bases[unit] as u64 + offset;
+        let at = |&(unit, offset): &(usize, u64)| link.text_map[unit].at(offset);
         link.slot_reads = s.sites.iter().map(at).collect();
         link.warnings.extend(s.warnings.iter().cloned());
     }
@@ -1147,11 +1209,17 @@ struct Link<'a> {
     objs: &'a [NativeObject],
     machine: NativeMachine,
     allow_undefined: bool,
+    /// A weak reference no input defines resolves to 0, as GNU ld and
+    /// link.exe resolve it; ld64 resolves it only through a dylib that
+    /// exports it, else it is undefined (a Mach-O image).
+    weak_undefined_is_zero: bool,
     preemption: Preemption,
     export_all: bool,
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// The image runs `.init` / `.fini` code: an ELF one.
+    init_fini: bool,
     /// COFF COMDAT groups' sections, and those selection displaced.
     comdats: super::comdat::CoffSelection,
     preemptible: hashbrown::HashSet<&'a str>,
@@ -1177,7 +1245,9 @@ struct Link<'a> {
     tls_defined: BTreeMap<String, MergedSymbol>,
 
     text: Vec<u8>,
-    text_bases: Vec<usize>,
+    /// Where each unit's text landed; its `.init` / `.fini` fragments
+    /// were moved out to form one function each.
+    text_map: Vec<BlobMap>,
     text_align: usize,
     /// The file-backed data of every unit as one offset space: every
     /// unit's read-only payload first, then every unit's relro payload,
@@ -1204,6 +1274,9 @@ struct Link<'a> {
     /// offset)`, in run order.
     init_entries: Vec<(Option<u32>, u64)>,
     fini_entries: Vec<(Option<u32>, u64)>,
+    /// The merged text offset of the `.init` and `.fini` functions.
+    init_code: Option<u64>,
+    fini_code: Option<u64>,
     /// `[start, end)` of each pointer array in the data stream.
     init_array: (u64, u64),
     fini_array: (u64, u64),
@@ -1216,6 +1289,9 @@ struct Link<'a> {
     prologue_ends: HashMap<u64, u64>,
     /// Function entry -> (frame path, early return), in merged text.
     early_returns: HashMap<u64, (u64, u64)>,
+    /// Function entry -> prologue unwind steps, in merged text.
+    unwind: HashMap<u64, crate::c5::codegen::UnwindSteps>,
+    seh_rows: Vec<super::object::SehRowAt<u32>>,
     /// `STT_FUNC` `STB_LOCAL` text symbols; a flat list, so two units'
     /// same-named statics both survive.
     local_funcs: Vec<(String, u64)>,
@@ -1273,6 +1349,7 @@ struct Link<'a> {
     /// Data slots that name an import; see [`MergedNative::data_import_refs`].
     data_import_refs: Vec<DataImportBind>,
     tls_data_import_refs: Vec<DataImportBind>,
+    data_import_rva_refs: Vec<DataImportBind>,
     /// `.rela.tdata` slots, resolved like `.rela.data` ones.
     tls_abs_relocs: Vec<DataAbsReloc>,
 }
@@ -1304,12 +1381,14 @@ impl<'a> Link<'a> {
         Ok(Link {
             objs,
             machine,
-            allow_undefined: opts.allow_undefined,
+            allow_undefined: opts.allow_undefined && opts.format != BinaryFormat::Pe,
+            weak_undefined_is_zero: opts.format != BinaryFormat::MachO,
             preemption: opts.preemption,
             export_all: opts.export_all,
             export_data: opts.export_data,
-            no_copy_relocs: opts.no_copy_relocs,
-            pe_image: opts.pe_image,
+            no_copy_relocs: opts.format != BinaryFormat::Elf,
+            pe_image: opts.format == BinaryFormat::Pe,
+            init_fini: opts.format == BinaryFormat::Elf,
             comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
             shared_libs,
@@ -1328,7 +1407,7 @@ impl<'a> Link<'a> {
             tls_symbol_offsets: HashMap::new(),
             tls_defined: BTreeMap::new(),
             text: Vec::new(),
-            text_bases: Vec::with_capacity(objs.len()),
+            text_map: Vec::with_capacity(objs.len()),
             text_align: 16,
             data: Vec::new(),
             data_align: crate::c5::layout::DATA_ALIGN_MIN,
@@ -1344,12 +1423,16 @@ impl<'a> Link<'a> {
             section_map: SectionMap::default(),
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
+            init_code: None,
+            fini_code: None,
             init_array: (0, 0),
             fini_array: (0, 0),
             defined: HashMap::new(),
             absolute_defined: HashMap::new(),
             prologue_ends: HashMap::new(),
             early_returns: HashMap::new(),
+            unwind: HashMap::new(),
+            seh_rows: Vec::new(),
             local_funcs: Vec::new(),
             imports: Vec::new(),
             import_idx_for_name: HashMap::new(),
@@ -1382,6 +1465,7 @@ impl<'a> Link<'a> {
             data_pcrel_relocs: Vec::new(),
             data_import_refs: Vec::new(),
             tls_data_import_refs: Vec::new(),
+            data_import_rva_refs: Vec::new(),
             tls_abs_relocs: Vec::new(),
         })
     }
@@ -1395,7 +1479,7 @@ impl<'a> Link<'a> {
         value: u64,
     ) -> Option<u64> {
         Some(match section {
-            NativeSymSection::Text => self.text_bases[unit] as u64 + value,
+            NativeSymSection::Text => self.text_map[unit].at(value),
             NativeSymSection::RoData => self.ro_map[unit].at(value),
             NativeSymSection::RelRo => self.relro_map[unit].at(value),
             NativeSymSection::Data => self.rw_map[unit].at(value),
@@ -1410,6 +1494,7 @@ impl<'a> Link<'a> {
         let own = sym.input_section.and_then(|k| {
             let s = self.objs[unit].sections.get(k as usize)?;
             let map = match s.family {
+                SectionFamily::Text => &self.text_map[unit],
                 SectionFamily::RoData => &self.ro_map[unit],
                 SectionFamily::RelRo => &self.relro_map[unit],
                 SectionFamily::Data => &self.rw_map[unit],
@@ -1508,6 +1593,9 @@ impl<'a> Link<'a> {
                 }
             }
         }
+        let unique: hashbrown::HashSet<&str> = (self.objs.iter())
+            .flat_map(|o| o.unique.iter().map(String::as_str))
+            .collect();
         for (name, sym) in &self.defined {
             let place = match sym.section {
                 NativeSymSection::Text => SymbolPlace::Text(sym.value),
@@ -1515,7 +1603,11 @@ impl<'a> Link<'a> {
                 NativeSymSection::Bss => SymbolPlace::Bss(sym.value),
                 _ => continue,
             };
-            let binding = if sym.weak { 2 } else { 1 };
+            let binding = match () {
+                _ if unique.contains(name.as_ref()) => super::object::STB_GNU_UNIQUE,
+                _ if sym.weak => 2,
+                _ => 1,
+            };
             globals.push(row(
                 name,
                 place,
@@ -1766,9 +1858,10 @@ impl<'a> Link<'a> {
             ));
         }
         // The rewrite reads and writes the unit's own bytes only.
-        let base = self.text_bases[unit];
-        let text = &mut self.text[base..base + self.objs[unit].text.len()];
-        let at = reloc.offset as usize;
+        let (base, origin, len) = self.text_map[unit].run(reloc.offset);
+        let base = base as usize;
+        let text = &mut self.text[base..base + len as usize];
+        let at = (reloc.offset - origin) as usize;
         let field = match (machine, to) {
             (NativeMachine::X86_64, Model::LocalExec(value)) => {
                 let value = value + tls_relax::x86_64_addend_bias(reloc.rtype);
@@ -1910,7 +2003,7 @@ impl<'a> Link<'a> {
         if !self.allow_undefined {
             self.library_thread_local(&sym.name)?;
         }
-        let idx = self.bind_import(sym, false, true);
+        let idx = self.bind_import(sym, false);
         self.tls_imports.insert(idx);
         Ok(TlsGotTarget::Import(idx))
     }
@@ -1924,7 +2017,7 @@ impl<'a> Link<'a> {
         rtype: u32,
         addend: i64,
     ) {
-        let idx = self.bind_import(sym, false, true);
+        let idx = self.bind_import(sym, false);
         self.tls_imports.insert(idx);
         self.pending_imports.push(PendingImportReloc {
             text_offset: text_offset as u64,
@@ -2081,8 +2174,18 @@ impl<'a> Link<'a> {
         for obj in objs {
             align_up(&mut self.text, obj.text_align.max(16));
             self.text_align = self.text_align.max(obj.text_align);
-            self.text_bases.push(self.text.len());
-            self.text.extend_from_slice(&obj.text);
+            let keep = match self.init_fini {
+                true => moved_prefix_len(
+                    obj,
+                    SectionFamily::Text,
+                    obj.text.len() as u64,
+                    super::object::is_init_fini,
+                ),
+                false => obj.text.len() as u64,
+            };
+            self.text_map
+                .push(BlobMap::new(self.text.len() as u64, keep));
+            self.text.extend_from_slice(&obj.text[..keep as usize]);
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.rodata_align),
@@ -2093,6 +2196,10 @@ impl<'a> Link<'a> {
             self.ro_map.push(BlobMap::new(self.data.len() as u64, keep));
             self.data.extend_from_slice(&obj.rodata[..keep as usize]);
             self.data_align = self.data_align.max(obj.data_align);
+        }
+        if self.init_fini {
+            self.init_code = self.group_init_fini(".init");
+            self.fini_code = self.group_init_fini(".fini");
         }
         self.keep_end_label_byte(SectionFamily::RoData);
         group_named_bytes(
@@ -2211,10 +2318,9 @@ impl<'a> Link<'a> {
             for s in &obj.sections {
                 let tls_at = self.unit_tls_offset(i, s.offset);
                 let (list, offset) = match s.family {
-                    SectionFamily::Text => (
-                        &mut self.section_map.text,
-                        self.text_bases[i] as u64 + s.offset,
-                    ),
+                    SectionFamily::Text => {
+                        (&mut self.section_map.text, self.text_map[i].at(s.offset))
+                    }
                     SectionFamily::RoData => {
                         (&mut self.section_map.data, self.ro_map[i].at(s.offset))
                     }
@@ -2240,6 +2346,42 @@ impl<'a> Link<'a> {
         }
     }
 
+    /// Every unit's `name` fragment, in input order, as one function in
+    /// the text stream: the frame crti.o and crtn.o give it, and no-op
+    /// fill up to each fragment's alignment, since each one falls through
+    /// into the next. Returns the function's offset; `None` when no unit
+    /// contributes.
+    fn group_init_fini(&mut self, name: &str) -> Option<u64> {
+        let objs = self.objs;
+        let fragments: Vec<(usize, u32, &super::object::InputSection)> = (objs.iter().enumerate())
+            .flat_map(|(i, o)| (o.sections.iter().enumerate()).map(move |(k, s)| (i, k as u32, s)))
+            .filter(|(_, _, s)| s.family == SectionFamily::Text && s.name == name)
+            .collect();
+        if fragments.is_empty() {
+            return None;
+        }
+        let (prologue, epilogue, nop) = init_fini_frame(self.machine);
+        align_up(&mut self.text, 16);
+        let start = self.text.len() as u64;
+        self.text.extend_from_slice(prologue);
+        for (i, section, s) in fragments {
+            while !self.text.len().is_multiple_of(s.align.max(1) as usize) {
+                self.text.extend_from_slice(nop);
+            }
+            let merged = self.text.len() as u64;
+            let bytes = &objs[i].text[s.offset as usize..(s.offset + s.size) as usize];
+            self.text.extend_from_slice(bytes);
+            self.text_map[i].moved.push(MovedSection {
+                offset: s.offset,
+                size: s.size,
+                merged,
+                section,
+            });
+        }
+        self.text.extend_from_slice(epilogue);
+        Some(start)
+    }
+
     /// `.init_array` / `.fini_array`: every unit's constructor and
     /// destructor entries, rebased to merged `.text` offsets and
     /// ordered prioritized ascending, then unprioritized in link order
@@ -2252,7 +2394,7 @@ impl<'a> Link<'a> {
     fn lay_out_init_fini_arrays(&mut self) {
         for (i, obj) in self.objs.iter().enumerate() {
             for f in &obj.init_funcs {
-                let off = self.text_bases[i] as u64 + f.unit_text_offset;
+                let off = self.text_map[i].at(f.unit_text_offset);
                 if f.is_destructor {
                     self.fini_entries.push((f.priority, off));
                 } else {
@@ -2264,6 +2406,15 @@ impl<'a> Link<'a> {
             .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
         self.fini_entries
             .sort_by_key(|&(p, _)| (p.is_none(), p.unwrap_or(0)));
+        // The `.init` function runs before every constructor and the `.fini`
+        // one after every destructor, as DT_INIT and DT_FINI run around
+        // the arrays (gABI, Initialization and Termination Functions).
+        if let Some(off) = self.init_code {
+            self.init_entries.insert(0, (None, off));
+        }
+        if let Some(off) = self.fini_code {
+            self.fini_entries.insert(0, (None, off));
+        }
         // A program with no constructors gets no `.data` change (start
         // == end leaves the runtime's walk a no-op); only touch the
         // layout when there is something to lay out, so existing data
@@ -2456,14 +2607,25 @@ impl<'a> Link<'a> {
     /// Win-x64 .pdata / DWARF CFA output.
     fn collect_prologue_anchors(&mut self) {
         for (i, obj) in self.objs.iter().enumerate() {
-            let base = self.text_bases[i] as u64;
+            let map = &self.text_map[i];
             for &(entry, post) in &obj.prologue_ends {
-                self.prologue_ends.insert(base + entry, base + post);
+                self.prologue_ends.insert(map.at(entry), map.at(post));
             }
             for &(entry, frame, exit) in &obj.early_returns {
                 self.early_returns
-                    .insert(base + entry, (base + frame, base + exit));
+                    .insert(map.at(entry), (map.at(frame), map.at(exit)));
             }
+            for (entry, steps) in &obj.unwind {
+                self.unwind.insert(map.at(*entry), steps.clone());
+            }
+            for &(row, target, handler) in &obj.seh_rows {
+                let at = |at: u64| map.at(at) as u32;
+                (self.seh_rows).push((row.map(at), target.map(at), handler.map(at)));
+            }
+        }
+        // A scope table names its language handler, which the image imports.
+        if !self.seh_rows.is_empty() {
+            self.record_import(LANGUAGE_HANDLER);
         }
     }
 
@@ -2479,7 +2641,7 @@ impl<'a> Link<'a> {
                     continue;
                 }
                 self.local_funcs
-                    .push((sym.name.clone(), self.text_bases[i] as u64 + sym.value));
+                    .push((sym.name.clone(), self.text_map[i].at(sym.value)));
             }
         }
     }
@@ -2630,6 +2792,24 @@ impl<'a> Link<'a> {
                     weak: false,
                 },
             );
+        }
+        // crti.o's names for the two functions, hidden as it defines them.
+        for (name, code) in [("_init", self.init_code), ("_fini", self.fini_code)] {
+            if let Some(off) = code
+                && !self.defined.contains_key(name)
+            {
+                self.defined.insert(
+                    Cow::Borrowed(name),
+                    MergedSymbol {
+                        section: NativeSymSection::Text,
+                        value: off,
+                        size: 0,
+                        kind: super::object::STT_FUNC,
+                        visibility: super::object::STV_HIDDEN,
+                        weak: false,
+                    },
+                );
+            }
         }
         // The psABIs make the GOT base a linker-defined local OBJECT on
         // the section holding the GOT; hand-written PIC computes the
@@ -2831,7 +3011,7 @@ impl<'a> Link<'a> {
                 let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
                     continue;
                 };
-                let field = self.text_bases[i] + reloc.offset as usize;
+                let field = self.text_map[i].at(reloc.offset) as usize;
                 if self.preempts(sym, reloc.rtype) || !self.needs_got_slot(sym, reloc.rtype, field)
                 {
                     continue;
@@ -2935,7 +3115,7 @@ impl<'a> Link<'a> {
                     }
                 };
                 self.compact_unwind.push(CompactUnwind {
-                    text_offset: self.text_bases[i] as u64 + e.text_offset,
+                    text_offset: self.text_map[i].at(e.text_offset),
                     encoding: e.encoding,
                     personality,
                     lsda,
@@ -3001,7 +3181,7 @@ impl<'a> Link<'a> {
                 if sym.section != NativeSymSection::Text {
                     return Err(bad(&format!("names `{}`, which is not code", sym.name)));
                 }
-                Ok((self.text_bases[i] as i64 + sym.value as i64 + addend) as u64)
+                Ok((self.text_map[i].at(sym.value) as i64 + addend) as u64)
             };
             for e in &obj.pe_unwind {
                 let begin_sym = unwind_symbol(obj, e.begin.0)?;
@@ -3080,11 +3260,7 @@ impl<'a> Link<'a> {
                 ),
             ));
         }
-        Ok(PointerSlot::Import(self.bind_import(
-            sym,
-            routed,
-            shlib_exported,
-        )))
+        Ok(PointerSlot::Import(self.bind_import(sym, routed)))
     }
 
     /// Where `symbol + addend` of `unit` lies in the merged streams.
@@ -3163,6 +3339,7 @@ impl<'a> Link<'a> {
             return true;
         }
         let unresolved_weak = sym.binding == 2
+            && self.weak_undefined_is_zero
             && section == NativeSymSection::Undef
             && !self.defined.contains_key(name)
             && !self.data_binding_locals.contains(name)
@@ -3256,7 +3433,7 @@ impl<'a> Link<'a> {
                         obj.symbols.len(),
                     ))
                 })?;
-                let patch_offset = self.text_bases[i] + reloc.offset as usize;
+                let patch_offset = self.text_map[i].at(reloc.offset) as usize;
                 let tls = match self.machine {
                     NativeMachine::X86_64 => x86_64_is_tls(reloc.rtype),
                     NativeMachine::Aarch64 => aarch64_is_tls(reloc.rtype),
@@ -3308,7 +3485,7 @@ impl<'a> Link<'a> {
                     || self.defined.contains_key(sym.name.as_str());
                 let relaxed = self.relax_got_reference(reloc, patch_offset, resolved_here);
                 let reloc = relaxed.as_ref().unwrap_or(reloc);
-                let patch_offset = self.text_bases[i] + reloc.offset as usize;
+                let patch_offset = self.text_map[i].at(reloc.offset) as usize;
                 let site = origin.at(
                     self.machine,
                     reloc.rtype,
@@ -3579,7 +3756,12 @@ impl<'a> Link<'a> {
         if shlib_exported && !routed {
             self.refuse_library_thread_local(name)?;
         }
-        if sym.binding == 2 && !is_data_binding && !routed && !shlib_exported {
+        let unresolved_weak = sym.binding == 2 && !is_data_binding && !routed && !shlib_exported;
+        if unresolved_weak && !self.weak_undefined_is_zero && !self.allow_undefined {
+            self.note_undefined_at(&sym.name, "");
+            return Ok(());
+        }
+        if unresolved_weak && self.weak_undefined_is_zero {
             // A distance from the GOT base takes address 0 for the
             // symbol, as GNU ld resolves it; the site's guard skips it.
             if is_x86_64_got_distance(self.machine, reloc.rtype) {
@@ -3617,7 +3799,7 @@ impl<'a> Link<'a> {
             self.note_undefined_at(&sym.name, "");
             return Ok(());
         }
-        let idx = self.bind_import(sym, routed, shlib_exported);
+        let idx = self.bind_import(sym, routed);
         if is_branch_reloc(self.machine, reloc.rtype) {
             self.branch_imports.insert(idx);
         } else if self.extern_data_names.contains(name) {
@@ -3639,10 +3821,10 @@ impl<'a> Link<'a> {
     /// Record admitted `sym` as an import. A global UNDEF admitted has no
     /// dylib routing; it is marked flat so the writer emits a load-time
     /// flat-namespace import. A weak one admitted through a shared
-    /// library's export needs the same marking; a routed weak carries its
-    /// own dylib assignment.
-    fn bind_import(&mut self, sym: &'a NativeSymbol, routed: bool, shlib_exported: bool) -> usize {
-        if sym.binding == 1 || (sym.binding == 2 && shlib_exported && !routed) {
+    /// library's export, or (Mach-O) under `allow_undefined`, needs the same
+    /// marking; a routed weak carries its own dylib assignment.
+    fn bind_import(&mut self, sym: &'a NativeSymbol, routed: bool) -> usize {
+        if sym.binding == 1 || (sym.binding == 2 && !routed) {
             self.flat_imports.insert(sym.name.clone());
         }
         self.record_import(sym.name.as_str())
@@ -3734,7 +3916,7 @@ impl<'a> Link<'a> {
                         }
                     }
                 };
-                let patch = self.text_bases[i] + *text_off as usize;
+                let patch = self.text_map[i].at(*text_off) as usize;
                 if patch + 4 > self.text.len() {
                     return Err(internal_err(
                         MODULE,
@@ -3978,6 +4160,7 @@ impl<'a> Link<'a> {
                     // name a `-l` shared library exports binds instead,
                     // in the arm below.
                     None if sym.binding == 2
+                        && self.weak_undefined_is_zero
                         && !self.is_routed_import(sym.name.as_str())
                         && !self.shlib_exports.contains(sym.name.as_str()) =>
                     {
@@ -4054,7 +4237,7 @@ impl<'a> Link<'a> {
             | NativeSymSection::RelRo
             | NativeSymSection::Data
             | NativeSymSection::Bss => self.symbol_offset(unit, sym).unwrap_or(0) as i64,
-            NativeSymSection::Text => self.text_bases[unit] as i64 + sym.value as i64,
+            NativeSymSection::Text => self.symbol_offset(unit, sym).unwrap_or(0) as i64,
             NativeSymSection::Tls => {
                 return Err(link_err(
                     Code::RELOCATION,
@@ -4164,6 +4347,20 @@ impl<'a> Link<'a> {
         let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let Some(d) = self.defined.get(sym.name.as_str()) else {
+                    let name = sym.name.as_str();
+                    let import = self.shlib_exports.contains(name)
+                        || self.is_routed_import(name)
+                        || self.import_idx_for_name.contains_key(name);
+                    if image_relative && !in_tls && width == 4 && import {
+                        let import = self.record_import(name);
+                        self.flat_imports.insert(sym.name.clone());
+                        self.data_import_rva_refs.push(DataImportBind {
+                            data_offset: slot_offset,
+                            import,
+                            addend: reloc.addend,
+                        });
+                        return Ok(());
+                    }
                     self.note_undefined_at(&sym.name, &format!(" ({what})"));
                     return Ok(());
                 };
@@ -4363,7 +4560,17 @@ impl<'a> Link<'a> {
         let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
         let mut import_ordinals: BTreeMap<String, u16> = BTreeMap::new();
         for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
-            if let Some(&idx) = routing.get(name.as_str()) {
+            // A PE import names its DLL: an import library or a DLL the
+            // link read that exports the name supplies it ahead of a
+            // binding, as link.exe and GNU ld take the import from it.
+            let supplied = |lib: &SharedLibrary| {
+                self.pe_image
+                    && lib.from_image
+                    && (lib.exports.contains(name) || lib.data_exports.contains(name))
+            };
+            if let Some(&idx) = routing.get(name.as_str())
+                && !self.shared_libs.iter().any(supplied)
+            {
                 bound[idx as usize] = true;
                 continue;
             }
@@ -4372,9 +4579,11 @@ impl<'a> Link<'a> {
             // That library becomes the import's routing -- a PE import
             // names its DLL and nothing else states which -- and its
             // spelling of the name is recorded where the two differ.
+            let routed = routing.contains_key(name.as_str());
             for (lib, at) in self.shared_libs.iter().zip(&shlib_declared) {
                 if let Some(at) = at
                     && (lib.exports.contains(name) || lib.data_exports.contains(name))
+                    && (!routed || supplied(lib))
                 {
                     bound[*at] = true;
                     routing.insert(name.as_str(), *at as u32);
@@ -4473,7 +4682,7 @@ impl<'a> Link<'a> {
         let mut fixups: Vec<usize> = Vec::new();
         for (i, obj) in self.objs.iter().enumerate() {
             for &off in &obj.tls_index_fixups {
-                fixups.push(self.text_bases[i] + off);
+                fixups.push(self.text_map[i].at(off as u64) as usize);
             }
         }
         fixups
@@ -4510,7 +4719,7 @@ impl<'a> Link<'a> {
                 descriptors.push(resolved);
             }
             for &(adrp, idx) in &obj.macho_tlv_fixups {
-                fixups.push((self.text_bases[i] + adrp, desc_base + idx));
+                fixups.push((self.text_map[i].at(adrp as u64) as usize, desc_base + idx));
             }
         }
         Ok(TlvMerge {
@@ -4767,7 +4976,7 @@ impl<'a> Link<'a> {
         // A string-folded target consumes the addend in its lookup.
         let mut addend_applied = false;
         let (merged_value, in_text, resolvable) = match sym.section {
-            NativeSymSection::Text => (self.text_bases[unit_idx] as u64 + sym.value, true, true),
+            NativeSymSection::Text => (self.symbol_offset(unit_idx, sym).unwrap_or(0), true, true),
             NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
                 (self.symbol_offset(unit_idx, sym).unwrap_or(0), false, true)
             }
@@ -4920,6 +5129,19 @@ impl<'a> Link<'a> {
             .into_iter()
             .filter(|name| !merged_dylibs.import_dylib_map.contains_key(name))
             .collect();
+        let (mut weak_refs, mut strong_refs) = (BTreeSet::new(), BTreeSet::new());
+        let undefined = (self.objs.iter()).flat_map(|o| &o.symbols);
+        for s in undefined.filter(|s| s.section == NativeSymSection::Undef) {
+            match s.binding {
+                1 => strong_refs.insert(s.name.as_str()),
+                2 => weak_refs.insert(s.name.as_str()),
+                _ => false,
+            };
+        }
+        let weak_imports = (self.imports.iter())
+            .filter(|n| weak_refs.contains(n.as_str()) && !strong_refs.contains(n.as_str()))
+            .cloned()
+            .collect();
         Ok(MergedNative {
             text: self.text,
             text_align: self.text_align,
@@ -4940,6 +5162,7 @@ impl<'a> Link<'a> {
             data_pcrel_relocs: self.data_pcrel_relocs,
             data_import_refs: self.data_import_refs,
             tls_data_import_refs: self.tls_data_import_refs,
+            data_import_rva_refs: self.data_import_rva_refs,
             machine: self.machine,
             dylibs: merged_dylibs.dylibs,
             import_dylib_map: merged_dylibs.import_dylib_map,
@@ -4947,6 +5170,7 @@ impl<'a> Link<'a> {
             import_ordinals: merged_dylibs.import_ordinals,
             import_versions: merged_dylibs.import_versions,
             flat_imports,
+            weak_imports,
             exports,
             shared_names: (self.shared_libs.iter())
                 .flat_map(|l| l.exports.iter().chain(&l.references))
@@ -4990,6 +5214,8 @@ impl<'a> Link<'a> {
                 .collect(),
             prologue_ends: self.prologue_ends,
             early_returns: self.early_returns,
+            unwind: self.unwind,
+            seh_rows: self.seh_rows,
             local_funcs: self.local_funcs,
             symbols,
             tls_data: self.tls_data,
@@ -5482,20 +5708,12 @@ fn emit_plt(
                 ),
             ));
         }
-        let stub_at = match tramp_for_import.get(&import_index) {
-            Some(&off) => off,
-            None => {
-                let text_offset = merged.text.len();
-                tramp_for_import.insert(import_index, text_offset);
-                trampolines.push(PltTrampoline {
-                    text_offset,
-                    import_index,
-                });
-                merged.text.extend_from_slice(&stub);
-                text_offset
-            }
-        };
-        merged.stub_address_imports.insert(import_index);
+        let stub_at = stub_for(
+            merged,
+            &mut tramp_for_import,
+            &mut trampolines,
+            import_index,
+        );
         let reloc = DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub_at as i64 + addend),
@@ -5507,9 +5725,67 @@ fn emit_plt(
             merged.data_abs_relocs.push(reloc);
         }
     }
+    // An image-relative field (PE's ADDR32NB) cannot name another image,
+    // so it takes the RVA of the import's stub, which jumps through the
+    // import address table.
+    for bind in core::mem::take(&mut merged.data_import_rva_refs) {
+        let name = import_name(merged, bind.import);
+        if slots != DataImportSlots::Thunk || is_data_import(merged, bind.import) {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "an image-relative reference names `{name}`, which is no imported function"
+                ),
+            ));
+        }
+        let stub_at = stub_for(merged, &mut tramp_for_import, &mut trampolines, bind.import);
+        merged.data_pcrel_relocs.push(DataPcRel {
+            slot_offset: bind.data_offset,
+            target: MergedTarget::Text(stub_at as i64 + bind.addend),
+            anchor: MergedTarget::Text(stub_at as i64),
+            width: 4,
+            image_relative: true,
+        });
+    }
+    // A `__try` scope table names the language handler by its stub's RVA.
+    if !merged.seh_rows.is_empty() && slots == DataImportSlots::Thunk {
+        let handler =
+            (0..merged.imports.len()).find(|&i| import_name(merged, i) == LANGUAGE_HANDLER);
+        let Some(handler) = handler else {
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("a `__try` scope table names `{LANGUAGE_HANDLER}`, which nothing imports"),
+            ));
+        };
+        stub_for(merged, &mut tramp_for_import, &mut trampolines, handler);
+    }
     merged.pending_imports = parked_back;
     record_plt_contribution(merged, plt_pool_start);
     Ok(trampolines)
+}
+
+/// The text offset of `import`'s stub, appended on first use; an address
+/// taken of the import is the stub's.
+fn stub_for(
+    merged: &mut MergedNative,
+    tramp_for_import: &mut BTreeMap<usize, usize>,
+    trampolines: &mut Vec<PltTrampoline>,
+    import_index: usize,
+) -> usize {
+    merged.stub_address_imports.insert(import_index);
+    if let Some(&off) = tramp_for_import.get(&import_index) {
+        return off;
+    }
+    let text_offset = merged.text.len();
+    tramp_for_import.insert(import_index, text_offset);
+    trampolines.push(PltTrampoline {
+        text_offset,
+        import_index,
+    });
+    merged.text.extend_from_slice(&plt_stub(merged.machine));
+    text_offset
 }
 
 /// [`emit_plt`] for x86_64: each call site's disp32 reaches its
@@ -6131,6 +6407,7 @@ mod tests {
     /// An object carrying nothing, for a test that fills in one aspect.
     fn blank_object(machine: NativeMachine) -> NativeObject {
         NativeObject {
+            unique: Default::default(),
             source: String::new(),
             sections: Vec::new(),
             discarded: Vec::new(),
@@ -6167,6 +6444,8 @@ mod tests {
             copy_relocs: Vec::new(),
             prologue_ends: Vec::new(),
             early_returns: Vec::new(),
+            seh_rows: Vec::new(),
+            unwind: Vec::new(),
             extern_data_names: Vec::new(),
             alternate_names: Vec::new(),
             comdats: Vec::new(),
@@ -6791,6 +7070,36 @@ mod tests {
         );
     }
 
+    /// A shared library's unresolved function is a load-time import the
+    /// loader's global scope resolves on ELF; a PE import names its DLL,
+    /// so a DLL link reports the same reference undefined.
+    #[test]
+    fn a_dll_link_reports_a_reference_no_library_supplies() {
+        let src = "int host_fn(void);\nint f(void) { return host_fn(); }\n";
+        for target in [Target::LinuxX64, Target::WindowsX64, Target::WindowsAarch64] {
+            let mut opts = NativeOptions::new().with_debug_info(false);
+            opts.output_kind = OutputKind::Relocatable;
+            let copts = crate::CompileOptions::default().with_no_entry_point(true);
+            let obj = compile_native_with(src, target, opts, copts);
+            let link = LinkOptions {
+                allow_undefined: true,
+                shared: true,
+                format: target.binary_format(),
+                ..Default::default()
+            };
+            let got = link_native_objects_with(core::slice::from_ref(&obj), &[], &link);
+            if target.binary_format() == BinaryFormat::Pe {
+                let err = got.err().map(|e| e.to_string()).unwrap_or_default();
+                assert!(
+                    err.contains("undefined reference to `host_fn`"),
+                    "{target:?}: {err}"
+                );
+            } else {
+                assert!(got.expect("ELF admits it").flat_imports.contains("host_fn"));
+            }
+        }
+    }
+
     /// A shared library's own undefined references: the host supplies
     /// both at load time, so both become imports, but only the call gets
     /// a stub. A stub for the data symbol would leave every read of it
@@ -7183,6 +7492,7 @@ mod tests {
     #[test]
     fn common_symbols_coalesce_to_single_bss_slot() {
         let mk_unit = |size: u64, align: u64| NativeObject {
+            unique: Default::default(),
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -7240,6 +7550,7 @@ mod tests {
             .chain([1, 0, 1, 0x78])
             .collect();
         let unit = || NativeObject {
+            unique: Default::default(),
             relro: cie.clone(),
             relro_align: 8,
             sections: alloc::vec![super::super::object::InputSection {
@@ -7350,6 +7661,7 @@ mod tests {
     #[test]
     fn common_symbol_reloc_is_biased_past_merged_data() {
         let mk_unit = |data: alloc::vec::Vec<u8>, with_reloc: bool| NativeObject {
+            unique: Default::default(),
             text: alloc::vec![0u8; 16],
             data,
             symbols: alloc::vec![
@@ -7416,6 +7728,7 @@ mod tests {
     #[test]
     fn common_yields_to_strong_definition() {
         let unit_common = NativeObject {
+            unique: Default::default(),
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -7441,6 +7754,7 @@ mod tests {
             ..blank_object(NativeMachine::X86_64)
         };
         let unit_strong = NativeObject {
+            unique: Default::default(),
             data: alloc::vec![0u8; 4],
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
@@ -7499,6 +7813,7 @@ mod tests {
                   text_relocs: alloc::vec::Vec<NativeReloc>|
          -> NativeObject {
             NativeObject {
+                unique: Default::default(),
                 source: alloc::string::String::new(),
                 sections: alloc::vec::Vec::new(),
                 discarded: alloc::vec::Vec::new(),
@@ -7535,6 +7850,8 @@ mod tests {
                 copy_relocs: alloc::vec::Vec::new(),
                 prologue_ends: alloc::vec::Vec::new(),
                 early_returns: alloc::vec::Vec::new(),
+                seh_rows: alloc::vec::Vec::new(),
+                unwind: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),
@@ -7694,6 +8011,7 @@ mod tests {
         // `call f` (R_X86_64_PC32) against an UNDEF `f`: the reference
         // is what puts the routed name in the image.
         let mk = |dylib: &str| NativeObject {
+            unique: Default::default(),
             dylibs: alloc::vec![dylib.to_string()],
             import_dylib_map: alloc::vec![("f".to_string(), 0u32)],
             text: alloc::vec![0xE8, 0, 0, 0, 0],
@@ -7855,6 +8173,7 @@ mod tests {
         // may abort the link.
         use super::super::object::{NativeReloc, NativeSymbol};
         let base = || NativeObject {
+            unique: Default::default(),
             ..blank_object(NativeMachine::X86_64)
         };
         let sym = |name: &str, section| NativeSymbol {
@@ -8942,7 +9261,7 @@ mod tests {
         assert!(format!("{err}").contains("states no size"), "{err}");
 
         let no_copies = LinkOptions {
-            no_copy_relocs: true,
+            format: BinaryFormat::MachO,
             ..Default::default()
         };
         let err = link_native_objects_with(&[reader(true, movl)], &[lib(true)], &no_copies)

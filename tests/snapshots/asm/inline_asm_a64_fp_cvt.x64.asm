@@ -27,7 +27,4 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x2a, %eax
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	cvttsd2si	%xmm0, %rax
                	retq

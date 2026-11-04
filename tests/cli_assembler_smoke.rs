@@ -146,6 +146,61 @@ fn dot_capital_s_preprocesses_and_predefines_assembler() {
     assert_eq!(&std::fs::read(d.join("leaf.o")).unwrap()[..4], b"\x7fELF");
 }
 
+/// `-x assembler` assembles an input whatever its name, the form
+/// configure-time probes use on `/dev/null`; `-x assembler-with-cpp`
+/// preprocesses it first, as a `.S` is.
+#[test]
+fn x_assembler_takes_an_input_of_any_name() {
+    let d = dir("x-assembler");
+    write(&d, "leaf.txt", LEAF);
+    write(&d, "macro.txt", &LEAF.replace("7", "SEVEN"));
+    let target = format!("--target={TARGET}");
+    let target = target.as_str();
+    run_ok(
+        &d,
+        &[
+            "-q",
+            "-c",
+            target,
+            "-x",
+            "assembler",
+            "leaf.txt",
+            "-o",
+            "a.o",
+        ],
+    );
+    let cpp = [
+        "-x",
+        "assembler-with-cpp",
+        "macro.txt",
+        "-DSEVEN=7",
+        "-o",
+        "b.o",
+    ];
+    run_ok(&d, &[&["-q", "-c", target][..], &cpp].concat());
+    for obj in ["a.o", "b.o"] {
+        assert_eq!(
+            &std::fs::read(d.join(obj)).unwrap()[..4],
+            b"\x7fELF",
+            "{obj}"
+        );
+    }
+    if cfg!(unix) {
+        run_ok(
+            &d,
+            &[
+                "-q",
+                "-c",
+                "-o",
+                "/dev/null",
+                "-x",
+                "assembler",
+                "/dev/null",
+            ],
+        );
+    }
+}
+
 #[test]
 fn dot_s_is_not_preprocessed() {
     let d = dir("dot-s-verbatim");
@@ -305,6 +360,116 @@ fn sym_table(bytes: &[u8]) -> Vec<(String, u8, u16, u64, u64)> {
         }
     }
     out
+}
+
+/// Apple's assembler syntax: `.section SEGMENT,SECTION` names the section
+/// badc's Mach-O writer places there, `.private_extern` is a hidden global,
+/// and `sym@PAGE` / `sym@PAGEOFF` are the page and in-page relocations of
+/// `adrp` and of an `add` or load offset, the addend on either side.
+#[test]
+fn apple_section_visibility_and_page_operands_assemble() {
+    const ADR_PREL_PG_HI21: u32 = 275;
+    const ADD_ABS_LO12_NC: u32 = 277;
+    const LDST32_ABS_LO12_NC: u32 = 285;
+    let d = dir("apple-syntax");
+    write(
+        &d,
+        "m.s",
+        ".section __TEXT,__const\nLrcon: .long 1,2,3,4\n.globl _tab\n_tab: .long 5\n\
+         .section __DATA,__data\n_d: .long 1\n.section __DATA,__bss\n_z: .space 8\n\
+         .text\n.private_extern _f\n.globl _f\n_f:\n\
+         adrp x8, Lrcon@PAGE\nadd x8, x8, Lrcon@PAGEOFF\n\
+         adrp x9, _tab@PAGE\nldr w1, [x9, _tab@PAGEOFF]\n\
+         adrp x10, Lrcon+16@PAGE\nadd x10, x10, Lrcon@PAGEOFF+16\nret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "-c", "--target=macos-aarch64", "m.s", "-o", "m.o"],
+    );
+    let bytes = std::fs::read(d.join("m.o")).unwrap();
+    let headers = section_headers(&bytes);
+    for (name, sh_type) in [(".rodata", 1), (".data", 1), (".bss", 8)] {
+        assert!(
+            headers.iter().any(|h| h.0 == name && h.1 == sh_type),
+            "{name}"
+        );
+    }
+    // Apple's `_f` is the C name `f`.
+    let f = sym_table(&bytes)
+        .into_iter()
+        .find(|s| s.0 == "f")
+        .expect("f");
+    assert_eq!(f.1 >> 4, 1, "`.private_extern` is global");
+    assert_eq!(visibility(&bytes, "f"), Some(2), "and hidden");
+    let got: Vec<(u32, i64)> = relocs(&bytes, ".rela.text")
+        .into_iter()
+        .map(|(_, rtype, addend)| (rtype, addend))
+        .collect();
+    let want = [
+        (ADR_PREL_PG_HI21, 0),
+        (ADD_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 0),
+        (LDST32_ABS_LO12_NC, 0),
+        (ADR_PREL_PG_HI21, 16),
+        (ADD_ABS_LO12_NC, 16),
+    ];
+    assert_eq!(got, want);
+}
+
+/// gas takes an ELF section's type from its name (bfd's special-section
+/// table) and adds the name's attributes to the written ones unless the
+/// written ones name another attribute. A symbol in a thread-local section
+/// is `STT_TLS`. Rows measured against gas 2.46.1 on x86-64.
+#[test]
+fn special_section_names_take_their_type_and_attributes() {
+    const PROGBITS: u32 = 1;
+    const NOTE: u32 = 7;
+    const NOBITS: u32 = 8;
+    const INIT_ARRAY: u32 = 14;
+    const FINI_ARRAY: u32 = 15;
+    const PREINIT_ARRAY: u32 = 16;
+    const W: u64 = 0x1;
+    const A: u64 = 0x2;
+    const X: u64 = 0x4;
+    const T: u64 = 0x400;
+    let cases: &[(&str, &str, u32, u64)] = &[
+        (".init", ".init", PROGBITS, A | X),
+        (".fini", ".fini", PROGBITS, A | X),
+        (".init_array", ".init_array", INIT_ARRAY, W | A),
+        (".fini_array", ".fini_array", FINI_ARRAY, W | A),
+        (".preinit_array", ".preinit_array", PREINIT_ARRAY, W | A),
+        (".note.x", ".note.x", NOTE, 0),
+        (".note.gnu.property, \"a\"", ".note.gnu.property", NOTE, A),
+        (".tdata.x", ".tdata.x", PROGBITS, W | A | T),
+        (".tbss.x", ".tbss.x", NOBITS, W | A | T),
+        (".tdata.y, \"aw\"", ".tdata.y", PROGBITS, W | A | T),
+        (".text.x", ".text.x", PROGBITS, A | X),
+        (".rodata.x", ".rodata.x", PROGBITS, A),
+        (".bss.x", ".bss.x", NOBITS, W | A),
+        (".note.GNU-stack", ".note.GNU-stack", PROGBITS, 0),
+        (".textx", ".textx", PROGBITS, 0),
+    ];
+    let d = dir("special-sections");
+    let mut src = String::new();
+    for (i, (directive, _, _, _)) in cases.iter().enumerate() {
+        src.push_str(&format!(".section {directive}\nsym{i}: .byte 0\n"));
+    }
+    write(&d, "s.s", &src);
+    run_ok(&d, &["-q", "-c", "--target=linux-x64", "s.s"]);
+    let bytes = std::fs::read(d.join("s.o")).expect("object");
+    let headers = section_headers(&bytes);
+    let symbols = sym_table(&bytes);
+    for (i, (directive, name, sh_type, flags)) in cases.iter().enumerate() {
+        let got = headers.iter().find(|h| h.0 == *name);
+        assert_eq!(
+            got.map(|h| (h.1, h.2)),
+            Some((*sh_type, *flags)),
+            "`.section {directive}`"
+        );
+        let sym = symbols.iter().find(|s| s.0 == format!("sym{i}"));
+        let tls = sym.map(|s| s.1 & 0xf == 6);
+        assert_eq!(tls, Some(flags & T != 0), "`sym{i}` in `{name}`");
+    }
 }
 
 /// A `.globl` naming a symbol the unit neither defines nor references still
@@ -1033,6 +1198,26 @@ fn code32_and_code64_short_branches_take_rel8() {
     assert_eq!(t, bytes);
 }
 
+/// A branch out of reach until an earlier branch's long form moves it
+/// toward a target an alignment holds in place stays short, as GNU as
+/// 2.46.1 leaves it: with every branch short `jb near` falls 128 bytes
+/// short of `near`, and once `jne far` takes rel32 it reaches it with 124.
+#[test]
+fn a_branch_an_earlier_long_form_brings_into_reach_stays_short() {
+    let t = text_of(
+        "relax-in-order",
+        "\t.text\n\tjne far\n\t.fill 12, 1, 0x90\n\tjb near\n\t.fill 120, 1, 0x90\n\
+         \t.p2align 4\nnear:\tnop\n\t.fill 200, 1, 0x90\nfar:\tret\n",
+    );
+    assert_eq!(
+        &t[..6],
+        [0x0f, 0x85, 0x53, 0x01, 0x00, 0x00],
+        "jne far, rel32"
+    );
+    assert_eq!(&t[0x12..0x14], [0x72, 0x7c], "jb near, rel8");
+    assert_eq!(t[0x90], 0x90, "near is 16-byte aligned at 0x90");
+}
+
 /// `jcxz` / `jecxz` / `jrcxz` are one `E3 rel8` opcode; the counter the name
 /// spells is the address size, so the name off the mode's default carries the
 /// `67` prefix. Bytes are GNU as 2.46.1's for the same unit.
@@ -1556,20 +1741,27 @@ fn dash_p_drops_the_line_markers() {
 }
 
 /// `-E` output compiles as its source does: the pragmas the preprocessor
-/// consumed, <stdatomic.h>'s `#pragma intrinsic` lines among them, are
-/// written where they stood.
+/// consumed, <math.h>'s `#pragma intrinsic` lines among them, are written
+/// where they stood, so `sqrt` stays the instruction and no reference.
 #[test]
 fn preprocessed_output_compiles_again() {
     let d = dir("pp-recompile");
     write(
         &d,
         "a.c",
-        "#include <stdatomic.h>\n\
+        "#include <math.h>\n#include <stdatomic.h>\n\
          int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
-         int main(void) { atomic_int x = 1; return f(&x) - 1; }\n",
+         double g(double x) { return sqrt(x); }\n",
     );
-    run_ok(&d, &["-q", "-E", "a.c", "-o", "a_pp.c"]);
-    run_ok(&d, &["-q", "-c", "a_pp.c", "-o", "a.o"]);
+    let t = "--target=linux-x64";
+    run_ok(&d, &["-q", t, "-E", "a.c", "-o", "a_pp.c"]);
+    run_ok(&d, &["-q", t, "-c", "a_pp.c", "-o", "a.o"]);
+    let undefined: Vec<String> = sym_bindings(&std::fs::read(d.join("a.o")).unwrap())
+        .into_iter()
+        .filter(|s| s.2 == 0)
+        .map(|s| s.0)
+        .collect();
+    assert!(undefined.is_empty(), "{undefined:?}");
 }
 
 /// A `.i` unit is C that needs no preprocessing, as in gcc's suffix
@@ -3426,4 +3618,154 @@ fn relocation_operators_outside_their_forms_are_refused() {
         !ok && text.contains("only supported in file-scope asm"),
         "{text}"
     );
+}
+
+/// The error and note lines of `name` (`body`, beside `extra`), which fails.
+fn assembly_errors(target: &str, name: &str, body: &str, extra: &[(&str, &str)]) -> Vec<String> {
+    let d = dir(&format!("errors-{target}-{name}"));
+    write(&d, name, body);
+    for (file, text) in extra {
+        write(&d, file, text);
+    }
+    let (ok, text) = run(
+        &d,
+        &["-q", "-c", &format!("--target={target}"), name, "-o", "u.o"],
+    );
+    assert!(!ok, "{target}: a unit with errors must fail: {text}");
+    assert!(
+        !d.join("u.o").exists(),
+        "{target}: no object on a failed unit"
+    );
+    assert!(!text.contains("inline asm"), "{target}: {text}");
+    text.lines()
+        .filter(|l| l.contains(" error: ") || l.contains(" note: "))
+        .map(String::from)
+        .collect()
+}
+
+fn error_positions(errors: &[String]) -> Vec<String> {
+    errors
+        .iter()
+        .map(|e| e.splitn(3, ": ").take(2).collect::<Vec<_>>().join(": "))
+        .collect()
+}
+
+/// gas reports every error of a unit, each at `file:line`; a block comment
+/// over several lines leaves the lines after it in place.
+#[test]
+fn every_bad_statement_is_reported_at_its_line() {
+    for (target, insn1, insn2) in [
+        ("linux-x64", "frob %rax", "movq %rax, %zz"),
+        ("linux-aarch64", "frob x0", "bogus x1, x2"),
+    ] {
+        let body = format!(
+            "\t.text\n\t.globl f\nf:\n\tnop\n\t{insn1}\n\t/* a comment\n\t   over two lines */\n\
+             \t.bogus 1\n\tnop\n\t{insn2}\n\tret\n"
+        );
+        let errors = assembly_errors(target, "bad.s", &body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["bad.s:5: error", "bad.s:8: error", "bad.s:10: error"],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[0].ends_with(&format!("(instruction `{insn1}`) [B5002] [assembler]")),
+            "{target}: {}",
+            errors[0]
+        );
+        assert!(errors[1].contains("`.bogus`"), "{target}: {}", errors[1]);
+        assert!(
+            errors[2].contains(&format!("(instruction `{insn2}`)")),
+            "{target}: {}",
+            errors[2]
+        );
+    }
+}
+
+/// gas follows the preprocessor's line markers back to each line's file.
+#[test]
+fn a_preprocessed_unit_reports_the_line_of_the_original_file() {
+    for (target, mov, bad, bad_in_header) in [
+        ("linux-x64", "movq $ONE, %rax", "frob %rax", "frobh %rcx"),
+        ("linux-aarch64", "mov x0, #ONE", "frob x0", "frobh x1"),
+    ] {
+        let header = format!("/* constants\n   of the unit */\n#define ONE 1\n\t{bad_in_header}\n");
+        let body = format!("#include \"defs.h\"\n\n\n\t.text\nf:\n\t{mov}\n\t{bad}\n\tret\n");
+        let errors = assembly_errors(target, "unit.S", &body, &[("defs.h", &header)]);
+        assert_eq!(
+            error_positions(&errors),
+            ["defs.h:4: error", "unit.S:7: error"],
+            "{target}: {errors:#?}"
+        );
+    }
+}
+
+/// gas reports an expansion's error at its body line, a macro's with a note
+/// per invocation, innermost first; markers apply as of the definition.
+#[test]
+fn an_error_in_an_expansion_is_reported_at_its_body_line() {
+    let body = ".macro inner\n\tbogus_in\n.endm\n.macro outer\n\tnop\n\tinner\n.endm\n\touter\n\
+                .rept 2\n\tbogus_rept\n.endr\n.irp r, a, b\n\tbogus_\\r\n.endr\n";
+    let marked = "# 1 \"orig.S\"\n# 1 \"<built-in>\"\n# 1 \"orig.S\"\n\n\n.macro m\n\tbogus_m\n\
+                  .endm\n# 10 \"orig.S\"\n\tm\n";
+    for target in ["linux-x64", "linux-aarch64"] {
+        let errors = assembly_errors(target, "n.s", body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            [
+                "n.s:2: error",
+                "n.s:6: note",
+                "n.s:8: note",
+                "n.s:10: error",
+                "n.s:10: error",
+                "n.s:13: error",
+                "n.s:13: error"
+            ],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[0].contains("(instruction `bogus_in`)"),
+            "{}",
+            errors[0]
+        );
+        assert!(
+            errors[1].ends_with("note: macro invoked from here"),
+            "{}",
+            errors[1]
+        );
+        assert!(errors[6].contains("`bogus_b`"), "{}", errors[6]);
+        let errors = assembly_errors(target, "m.s", marked, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["orig.S:4: error", "orig.S:10: note"],
+            "{target}: {errors:#?}"
+        );
+    }
+}
+
+/// The layout's errors are each reported at their lines too.
+#[test]
+fn every_layout_error_is_reported_at_its_line() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let body = "\t.data\na:\n\t.byte 1\n\t.org 0\n\t.byte 2\n\t.size a, 1 / 0\n1:\t.byte 3\n2:\n\
+                    \t.if (2b - 1b) != 0\n\t.error \"one byte\"\n\t.endif\n";
+        let errors = assembly_errors(target, "lay.s", body, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["lay.s:4: error", "lay.s:6: error", "lay.s:10: error"],
+            "{target}: {errors:#?}"
+        );
+        assert!(
+            errors[0].contains("`.org` moves backwards"),
+            "{}",
+            errors[0]
+        );
+        let sets = "\t.data\nx:\n\t.byte 1\n\t.set a, x * 2\n\t.byte 2\n\t.set b, . * 3\n";
+        let errors = assembly_errors(target, "sets.s", sets, &[]);
+        assert_eq!(
+            error_positions(&errors),
+            ["sets.s:4: error", "sets.s:6: error"],
+            "{target}: {errors:#?}"
+        );
+    }
 }

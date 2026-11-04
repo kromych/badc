@@ -17,10 +17,9 @@ Disassembly of section .text:
                	and	x2, x1, #0xff
                	strb	w2, [x0]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0]
+               	ldrsw	x2, [x0, #0x30]
                	add	x1, x2, x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	ret
 
 <beside_vla>:

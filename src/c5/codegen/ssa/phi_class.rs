@@ -164,6 +164,9 @@ mod tests {
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -198,7 +201,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),

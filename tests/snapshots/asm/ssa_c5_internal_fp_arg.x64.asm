@@ -32,21 +32,15 @@ Disassembly of section .text:
                	subq	%rdi, %rax
                	movslq	%eax, %rax
                	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
-               	movq	%rdi, %rdx
-               	subq	%rdi, %rdx
-               	movslq	%edx, %rdx
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rdx, %xmm0
+               	xorl	%edx, %edx
                	movq	%rcx, %xmm14
-               	vaddsd	%xmm0, %xmm14, %xmm1
+               	movq	%rdx, %xmm15
+               	vaddsd	%xmm15, %xmm14, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	ucomisd	%xmm0, %xmm1
-               	setb	%al
+               	ucomisd	%xmm1, %xmm0
+               	seta	%al
                	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -60,11 +54,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	ucomisd	%xmm0, %xmm0
-               	setbe	%al
+               	setae	%al
                	movzbq	%al, %rax
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax

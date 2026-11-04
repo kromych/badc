@@ -32,11 +32,9 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
+               	movq	<rip>, %rdi # <addr>
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rsi
+               	movq	<rip>, %rsi # <addr>
                	orq	%rcx, %rsi
                	movabsq	$-0x8000000000000000, %r8 # imm = 0x8000000000000000
                	movl	$0x1, %r13d
@@ -312,8 +310,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	0xc(%rcx), %ecx
+               	movl	<rip>, %ecx # <addr>
                	movq	%rcx, %rdx
                	andq	$0x7f, %rdx
                	andq	$0x3f, %rcx
@@ -333,8 +330,7 @@ Disassembly of section .text:
                	andq	%r8, %rdx
                	orq	%rdx, %rcx
                	andq	%r8, %rdi
-               	leaq	<rip>, %rdx # <addr>
-               	movq	(%rdx), %rdx
+               	movq	<rip>, %rdx # <addr>
                	cmpq	%rdx, %rcx
                	jne	<addr>
                	testq	%rdi, %rdi

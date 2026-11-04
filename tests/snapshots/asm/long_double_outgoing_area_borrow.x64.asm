@@ -179,8 +179,7 @@ Disassembly of section .text:
                	addq	%r15, %rdi
                	subq	%r14, %rdi
                	addq	%r13, %rdi
-               	leaq	<rip>, %r13 # <addr>
-               	movq	(%r13), %r13
+               	movq	<rip>, %r13 # <addr>
                	subq	$0x20, %rsp
                	movq	%r12, (%rsp)
                	movq	0x60(%rsp), %r10
@@ -230,10 +229,8 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rsi
+               	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
                	leaq	(%rdi,%rdi,2), %rax
                	leaq	(%rsi,%rsi,4), %rcx
                	leaq	(%rdi,%rsi), %rdx

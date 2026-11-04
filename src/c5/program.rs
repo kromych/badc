@@ -1,3 +1,4 @@
+use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -179,6 +180,16 @@ pub struct CodeReloc {
     pub target_ent_pc: u64,
     /// Bytes added to the function's address: `(char *)f + 4`.
     pub addend: i64,
+}
+
+/// An undeclared library function the auto-include retry declared by
+/// force-including the standard header that declares it (C99 7.1.4p2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoInclude {
+    pub name: String,
+    pub header: String,
+    /// The header binds `name` to a library with `#pragma binding`.
+    pub bound: bool,
 }
 
 /// Compiled program ready for the VM.
@@ -480,12 +491,13 @@ pub struct Program {
     pub entry_pragma: Option<String>,
     /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
     pub default_libs: Vec<String>,
-    /// Function names the auto-include retry bound to a bundled
-    /// header during [`crate::c5::Compiler::compile`]. The driver
-    /// consults this in a multi-TU build: a name another input
-    /// defines is recompiled as an implicit extern so the user's
-    /// definition wins over the header's library binding.
-    pub auto_includes: Vec<String>,
+    /// What the auto-include retry of [`crate::c5::Compiler::compile`]
+    /// declared, in the order it force-included the headers. A re-compile
+    /// of the unit force-includes the same headers.
+    pub auto_includes: Vec<AutoInclude>,
+    /// `-ffreestanding`: an `_Atomic` object takes the freestanding layout
+    /// ([`crate::c5::compiler::types::atomic_layout`]).
+    pub(crate) freestanding: bool,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
@@ -552,6 +564,47 @@ impl Program {
             .filter(|s| s.is_weak && s.is_link_entity())
             .map(|s| s.link_name())
             .collect()
+    }
+
+    /// The names the unit defines with external linkage, strong and weak, its
+    /// aliases and file-scope asm's included.
+    pub(crate) fn external_definitions(&self) -> (BTreeSet<String>, BTreeSet<String>) {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let (mut strong, mut weak) = (BTreeSet::new(), BTreeSet::new());
+        let mut add = |name: &str, is_weak: bool| {
+            if is_weak {
+                weak.insert(String::from(name));
+            } else {
+                strong.insert(String::from(name));
+            }
+        };
+        for s in &self.symbols {
+            if s.defined_here
+                && s.linkage == Linkage::External
+                && !s.name.is_empty()
+                && (s.is_fun_entity() || s.class == Token::Glo as i64)
+            {
+                add(s.link_name(), s.is_weak);
+            }
+        }
+        let asm_weak = |n: &str| self.asm_weak_names.iter().any(|w| w == n);
+        let asm_global = |n: &str| self.asm_global_names.iter().any(|g| g == n);
+        for a in &self.function_aliases {
+            match a.bind {
+                AliasBind::Global => add(&a.name, false),
+                AliasBind::Weak => add(&a.name, true),
+                AliasBind::Assigned if asm_weak(&a.name) || asm_global(&a.name) => {
+                    add(&a.name, asm_weak(&a.name))
+                }
+                AliasBind::Assigned | AliasBind::Local => {}
+            }
+        }
+        for n in self.asm_global_names.iter().chain(&self.asm_weak_names) {
+            add(n, asm_weak(n));
+        }
+        strong.retain(|n| !weak.contains(n));
+        (strong, weak)
     }
 
     /// Data slots holding a `&&label` address, each paired with the
@@ -769,6 +822,7 @@ impl DataOffsets for Program {
             entry_pragma: _,
             default_libs: _,
             auto_includes: _,
+            freestanding: _,
             subsystem: _,
             finished_functions,
             symbols,
@@ -912,6 +966,7 @@ mod data_offset_tests {
             entry_pragma: None,
             default_libs: Vec::new(),
             auto_includes: Vec::new(),
+            freestanding: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,

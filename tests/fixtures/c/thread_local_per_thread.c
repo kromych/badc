@@ -25,10 +25,10 @@ int *thread_main(int *arg) {
     // Child thread: TLS starts zero (loader's per-thread copy of
     // .tdata; ours is all .tbss). Mutate it; the main thread's
     // counter must NOT be affected.
-    if (counter != 0) return 0xbad1;
+    if (counter != 0) return (int *)0xbad1;
     counter = 99;
-    if (counter != 99) return 0xbad2;
-    return counter;     // 99 -- pthread_join in main reads this
+    if (counter != 99) return (int *)0xbad2;
+    return (int *)(long long)counter;   // 99 -- pthread_join in main reads this
 }
 
 int main() {

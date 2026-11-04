@@ -21,8 +21,7 @@ Disassembly of section .text:
                	fsub	s1, s1, s0
                	fadd	s3, s1, s2
                	fmov	d1, #1.00000000
-               	fcvt	d2, s2
-               	fadd	d2, d2, d1
+               	fadd	d2, d1, d1
                	fcvt	s2, d2
                	fsub	s3, s3, s0
                	fadd	s3, s3, s2
@@ -70,18 +69,16 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fmov	s1, #0.50000000
-               	fmov	d2, #-1.00000000
-               	fcvt	d1, s1
-               	fadd	d1, d1, d2
+               	fmov	d1, #-1.00000000
+               	fmov	d2, #0.50000000
+               	fadd	d1, d2, d1
                	fcvt	s1, d1
                	fmov	s2, #-0.50000000
                	fcmp	s1, s2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fmov	s1, #3.00000000
-               	fcvt	d1, s1
+               	fmov	d1, #3.00000000
                	fmov	d2, #4.00000000
                	fmul	d1, d1, d2
                	fcvt	s1, d1

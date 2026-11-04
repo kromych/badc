@@ -428,9 +428,15 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
             },
         ),
         Inst::Store {
-            addr, value, kind, ..
+            addr,
+            value,
+            kind,
+            pc_rel,
+            ..
         } => {
-            f(*addr, false);
+            if !pc_rel {
+                f(*addr, false);
+            }
             f(*value, fp_store(*kind, *value));
         }
         Inst::StoreLocal { value, kind, .. } => f(*value, fp_store(*kind, *value)),
@@ -710,7 +716,7 @@ fn x86_preferences(
     liveness: &super::liveness::Liveness,
     node_of: &[ValueId],
     hints: &mut [Option<u8>],
-) -> (Vec<Vec<ValueId>>, Vec<u64>) {
+) -> (Vec<Vec<ValueId>>, Vec<u64>, Vec<u64>) {
     let n = func.insts.len();
     let binop = |inst: &Inst| match *inst {
         Inst::Binop { op, lhs, rhs } if (lhs as usize) < n && (rhs as usize) < n => {
@@ -789,13 +795,22 @@ fn x86_preferences(
         }
     }
     let writes = |inst: &Inst| x86_implicit_writes(inst) != 0;
+    let depth = crate::c5::codegen::passes::layout::loop_depths(func);
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    let mut in_loop: Vec<u64> = vec![0; n];
     for (site, live) in liveness.values_live_after(func, &writes) {
         let regs = u64::from(x86_implicit_writes(&func.insts[site as usize]));
+        let looped = (block_of.get(site as usize))
+            .and_then(|&b| depth.get(b as usize))
+            .is_some_and(|&d| d > 0);
         for u in live {
             keep_out(u, regs);
+            if looped && !produces_fp_result(&func.insts[u as usize]) {
+                in_loop[u as usize] |= regs;
+            }
         }
     }
-    (apart, avoid)
+    (apart, avoid, in_loop)
 }
 
 /// Floating-point scratch registers the emit pass needs: two operand
@@ -913,6 +928,41 @@ fn preserved_regs(row: Target, fixed: FixedRegs) -> (u32, u32) {
         .filter(|&r| fp_callee_saved(row, r))
         .fold(0u32, |m, r| m | 1 << r);
     (gpr & !fixed.gpr, fpr & !fixed.fpr)
+}
+
+/// The `(gpr, fpr)` masks a naked function's code leaves alone: the
+/// callee-saved ones, which no prologue saves, and those its arguments
+/// arrive in, every one if variadic, with al (AMD64 psABI 3.5.7).
+pub(crate) fn naked_kept_regs(func: &FunctionSsa, target: Target) -> (u32, u32) {
+    use crate::c5::codegen::ArgPlacement as P;
+    let row = target.abi_row(func.conv);
+    let abi = row.abi();
+    let (mut gpr, mut fpr) = preserved_regs(row, FixedRegs::NONE);
+    let int_mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    if func.is_variadic {
+        gpr |= int_mask(abi.int_arg_regs) | u32::from(row == Target::LinuxX64);
+        fpr |= (1u32 << if abi.position_indexed_args { 4 } else { 8 }) - 1;
+    }
+    if func.indirect_result_slot != 0 {
+        gpr |= if target.is_aarch64() {
+            1 << 8
+        } else {
+            int_mask(&abi.int_arg_regs[..1])
+        };
+    }
+    for p in super::emit_common::param_placements_common(func, abi) {
+        match p {
+            P::IntReg(r) => gpr |= 1 << r,
+            P::FpReg(r) => fpr |= 1 << r,
+            P::StructRegs { regs, n, .. } => {
+                for c in &regs[..n as usize] {
+                    *if c.is_fp { &mut fpr } else { &mut gpr } |= 1 << c.reg;
+                }
+            }
+            _ => {}
+        }
+    }
+    (gpr, fpr)
 }
 
 /// The registers of `kept`'s preserved set that the call `inst` may change:
@@ -1204,7 +1254,7 @@ pub(crate) fn free_fp_register(
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let region_base = super::emit_common::region_base(func, target, fixed);
-    let fixed = super::emit_common::fixed_with_region_base(func, target, fixed);
+    let fixed = super::emit_common::fixed_for_function(func, target, fixed);
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
@@ -1305,10 +1355,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
         .map(|v| classes.find(v))
         .collect();
-    let (mut apart, avoid) = if target.is_x86_64() {
+    let (mut apart, avoid, loop_avoid) = if target.is_x86_64() {
         x86_preferences(func, &liveness, &node_of, &mut hints)
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     atomic_apart(func, target, &node_of, &mut apart);
     if target.is_x86_64() {
@@ -1341,6 +1391,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             hint: None,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide: false,
             follow: [None; 3],
         });
@@ -1352,6 +1403,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
+        entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
         for &(gpr, fpr) in asm_forbid
             .get(root)
             .into_iter()
@@ -1516,6 +1568,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         match inst {
             Inst::Imm(_)
             | Inst::Undef
+            | Inst::ExceptionCode
+            | Inst::ParentLocalAddr { .. }
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1681,27 +1735,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // phi predecessor moves emitted between the body and the
     // terminator use only flag-transparent instructions (mov / xchg /
     // spill load / store / movz / fmov) except the case guarded below.
-    let is_compare_op = |op: BinOp| {
-        matches!(
-            op,
-            BinOp::Eq
-                | BinOp::Ne
-                | BinOp::Lt
-                | BinOp::Gt
-                | BinOp::Le
-                | BinOp::Ge
-                | BinOp::Ult
-                | BinOp::Ugt
-                | BinOp::Ule
-                | BinOp::Uge
-                | BinOp::Feq
-                | BinOp::Fne
-                | BinOp::Flt
-                | BinOp::Fgt
-                | BinOp::Fle
-                | BinOp::Fge
-        )
-    };
+    let is_compare_op = crate::c5::ir::is_comparison_op;
     let is_x86 = target.is_x86_64();
     // Whether the inst's lowering writes the host flags. On x86_64
     // every integer ALU op does, a zero immediate materialises as
@@ -1713,6 +1747,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         match inst {
             Inst::Imm(k) => !(is_x86 && *k == 0),
             Inst::Undef
+            | Inst::ExceptionCode
+            | Inst::ParentLocalAddr { .. }
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1836,7 +1872,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 let fuses = branch_mask_fuses(*rhs_imm, low_word, is_x86);
                 (fuses && is_x86, fuses && !is_x86)
             }
-            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (is_compare_op(*op), false),
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => (
+                is_compare_op(*op)
+                    && (is_x86 || crate::c5::codegen::aarch64::emit::compare_fuses(*op)),
+                false,
+            ),
             Some(inst) => {
                 let quad = matches!(
                     inst,
@@ -2653,6 +2693,10 @@ pub(crate) struct NodeConstraints {
     /// Registers (in this node's bank) the colorer passes over, the hint
     /// included, for another free caller-saved one ([`x86_preferences`]).
     pub avoid: u64,
+    /// The part of `avoid` an instruction in a loop writes while the node
+    /// is live: the emit saves and restores it around that instruction at
+    /// every iteration, so a callee-saved register is taken first.
+    pub loop_avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
     /// Nodes whose register, or hint while uncolored, this one prefers next.
@@ -2906,6 +2950,12 @@ pub(crate) fn color_graph(
                 let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
                 (!c.must_callee)
                     .then(|| caller.iter().copied().find(kept))
+                    .flatten()
+            })
+            .or_else(|| {
+                let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
+                (c.loop_avoid != 0)
+                    .then(|| callee.iter().copied().find(kept))
                     .flatten()
             })
             .or(hint)
@@ -3217,12 +3267,13 @@ pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
 /// allocator's use counting.
 ///
-/// The traversal itself is `Inst::for_each_operand`, with two deviations:
+/// The traversal itself is `Inst::for_each_operand`, with these deviations:
 /// the `VaArg` intrinsic's second operand, a compile-time packed type
 /// descriptor (`VaArgDesc`) the per-target emit reads straight off the
-/// constant `Inst::Imm`, and the base of an indexed access carrying it as
-/// its displacement (`abs_base`). Neither is a runtime value, so counting
-/// one would force it into a register instead of letting it stay dead.
+/// constant `Inst::Imm`, the base of an indexed access carrying it as its
+/// displacement (`abs_base`), and the address an access forms PC-relative
+/// (`pc_rel`). None is a runtime value, so counting one would force it
+/// into a register instead of letting it stay dead.
 pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
     match inst {
         Inst::Intrinsic { kind, args } if *kind == crate::c5::op::Intrinsic::VaArg as i64 => {
@@ -3246,6 +3297,12 @@ pub(crate) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*index);
             f(*value);
         }
+        Inst::Load { pc_rel: true, .. } => {}
+        Inst::Store {
+            value,
+            pc_rel: true,
+            ..
+        } => f(*value),
         _ => inst.for_each_operand(f),
     }
 }
@@ -3312,8 +3369,16 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | Undef | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
-        | TlsAddr(_) => ResultKind::Int,
+        Imm(_)
+        | Undef
+        | ImmData(_)
+        | ImmCode(_)
+        | ImmExtCode(_)
+        | BlockAddr(_)
+        | LocalAddr(_)
+        | TlsAddr(_)
+        | ExceptionCode
+        | ParentLocalAddr { .. } => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
@@ -4389,6 +4454,7 @@ mod tests {
             hint,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide: false,
             follow: [None; 3],
         })
@@ -4401,6 +4467,7 @@ mod tests {
             hint: None,
             forbid: 0,
             avoid: 0,
+            loop_avoid: 0,
             wide,
             follow: [None; 3],
         })
@@ -5898,6 +5965,9 @@ int main(void) { return 0; }
             },
         ];
         let func = FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -5932,7 +6002,7 @@ int main(void) { return 0; }
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -6143,6 +6213,9 @@ int main(void) { return 0; }
     fn func_with(insts: Vec<Inst>, blocks: Vec<super::super::super::ir::Block>) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -6177,7 +6250,7 @@ int main(void) { return 0; }
             param_local_slots: Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),
@@ -6423,6 +6496,7 @@ int main(void) { return 0; }
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -6590,6 +6664,26 @@ int main(void) { return 0; }
         ];
         let apart = vec![vec![], vec![2], vec![1]];
         assert_eq!(color_nodes(&g, &free, &[], &apart), [r0, r1, r1]);
+    }
+
+    /// With no other caller-saved register free, a node avoiding a register
+    /// takes it rather than a callee-saved one, unless an instruction in a
+    /// loop writes it while the node is live: its save and restore would
+    /// run at every iteration, a callee-saved register's once per call.
+    #[test]
+    fn a_register_a_loop_writes_yields_to_a_callee_saved_one() {
+        // Node 0 holds r1 and interferes with node 1, which avoids r0.
+        let g = Interference::from_edges(2, &[(0, 1)]);
+        let avoiding = |looped: bool| {
+            let mut node = int_node(false, Some(0));
+            if let Some(c) = node.as_mut() {
+                c.avoid = 1;
+                c.loop_avoid = if looped { 1 } else { 0 };
+            }
+            color_nodes(&g, &[int_node(false, Some(1)), node], &[], &[])[1]
+        };
+        assert_eq!(avoiding(false), Place::IntReg(0));
+        assert_eq!(avoiding(true), Place::IntReg(20));
     }
 
     /// A node's own avoid set outranks its hint: the hint is taken only

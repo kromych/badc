@@ -52,7 +52,7 @@ pub(crate) struct EmitCtx<'a> {
     /// frame, by `ent_pc`. Every local slot sits that much lower, so the
     /// debug-info emitter subtracts it from the slot's frame offset.
     /// Absent for a function with no canary.
-    pub(crate) canary_frame_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) local_shift_bytes: &'a mut alloc::collections::BTreeMap<usize, u32>,
     /// What each function's prologue reserves below its return address,
     /// by `ent_pc`, region by region. What `-Wframe-larger-than=` is
     /// measured against.
@@ -69,6 +69,14 @@ pub(crate) struct EmitCtx<'a> {
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
     /// The functions that return ahead of their frame.
     pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
+    /// The `__try` scope tables.
+    pub(crate) seh_rows: &'a mut alloc::vec::Vec<super::SehRow>,
+    /// Each arm64 function's prologue unwind steps.
+    pub(crate) a64_unwind: &'a mut alloc::vec::Vec<super::A64Unwind>,
+    /// Per function with filter funclets, by `ent_pc`, where each of its
+    /// `funclet_slots` lies relative to the frame value the language
+    /// handler passes a funclet.
+    pub(crate) funclet_frames: &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -518,6 +526,11 @@ pub(crate) fn body_keeps_frame_record(
     intrinsic_keeps_frame: impl Fn(crate::c5::op::Intrinsic) -> bool,
 ) -> bool {
     use super::super::ir::Inst;
+    // A region's handler entry and its filter funclets address the frame
+    // through its record.
+    if func.has_seh() {
+        return true;
+    }
     func.insts.iter().any(|inst| match inst {
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
@@ -1463,6 +1476,87 @@ pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool 
         .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
+/// Why naked `func` cannot be emitted under `alloc`: with no frame and no
+/// prologue, a value has no spill slot, an automatic object no storage, a
+/// call no frame and a callee-saved register no save.
+pub(crate) fn naked_refusal(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &super::reg_alloc::Allocation,
+    target: super::Target,
+) -> Option<&'static str> {
+    use super::super::ir::{Inst, Terminator};
+    use crate::c5::asm::StaticOperand;
+    use crate::c5::op::Intrinsic as I;
+    const CALL: &str = "a naked function has no frame to make a call from";
+    const OBJECT: &str = "a naked function has no frame for an automatic object";
+    const PARAM: &str = "a naked function has no prologue to read a parameter in";
+    if !func.is_naked {
+        return None;
+    }
+    if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
+        return Some("a naked function has no prologue to save a callee-saved register");
+    }
+    let tls_call = super::reg_alloc::tls_addr_is_call(target, func);
+    for block in &func.blocks {
+        if matches!(block.terminator, Terminator::TailExt(_)) {
+            return Some(CALL);
+        }
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            if matches!(
+                alloc.places.get(v as usize),
+                Some(super::reg_alloc::Place::Spill(_))
+            ) {
+                return Some("a naked function has no frame to spill a value to");
+            }
+            if inst_emits_nothing(inst, v, alloc) {
+                continue;
+            }
+            let frame_operand = |args: &[u32], asm: &super::super::ir::AsmBlock| {
+                asm.operands.iter().zip(args).any(|(op, &a)| {
+                    op.static_arg
+                        && matches!(
+                            crate::c5::asm::asm_operand_static(func, a),
+                            Some(StaticOperand::Frame(_))
+                        )
+                })
+            };
+            let why = match inst {
+                Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } => CALL,
+                Inst::TlsAddr(_) if tls_call => CALL,
+                Inst::LocalAddr(off)
+                | Inst::LoadLocal { off, .. }
+                | Inst::StoreLocal { off, .. }
+                    if *off >= 0 =>
+                {
+                    PARAM
+                }
+                Inst::ParamRef { .. } | Inst::ParamPart { .. } => PARAM,
+                Inst::LocalAddr(_) | Inst::LoadLocal { .. } | Inst::StoreLocal { .. } => OBJECT,
+                Inst::AllocaInit(slot) if *slot != 0 => OBJECT,
+                Inst::InlineAsm { asm, args } if frame_operand(args, asm) => OBJECT,
+                Inst::Intrinsic { kind, .. } => match I::from_i64(*kind) {
+                    Some(I::Alloca) => OBJECT,
+                    Some(I::VaStart | I::VaArg | I::VaEnd | I::VaCopy) => {
+                        "a naked function has no frame for its variable arguments"
+                    }
+                    Some(I::SetjmpAArch64 | I::LongjmpAArch64) => CALL,
+                    Some(I::ReturnAddress) => {
+                        "a naked function has no frame record to read a return address from"
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            return Some(why);
+        }
+    }
+    None
+}
+
 /// The prologue realigns sp (C11 6.7.5) and sp moves during the body: the
 /// realigned region needs a base register, as clang's base pointer.
 pub(crate) fn needs_region_base(
@@ -1522,14 +1616,20 @@ pub(crate) fn region_base(
 pub(crate) const NO_REGION_BASE: &str = "no callee-saved register is left to address the \
     realigned frame: -ffixed- reserves or an inline asm operand names every candidate";
 
-/// `fixed` with the register [`region_base`] picks for `func` added.
-pub(crate) fn fixed_with_region_base(
+/// `fixed` with the [`region_base`] or a naked function's
+/// [`super::reg_alloc::naked_kept_regs`] added.
+pub(crate) fn fixed_for_function(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
     mut fixed: super::super::FixedRegs,
 ) -> super::super::FixedRegs {
     if let Some(r) = region_base(func, target, fixed) {
         fixed.frame |= 1 << r;
+    }
+    if func.is_naked {
+        let (gpr, fpr) = super::reg_alloc::naked_kept_regs(func, target);
+        fixed.frame |= gpr;
+        fixed.fpr |= fpr;
     }
     fixed
 }
@@ -1604,6 +1704,99 @@ pub(crate) fn record_block_src(
     }
 }
 
+/// Code no function table describes to the unwinder (TODO #1860) keeps
+/// `longjmp` from unwinding: `setjmp` stores 0 as the frame, which makes
+/// msvcrt's x64 `longjmp` restore directly, and on Windows on ARM64, whose
+/// msvcrt `longjmp` unwinds for that frame too, the pair is the inline one.
+fn unwind_free_jumps(
+    funcs: &mut [super::super::ir::FunctionSsa],
+    imports: &super::ResolvedImports,
+    target: super::Target,
+) {
+    use super::super::ir::Inst;
+    use crate::c5::op::Intrinsic as I;
+    let named = |binding: i64, name: &str| {
+        (imports.imports.iter()).any(|i| i.binding_idx == binding && i.local_name == name)
+    };
+    let arm64 = target == super::Target::WindowsAarch64;
+    for f in funcs {
+        for inst in &mut f.insts {
+            let swap = match inst {
+                Inst::Intrinsic { kind, .. } if *kind == I::EstablisherFrame as i64 => {
+                    Some(Inst::Imm(0))
+                }
+                Inst::CallExt {
+                    binding_idx, args, ..
+                } if arm64 && named(*binding_idx, "__c5_msvcrt_setjmp") => Some(Inst::Intrinsic {
+                    kind: I::SetjmpAArch64 as i64,
+                    args: alloc::vec![args[0]],
+                }),
+                Inst::CallExt {
+                    binding_idx, args, ..
+                } if arm64 && named(*binding_idx, "__c5_msvcrt_longjmp") => Some(Inst::Intrinsic {
+                    kind: I::LongjmpAArch64 as i64,
+                    args: args.clone(),
+                }),
+                _ => None,
+            };
+            if let Some(swap) = swap {
+                *inst = swap;
+            }
+        }
+    }
+}
+
+/// The scope-table rows of `func`, whose function starts at `begin` and
+/// whose blocks were placed at `placed` (block, start), in order, up to
+/// `body_end`: per region, innermost first, each maximal run of code whose
+/// blocks lie in the region or in one nested in it.
+pub(crate) fn seh_rows(
+    func: &super::super::ir::FunctionSsa,
+    begin: usize,
+    placed: &[(super::super::ir::BlockId, usize)],
+    body_end: usize,
+    block_offsets: &[usize],
+) -> alloc::vec::Vec<super::SehRow> {
+    let scopes = &func.seh_scopes;
+    let chain = |mut s: Option<u32>| {
+        core::iter::from_fn(move || {
+            let at = s?;
+            s = scopes[at as usize].parent;
+            Some(at)
+        })
+    };
+    let mut order: alloc::vec::Vec<u32> = (0..scopes.len() as u32).collect();
+    order.sort_by_key(|&s| core::cmp::Reverse(chain(Some(s)).count()));
+    let mut rows = alloc::vec::Vec::new();
+    for s in order {
+        let scope = scopes[s as usize];
+        let target = scope.target.map(|t| block_offsets[t as usize] as u32);
+        let handler = scope.handler.funclet().map(|pc| pc as u32);
+        let mut run: Option<(usize, usize)> = None;
+        let mut flush = |run: Option<(usize, usize)>| {
+            if let Some((a, e)) = run.filter(|(a, e)| e > a) {
+                rows.push(super::SehRow {
+                    func: begin as u32,
+                    begin: a as u32,
+                    end: e as u32,
+                    target,
+                    handler,
+                });
+            }
+        };
+        for (i, &(b, start)) in placed.iter().enumerate() {
+            let end = placed.get(i + 1).map_or(body_end, |p| p.1);
+            if chain(func.seh_scope_of(b)).any(|c| c == s) {
+                run = Some((run.map_or(start, |r| r.0), end));
+            } else {
+                flush(run.take());
+            }
+        }
+        flush(run);
+    }
+    rows
+}
+
 /// Record the byte offset of the first post-prologue instruction,
 /// keyed by the function's `ent_pc`. The DWARF CFI pass reads this
 /// to encode `DW_CFA_advance_loc <prologue bytes>` so the post-
@@ -1633,6 +1826,33 @@ pub(crate) fn defined_fn_syms(
         .filter(|(_, s)| s.is_fun_entity() && s.defined_here)
         .map(|(i, s)| (i as u32, s.val as usize))
         .collect()
+}
+
+/// The return type of each direct call target: a definition's, and a
+/// prototyped declaration's for a function another unit defines. A
+/// declaration without a prototype states no return contract.
+pub(crate) fn callee_return_tags(
+    program: &crate::c5::program::Program,
+    funcs: &[super::super::ir::FunctionSsa],
+) -> alloc::collections::BTreeMap<usize, i64> {
+    let imports: alloc::collections::BTreeSet<usize> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .collect();
+    let mut tags: alloc::collections::BTreeMap<usize, i64> = (funcs.iter())
+        .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+        .collect();
+    for sym in &program.symbols {
+        if sym.is_fun_entity()
+            && !sym.defined_here
+            && sym.prototyped()
+            && imports.contains(&(sym.val as usize))
+        {
+            tags.insert(sym.val as usize, sym.type_);
+        }
+    }
+    tags
 }
 
 /// A function this unit calls but does not define, keyed by the
@@ -1835,6 +2055,9 @@ pub(crate) struct LowerState {
     pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
     pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
+    pub(crate) seh_rows: alloc::vec::Vec<super::SehRow>,
+    pub(crate) a64_unwind: alloc::vec::Vec<super::A64Unwind>,
+    pub(crate) funclet_frames: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
@@ -1853,7 +2076,7 @@ pub(crate) struct LowerState {
     pub(crate) text_align: usize,
     pub(crate) label_relocs: alloc::vec::Vec<super::LabelReloc>,
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
-    pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
+    pub(crate) local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
     pub(crate) region_frame_offsets:
@@ -1872,6 +2095,9 @@ impl LowerState {
             patchable_entries: alloc::vec::Vec::new(),
             mcount_sites: alloc::vec::Vec::new(),
             early_returns: alloc::vec::Vec::new(),
+            seh_rows: alloc::vec::Vec::new(),
+            a64_unwind: alloc::vec::Vec::new(),
+            funclet_frames: alloc::collections::BTreeMap::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             ssa_line_rows: alloc::vec::Vec::new(),
@@ -1890,7 +2116,7 @@ impl LowerState {
             text_align: 16,
             label_relocs: alloc::vec::Vec::new(),
             text_data_ranges: alloc::vec::Vec::new(),
-            canary_frame_bytes: alloc::collections::BTreeMap::new(),
+            local_shift_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             region_frame_offsets: alloc::collections::BTreeMap::new(),
@@ -1920,12 +2146,15 @@ impl LowerState {
                 text_align: &mut self.text_align,
                 label_relocs: &mut self.label_relocs,
                 text_data_ranges: &mut self.text_data_ranges,
-                canary_frame_bytes: &mut self.canary_frame_bytes,
+                local_shift_bytes: &mut self.local_shift_bytes,
                 frame_stack: &mut self.frame_stack,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
                 early_returns: &mut self.early_returns,
+                seh_rows: &mut self.seh_rows,
+                a64_unwind: &mut self.a64_unwind,
+                funclet_frames: &mut self.funclet_frames,
             },
             rodata: &mut self.rodata,
             asm_text_labels: &mut self.asm_text_labels,
@@ -2195,6 +2424,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     if native.output_kind != super::OutputKind::Relocatable {
         super::shadow::bind_alias_imports(program, &mut ssa_funcs);
     }
+    if native.in_process {
+        unwind_free_jumps(&mut ssa_funcs, imports, target);
+    }
     check_frame_limits(&ssa_funcs)?;
     // Frame slots mem2reg promoted to registers (-O) or that slot
     // coalescing moved onto shared storage: the debug-info emitter drops
@@ -2225,6 +2457,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 target.abi(),
                 &code_syms,
                 &extern_fns,
+                &alloc::collections::BTreeSet::new(),
                 &mut sink,
             );
         });
@@ -2261,14 +2494,17 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // Vector slots become `V128` slot accesses, and inline-asm register
         // outputs into slots the statements' own values, for mem2reg to
         // promote.
+        // A function with a `__try` region keeps its locals in their slots,
+        // where the handler, entered with no edge from the region, reads
+        // the last value the region stored.
         pipeline.run("ssa::vector_slots::run", &mut ssa_funcs, |funcs| {
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 super::vector_slots::run(f);
                 super::asm_outputs::run(f);
             }
         });
         pipeline.run("ssa::mem2reg::run", &mut ssa_funcs, |funcs| {
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 let promoted = super::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
@@ -2331,12 +2567,15 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         let code_syms = defined_fn_syms(program);
         let extern_fns = extern_fn_targets(program);
         pipeline.run("passes::inline::run", &mut ssa_funcs, |funcs| {
+            let escaping =
+                super::super::passes::ipa_const_param::escaping_functions(funcs, program);
             super::super::passes::inline::run(
                 funcs,
                 native.inline_cap,
                 target.abi(),
                 &code_syms,
                 &extern_fns,
+                &escaping,
                 &mut sink,
             );
         });
@@ -2408,7 +2647,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             } else {
                 Default::default()
             };
-            for f in funcs.iter_mut() {
+            for f in funcs.iter_mut().filter(|f| !f.has_seh()) {
                 let budget = super::super::passes::sroa::Budget {
                     usable: usable_gpr,
                     caller: caller_gpr,
@@ -2617,6 +2856,15 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
             super::super::passes::store_forward::run(funcs);
         });
+        // The merges above can leave an operation reading one value twice,
+        // or a constant, and a branch it decides.
+        pipeline.run(
+            "passes::simplify_branches::run_late",
+            &mut ssa_funcs,
+            |funcs| {
+                super::super::passes::simplify_branches::run_late(funcs);
+            },
+        );
         b.late_opt_passes(&mut ssa_funcs, pipeline);
         // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
         // inline run exposed -- the post-inline promotions and the
@@ -2627,6 +2875,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let code_syms = defined_fn_syms(program);
             let extern_fns = extern_fn_targets(program);
             super::super::passes::inline::devirtualize(funcs, &code_syms, &extern_fns);
+        });
+        // A returned call result whose callee has this function's return
+        // contract needs no renormalization, which a sibling call needs gone.
+        pipeline.run("passes::return_call::run", &mut ssa_funcs, |funcs| {
+            let tags = callee_return_tags(program, funcs);
+            super::super::passes::return_call::run(funcs, &tags, target);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test. Reorders blocks and remaps block ids only, so it
@@ -2683,6 +2937,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         if abs32 {
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
+        if target.is_x86_64() {
+            super::super::passes::index_fold::mark_pc_rel_accesses(f, native.strict_align);
+        }
         f.general_regs_only = native.no_fp_regs;
         f.tls_dynamic = native.pic
             && !native.pie
@@ -2702,7 +2959,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .iter_mut()
                 .map(|f| {
                     super::mem2reg::zero_read_undefs(f);
-                    if native.optimize {
+                    if native.optimize && !f.has_seh() {
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
@@ -3008,33 +3265,38 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             &mut st.user_extern_data_refs,
         );
     }
-    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
-        // Relocatable objects carry no entry point; the linker picks it once
-        // every TU is merged. `entry_pc` may legitimately be 0 here
-        // (`--no-entry-point` / `-c` on a TU without `main`) and need not
-        // land on a real instruction.
-        st.pc_to_native
-            .get(program.entry_pc)
-            .copied()
-            .filter(|&n| n != usize::MAX)
-            .unwrap_or(0)
-    } else {
-        let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
-        if off == usize::MAX {
-            return Err(C5Error::internal(alloc::format!(
-                "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
-                tag = B::ERR_TAG,
-                pc = program.entry_pc,
-            )));
-        }
-        off
-    };
+    let entry_offset =
+        if native.output_kind == super::OutputKind::Relocatable || program.entry_name.is_none() {
+            // Relocatable objects carry no entry point; the linker picks it once
+            // every TU is merged. Nor does a unit compiled without one. `entry_pc`
+            // may legitimately be 0 here (`--no-entry-point` / `-c` on a TU
+            // without `main`) and need not land on a real instruction.
+            st.pc_to_native
+                .get(program.entry_pc)
+                .copied()
+                .filter(|&n| n != usize::MAX)
+                .unwrap_or(0)
+        } else {
+            let off = B::entry_native_offset(&st.pc_to_native, program.entry_pc)?;
+            if off == usize::MAX {
+                return Err(C5Error::internal(alloc::format!(
+                    "native codegen{tag}: entry_pc {pc} did not align with any instruction start",
+                    tag = B::ERR_TAG,
+                    pc = program.entry_pc,
+                )));
+            }
+            off
+        };
 
     st.asm_sections
         .emit_cfi_sections(B::cfi_target(&native))
         .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
     let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
     st.rodata.place_literals();
+    // A row names its funclet by text offset.
+    for r in &mut st.seh_rows {
+        r.handler = r.handler.map(|pc| st.pc_to_native[pc as usize] as u32);
+    }
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
@@ -3085,15 +3347,21 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         patchable_entries: st.patchable_entries,
         mcount_sites: st.mcount_sites,
         early_returns: st.early_returns,
+        seh_rows: st.seh_rows,
         func_names: st.func_names,
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
-        canary_frame_bytes: st.canary_frame_bytes,
+        local_shift_bytes: st.local_shift_bytes,
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
-        a64_unwind: alloc::vec::Vec::new(),
+        // The PE unwind tables are their only reader.
+        a64_unwind: if target == super::Target::WindowsAarch64 {
+            st.a64_unwind
+        } else {
+            alloc::vec::Vec::new()
+        },
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs: st.user_extern_data_refs,
@@ -3125,6 +3393,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
         protected_exports: Default::default(),
+        unique_symbols: Default::default(),
         image_symbols: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
@@ -3215,6 +3484,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ];
         let func = |ret| FunctionSsa {

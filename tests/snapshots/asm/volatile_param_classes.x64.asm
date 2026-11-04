@@ -56,10 +56,9 @@ Disassembly of section .text:
                	movsd	-0x18(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
-               	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	leaq	0x1(%rax), %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movq	%rdx, %xmm14
+               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
+               	movq	$0x2, -0x8(%rbp)
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x18(%rbp)
                	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x20(%rbp)
@@ -67,10 +66,9 @@ Disassembly of section .text:
                	movsd	-0x18(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
-               	movabsq	$0x400c000000000000, %rdx # imm = 0x400C000000000000
-               	incq	%rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movq	%rdx, %xmm14
+               	movabsq	$0x400c000000000000, %rcx # imm = 0x400C000000000000
+               	movq	$0x3, -0x8(%rbp)
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x18(%rbp)
                	movsd	-0x10(%rbp), %xmm0
                	movsd	%xmm0, -0x20(%rbp)

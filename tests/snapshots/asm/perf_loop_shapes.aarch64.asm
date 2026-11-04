@@ -221,8 +221,6 @@ Disassembly of section .text:
                	ret
 
 <negneg>:
-               	neg	x0, x0
-               	neg	x0, x0
                	ret
 
 <sub_of_neg>:

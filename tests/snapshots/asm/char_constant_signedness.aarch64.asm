@@ -62,8 +62,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xff
                	sturb	w1, [x29, #-0x10]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -78,8 +77,7 @@ Disassembly of section .text:
                	and	x1, x1, #0xff
                	sturb	w1, [x29, #-0x10]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x2
                	b.eq	<addr>

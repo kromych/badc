@@ -151,6 +151,16 @@ pub(crate) fn fold_asm_sections(
             {
                 continue;
             }
+            if s.flags.contains('T') {
+                return Err(err(
+                    Code::OBJECT_FORMAT,
+                    alloc::format!(
+                        "inline-asm section `{}`: thread-local storage cannot be placed in \
+                         {path}; compile with `-c` and link",
+                        s.name
+                    ),
+                ));
+            }
             let base = if s.flags.contains('w') {
                 // The data image ends where the zero-fill range begins, so
                 // its tail is the only writable byte range left to grow.

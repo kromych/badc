@@ -38,6 +38,9 @@ pub(crate) enum Inst {
     /// Plain integer immediate with no data / code segment
     /// provenance. Lowering uses `load_imm64`.
     Imm(i64),
+    /// The first instruction of a [`SehScope::target`] block: the code of
+    /// the exception the language handler hands it (in rax / x0).
+    ExceptionCode,
     /// An indeterminate value (C99 6.2.4p5, 6.7.8p10): what a read of an
     /// automatic object yields where no store reaches it. It emits
     /// nothing, and a phi income of it emits no move and keeps no value
@@ -82,6 +85,15 @@ pub(crate) enum Inst {
     /// Address of a thread-local variable in the per-target TLS
     /// block.
     TlsAddr(i64),
+    /// In a filter funclet, the address of `funclet_slots[index]` of the
+    /// function `parent` (its `ent_pc`), from the frame value `establisher`
+    /// the language handler passes: rdx on x64 (the establisher frame), x1
+    /// on arm64 (the frame's x29).
+    ParentLocalAddr {
+        establisher: ValueId,
+        parent: usize,
+        index: u32,
+    },
     /// Load from `addr + disp`. Width / signedness driven by the
     /// source load op. `disp` is a byte offset folded from a constant
     /// pointer addition (a struct field offset) into the addressing
@@ -99,18 +111,23 @@ pub(crate) enum Inst {
     /// that. A pass that rebuilds the access at the same address must
     /// carry the field across; one that retargets it to a different
     /// address must recompute it.
+    ///
+    /// With `pc_rel` the address is an `ImmData` the access forms itself,
+    /// PC-relative (x86-64 `disp32(%rip)`), so no register holds it. It is
+    /// set immediately before allocation.
     Load {
         addr: ValueId,
         disp: i32,
         kind: LoadKind,
         volatile: bool,
         align: u8,
+        pc_rel: bool,
     },
     /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
     /// instruction's id read that value. `disp` is a byte offset folded
     /// from a constant pointer addition, zero for a plain dereference.
-    /// `volatile` and `align` as for [`Self::Load`].
+    /// `volatile`, `align` and `pc_rel` as for [`Self::Load`].
     Store {
         addr: ValueId,
         disp: i32,
@@ -118,6 +135,7 @@ pub(crate) enum Inst {
         kind: StoreKind,
         volatile: bool,
         align: u8,
+        pc_rel: bool,
     },
     /// Load from a local / parameter slot. Equivalent to a
     /// `LocalAddr(off)` followed by `Load { disp, kind }`, but
@@ -683,6 +701,7 @@ impl Inst {
                 | Inst::ImmExtCode(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
+                | Inst::ParentLocalAddr { .. }
                 | Inst::Load {
                     volatile: false,
                     ..
@@ -741,12 +760,14 @@ impl Inst {
         match self {
             Inst::Imm(_) => "Imm",
             Inst::Undef => "Undef",
+            Inst::ExceptionCode => "ExceptionCode",
             Inst::ImmData(_) => "ImmData",
             Inst::ImmCode(_) => "ImmCode",
             Inst::ImmExtCode(_) => "ImmExtCode",
             Inst::BlockAddr(_) => "BlockAddr",
             Inst::LocalAddr(_) => "LocalAddr",
             Inst::TlsAddr(_) => "TlsAddr",
+            Inst::ParentLocalAddr { .. } => "ParentLocalAddr",
             Inst::Load { .. } => "Load",
             Inst::Store { .. } => "Store",
             Inst::SegLoad { .. } => "SegLoad",
@@ -805,6 +826,7 @@ impl Inst {
         match self {
             Inst::Imm(_)
             | Inst::Undef
+            | Inst::ExceptionCode
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -847,7 +869,7 @@ impl Inst {
                 f(*rhs);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
-            Inst::Neg(v) | Inst::Fneg(v) => f(*v),
+            Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
@@ -925,6 +947,7 @@ impl Inst {
         match self {
             Inst::Imm(_)
             | Inst::Undef
+            | Inst::ExceptionCode
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -967,7 +990,7 @@ impl Inst {
                 f(rhs);
             }
             Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
-            Inst::Neg(v) | Inst::Fneg(v) => f(v),
+            Inst::Neg(v) | Inst::Fneg(v) | Inst::ParentLocalAddr { establisher: v, .. } => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
@@ -1173,6 +1196,10 @@ pub(crate) enum BinOp {
     Fgt,
     Fle,
     Fge,
+    /// Ordered and unequal, the quiet `islessgreater` (C99 7.12.14.5).
+    Fone,
+    /// Unordered, the quiet `isunordered` (C99 7.12.14.6).
+    Funo,
 }
 
 /// A zero divisor reached [`eval_int_binop`]. C99 6.5.5p5 leaves integer
@@ -1200,12 +1227,24 @@ pub(crate) fn is_int_comparison_op(op: BinOp) -> bool {
 }
 
 /// Floating-point relational and equality operators (C99 6.5.8 /
-/// 6.5.9).
+/// 6.5.9) and the 7.12.14 comparison macros.
 pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
     matches!(
         op,
-        BinOp::Feq | BinOp::Fne | BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge
+        BinOp::Feq
+            | BinOp::Fne
+            | BinOp::Flt
+            | BinOp::Fgt
+            | BinOp::Fle
+            | BinOp::Fge
+            | BinOp::Fone
+            | BinOp::Funo
     )
+}
+
+/// Floating-point arithmetic or comparison.
+pub(crate) fn is_fp_op(op: BinOp) -> bool {
+    is_fp_arith_op(op) || is_fp_comparison_op(op)
 }
 
 /// True for a relational or equality operator (integer or
@@ -1300,7 +1339,9 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Flt
         | BinOp::Fgt
         | BinOp::Fle
-        | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
+        | BinOp::Fge
+        | BinOp::Fone
+        | BinOp::Funo => unreachable!("eval_int_binop reached on {op:?}"),
     };
     Ok(v)
 }
@@ -1594,6 +1635,9 @@ pub(crate) struct AsmOperand {
     /// `&` output: the template writes it before it has read every input,
     /// so it may not share a register with one.
     pub early_clobber: bool,
+    /// AArch64 `x` / `y`: the operand takes one of the first 16 / 8 SIMD
+    /// registers; 0 for any.
+    pub fp_limit: u8,
 }
 
 /// A parsed GCC extended-asm statement (`asm(template : outputs :
@@ -1998,6 +2042,42 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// A `__try` region: an exception raised in a block of the region, or of a
+/// region nested in it, that an `__except` handler's filter accepts enters
+/// `target` with the exception code ([`Inst::ExceptionCode`]) and the
+/// frame's registers restored, sp aside; one that unwinds the region runs
+/// its `__finally` funclet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SehScope {
+    pub parent: Option<u32>,
+    /// The `__except` body's entry, `None` for a `__finally`.
+    pub target: Option<BlockId>,
+    pub handler: ScopeHandler,
+}
+
+/// What a region's scope-table row names as its HandlerAddress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScopeHandler {
+    /// The constant filter `EXCEPTION_EXECUTE_HANDLER`: every exception.
+    ExecuteHandler,
+    /// The filter funclet at this `ent_pc`, `long (EXCEPTION_POINTERS *,
+    /// void *frame)`, as cl compiles every other filter.
+    Filter(usize),
+    /// The `__finally` funclet at this `ent_pc`, `void (unsigned char
+    /// abnormal, void *frame)`.
+    Finally(usize),
+}
+
+impl ScopeHandler {
+    /// The funclet's `ent_pc`.
+    pub(crate) fn funclet(self) -> Option<usize> {
+        match self {
+            ScopeHandler::ExecuteHandler => None,
+            ScopeHandler::Filter(pc) | ScopeHandler::Finally(pc) => Some(pc),
+        }
+    }
+}
+
 /// The byte width of each scalar argument, or parameter, narrower than 8
 /// bytes: where a convention places stack arguments at their own size and
 /// alignment (Apple arm64), this is the size. Two bits per position below
@@ -2335,12 +2415,12 @@ pub(crate) struct FunctionSsa {
     /// integer immediate in a GPR.
     pub ret_is_fp: bool,
     /// Declared return type tag (`Ty` encoding, unsigned bit OR'd in;
-    /// 0 when not recorded). A sub-word integer return occupies the low
+    /// `None` when not recorded). A sub-word integer return occupies the low
     /// bits of the return register and the caller widens it
     /// (`irgen::types::extend_scalar_call_result`); the emit-time
     /// tail-call conversion compares the caller's and callee's recipes
     /// and keeps the regular call-then-extend path when they differ.
-    pub ret_type_tag: i64,
+    pub ret_type_tag: Option<i64>,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
     /// larger than 16 bytes. The prologue stores x8 here; the callee
@@ -2436,6 +2516,14 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+    /// The `__try` regions.
+    pub seh_scopes: Vec<SehScope>,
+    /// Per block, the innermost region its code lies in; empty when
+    /// `seh_scopes` is, and a block past its end lies in none.
+    pub block_seh: Vec<Option<u32>>,
+    /// The slots the function's filter funclets reach, by the index of an
+    /// [`Inst::ParentLocalAddr`]: they stay in the frame for the whole body.
+    pub funclet_slots: Vec<i64>,
 }
 
 /// An automatic object of the over-aligned region (`FunctionSsa::over_aligned`):
@@ -2502,6 +2590,30 @@ impl SspFacts {
 }
 
 impl FunctionSsa {
+    pub(crate) fn has_seh(&self) -> bool {
+        !self.seh_scopes.is_empty()
+    }
+
+    /// The innermost `__try` region block `b` lies in.
+    pub(crate) fn seh_scope_of(&self, b: BlockId) -> Option<u32> {
+        self.block_seh.get(b as usize).copied().flatten()
+    }
+
+    /// Whether `b` is a region's handler entry, which no edge reaches.
+    pub(crate) fn is_seh_target(&self, b: BlockId) -> bool {
+        self.seh_scopes.iter().any(|s| s.target == Some(b))
+    }
+
+    /// Append `block` in the region block `of` lies in.
+    pub(crate) fn push_block_in_scope_of(&mut self, block: Block, of: BlockId) {
+        if self.has_seh() {
+            let scope = self.seh_scope_of(of);
+            self.block_seh.resize(self.blocks.len(), None);
+            self.block_seh.push(scope);
+        }
+        self.blocks.push(block);
+    }
+
     /// Each value output of the asm statement at `site` with its value: the
     /// statement's own for the first, the following [`Inst::AsmOut`] for a
     /// later one, `NO_VALUE` for a dead one.
@@ -2604,9 +2716,9 @@ pub(crate) fn sp_asm_reachers(funcs: &[FunctionSsa]) -> alloc::collections::BTre
 /// External functions that may return twice into the caller's frame:
 /// the setjmp family (C99 7.13.1.1) plus vfork(2). Matched on the
 /// c5-side symbol name; `__c5_msvcrt_setjmp` is the target of the
-/// Windows x86_64 `setjmp` macro (libc/include/setjmp.h). The
-/// AArch64 inline setjmp is an intrinsic, recognised structurally by
-/// `codegen::ssa::reg_alloc::is_setjmp_barrier`.
+/// Windows `setjmp` macro (libc/include/setjmp.h). The AArch64 inline
+/// setjmp an in-process image takes is an intrinsic, recognised
+/// structurally by `codegen::ssa::reg_alloc::is_setjmp_barrier`.
 pub(crate) fn returns_twice_fn_name(name: &str) -> bool {
     matches!(
         name,
@@ -2626,13 +2738,15 @@ impl crate::c5::layout::DataOffsets for Inst {
                     *self = r.remap(off, off).map_or(Inst::Imm(0), Inst::ImmData);
                 }
             }
-            Inst::Imm { .. }
+            Inst::ExceptionCode
+            | Inst::Imm { .. }
             | Inst::Undef
             | Inst::ImmCode { .. }
             | Inst::ImmExtCode { .. }
             | Inst::BlockAddr { .. }
             | Inst::LocalAddr { .. }
             | Inst::TlsAddr { .. }
+            | Inst::ParentLocalAddr { .. }
             | Inst::Load { .. }
             | Inst::Store { .. }
             | Inst::LoadLocal { .. }
@@ -2689,6 +2803,9 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             end_pc: _,
             locals: _,
             ssp: _,
+            seh_scopes: _,
+            block_seh: _,
+            funclet_slots: _,
             n_params: _,
             is_variadic: _,
             is_inline: _,
@@ -2762,6 +2879,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 alloc::vec![1]
             ),
@@ -2773,6 +2891,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 alloc::vec![1, 2]
             ),

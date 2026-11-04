@@ -13,7 +13,7 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<check_static>:
+<main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x0]
@@ -25,6 +25,9 @@ Disassembly of section .text:
                	cmp	w1, #0x2b
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
+               	cbz	x0, <addr>
+               	ret
+               	mov	x0, #0x0                // =0
                	ret
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x7
@@ -38,7 +41,7 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	ret
+               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
@@ -48,24 +51,8 @@ Disassembly of section .text:
                	cmp	w0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ret
+               	b	<addr>
                	mov	x0, #0x0                // =0
-               	ret
+               	b	<addr>
                	mov	x0, #0x2                // =2
-               	ret
-
-<check_local>:
-               	mov	x0, #0x0                // =0
-               	ret
-
-<main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	b	<addr>

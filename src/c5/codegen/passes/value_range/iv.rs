@@ -1,6 +1,7 @@
 //! Induction variables: a header phi each back edge advances by marked
 //! steps (C99 6.5p5 without `-fwrapv`) of an immediate, a value defined
-//! ahead of the loop, or another such variable of the header (`j += i`).
+//! ahead of the loop, or another such variable of the header (`j += i`),
+//! on every path through the body or on some (`if (c) i++`).
 //! In a defined execution each step, and the marked operation the variable
 //! starts from, fits its width. Only addresses and comparisons rest on that
 //! (`drop_redundant_extend::drop_fitting`); a return of an accumulator
@@ -29,6 +30,8 @@ struct Walk<'a> {
     /// Per value: the counter phi it is, or a step or sum of one of.
     counter: Vec<Option<ValueId>>,
     marked_extension: Vec<Option<ValueId>>,
+    /// The body phis [`Walk::merged_chain`] decided for the current candidate.
+    merges: Vec<(ValueId, bool)>,
 }
 
 impl Walk<'_> {
@@ -98,7 +101,7 @@ impl Walk<'_> {
     /// Whether `v` is `phi` advanced by marked steps (or unmarked ones a
     /// marked copy dominates), recording each in `out`.
     fn chain(
-        &self,
+        &mut self,
         v: ValueId,
         phi: ValueId,
         h: BlockId,
@@ -112,7 +115,11 @@ impl Walk<'_> {
         if depth == 0 {
             return false;
         }
-        let (x, kind) = match self.func.insts.get(v as usize) {
+        let func = self.func;
+        if let Some(Inst::Phi { incoming, .. }) = func.insts.get(v as usize) {
+            return self.merged_chain(v, incoming, phi, h, counters, depth - 1, out);
+        }
+        let (x, kind) = match func.insts.get(v as usize) {
             Some(&Inst::Extend {
                 value,
                 kind: kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32),
@@ -125,7 +132,7 @@ impl Walk<'_> {
             }) => return self.chain(value, phi, h, counters, depth - 1, out),
             _ => return false,
         };
-        let options: [(ValueId, Result<ValueId, i64>); 2] = match self.func.insts.get(x as usize) {
+        let options: [(ValueId, Result<ValueId, i64>); 2] = match func.insts.get(x as usize) {
             Some(&Inst::BinopI {
                 op: BinOp::Add | BinOp::Sub,
                 lhs,
@@ -154,9 +161,42 @@ impl Walk<'_> {
         false
     }
 
+    /// Whether `v`, a phi of a block inside the loop other than a loop
+    /// header, merges chains only.
+    #[allow(clippy::too_many_arguments)]
+    fn merged_chain(
+        &mut self,
+        v: ValueId,
+        incoming: &[(BlockId, ValueId)],
+        phi: ValueId,
+        h: BlockId,
+        counters: bool,
+        depth: usize,
+        out: &mut Vec<(ValueId, LoadKind)>,
+    ) -> bool {
+        if let Some(&(_, known)) = self.merges.iter().find(|&&(p, _)| p == v) {
+            return known;
+        }
+        let at = self.block_of[v as usize];
+        let inside = at != h
+            && self.dominates(h, at)
+            && !incoming.iter().any(|&(pred, _)| self.dominates(at, pred));
+        let mark = out.len();
+        let all = inside
+            && incoming
+                .iter()
+                .all(|&(_, u)| self.chain(u, phi, h, counters, depth, out));
+        if !all {
+            out.truncate(mark);
+        }
+        self.merges.push((v, all));
+        all
+    }
+
     /// The steps of `c`'s back-edge values, if each is a chain of them.
-    fn steps_of(&self, c: &Candidate, counters: bool) -> Option<Vec<(ValueId, LoadKind)>> {
+    fn steps_of(&mut self, c: &Candidate, counters: bool) -> Option<Vec<(ValueId, LoadKind)>> {
         let mut out = Vec::new();
+        self.merges.clear();
         c.back
             .iter()
             .all(|&e| self.chain(e, c.phi, c.header, counters, MAX_CHAIN, &mut out))
@@ -220,6 +260,7 @@ fn find_in(func: &FunctionSsa, tin: &[u32], tout: &[u32]) -> Vec<Option<LoadKind
         tout,
         counter: alloc::vec![None; n],
         marked_extension,
+        merges: Vec::new(),
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (h, blk) in func.blocks.iter().enumerate() {

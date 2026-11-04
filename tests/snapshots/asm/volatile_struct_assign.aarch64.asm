@@ -41,9 +41,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x2, #0x6                // =6
                	str	w2, [x0, #0x4]
-               	mov	x3, x1
-               	cmp	w3, #0x5
-               	b.ne	<addr>
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, #0x6
                	b.eq	<addr>

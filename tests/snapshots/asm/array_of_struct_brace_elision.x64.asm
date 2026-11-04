@@ -26,40 +26,37 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	cmpq	$0x1, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1, %rax
                	jne	<addr>
-               	cmpq	$0x0, 0x8(%rax)
+               	cmpq	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x2, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x2, %eax
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x3, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x3, %eax
                	jne	<addr>
-               	movl	0xc(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0xa, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0xa, %eax
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x14, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x14, %eax
                	jne	<addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x1e, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1e, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0xc(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq

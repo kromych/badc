@@ -74,9 +74,9 @@ Disassembly of section .text:
                	ret
 
 <digits>:
-               	mov	x5, #0xa                // =10
                	mov	x2, #0x1                // =1
                	mov	x1, #0x0                // =0
+               	mov	x5, #0xa                // =10
                	mov	x6, #0x6667             // =26215
                	movk	x6, #0x6666, lsl #16
                	movk	x6, #0x6666, lsl #32
@@ -86,7 +86,8 @@ Disassembly of section .text:
                	lsr	x4, x0, #1
                	umulh	x4, x4, x6
                	lsr	x4, x4, #1
-               	msub	x0, x4, x5, x0
+               	mul	x7, x4, x5
+               	sub	x0, x0, x7
                	madd	x3, x0, x2, x3
                	add	x1, x1, #0x1
                	add	x2, x2, #0x1
@@ -467,8 +468,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x60
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	mov	x1, #0xa                // =10
                	mov	x2, #0x1                // =1
                	bl	<addr>

@@ -1,5 +1,6 @@
 #pragma once
 #ifdef _WIN32
+#include <__badc_wprocess.h>
 // Thread creation through the C runtime. _beginthreadex initializes
 // per-thread CRT state, unlike the raw kernel32 CreateThread.
 #pragma dylib(msvcrt, "msvcrt.dll")

@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <f>:
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	mov	x1, #0x5                // =5
+               	str	w1, [x0, #0x30]
                	mov	x0, #0x5                // =5
-               	str	w0, [x1]
                	ret
 
 <main>:
@@ -31,8 +31,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

@@ -47,38 +47,29 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x0, (%rax)
-               	movl	$0xa, 0x4(%rax)
-               	movl	$0x14, 0x8(%rax)
-               	movl	$0x1e, 0xc(%rax)
-               	movl	$0x28, 0x10(%rax)
-               	movl	(%rax), %edx
-               	movl	0x4(%rax), %esi
-               	addq	%rsi, %rdx
-               	movl	0x8(%rax), %esi
-               	addq	%rsi, %rdx
-               	movl	0xc(%rax), %esi
-               	addq	%rsi, %rdx
-               	movl	0x10(%rax), %eax
-               	addq	%rdx, %rax
-               	cmpl	$0x64, %eax
+               	movl	$0x0, <rip> # <addr>
+               	movl	$0xa, <rip> # <addr>
+               	movl	$0x14, <rip> # <addr>
+               	movl	$0x1e, <rip> # <addr>
+               	movl	$0x28, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	movl	<rip>, %edx # <addr>
+               	addq	%rdx, %rcx
+               	cmpl	$0x64, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movb	$0x68, (%rax)
-               	movl	$0x69, %edx
-               	movb	%dl, 0x1(%rax)
-               	movb	$0x0, 0x2(%rax)
-               	movsbq	%dl, %rcx
-               	cmpl	$0x69, %ecx
-               	je	<addr>
-               	movl	$0x7, %eax
-               	leave
-               	retq
-               	cmpb	$0x0, 0x2(%rax)
+               	movb	$0x68, <rip> # <addr>
+               	movb	$0x69, <rip> # <addr>
+               	movb	$0x0, <rip> # <addr>
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x8, %eax
                	leave

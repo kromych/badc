@@ -214,6 +214,7 @@ fn reachable(func: &FunctionSsa, preds: &[Vec<BlockId>]) -> Vec<bool> {
     let mut live = alloc::vec![false; preds.len()];
     let mut stack: Vec<BlockId> = alloc::vec![0];
     stack.extend(&func.computed_goto_targets);
+    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
     while let Some(b) = stack.pop() {
         if !core::mem::replace(&mut live[b as usize], true) {
             stack.extend(&succs[b as usize]);

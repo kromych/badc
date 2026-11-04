@@ -19,8 +19,7 @@ Disassembly of section .text:
                	mul	x0, x0, x17
                	add	x0, x0, #0xc8
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	add	x0, x0, x1
@@ -49,8 +48,7 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0xa               // =10
                	mul	x0, x0, x17
                	add	x0, x0, #0x898

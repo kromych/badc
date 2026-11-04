@@ -20,7 +20,8 @@ use super::Compiler;
 use super::types::{
     QUAL_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_long_double_scalar,
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
-    strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
+    pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
 
@@ -32,6 +33,9 @@ impl Compiler {
     /// override: `long *` is 4 bytes on LLP64 (Windows) and 8
     /// bytes on LP64 (Linux / macOS).
     pub(super) fn pointee_size(&self, ptr_ty: i64) -> i64 {
+        if is_pointer_ty(ptr_ty) && super::types::is_atomic_object_ty(pointee_ty(ptr_ty)) {
+            return self.size_of_type(pointee_ty(ptr_ty)) as i64;
+        }
         if is_struct_ty(ptr_ty) && struct_ptr_depth(ptr_ty) == 1 {
             // Single-level pointer-to-struct: the pointee is the
             // struct value, whose size lives in the struct table.
@@ -764,7 +768,8 @@ impl Compiler {
     ) -> i64 {
         let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK))
+        (agg + ptr_levels * (Ty::Ptr as i64))
+            | super::types::ptr_quals_over_array(ty, super::types::ptr_depth_of(elem_ty))
     }
 
     /// True when the current lexer position starts a type. The free
@@ -917,6 +922,9 @@ impl Compiler {
     ///   * scalar `double`           -> 8
     ///   * struct values             -> recorded in the struct table
     pub(super) fn size_of_type(&self, ty: i64) -> usize {
+        if super::types::is_atomic_object_ty(ty) {
+            return self.atomic_layout_of(ty).size;
+        }
         // A scalar `long double` takes the target ABI's storage size
         // (16 on both Linux targets); pointers to one stay 8 bytes.
         if is_long_double_scalar(ty) {
@@ -963,12 +971,22 @@ impl Compiler {
         }
     }
 
+    /// The layout of the `_Atomic` object `ty` describes.
+    pub(super) fn atomic_layout_of(&self, ty: i64) -> super::types::AtomicLayout {
+        let base = super::types::non_atomic_ty(ty);
+        let (size, align) = (self.size_of_type(base), self.align_of_type(base));
+        super::types::atomic_layout(size, align, self.target, self.freestanding)
+    }
+
     /// Natural alignment (in bytes) for a value of the given `ty`.
     /// Mirrors the C alignment rule: the value lives on a boundary
     /// equal to its size for scalars (`char` = 1, `int` = 4,
     /// `long` / pointer = 8). Struct values inherit the max
     /// alignment of their fields, capped at `MAX_STATIC_ALIGN`.
     pub(super) fn align_of_type(&self, ty: i64) -> usize {
+        if super::types::is_atomic_object_ty(ty) {
+            return self.atomic_layout_of(ty).align;
+        }
         if is_long_double_scalar(ty) {
             return self.target.long_double().align();
         }
@@ -1011,7 +1029,7 @@ impl Compiler {
     /// alignment its members require, which `align` no longer carries once
     /// an attribute raised or lowered it.
     pub(super) fn unattributed_align_of(&self, ty: i64) -> usize {
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && !super::types::is_atomic_object_ty(ty) {
             let natural = self.structs[struct_id_of(ty)].natural_align;
             if natural > 0 {
                 return natural;
@@ -1052,7 +1070,7 @@ impl Compiler {
     /// Each c5 slot is 8 bytes; struct values and a wide-format
     /// `long double` may span several.
     pub(super) fn slots_of_type(&self, ty: i64) -> i64 {
-        if is_struct_value_ty(ty) {
+        if is_struct_value_ty(ty) && !super::types::is_atomic_object_ty(ty) {
             // Struct fields are 8-byte aligned (see parse_struct_body),
             // so the size is already a multiple of 8 -- the +7 round
             // is defensive in case a future change adds sub-8-byte

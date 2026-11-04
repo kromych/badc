@@ -23,18 +23,8 @@ Disassembly of section .text:
                	movk	x1, #0x3344, lsl #32
                	movk	x1, #0x1122, lsl #48
                	stur	x1, [x29, #-0x10]
-               	mov	x2, #0x9                // =9
-               	stur	x2, [x29, #-0x8]
-               	mov	x17, #0x7788            // =30600
-               	movk	x17, #0x5566, lsl #16
-               	movk	x17, #0x3344, lsl #32
-               	movk	x17, #0x1122, lsl #48
-               	cmp	x1, x17
-               	b.eq	<addr>
-               	mov	x0, #0x15               // =21
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x1, #0x9                // =9
+               	stur	x1, [x29, #-0x8]
                	add	x1, x0, #0x8
                	sub	x0, x1, x0
                	cmp	x0, #0x8

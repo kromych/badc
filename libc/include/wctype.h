@@ -73,25 +73,10 @@ typedef const int *wctrans_t;
 #endif
 
 #ifdef _WIN32
-#pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::iswalnum,  "iswalnum")
-#pragma binding(msvcrt::iswalpha,  "iswalpha")
-#pragma binding(msvcrt::iswcntrl,  "iswcntrl")
-#pragma binding(msvcrt::iswdigit,  "iswdigit")
-#pragma binding(msvcrt::iswgraph,  "iswgraph")
-#pragma binding(msvcrt::iswlower,  "iswlower")
-#pragma binding(msvcrt::iswprint,  "iswprint")
-#pragma binding(msvcrt::iswpunct,  "iswpunct")
-#pragma binding(msvcrt::iswspace,  "iswspace")
-#pragma binding(msvcrt::iswupper,  "iswupper")
-#pragma binding(msvcrt::iswxdigit, "iswxdigit")
-#pragma binding(msvcrt::towlower,  "towlower")
-#pragma binding(msvcrt::towupper,  "towupper")
-#pragma binding(msvcrt::iswctype,  "iswctype")
-// msvcrt.dll exports neither iswblank nor the property and mapping
-// lookups; ucrtbase.dll does, with msvcrt's class bits.
+#include <__badc_wctype.h>
+// msvcrt.dll exports none of the property and mapping lookups;
+// ucrtbase.dll does, with msvcrt's class bits.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::iswblank,  "iswblank")
 #pragma binding(ucrtbase::wctype,    "wctype")
 #pragma binding(ucrtbase::wctrans,   "wctrans")
 #pragma binding(ucrtbase::towctrans, "towctrans")

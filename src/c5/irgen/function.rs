@@ -11,7 +11,9 @@ use crate::c5::compiler::{StructDef, StructReturnAbi};
 /// `is_variadic` come from the declarator and `n_locals` is the
 /// post-parse slot count. `ent_pc` is the function's entry identifier,
 /// threaded through the SSA emit so the post-link codegen resolves
-/// call-site fixups against the identifier the linker rebased.
+/// call-site fixups against the identifier the linker rebased. Returns
+/// the function and its filter funclets.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
     fun: &FinishedFunction,
     symbols: &[Symbol],
@@ -20,7 +22,8 @@ pub(crate) fn walk_function(
     optimize: bool,
     jump_tables: bool,
     named_refs: super::NamedRefs,
-) -> Result<FunctionSsa, WalkError> {
+    freestanding: bool,
+) -> Result<(FunctionSsa, alloc::vec::Vec<FunctionSsa>), WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
     b.set_conv(fun.conv);
@@ -51,14 +54,22 @@ pub(crate) fn walk_function(
     b.alloca_init(-fun.alloca_top_slot);
     let ret = ReturnAbi::classify(&mut b, structs, target, fun.conv, fun.return_ty);
     let entry = ParamEntry::plan(&mut b, fun, structs, target, ret.outptr);
-    entry.seed_param_refs(&mut b);
-    entry.emit_entry_copies(&mut b);
+    // A naked function has no prologue to home or copy its parameters in.
+    if !fun.is_naked {
+        entry.seed_param_refs(&mut b);
+        entry.emit_entry_copies(&mut b);
+    }
     let mut ctx = Walker {
         ast,
+        fun,
+        funclets: alloc::vec::Vec::new(),
+        finally_calls: alloc::collections::BTreeMap::new(),
         symbols,
         structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
+        seh: alloc::vec::Vec::new(),
+        dynamic_sp: fun.alloca_top_slot != 0,
         scopes: alloc::vec::Vec::new(),
         label_scopes: alloc::vec::Vec::new(),
         label_blocks: alloc::vec![None; ast.goto_targets.len()],
@@ -70,11 +81,16 @@ pub(crate) fn walk_function(
         ret_indirect: ret.indirect,
         indirect_result_slot: ret.indirect_result_slot,
         scalar_return_ty: fun.return_ty,
-        returns_no_value: is_void_ty(fun.return_ty) && fun.name != "main",
+        returns_no_value: fun.is_naked || (is_void_ty(fun.return_ty) && fun.name != "main"),
+        naked: fun.is_naked,
         optimize,
         jump_tables,
         named_refs,
+        freestanding,
     };
+    if !fun.is_naked {
+        ctx.release_param_lock_words(&mut b);
+    }
     let terminated = match ast.body {
         Some(root) => {
             ctx.label_scopes = ctx.label_scope_chains(root);
@@ -101,7 +117,7 @@ pub(crate) fn walk_function(
     // `frame_align` 16 the region sits at a static frame offset; above 16
     // the prologue realigns sp.
     b.place_region_members();
-    Ok(b.finish())
+    Ok((b.finish(), ctx.funclets))
 }
 
 /// How a definition returns its value (C99 6.8.6.4 + the host ABI).

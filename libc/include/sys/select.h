@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <__badc_timeval.h>
 #include <time.h>
 
 #define FD_SETSIZE   1024

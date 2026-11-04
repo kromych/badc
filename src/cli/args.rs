@@ -78,12 +78,18 @@ pub(crate) enum Parsed {
     /// `--list-diagnostics` / `--explain <sel>`: rendered catalogue text
     /// for stdout, then exit 0. Neither reads a target or an input.
     Diagnostics(String),
+    /// gcc's `-print-file-name=<name>`: print the path for `name`, then
+    /// exit 0, whatever else the command line asks for.
+    PrintFileName(String),
 }
 
 /// Front-end options every translation unit preprocesses and compiles
 /// under. The two path lists the driver fills after parsing are noted.
 #[derive(Default, Clone)]
 pub(crate) struct FrontEnd {
+    /// Each input named while a `-x` language was in effect, with that
+    /// language; any other input's comes from its file name.
+    pub(crate) languages: std::collections::BTreeMap<String, SourceKind>,
     pub(crate) gnu: bool,
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
@@ -100,12 +106,17 @@ pub(crate) struct FrontEnd {
     /// gcc `-fvisibility=`; `None` is default.
     pub(crate) default_visibility: Option<badc::SymVisibility>,
     pub(crate) nostdinc: bool,
+    pub(crate) nostdlibinc: bool,
+    /// The directory `-print-file-name=include` names.
+    pub(crate) compiler_include_dir: Option<String>,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
     /// gcc `-dM`: `-E` prints the macro definitions in place of the text.
     pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
+    /// gcc `-ffreestanding`, the compile flag; `--freestanding` is the link's.
+    pub(crate) freestanding: bool,
     pub(crate) defines: Vec<(String, String)>,
     pub(crate) undefines: Vec<String>,
     pub(crate) include_paths: Vec<String>,
@@ -148,6 +159,7 @@ pub(crate) struct Codegen {
     pub(crate) sibling_calls: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
+    pub(crate) align_functions: u32,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
@@ -185,6 +197,7 @@ impl Default for Codegen {
             sibling_calls: true,
             keep_local_labels: false,
             min_function_alignment: 1,
+            align_functions: 1,
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
@@ -259,6 +272,31 @@ pub(crate) struct Link {
     /// The last of `-pie` / `-no-pie`: whether an executable is
     /// position-independent. `None` keeps the link's default.
     pub(crate) pie: Option<bool>,
+    /// ld64's `-undefined <treatment>`, the last one given.
+    pub(crate) undefined: Option<Undefined>,
+}
+
+/// How a Mach-O link treats a reference no input defines, as ld64's
+/// `-undefined` names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Undefined {
+    /// `error`, the default: the link fails.
+    Error,
+    /// `warning`: a warning names the reference, which the image looks
+    /// up in the flat namespace at load time.
+    Warning,
+    /// `suppress`: the image looks the reference up in the flat
+    /// namespace, with no diagnostic.
+    Suppress,
+    /// `dynamic_lookup`: as `suppress`.
+    DynamicLookup,
+}
+
+impl Undefined {
+    /// Whether the image looks an undefined reference up at load time.
+    pub(crate) fn looks_up(self) -> bool {
+        self != Undefined::Error
+    }
 }
 
 impl Link {
@@ -322,6 +360,7 @@ impl Default for Link {
             map_path: None,
             print_map: false,
             pie: None,
+            undefined: None,
         }
     }
 }
@@ -444,6 +483,20 @@ impl Cli {
     /// table the `--ld` persona shares ([`badc::ZKeyword::in_script_link`],
     /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
     /// every local symbol of its inputs (`--discard-none`).
+    /// Whether a reference no input defines becomes a load-time import
+    /// rather than a link error: in an ELF shared library unless `-z defs`,
+    /// as GNU ld's default; in a Mach-O image under an `-undefined` other
+    /// than ld64's default `error`; never in a PE image.
+    pub(crate) fn allows_undefined(&self) -> bool {
+        match self.target.binary_format() {
+            badc::BinaryFormat::Elf => {
+                self.mode == Mode::SharedLibrary && self.link.z.defs() != Some(true)
+            }
+            badc::BinaryFormat::MachO => self.link.undefined.is_some_and(Undefined::looks_up),
+            badc::BinaryFormat::Pe => false,
+        }
+    }
+
     pub(crate) fn link_refusal(&self, script: bool) -> Option<(String, &'static str)> {
         let link = &self.link;
         let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
@@ -455,11 +508,17 @@ impl Cli {
             if script {
                 kw.in_script_link()
             } else {
-                kw.in_hosted_link(shared)
+                kw.in_hosted_link(shared, !shared && self.exec_form().placed())
             }
         });
+        let mach_o = self.target.binary_format() == badc::BinaryFormat::MachO;
         let refusal = if !elf && elf_only {
             (String::from("-z / --build-id"), "it shapes an ELF image")
+        } else if !mach_o && link.undefined.is_some() {
+            (
+                String::from("-undefined"),
+                "it is ld64's, for a Mach-O image",
+            )
         } else if let Some((kw, why)) = z_refusal {
             (format!("-z {}", kw.name()), why)
         } else if script {
@@ -553,6 +612,9 @@ struct Parser {
     track_pointers: bool,
     trace: bool,
     positional: Vec<String>,
+    /// The language the last `-x` gave the inputs after it; `None` before
+    /// any and after `-x none`.
+    language: Option<SourceKind>,
     /// The mode-picking flag seen, with its spelling for the
     /// mutual-exclusion diagnostic.
     mode: Option<(Mode, &'static str)>,
@@ -560,6 +622,8 @@ struct Parser {
     print: Option<&'static str>,
     /// The `--explain` selector, resolved once the whole line is read.
     explain: Option<String>,
+    /// The `-print-file-name=` operand.
+    print_file_name: Option<String>,
     target_spec: Option<String>,
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
@@ -658,6 +722,9 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
                 "badc: error: unknown option `{arg}`"
             )));
         }
+        if let Some(kind) = p.language {
+            p.front.languages.insert(arg.clone(), kind);
+        }
         p.positional.push(arg);
     }
     p.finish()
@@ -689,6 +756,25 @@ const AARCH64_CPUS: &[&str] = &[
     "saphira", "thunderx", "thunderx2t99", "thunderx2t99p1", "thunderx3t110", "thunderxt81",
     "thunderxt83", "thunderxt88", "thunderxt88p1", "tsv110", "vulcan", "xgene1", "zeus",
 ];
+
+/// The language a gcc `-x` name selects, `None` for `none`: the
+/// languages badc translates.
+fn source_language(name: &str) -> Result<Option<SourceKind>, ParseError> {
+    Ok(Some(match name {
+        "none" => return Ok(None),
+        "c" => SourceKind::C {
+            preprocessed: false,
+        },
+        "cpp-output" => SourceKind::C { preprocessed: true },
+        "assembler" => SourceKind::Asm { preprocess: false },
+        "assembler-with-cpp" => SourceKind::Asm { preprocess: true },
+        _ => {
+            return Err(ParseError::diag(format!(
+                "badc: error: language `{name}` not recognized"
+            )));
+        }
+    }))
+}
 
 impl Parser {
     /// Handle one argument, or report that it is a positional. The
@@ -817,6 +903,10 @@ impl Parser {
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
+            // gcc 14 in C: the diagnostics that are errors by default for
+            // C99 constraint violations become warnings.
+            "-fpermissive" => self.front.diag.permissive(true),
+            "-fno-permissive" => self.front.diag.permissive(false),
             s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
             s if s.starts_with("-Wno-error=") => {
                 self.diag_error(&s["-Wno-error=".len()..], s, false)?
@@ -903,7 +993,13 @@ impl Parser {
                 }
             }
             sel => {
+                // As in gcc, `-W<sel>` enables a row at its default, so
+                // one that is an error by default stays one.
                 for code in sel.codes() {
+                    let level = match level {
+                        badc::diag::Level::Warning => level.max(code.default_level()),
+                        _ => level,
+                    };
                     self.front.diag.set_level(code, level);
                 }
             }
@@ -1016,6 +1112,9 @@ impl Parser {
                 self.sysroot = Some(PathBuf::from(&s["--sysroot=".len()..]));
             }
             "--dump-pp" | "-E" => self.claim(Mode::DumpPp)?,
+            s if s.starts_with("-print-file-name=") => {
+                self.print_file_name = Some(s["-print-file-name=".len()..].to_string());
+            }
             "--jit" => self.claim(Mode::Jit)?,
             "--shared" | "-shared" => self.claim(Mode::SharedLibrary)?,
             "--ar" | "--archive" => self.claim(Mode::BuildArchive)?,
@@ -1104,6 +1203,14 @@ impl Parser {
     fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         if arg == "-arch" {
             self.arch = Some(operand(iter, "badc: error: -arch requires a name")?);
+            return Ok(true);
+        }
+        if let Some(joined) = arg.strip_prefix("-x") {
+            let name = match joined {
+                "" => operand(iter, "badc: error: -x requires a language")?,
+                _ => joined.to_string(),
+            };
+            self.language = source_language(&name)?;
             return Ok(true);
         }
         let front = &mut self.front;
@@ -1320,24 +1427,33 @@ impl Parser {
                     }
                 };
             }
-            // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
-            // spelled with a library function's own name is an ordinary
-            // call the compiler may not fold. `-ffreestanding` also drops
-            // the hosted assumption that such a name is declarable, which
-            // is the auto-include retry. The `__builtin_` spellings are
-            // unaffected, as under gcc.
-            "-fno-builtin" | "-ffreestanding" => front.no_builtin = true,
-            "-fbuiltin" | "-fhosted" => front.no_builtin = false,
+            // gcc / clang `-fno-builtin`: a call spelled with a library
+            // function's own name is an ordinary call the compiler may not
+            // fold; the `__builtin_` spellings are unaffected, as under gcc.
+            // `-ffreestanding` (`-fno-hosted`) implies it and makes the
+            // implementation freestanding; `-fhosted` (`-fno-freestanding`)
+            // undoes both, as gcc's options do.
+            "-fno-builtin" => front.no_builtin = true,
+            "-fbuiltin" => front.no_builtin = false,
+            "-ffreestanding" | "-fno-hosted" => {
+                front.freestanding = true;
+                front.no_builtin = true;
+            }
+            "-fhosted" | "-fno-freestanding" => {
+                front.freestanding = false;
+                front.no_builtin = false;
+            }
             s if s.starts_with("-fno-builtin-") => {
                 front
                     .no_builtin_fns
                     .push(s["-fno-builtin-".len()..].to_string());
             }
-            // gcc / clang `-nostdinc`: the standard headers leave the
+            // gcc / clang `-nostdinc`: the bundled headers leave the
             // `#include` search, so a name no `-I` / `-iquote` path
             // carries is an error rather than a bind to badc's bundled
-            // libc.
+            // libc. clang's `-nostdlibinc` keeps the compiler's own.
             "-nostdinc" => front.nostdinc = true,
+            "-nostdlibinc" => front.nostdlibinc = true,
             // gcc / clang `-P`: `-E` prints no line markers, for inputs
             // that are not C (linker scripts, generated headers). Without
             // `-E` it has no effect, as under gcc.
@@ -1483,6 +1599,23 @@ impl Parser {
                     }
                 };
             }
+            // gcc `-falign-functions=N[:M[:N2[:M2]]]`: function entries on
+            // the power of two at or above N. gcc may leave an entry
+            // unaligned when that pads past M - 1 bytes; badc always aligns,
+            // as clang does, which a reader of the entry addresses (patch
+            // sites aligned for `-fpatchable-function-entry`) relies on.
+            s if s.starts_with("-falign-functions=") => {
+                let spec = &s["-falign-functions=".len()..];
+                code.align_functions = match spec.split(':').next().map(str::parse::<u32>) {
+                    Some(Ok(n)) => n.max(1).next_power_of_two(),
+                    _ => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: `-falign-functions=` takes a byte count, got `{spec}`"
+                        )));
+                    }
+                };
+            }
+            "-falign-functions" | "-fno-align-functions" => code.align_functions = 1,
             // gcc `-fpatchable-function-entry=N[,M]`: N NOPs at every
             // function entry, M of them ahead of the symbol, recorded per
             // function in `__patchable_function_entries`.
@@ -1914,6 +2047,21 @@ impl Parser {
             "--no-warn-execstack" => link.warn_execstack = Some(false),
             "--no-apply-dynamic-relocs" => link.apply_dynamic_relocs = false,
             "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
+            "-undefined" => {
+                let treatment = operand(iter, "badc: error: -undefined requires a treatment")?;
+                link.undefined = Some(match treatment.as_str() {
+                    "error" => Undefined::Error,
+                    "warning" => Undefined::Warning,
+                    "suppress" => Undefined::Suppress,
+                    "dynamic_lookup" => Undefined::DynamicLookup,
+                    other => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: -undefined `{other}`: expected error, warning, \
+                             suppress or dynamic_lookup"
+                        )));
+                    }
+                });
+            }
             "--fatal-warnings" => link.fatal_warnings = true,
             "-Bsymbolic" => (link.symbolic, link.symbolic_functions) = (true, false),
             "-Bsymbolic-functions" => (link.symbolic, link.symbolic_functions) = (false, true),
@@ -2055,6 +2203,9 @@ impl Parser {
     /// Resolve the target, check every flag combination the argument
     /// vector alone decides, and hand back the parsed command line.
     fn finish(mut self) -> Result<Parsed, ParseError> {
+        if let Some(name) = self.print_file_name.take() {
+            return Ok(Parsed::PrintFileName(name));
+        }
         let mode = self.mode.map(|(m, _)| m).unwrap_or(Mode::NativeExecutable);
         if mode == Mode::Install {
             return Ok(Parsed::Install {
@@ -2084,6 +2235,7 @@ impl Parser {
             }
         }
         self.check_arch(target)?;
+        self.check_jit_target(mode, target)?;
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
@@ -2192,6 +2344,29 @@ impl Parser {
             }
             Target::MacOSAarch64 => format!("invalid arch name `-arch {arch}`"),
             other => format!("unsupported option `-arch` for target `{}`", other.id_str()),
+        };
+        Err(ParseError::diag(format!("badc: error: {message}")))
+    }
+
+    /// `--jit` runs the code it lowers in this process, so it lowers for
+    /// the target this host runs. Another OS on the same architecture has
+    /// another calling convention, data model and C library, so it is
+    /// refused as another architecture is.
+    fn check_jit_target(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
+        if mode != Mode::Jit || Target::native_host() == Some(target) {
+            return Ok(());
+        }
+        let message = match Target::native_host() {
+            Some(host) => format!(
+                "`--jit` runs the program in this process, which runs {} code; \
+                 `--target={}` cannot run here: build an image for it, or \
+                 interpret it with `--interp`",
+                host.id_str(),
+                target.id_str()
+            ),
+            None => "`--jit` runs the program in this process, and badc has no \
+                     target for this host"
+                .to_string(),
         };
         Err(ParseError::diag(format!("badc: error: {message}")))
     }
@@ -2542,13 +2717,16 @@ impl FrontEnd {
             .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
+            .with_nostdlibinc(self.nostdlibinc)
+            .with_compiler_include_dir(self.compiler_include_dir.clone())
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
             .with_std(self.std)
             .with_optimize(self.optimize)
             .with_vla_larger_than(self.vla_larger_than)
-            .with_defines(tu_defines(label, &self.defines))
+            .with_defines(tu_defines(self.source_kind(label), &self.defines))
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
             .with_quote_include_paths(self.quote_include_paths.clone())
@@ -2559,7 +2737,13 @@ impl FrontEnd {
             .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
-            .with_preprocessed(SourceKind::of(label).is_preprocessed())
+            .with_preprocessed(self.source_kind(label).is_preprocessed())
+    }
+
+    /// The language `path` is translated as: its `-x` language, or the one
+    /// its suffix selects.
+    pub(crate) fn source_kind(&self, path: &str) -> SourceKind {
+        (self.languages.get(path).copied()).unwrap_or_else(|| SourceKind::of(path))
     }
 }
 
@@ -2582,7 +2766,7 @@ impl Codegen {
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
         opts.sibling_calls = self.sibling_calls;
-        opts.min_function_alignment = self.min_function_alignment;
+        opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
         opts.pic = self.fpic;
@@ -2642,6 +2826,7 @@ mod tests {
             Ok(Parsed::Print(_)) => "printed text".to_string(),
             Ok(Parsed::Install { .. }) => "an install".to_string(),
             Ok(Parsed::Diagnostics(_)) => "catalogue text".to_string(),
+            Ok(Parsed::PrintFileName(_)) => "a file name".to_string(),
             Err(e) => format!("a rejection: {}", e.message),
         }
     }
@@ -2944,6 +3129,31 @@ mod tests {
         assert!(reject(&["--target=nope", "a.c"]).0.contains("nope"));
     }
 
+    /// `--jit` runs what it lowers in this process, so it takes only the
+    /// target this host runs; another OS on the same architecture is
+    /// another calling convention, data model and C library. `--interp`
+    /// takes every target.
+    #[test]
+    fn jit_takes_only_the_target_this_host_runs() {
+        for target in Target::ALL {
+            let spec = format!("--target={}", target.id_str());
+            if Target::native_host() == Some(target) {
+                assert_eq!(parse(&["--jit", &spec, "a.c"]).target, target);
+            } else {
+                let (message, _) = reject(&["--jit", &spec, "a.c"]);
+                assert!(
+                    message.contains("`--jit` runs the program in this process")
+                        && message.contains(&spec),
+                    "{spec}: {message}"
+                );
+            }
+            assert_eq!(parse(&["--interp", &spec, "a.c"]).target, target);
+        }
+        if Target::native_host().is_some() {
+            assert_eq!(parse(&["--jit", "a.c"]).mode, Mode::Jit);
+        }
+    }
+
     /// The catalogue text `args` prints. Panics on any other outcome.
     fn catalog(args: &[&str]) -> String {
         match parse_args(argv(args)) {
@@ -3116,11 +3326,11 @@ mod tests {
             Level::Warning
         );
         // `-w` silences what is on; `-Werror` raises it.
-        assert_eq!(level(&["a.c"], "int-conversion"), Level::Warning);
-        assert_eq!(level(&["-w", "a.c"], "int-conversion"), Level::Ignore);
-        assert_eq!(level(&["-Werror", "a.c"], "int-conversion"), Level::Error);
+        assert_eq!(level(&["a.c"], "pointer-sign"), Level::Warning);
+        assert_eq!(level(&["-w", "a.c"], "pointer-sign"), Level::Ignore);
+        assert_eq!(level(&["-Werror", "a.c"], "pointer-sign"), Level::Error);
         assert_eq!(
-            level(&["-Werror", "-Wno-error", "a.c"], "int-conversion"),
+            level(&["-Werror", "-Wno-error", "a.c"], "pointer-sign"),
             Level::Warning
         );
         // `-Werror=<sel>` enables the row as well as raising it; the
@@ -3129,13 +3339,53 @@ mod tests {
             level(&["-Werror=unused-variable", "a.c"], "unused-variable"),
             Level::Error
         );
-        assert_eq!(
-            level(
-                &["-Werror", "-Wno-error=int-conversion", "a.c"],
-                "int-conversion"
-            ),
-            Level::Warning
-        );
+        let one_back = ["-Werror", "-Wno-error=pointer-sign", "a.c"];
+        assert_eq!(level(&one_back, "pointer-sign"), Level::Warning);
+    }
+
+    /// A row that is an error by default, as `-Wint-conversion` is in gcc 14,
+    /// under each option combination, with the level gcc 16 gives it.
+    #[test]
+    fn a_default_error_follows_gccs_options() {
+        use badc::diag::Level::{Error, Ignore, Warning};
+        #[rustfmt::skip]
+        let cases = [
+            (&[][..], Error),
+            (&["-Wno-error=int-conversion"], Warning),
+            (&["-Wno-int-conversion"], Ignore),
+            (&["-Wno-error"], Error),
+            (&["-w"], Error),
+            (&["-fpermissive"], Warning),
+            (&["-fpermissive", "-fno-permissive"], Error),
+            (&["-fpermissive", "-Wint-conversion"], Warning),
+            (&["-fpermissive", "-Werror"], Error),
+            (&["-fpermissive", "-Werror=int-conversion"], Error),
+            (&["-fpermissive", "-w"], Ignore),
+            (&["-Werror", "-Wno-error=int-conversion"], Warning),
+            (&["-Wno-error=int-conversion", "-Werror"], Warning),
+            (&["-Wno-error=int-conversion", "-Werror=int-conversion"], Error),
+            (&["-Werror=int-conversion", "-Wno-error=int-conversion"], Warning),
+            (&["-Wno-error=int-conversion", "-Wint-conversion"], Warning),
+            (&["-Wno-int-conversion", "-Wint-conversion"], Error),
+            (&["-Wno-int-conversion", "-Werror"], Ignore),
+            (&["-Wno-error=int-conversion", "-w"], Ignore),
+            (&["-Wall", "-Wextra", "-Wpedantic"], Error),
+            (&["-pedantic-errors"], Error),
+            (&["-Wno-error=int-conversion", "-pedantic-errors"], Warning),
+        ];
+        for (args, want) in cases {
+            let args = [args, &["a.c"]].concat();
+            assert_eq!(level(&args, "int-conversion"), want, "{args:?}");
+        }
+        for row in [
+            "implicit-int",
+            "return-mismatch",
+            "incompatible-pointer-types",
+        ] {
+            assert_eq!(level(&["-fpermissive", "a.c"], row), Warning, "{row}");
+            let (off, on) = (format!("-Wno-{row}"), format!("-W{row}"));
+            assert_eq!(level(&[off.as_str(), on.as_str(), "a.c"], row), Error);
+        }
     }
 
     #[test]
@@ -3464,6 +3714,23 @@ mod tests {
         assert_eq!(cli.front.no_builtin_fns, vec!["memcpy".to_string()]);
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);
+        // `-falign-functions=` rounds up to a power of two, and the larger
+        // of it and `-fmin-function-alignment=` is the entry alignment.
+        let entry = |args: &[&str]| {
+            let c = parse(args).codegen;
+            c.min_function_alignment.max(c.align_functions)
+        };
+        assert_eq!(entry(&["-falign-functions=8", "a.c"]), 8);
+        assert_eq!(entry(&["-falign-functions=5:3", "a.c"]), 8);
+        assert_eq!(
+            entry(&["-falign-functions=8", "-fmin-function-alignment=16", "a.c"]),
+            16
+        );
+        assert_eq!(
+            entry(&["-falign-functions=32", "-fno-align-functions", "a.c"]),
+            1
+        );
+        assert_eq!(entry(&["-falign-functions", "a.c"]), 1);
         assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
         // The overflow pair: the last spelling given wins.
         assert!(!parse(&["a.c"]).front.wrapv);
@@ -3762,6 +4029,33 @@ mod tests {
         }
     }
 
+    /// A reference no input defines is a load-time import in an ELF shared
+    /// library unless `-z defs`, in a Mach-O image under the last
+    /// `-undefined` that is not `error`, and never in a PE image.
+    #[test]
+    fn each_format_allows_undefined_as_its_linker() {
+        const MAC: &str = "--target=macos-aarch64";
+        let allows = |args: &[&str]| parse(args).allows_undefined();
+        assert!(allows(&[X64, "-shared", "a.c"]));
+        assert!(!allows(&[X64, "-shared", "-Wl,-z,defs", "a.c"]));
+        assert!(!allows(&[X64, "a.c"]));
+        assert!(!allows(&[MAC, "-shared", "a.c"]));
+        assert!(!allows(&[MAC, "-shared", "-Wl,-undefined,error", "a.c"]));
+        for treatment in ["warning", "suppress", "dynamic_lookup"] {
+            assert!(allows(&[MAC, "-shared", "-undefined", treatment, "a.c"]));
+            let wl = format!("-Wl,-undefined,{treatment}");
+            assert!(allows(&[MAC, wl.as_str(), "a.c"]), "{treatment}");
+        }
+        let last = [MAC, "-Wl,-undefined,dynamic_lookup,-undefined,error", "a.c"];
+        assert!(!allows(&last));
+        assert!(!allows(&["--target=windows-x64", "-shared", "a.c"]));
+        let (msg, _) = reject(&[MAC, "-Wl,-undefined,lazy", "a.c"]);
+        assert_eq!(
+            msg,
+            "badc: error: -undefined `lazy`: expected error, warning, suppress or dynamic_lookup"
+        );
+    }
+
     /// The last of `-pie` / `-no-pie` picks an ELF executable's form,
     /// `--freestanding` places the image whatever else is given, and a
     /// form the output cannot take is refused rather than ignored.
@@ -3788,6 +4082,20 @@ mod tests {
             );
             parse(&[target, "-no-pie", "-c", "a.c"]);
             parse(&[target, "-no-pie", "--shared", "a.c"]);
+        }
+    }
+
+    #[test]
+    fn print_file_name_answers_whatever_else_the_line_asks() {
+        // gcc prints the name and exits, compiling nothing.
+        for args in [
+            &["-print-file-name=include"][..],
+            &["-c", "a.c", "--target=nonesuch", "-print-file-name=include"],
+        ] {
+            match parse_args(argv(args)) {
+                Ok(Parsed::PrintFileName(name)) => assert_eq!(name, "include"),
+                other => panic!("{args:?}: expected a file name, got {}", outcome(&other)),
+            }
         }
     }
 
@@ -3882,6 +4190,53 @@ mod tests {
                 other => panic!("{flag}: expected the build info, got {}", outcome(&other)),
             }
         }
+    }
+
+    /// gcc's `-x`: the language of the inputs after it, until the next
+    /// `-x`; `-x none` returns to the file name's suffix.
+    #[test]
+    fn x_names_the_language_of_the_inputs_after_it() {
+        use SourceKind::{Asm, C};
+        let cli = parse(&[
+            "-c",
+            "a.c",
+            "-x",
+            "assembler",
+            "b",
+            "c.c",
+            "-xc",
+            "d.s",
+            "-x",
+            "none",
+            "e.s",
+        ]);
+        let kinds: Vec<_> = ["a.c", "b", "c.c", "d.s", "e.s"]
+            .map(|p| cli.front.source_kind(p))
+            .into();
+        let asm = Asm { preprocess: false };
+        let c = C {
+            preprocessed: false,
+        };
+        assert!(kinds == [c, asm, asm, c, asm]);
+        let cli = parse(&[
+            "-c",
+            "-x",
+            "assembler-with-cpp",
+            "f",
+            "-x",
+            "cpp-output",
+            "g",
+        ]);
+        assert!(cli.front.source_kind("f") == Asm { preprocess: true });
+        assert!(cli.front.source_kind("g") == C { preprocessed: true });
+        assert_eq!(
+            reject(&["-x", "c++", "a.c"]),
+            ("badc: error: language `c++` not recognized".to_string(), 1)
+        );
+        assert_eq!(
+            reject(&["-c", "a.c", "-x"]),
+            ("badc: error: -x requires a language".to_string(), 1)
+        );
     }
 
     #[test]
@@ -4065,7 +4420,8 @@ mod tests {
             ("WINDOWS", Windows),
             ("GUI", Windows),
             ("NT", Native),
-            ("Driver", Native),
+            ("Native", Native),
+            ("Driver", Driver),
             ("efi-application", EfiApplication),
             ("EFI_Application", EfiApplication),
             ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),
@@ -4092,8 +4448,10 @@ mod tests {
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
         assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
+        let lib = parse(&["-nostdlibinc", "a.c"]).front;
+        assert!(lib.nostdlibinc && !lib.nostdinc);
         let edition = |s: &str| parse(&[s, "a.c"]).front.std.0;
-        assert_eq!(parse(&["a.c"]).front.std.0, Some(201112));
+        assert_eq!(parse(&["a.c"]).front.std.0, Some(201710));
         assert_eq!(edition("-std=gnu89"), None);
         assert_eq!(edition("-std=iso9899:199409"), Some(199409));
         assert_eq!(edition("-std=c9x"), Some(199901));

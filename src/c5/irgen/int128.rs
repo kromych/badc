@@ -151,7 +151,7 @@ impl<'a> Walker<'a> {
     /// Sub-shifts stay in [0,63] so every 64-bit shift is defined on
     /// all backends: `x >> (64-t)` is written `(x >> (63-t)) >> 1`,
     /// which is 0 at `t = 0` as required.
-    fn int128_shift(b: &mut SsaBuilder, op: BinOp, a: Halves, count: ValueId) -> Halves {
+    pub(super) fn int128_shift(b: &mut SsaBuilder, op: BinOp, a: Halves, count: ValueId) -> Halves {
         let s = b.binop_imm(BinOp::And, count, 127);
         let t = b.binop_imm(BinOp::And, s, 63);
         let inv = {
@@ -260,7 +260,7 @@ impl<'a> Walker<'a> {
     /// halves; the high half adds that product's carry-out to the two
     /// cross terms. The `a.hi * c.hi` term only reaches bit 128 and up,
     /// so it is dropped (C99 6.2.5p9: the result wraps mod 2^128).
-    fn int128_mul(b: &mut SsaBuilder, a: Halves, c: Halves) -> Halves {
+    pub(super) fn int128_mul(b: &mut SsaBuilder, a: Halves, c: Halves) -> Halves {
         let lo = b.binop(BinOp::Mul, a.0, c.0);
         let hi = Self::int128_mulhi_u(b, a.0, c.0);
         let cross0 = b.binop(BinOp::Mul, a.0, c.1);
@@ -277,7 +277,12 @@ impl<'a> Walker<'a> {
     /// divisor one step over its normalized top word (Hacker's Delight 9-5).
     /// Inline, it serves the VM, the JIT and both targets and links nothing
     /// into a freestanding image. A zero divisor is undefined (C99 6.5.5p5).
-    fn int128_udivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
+    pub(super) fn int128_udivmod(
+        &mut self,
+        b: &mut SsaBuilder,
+        a: Halves,
+        c: Halves,
+    ) -> (Halves, Halves) {
         let q_lo = b.alloc_synthetic_local();
         let q_hi = b.alloc_synthetic_local();
         let r_lo = b.alloc_synthetic_local();
@@ -476,7 +481,12 @@ impl<'a> Walker<'a> {
     /// Divides the magnitudes and restores the signs: the quotient is
     /// negative when the operand signs differ and the remainder takes
     /// the dividend's sign (C99 6.5.5p6, truncation toward zero).
-    fn int128_sdivmod(&mut self, b: &mut SsaBuilder, a: Halves, c: Halves) -> (Halves, Halves) {
+    pub(super) fn int128_sdivmod(
+        &mut self,
+        b: &mut SsaBuilder,
+        a: Halves,
+        c: Halves,
+    ) -> (Halves, Halves) {
         let sa = b.binop_imm(BinOp::Shr, a.1, 63);
         let sc = b.binop_imm(BinOp::Shr, c.1, 63);
         let ua = Self::int128_xor_sub(b, a, sa);

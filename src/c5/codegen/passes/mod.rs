@@ -26,6 +26,7 @@ pub(crate) mod narrow;
 pub(crate) mod noreturn;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
+pub(crate) mod return_call;
 pub(crate) mod rotate;
 pub(crate) mod shifted_operand;
 pub(crate) mod simplify_branches;

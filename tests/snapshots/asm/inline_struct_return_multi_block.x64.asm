@@ -46,18 +46,15 @@ Disassembly of section .text:
                	shrq	$0x5, %rax
                	cmpl	$0x9, %eax
                	jne	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x1, (%rsi)
+               	movl	$0x1, <rip> # <addr>
                	cmpl	$0x4, %eax
                	jb	<addr>
-               	leaq	<rip>, %rsi # <addr>
-               	movl	$0x1, (%rsi)
+               	movl	$0x1, <rip> # <addr>
                	imulq	$0x18, %rax, %rax
                	addq	%rcx, %rax
                	cmpl	$0x0, (%rax)
                	jne	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	movl	$0x1, (%rcx)
+               	movl	$0x1, <rip> # <addr>
                	movl	(%rax), %ecx
                	movl	0x4(%rax), %esi
                	movzwq	0x8(%rax), %rdi
@@ -84,8 +81,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	cmpq	$0x100f1, %rax          # imm = 0x100F1
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

@@ -25,25 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<use_auto>:
-               	xorl	%eax, %eax
-               	retq
-
-<use_fixed>:
-               	xorl	%eax, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x5, %edi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	movl	$0x7, %edi
-               	callq	<addr>
-               	popq	%rbp
+               	xorl	%eax, %eax
                	retq

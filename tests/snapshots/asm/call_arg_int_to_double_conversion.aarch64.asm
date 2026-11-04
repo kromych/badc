@@ -51,9 +51,8 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
                	fmov	d0, #2.00000000
-               	scvtf	d1, x0
+               	fmov	d1, d0
                	bl	<addr>
                	fmov	d1, #4.00000000
                	fcmp	d0, d1
@@ -61,9 +60,8 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
                	fmov	d0, #2.00000000
-               	scvtf	d1, x0
+               	fmov	d1, #3.00000000
                	bl	<addr>
                	fmov	d1, #8.00000000
                	fcmp	d0, d1

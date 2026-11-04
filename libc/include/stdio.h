@@ -318,75 +318,29 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::setvbuf,   "setvbuf")
 #pragma binding(msvcrt::remove,    "remove")
 #pragma binding(msvcrt::rename,    "rename")
-// Wide-string companion a program uses to open paths that contain
-// non-ASCII characters: it converts the UTF-8 input to UTF-16 via
-// MultiByteToWideChar and then calls _wfopen. The Windows CRT
-// spells the entry point with the leading underscore.
-#pragma binding(msvcrt::_wfopen,   "_wfopen")
 #pragma binding(msvcrt::_fsopen,   "_fsopen")
-#pragma binding(msvcrt::_wfsopen,  "_wfsopen")
 #pragma binding(msvcrt::freopen_s, "freopen_s")
-#pragma binding(msvcrt::_wfreopen_s, "_wfreopen_s")
-// `_wpopen` / `_pclose` drive a command pipe whose command line
-// needs UTF-16. The Windows CRT spells the popen entry point with a
-// leading underscore on both the byte-string and wide-string
-// flavours.
-#pragma binding(msvcrt::_wpopen,   "_wpopen")
+// The Windows CRT spells the popen entry point with a leading underscore.
 #pragma binding(msvcrt::_popen,    "_popen")
 #pragma binding(msvcrt::_pclose,   "_pclose")
 // The POSIX names, which mingw-w64 declares and its oldnames library
 // forwards to the CRT's underscored entry points.
 #pragma binding(msvcrt::popen,     "_popen")
 #pragma binding(msvcrt::pclose,    "_pclose")
-// The wide-string fs APIs, for paths that contain non-ASCII
-// characters, plus the Win32-spelled fileno / setmode / isatty /
-// access helpers every Windows console interaction routes through.
+// The CRT's underscored fileno, isatty, setmode and access.
 #pragma binding(msvcrt::_fileno,        "_fileno")
 #pragma binding(msvcrt::_isatty,        "_isatty")
 #pragma binding(msvcrt::_setmode,       "_setmode")
 #pragma binding(msvcrt::_access,        "_access")
-#pragma binding(msvcrt::_waccess,       "_waccess")
-#pragma binding(msvcrt::_wfreopen,      "_wfreopen")
-#pragma binding(msvcrt::_wchmod,        "_wchmod")
-#pragma binding(msvcrt::_wmkdir,        "_wmkdir")
-#pragma binding(msvcrt::_wunlink,       "_wunlink")
-#pragma binding(msvcrt::_wfullpath,     "_wfullpath")
-#pragma binding(msvcrt::_wfindfirst,    "_wfindfirst")
-#pragma binding(msvcrt::_wfindnext,     "_wfindnext")
 #pragma binding(msvcrt::_findclose,     "_findclose")
-// Wide-string IO companions to fgets / fputs / putc, plus the
-// process-environment helpers for passing argv to a child process
-// on Windows. Names spelled with the leading underscore where the
-// MSVC CRT does so.
-#pragma binding(msvcrt::fgetws,         "fgetws")
-#pragma binding(msvcrt::fputws,         "fputws")
-// The legacy arm64 msvcrt.dll does not export `_getws`; UCRT does.
-#if defined(__aarch64__)
-#pragma binding(ucrtbase::_getws,       "_getws")
-#else
-#pragma binding(msvcrt::_getws,         "_getws")
-#endif
-#pragma binding(msvcrt::_putws,         "_putws")
-#pragma binding(msvcrt::_wgetenv,       "_wgetenv")
-#pragma binding(msvcrt::_wputenv,       "_wputenv")
-#pragma binding(msvcrt::_wsystem,       "_wsystem")
-#pragma binding(msvcrt::_wgetcwd,       "_wgetcwd")
-#pragma binding(msvcrt::_wchdir,        "_wchdir")
-#pragma binding(msvcrt::_wrename,       "_wrename")
-#pragma binding(msvcrt::_wremove,       "_wremove")
-#pragma binding(msvcrt::_wtoi,          "_wtoi")
-#pragma binding(msvcrt::wcslen,         "wcslen")
-#pragma binding(msvcrt::wcscmp,         "wcscmp")
-#pragma binding(msvcrt::wcsncmp,        "wcsncmp")
-#pragma binding(msvcrt::wcschr,         "wcschr")
-#pragma binding(msvcrt::wcsrchr,        "wcsrchr")
-#pragma binding(msvcrt::wcsstr,         "wcsstr")
-#pragma binding(msvcrt::wcscpy,         "wcscpy")
-#pragma binding(msvcrt::wcsncpy,        "wcsncpy")
-#pragma binding(msvcrt::wcscat,         "wcscat")
-#pragma binding(msvcrt::wcsncat,        "wcsncat")
-#pragma binding(msvcrt::wcsdup,         "_wcsdup")
-#pragma binding(msvcrt::_wcsicmp,       "_wcsicmp")
+// The wide stream functions, as the UCRT's <stdio.h> has them, and the
+// wide file, directory, environment and process functions this header has
+// carried.
+#include <__badc_wstdio.h>
+#include <__badc_wio.h>
+#include <__badc_wdirect.h>
+#include <__badc_wstdlib.h>
+#include <__badc_wprocess.h>
 // MSVC "safe" CRT variants (`_s` suffix). MSVC-only sources
 // reach for these under `_MSC_VER`; the `_s` form is the
 // bounded-buffer rewrite of the legacy entry point and behaves
@@ -593,51 +547,15 @@ long getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
 int dprintf(int fd, const char *fmt, ...);
 int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
-FILE *_wfopen(unsigned short *path, unsigned short *mode);
 FILE *_fsopen(const char *path, const char *mode, int shflag);
-FILE *_wfsopen(const wchar_t *path, const wchar_t *mode, int shflag);
 int   freopen_s(FILE **pfile, const char *path, const char *mode, FILE *stream);
-int   _wfreopen_s(FILE **pfile, const wchar_t *path, const wchar_t *mode, FILE *stream);
-FILE *_wpopen(unsigned short *cmd, unsigned short *mode);
 FILE *_popen(char *cmd, char *mode);
 int   _pclose(FILE *stream);
 int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
 int   _access(char *path, int mode);
-int   _waccess(unsigned short *path, int mode);
-FILE *_wfreopen(unsigned short *path, unsigned short *mode, FILE *stream);
-int   _wchmod(unsigned short *path, int mode);
-int   _wmkdir(unsigned short *path);
-int   _wunlink(unsigned short *path);
-unsigned short *_wfullpath(unsigned short *abs, unsigned short *rel, long long size);
-long long _wfindfirst(unsigned short *pat, void *find_data);
-int   _wfindnext(long long handle, void *find_data);
 int   _findclose(long long handle);
-unsigned short *fgetws(unsigned short *buf, int n, FILE *stream);
-int   fputws(const unsigned short *s, FILE *stream);
-unsigned short *_getws(unsigned short *buf);
-int   _putws(unsigned short *s);
-unsigned short *_wgetenv(unsigned short *name);
-int   _wputenv(unsigned short *name_eq_value);
-int   _wsystem(unsigned short *cmd);
-unsigned short *_wgetcwd(unsigned short *buf, int n);
-int   _wchdir(unsigned short *path);
-int   _wrename(unsigned short *old, unsigned short *new_);
-int   _wremove(unsigned short *path);
-int   _wtoi(unsigned short *s);
-unsigned long long wcslen(const unsigned short *s);
-int   wcscmp(const unsigned short *a, const unsigned short *b);
-int   wcsncmp(const unsigned short *a, const unsigned short *b, unsigned long long n);
-unsigned short *wcschr(const unsigned short *s, unsigned short c);
-unsigned short *wcsrchr(const unsigned short *s, unsigned short c);
-unsigned short *wcsstr(const unsigned short *hay, const unsigned short *needle);
-unsigned short *wcscpy(unsigned short *dst, const unsigned short *src);
-unsigned short *wcsncpy(unsigned short *dst, const unsigned short *src, unsigned long long n);
-unsigned short *wcscat(unsigned short *dst, const unsigned short *src);
-unsigned short *wcsncat(unsigned short *dst, const unsigned short *src, unsigned long long n);
-unsigned short *wcsdup(const unsigned short *s);
-int   _wcsicmp(const unsigned short *a, const unsigned short *b);
 // The Windows SDK's prototypes: `errno_t` is `int`, and `time_t` the
 // 64-bit `long long` the CRT's `_*64_s` entries take.
 struct tm;
@@ -660,7 +578,6 @@ int   __getmainargs(int *argc, char ***argv, char ***envp, int do_wildcard, void
 int   _getch(void);
 int   _kbhit(void);
 int   _vscprintf(const char *format, __builtin_va_list ap);
-int   _vscwprintf(const wchar_t *format, __builtin_va_list ap);
 int   _locking(int fd, int mode, long nbytes);
 long long _get_osfhandle(int fd);
 int _open_osfhandle(long long osfhandle, int flags);
@@ -692,8 +609,8 @@ FILE *__iob_func(void);
 // MSVC's `_findfirst`/`_findnext` companion structs. Layout
 // pinned to the Win64 SDK so the kernel-emitted records match
 // what a program reads. Per MSVC: `time_t` is 64-bit on the 64-bit
-// CRT; `_fsize_t` is `unsigned long` (32-bit on LLP64). Wide
-// names are 260 wchars; ANSI variant is 260 chars.
+// CRT; `_fsize_t` is `unsigned long` (32-bit on LLP64). Names are 260
+// chars; the wide structs are <io.h>'s.
 struct _finddata_t {
     unsigned int  attrib;
     long long     time_create;
@@ -702,14 +619,6 @@ struct _finddata_t {
     unsigned int  size;
     char          name[260];
 };
-struct _wfinddata_t {
-    unsigned int   attrib;
-    long long      time_create;
-    long long      time_access;
-    long long      time_write;
-    unsigned int   size;
-    unsigned short name[260];
-};
 struct _finddata64_t {
     unsigned int  attrib;
     long long     time_create;
@@ -717,14 +626,6 @@ struct _finddata64_t {
     long long     time_write;
     long long     size;
     char          name[260];
-};
-struct _wfinddata64_t {
-    unsigned int   attrib;
-    long long      time_create;
-    long long      time_access;
-    long long      time_write;
-    long long      size;
-    unsigned short name[260];
 };
 #define _A_NORMAL     0x00
 #define _A_RDONLY     0x01

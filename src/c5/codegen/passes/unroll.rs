@@ -424,10 +424,10 @@ pub(crate) fn eval_value(
                 .map(|x| eval::eval_extend(x, *kind))
         }
         Inst::BinopI { op, lhs, rhs_imm } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
-            .and_then(|l| fold_at_width(*op, l, *rhs_imm, narrow)),
+            .and_then(|l| super::narrow::fold_at_width(*op, l, *rhs_imm, narrow)),
         Inst::Binop { op, lhs, rhs } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
             .zip(eval_value(func, *rhs, state, cache, depth + 1, cmp32))
-            .and_then(|(l, r)| fold_at_width(*op, l, r, narrow)),
+            .and_then(|(l, r)| super::narrow::fold_at_width(*op, l, r, narrow)),
         Inst::ShiftOp {
             op,
             lhs,
@@ -437,8 +437,8 @@ pub(crate) fn eval_value(
         } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
             .zip(eval_value(func, *rhs, state, cache, depth + 1, cmp32))
             .and_then(|(l, r)| {
-                let shifted = fold_at_width(*shift, r, i64::from(*amount), false)?;
-                fold_at_width(*op, l, shifted, false)
+                let shifted = super::narrow::fold_at_width(*shift, r, i64::from(*amount), false)?;
+                super::narrow::fold_at_width(*op, l, shifted, false)
             }),
         Inst::BitField {
             value,
@@ -482,22 +482,6 @@ pub(crate) fn bind_phis(
         bound.push((v, value));
     }
     state.extend(bound);
-}
-
-/// [`eval::fold_binop`] on the low words, under the operator's sign, when `narrow`.
-fn fold_at_width(op: crate::c5::ir::BinOp, lhs: i64, rhs: i64, narrow: bool) -> Option<i64> {
-    use crate::c5::ir::BinOp;
-    let unsigned = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
-    let low = |x: i64| {
-        if !narrow {
-            x
-        } else if unsigned {
-            i64::from(x as u32)
-        } else {
-            i64::from(x as i32)
-        }
-    };
-    eval::fold_binop(op, low(lhs), low(rhs))
 }
 
 /// Count iterations by abstract interpretation: bind each phi to its
@@ -1569,6 +1553,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);
@@ -1585,6 +1570,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: true,
             align: 0,
+            pc_rel: false,
         };
         run_one(&mut f);
         assert_eq!(f.blocks.len(), 5);
@@ -1676,6 +1662,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false,
                 },
                 Inst::Binop {
                     op: BinOp::Add,

@@ -32,12 +32,10 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movl	$0x40, %esi
                	leaq	<rip>, %rdx
-               	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
-               	movq	%rax, %xmm14
-               	cvtss2sd	%xmm14, %xmm0
-               	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
-               	movq	%rax, %xmm14
-               	cvtss2sd	%xmm14, %xmm1
+               	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
+               	movabsq	$0x3fb99999a0000000, %rcx # imm = 0x3FB99999A0000000
+               	movq	%rax, %xmm0
+               	movq	%rcx, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	leaq	-0x40(%rbp), %rdi

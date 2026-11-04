@@ -193,7 +193,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::putenv,    "_putenv")
 #pragma binding(msvcrt::_putenv,   "_putenv")
 #pragma binding(msvcrt::_putenv_s, "_putenv_s")
-#pragma binding(msvcrt::_wputenv_s, "_wputenv_s")
 #pragma binding(msvcrt::qsort,     "qsort")
 #pragma binding(msvcrt::bsearch,   "bsearch")
 #pragma binding(msvcrt::rand,      "rand")
@@ -223,11 +222,6 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::itoa,      "_itoa")
 #pragma binding(msvcrt::ltoa,      "_ltoa")
 #pragma binding(msvcrt::ultoa,     "_ultoa")
-#pragma binding(msvcrt::_itow,     "_itow")
-#pragma binding(msvcrt::_ltow,     "_ltow")
-#pragma binding(msvcrt::_ultow,    "_ultow")
-#pragma binding(msvcrt::_i64tow,   "_i64tow")
-#pragma binding(msvcrt::_ui64tow,  "_ui64tow")
 #pragma binding(msvcrt::_ecvt,     "_ecvt")
 #pragma binding(msvcrt::_fcvt,     "_fcvt")
 #pragma binding(msvcrt::_gcvt,     "_gcvt")
@@ -239,15 +233,11 @@ char *_ui64toa(unsigned long long value, char *dst, int radix);
 char *itoa(int value, char *dst, int radix);
 char *ltoa(long value, char *dst, int radix);
 char *ultoa(unsigned long value, char *dst, int radix);
-wchar_t *_itow(int value, wchar_t *dst, int radix);
-wchar_t *_ltow(long value, wchar_t *dst, int radix);
-wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
-wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
-wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
 char *_ecvt(double value, int ndigits, int *decpt, int *sign);
 char *_fcvt(double value, int ndigits, int *decpt, int *sign);
 char *_gcvt(double value, int ndigits, char *dst);
 #include <corecrt.h>
+#include <__badc_wstdlib.h>
 // The bounds-checked forms <tchar.h>'s _s mappings reach, with mingw-w64's
 // prototypes (sec_api/*_s.h); msvcrt.dll exports each on both targets.
 #pragma binding(msvcrt::_itoa_s, "_itoa_s")
@@ -258,6 +248,71 @@ errno_t _ltoa_s(long _Val, char *_DstBuf, size_t _Size, int _Radix);
 errno_t _ultoa_s(unsigned long _Val, char *_DstBuf, size_t _Size, int _Radix);
 #pragma binding(msvcrt::_i64toa_s, "_i64toa_s")
 errno_t _i64toa_s(long long _Val, char *_DstBuf, size_t _Size, int _Radix);
+// The number conversions under a locale object, with the UCRT's prototypes.
+// msvcrt.dll exports the double, long, unsigned long and 64-bit forms; the
+// long long ones bind to the 64-bit ones as strtoll does, and `long double`
+// is `double`. libc/lib/locale_ext.c defines _strtof_l.
+#pragma binding(msvcrt::_strtod_l, "_strtod_l")
+double _strtod_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+#pragma binding(msvcrt::_strtold_l, "_strtod_l")
+long double _strtold_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+float _strtof_l(const char *_String, char **_EndPtr, _locale_t _Locale);
+#pragma binding(msvcrt::_strtol_l, "_strtol_l")
+long _strtol_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoul_l, "_strtoul_l")
+unsigned long _strtoul_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoi64_l, "_strtoi64_l")
+long long _strtoi64_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoll_l, "_strtoi64_l")
+long long _strtoll_l(const char *_String, char **_EndPtr, int _Radix, _locale_t _Locale);
+#pragma binding(msvcrt::_strtoui64_l, "_strtoui64_l")
+unsigned long long _strtoui64_l(const char *_String, char **_EndPtr, int _Radix,
+                                _locale_t _Locale);
+#pragma binding(msvcrt::_strtoull_l, "_strtoui64_l")
+unsigned long long _strtoull_l(const char *_String, char **_EndPtr, int _Radix,
+                               _locale_t _Locale);
+#pragma binding(msvcrt::_atof_l, "_atof_l")
+double _atof_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoi_l, "_atoi_l")
+int _atoi_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atol_l, "_atol_l")
+long _atol_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoi64_l, "_atoi64_l")
+long long _atoi64_l(const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoll_l, "_atoi64_l")
+long long _atoll_l(const char *_String, _locale_t _Locale);
+// The results _atodbl, _atoflt and _atoldbl write, with the UCRT's layout:
+// _LDOUBLE holds an x87 80-bit value.
+typedef struct {
+    unsigned char ld[10];
+} _LDOUBLE;
+#define _PTR_LD(x) ((unsigned char *)(&(x)->ld))
+typedef struct {
+    double x;
+} _CRT_DOUBLE;
+typedef struct {
+    float f;
+} _CRT_FLOAT;
+typedef struct {
+    long double x;
+} _LONGDOUBLE;
+typedef struct {
+    unsigned char ld12[12];
+} _LDBL12;
+#pragma binding(msvcrt::_atodbl, "_atodbl")
+int _atodbl(_CRT_DOUBLE *_Result, char *_String);
+#pragma binding(msvcrt::_atoldbl, "_atoldbl")
+int _atoldbl(_LDOUBLE *_Result, char *_String);
+#pragma binding(msvcrt::_atodbl_l, "_atodbl_l")
+int _atodbl_l(_CRT_DOUBLE *_Result, char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoflt_l, "_atoflt_l")
+int _atoflt_l(_CRT_FLOAT *_Result, const char *_String, _locale_t _Locale);
+#pragma binding(msvcrt::_atoldbl_l, "_atoldbl_l")
+int _atoldbl_l(_LDOUBLE *_Result, char *_String, _locale_t _Locale);
+// msvcrt.dll has no _atoflt: _atoflt_l in the current locale.
+static inline int _atoflt(_CRT_FLOAT *_Result, const char *_String) {
+    return _atoflt_l(_Result, _String, 0);
+}
 #pragma binding(msvcrt::_ui64toa_s, "_ui64toa_s")
 errno_t _ui64toa_s(unsigned long long _Val, char *_DstBuf, size_t _Size, int _Radix);
 #pragma binding(msvcrt::getenv_s, "getenv_s")
@@ -271,6 +326,14 @@ errno_t _splitpath_s(const char *_FullPath, char *_Drive, size_t _DriveSize, cha
 #define _CVTBUFSIZE (309 + 40)
 #define __max(a, b) (((a) > (b)) ? (a) : (b))
 #define __min(a, b) (((a) < (b)) ? (a) : (b))
+// The UCRT defines these for C with its other non-standard names; NOMINMAX
+// gates only the <windows.h> copies.
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 #ifndef _countof
 #define _countof(_Array) (sizeof(_Array) / sizeof(_Array[0]))
 #endif
@@ -450,6 +513,7 @@ char *getenv(const char *name);
 // calls that name directly.
 int _putenv(const char *string);
 int _putenv_s(const char *name, const char *value);
+_Noreturn void _exit(int status);
 #else
 int setenv(const char *name, const char *value, int overwrite);
 #endif

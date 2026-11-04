@@ -60,8 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	sturh	w0, [x29, #-0x60]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x3, [x0]
+               	ldr	x3, [x0, #0x18]
                	mov	x1, #0x6                // =6
                	mov	x0, x20
                	blr	x3

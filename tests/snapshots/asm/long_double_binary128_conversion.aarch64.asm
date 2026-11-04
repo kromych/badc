@@ -345,26 +345,24 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	b	<addr>
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x1, [x2]
+               	ldr	x1, [x2, #0x18]
                	eor	x1, x1, x1, lsl #13
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	eor	x1, x1, x1, lsr #7
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	eor	x1, x1, x1, lsl #17
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	b	<addr>
                	mov	x0, x21
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	eor	x1, x1, x1, lsl #13
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	eor	x1, x1, x1, lsr #7
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	eor	x1, x1, x1, lsl #17
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	lsr	x0, x1, #16
                	b	<addr>
                	add	x20, x20, #0x1
@@ -378,20 +376,19 @@ Disassembly of section .text:
                	b.lo	<addr>
                	mov	x20, #0x0               // =0
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x0, [x2]
+               	ldr	x0, [x2, #0x18]
                	eor	x0, x0, x0, lsl #13
-               	str	x0, [x2]
+               	str	x0, [x2, #0x18]
                	eor	x0, x0, x0, lsr #7
-               	str	x0, [x2]
+               	str	x0, [x2, #0x18]
                	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2]
+               	str	x0, [x2, #0x18]
                	eor	x1, x0, x0, lsl #13
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	eor	x1, x1, x1, lsr #7
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	eor	x1, x1, x1, lsl #17
-               	str	x1, [x2]
+               	str	x1, [x2, #0x18]
                	bl	<addr>
                	cbz	w0, <addr>
                	add	x20, x20, #0x1
@@ -451,14 +448,13 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	mov	x20, #0x0               // =0
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
+               	ldr	x0, [x1, #0x18]
                	eor	x0, x0, x0, lsl #13
-               	str	x0, [x1]
+               	str	x0, [x1, #0x18]
                	eor	x0, x0, x0, lsr #7
-               	str	x0, [x1]
+               	str	x0, [x1, #0x18]
                	eor	x0, x0, x0, lsl #17
-               	str	x0, [x1]
+               	str	x0, [x1, #0x18]
                	tbz	w20, #0x0, <addr>
                	and	x0, x0, #0x800fffffffffffff
                	bl	<addr>

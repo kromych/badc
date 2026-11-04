@@ -27,6 +27,10 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         id: ExprId,
     ) -> Result<ValueId, WalkError> {
+        if let Some(ty) = self.atomic_lvalue_ty(id) {
+            let addr = self.atomic_lvalue_addr(b, id, ty)?;
+            return self.atomic_object_load(b, addr, ty);
+        }
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Ok(b.imm(*val)),
             Expr::FloatLit { bits, ty } => {

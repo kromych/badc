@@ -28,19 +28,87 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x1c0, %rsp            # imm = 0x1C0
-               	movl	$0xa5a5a5a5, -0x8(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x10(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x18(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x20(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x68(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x70(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x78(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0x80(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0xc8(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0xd0(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0xd8(%rbp) # imm = 0xA5A5A5A5
-               	movl	$0xa5a5a5a5, -0xe0(%rbp) # imm = 0xA5A5A5A5
+               	subq	$0x8, %rsp
+               	pushq	%rbx
                	xorl	%eax, %eax
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	xorl	%eax, %eax
+               	cpuid
+               	orq	%rbx, %rcx
+               	orq	%rdx, %rcx
+               	testl	%ecx, %ecx
+               	jne	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%eax, %eax
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	jae	<addr>
+               	movl	$0x80000000, %eax       # imm = 0x80000000
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpl	%r11d, %eax
+               	jae	<addr>
+               	xorl	%eax, %eax
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	jae	<addr>
+               	xorl	%eax, %eax
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x7, %eax
+               	jae	<addr>
+               	xorl	%esi, %esi
+               	xorl	%eax, %eax
+               	cpuid
+               	testl	%eax, %eax
+               	je	<addr>
+               	cmpl	$0x7, %eax
+               	jae	<addr>
+               	xorl	%eax, %eax
+               	cmpl	%eax, %esi
+               	je	<addr>
+               	movl	$0x4, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	xorl	%eax, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x7, %eax
+               	cpuid
+               	movl	$0x1, %eax
+               	jmp	<addr>
+               	movl	$0x7, %eax
+               	xorl	%ecx, %ecx
+               	cpuid
+               	movl	$0x1, %esi
+               	jmp	<addr>
+               	movl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	xorl	%ecx, %ecx
+               	cpuid
+               	jmp	<addr>
+               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
+               	cpuid
+               	movl	$0x3, %eax
+               	popq	%rbx
+               	leave
+               	retq
+               	movl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
+               	cpuid
+               	movl	$0x2, %eax
+               	popq	%rbx
                	leave
                	retq

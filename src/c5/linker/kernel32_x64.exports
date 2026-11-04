@@ -1,0 +1,6 @@
+RtlIsEcCode
+RtlRaiseException
+__C_specific_handler
+__chkstk
+__misaligned_access
+_local_unwind

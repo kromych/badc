@@ -473,7 +473,8 @@ fn linker_input_kind(path: &str, target: Target) -> Result<InputKind, String> {
 }
 
 impl Inputs {
-    /// Classify every positional input by extension: `.c`, and a name
+    /// Classify every positional input by extension, unless a `-x` names
+    /// its language: `.c`, and a name
     /// with no extension, is a C source; `.s` / `.S` / `.sx` an
     /// assembler source; `.o` / `.obj` a relocatable object; `.a` /
     /// `.lib` a static archive; `.so` / `.dylib` / `.tbd` / `.dll` a shared
@@ -512,7 +513,7 @@ impl Inputs {
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
             let kind = match ext {
-                _ if a == "-" => InputKind::Source,
+                _ if a == "-" || cli.front.languages.contains_key(a) => InputKind::Source,
                 "c" | "i" | "" | "s" | "S" | "sx" => InputKind::Source,
                 "o" | "obj" => InputKind::Object,
                 "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => InputKind::Shared,
@@ -643,9 +644,17 @@ impl Inputs {
         // than read off the link host (see `TargetCLibrary`), so the image
         // is a function of the sources, the flags and the target alone. The
         // set is materialized during symbol selection below, once the
-        // undefined names are known.
-        self.target_libc = (cli.mode == Mode::NativeExecutable && !cli.freestanding)
-            .then(|| badc::TargetCLibrary::new(cli.target));
+        // undefined names are known. An ELF shared library leaves such a
+        // name to the loader's global scope; a DLL's import names its DLL,
+        // and ld64 reports a reference a dylib leaves unresolved, so a PE
+        // or Mach-O shared link takes the library as gcc's and clang's do.
+        let hosted = match cli.mode {
+            Mode::NativeExecutable => true,
+            Mode::SharedLibrary => cli.target.binary_format() != badc::BinaryFormat::Elf,
+            _ => false,
+        };
+        self.target_libc =
+            (hosted && !cli.freestanding).then(|| badc::TargetCLibrary::new(cli.target));
     }
     /// Fall back to stdin when no positional source was given
     /// and stdin isn't a terminal -- the `cat foo.c | badc`

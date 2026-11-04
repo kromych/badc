@@ -41,7 +41,7 @@ use crate::c5::codegen::ssa::reg_alloc::{
 };
 use crate::c5::ir::{
     BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator,
-    ValueId,
+    ValueId, is_comparison_op,
 };
 use alloc::vec::Vec;
 use hashbrown::HashMap;
@@ -84,7 +84,9 @@ enum Key {
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
-    for func in funcs {
+    // A value extended across a `__try` region boundary would be read where
+    // an exception left it unset.
+    for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
         run_one(func, caps);
     }
 }
@@ -95,28 +97,6 @@ fn commutative_int(op: BinOp) -> bool {
     matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Eq | BinOp::Ne
-    )
-}
-
-fn is_compare(op: BinOp) -> bool {
-    matches!(
-        op,
-        BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Lt
-            | BinOp::Gt
-            | BinOp::Le
-            | BinOp::Ge
-            | BinOp::Ult
-            | BinOp::Ugt
-            | BinOp::Ule
-            | BinOp::Uge
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
     )
 }
 
@@ -308,7 +288,7 @@ fn branch_pinned(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
                 Inst::Binop { op, .. } | Inst::BinopI { op, .. } => (*op, None),
                 _ => break,
             };
-            if !is_compare(op) {
+            if !is_comparison_op(op) {
                 break;
             }
             if blk.inst_range.contains(&v) {
@@ -857,6 +837,9 @@ mod tests {
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
         FunctionSsa {
+            seh_scopes: Vec::new(),
+            block_seh: Vec::new(),
+            funclet_slots: Vec::new(),
             name: alloc::string::String::new(),
             ent_pc: 0,
             end_pc: 0,
@@ -891,7 +874,7 @@ mod tests {
             param_local_slots: Vec::new(),
             ret_agg: None,
             ret_is_fp: false,
-            ret_type_tag: 0,
+            ret_type_tag: None,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             label_data_relocs: Vec::new(),

@@ -83,9 +83,94 @@ pub(crate) struct Frame {
     /// instruction. The modulo and cursor `va_arg` lowerings that take x19
     /// as a third scratch push and pop it around the use.
     pub local_base: bool,
+    /// Bytes of the callee-saved block directly below the frame record, 0
+    /// where the saves sit at the frame bottom. Windows on ARM64 places them
+    /// there when the frame does not fold, so the prolog stores them before
+    /// it sets x29 and its unwind codes describe each one.
+    pub saves_top: u32,
+    /// A save pair names consecutive registers, the only pairs the Windows
+    /// ARM64 unwind codes `save_regp` and `save_fregp` describe.
+    pub consecutive_pairs: bool,
+    /// An integer division by zero raises an exception (Windows on ARM64).
+    pub raises_divide_by_zero: bool,
+}
+
+/// One callee save: `r` alone, or with `r2` in the slot above it as one
+/// `stp`; a d-register when `fp`; at byte `off` of the save block.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Save {
+    pub fp: bool,
+    pub r: u8,
+    pub r2: Option<u8>,
+    pub off: u32,
+}
+
+/// The callee saves in slot order: the FP registers, the GPRs, then x19
+/// in its own 16-byte slot. Under `consecutive_pairs` each list is sorted
+/// and only consecutive registers pair.
+pub(super) fn save_plan(alloc: &Allocation, frame: Frame) -> Vec<Save> {
+    let mut plan = Vec::new();
+    let mut base = 0u32;
+    for (fp, list) in [(true, &alloc.fp_used), (false, &alloc.gpr_used)] {
+        let mut regs = list.clone();
+        if frame.consecutive_pairs {
+            regs.sort_unstable();
+        }
+        let mut i = 0usize;
+        while i < regs.len() {
+            let pair =
+                i + 1 < regs.len() && (!frame.consecutive_pairs || regs[i + 1] == regs[i] + 1);
+            plan.push(Save {
+                fp,
+                r: regs[i],
+                r2: pair.then(|| regs[i + 1]),
+                off: base + i as u32 * 8,
+            });
+            i += 1 + usize::from(pair);
+        }
+        base += super::ssa::emit_common::slots16(regs.len() as u32);
+    }
+    if frame.uses_x19 {
+        plan.push(Save {
+            fp: false,
+            r: 19,
+            r2: None,
+            off: base,
+        });
+    }
+    plan
 }
 
 impl Frame {
+    /// fp-relative shift of the locals: the save block above them, then the
+    /// canary region.
+    pub(super) fn locals_shift(self) -> u32 {
+        self.saves_top + self.canary_bytes
+    }
+
+    /// fp-relative offset of the canary slot, the top of its region.
+    pub(super) fn canary_slot_off(self) -> i32 {
+        super::ssa::emit_common::CANARY_SLOT_OFF - self.saves_top as i32
+    }
+
+    /// Move the callee saves from the frame bottom to directly below the
+    /// frame record; every fp-relative region under them moves down by
+    /// their size, and `frame_bytes` keeps its total.
+    fn lift_saves(&mut self) {
+        let s = self.parts.saved_regs;
+        self.saves_top = s;
+        self.alloc_spill_base += s;
+        for off in [
+            &mut self.param_cells_off,
+            &mut self.asm_scratch_off,
+            &mut self.align_region_off,
+        ] {
+            if *off != 0 {
+                *off -= i64::from(s);
+            }
+        }
+    }
+
     /// sp keeps its prologue value across the body and the prologue
     /// reserved the outgoing argument area at `[sp, #0]`.
     pub(crate) fn reserves_outgoing(self) -> bool {
@@ -134,7 +219,7 @@ pub(crate) fn compute_frame(
     // nothing in the body overwrites x19, and the one-instruction forms
     // pay for the register's save, restore and capture.
     let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
-    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_for_function(func, target, abi.fixed_regs);
     let writes_third_scratch = writes_x19(func, alloc, abi);
     let local_base = !x19_overwritten(func, fixed_regs)
         && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
@@ -242,9 +327,18 @@ pub(crate) fn compute_frame(
         },
         outgoing_bytes,
         local_base,
+        saves_top: 0,
+        consecutive_pairs: target == Target::WindowsAarch64,
+        raises_divide_by_zero: target == Target::WindowsAarch64,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
+    // Microsoft, "ARM64 exception handling": the unwind codes recover sp
+    // from x29 first, so a save they describe precedes the x29 setup.
+    if frame.consecutive_pairs && frame.parts.saved_regs != 0 && frame_fold_bytes(alloc, frame) == 0
+    {
+        frame.lift_saves();
+    }
     frame
 }
 
@@ -305,9 +399,9 @@ fn x19_overwritten(func: &FunctionSsa, fixed: super::FixedRegs) -> bool {
         Inst::InlineAsm { asm, args } => {
             asm.clobber_regs & (1 << 19) != 0
                 || asm_operand_regs(func, asm, args, fixed).map_or(true, |regs| {
-                    asm.operands.iter().zip(regs).any(|(op, r)| {
+                    regs.iter().enumerate().any(|(i, &r)| {
                         r == Some(19)
-                            && !matches!(op.constraint, super::super::ir::AsmConstraint::Fp)
+                            && !matches!(asm.operand_class(i), super::super::ir::AsmConstraint::Fp)
                     })
                 })
         }
@@ -587,8 +681,8 @@ pub(super) fn asm_operand_regs(
 /// The GP / FP register masks a statement saves around its template: the
 /// registers it writes -- the clobber list (minus x16 / x17 and bit 31)
 /// plus every operand register -- that `preserve` names as holding
-/// something across the block. `w` operands are a double or a 16-byte
-/// vector. A `-ffixed-` register holds nothing of the compiler's and is
+/// something across the block. A `w` operand is a scalar of 1 to 8 bytes
+/// or a 16-byte vector. A `-ffixed-` register holds nothing of the compiler's and is
 /// never saved, as under gcc.
 pub(super) fn asm_save_masks(
     asm: &super::super::ir::AsmBlock,
@@ -601,10 +695,10 @@ pub(super) fn asm_save_masks(
     let mut fp_used: u32 = asm.clobber_fp_regs;
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
-        if matches!(op.constraint, AsmConstraint::Fp) {
-            if op.width != 8 && op.width != 16 {
+        if matches!(asm.operand_class(i), AsmConstraint::Fp) {
+            if !matches!(op.width, 1 | 2 | 4 | 8 | 16) {
                 return Err(alloc::string::String::from(
-                    "aarch64 inline asm: `w` operands must be 8 or 16 bytes",
+                    "aarch64 inline asm: a `w` operand is 1, 2, 4, 8 or 16 bytes",
                 ));
             }
             fp_used |= 1 << r;
@@ -649,7 +743,9 @@ pub(crate) fn asm_site_write_masks(
 /// value output, none tied, read-write or early-clobbered, the clobbers
 /// spare the frame's registers, and scratch outside them can reload every
 /// input and hold every output without a register. Such a statement stages
-/// nothing and writes only its clobbers.
+/// nothing and writes only its clobbers. A naked function saves and spills
+/// nothing, so it binds whatever a statement clobbers, a memory operand as
+/// its address, and takes scratch only for an operand formed at the site.
 pub(crate) fn asm_binds_directly(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -659,10 +755,11 @@ pub(crate) fn asm_binds_directly(
     use super::super::ir::AsmConstraint as C;
     // x18, x19, x29, x30, sp, the frame's own: saved around the template.
     const RESERVED: u32 = (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31);
-    if func.is_naked
-        || func.has_sp_asm()
-        || asm.references_sp()
-        || asm.clobber_regs & (RESERVED | fixed.frame) != 0
+    let naked = func.is_naked;
+    if !naked
+        && (func.has_sp_asm()
+            || asm.references_sp()
+            || asm.clobber_regs & (RESERVED | fixed.frame) != 0)
     {
         return false;
     }
@@ -685,25 +782,35 @@ pub(crate) fn asm_binds_directly(
     let (mut gp_out, mut fp_out) = (0usize, 0usize);
     for (i, op) in asm.operands.iter().enumerate() {
         let arg = args.get(i).copied();
-        if op.is_output {
+        let addressed = naked && matches!(op.constraint, C::Mem | C::MemBase);
+        // An `x` / `y` operand takes a staged register, all below v8.
+        if op.fp_limit != 0 {
+            return false;
+        }
+        if op.is_output && !addressed {
             if !op.value || op.is_rw || op.early_clobber {
                 return false;
             }
             match op.constraint {
                 C::Reg if op.width <= 8 => gp_out += 1,
-                C::Fp if op.width == 16 => fp_out += 1,
+                C::Fp => fp_out += 1,
                 _ => return false,
             }
             continue;
         }
+        let formed = op.static_arg
+            || arg
+                .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
+                .is_some();
         match op.constraint {
             C::Imm => {}
             C::RegOrImm { reg: None, imm }
                 if arg
                     .and_then(|a| crate::c5::asm::asm_operand_const(func, a))
                     .is_some_and(|v| crate::Compiler::aarch64_imm_alternative_accepts(imm, v)) => {}
-            C::Reg | C::RegOrImm { reg: None, .. } => {
-                gp_in += 1;
+            C::Mem | C::MemBase if !addressed => return false,
+            C::Reg | C::RegOrImm { reg: None, .. } | C::Mem | C::MemBase => {
+                gp_in += usize::from(!naked || formed);
                 // A link-time address with an offset forms through a second scratch.
                 if op.static_arg
                     && let Some(crate::c5::asm::StaticOperand::Addr { off, .. }) =
@@ -713,7 +820,7 @@ pub(crate) fn asm_binds_directly(
                     gp_in += 1;
                 }
             }
-            C::Fp if !op.static_arg && (op.width == 8 || (op.width == 16 && op.value)) => {
+            C::Fp if !op.static_arg && (op.width <= 8 || (op.width == 16 && op.value)) => {
                 fp_in += 1
             }
             _ => return false,
@@ -741,7 +848,11 @@ pub(crate) fn asm_site_bound_values(
         .operands
         .iter()
         .zip(args)
-        .filter(|(op, _)| !op.is_output && !op.static_arg && !matches!(op.constraint, C::Imm))
+        .filter(|(op, _)| {
+            (!op.is_output || matches!(op.constraint, C::Mem | C::MemBase))
+                && !op.static_arg
+                && !matches!(op.constraint, C::Imm)
+        })
         .map(|(_, &a)| a)
         .collect();
     out.extend(
@@ -1057,10 +1168,6 @@ pub(super) fn signs_return_address(
 /// lowering's own register choice, over the instructions the emit walks.
 fn writes_x19(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> bool {
     use crate::c5::op::Intrinsic as I;
-    // A naked function emits only its inline asm and has no frame.
-    if func.is_naked {
-        return false;
-    }
     let scratch = ScratchPool::new();
     let place = |v: u32| place_of(alloc, v);
     func.blocks

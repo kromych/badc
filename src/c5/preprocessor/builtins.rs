@@ -22,9 +22,8 @@ pub(super) enum Supply {
     /// Supplied without the registry -- recognized by the parser at the
     /// call site, or predefined as a macro. Also usable with no header.
     Direct,
-    /// A library function that a bundled header binds with
-    /// `#pragma intrinsic`; it is not a builtin until that header is
-    /// included.
+    /// A function `#pragma intrinsic` binds, as a bundled header does; it
+    /// is not a builtin until a pragma names it.
     Library(Intrinsic),
 }
 
@@ -142,14 +141,28 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_memmove"),
     direct("__builtin_memset"),
     // Values the call site forms from the operands: the hints with no
-    // code-generation effect, the ASCII classifications, the infinity and
-    // NaN constants and the return-address conversions.
+    // code-generation effect, the absolute values, the ASCII
+    // classifications, the infinity and NaN constants and the
+    // return-address conversions.
     direct("__builtin_expect"),
+    direct("__builtin_abs"),
+    direct("__builtin_labs"),
+    direct("__builtin_llabs"),
+    direct("__builtin_imaxabs"),
+    direct("__builtin_fabs"),
+    direct("__builtin_fabsf"),
+    direct("__builtin_fabsl"),
     direct("__builtin_prefetch"),
     direct("__builtin_assume_aligned"),
     direct("__builtin_isdigit"),
     direct("__builtin_isascii"),
     direct("__builtin_toascii"),
+    direct("__builtin_isgreater"),
+    direct("__builtin_isgreaterequal"),
+    direct("__builtin_isless"),
+    direct("__builtin_islessequal"),
+    direct("__builtin_islessgreater"),
+    direct("__builtin_isunordered"),
     direct("__builtin_inf"),
     direct("__builtin_inff"),
     direct("__builtin_infl"),
@@ -199,8 +212,8 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__sync_lock_test_and_set"),
     direct("__sync_lock_release"),
     direct("__sync_synchronize"),
-    // Library names a bundled header binds; a unit that has not included
-    // the header may define its own function under the same name.
+    // Names `#pragma intrinsic` binds; a unit that has not bound one may
+    // define its own function under the same name.
     library("alloca", Intrinsic::Alloca),
     library("fma", Intrinsic::Fma),
     library("fmaf", Intrinsic::Fmaf),
@@ -214,22 +227,9 @@ pub(super) const BUILTINS: &[Builtin] = &[
     library("ceilf", Intrinsic::Ceilf),
     library("trunc", Intrinsic::Trunc),
     library("truncf", Intrinsic::Truncf),
-    // C11 7.17 generic atomics, lowered at the call site to
-    // load / store / read-modify-write rather than to an intrinsic call.
-    library("atomic_load", Intrinsic::AtomicLoad),
-    library("atomic_store", Intrinsic::AtomicStore),
-    library("atomic_exchange", Intrinsic::AtomicExchange),
-    library("atomic_fetch_add", Intrinsic::AtomicFetchAdd),
-    library("atomic_fetch_sub", Intrinsic::AtomicFetchSub),
-    library("atomic_fetch_and", Intrinsic::AtomicFetchAnd),
-    library("atomic_fetch_or", Intrinsic::AtomicFetchOr),
-    library("atomic_fetch_xor", Intrinsic::AtomicFetchXor),
-    library(
-        "atomic_compare_exchange_strong",
-        Intrinsic::AtomicCompareExchangeStrong,
-    ),
     library("__c5_aarch64_setjmp", Intrinsic::SetjmpAArch64),
     library("__c5_aarch64_longjmp", Intrinsic::LongjmpAArch64),
+    library("__c5_establisher_frame", Intrinsic::EstablisherFrame),
 ];
 
 /// Library functions whose `__builtin_` spelling gcc or clang provide as the
@@ -238,41 +238,173 @@ pub(super) const BUILTINS: &[Builtin] = &[
 /// translation unit that defines a macro of the library name does not
 /// capture the builtin spelling -- the guarantee gcc and clang give, and the
 /// reason a fortified header can call the builtin to reach the unfortified
-/// function. `abs` / `labs` / `llabs` and the string comparisons fold with
-/// constant arguments. Excluded: `setjmp` / `longjmp`, whose builtins take
-/// gcc's five-word buffer, the classification macros of <math.h>, and the
-/// classifications gcc folds from the operand, which the table supplies.
+/// function. The string comparisons fold with constant arguments.
+/// Excluded: `setjmp` / `longjmp`, whose builtins take gcc's five-word
+/// buffer, the classification macros of <math.h>, and the builtins formed
+/// at the call site, which the table supplies.
+///
+/// Each carries the prototype gcc gives the builtin, which declares the
+/// function where the unit does not. `FILE *` and `const struct tm *` are
+/// `void *` and `const void *` until a header declares the type, as in gcc.
 /// Sorted for the binary search.
 #[rustfmt::skip]
-pub(super) const LIBRARY_BUILTINS: &[&str] = &[
-    "__clear_cache", "_exit", "abort", "abs", "acos", "acosf", "acosh", "acoshf", "acoshl", "acosl",
-    "aligned_alloc", "asin", "asinf", "asinh", "asinhf", "asinhl", "asinl", "atan", "atan2",
-    "atan2f", "atan2l", "atanf", "atanh", "atanhf", "atanhl", "atanl", "bcmp", "bcopy", "bzero",
-    "calloc", "cbrt", "cbrtf", "cbrtl", "ceil", "ceilf", "ceill", "copysign", "copysignf",
-    "copysignl", "cos", "cosf", "cosh", "coshl", "cosl", "dcgettext", "dgettext", "erf", "erfc",
-    "erfcf", "erfcl", "erff", "erfl", "execl", "execle", "execlp", "execv", "execve", "execvp",
-    "exit", "exp", "exp2", "exp2f", "exp2l", "expf", "expl", "expm1", "expm1f", "expm1l", "fabs",
-    "fabsf", "fabsl", "fdim", "fdimf", "fdiml", "feclearexcept", "fegetround", "feraiseexcept",
-    "fesetround", "fetestexcept", "floor", "floorf", "floorl", "fma", "fmaf", "fmal", "fmax",
-    "fmaxf", "fmaxl", "fmin", "fminf", "fminl", "fmod", "fmodf", "fmodl", "fork", "fprintf",
-    "fputc", "fputs", "free", "frexp", "frexpl", "fscanf", "fwrite", "gettext", "hypot", "hypotf",
-    "hypotl", "ilogb", "ilogbf", "ilogbl", "imaxabs", "index", "isalnum", "isalpha", "iscntrl",
-    "isgraph", "islower", "isprint", "ispunct", "isspace", "isupper", "iswalnum", "iswalpha",
-    "iswblank", "iswcntrl", "iswdigit", "iswgraph", "iswlower", "iswprint", "iswpunct", "iswspace",
-    "iswupper", "iswxdigit", "isxdigit", "labs", "ldexp", "ldexpl", "llabs", "llrint", "llrintl",
-    "llround", "llroundl", "log", "log10", "log10f", "log10l", "log1p", "log1pf", "log1pl", "log2",
-    "log2l", "logf", "logl", "lrint", "lrintl", "lround", "lroundl", "malloc", "memchr", "memcmp",
-    "mempcpy", "modf", "modfl", "nearbyint", "nearbyintf", "nearbyintl", "nextafter", "nextafterf",
-    "nextafterl", "posix_memalign", "pow", "powf", "powl", "printf", "putc", "putc_unlocked",
-    "putchar", "puts", "realloc", "remainder", "remainderf", "remainderl", "rindex", "rint",
-    "rintf", "rintl", "round", "roundf", "roundl", "scalbln", "scalblnf", "scalblnl", "scalbn",
-    "scalbnf", "scalbnl", "scanf", "sin", "sinf", "sinh", "sinhl", "sinl", "snprintf", "sprintf",
-    "sqrt", "sqrtf", "sqrtl", "sscanf", "strcasecmp", "strcat", "strchr", "strcmp", "strcpy",
-    "strcspn", "strdup", "strftime", "strlen", "strncasecmp", "strncat", "strncmp", "strncpy",
-    "strndup", "strnlen", "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanf", "tanh", "tanhl",
-    "tanl", "tgamma", "tgammaf", "tgammal", "tolower", "toupper", "towlower", "towupper", "trunc",
-    "truncf", "truncl", "vfprintf", "vprintf", "vsnprintf", "vsprintf", "vsscanf", "wcschr",
-    "wcscmp", "wcslen", "wcsncmp", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove",
+pub(super) const LIBRARY_BUILTINS: &[(&str, &str)] = &[
+    ("__clear_cache", "void(void *, void *)"), ("_exit", "_Noreturn void(int)"),
+    ("abort", "_Noreturn void(void)"),
+    ("acos", "double(double)"), ("acosf", "float(float)"),
+    ("acosh", "double(double)"), ("acoshf", "float(float)"),
+    ("acoshl", "long double(long double)"), ("acosl", "long double(long double)"),
+    ("aligned_alloc", "void *(size_t, size_t)"),
+    ("asin", "double(double)"), ("asinf", "float(float)"),
+    ("asinh", "double(double)"), ("asinhf", "float(float)"),
+    ("asinhl", "long double(long double)"), ("asinl", "long double(long double)"),
+    ("atan", "double(double)"), ("atan2", "double(double, double)"),
+    ("atan2f", "float(float, float)"), ("atan2l", "long double(long double, long double)"),
+    ("atanf", "float(float)"), ("atanh", "double(double)"), ("atanhf", "float(float)"),
+    ("atanhl", "long double(long double)"), ("atanl", "long double(long double)"),
+    ("bcmp", "int(const void *, const void *, size_t)"),
+    ("bcopy", "void(const void *, void *, size_t)"), ("bzero", "void(void *, size_t)"),
+    ("calloc", "void *(size_t, size_t)"),
+    ("cbrt", "double(double)"), ("cbrtf", "float(float)"), ("cbrtl", "long double(long double)"),
+    ("ceil", "double(double)"), ("ceilf", "float(float)"), ("ceill", "long double(long double)"),
+    ("copysign", "double(double, double)"), ("copysignf", "float(float, float)"),
+    ("copysignl", "long double(long double, long double)"),
+    ("cos", "double(double)"), ("cosf", "float(float)"), ("cosh", "double(double)"),
+    ("coshl", "long double(long double)"), ("cosl", "long double(long double)"),
+    ("dcgettext", "char *(const char *, const char *, int)"),
+    ("dgettext", "char *(const char *, const char *)"),
+    ("erf", "double(double)"), ("erfc", "double(double)"), ("erfcf", "float(float)"),
+    ("erfcl", "long double(long double)"), ("erff", "float(float)"),
+    ("erfl", "long double(long double)"),
+    ("execl", "int(const char *, const char *, ...)"),
+    ("execle", "int(const char *, const char *, ...)"),
+    ("execlp", "int(const char *, const char *, ...)"),
+    ("execv", "int(const char *, char *const *)"),
+    ("execve", "int(const char *, char *const *, char *const *)"),
+    ("execvp", "int(const char *, char *const *)"),
+    ("exit", "_Noreturn void(int)"),
+    ("exp", "double(double)"), ("exp2", "double(double)"), ("exp2f", "float(float)"),
+    ("exp2l", "long double(long double)"), ("expf", "float(float)"),
+    ("expl", "long double(long double)"), ("expm1", "double(double)"),
+    ("expm1f", "float(float)"), ("expm1l", "long double(long double)"),
+    ("fdim", "double(double, double)"), ("fdimf", "float(float, float)"),
+    ("fdiml", "long double(long double, long double)"),
+    ("feclearexcept", "int(int)"), ("fegetround", "int(void)"), ("feraiseexcept", "int(int)"),
+    ("fesetround", "int(int)"), ("fetestexcept", "int(int)"),
+    ("floor", "double(double)"), ("floorf", "float(float)"),
+    ("floorl", "long double(long double)"),
+    ("fma", "double(double, double, double)"), ("fmaf", "float(float, float, float)"),
+    ("fmal", "long double(long double, long double, long double)"),
+    ("fmax", "double(double, double)"), ("fmaxf", "float(float, float)"),
+    ("fmaxl", "long double(long double, long double)"),
+    ("fmin", "double(double, double)"), ("fminf", "float(float, float)"),
+    ("fminl", "long double(long double, long double)"),
+    ("fmod", "double(double, double)"), ("fmodf", "float(float, float)"),
+    ("fmodl", "long double(long double, long double)"),
+    ("fork", "pid_t(void)"), ("fprintf", "int(FILE *, const char *, ...)"),
+    ("fputc", "int(int, FILE *)"), ("fputs", "int(const char *, FILE *)"),
+    ("free", "void(void *)"), ("frexp", "double(double, int *)"),
+    ("frexpl", "long double(long double, int *)"),
+    ("fscanf", "int(FILE *, const char *, ...)"),
+    ("fwrite", "size_t(const void *, size_t, size_t, FILE *)"),
+    ("gettext", "char *(const char *)"),
+    ("hypot", "double(double, double)"), ("hypotf", "float(float, float)"),
+    ("hypotl", "long double(long double, long double)"),
+    ("ilogb", "int(double)"), ("ilogbf", "int(float)"), ("ilogbl", "int(long double)"),
+    ("index", "char *(const char *, int)"),
+    ("isalnum", "int(int)"), ("isalpha", "int(int)"), ("iscntrl", "int(int)"),
+    ("isgraph", "int(int)"), ("islower", "int(int)"), ("isprint", "int(int)"),
+    ("ispunct", "int(int)"), ("isspace", "int(int)"), ("isupper", "int(int)"),
+    ("iswalnum", "int(wint_t)"), ("iswalpha", "int(wint_t)"), ("iswblank", "int(wint_t)"),
+    ("iswcntrl", "int(wint_t)"), ("iswdigit", "int(wint_t)"), ("iswgraph", "int(wint_t)"),
+    ("iswlower", "int(wint_t)"), ("iswprint", "int(wint_t)"), ("iswpunct", "int(wint_t)"),
+    ("iswspace", "int(wint_t)"), ("iswupper", "int(wint_t)"), ("iswxdigit", "int(wint_t)"),
+    ("isxdigit", "int(int)"),
+    ("ldexp", "double(double, int)"), ("ldexpl", "long double(long double, int)"),
+    ("llrint", "long long(double)"), ("llrintl", "long long(long double)"),
+    ("llround", "long long(double)"), ("llroundl", "long long(long double)"),
+    ("log", "double(double)"), ("log10", "double(double)"), ("log10f", "float(float)"),
+    ("log10l", "long double(long double)"), ("log1p", "double(double)"),
+    ("log1pf", "float(float)"), ("log1pl", "long double(long double)"),
+    ("log2", "double(double)"), ("log2l", "long double(long double)"),
+    ("logf", "float(float)"), ("logl", "long double(long double)"),
+    ("lrint", "long(double)"), ("lrintl", "long(long double)"),
+    ("lround", "long(double)"), ("lroundl", "long(long double)"),
+    ("malloc", "void *(size_t)"), ("memchr", "void *(const void *, int, size_t)"),
+    ("memcmp", "int(const void *, const void *, size_t)"),
+    ("mempcpy", "void *(void *, const void *, size_t)"),
+    ("modf", "double(double, double *)"), ("modfl", "long double(long double, long double *)"),
+    ("nearbyint", "double(double)"), ("nearbyintf", "float(float)"),
+    ("nearbyintl", "long double(long double)"),
+    ("nextafter", "double(double, double)"), ("nextafterf", "float(float, float)"),
+    ("nextafterl", "long double(long double, long double)"),
+    ("posix_memalign", "int(void **, size_t, size_t)"),
+    ("pow", "double(double, double)"), ("powf", "float(float, float)"),
+    ("powl", "long double(long double, long double)"),
+    ("printf", "int(const char *, ...)"), ("putc", "int(int, FILE *)"),
+    ("putc_unlocked", "int(int, FILE *)"), ("putchar", "int(int)"),
+    ("puts", "int(const char *)"), ("realloc", "void *(void *, size_t)"),
+    ("remainder", "double(double, double)"), ("remainderf", "float(float, float)"),
+    ("remainderl", "long double(long double, long double)"),
+    ("rindex", "char *(const char *, int)"),
+    ("rint", "double(double)"), ("rintf", "float(float)"), ("rintl", "long double(long double)"),
+    ("round", "double(double)"), ("roundf", "float(float)"),
+    ("roundl", "long double(long double)"),
+    ("scalbln", "double(double, long)"), ("scalblnf", "float(float, long)"),
+    ("scalblnl", "long double(long double, long)"),
+    ("scalbn", "double(double, int)"), ("scalbnf", "float(float, int)"),
+    ("scalbnl", "long double(long double, int)"),
+    ("scanf", "int(const char *, ...)"),
+    ("sin", "double(double)"), ("sinf", "float(float)"), ("sinh", "double(double)"),
+    ("sinhl", "long double(long double)"), ("sinl", "long double(long double)"),
+    ("snprintf", "int(char *, size_t, const char *, ...)"),
+    ("sprintf", "int(char *, const char *, ...)"),
+    ("sqrt", "double(double)"), ("sqrtf", "float(float)"), ("sqrtl", "long double(long double)"),
+    ("sscanf", "int(const char *, const char *, ...)"),
+    ("strcasecmp", "int(const char *, const char *)"),
+    ("strcat", "char *(char *, const char *)"), ("strchr", "char *(const char *, int)"),
+    ("strcmp", "int(const char *, const char *)"), ("strcpy", "char *(char *, const char *)"),
+    ("strcspn", "size_t(const char *, const char *)"), ("strdup", "char *(const char *)"),
+    ("strftime", "size_t(char *, size_t, const char *, const struct tm *)"),
+    ("strlen", "size_t(const char *)"),
+    ("strncasecmp", "int(const char *, const char *, size_t)"),
+    ("strncat", "char *(char *, const char *, size_t)"),
+    ("strncmp", "int(const char *, const char *, size_t)"),
+    ("strncpy", "char *(char *, const char *, size_t)"),
+    ("strndup", "char *(const char *, size_t)"), ("strnlen", "size_t(const char *, size_t)"),
+    ("strpbrk", "char *(const char *, const char *)"), ("strrchr", "char *(const char *, int)"),
+    ("strspn", "size_t(const char *, const char *)"),
+    ("strstr", "char *(const char *, const char *)"),
+    ("tan", "double(double)"), ("tanf", "float(float)"), ("tanh", "double(double)"),
+    ("tanhl", "long double(long double)"), ("tanl", "long double(long double)"),
+    ("tgamma", "double(double)"), ("tgammaf", "float(float)"),
+    ("tgammal", "long double(long double)"),
+    ("tolower", "int(int)"), ("toupper", "int(int)"),
+    ("towlower", "wint_t(wint_t)"), ("towupper", "wint_t(wint_t)"),
+    ("trunc", "double(double)"), ("truncf", "float(float)"),
+    ("truncl", "long double(long double)"),
+    ("vfprintf", "int(FILE *, const char *, va_list)"),
+    ("vprintf", "int(const char *, va_list)"),
+    ("vsnprintf", "int(char *, size_t, const char *, va_list)"),
+    ("vsprintf", "int(char *, const char *, va_list)"),
+    ("vsscanf", "int(const char *, const char *, va_list)"),
+    ("wcschr", "wchar_t *(const wchar_t *, wchar_t)"),
+    ("wcscmp", "int(const wchar_t *, const wchar_t *)"), ("wcslen", "size_t(const wchar_t *)"),
+    ("wcsncmp", "int(const wchar_t *, const wchar_t *, size_t)"),
+    ("wmemchr", "wchar_t *(const wchar_t *, wchar_t, size_t)"),
+    ("wmemcmp", "int(const wchar_t *, const wchar_t *, size_t)"),
+    ("wmemcpy", "wchar_t *(wchar_t *, const wchar_t *, size_t)"),
+    ("wmemmove", "wchar_t *(wchar_t *, const wchar_t *, size_t)"),
+];
+
+/// The library functions builtins formed at the call site call where they
+/// decline to expand, with gcc's prototypes.
+pub(super) const FALLBACK_FUNCTIONS: &[(&str, &str)] = &[
+    ("memcpy", "void *(void *, const void *, size_t)"),
+    ("memmove", "void *(void *, const void *, size_t)"),
+    ("memset", "void *(void *, int, size_t)"),
+    ("nan", "double(const char *)"),
+    ("nanf", "float(const char *)"),
 ];
 
 /// Whether `name` is an MSVC intrinsic `target` lowers at the call site.
@@ -313,8 +445,30 @@ pub(super) fn preseeded(target: Target) -> impl Iterator<Item = (&'static str, i
 /// of a translation unit's macro of the library name.
 pub(crate) fn library_alias(name: &str) -> Option<&'static str> {
     let fn_name = name.strip_prefix("__builtin_")?;
-    let at = LIBRARY_BUILTINS.binary_search(&fn_name).ok()?;
-    Some(LIBRARY_BUILTINS[at])
+    let at = LIBRARY_BUILTINS
+        .binary_search_by(|(f, _)| (*f).cmp(fn_name))
+        .ok()?;
+    Some(LIBRARY_BUILTINS[at].0)
+}
+
+/// The prototype gcc gives the builtin calling library function
+/// `fn_name`, in the tables' C spelling.
+pub(crate) fn library_prototype(fn_name: &str) -> Option<&'static str> {
+    LIBRARY_BUILTINS
+        .iter()
+        .chain(FALLBACK_FUNCTIONS)
+        .find(|(f, _)| *f == fn_name)
+        .map(|&(_, proto)| proto)
+}
+
+/// The intrinsic a `__builtin_` alias lowers to whatever the unit
+/// declares: the one its library function's header binds.
+pub(crate) fn library_alias_intrinsic(name: &str) -> Option<Intrinsic> {
+    let fn_name = library_alias(name)?;
+    match lookup(fn_name)?.supply {
+        Supply::Library(kind) => Some(kind),
+        _ => None,
+    }
 }
 
 /// `#pragma intrinsic(name)`: the registry discriminant to record, or

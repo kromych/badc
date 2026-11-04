@@ -131,9 +131,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ebx
-               	movl	0x4(%rax), %r12d
+               	movl	<rip>, %ebx # <addr>
+               	movl	<rip>, %r12d # <addr>
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
@@ -175,9 +174,8 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
-               	movq	0x8(%rax), %rsi
+               	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
                	callq	<addr>
                	cmpq	$0x55555556, %rax       # imm = 0x55555556
                	je	<addr>
@@ -213,14 +211,12 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x8(%rax), %edi
-               	movl	0xc(%rax), %esi
+               	movl	<rip>, %edi # <addr>
+               	movl	<rip>, %esi # <addr>
                	callq	<addr>
                	cmpq	$-0x7cc, %rax           # imm = 0xF834
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x10(%rax), %esi
+               	movl	<rip>, %esi # <addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movabsq	$-0x476db6da51, %r11    # imm = 0xFFFFFFB8924925AF
@@ -231,10 +227,9 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0xc(%rax), %edi
+               	movl	<rip>, %edi # <addr>
                	shlq	%rdi
-               	movl	0x8(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	leaq	-0xa(%rax), %rsi
                	movl	$0x3, %edx
                	callq	<addr>

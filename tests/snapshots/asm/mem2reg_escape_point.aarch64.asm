@@ -32,13 +32,6 @@ Disassembly of section .text:
                	sub	x3, x29, #0x8
                	mov	x1, #0xf                // =15
                	stur	w1, [x29, #-0x8]
-               	sub	x1, x1, #0xa
-               	cmp	w1, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	stur	w0, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	mov	x2, x0

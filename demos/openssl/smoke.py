@@ -3,18 +3,27 @@
 
 Pipeline, once per optimization level (-O0, then -O):
   - ``setup.py`` fetches + extracts the release under ``.cache/openssl-4.1.0``.
-  - ``Configure`` runs out of tree in ``.cache/build-<level>`` with a target
+  - ``Configure`` runs out of tree in ``.cache/build-<level>`` (with ``--asm``,
+    ``.cache/build-<level>-asm``) with a target
     from ``badc.conf``, which inherits the stock target of the host and
     names badc as the compiler, so every object and executable --
     libcrypto, libssl, the ``openssl`` application and the test programs --
     comes out of badc's compiler and linker. The host's ``ar`` archives
     the objects.
   - ``make build_sw`` builds it; ``make test`` runs ``test/run_tests.pl``
-    over every recipe but ``SERIAL_RECIPES``, ``HARNESS_JOBS`` at a time,
+    over every recipe but ``TIMED_RECIPES``, ``HARNESS_JOBS`` at a time,
     then over those alone; the harness's summaries decide the verdict.
+    ``BADC_OPENSSL_TESTS`` selects the whole suite (``all``, the default),
+    the builds and every recipe but those (``untimed``), or those alone over
+    the builds an untimed run left from the same badc (``timed``).
+
+``--asm`` configures without ``no-asm``: the perlasm modules are generated
+for the host and assembled, through badc, alongside the C units, and the
+CPU-feature dispatch selects them at run time.
 
 The build directory is removed first: make does not track the compiler
-binary, so objects from an earlier badc would otherwise survive.
+binary, so objects from an earlier badc would otherwise survive. It is
+removed again once its last suite passes.
 
 Override the badc binary via the ``BADC`` env var (default:
 ``target/release/badc``).
@@ -47,14 +56,15 @@ TARGETS = {
 
 # no-asm: the subject is badc's C compilation; the perlasm modules are
 # assembler sources and their C implementations are what this builds
-# instead. no-shared: libcrypto and libssl are archives the programs link
-# statically. no-module: the legacy provider is linked into libcrypto
-# rather than loaded as a module.
+# instead (`--asm` drops it). no-shared: libcrypto and libssl are archives
+# the programs link statically. no-module: the legacy provider is linked
+# into libcrypto rather than loaded as a module.
 CONFIGURE_OPTIONS = ("no-asm", "no-shared", "no-module")
 
 LEVELS = {"O0": "-O0", "O": "-O"}
 
-# Recipes run on their own after the rest. test_quicapi's blocking-mode
+# Recipes that race a timer against the host's scheduler, run on their own
+# after the rest. test_quicapi's blocking-mode
 # cases run the server in a thread that advances the test's clock 1 ms per
 # pass while the client handshakes in real time, so a client slowed by a
 # loaded machine lets the server's idle timeout end the connection. Measured
@@ -64,8 +74,13 @@ LEVELS = {"O0": "-O0", "O": "-O"}
 # test_quic_multistream bounds a connection's shutdown to 5 s of wall-clock
 # time (quic_multistream_test.c's "shutdown time exceeded 5sec"); on the Mac
 # with 12 recipes at a time the badc -O0 build exceeded it in script 88, and
-# run alone it passes.
-SERIAL_RECIPES = ("test_quicapi", "test_quic_multistream")
+# run alone it passes. A parallel demo pass runs the untimed set and leaves
+# these to a phase with the host to itself (scripts/run_demos.py AFTER_POOL).
+TIMED_RECIPES = ("test_quicapi", "test_quic_multistream")
+TEST_SETS = ("all", "untimed", "timed")
+
+# Written into a build directory once its build succeeds.
+BUILT = "badc-build.ok"
 
 BUILD_TIMEOUT = 3600
 TEST_TIMEOUT = 3600
@@ -106,13 +121,29 @@ def run_logged(cmd: list[str], cwd: Path, log: Path, timeout: int, env=None) -> 
     return r.returncode
 
 
-def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, log) -> Path:
-    bld = CACHE / f"build-{level}"
+def build_dir(level: str, asm: bool) -> Path:
+    return CACHE / f"build-{level}{'-asm' if asm else ''}"
+
+
+def built(badc: Path, level: str, asm: bool) -> Path:
+    """The build directory an untimed run left, which has to postdate badc."""
+    bld = build_dir(level, asm)
+    stamp = bld / BUILT
+    if not stamp.is_file() or stamp.stat().st_mtime < badc.stat().st_mtime:
+        fail(f"[{level}] no build by {badc} in {bld}; the timed set runs over the "
+             "untimed set's builds")
+    return bld
+
+
+def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, asm: bool,
+          log) -> Path:
+    bld = build_dir(level, asm)
     if bld.exists():
         shutil.rmtree(bld)
     bld.mkdir(parents=True)
     cmd = ["perl", str(SRC / "Configure"), f"--config={DEMO_DIR / 'badc.conf'}", target,
-           f"CC={badc}", f"CFLAGS={LEVELS[level]}", *CONFIGURE_OPTIONS]
+           f"CC={badc}", f"CFLAGS={LEVELS[level]}",
+           *(o for o in CONFIGURE_OPTIONS if not (asm and o == "no-asm"))]
     if sys.platform == "darwin":
         # The host's ar keeps badc's ELF members, but its ranlib rewrites the
         # archive with an index of Mach-O symbols only and drops them.
@@ -128,6 +159,7 @@ def build(badc: Path, target: str, level: str, jobs: int, keep_going: bool, log)
     if rc != 0:
         errs = [l for l in text.splitlines() if ": error: " in l]
         fail(f"[{level}] make build_sw exited {rc}", "\n".join(errs[:40]) or text)
+    (bld / BUILT).touch()
     print(f"[{level}] built in {time.monotonic() - t0:.0f}s", flush=True)
     return bld
 
@@ -154,12 +186,14 @@ def run_pass(bld: Path, level: str, name: str, tests: str | None, jobs: int) -> 
     print(f"[{level}] make test ({name}): {summary}, Result: PASS ({elapsed:.0f}s)", flush=True)
 
 
-def run_tests(bld: Path, level: str, jobs: int, tests: str | None) -> None:
+def run_tests(bld: Path, level: str, jobs: int, tests: str | None, tests_set: str) -> None:
     if tests:
         run_pass(bld, level, "selected", tests, jobs)
         return
-    run_pass(bld, level, "parallel", " ".join(f"-{t}" for t in SERIAL_RECIPES), jobs)
-    run_pass(bld, level, "serial", " ".join(SERIAL_RECIPES), 1)
+    if tests_set != "timed":
+        run_pass(bld, level, "parallel", " ".join(f"-{t}" for t in TIMED_RECIPES), jobs)
+    if tests_set != "untimed":
+        run_pass(bld, level, "serial", " ".join(TIMED_RECIPES), 1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--level", choices=("O0", "O", "both"), default="both")
     ap.add_argument("--tests", help="the TESTS= selection passed to `make test`")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
+    ap.add_argument("--asm", action="store_true",
+                    help="configure without no-asm, assembling the perlasm modules")
     ap.add_argument("--keep-going", action="store_true",
                     help="pass -k to make, so every unit that fails is reported")
     args = ap.parse_args(argv)
@@ -181,6 +217,9 @@ def main(argv: list[str] | None = None) -> int:
     if target is None:
         print(f"openssl smoke skipped ({sys.platform} {platform.machine()}: no badc.conf target)")
         return 0
+    tests_set = os.environ.get("BADC_OPENSSL_TESTS", "all")
+    if tests_set not in TEST_SETS:
+        sys.exit(f"smoke: BADC_OPENSSL_TESTS={tests_set!r} is not one of {TEST_SETS}")
     start = time.monotonic()
     badc = resolve_badc()
     r = subprocess.run([sys.executable, str(DEMO_DIR / "setup.py")] + (["-v"] if args.verbose else []))
@@ -188,9 +227,17 @@ def main(argv: list[str] | None = None) -> int:
         fail("setup.py")
     levels = ("O0", "O") if args.level == "both" else (args.level,)
     for level in levels:
-        bld = build(badc, target, level, args.jobs, args.keep_going, log)
-        run_tests(bld, level, args.jobs, args.tests)
-    print(f"openssl smoke OK ({time.monotonic() - start:.0f}s)")
+        if tests_set == "timed":
+            bld = built(badc, level, args.asm)
+        else:
+            bld = build(badc, target, level, args.jobs, args.keep_going, args.asm, log)
+        run_tests(bld, level, args.jobs, args.tests, tests_set)
+        # A build takes about 2 GB, and nothing reads it once its last suite
+        # has passed; a failing one stays for its logs until the next build.
+        if tests_set != "untimed":
+            shutil.rmtree(bld)
+    tag =" ".join((["asm"] if args.asm else []) + ([tests_set] if tests_set != "all" else []))
+    print(f"openssl smoke{f' ({tag})' if tag else ''} OK ({time.monotonic() - start:.0f}s)")
     return 0
 
 

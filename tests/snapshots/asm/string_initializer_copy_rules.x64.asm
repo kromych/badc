@@ -26,172 +26,159 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	0x4(%rax), %rcx
-               	cmpl	$0x61, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x61, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x5(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsbq	0x6(%rax), %rcx
-               	cmpl	$0x62, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x62, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x7(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x2, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsbq	0x4(%rax), %rcx
-               	cmpl	$0x61, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x61, %eax
                	jne	<addr>
-               	movsbq	0x6(%rax), %rcx
-               	cmpl	$0x63, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x63, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x7(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpb	$0x0, 0x1(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
-               	movsbq	0x2(%rax), %rax
+               	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x71, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	(%rax), %rcx
-               	cmpl	$0x61, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x61, %eax
                	jne	<addr>
-               	movsbq	0x2(%rax), %rax
+               	movsbq	<rip>, %rax # <addr>
                	cmpl	$0x63, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	0x1(%rax), %rcx
-               	cmpl	$0x62, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x62, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x2(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpb	$0x0, 0x5(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpb	$0x0, 0x2(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	0x1(%rax), %rcx
-               	cmpl	$0x62, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x62, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x2(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpb	$0x0, 0x3(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movsbq	0x4(%rax), %rcx
-               	cmpl	$0x63, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x63, %eax
                	jne	<addr>
-               	movsbq	0x7(%rax), %rcx
-               	cmpl	$0x66, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x66, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	movsbq	0x8(%rax), %rcx
-               	cmpl	$0x67, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x67, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x9(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x62, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x62, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x8(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpl	$0x0, 0xc(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0xe, %eax
                	retq
-               	movl	0x10(%rax), %ecx
-               	cmpl	$0x63, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x63, %eax
                	jne	<addr>
-               	movl	0x1c(%rax), %ecx
-               	cmpl	$0x66, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x66, %eax
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	movl	0x20(%rax), %ecx
-               	cmpl	$0x67, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x67, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x24(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, 0x8(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x12, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x68, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x68, %eax
                	jne	<addr>
-               	movl	0x4(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x69, %eax
                	je	<addr>
                	movl	$0x13, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x69, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x69, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x8(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpl	$0x0, 0xc(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x14, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x7, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	retq
-               	movsbq	0x4(%rax), %rcx
-               	cmpl	$0x78, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x78, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x5(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x16, %eax
                	retq
-               	movsbq	0x6(%rax), %rcx
-               	cmpl	$0x79, %ecx
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x79, %eax
                	jne	<addr>
-               	cmpb	$0x0, 0x7(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
-               	cmpb	$0x0, 0x8(%rax)
+               	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x17, %eax
                	retq
-               	movl	0x10(%rax), %ecx
-               	cmpl	$0x69, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x69, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x14(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, 0x18(%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x18, %eax
                	retq

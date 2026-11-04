@@ -158,6 +158,7 @@ pub(crate) fn walk_program(
                 weak: program.weak_refs_by_name,
                 interposable: program.interposable_refs,
             },
+            program.freestanding,
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the
@@ -177,8 +178,8 @@ pub(crate) fn walk_program(
                 )
             }
         });
-        let mut func = match walked {
-            Ok(func) => func,
+        let (mut func, funclets) = match walked {
+            Ok(walked) => walked,
             Err(e) => {
                 failed.push((f.ent_pc, e));
                 continue;
@@ -217,6 +218,16 @@ pub(crate) fn walk_program(
         // address. The walker's count covers a hidden result pointer.
         let touched = walker_param_count(&func);
         func.n_params = touched.max(f.n_params).max(func.n_params);
+        // A funclet takes cl's name, `$filt$` or `$fin$` and its number
+        // after its function's, and the function's section.
+        for mut funclet in funclets {
+            let index = funclet.ent_pc - f.end_pc;
+            funclet.name = alloc::format!("{}{}{index}", func.name, funclet.name);
+            funclet.is_internal = true;
+            funclet.section = func.section.clone();
+            walker_pcs.insert(funclet.ent_pc);
+            out.push(funclet);
+        }
         out.push(func);
     }
     // Parser-emitted helpers (sys-trampolines) come through
@@ -508,12 +519,15 @@ fn order_by_section(mut funcs: Vec<FunctionSsa>, program: &Program) -> Vec<Funct
     if section_of.is_empty() {
         return funcs;
     }
-    // `None` (default `.text`) sorts before every named group.
-    funcs.sort_by(|a, b| {
-        section_of
-            .get(a.name.as_str())
-            .cmp(&section_of.get(b.name.as_str()))
-    });
+    // `None` (default `.text`) sorts before every named group. A funclet,
+    // which no symbol names, carries its function's section.
+    fn group<'f>(
+        section_of: &alloc::collections::BTreeMap<&'f str, &'f str>,
+        f: &'f FunctionSsa,
+    ) -> Option<&'f str> {
+        (section_of.get(f.name.as_str()).copied()).or(f.section.as_deref())
+    }
+    funcs.sort_by(|a, b| group(&section_of, a).cmp(&group(&section_of, b)));
     funcs
 }
 
@@ -613,7 +627,7 @@ impl<'p> ReachGraph<'p> {
         };
         let mut renamed = alloc::collections::BTreeMap::new();
         for s in &program.symbols {
-            let keeps = matches!(s.linkage, Linkage::External) || s.is_used;
+            let keeps = (matches!(s.linkage, Linkage::External) && !s.discardable) || s.is_used;
             if s.class == Token::Glo as i64
                 && s.defined_here
                 && !s.is_thread_local
@@ -820,6 +834,10 @@ pub(crate) fn compute_live_sets(
     let (func_pcs, data_live) =
         graph.solve(&defined, reachable_owners, assume_data_live, |pc, work| {
             let Some(f) = by_ent.get(&pc) else { return };
+            // A region's scope table names its funclet.
+            for t in f.seh_scopes.iter().filter_map(|s| s.handler.funclet()) {
+                work.push(Node::Func(t));
+            }
             // An address keeps its referent only if emitted: the use counts
             // behind the emitters' dead-code skip.
             let counts = super::reg_alloc::compute_use_counts(f);
@@ -1124,6 +1142,12 @@ pub(crate) fn compact_program_data(
     })
 }
 
+/// Whether every byte of `bytes` is zero, tested 64 bytes at a time.
+fn all_zero(bytes: &[u8]) -> bool {
+    let (chunks, rest) = bytes.as_chunks::<64>();
+    chunks.iter().all(|c| c.iter().fold(0, |a, &b| a | b) == 0) && rest.iter().all(|&b| b == 0)
+}
+
 /// Rewrite `out` in place to hold only the data objects `sets` marks live
 /// and only the functions in `live_func_pcs`, packing `.data` and mapping
 /// every offset surface -- symbol values, relocation slots, relocation
@@ -1265,16 +1289,17 @@ pub(crate) fn apply_data_liveness(
     // layout it produces records the answer as a position -- everything
     // at or past the file image is zero-fill -- and the object writer
     // reads it back through that watershed rather than re-deriving it.
-    let is_bss = |i: usize| -> bool {
-        segregate
-            && i != 0
-            && live[i]
-            && !has_reloc_slot[i]
-            && !is_readonly[i]
-            && out.data[starts[i] as usize..obj_end(i) as usize]
-                .iter()
-                .all(|&b| b == 0)
-    };
+    let bss: Vec<bool> = (0..n)
+        .map(|i| {
+            segregate
+                && i != 0
+                && live[i]
+                && !has_reloc_slot[i]
+                && !is_readonly[i]
+                && all_zero(&out.data[starts[i] as usize..obj_end(i) as usize])
+        })
+        .collect();
+    let is_bss = |i: usize| bss[i];
 
     // File-backed objects pack in three regions -- read-only prefix,
     // relro, writable -- the same regions-then-boundary layout the
@@ -1551,6 +1576,19 @@ mod tests {
         Compiler::with_target(with_prelude(src), target)
             .compile()
             .expect("compile")
+    }
+
+    #[test]
+    fn a_nonzero_byte_anywhere_makes_the_span_initialized() {
+        for len in [0usize, 1, 63, 64, 65, 128, 200] {
+            let mut bytes = alloc::vec![0u8; len];
+            assert!(all_zero(&bytes), "{len} zero bytes");
+            for at in 0..len {
+                bytes[at] = 0x80;
+                assert!(!all_zero(&bytes), "byte {at} of {len}");
+                bytes[at] = 0;
+            }
+        }
     }
 
     // A wholly-zero global referenced by a pointer initializer moves to

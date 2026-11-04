@@ -22,6 +22,11 @@ static inline int _rdrand64_step(unsigned long long *__P) {
 }
 #endif
 
+/* XCR[__A], as gcc's <immintrin.h> carries it through <xsaveintrin.h>. */
+static inline long long _xgetbv(unsigned int __A) {
+    return __builtin_ia32_xgetbv(__A);
+}
+
 /* POPCNT, which gcc's <immintrin.h> carries through <popcntintrin.h>. */
 static inline int _mm_popcnt_u32(unsigned int __X) {
     return __builtin_popcount(__X);

@@ -87,17 +87,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	fmov	d0, #2.50000000
-               	fmov	s1, #0.50000000
-               	fmov	d2, #4.25000000
-               	mov	x1, #0x1                // =1
-               	mov	x0, #0x3                // =3
-               	scvtf	d3, x1
-               	fadd	d0, d3, d0
-               	fcvt	d1, s1
-               	fadd	d0, d0, d1
-               	scvtf	d1, x0
-               	fadd	d0, d0, d1
+               	fmov	d1, #4.25000000
+               	fmov	d2, #1.00000000
+               	fadd	d0, d2, d0
+               	fmov	d2, #0.50000000
                	fadd	d0, d0, d2
+               	fmov	d2, #3.00000000
+               	fadd	d0, d0, d2
+               	fadd	d0, d0, d1
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	fcmp	d0, d1
@@ -106,15 +103,11 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x29               // =41
-               	stur	x1, [x29, #-0x8]
-               	add	x1, x1, #0x1
-               	stur	x1, [x29, #-0x8]
-               	cmp	x1, #0x2a
-               	b.eq	<addr>
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	mov	x0, #0x29               // =41
+               	stur	x0, [x29, #-0x8]
+               	mov	x0, #0x2a               // =42
+               	stur	x0, [x29, #-0x8]
+               	mov	x0, #0x3                // =3
                	mov	x1, #0xa                // =10
                	mov	x2, #0x14               // =20
                	mov	x3, #0x1e               // =30

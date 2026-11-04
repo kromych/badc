@@ -1085,26 +1085,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x20, [x0]
+               	ldrsw	x20, [x0, #0x18]
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
-               	cbz	x0, <addr>
+               	cbz	w0, <addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

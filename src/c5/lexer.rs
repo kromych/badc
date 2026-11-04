@@ -196,14 +196,17 @@ impl StrPrefix {
 /// stripped by the lexer's `#`-line handler, so we see the
 /// body bytes only.
 #[derive(Debug)]
-struct LineMarker {
+pub(crate) struct LineMarker {
     /// 1-based line number to attribute to the *next* source
     /// line. The lexer subtracts 1 (so the trailing `\n` of the
     /// marker bumps the counter to exactly this value).
-    line: usize,
+    pub(crate) line: usize,
     /// Filename, if the marker carries one. `None` for bare
     /// `#line N` (C99 6.10.4 says: keep the existing file).
-    file: Option<alloc::string::String>,
+    pub(crate) file: Option<alloc::string::String>,
+    /// GNU flag 2 follows the file name: the text returns to a file
+    /// after an inclusion.
+    pub(crate) returning: bool,
 }
 
 /// Parse a `#`-prefix-stripped line as a GNU line marker
@@ -215,14 +218,13 @@ struct LineMarker {
 ///   * `#line N`               -> `LineMarker { line: N, file: None }`
 ///   * `#line N "file"`        -> `LineMarker { line: N, file: Some("file") }`
 ///   * `# N "file"`            -> same (GNU shape, no `line` keyword)
-///   * `# N "file" 1 2 3 4`    -> same; trailing flag digits are ignored
+///   * `# N "file" 1 2 3 4`    -> same; of the trailing flags only 2
+///     (`returning`) is recorded
 ///
-/// Filenames go through C99-style escape decoding (`\\` -> `\`,
-/// `\"` -> `"`, `\n` -> LF, `\t` -> tab) so a path with a
-/// space or quote round-trips. Anything malformed (missing
-/// digits, unterminated quote) returns `None` and falls
-/// through to the historical `#`-line skip.
-fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
+/// The filename is the string literal's value ([`decode_string_body`]).
+/// Anything malformed (missing digits, unterminated quote) returns
+/// `None` and falls through to the historical `#`-line skip.
+pub(crate) fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
     let mut i = 0;
     while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
         i += 1;
@@ -251,37 +253,85 @@ fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
     // Optional `"file"` part.
     let file = if i < body.len() && body[i] == b'"' {
         i += 1;
-        let mut decoded = alloc::string::String::new();
+        let start = i;
         while i < body.len() && body[i] != b'"' {
-            if body[i] == b'\\' && i + 1 < body.len() {
-                let esc = body[i + 1];
-                let ch = match esc {
-                    b'\\' => '\\',
-                    b'"' => '"',
-                    b'n' => '\n',
-                    b't' => '\t',
-                    b'r' => '\r',
-                    other => other as char,
-                };
-                decoded.push(ch);
-                i += 2;
-            } else {
-                decoded.push(body[i] as char);
-                i += 1;
-            }
+            i += if body[i] == b'\\' { 2 } else { 1 };
         }
         // Unterminated string -- bail rather than partially update.
         if i >= body.len() {
             return None;
         }
-        // Closing `"` consumed implicitly; trailing GNU flag digits
-        // (`1 2 3 4`) are ignored -- they tag enter/leave/system but
-        // the (file, line) state is what we care about.
-        Some(decoded)
+        Some(decode_string_body(&body[start..i]))
     } else {
         None
     };
-    Some(LineMarker { line, file })
+    // The flags (1 enter, 2 return, 3 system header, 4 extern "C")
+    // follow the closing quote.
+    let returning = file.is_some()
+        && body[i + 1..]
+            .split(|b| b.is_ascii_whitespace())
+            .any(|f| f == b"2");
+    Some(LineMarker {
+        line,
+        file,
+        returning,
+    })
+}
+
+/// The value of a narrow string literal's body (C99 6.4.5, escapes as
+/// 6.4.4.4 and universal character names as 6.4.3 give them), read as
+/// UTF-8: a line marker's or `#line`'s file name, whose non-ASCII bytes
+/// gcc writes as octal escapes. An unknown escape stands for its character.
+pub(crate) fn decode_string_body(body: &[u8]) -> alloc::string::String {
+    let mut out = alloc::vec::Vec::with_capacity(body.len());
+    let mut i = 0;
+    let digits = |from: usize, max: usize, radix: u32| {
+        let n = (body[from..].iter().take(max))
+            .take_while(|b| (**b as char).is_digit(radix))
+            .count();
+        let v = (body[from..from + n].iter()).fold(0u32, |v, b| {
+            v.wrapping_mul(radix) + (*b as char).to_digit(radix).unwrap_or(0)
+        });
+        (v, n)
+    };
+    while i < body.len() {
+        if body[i] != b'\\' || i + 1 == body.len() {
+            out.push(body[i]);
+            i += 1;
+            continue;
+        }
+        let esc = body[i + 1];
+        i += 2;
+        match esc {
+            b'0'..=b'7' => {
+                let (v, n) = digits(i - 1, 3, 8);
+                out.push(v as u8);
+                i += n - 1;
+            }
+            b'x' => {
+                let (v, n) = digits(i, usize::MAX, 16);
+                out.push(if n == 0 { b'x' } else { v as u8 });
+                i += n;
+            }
+            b'u' | b'U' => {
+                let (v, n) = digits(i, if esc == b'u' { 4 } else { 8 }, 16);
+                let ch = char::from_u32(v).unwrap_or(char::REPLACEMENT_CHARACTER);
+                out.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
+                i += n;
+            }
+            _ => out.push(match esc {
+                b'a' => 7,
+                b'b' => 8,
+                b'f' => 12,
+                b'n' => b'\n',
+                b'r' => b'\r',
+                b't' => b'\t',
+                b'v' => 11,
+                other => other,
+            }),
+        }
+    }
+    alloc::string::String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.
@@ -438,15 +488,17 @@ impl LineRun {
 struct LineIndex {
     files: Vec<String>,
     runs: Vec<LineRun>,
+    /// Each file's runs, in buffer order.
+    by_file: Vec<Vec<u32>>,
 }
 
 impl LineIndex {
     /// Byte span of `line` in `files[file_id]`, or `None` when no run
     /// holds it.
     fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
-        let run = self.runs.iter().find(|r| {
-            r.file_id == file_id && line.checked_sub(r.first_line).is_some_and(|k| k < r.lines)
-        })?;
+        let run = (self.by_file.get(file_id as usize)?.iter())
+            .map(|&r| &self.runs[r as usize])
+            .find(|r| line.checked_sub(r.first_line).is_some_and(|k| k < r.lines))?;
         let text = &src[run.start as usize..run.end as usize];
         let starts = run.starts.get_or_init(|| {
             let after_newline = text
@@ -457,12 +509,15 @@ impl LineIndex {
                 .chain(after_newline.map(|(k, _)| run.start + k as u32 + 1))
                 .collect()
         });
-        let pos = starts[(line - run.first_line) as usize];
-        let stop = text[(pos - run.start) as usize..]
-            .iter()
-            .position(|&b| b == b'\n')
-            .map_or(run.end, |k| pos + k as u32);
-        Some((pos, stop))
+        // The line ends where the next one starts, so a lookup costs the
+        // same however long the line is.
+        let k = (line - run.first_line) as usize;
+        let stop = match starts.get(k + 1) {
+            Some(&next) => next - 1,
+            None if text.last() == Some(&b'\n') => run.end - 1,
+            None => run.end,
+        };
+        Some((starts[k], stop))
     }
 }
 
@@ -1885,7 +1940,15 @@ impl Lexer {
             if start < n {
                 runs.push(LineRun::new(file_id, first_line, lines, start, n));
             }
-            LineIndex { files, runs }
+            let mut by_file = alloc::vec![Vec::new(); files.len()];
+            for (r, run) in runs.iter().enumerate() {
+                by_file[run.file_id as usize].push(r as u32);
+            }
+            LineIndex {
+                files,
+                runs,
+                by_file,
+            }
         });
         let file_id = index.files.iter().position(|f| f == file)? as u32;
         index.span_of(&self.src, file_id, u32::try_from(target).ok()?)
@@ -2072,6 +2135,12 @@ impl Lexer {
                     continue;
                 }
                 self.tk = Tok(symbols[self.curr_id_idx].token);
+                if self.tk == Token::TypeQual
+                    && symbols[self.curr_id_idx].name == "_Atomic"
+                    && self.peek_after_whitespace(b'(')
+                {
+                    self.tk = Tok(Token::Atomic as i64);
+                }
                 return Ok(());
             } else if c.is_ascii_digit() {
                 let int_start = self.pos - 1;
@@ -2672,10 +2741,20 @@ fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, t
 /// wide; `__ptr64` (a pointer is 64 bits there already), `__w64` (a
 /// portability marker), `__sptr` / `__uptr` (how a 32-bit pointer extends)
 /// and `__unaligned` (an access that may be misaligned, which both PE
-/// targets' loads and stores allow) qualify without effect; and
-/// `__builtin_alignof` is `_Alignof`.
+/// targets' loads and stores allow) qualify without effect;
+/// `__builtin_alignof` is `_Alignof`; and `__try`, `__except`, `__finally`
+/// and `__leave` are the structured exception handling statements, which
+/// clang leaves identifiers off a windows-msvc triple.
 /// TODO: `_Alignof` of an `__unaligned` type, which clang reports as 1.
 pub(crate) fn init_ms_keywords(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex) {
+    for (name, token) in [
+        ("__try", Token::SehTry),
+        ("__except", Token::SehExcept),
+        ("__finally", Token::SehFinally),
+        ("__leave", Token::SehLeave),
+    ] {
+        add_keyword(symbols, index, name, token as i64);
+    }
     for name in [
         "__ptr32",
         "__ptr64",
@@ -2780,7 +2859,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     ),
     ("__builtin_offsetof", Token::BuiltinOffsetof),
     // Type qualifiers -- consumed everywhere a type qualifier
-    // may appear; no semantic effect.
+    // may appear. `_Atomic` followed by `(` is instead the type
+    // specifier of C11 6.7.2.4.
+    ("_Atomic", Token::TypeQual),
     ("const", Token::TypeQual),
     ("__const", Token::TypeQual),
     ("__const__", Token::TypeQual),
@@ -2836,7 +2917,6 @@ const KEYWORDS: &[(&str, Token)] = &[
     // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
     // under the same token so source using the keyword without the
     // header still parses.
-    ("_Atomic", Token::Atomic),
     ("asm", Token::Asm),
     ("__asm__", Token::Asm),
     ("__asm", Token::Asm),
@@ -2928,15 +3008,15 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
     out
 }
 
-/// Seed the symbol table with C keywords plus one `Token::Sys`
-/// entry per `#pragma binding(...)` the preprocessor parsed out of
-/// the included headers.
+/// Seed the symbol table with C keywords plus one entry per
+/// `#pragma binding(...)` the preprocessor parsed out of the
+/// included headers.
 ///
-/// Each binding becomes a callable name with `val` set to its
-/// flat index across all `bindings` in declaration order. The
-/// parser's call site builds an `Inst::CallExt` with that
-/// binding index, and the codegen / VM resolve it against the
-/// same flattened list at emit / run time.
+/// Each binding's name carries its flat index across all `bindings`
+/// in declaration order as `binding_slot`, and stays undeclared until
+/// a function declaration makes it a `Token::Sys` symbol. A call then
+/// builds an `Inst::CallExt` with that binding index, and the codegen
+/// / VM resolve it against the same flattened list at emit / run time.
 ///
 /// A name that's bound twice (two `#pragma binding`s with the
 /// same `local_name`) gets the *first* index; later bindings are
@@ -2963,11 +3043,9 @@ pub(crate) fn init_symbols(
             if binding.is_data {
                 // A data binding (e.g. environ) names a data object
                 // referenced through its `extern` declaration, not a
-                // callable symbol. Seeding it as `Token::Sys` would
-                // shadow the data symbol with a call entry; the COPY
-                // relocation binds it instead. Consume a binding index
-                // so the flat binding table stays aligned with
-                // `spec.bindings`.
+                // callable symbol; the COPY relocation binds it. Consume
+                // a binding index so the flat binding table stays
+                // aligned with `spec.bindings`.
                 binding_idx += 1;
                 continue;
             }
@@ -2976,12 +3054,7 @@ pub(crate) fn init_symbols(
                 symbols.push(Symbol {
                     name: name.to_string(),
                     token: Token::Id as i64,
-                    class: Token::Sys as i64,
-                    type_: Ty::Int as i64,
-                    val: binding_idx,
-                    // Return type defaults to `int` until a prototype
-                    // declares it; a call before then warns.
-                    implicit_return_int: true,
+                    binding_slot: Some(binding_idx),
                     ..Default::default()
                 });
                 index.record(hash);

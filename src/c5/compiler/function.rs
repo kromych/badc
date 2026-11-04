@@ -52,6 +52,9 @@ pub(super) struct ParsedParams {
     /// The `-Wstrict-prototypes` record of a list that declares no
     /// prototype.
     pub(super) unprototyped: Option<u32>,
+    /// The last named parameter was declared `register`, which C99
+    /// 7.15.1.4p4 makes `va_start` on it undefined.
+    pub(super) last_register: bool,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -68,12 +71,16 @@ pub(super) struct ParamSize {
     pub(super) vm: Option<VmParam>,
 }
 
-/// A variably modified parameter: its symbol, the element type of the
-/// array it points to, and the pointer levels above that array.
-#[derive(Clone, Copy)]
+/// A variably modified parameter: its symbol, the type below the bounds of
+/// the array it points to, those bounds (outermost first, `None` for one
+/// evaluated on entry), where each variable bound after the first is
+/// written, and the pointer levels above that array.
+#[derive(Clone)]
 pub(super) struct VmParam {
     pub(super) sym: usize,
-    pub(super) elem: i64,
+    pub(super) base: i64,
+    pub(super) dims: Vec<Option<i64>>,
+    pub(super) more: Vec<crate::c5::lexer::LexerSnapshot>,
     pub(super) levels: i64,
 }
 
@@ -130,6 +137,7 @@ impl ParsedParams {
             tags: Vec::new(),
             enumerators: Vec::new(),
             unprototyped: None,
+            last_register: false,
         }
     }
 
@@ -183,6 +191,25 @@ impl Compiler {
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         self.pending.base_is_function_type = false;
         Ok((indirection, ret_indirection, f))
+    }
+
+    /// Park the parameter of `params` named like the function `fn_idx`, so
+    /// the declarator's reads and writes of the function reach the function
+    /// ([`crate::c5::symbol::Symbol::parked_param`]).
+    pub(super) fn park_self_named_param(&mut self, fn_idx: usize, params: &ParsedParams) {
+        let s = &mut self.symbols[fn_idx];
+        if params.indices.contains(&fn_idx) && !s.parked_param {
+            Self::swap_parked_param(s);
+        }
+    }
+
+    /// Bring a parameter [`Self::park_self_named_param`] parked back into
+    /// scope.
+    pub(super) fn unpark_param(&mut self, idx: usize) {
+        let s = &mut self.symbols[idx];
+        if s.parked_param {
+            Self::swap_parked_param(s);
+        }
     }
 
     /// A parameter's attributes describe that parameter, not the declarator
@@ -320,6 +347,10 @@ impl Compiler {
         let mut enum_tags = Vec::new();
         let mut fn_types = Vec::new();
         let mut is_variadic = false;
+        // Each parameter's `register` is its own; the declaration around
+        // the list keeps the one it saw.
+        let outer_register = core::mem::take(&mut self.pending.saw_register_storage);
+        let mut last_register = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
         // spells a type.
@@ -375,6 +406,7 @@ impl Compiler {
             } else {
                 (Ty::Int as i64, false)
             };
+            let register = core::mem::take(&mut self.pending.saw_register_storage);
             let base_spelling = self.take_base_spelling();
             let base_enum_tag = self.pending.base_enum_tag.take();
             // `(void)` via a typedef alias. The early check above
@@ -451,6 +483,29 @@ impl Compiler {
             // (`gf *`) absorbed them above.
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
                 let mut dims = self.parse_unnamed_param_bounds()?;
+                if dims.contains(&super::VLA_ARRAY_SIZE) {
+                    // The adjusted parameter points to a row of unspecified size.
+                    let variable: Vec<bool> = dims[1..]
+                        .iter()
+                        .map(|&d| d == super::VLA_ARRAY_SIZE)
+                        .collect();
+                    let row = self.unspecified_vla_type(ty, &dims[1..], &variable)?;
+                    ty = add_ptr_level(row);
+                    let carriers = self.take_param_fn_ptr_carriers()?;
+                    if let Some((f, depth)) = param_fn_type(carriers, true) {
+                        fn_types.push((types.len(), f, depth));
+                    }
+                    if implicit_int {
+                        self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                    }
+                    self.ty = ty;
+                    enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
+                    types.push(ty);
+                    if !self.parameter_separator()? {
+                        break;
+                    }
+                    continue;
+                }
                 self.require_complete_elements(ty, &dims)?;
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
                     if !dims.is_empty() && self.typedef_base_incomplete() {
@@ -588,6 +643,7 @@ impl Compiler {
             self.symbols[param_idx].incomplete_enum_tag = base_enum_tag;
             self.symbols[param_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
             self.symbols[param_idx].binding.maybe_unused = param_maybe_unused;
+            self.symbols[param_idx].binding.register_storage = register;
             self.symbols[param_idx].array_size = 0;
             self.set_decl_site(param_idx);
             // Unconditional write: a regular scalar/pointer
@@ -606,12 +662,14 @@ impl Compiler {
                 .unwrap_or_default();
 
             args.push(param_idx);
+            last_register = register;
             enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
             types.push(full_ty);
             if !self.parameter_separator()? {
                 break;
             }
         }
+        self.pending.saw_register_storage = outer_register;
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
         // `__va_list_tag[1]` on the SysV/AAPCS ABIs) leaves the typedef-array
@@ -630,6 +688,7 @@ impl Compiler {
             tags: Vec::new(),
             enumerators: Vec::new(),
             unprototyped: None,
+            last_register,
         })
     }
 
@@ -650,12 +709,12 @@ impl Compiler {
             } else {
                 let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
                 else {
-                    let ty = self.peek_expr_type()?;
-                    self.require_integer_size(ty)?;
-                    return Err(self.compile_err(
-                        Code::UNSUPPORTED,
-                        "a non-constant inner array dimension is not supported",
-                    ));
+                    // A variable bound, unspecified in a prototype (C99
+                    // 6.7.5.2p4): only a definition evaluates one.
+                    self.skip_param_array_size()?;
+                    dims.push(super::VLA_ARRAY_SIZE);
+                    self.consume(b']', "close bracket expected in array declarator")?;
+                    continue;
                 };
                 if n < 0 {
                     return Err(self.compile_err(

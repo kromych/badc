@@ -116,6 +116,13 @@ fn hex_float_literal() {
 }
 
 #[test]
+fn comparison_macros_raise_no_invalid() {
+    // C99 7.12.14: the interpreter's comparisons are quiet, and
+    // fetestexcept reads the flags its arithmetic raises.
+    assert_eq!(run_fixture("c99_comparison_macros_raise_no_invalid.c"), 0);
+}
+
+#[test]
 fn bool_normalize_c99() {
     // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
     assert_eq!(run_fixture("bool_normalize_c99.c"), 0);
@@ -588,6 +595,21 @@ fn builtin_inf() {
     // __builtin_inf / __builtin_inff / __builtin_huge_val are positive
     // infinity; the Linux SYNC_FILE_RANGE_* flags ride along under guard.
     assert_eq!(run_fixture("builtin_inf.c"), 0);
+}
+
+#[test]
+fn math_constant_types() {
+    // <math.h>'s NAN and INFINITY are float constant expressions, HUGE_VAL*
+    // of the type its name gives; NAN's sign bit is clear on every target.
+    assert_eq!(run_fixture("math_constant_types.c"), 0);
+}
+
+#[test]
+fn sizeof_builtin_result_shape() {
+    // `sizeof` over a value builtin with a string operand measured the
+    // string, and over `__builtin_choose_expr` lost the chosen array to the
+    // discarded operand; each answers with its result's own type.
+    assert_eq!(run_fixture("sizeof_builtin_result_shape.c"), 0);
 }
 
 #[test]
@@ -1517,6 +1539,201 @@ fn msvc_intrinsics_lower_at_the_call_site() {
     }
 }
 
+/// MSVC's `__va_start`, which <vadefs.h> calls for `va_start`, lowers as
+/// `__builtin_va_start` on both PE targets, as clang lowers it: x64's
+/// `(&ap, last)` and arm64's `(&ap, &last, size, alignment, &last)` leave no
+/// call for the link, and the arguments read back. Off the PE targets the
+/// name is an ordinary function.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_va_start_lowers_as_the_builtin() {
+    use crate::{CompileOptions, Target};
+    let unit = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
+                int f(int n, ...) { va_list ap; __va_start(&ap, n, 4, 4, &n);\n\
+                return *(int *)ap; }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let dump = super::perf_codegen::ssa_dump_for(unit, "f", t, false);
+        assert!(!dump.contains("Call"), "{t:?}:\n{dump}");
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_va_start.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+    let dump = super::perf_codegen::ssa_dump_for(unit, "f", Target::LinuxX64, false);
+    assert!(dump.contains("Call"), "LinuxX64:\n{dump}");
+}
+
+/// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list
+/// ends in `...`. As under gcc and clang, it is an error in a function with
+/// fixed arguments in every spelling: the `<stdarg.h>` macro,
+/// `__builtin_va_start` in a nested block, a statement expression and a K&R
+/// definition, and MSVC's `__va_start` in its x64 and arm64 forms on the PE
+/// targets, where it is no builtin elsewhere. `va_copy` and `va_end` of a
+/// `va_list` parameter stay allowed there.
+#[test]
+fn va_start_needs_a_variadic_function() {
+    use crate::{CompileOptions, Target};
+    let compile = |src: &str, t: Target| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = crate::Compiler::with_options(src.to_string(), t, opts).compile();
+        compiled.map(|_| ()).map_err(|e| e.to_string())
+    };
+    let refused = [
+        "#include <stdarg.h>\nvoid f(int a) { va_list ap; va_start(ap, a); va_end(ap); }\n",
+        "void f(int a) { { __builtin_va_list ap; if (a) { __builtin_va_start(ap, a); } } }\n",
+        "void f(int a) { __builtin_va_list ap; (void)({ __builtin_va_start(ap, a); 1; }); }\n",
+        "void f(a) int a; { __builtin_va_list ap; __builtin_va_start(ap, a); }\n",
+    ];
+    let accepted = [
+        "#include <stdarg.h>\n\
+         void f(va_list src) { va_list d; va_copy(d, src); va_end(d); va_end(src); }\n",
+        "#include <stdarg.h>\n\
+         int f(int n, ...) { va_list ap; ({ va_start(ap, n); }); int r = va_arg(ap, int);\n\
+         va_end(ap); return r; }\n",
+    ];
+    let ms = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n";
+    let ms_x64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, a); }}\n");
+    let ms_arm64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, 4, 4, &a); }}\n");
+    let fixed = "`va_start` used in function with fixed arguments";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for src in refused {
+            let err = compile(src, t).expect_err(src);
+            assert!(err.contains(fixed), "{t:?}: {src}\n{err}");
+        }
+        for src in accepted {
+            compile(src, t).unwrap_or_else(|e| panic!("{t:?}: {src}\n{e}"));
+        }
+        for src in [&ms_x64, &ms_arm64] {
+            match compile(src, t) {
+                Err(e) if t.is_windows() => assert!(e.contains(fixed), "{t:?}: {src}\n{e}"),
+                got => assert!(got.is_ok() && !t.is_windows(), "{t:?}: {src}\n{got:?}"),
+            }
+        }
+    }
+}
+
+/// C99 6.2.1p4: a parameter named like its function hides the function in
+/// the body, and the declarator still gives the type each `return`
+/// converts to. The fixture under the interpreter, for every target's data
+/// model, at -O0 and -O; the native and JIT tables run it on each backend.
+/// A `return` matching the function's type draws nothing, and one matching
+/// only the parameter's draws the function's conversion diagnostic, as in
+/// gcc 16 and clang 22.
+#[test]
+fn a_parameter_named_like_its_function_keeps_the_function_type() {
+    use crate::{CompileOptions, Target};
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("param_named_like_function.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let checked = "struct X; struct L;\n\
+                   static int already_checked(const struct X *cert,\n\
+                   const struct L *already_checked) { return cert != 0; }\n\
+                   int use(void) { return already_checked(0, 0); }\n";
+    let program = compile(checked).unwrap_or_else(|e| panic!("{e}"));
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+    let err = compile("static int *p(int p) { return p; }\nint *use(void) { return p(1); }\n")
+        .map(|_| ())
+        .expect_err("an int returned as `int *`");
+    let text = err.to_string();
+    let want = "in return (declared=int*, returned=int)";
+    assert!(text.contains(want), "{text}");
+}
+
+/// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
+/// 7.15.1.4p4): `va_start` naming other than the last named parameter
+/// (both compilers), one declared `register` (both) or one of a type the
+/// default argument promotions change (clang), and `va_arg` of such a type
+/// (clang; gcc warns with no flag). The lines are clang 22's for the same
+/// unit; an array parameter, a parenthesized one and the arm64 form of
+/// MSVC's `__va_start` draw nothing, as in clang. Every target, in the
+/// `<stdarg.h>`, `__builtin_` and x64 `__va_start` spellings; `-Wno-varargs`
+/// silences each.
+#[test]
+fn va_start_and_va_arg_operands_draw_varargs() {
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Target};
+    let lines = |src: &str, t: Target, varargs: Level| -> Vec<u32> {
+        let mut diag = Config::new();
+        diag.set_level(Code::VARARGS, varargs);
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(diag);
+        let program = crate::Compiler::with_options(src.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let ours = program.warnings.iter().filter(|w| w.code == Code::VARARGS);
+        ours.map(|w| w.loc.as_ref().map_or(0, |l| l.line)).collect()
+    };
+    let body = "int not_last(int a, int b, ...) { V ap; S(ap, a); E(ap); return b; }\n\
+                int reg(register int a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int ch(char a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int sh(unsigned short a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int fl(float a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int bo(_Bool a, ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int sum(int a, ...) { V ap; S(ap, a + 1); E(ap); return 0; }\n\
+                int arr(int a[], ...) { V ap; S(ap, a); E(ap); return 0; }\n\
+                int par(int a, ...) { V ap; S(ap, (a)); E(ap); return 0; }\n\
+                int ok(double a, ...) { V ap; S(ap, a); E(ap); return 0; }\n";
+    let stdarg = format!(
+        "#include <stdarg.h>\n#define V va_list\n#define S va_start\n#define E va_end\n{body}\
+         int arg(int a, ...) {{ va_list ap; va_start(ap, a); short s = va_arg(ap, short);\n\
+         va_end(ap); return s; }}\n"
+    );
+    let builtin = format!(
+        "#define V __builtin_va_list\n#define S __builtin_va_start\n#define E __builtin_va_end\n\
+         {body}int arg(int a, ...) {{ V ap; S(ap, a); float f = __builtin_va_arg(ap, float);\n\
+         E(ap); return (int)f; }}\n"
+    );
+    let ms = format!(
+        "typedef char *V;\nvoid __va_start(V *, ...);\n#define S(ap, v) __va_start(&ap, v)\n\
+         #define E(ap) (void)(ap)\n{body}\
+         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, 1, 1, &a); return 0; }}\n"
+    );
+    // The first seven lines of `body` warn, and the `va_arg` line after it.
+    let want = |src: &str| -> Vec<u32> {
+        let first = src[..src.find(body).unwrap()].matches('\n').count() as u32 + 1;
+        let arg = src.contains("va_arg").then_some(first + 10);
+        (first..first + 7).chain(arg).collect()
+    };
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let mut units = alloc::vec![&stdarg, &builtin];
+        if t.is_windows() {
+            units.push(&ms);
+        }
+        for src in units {
+            assert_eq!(lines(src, t, Level::Warning), want(src), "{t:?}:\n{src}");
+            assert!(lines(src, t, Level::Ignore).is_empty(), "{t:?}:\n{src}");
+        }
+    }
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {
@@ -1618,6 +1835,168 @@ fn msvc_instruction_intrinsics_encode_their_instructions() {
         (0xffffffe0, 0xd51b4400),
     ] {
         assert!(words.iter().any(|w| w & mask == bits), "arm64: {bits:08x}");
+    }
+}
+
+/// Each `_Interlocked` intrinsic of the compare-exchange, exchange,
+/// exchange-add, increment, decrement, and, or and xor families, at every
+/// width it has, is one atomic instruction, as cl emits them: on x64 a
+/// `lock` cmpxchg or xadd, or xchg, with a cmpxchg loop where an and, or or
+/// xor returns the old value; on arm64 the FEAT_LSE form cl emits under
+/// /arch:armv8.1, acquire and release for the full barrier, acquire alone
+/// for `_acq`, release alone for `_rel` and neither for `_nf`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn msvc_interlocked_intrinsics_encode_atomic_instructions() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let object = |src: &str, t: Target| {
+        let copts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), t, copts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}\n{src}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        crate::emit_native_with_options(&program, t, opts).unwrap_or_else(|e| panic!("{t:?}: {e}"))
+    };
+    // (family, operands, x64 opcode after the prefixes for 1 byte and
+    // wider, x64 lock prefix, arm64 operation bits).
+    const CAS: u32 = 0x08a0_7c00;
+    const LSE: u32 = 0x3820_0000;
+    let families: [(&str, usize, u8, u8, bool, u32); 8] = [
+        ("CompareExchange", 3, 0xb0, 0xb1, true, CAS),
+        ("Exchange", 2, 0x86, 0x87, false, LSE | 0x8000),
+        ("ExchangeAdd", 2, 0xc0, 0xc1, true, LSE),
+        ("Increment", 1, 0xc0, 0xc1, true, LSE),
+        ("Decrement", 1, 0xc0, 0xc1, true, LSE),
+        ("And", 2, 0xb0, 0xb1, true, LSE | 0x1000),
+        ("Or", 2, 0xb0, 0xb1, true, LSE | 0x3000),
+        ("Xor", 2, 0xb0, 0xb1, true, LSE | 0x2000),
+    ];
+    let widths: [(&str, &str, u32); 4] = [
+        ("8", "char", 1),
+        ("16", "short", 2),
+        ("", "long", 4),
+        ("64", "long long", 8),
+    ];
+    // Whether `lock`, then 0x66 / REX prefixes saying the width, then the
+    // opcode (0x0f-escaped but for xchg) occur in `code`.
+    let x64_has = |code: &[u8], lock: bool, width: u32, op: u8| {
+        let opcode: &[u8] = if op & 0xfe == 0x86 {
+            &[op]
+        } else {
+            &[0x0f, op]
+        };
+        (0..code.len()).any(|i| {
+            let mut at = i;
+            if lock {
+                if code[at] != 0xf0 {
+                    return false;
+                }
+                at += 1;
+            }
+            let (mut opsize, mut rex_w) = (false, false);
+            while let Some(&b) = code.get(at) {
+                match b {
+                    0x66 => opsize = true,
+                    0x40..=0x4f => rex_w |= b & 8 != 0,
+                    _ => break,
+                }
+                at += 1;
+            }
+            code[at..].starts_with(opcode) && opsize == (width == 2) && rex_w == (width == 8)
+        })
+    };
+    for (family, operands, op_byte, op_wide, lock, arm64_op) in families {
+        for (suffix, ty, width) in widths {
+            if width == 1 && matches!(family, "Increment" | "Decrement") {
+                continue;
+            }
+            let args = ["p", "a", "b"][..operands].join(", ");
+            let call = |order: &str| {
+                format!(
+                    "{ty} f({ty} volatile *p, {ty} a, {ty} b) \
+                     {{ (void)a; (void)b; return _Interlocked{family}{suffix}{order}({args}); }}\n"
+                )
+            };
+            let x64 = object(&call(""), Target::WindowsX64);
+            let op = if width == 1 { op_byte } else { op_wide };
+            assert!(
+                x64_has(&x64, lock, width, op),
+                "x64 _Interlocked{family}{suffix}: lock={lock} {op:02x}"
+            );
+            let size = match width {
+                1 => 0u32,
+                2 => 1,
+                4 => 2,
+                _ => 3,
+            };
+            for (order, acquire, release) in [
+                ("", true, true),
+                ("_acq", true, false),
+                ("_rel", false, true),
+                ("_nf", false, false),
+            ] {
+                let bits = if arm64_op == CAS {
+                    u32::from(acquire) << 22 | u32::from(release) << 15
+                } else {
+                    u32::from(acquire) << 23 | u32::from(release) << 22
+                };
+                let want = arm64_op | size << 30 | bits;
+                let obj = object(&call(order), Target::WindowsAarch64);
+                let (words, _) = obj.as_chunks::<4>();
+                assert!(
+                    words
+                        .iter()
+                        .any(|w| u32::from_le_bytes(*w) & 0xffe0_fc00 == want),
+                    "arm64 _Interlocked{family}{suffix}{order}: {want:08x}"
+                );
+            }
+        }
+    }
+    // The pointer forms take the doubleword encodings.
+    let pointers = "void *x(void *volatile *p, void *a) { return _InterlockedExchangePointer(p, a); }\n\
+                    void *c(void *volatile *p, void *a, void *b) \
+                    { return _InterlockedCompareExchangePointer(p, a, b); }\n";
+    let x64 = object(pointers, Target::WindowsX64);
+    assert!(x64_has(&x64, false, 8, 0x87) && x64_has(&x64, true, 8, 0xb1));
+    let obj = object(pointers, Target::WindowsAarch64);
+    let (words, _) = obj.as_chunks::<4>();
+    for want in [0xf8e0_8000u32, 0xc8e0_fc00] {
+        assert!(
+            words
+                .iter()
+                .any(|w| u32::from_le_bytes(*w) & 0xffe0_fc00 == want),
+            "arm64 pointer form: {want:08x}"
+        );
+    }
+}
+
+/// msvc_compat.h defines no Interlocked function of its own: with it and
+/// `<windows.h>`, `InterlockedCompareExchange` over a `LONG volatile *` is
+/// the intrinsic, on both PE targets.
+#[test]
+fn msvc_compat_leaves_interlocked_to_the_intrinsics() {
+    use crate::{CompileOptions, Target};
+    let src = "#include <windows.h>\n\
+               LONG f(LONG volatile *p) { return InterlockedCompareExchange(p, 1, 0); }\n";
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_force_includes(vec!["msvc_compat.h".into()]);
+        let program = crate::Compiler::with_options(src.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert!(program.warnings.is_empty(), "{t:?}: {:?}", program.warnings);
+        assert!(
+            !program
+                .symbols
+                .iter()
+                .any(|s| s.name == "InterlockedCompareExchange"),
+            "{t:?}"
+        );
     }
 }
 
@@ -4292,12 +4671,9 @@ fn scanf_fscanf_binding() {
     // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared by <stdio.h>;
     // the calls are guarded so the interp lane never reaches their
     // (unimplemented) CallExt and never blocks on stdin. On Windows they
-    // are libc/lib/scanf_ext.c's, which the interpreter does not load; the
-    // native tables link and run the fixture there.
-    if crate::Target::default_target().is_windows() {
-        super::compile_fixture("scanf_fscanf_binding.c");
-    } else {
-        assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+    // are libc/lib/scanf_ext.c's, which the run joins on demand.
+    for target in [crate::Target::default_target(), crate::Target::WindowsX64] {
+        assert_eq!(super::run_fixture_for("scanf_fscanf_binding.c", target), 0);
     }
 }
 
@@ -6574,10 +6950,9 @@ fn a_disabled_warning_locates_no_source_line() {
 
 #[test]
 fn atomic_ops_require_stdatomic_header() {
-    // The C11 7.17 atomic operations are recognized only when declared
-    // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with
-    // no such declaration is an ordinary unresolved function reference,
-    // so a name like `atomic_load` is not silently intercepted.
+    // The C11 7.17 generic functions are `<stdatomic.h>` macros; without
+    // the header a call is an ordinary unresolved function reference, so
+    // a name like `atomic_load` is not silently intercepted.
     use crate::c5::Compiler;
     let src = "int main(void){int x=0; return atomic_load(&x);}\n";
     let err = Compiler::new(src.to_string())
@@ -8511,9 +8886,8 @@ fn builtin_nan_reads_its_payload_as_gcc_does() {
 fn preprocessed_output_compiles_to_the_same_program() {
     use crate::{CompileOptions, Compiler, Target, Vm};
     // `-E` output is a translation unit of its own: <stdatomic.h>'s
-    // generic functions exist only through the `#pragma intrinsic` lines
-    // the preprocessor consumes, so the output has to carry them for its
-    // compile to reach the same program.
+    // generic functions expand to the builtins, which need no declaration,
+    // so its compile reaches the same program.
     let src = "#include <stdatomic.h>\n\
                int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
                int main(void) { atomic_int x = 41; f(&x); return atomic_load(&x); }\n";

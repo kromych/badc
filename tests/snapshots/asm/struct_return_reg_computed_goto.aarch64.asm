@@ -22,8 +22,6 @@ Disassembly of section .text:
 <ternary>:
                	adr	x0, <addr>
                	br	x0
-               	mov	x0, #0x1                // =1
-               	ret
                	mov	x0, #0x0                // =0
                	ret
 

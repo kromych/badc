@@ -164,8 +164,7 @@ Disassembly of section .text:
                	mov	x15, #0x61              // =97
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	d0, [x0]
+               	str	d0, [x0, #0x50]
                	sub	x2, x29, #0x80
                	mov	x0, #0x0                // =0
                	mov	x1, x0
@@ -222,8 +221,7 @@ Disassembly of section .text:
                	cmp	x0, #0x128
                	b.ne	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d0, [x0]
+               	ldr	d0, [x0, #0x50]
                	fmov	d1, #1.50000000
                	fcmp	d0, d1
                	b.eq	<addr>

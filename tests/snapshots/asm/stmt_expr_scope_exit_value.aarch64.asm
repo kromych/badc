@@ -61,14 +61,12 @@ Disassembly of section .text:
                	mov	sp, x2
                	str	w0, [x2]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0]
+               	ldrsw	x2, [x0, #0x30]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
+               	str	w2, [x0, #0x30]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldursw	x2, [x29, #-0x10]
-               	str	w2, [x0]
+               	str	w2, [x0, #0x38]
                	mov	sp, x1
                	mov	x0, #0x7                // =7
                	mov	sp, x29
@@ -80,23 +78,21 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	wzr, [x0]
-               	ldrsw	x1, [x0]
+               	str	wzr, [x0, #0x30]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	mov	x3, #-0x1               // =-1
-               	str	w3, [x1]
-               	ldrsw	x3, [x0]
+               	str	w3, [x1, #0x38]
+               	ldrsw	x3, [x0, #0x30]
                	cmp	w3, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x3, [x1]
+               	ldrsw	x3, [x1, #0x38]
                	mov	x17, #-0x1              // =-1
                	cmp	w3, w17
                	b.eq	<addr>
@@ -104,10 +100,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x3, [x0]
+               	ldrsw	x3, [x0, #0x30]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	str	wzr, [x1]
+               	str	w3, [x0, #0x30]
+               	str	wzr, [x1, #0x38]
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	cmp	w0, #0x2a
@@ -125,82 +121,78 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	wzr, [x0]
+               	str	wzr, [x0, #0x30]
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
                	mov	x2, #0x2                // =2
                	stur	w2, [x29, #-0x8]
-               	ldrsw	x2, [x0]
+               	ldrsw	x2, [x0, #0x30]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
+               	str	w2, [x0, #0x30]
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	ldursw	x3, [x29, #-0x8]
-               	str	w3, [x2]
-               	ldrsw	x3, [x0]
+               	str	w3, [x2, #0x38]
+               	ldrsw	x3, [x0, #0x30]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
+               	str	w3, [x0, #0x30]
                	ldursw	x3, [x29, #-0x10]
-               	str	w3, [x2]
-               	ldrsw	x3, [x0]
+               	str	w3, [x2, #0x38]
+               	ldrsw	x3, [x0, #0x30]
                	cmp	w3, #0x2
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	wzr, [x0]
+               	str	wzr, [x0, #0x30]
                	mov	x3, #0xb                // =11
                	stur	w3, [x29, #-0x8]
-               	ldrsw	x3, [x0]
+               	ldrsw	x3, [x0, #0x30]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
+               	str	w3, [x0, #0x30]
                	ldursw	x3, [x29, #-0x8]
-               	str	w3, [x2]
-               	ldrsw	x3, [x0]
+               	str	w3, [x2, #0x38]
+               	ldrsw	x3, [x0, #0x30]
                	cmp	w3, #0x1
                	b.ne	<addr>
-               	ldrsw	x3, [x2]
+               	ldrsw	x3, [x2, #0x38]
                	cmp	w3, #0xb
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	wzr, [x0]
+               	str	wzr, [x0, #0x30]
                	stur	wzr, [x29, #-0x8]
-               	ldrsw	x3, [x0]
+               	ldrsw	x3, [x0, #0x30]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
+               	str	w3, [x0, #0x30]
                	ldursw	x3, [x29, #-0x8]
-               	str	w3, [x2]
-               	ldrsw	x2, [x0]
+               	str	w3, [x2, #0x38]
+               	ldrsw	x2, [x0, #0x30]
                	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	wzr, [x0]
+               	str	wzr, [x0, #0x30]
                	stur	wzr, [x29, #-0x10]
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	ldursw	x2, [x29, #-0x8]
-               	str	w2, [x1]
-               	ldrsw	x2, [x0]
+               	str	w2, [x1, #0x38]
+               	ldrsw	x2, [x0, #0x30]
                	add	x2, x2, #0x1
-               	str	w2, [x0]
+               	str	w2, [x0, #0x30]
                	ldursw	x2, [x29, #-0x10]
-               	str	w2, [x1]
-               	ldrsw	x0, [x0]
+               	str	w2, [x1, #0x38]
+               	ldrsw	x0, [x0, #0x30]
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0xe                // =14

@@ -4,7 +4,8 @@
 //! load/store into the heap region consults the allocations table and
 //! turns dangling-pointer access into a `Runtime` error.
 
-use super::try_run_fixture;
+use super::{compile_str, run_str, try_run_fixture};
+use crate::Vm;
 
 fn expect_error_containing(name: &str, needle: &str) {
     match try_run_fixture(name) {
@@ -122,10 +123,142 @@ fn calling_a_forged_code_pointer_is_refused() {
     );
 }
 
+/// GCC's labels as values: `goto *` must reach a label of the function
+/// that runs it. An integer whose bits decode to the entry block ran the
+/// function again forever; one decoding past the last block indexed out
+/// of range. A label of another function, a label's address moved by a
+/// byte, and the block after the label's are no label addresses either.
+#[test]
+fn a_computed_goto_to_a_value_that_is_no_label_address_is_refused() {
+    let elsewhere = "void *other;\n\
+        void take(void) { other = &&there; there: return; }\n";
+    for (setup, operand) in [
+        ("", "(void *)(long)12345"),
+        ("", "(void *)(long)(1 << 30)"),
+        ("take();", "other"),
+        ("", "(char *)&&here + 1"),
+        ("", "(char *)&&here + (1 << 20)"),
+    ] {
+        let src = format!(
+            "{elsewhere}int main(void) {{ {setup} void *p = {operand}; goto *p; \
+             here: return 0; }}\n"
+        );
+        let err = Vm::new(compile_str(&src)).run().expect_err(operand);
+        assert!(
+            err.to_string().contains("is not the address of a label"),
+            "{operand}: {err}"
+        );
+    }
+}
+
+/// A label address and a return address are positions in a function's
+/// code, not functions: none equals a function pointer, and a call through
+/// one stops instead of running the function whose pointer has its bits.
+#[test]
+fn a_call_through_a_label_or_return_address_is_refused() {
+    // The calls in `first`'s entry block return to offsets that span the
+    // functions' entry points, which the first function's positions in its
+    // first block once shared their bits with.
+    let defs = "typedef int fn(int);\n\
+        void *code[18];\n\
+        void *ret(void);\n\
+        void first(void) {\n\
+          code[0] = ret(); code[1] = ret(); code[2] = ret(); code[3] = ret();\n\
+          code[4] = ret(); code[5] = ret(); code[6] = ret(); code[7] = ret();\n\
+          code[8] = ret(); code[9] = ret(); code[10] = ret(); code[11] = ret();\n\
+          code[12] = ret(); code[13] = ret(); code[14] = ret(); code[15] = ret();\n\
+          code[16] = &&here;\n\
+          here: code[17] = &&there;\n\
+          there: return;\n\
+        }\n\
+        void *ret(void) { return __builtin_return_address(0); }\n\
+        #define F(n) int f##n(int x) { return x + n; }\n\
+        F(0) F(1) F(2) F(3) F(4) F(5) F(6) F(7) F(8) F(9) F(10) F(11) F(12) F(13)\n\
+        F(14) F(15) F(16) F(17) F(18) F(19) F(20) F(21) F(22) F(23) F(24) F(25)\n\
+        F(26) F(27) F(28) F(29) F(30) F(31) F(32) F(33) F(34) F(35) F(36) F(37)\n\
+        fn *const fns[] = {f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12,\n\
+          f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, f25, f26, f27,\n\
+          f28, f29, f30, f31, f32, f33, f34, f35, f36, f37};\n";
+    let compare = "int main(void) {\n\
+          first();\n\
+          int equal = 0;\n\
+          for (int i = 0; i < 18; i++)\n\
+            for (int j = 0; j < 38; j++)\n\
+              equal += code[i] == (void *)fns[j] || code[i] == (void *)first;\n\
+          return equal;\n\
+        }\n";
+    assert_eq!(run_str(&format!("{defs}{compare}")), 0);
+    for which in [0, 15, 16] {
+        let call = format!("int main(void) {{ first(); return ((fn *)code[{which}])(0); }}\n");
+        let err = Vm::new(compile_str(&format!("{defs}{call}")))
+            .run()
+            .expect_err("a call through a code position");
+        assert!(
+            err.to_string()
+                .contains("is a label or return address, not a function"),
+            "code[{which}]: {err}"
+        );
+    }
+}
+
 #[test]
 fn negative_size_argument_is_caught() {
     // memset(p, 0, -1) used to walk the address space (and accidentally
     // trip the code-segment guard). With the new size validation it
     // surfaces a clear "negative size" error at the intrinsic boundary.
     expect_error_containing("negative_size_memset.c", "negative size");
+}
+
+// ---- Allocation functions ----
+
+/// C99 7.20.3: space that cannot be allocated is a null pointer, with
+/// `errno` set to ENOMEM as the C libraries set it, and a failed `realloc`
+/// leaves the old object as it was. The guest memory stops at 4 GiB, so
+/// the terabyte `calloc` a native C library grants lazily is refused too.
+#[test]
+fn an_allocation_the_interpreter_cannot_hold_is_a_null_pointer() {
+    let src = "#include <errno.h>\n\
+        int main(void) {\n\
+            errno = 0;\n\
+            if (malloc((size_t)-1 / 2) || errno != ENOMEM) return 1;\n\
+            errno = 0;\n\
+            if (malloc((size_t)-1) || errno != ENOMEM) return 2;\n\
+            errno = 0;\n\
+            if (calloc((size_t)-1 / 2, 4) || errno != ENOMEM) return 3;\n\
+            errno = 0;\n\
+            if (calloc(1, (size_t)1 << 40) || errno != ENOMEM) return 4;\n\
+            unsigned char *q = calloc(4, 4);\n\
+            if (!q) return 5;\n\
+            for (int i = 0; i < 16; i++) if (q[i]) return 6;\n\
+            memcpy(q, \"keep\", 5);\n\
+            errno = 0;\n\
+            if (realloc(q, (size_t)-1 / 2) || errno != ENOMEM) return 7;\n\
+            if (memcmp(q, \"keep\", 5)) return 8;\n\
+            unsigned char *r = realloc(q, 64);\n\
+            if (!r || memcmp(r, \"keep\", 5)) return 9;\n\
+            unsigned char *s = realloc(0, 8);\n\
+            void *z1 = malloc(0), *z2 = malloc(0);\n\
+            if (!s || (z1 && z1 == z2)) return 10;\n\
+            if (read(-1, r, (size_t)-1 / 2) != -1) return 11;\n\
+            free(r); free(s); free(z1); free(z2);\n\
+            return 0;\n\
+        }\n";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn a_fill_or_resize_past_the_interpreters_memory_is_a_runtime_error() {
+    // The size is checked against the memory before anything is built for
+    // it; an unknown pointer is as `free` reports it.
+    for (body, needle) in [
+        (
+            "char *p = malloc(8); memset(p, 0, (size_t)-1 / 2);",
+            "past memory len",
+        ),
+        ("char c; realloc(&c, 8);", "realloc of unknown pointer"),
+    ] {
+        let src = format!("int main(void) {{ {body} return 0; }}\n");
+        let err = Vm::new(compile_str(&src)).run().expect_err(body);
+        assert!(err.to_string().contains(needle), "{body}: {err}");
+    }
 }

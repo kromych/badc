@@ -1,10 +1,9 @@
 /* <cpuid.h> leaf-checked queries. __get_cpuid / __get_cpuid_count report
    whether the leaf is within the range reported by __get_cpuid_max, taking
    the extended range for leaves with bit 31 set, and leave the four output
-   words untouched when they reject a leaf. The bundled __get_cpuid_max
-   reports no range, so every leaf is rejected here; the vendor-string check
-   still holds if it starts reporting a real maximum. No inline asm, so this
-   compiles and runs the same on every target. */
+   words untouched when they reject a leaf. Natively leaf 0 is read and its
+   vendor string is not empty; under the interpreter, which runs CPUID as
+   zero, every leaf is rejected and the outputs keep their sentinels. */
 
 #include <cpuid.h>
 

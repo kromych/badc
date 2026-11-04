@@ -599,6 +599,8 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
     for _ in 0..FOLD_DEPTH {
         let form = match func.insts.get(v as usize) {
             None | Some(Inst::Undef) => "an undefined value",
+            Some(Inst::ExceptionCode) => "an exception code",
+            Some(Inst::ParentLocalAddr { .. }) => "the address of an enclosing function's object",
             Some(Inst::Copy { value, .. } | Inst::Extend { value, .. }) => {
                 v = *value;
                 continue;
@@ -750,6 +752,7 @@ mod tests {
                     value: false,
                     volatile_object: false,
                     early_clobber: false,
+                    fp_limit: 0,
                 }],
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
@@ -883,6 +886,7 @@ mod tests {
             kind: StoreKind::I32,
             volatile: false,
             align: 4,
+            pc_rel: false,
         };
         assert_eq!(asm_operand_const(&body(through), 5), None);
     }
@@ -994,6 +998,7 @@ mod tests {
                     value: false,
                     volatile_object: false,
                     early_clobber: false,
+                    fp_limit: 0,
                 })
                 .collect()
         };

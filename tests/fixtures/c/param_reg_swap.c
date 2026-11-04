@@ -17,7 +17,7 @@ static u32 ld32(const u8 *x) {
     return (u << 8) | x[0];
 }
 
-static void core(u8 *out, const u8 *in, const u8 *k, const u8 *c) {
+__attribute__((noinline)) static void core(u8 *out, const u8 *in, const u8 *k, const u8 *c) {
     u32 x[16];
     int i;
     for (i = 0; i < 4; i++) {

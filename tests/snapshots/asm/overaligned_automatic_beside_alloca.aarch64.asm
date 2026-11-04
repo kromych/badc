@@ -17,11 +17,10 @@ Disassembly of section .text:
                	and	x1, x1, #0xff
                	strb	w1, [x0]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x2, [x1]
+               	ldrsw	x2, [x1, #0x30]
                	ldrb	w0, [x0]
                	add	x0, x2, x0
-               	str	w0, [x1]
+               	str	w0, [x1, #0x30]
                	ret
 
 <with_alloca>:

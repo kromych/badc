@@ -20,8 +20,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	sturb	wzr, [x29, #-0x20]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x6, [x1]
+               	ldr	x6, [x1, #0x18]
                	mov	x1, #0x20               // =32
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

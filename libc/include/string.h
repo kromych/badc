@@ -241,8 +241,6 @@ errno_t memset_s(void *s, rsize_t smax, int c, rsize_t n);
 // programs reach for directly; the POSIX aliases (stricmp /
 // strnicmp / strlwr / strupr) bind to the same symbols.
 #include <corecrt.h>
-#pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
-#pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
 #pragma binding(msvcrt::memcpy_s,  "memcpy_s")
 #pragma binding(msvcrt::memmove_s, "memmove_s")
 #pragma binding(msvcrt::_strupr_l, "_strupr_l")
@@ -251,8 +249,6 @@ errno_t memcpy_s(void *dst, size_t dstsz, const void *src, size_t count);
 errno_t memmove_s(void *dst, size_t dstsz, const void *src, size_t count);
 char *_strupr_l(char *s, _locale_t locale);
 char *_strlwr_l(char *s, _locale_t locale);
-int _wcsicmp(const wchar_t *a, const wchar_t *b);
-int _wcsnicmp(const wchar_t *a, const wchar_t *b, size_t n);
 int stricmp(const char *a, const char *b);
 int _stricmp(const char *a, const char *b);
 int strnicmp(const char *a, const char *b, size_t n);
@@ -287,6 +283,7 @@ errno_t _strupr_s_l(char *_Str, size_t _Size, _locale_t _Locale);
 errno_t _strnset_s(char *_Str, size_t _Size, int _Val, size_t _MaxCount);
 #pragma binding(msvcrt::_strset_s, "_strset_s")
 errno_t _strset_s(char *_Dst, size_t _DstSize, int _Value);
+#include <__badc_wstring.h>
 #endif
 
 // POSIX.1-2008 / BSD `<string.h>` helpers that not every target libc

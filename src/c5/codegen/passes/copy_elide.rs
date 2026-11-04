@@ -755,6 +755,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LocalAddr(-2),
                 Inst::Store {
@@ -764,6 +765,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Mcpy {
                     dst: 0,
@@ -813,6 +815,7 @@ mod tests {
                 kind: crate::c5::ir::LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             },
         );
         for inst in f.insts.iter_mut().skip(6) {
@@ -856,6 +859,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         });
         f.blocks[0].inst_range = 0..f.insts.len() as u32;
         f.inst_src.push((0, 0));
@@ -1089,6 +1093,7 @@ mod tests {
                     kind: StoreKind::I32,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LocalAddr(-2),
                 Inst::Mcpy {
@@ -1170,6 +1175,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Store {
                     addr: 0,
@@ -1178,6 +1184,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LocalAddr(-2),
                 Inst::Mcpy {

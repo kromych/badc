@@ -34,16 +34,15 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %r12
-               	movq	0x10(%rax), %r13
-               	movq	0x20(%rax), %r14
-               	movq	0x28(%rax), %r15
+               	movq	<rip>, %rax # <addr>
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %r13 # <addr>
+               	movq	<rip>, %r14 # <addr>
+               	movq	<rip>, %r15 # <addr>
                	leaq	<rip>, %rdi
                	movl	$0x42, %esi
                	movl	$0x1a4, %edx            # imm = 0x1A4
-               	callq	*%rcx
+               	callq	*%rax
                	movq	%rax, %rbx
                	testl	%ebx, %ebx
                	jge	<addr>

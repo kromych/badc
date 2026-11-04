@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <with_side_effect>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	$0x1, (%rax)
+               	movl	$0x1, <rip> # <addr>
                	movl	$0x7, %eax
                	retq
 
@@ -36,21 +35,14 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x5, -0x10(%rbp)
-               	movl	$0x8, %eax
-               	movl	%eax, -0x8(%rbp)
-               	cmpl	$0x8, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
+               	movl	$0x8, -0x8(%rbp)
                	movl	-0x10(%rbp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x9, %eax
                	leave

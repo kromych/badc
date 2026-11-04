@@ -226,7 +226,7 @@ impl Compiler {
             )
         })?;
         self.ingest_file_scope_asm(text, true)
-            .map_err(|m| self.compile_err(Code::ASSEMBLER, m))
+            .map_err(|e| self.compile_err(Code::ASSEMBLER, String::from(e)))
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
@@ -244,12 +244,14 @@ impl Compiler {
     /// nothing but `.globl` at C symbols, which only a translation unit has.
     ///
     /// Shared by the file-scope `asm("...")` parse and the assembler driver so
-    /// both accept the same constructs and reject the rest identically.
+    /// both accept the same constructs and reject the rest identically,
+    /// every bad statement at its line of `text`.
     pub(super) fn ingest_file_scope_asm(
         &mut self,
         text: &str,
         globl_shortcut: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::c5::asm::AsmErrors> {
+        use crate::c5::asm::{AsmError, AsmErrors, AsmSectionItem};
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
         // prepared form so the codegen materialization sees the same
@@ -260,8 +262,17 @@ impl Compiler {
         } else {
             crate::c5::asm::AsmComments::X86
         };
-        let prepared = crate::c5::asm::prepare_file_asm_text(text, comments)?;
+        let crate::c5::asm::AsmPrepared {
+            text: mut prepared,
+            origin,
+            mut errors,
+        } = crate::c5::asm::prepare_file_asm_text(text, comments);
+        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
+            prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
+        }
         let text = prepared.as_str();
+        // Errors at lines of the prepared text.
+        let mut later = Vec::new();
         // The stream outside pushed sections is either linkage directives only
         // (`.globl name`, applied to a C symbol) or a trampoline body (labels +
         // instructions in the default `.text` section). The first routes through
@@ -276,55 +287,57 @@ impl Compiler {
                 }
                 ex.blocks
             }
-            _ => crate::c5::asm::extract_file_scope_asm_sections(text, aarch64)?,
+            _ => crate::c5::asm::extract_file_scope_asm_sections_noting(text, aarch64, &mut later),
         };
         for b in &blocks {
-            for item in &b.items {
-                match item {
-                    crate::c5::asm::AsmSectionItem::Data { values, .. }
+            for li in &b.items {
+                match &li.item {
+                    AsmSectionItem::Data { values, .. }
                         if values.iter().any(|v| {
                             matches!(v, crate::c5::asm::AsmSectionValue::OperandConst(_))
                         }) =>
                     {
-                        return Err(
-                            "operand reference in file-scope asm (no operands at file scope)"
-                                .into(),
-                        );
+                        later.push(AsmError::at(
+                            li.line,
+                            String::from(
+                                "operand reference in file-scope asm (no operands at file scope)",
+                            ),
+                        ));
                     }
                     // Unit-level symbol directives: `.weak name` binds the
                     // symbol weak wherever it is defined; `.set name, target`
                     // is an object-level alias emitted at the target's
                     // definition.
-                    crate::c5::asm::AsmSectionItem::Weak(name) => {
+                    AsmSectionItem::Weak(name) => {
                         if !self.asm_weak_names.contains(name) {
                             self.asm_weak_names.push(name.clone());
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::Global(name) => {
+                    AsmSectionItem::Global(name) => {
                         if !self.asm_global_names.contains(name) {
                             self.asm_global_names.push(name.clone());
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::Visibility { name, vis } => {
+                    AsmSectionItem::Visibility { name, vis } => {
                         match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
                             Some(e) => e.1 = *vis,
                             None => self.asm_visibility.push((name.clone(), *vis)),
                         }
                     }
-                    crate::c5::asm::AsmSectionItem::File(name) => {
+                    AsmSectionItem::File(name) => {
                         self.asm_file_names.push(name.clone());
                     }
-                    crate::c5::asm::AsmSectionItem::Ident(s) => {
+                    AsmSectionItem::Ident(s) => {
                         self.asm_idents.push(s.clone());
                     }
-                    crate::c5::asm::AsmSectionItem::SymSet { name, target } => {
+                    AsmSectionItem::SymSet { name, target } => {
                         Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
                     }
                     // `.set name, sym + k` names the same alias at an offset.
                     // A target this unit's layout places defines the name as
                     // a label of the owning section instead; the object
                     // writer drops the alias record there.
-                    crate::c5::asm::AsmSectionItem::SetExpr { name, expr } => {
+                    AsmSectionItem::SetExpr { name, expr } => {
                         if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
                             Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
                         }
@@ -339,15 +352,35 @@ impl Compiler {
         // sections under the emit target's conventions. The sink spans the unit
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
-        crate::c5::codegen::encode_file_asm_section_code(&mut blocks, self.target, self.elf_class)?;
-        crate::c5::asm::materialize_asm_sections(
-            &blocks,
-            &crate::c5::asm::AsmOperandResolver::NONE,
-            &|_| None,
-            &|_| None,
-            aarch64,
-            &mut self.asm_validate_sink,
-        )?;
+        if let Err(e) = crate::c5::codegen::encode_file_asm_section_code(
+            &mut blocks,
+            self.target,
+            self.elf_class,
+        ) {
+            later.extend(e.0);
+        }
+        // The layout reads every statement's size: it needs all of them.
+        if errors.is_empty()
+            && later.is_empty()
+            && let Err(e) = crate::c5::asm::materialize_asm_sections(
+                &blocks,
+                &crate::c5::asm::AsmOperandResolver::NONE,
+                &|_| None,
+                &|_| None,
+                aarch64,
+                &mut self.asm_validate_sink,
+            )
+        {
+            later.extend(e.0);
+        }
+        // In the order gas reads the statements; an expansion error first on a tie.
+        for mut e in later {
+            let read = e.line.checked_sub(1).unwrap_or(u32::MAX);
+            origin.place(&mut e);
+            errors.push((read, e));
+        }
+        errors.sort_by_key(|&(read, _)| read);
+        AsmErrors::check(errors.into_iter().map(|(_, e)| e).collect())?;
         self.file_asm.push(prepared);
         Ok(())
     }
@@ -542,6 +575,12 @@ impl Compiler {
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        // A list the declarator consumed (`T (*f(args))(...)`) may name a
+        // parameter like `f`; the rest of the declarator describes `f`.
+        if let Some(params) = self.pending.fn_params.take() {
+            self.park_self_named_param(id_idx, &params);
+            self.pending.fn_params = Some(params);
+        }
         let id_idx = if is_typedef {
             self.claim_file_scope_name(id_idx)
         } else {
@@ -786,10 +825,7 @@ impl Compiler {
             };
         let prior_class = self.symbols[id_idx].class;
         let prior_type = self.symbols[id_idx].type_;
-        // A `#pragma binding` no prototype has claimed declares nothing.
-        let unclaimed_binding =
-            prior_class == Token::Sys as i64 && self.symbols[id_idx].implicit_return_int;
-        if prior_class != 0 && prior_class != Token::Typedef as i64 && !unclaimed_binding {
+        if prior_class != 0 && prior_class != Token::Typedef as i64 {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 format!(
@@ -866,10 +902,19 @@ impl Compiler {
         let &FileScopeDecl { base_spelling, .. } = decl;
         let &DeclaratorBinding { id_idx, ty, .. } = b;
 
-        // A `Sys` binding may be re-declared as a prototype: the declaration
-        // teaches the parser the signature without overriding the binding. A
-        // bodyless function may be too -- an amalgamated unit repeats prototypes.
-        // A second body for one function is still a duplicate.
+        // The first function declaration of a name a `#pragma binding` names
+        // makes it a `Sys` symbol calling through the binding; a later one
+        // re-declares it. A bodyless function may be re-declared too -- an
+        // amalgamated unit repeats prototypes. A second body for one function
+        // is still a duplicate.
+        let declares_function = self.lex.tk == '(' || has_preconsumed_params;
+        if let Some(slot) = self.symbols[id_idx].binding_slot
+            && self.symbols[id_idx].class == 0
+            && declares_function
+        {
+            self.symbols[id_idx].class = Token::Sys as i64;
+            self.symbols[id_idx].val = slot;
+        }
         let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
         // Forward / repeat function declarations: allowed
         // either when the next token is `(` (the regular
@@ -877,8 +922,7 @@ impl Compiler {
         // already consumed the outer params for the
         // function-returning-FP shape (tk is `;` or `{`
         // depending on prototype-vs-definition).
-        let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
-            && (self.lex.tk == '(' || has_preconsumed_params);
+        let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64 && declares_function;
         // C11 6.9.2: a prior `T x;` becomes the defining declaration when
         // re-declared, and the definition reuses the storage it reserved so a
         // reference already emitted against that offset still resolves. A prior
@@ -917,9 +961,6 @@ impl Compiler {
         // For an object the spelling is the object's; for a function it is
         // the return type's.
         self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
-        // An explicit return type replaces the implicit-`int`
-        // default (Sys binding without a prior prototype).
-        self.symbols[id_idx].implicit_return_int = false;
 
         Ok(PriorDecl {
             was_sys,
@@ -965,6 +1006,10 @@ impl Compiler {
             self.next()?;
             self.parse_function_params()?
         };
+        // C99 6.2.1p4: a parameter named like the function hides it from its
+        // own declarator on, but the rest of the declarator, and the
+        // definition's frame, describe the function.
+        self.park_self_named_param(id_idx, &params);
         // A function declarator may carry a trailing attribute
         // before the prototype's `;` or the body's `{`
         // (`RET name(args) __attribute__((noreturn));`).
@@ -1120,6 +1165,17 @@ impl Compiler {
     /// source position, the census the inline linkage models read (C99
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
+        // C99 5.1.2.2.1: a hosted program's startup calls an external
+        // `main`. clang's `-Wmain` flags each `static` declaration of one.
+        if static_seen
+            && !self.freestanding
+            && self.symbols[id_idx].name == "main"
+            && self.in_user_source()
+        {
+            let text =
+                String::from("`main` is declared `static`, so the program startup cannot call it");
+            self.warn_at(Code::MAIN, self.lex.line, text);
+        }
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
@@ -1133,6 +1189,7 @@ impl Compiler {
         // `static`-vs-external decision the inline model does not affect.
         let sym = &mut self.symbols[id_idx];
         sym.saw_static_decl |= static_seen;
+        sym.saw_extern_decl |= extern_seen;
         match (self.pending.attrs.saw_inline_specifier, extern_seen) {
             (false, _) => sym.saw_noninline_decl = true,
             (true, false) => sym.saw_plain_inline_decl = true,
@@ -1176,7 +1233,7 @@ impl Compiler {
                 if binding.local_name == name {
                     binding.is_variadic = variadic;
                     binding.fixed_args = fixed;
-                    binding.return_type_tag = ret_ty;
+                    binding.return_type_tag = Some(ret_ty);
                     // Per-param types for the
                     // DWARF subprogram DIE the codegen
                     // emits over each PLT trampoline.
@@ -1308,12 +1365,17 @@ impl Compiler {
         for (name, id) in core::mem::take(&mut params.tags) {
             self.tag_scopes.bind(&name, id);
         }
+        // The parameter declarations declare the parameters.
+        if params.indices.contains(&id_idx) {
+            self.unpark_param(id_idx);
+        }
         self.open_param_list_scope();
         let kr = self.parse_kr_parameter_declarations(&mut params, def.line);
         let enumerators = self.close_param_list_scope();
         kr?;
         params.enumerators.extend(enumerators);
         self.check_complete_parameters(&params, def.line)?;
+        self.park_self_named_param(id_idx, &params);
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
         if self.incomplete_aggregate_tag(ret).is_some() {
@@ -1363,7 +1425,15 @@ impl Compiler {
             s.incomplete_enum_tag = None;
             s.enumeration = enumeration;
         }
-        self.copy_by_value_parameters(&params)?;
+        // A naked function has no prologue to copy or size its parameters in.
+        let naked = self.current_func_attrs.is_naked;
+        if !naked {
+            self.copy_by_value_parameters(&params)?;
+        }
+        self.current_func_last_param = params
+            .indices
+            .last()
+            .map(|&idx| (idx, self.symbols[idx].val, params.last_register));
         self.parse_function_body_items(&params)?;
         self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
@@ -1377,7 +1447,12 @@ impl Compiler {
         let bound = self.take_scope_bound();
         let vars_start = self.record_function_variables(ent_pc, &params, &bound, &param_set);
         self.classify_function_frame(vars_start)?;
-        self.warn_unused_function_bindings(&bound, &param_set);
+        let named = if naked {
+            alloc::collections::BTreeSet::new()
+        } else {
+            param_set
+        };
+        self.warn_unused_function_bindings(&bound, &named);
         self.unwind_scope_bound(bound);
         Ok(())
     }
@@ -1554,24 +1629,35 @@ impl Compiler {
             }
             self.restore_lex(size.at);
             self.expr(Token::Assign as i64)?;
-            let Some(vm) = size.vm else {
+            let Some(vm) = size.vm.clone() else {
                 items.extend(self.ast_emit_expr_stmt());
                 continue;
             };
-            // The parameter's type takes the variable-length array whose byte
-            // count this evaluation stores.
-            if self.is_int128_ty(self.ty) {
-                self.ast_apply_assign_conv(self.size_t_ty());
+            // The parameter's type takes the variable-length arrays whose byte
+            // counts these evaluations store.
+            let mut dims = Vec::with_capacity(vm.more.len() + 1);
+            for at in core::iter::once(None).chain(vm.more.iter().map(Some)) {
+                if let Some(&at) = at {
+                    self.restore_lex(at);
+                    self.expr(Token::Assign as i64)?;
+                }
+                if self.is_int128_ty(self.ty) {
+                    self.ast_apply_assign_conv(self.size_t_ty());
+                }
+                dims.extend(self.ast_acc.take());
             }
-            let Some(dim) = self.ast_acc.take() else {
-                continue;
-            };
-            let (vla_ty, bound) = self.vla_bound_type(vm.elem, dim);
+            let mut dims = dims.into_iter();
+            let bounds: Vec<_> = (vm.dims.iter())
+                .map(|d| d.ok_or_else(|| dims.next().expect("a bound per variable dimension")))
+                .collect();
+            let (vla_ty, stores) = self.vla_inner_type(vm.base, &bounds);
             let pos = self.ast_src_pos();
-            items.push(
-                self.ast
-                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos),
-            );
+            for store in stores {
+                items.push(
+                    self.ast
+                        .push_stmt(super::super::ast::Stmt::Expr(store), pos),
+                );
+            }
             let declared = self.symbols[vm.sym].type_;
             let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
             self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;
@@ -1596,6 +1682,7 @@ impl Compiler {
         let return_ty = self.symbols[id_idx].type_;
         self.current_func_return_ty = return_ty;
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
+        self.current_func_variadic = self.symbols[id_idx].is_variadic();
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
@@ -1619,9 +1706,6 @@ impl Compiler {
         } else {
             2
         };
-        for (i, &idx) in params.indices.iter().enumerate() {
-            self.symbols[idx].val = (i as i64) + param_base;
-        }
 
         self.loc_offs = 0;
         self.committed_loc_offs = 0;
@@ -1640,14 +1724,7 @@ impl Compiler {
         self.ast_reset();
 
         let ent_pc = self.next_ent_pc;
-        // C99 6.2.1: a parameter sharing the function's name shadows it inside the
-        // body, so the entry pc goes onto the shadowed binding the function-exit
-        // cleanup restores, leaving the parameter its slot.
-        if params.indices.contains(&id_idx) {
-            self.symbols[id_idx].h_val = ent_pc as i64;
-        } else {
-            self.symbols[id_idx].val = ent_pc as i64;
-        }
+        self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
@@ -1673,6 +1750,12 @@ impl Compiler {
             });
         }
 
+        // A parameter named like the function hides it in the body (C99
+        // 6.2.1p4); the function-exit cleanup restores the function.
+        self.unpark_param(id_idx);
+        for (i, &idx) in params.indices.iter().enumerate() {
+            self.symbols[idx].val = (i as i64) + param_base;
+        }
         ent_pc
     }
 
@@ -1763,7 +1846,11 @@ impl Compiler {
         // either parses a local decl (with optional
         // initializer) into the function's symbol
         // frame, or parses a statement.
-        let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
+        let mut top_level_ids = if self.current_func_attrs.is_naked {
+            Vec::new()
+        } else {
+            self.evaluate_parameter_sizes(params)?
+        };
         self.stmt_expr_arena_ranges.clear();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
@@ -1844,6 +1931,7 @@ impl Compiler {
             }
         }
         self.resolve_jumps()?;
+        self.inline_unshared_return_exits();
         self.cleanup_scopes.pop();
         self.local_label_scopes.close();
         // The body's own objects end with it, as a nested block's do.
@@ -1938,6 +2026,8 @@ impl Compiler {
         );
         self.current_function_name.clear();
         self.current_func_returns_void = false;
+        self.current_func_variadic = false;
+        self.current_func_last_param = None;
 
         for name in &self.unresolved_gotos {
             if !self.label_is_defined(name) {
@@ -2516,7 +2606,7 @@ impl Compiler {
                 "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
                 format.name()
             );
-            let error = self.compile_err_at(Code::LIMIT, line, message);
+            let error = self.with_echoes(self.compile_err_at(Code::LIMIT, line, message));
             self.image_align_error = error.into_diagnostics().pop();
         }
     }
@@ -3183,6 +3273,25 @@ impl Compiler {
         None
     }
 
+    /// gcc's `-fvisibility=` for each external definition whose visibility no
+    /// attribute or pragma states; declarations keep default, as in gcc.
+    fn apply_default_visibility(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let Some(vis) = self.default_visibility else {
+            return;
+        };
+        for sym in self.symbols.iter_mut() {
+            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
+            if named
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.visibility_stated
+            {
+                sym.visibility = Some(vis);
+            }
+        }
+    }
+
     /// Settle every function's inline linkage once the unit's last
     /// file-scope declaration has been censused.
     ///
@@ -3213,31 +3322,16 @@ impl Compiler {
     /// the identifier stays an undefined external reference that every
     /// address site relocates against. A unit that only calls the
     /// function needs no such reference and links as before.
-    /// On Windows an inline function's external definition is pick-any, as
-    /// MSVC and clang's `*-windows-msvc` emit an `IMAGE_COMDAT_SELECT_ANY`.
-    /// gcc's `-fvisibility=` for each external definition whose visibility no
-    /// attribute or pragma states; declarations keep default, as in gcc.
-    fn apply_default_visibility(&mut self) {
-        use crate::c5::symbol::Linkage;
-        let Some(vis) = self.default_visibility else {
-            return;
-        };
-        for sym in self.symbols.iter_mut() {
-            let named = sym.class == Token::Fun as i64 || sym.class == Token::Glo as i64;
-            if named
-                && sym.defined_here
-                && sym.linkage == Linkage::External
-                && !sym.visibility_stated
-            {
-                sym.visibility = Some(vis);
-            }
-        }
-    }
-
+    ///
+    /// With the Microsoft extensions neither model applies, as for MSVC and
+    /// clang's `*-windows-msvc` in C: an inline function of external
+    /// linkage, unless `gnu_inline`, is emitted by each unit that references
+    /// it as an `IMAGE_COMDAT_SELECT_ANY` definition, kept unreferenced only
+    /// when a declaration says `extern`.
     fn resolve_inline_linkage(&mut self) {
         use crate::c5::symbol::{Linkage, inline_definition};
         let model = self.inline_model;
-        let windows = self.target.is_windows();
+        let microsoft = self.target.ms_extensions();
         for sym in self.symbols.iter_mut() {
             if sym.pick_any && !(sym.class == Token::Glo as i64 && sym.defined_here) {
                 sym.pick_any = false;
@@ -3251,6 +3345,15 @@ impl Compiler {
             if sym.class != Token::Fun as i64 || sym.saw_static_decl || !declared {
                 continue;
             }
+            let inline = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
+            if microsoft && inline && !sym.is_gnu_inline {
+                sym.is_inline_definition = false;
+                sym.linkage = Linkage::External;
+                sym.pick_any = sym.defined_here;
+                sym.is_weak |= sym.pick_any;
+                sym.discardable = sym.defined_here && !sym.saw_extern_decl;
+                continue;
+            }
             sym.is_inline_definition = inline_definition(sym, model);
             sym.linkage = if sym.is_inline_definition {
                 Linkage::Internal
@@ -3261,10 +3364,6 @@ impl Compiler {
             // collides with nothing the source can declare.
             if sym.is_inline_definition && sym.defined_here {
                 sym.inline_body_name = Some(alloc::format!("{}.inline", sym.link_name()));
-            }
-            if windows && sym.defined_here && !sym.is_inline_definition && !sym.is_gnu_inline {
-                sym.pick_any = sym.saw_plain_inline_decl || sym.saw_extern_inline_decl;
-                sym.is_weak |= sym.pick_any;
             }
         }
     }
@@ -3278,9 +3377,9 @@ impl Compiler {
     /// another TU may call them through the link-unit symbol
     /// table; the linker is responsible for the cross-TU
     /// reachability check. Names starting with `_` are suppressed
-    /// (gcc / clang `-Wunused-function` convention). `main` is
-    /// suppressed regardless of linkage: it is the program's
-    /// entry, called by the runtime stub the codegen emits.
+    /// (gcc / clang `-Wunused-function` convention). A `static` `main`
+    /// is no program entry, so it is reported like any other, as gcc
+    /// and clang report it.
     fn warn_unused_static_functions(&mut self) {
         use crate::c5::symbol::Linkage;
         // A `__attribute__((constructor))` / `((destructor))` function
@@ -3303,7 +3402,6 @@ impl Compiler {
                 || sym.binding.was_referenced
                 || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
-                || sym.name == "main"
                 || sym.is_used
                 || sym.binding.maybe_unused
                 || init_names.contains(sym.name.as_str())

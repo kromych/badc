@@ -18,8 +18,7 @@ Disassembly of section .text:
 
 <via_global>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ret
 
 <via_pointer>:
@@ -92,9 +91,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, #0xb                // =11
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	bl	<addr>
                	cmp	x0, #0xb
                	b.eq	<addr>

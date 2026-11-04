@@ -141,20 +141,7 @@ fn addr_cost(target: Target) -> u32 {
 /// The copy a hoist places is an integer `Inst::Imm`, so a float op --
 /// which has no immediate form to unfold on either target -- is not one.
 pub(super) fn binop_imm_materializes(target: Target, op: BinOp, imm: i64, high_dead: bool) -> bool {
-    if matches!(
-        op,
-        BinOp::Fadd
-            | BinOp::Fsub
-            | BinOp::Fmul
-            | BinOp::FmulContractible
-            | BinOp::Fdiv
-            | BinOp::Feq
-            | BinOp::Fne
-            | BinOp::Flt
-            | BinOp::Fgt
-            | BinOp::Fle
-            | BinOp::Fge
-    ) {
+    if crate::c5::ir::is_fp_op(op) {
         return false;
     }
     if target.is_aarch64() {
@@ -585,6 +572,7 @@ mod tests {
             kind: LoadKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -689,6 +677,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: true,
                 align: 0,
+                pc_rel: false,
             },
             sink(BODY + 1),
         ]);

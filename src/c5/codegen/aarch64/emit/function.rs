@@ -98,6 +98,7 @@ struct EmitSnapshot {
     asm_text_labels: usize,
     asm_section_text_refs: usize,
     early_returns: usize,
+    seh_rows: usize,
     text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
@@ -145,6 +146,16 @@ struct FunctionEmitter<'a, 'b> {
     /// Inline-asm `.subsection` replacement sequences, appended after the
     /// body.
     deferred_regions: Vec<DeferredAsmRegion>,
+    /// `(block, start)` of each block placed, in order, and where the
+    /// blocks end, for a function with a `__try` region.
+    seh_placed: Vec<(BlockId, usize)>,
+    seh_body_end: usize,
+    /// The prologue's unwind steps, one per instruction from where the
+    /// function's unwind record starts; none for a frameless function.
+    unwind: Vec<super::A64Step>,
+    /// The epilogues and their steps, for the target whose unwind records
+    /// describe them (Windows).
+    exits: Vec<super::A64Exit>,
 }
 
 /// Lower one function. Returns `true` when every block, instruction and
@@ -200,15 +211,20 @@ pub(crate) fn emit_function(
     }
     let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
     let frame = compute_frame(func, alloc, abi, target, max_call_scratch);
-    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
+    if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch)
+        .or_else(|| super::ssa::emit_common::naked_refusal(func, alloc, target))
+    {
         return fail(why);
+    }
+    if func.is_naked && frame.uses_x19 {
+        return fail("a naked function has no prologue to save x19, its operation's scratch");
     }
     if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
         return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
-    if frame.canary_bytes > 0 {
-        cx.canary_frame_bytes
-            .insert(func.ent_pc, frame.canary_bytes);
+    if frame.locals_shift() > 0 {
+        cx.local_shift_bytes
+            .insert(func.ent_pc, frame.locals_shift());
     }
     if func.n_params > 0 {
         cx.param_frame_offsets.insert(
@@ -223,6 +239,17 @@ pub(crate) fn emit_function(
             func.ent_pc,
             super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
         );
+    }
+    // A filter funclet gets the frame's x29, as cl's funclets read it.
+    if !func.funclet_slots.is_empty() {
+        let mut offsets = Vec::with_capacity(func.funclet_slots.len());
+        for &slot in &func.funclet_slots {
+            let Some(disp) = super::mem::local_slot(slot, func, frame).fp_disp() else {
+                return fail("a filter funclet reaches an object off the frame pointer");
+            };
+            offsets.push(disp);
+        }
+        cx.funclet_frames.insert(func.ent_pc, offsets);
     }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
@@ -265,8 +292,10 @@ pub(crate) fn emit_function(
         asm_text_labels: asm_text_labels.len(),
         asm_section_text_refs: asm_section_text_refs.len(),
         early_returns: cx.early_returns.len(),
+        seh_rows: cx.seh_rows.len(),
         text_map_state: *text_map_state,
     };
+    let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
     let mut em = FunctionEmitter {
         cx,
         fixups,
@@ -291,6 +320,7 @@ pub(crate) fn emit_function(
             param_plan: &param_plan,
             name2entpc,
             data_sym_offsets,
+            page_only: &page_only,
         },
         abs_jump_tables,
         entry,
@@ -308,14 +338,41 @@ pub(crate) fn emit_function(
         jump_table_fixups: Vec::new(),
         fp_literals: Vec::new(),
         deferred_regions: Vec::new(),
+        seh_placed: Vec::new(),
+        seh_body_end: 0,
+        unwind: Vec::new(),
+        exits: Vec::new(),
     };
     em.emit_body()?;
+    if func.has_seh() {
+        let rows = super::ssa::emit_common::seh_rows(
+            func,
+            em.snapshot.code,
+            &em.seh_placed,
+            em.seh_body_end,
+            &em.block_offsets,
+        );
+        em.cx.seh_rows.extend(rows);
+    }
     debug_assert_eq!(
         scratch.third_taken() || frame.local_base,
         frame.uses_x19,
         "x19 save and x19 writers disagree"
     );
-    em.resolve_layout()
+    em.resolve_layout()?;
+    let steps = core::mem::take(&mut em.unwind);
+    let exits = if steps.is_empty() {
+        Vec::new()
+    } else {
+        core::mem::take(&mut em.exits)
+    };
+    em.cx.a64_unwind.push(super::A64Unwind {
+        begin: em.snapshot.code as u32,
+        end: em.cx.code.len() as u32,
+        steps,
+        exits,
+    });
+    Ok(())
 }
 
 /// Whether no two parameter homes name the same location, which is what
@@ -331,7 +388,7 @@ impl FunctionEmitter<'_, '_> {
     /// reach; the far set only grows, so the loop ends.
     fn emit_body(&mut self) -> Emit {
         loop {
-            self.emit_entry();
+            self.emit_entry()?;
             self.prebatched = alloc::vec![false; self.fcx.func.insts.len()];
             self.place_int_params()?;
             self.place_fp_params();
@@ -379,6 +436,22 @@ impl FunctionEmitter<'_, '_> {
             exit: (exit_at - begin) as u32,
         });
         true
+    }
+
+    /// Record the epilogue from `start` to the `ret` just emitted, one step
+    /// per instruction before it.
+    fn record_exit(&mut self, start: usize, steps: Vec<super::A64Step>) -> Emit {
+        if (self.cx.code.len() - 4 - start) / 4 != steps.len() {
+            return Err(Unsupported::new(
+                "internal compiler error: the epilogue's unwind steps do not describe its \
+                 instructions",
+            ));
+        }
+        self.exits.push(super::A64Exit {
+            at: (start - self.snapshot.code) as u32,
+            steps,
+        });
+        Ok(())
     }
 
     /// Mark the owner of every conditional branch whose displacement does
@@ -432,6 +505,7 @@ impl FunctionEmitter<'_, '_> {
         self.asm_text_labels.truncate(s.asm_text_labels);
         self.asm_section_text_refs.truncate(s.asm_section_text_refs);
         self.cx.early_returns.truncate(s.early_returns);
+        self.cx.seh_rows.truncate(s.seh_rows);
         *self.text_map_state = s.text_map_state;
     }
 
@@ -533,9 +607,11 @@ impl FunctionEmitter<'_, '_> {
     }
 
     /// The landing pad, patchable-entry NOPs, the test of the early return,
-    /// return-address signing and the prologue. A naked function's inline-asm
-    /// body is the whole function, so it takes only the NOPs.
-    fn emit_entry(&mut self) {
+    /// return-address signing and the prologue, with the unwind step of each
+    /// instruction the function's record covers. A naked function's
+    /// inline-asm body is the whole function, so it takes only the NOPs.
+    fn emit_entry(&mut self) -> Emit {
+        use super::A64Step as S;
         let FnCtx {
             func,
             alloc,
@@ -544,6 +620,8 @@ impl FunctionEmitter<'_, '_> {
             ..
         } = self.fcx;
         let signs = signs_return_address(func, frame, alloc, abi);
+        self.unwind.clear();
+        self.exits.clear();
         if !func.is_naked {
             // The entry pays any realignment a preceding body left owing and
             // keeps the offset it was placed at, as a label does under GNU as.
@@ -555,12 +633,15 @@ impl FunctionEmitter<'_, '_> {
             let pad = self.entry.nops_after > 0 || !signs || self.early_exit.is_some();
             if abi.hardening.bti && pad {
                 emit(self.cx.code, super::encode::BTI_C);
+                self.unwind.push(S::Nop);
             }
         }
+        let mut from = self.snapshot.code;
         // The `-fpatchable-function-entry` NOPs follow the landing pad and
         // precede the rest of the entry, as gcc orders them.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
+            self.unwind.push(S::Nop);
         }
         if let Some(exit) = &self.early_exit {
             super::ssa::emit_common::record_test_src(
@@ -577,25 +658,46 @@ impl FunctionEmitter<'_, '_> {
             );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), self.cx.code.len());
+            // The record covers the frame path, which starts here.
+            self.unwind.clear();
+            from = self.cx.code.len();
         }
+        let mut described = None;
         if !func.is_naked {
             if signs {
                 emit(self.cx.code, super::encode::PACIASP);
+                self.unwind.push(S::PacSignLr);
+                described = Some(self.cx.code.len());
             }
-            emit_prologue(
+            let framed = emit_prologue(
                 self.cx.code,
                 func,
                 alloc,
                 frame,
                 abi,
                 self.cx.user_extern_data_refs,
+                &mut self.unwind,
             );
+            described = framed.or(described);
         }
         super::ssa::emit_common::record_post_prologue_pc(
             func,
             self.cx.prologue_native,
             self.cx.code.len(),
         );
+        // A frameless function's record states no prologue; otherwise one
+        // step describes each instruction up to where the frame is set.
+        match described {
+            None => self.unwind.clear(),
+            Some(end) if (end - from) / 4 == self.unwind.len() => {}
+            Some(_) => {
+                return Err(Unsupported::new(
+                    "internal compiler error: the prologue's unwind steps do not describe its \
+                     instructions",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Place the integer reads opening the entry block
@@ -718,6 +820,7 @@ impl FunctionEmitter<'_, '_> {
             abi,
             ..
         } = self.fcx;
+        self.seh_placed.clear();
         // Blocks a `BR` can reach take a `BTI J` at their head, ahead of
         // the offset every branch fixup resolves to.
         let bti_targets = if abi.hardening.bti {
@@ -739,6 +842,18 @@ impl FunctionEmitter<'_, '_> {
                 self.align_stream();
             }
             self.block_offsets[block_idx] = self.cx.code.len();
+            if func.has_seh() {
+                self.seh_placed
+                    .push((block_idx as BlockId, self.cx.code.len()));
+            }
+            // A `__try` handler is entered with sp where the exception left
+            // it: the prologue's sp, realigned as the prologue realigns it.
+            if func.is_seh_target(block_idx as BlockId) {
+                restore_dynamic_sp(self.cx.code, frame);
+                if frame.realign_align > 0 {
+                    emit_realign_sp(self.cx.code, frame);
+                }
+            }
             super::ssa::emit_common::record_block_start_pc(
                 block_idx,
                 block.start_pc,
@@ -771,6 +886,7 @@ impl FunctionEmitter<'_, '_> {
             }
             self.emit_terminator(block_idx, block)?;
         }
+        self.seh_body_end = self.cx.code.len();
         // A block left out stands where its edges land, for every reader of
         // the offsets.
         for b in 0..func.blocks.len() {
@@ -817,9 +933,9 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// Lower instruction `v` of `block`, or skip it: a naked function keeps
-    /// only its inline asm, a pure value nobody reads produces no code, and
-    /// a `ParamRef` the entry batch placed is done.
+    /// Lower instruction `v` of `block`, or skip it: a pure value nobody
+    /// reads produces no code, and a `ParamRef` the entry batch placed is
+    /// done.
     fn emit_block_inst(
         &mut self,
         block: &super::super::ir::Block,
@@ -828,9 +944,6 @@ impl FunctionEmitter<'_, '_> {
         let FnCtx { func, alloc, .. } = self.fcx;
         let inst = &func.insts[v as usize];
         let place = place_of(alloc, v);
-        if func.is_naked && !matches!(inst, Inst::InlineAsm { .. }) {
-            return Ok(());
-        }
         if super::ssa::emit_common::inst_emits_nothing(inst, v, alloc) {
             return Ok(());
         }
@@ -999,7 +1112,9 @@ impl FunctionEmitter<'_, '_> {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
             Terminator::Return(v) => {
-                return emit_return(
+                let mut steps = Vec::new();
+                let windows = self.fcx.target == Target::WindowsAarch64;
+                let start = emit_return(
                     self.cx.code,
                     v,
                     alloc,
@@ -1009,7 +1124,12 @@ impl FunctionEmitter<'_, '_> {
                     abi,
                     self.cx.asm_extern_call_sites,
                     self.cx.user_extern_data_refs,
-                );
+                    windows.then_some(&mut steps),
+                )?;
+                if windows {
+                    return self.record_exit(start, steps);
+                }
+                return Ok(());
             }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
                 return self.branch_unless_next(block_idx, t);
@@ -1461,7 +1581,8 @@ pub(super) fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, scratch: Option<R
     }
 }
 
-/// Emit the function prologue.
+/// Emit the function prologue, with the unwind step of each instruction up to
+/// where fp is set, which is where it returns; `None` for a full leaf.
 fn emit_prologue(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -1469,7 +1590,8 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) {
+    uw: &mut Vec<super::A64Step>,
+) -> Option<usize> {
     // A host-ABI variadic callee spills every argument register (a variadic
     // argument that landed in one must reach the save area for `va_arg`)
     // into the register save area above the saved fp/lr; see
@@ -1482,17 +1604,17 @@ fn emit_prologue(
             frame.va_save_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
-        emit_register_save_area(code, frame, abi, false);
+        emit_register_save_area(code, frame, abi, false, uw);
     } else if variadic {
         debug_assert_eq!(
             frame.va_save_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
-        emit_register_save_area(code, frame, abi, true);
+        emit_register_save_area(code, frame, abi, true, uw);
     } else if is_full_leaf(frame, alloc) {
-        return;
+        return None;
     }
-    emit_frame_and_saves(code, alloc, frame);
+    let described = emit_frame_and_saves(code, alloc, frame, uw);
     if frame.local_base {
         // x19 = the frame bottom: far locals and spills address from it
         // with a scaled offset, one instruction instead of the fp form's
@@ -1523,6 +1645,7 @@ fn emit_prologue(
         emit_param_homes(code, func, alloc, frame);
     }
     emit_struct_param_scatter(code, func, abi, frame);
+    Some(described)
 }
 
 /// The host-ABI variadic register save area above the saved fp/lr: the
@@ -1530,10 +1653,18 @@ fn emit_prologue(
 /// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
-fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, vector: bool) {
+fn emit_register_save_area(
+    code: &mut Vec<u8>,
+    frame: Frame,
+    abi: super::Abi,
+    vector: bool,
+    uw: &mut Vec<super::A64Step>,
+) {
     emit_sub_sp_imm(code, frame.va_save_bytes);
+    uw.push(super::A64Step::Alloc(frame.va_save_bytes));
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
+        uw.push(super::A64Step::Nop);
     }
     if vector && !abi.no_fp_regs {
         for i in 0..8u32 {
@@ -1545,6 +1676,7 @@ fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, ve
                 code,
                 super::encode::enc_str_q_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
             );
+            uw.push(super::A64Step::Nop);
         }
     }
 }
@@ -1689,80 +1821,67 @@ fn emit_struct_param_scatter(
 /// either way). The region sits just above sp, within reach of the pair
 /// imm7 and the scaled imm12, until a wide outgoing area pushes the
 /// offsets past the pair forms; the saves then go through x16, which the
-/// allocation left free. With `fold != 0` (see `frame_fold_bytes`) the
-/// first save pre-indexes the whole allocation, frame plus the fp/lr
-/// pair, in place of the prologue's `stp x29, x30, [sp, #-16]!` /
-/// `sub sp`; every other offset is unchanged.
-fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
-    let mut alloc_pending = fold != 0;
+/// allocation left free. With `pre != 0` the block starts at sp: the first
+/// save pre-indexes `pre` bytes, the folded frame (`frame_fold_bytes`) or
+/// the top block (`Frame::saves_top`) plus the fp/lr pair, in place of the
+/// prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`. With `uw`, each
+/// store's unwind step is pushed to it.
+fn emit_prologue_saved_regs(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    pre: u32,
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) {
+    let plan = save_plan(alloc, frame);
+    debug_assert!(
+        pre == 0 || !plan.is_empty(),
+        "a pre-index with no callee save"
+    );
+    let (sbase, shift) = save_base(code, alloc, frame, pre);
+    for (i, s) in plan.into_iter().enumerate() {
+        let off = s.off + shift;
+        let neg = -(pre as i32);
+        let first = i == 0 && pre != 0;
+        if let Some(uw) = uw.as_deref_mut() {
+            uw.push(super::A64Step::SaveReg {
+                fp: s.fp,
+                reg: s.r,
+                reg2: s.r2,
+                pre: first,
+                bytes: if first { pre } else { off },
+            });
+        }
+        let word = match (s.fp, s.r2, first) {
+            (true, Some(r2), true) => enc_stp_d_pre(s.r, r2, Reg(31), neg),
+            (true, None, true) => enc_str_d_pre(s.r, Reg(31), neg),
+            (false, Some(r2), true) => enc_stp_pre(Reg(s.r), Reg(r2), Reg(31), neg),
+            (false, None, true) => enc_str_pre(Reg(s.r), Reg(31), neg),
+            (true, Some(r2), false) => enc_stp_d_off(s.r, r2, sbase, off as i32),
+            (true, None, false) => enc_str_d_imm(s.r, sbase, off),
+            (false, Some(r2), false) => enc_stp_off(Reg(s.r), Reg(r2), sbase, off as i32),
+            (false, None, false) => enc_str_imm(Reg(s.r), sbase, off),
+        };
+        emit(code, word);
+    }
+}
+
+/// The register and offset the save block addresses from: sp itself for a
+/// block at sp, else sp plus the outgoing area, carried in x16 once a save
+/// offset could leave the pair forms' reach (the fold caps the frame at
+/// 480, well inside it).
+fn save_base(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, pre: u32) -> (Reg, u32) {
     let out = frame.outgoing_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-    // The base register carries the bottom's `out` shift once a save's
-    // offset could leave the pair forms' reach (the fold caps the frame
-    // at 480, well inside it).
-    let (sbase, shift) = if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
+    if frame.saves_top != 0 {
+        (Reg(31), 0)
+    } else if pre == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
         emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
-        (Reg(16), 0u32)
+        (Reg(16), 0)
     } else {
         (Reg(31), out)
-    };
-    let fp = &alloc.fp_used;
-    let mut i = 0usize;
-    while i + 1 < fp.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(
-                code,
-                enc_stp_d_pre(fp[i], fp[i + 1], Reg(31), -(fold as i32)),
-            );
-        } else {
-            emit(
-                code,
-                enc_stp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
-            );
-        }
-        i += 2;
     }
-    if i < fp.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_d_pre(fp[i], Reg(31), -(fold as i32)));
-        } else {
-            emit(code, enc_str_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
-        }
-    }
-    let gpr = &alloc.gpr_used;
-    let mut i = 0usize;
-    while i + 1 < gpr.len() {
-        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
-        if core::mem::take(&mut alloc_pending) {
-            emit(
-                code,
-                enc_stp_pre(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), -(fold as i32)),
-            );
-        } else {
-            emit(code, enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
-        }
-        i += 2;
-    }
-    if i < gpr.len() {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_pre(Reg(gpr[i]), Reg(31), -(fold as i32)));
-        } else {
-            let off = saved_fpr_bytes + (i as u32) * 8 + shift;
-            emit(code, enc_str_imm(Reg(gpr[i]), sbase, off));
-        }
-    }
-    if frame.uses_x19 {
-        if core::mem::take(&mut alloc_pending) {
-            emit(code, enc_str_pre(Reg(19), Reg(31), -(fold as i32)));
-        } else {
-            emit(
-                code,
-                enc_str_imm(Reg(19), sbase, saved_fpr_bytes + saved_gpr_bytes + shift),
-            );
-        }
-    }
-    debug_assert!(!alloc_pending, "frame fold requested with no callee save");
 }
 
 /// The stack-protector sequences' scratch: x16 / x17, free at the end
@@ -1830,11 +1949,7 @@ fn emit_canary_store(
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
     emit(
         code,
-        super::encode::enc_stur(
-            CANARY_SCRATCH,
-            Reg(29),
-            super::ssa::emit_common::CANARY_SLOT_OFF,
-        ),
+        super::encode::enc_stur(CANARY_SCRATCH, Reg(29), frame.canary_slot_off()),
     );
     emit(code, enc_movz(CANARY_SCRATCH, 0, 0));
 }
@@ -1855,11 +1970,7 @@ fn emit_canary_check(
     emit_load_stack_guard(code, CANARY_SCRATCH, abi, extern_data_refs);
     emit(
         code,
-        super::encode::enc_ldur(
-            CANARY_SCRATCH2,
-            Reg(29),
-            super::ssa::emit_common::CANARY_SLOT_OFF,
-        ),
+        super::encode::enc_ldur(CANARY_SCRATCH2, Reg(29), frame.canary_slot_off()),
     );
     emit(
         code,
@@ -1903,78 +2014,58 @@ fn restores_regs(alloc: &Allocation, frame: Frame) -> bool {
 }
 
 /// Restore what `emit_prologue_saved_regs` saved, in mirror order so the
-/// offset-0 access comes last and, with `fold != 0`, post-indexes the
-/// whole frame plus the fp/lr pair back. The unfolded shape of a frame
-/// with a locals base addresses from x19, which then loads last.
-fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
-    let out = frame.outgoing_bytes;
-    // The locals base, which holds the frame bottom; else the mirror of the
+/// offset-0 access comes last and, with `post != 0`, post-indexes the
+/// block plus the fp/lr pair back. The unfolded bottom block of a frame
+/// with a locals base addresses from x19, which then loads last. With
+/// `uw`, each load's unwind step is pushed to it.
+fn emit_epilogue_restore_regs(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    post: u32,
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) {
+    // The locals base holds the frame bottom; else the mirror of the
     // prologue's base selection, x16 being free here (the canary check
     // clears it, the dynamic-sp restore last used it).
-    let (sbase, shift) = if fold == 0 && frame.local_base {
-        (Reg(19), out)
-    } else if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
-        emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
-        (Reg(16), 0u32)
+    let (sbase, shift) = if post == 0 && frame.local_base {
+        (Reg(19), frame.outgoing_bytes)
     } else {
-        (Reg(31), out)
+        save_base(code, alloc, frame, post)
     };
-    let gpr = &alloc.gpr_used;
-    let x19_off = saved_fpr_bytes + saved_gpr_bytes + shift;
-    if frame.uses_x19 && sbase != Reg(19) {
-        if x19_off == 0 && fold != 0 {
-            emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_imm(Reg(19), sbase, x19_off));
+    let plan = save_plan(alloc, frame);
+    let mut x19_off = None;
+    for (i, s) in plan.into_iter().enumerate().rev() {
+        let off = s.off + shift;
+        if !s.fp && s.r == 19 && sbase == Reg(19) {
+            x19_off = Some(off);
+            continue;
         }
-    }
-    let mut i = gpr.len();
-    if i % 2 == 1 {
-        i -= 1;
-        let off = saved_fpr_bytes + (i as u32) * 8 + shift;
-        if off == 0 && fold != 0 {
-            emit(code, enc_ldr_post(Reg(gpr[i]), Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_imm(Reg(gpr[i]), sbase, off));
+        let back = post as i32;
+        let last = i == 0 && post != 0;
+        if let Some(uw) = uw.as_deref_mut() {
+            uw.push(super::A64Step::SaveReg {
+                fp: s.fp,
+                reg: s.r,
+                reg2: s.r2,
+                pre: last,
+                bytes: if last { post } else { off },
+            });
         }
+        let word = match (s.fp, s.r2, last) {
+            (true, Some(r2), true) => enc_ldp_d_post(s.r, r2, Reg(31), back),
+            (true, None, true) => enc_ldr_d_post(s.r, Reg(31), back),
+            (false, Some(r2), true) => enc_ldp_post(Reg(s.r), Reg(r2), Reg(31), back),
+            (false, None, true) => enc_ldr_post(Reg(s.r), Reg(31), back),
+            (true, Some(r2), false) => enc_ldp_d_off(s.r, r2, sbase, off as i32),
+            (true, None, false) => enc_ldr_d_imm(s.r, sbase, off),
+            (false, Some(r2), false) => enc_ldp_off(Reg(s.r), Reg(r2), sbase, off as i32),
+            (false, None, false) => enc_ldr_imm(Reg(s.r), sbase, off),
+        };
+        emit(code, word);
     }
-    while i >= 2 {
-        i -= 2;
-        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
-        if off == 0 && fold != 0 {
-            emit(
-                code,
-                enc_ldp_post(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), fold as i32),
-            );
-        } else {
-            emit(code, enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
-        }
-    }
-    let fp = &alloc.fp_used;
-    let mut i = fp.len();
-    if i % 2 == 1 {
-        i -= 1;
-        if i == 0 && fold != 0 {
-            emit(code, enc_ldr_d_post(fp[i], Reg(31), fold as i32));
-        } else {
-            emit(code, enc_ldr_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
-        }
-    }
-    while i >= 2 {
-        i -= 2;
-        if i == 0 && fold != 0 {
-            emit(code, enc_ldp_d_post(fp[i], fp[i + 1], Reg(31), fold as i32));
-        } else {
-            emit(
-                code,
-                enc_ldp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
-            );
-        }
-    }
-    if sbase == Reg(19) {
-        emit(code, enc_ldr_imm(Reg(19), Reg(19), x19_off));
+    if let Some(off) = x19_off {
+        emit(code, enc_ldr_imm(Reg(19), Reg(19), off));
     }
 }
 
@@ -1985,25 +2076,19 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
 /// The scaled imm7 pair forms reach 504, so a pair-first frame folds up
 /// to 480; a single-register bottom save takes the unscaled imm9 (255)
 /// and folds up to 224.
-fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
+pub(super) fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
     // A realigning function keeps the unfolded shape so
     // `restore_dynamic_sp` returns sp to the static frame bottom first.
     // The folded shape's first save lands at sp + 0, the bytes the
     // outgoing area claims, so a frame with one keeps the unfolded shape.
-    if frame.realign_align != 0 || frame.reserves_outgoing() {
+    if frame.realign_align != 0 || frame.reserves_outgoing() || frame.saves_top != 0 {
         return 0;
     }
-    let n_bottom = if !alloc.fp_used.is_empty() {
-        alloc.fp_used.len()
-    } else if !alloc.gpr_used.is_empty() {
-        alloc.gpr_used.len()
-    } else if frame.uses_x19 {
-        1
-    } else {
+    let Some(first) = save_plan(alloc, frame).first().copied() else {
         return 0;
     };
     debug_assert!(frame.frame_bytes >= 16, "saves imply a non-empty frame");
-    let limit = if n_bottom >= 2 { 480 } else { 224 };
+    let limit = if first.r2.is_some() { 480 } else { 224 };
     if frame.frame_bytes <= limit {
         frame.frame_bytes
     } else {
@@ -2014,21 +2099,40 @@ fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
 /// The frame record, fp, the frame allocation and the callee saves. The
 /// folded shape allocates everything with the first save's pre-index and
 /// keeps fp and every offset identical to the unfolded
-/// `stp fp/lr; mov fp, sp; sub sp` shape.
-fn emit_frame_and_saves(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
-    let fold = frame_fold_bytes(alloc, frame);
-    if fold != 0 {
-        emit_prologue_saved_regs(code, alloc, frame, fold + 16);
-        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), fold as i32));
-        emit(code, enc_add_imm(Reg(29), Reg(31), fold));
-        return;
+/// `stp fp/lr; mov fp, sp; sub sp` shape. A top save block is allocated
+/// the same way, and the rest of the frame after fp is set. Returns where
+/// fp is set, which ends the steps pushed to `uw`: the unwinder recovers
+/// sp from fp, so what follows is not described.
+fn emit_frame_and_saves(
+    code: &mut Vec<u8>,
+    alloc: &Allocation,
+    frame: Frame,
+    uw: &mut Vec<super::A64Step>,
+) -> usize {
+    let block = frame_fold_bytes(alloc, frame).max(frame.saves_top);
+    if block != 0 {
+        emit_prologue_saved_regs(code, alloc, frame, block + 16, Some(uw));
+        emit(code, enc_stp_off(Reg(29), Reg(30), Reg(31), block as i32));
+        emit(code, enc_add_imm(Reg(29), Reg(31), block));
+        uw.extend([
+            super::A64Step::SaveFpLr(block),
+            super::A64Step::AddFp(block),
+        ]);
+        let described = code.len();
+        if frame.frame_bytes > block {
+            emit_stack_alloc(code, frame.frame_bytes - block, Some(Reg(16)));
+        }
+        return described;
     }
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+    uw.extend([super::A64Step::SaveFpLrX(16), super::A64Step::SetFp]);
+    let described = code.len();
     if frame.frame_bytes > 0 {
         emit_stack_alloc(code, frame.frame_bytes, Some(Reg(16)));
     }
-    emit_prologue_saved_regs(code, alloc, frame, 0);
+    emit_prologue_saved_regs(code, alloc, frame, 0, None);
+    described
 }
 
 /// The `B.cond` condition for a comparison the allocator flagged as
@@ -2082,7 +2186,34 @@ fn fused_bit_test(
     }
 }
 
-/// Emit the function epilogue + `ret` for a Return terminator.
+/// Push `steps` to `uw`.
+fn push_steps(uw: &mut Option<&mut Vec<super::A64Step>>, steps: &[super::A64Step]) {
+    if let Some(uw) = uw.as_deref_mut() {
+        uw.extend_from_slice(steps);
+    }
+}
+
+/// Push to `uw` the steps of the instructions since `at`, which together
+/// write sp from x29: `last` for the last, `nop` for the others.
+fn push_sp_from_fp(
+    uw: &mut Option<&mut Vec<super::A64Step>>,
+    code: &[u8],
+    at: usize,
+    last: super::A64Step,
+) {
+    let n = (code.len() - at) / 4;
+    if let Some(uw) = uw.as_deref_mut()
+        && n > 0
+    {
+        uw.extend(core::iter::repeat_n(super::A64Step::Nop, n - 1));
+        uw.push(last);
+    }
+}
+
+/// Emit the function epilogue + `ret` for a Return terminator. Returns
+/// where the epilogue starts, after the return value and the canary check;
+/// with `uw`, each of its instructions before the `ret` pushes its unwind
+/// step.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_return(
     code: &mut Vec<u8>,
@@ -2094,58 +2225,83 @@ pub(super) fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) -> Emit {
+    mut uw: Option<&mut Vec<super::A64Step>>,
+) -> Emit<usize> {
+    use super::A64Step as S;
     if let Some(ai) = func.ret_agg {
         emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
+    let signs = signs_return_address(func, frame, alloc, abi);
     // A full leaf saved nothing, and moved no sp its signing read.
     if is_full_leaf(frame, alloc) {
-        if signs_return_address(func, frame, alloc, abi) {
+        let start = code.len();
+        if signs {
             emit(code, super::encode::AUTIASP);
+            push_steps(&mut uw, &[S::PacSignLr]);
         }
         emit(code, enc_ret(Reg(30)));
-        return Ok(());
+        return Ok(start);
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+    let start = code.len();
     // The folded shape restores fp/lr first (the lr load feeds `ret`) and
     // tears the frame down with the last restore's post-index.
     let fold = frame_fold_bytes(alloc, frame);
-    if fold != 0 {
+    if frame.saves_top != 0 {
+        // sp from fp in every frame, as the unwind codes recover it.
+        let top = frame.saves_top;
+        emit(code, enc_sub_imm(Reg(31), Reg(29), top));
+        emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), top as i32));
+        push_steps(&mut uw, &[S::AddFp(top), S::SaveFpLr(top)]);
+        emit_epilogue_restore_regs(code, alloc, frame, top + 16, uw.as_deref_mut());
+    } else if fold != 0 {
         if frame.dynamic_sp {
+            // The frame bottom, `x29 - fold`.
             restore_dynamic_sp(code, frame);
+            push_sp_from_fp(&mut uw, code, start, S::AddFp(fold));
         }
         emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
-        emit_epilogue_restore_regs(code, alloc, frame, fold + 16);
-    } else if frame.dynamic_sp {
-        // The teardown takes sp from fp; sp is re-established first only
-        // for restores off sp, which a frame saving nothing or holding the
-        // locals base does not make.
-        if restores_regs(alloc, frame) && !frame.local_base {
-            restore_dynamic_sp(code, frame);
-        }
-        emit_epilogue_restore_regs(code, alloc, frame, 0);
-        emit(code, enc_add_imm(Reg(31), Reg(29), 0));
-        emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
+        push_steps(&mut uw, &[S::SaveFpLr(fold)]);
+        emit_epilogue_restore_regs(code, alloc, frame, fold + 16, uw.as_deref_mut());
     } else {
-        emit_epilogue_restore_regs(code, alloc, frame, 0);
-        if frame.frame_bytes > 0 {
-            // x16 carries no result and is free for a frame size past the
-            // immediate reach.
-            super::encode::emit_add_sp_imm_scratch(code, frame.frame_bytes, Reg(16));
+        // Windows on ARM64 saves no register here (`compute_frame`), so the
+        // restores and the sp they address from take no step.
+        if frame.dynamic_sp {
+            // The teardown takes sp from fp; sp is re-established first only
+            // for restores off sp, which a frame saving nothing or holding the
+            // locals base does not make.
+            if restores_regs(alloc, frame) && !frame.local_base {
+                restore_dynamic_sp(code, frame);
+            }
+            emit_epilogue_restore_regs(code, alloc, frame, 0, None);
+            emit(code, enc_add_imm(Reg(31), Reg(29), 0));
+            push_steps(&mut uw, &[S::SetFp]);
+        } else {
+            emit_epilogue_restore_regs(code, alloc, frame, 0, None);
+            if frame.frame_bytes > 0 {
+                // x16 carries no result and is free for a frame size past the
+                // immediate reach. sp reaches x29.
+                let at = code.len();
+                super::encode::emit_add_sp_imm_scratch(code, frame.frame_bytes, Reg(16));
+                push_sp_from_fp(&mut uw, code, at, S::SetFp);
+            }
         }
         emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
+        push_steps(&mut uw, &[S::SaveFpLrX(16)]);
     }
     if frame.va_save_bytes > 0 {
         emit_add_sp_imm(code, frame.va_save_bytes);
+        push_steps(&mut uw, &[S::Alloc(frame.va_save_bytes)]);
     }
     // sp holds the value `paciasp` signed against.
-    if signs_return_address(func, frame, alloc, abi) {
+    if signs {
         emit(code, super::encode::AUTIASP);
+        push_steps(&mut uw, &[S::PacSignLr]);
     }
     emit(code, enc_ret(Reg(30)));
-    Ok(())
+    Ok(start)
 }
 
 /// A return in registers: each part moves into its class's register

@@ -7,10 +7,25 @@
 #include <locale.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
 
-#pragma dylib(ucrtbase, "ucrtbase.dll")
-#pragma binding(ucrtbase::__c5_ucrt_create_locale, "_create_locale")
-void *__c5_ucrt_create_locale(int category, const char *locale);
+// ucrtbase.dll's export `name`, found by name: an image imports a name from
+// one DLL, and the headers bind msvcrt.dll's spelling of the ones both
+// export (_create_locale, _strtod_l, ...).
+void (*__c5_ucrt_proc(const char *name))(void) {
+    static HMODULE ucrt;
+    HMODULE m = __atomic_load_n(&ucrt, __ATOMIC_ACQUIRE);
+    if (!m) {
+        m = LoadLibraryW(L"ucrtbase.dll");
+        __atomic_store_n(&ucrt, m, __ATOMIC_RELEASE);
+    }
+    return m ? (void (*)(void))GetProcAddress(m, name) : NULL;
+}
+
+static void *ucrt_create_locale(int category, const char *locale) {
+    void (*f)(void) = __c5_ucrt_proc("_create_locale");
+    return f ? ((void *(*)(int, const char *))f)(category, locale) : NULL;
+}
 
 struct numeric {
     struct numeric *next;
@@ -29,7 +44,7 @@ static void *numeric_locale(const char *name) {
     if (!e)
         return NULL;
     memcpy(e->name, name, len);
-    e->locale = __c5_ucrt_create_locale(LC_NUMERIC, name);
+    e->locale = ucrt_create_locale(LC_NUMERIC, name);
     e->next = head;
     while (!__atomic_compare_exchange_n(&known, &e->next, e, 0, __ATOMIC_ACQ_REL,
                                         __ATOMIC_ACQUIRE))

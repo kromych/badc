@@ -15,20 +15,18 @@ Disassembly of section .text:
 
 <note>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x2, [x1]
+               	ldr	x2, [x1, #0xb0]
                	add	x2, x2, x0
-               	str	x2, [x1]
+               	str	x2, [x1, #0xb0]
                	add	x0, x0, #0x1
                	ret
 
 <scale>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0xb0]
                	fcvtzs	x2, d0
                	add	x1, x1, x2
-               	str	x1, [x0]
+               	str	x1, [x0, #0xb0]
                	fmov	d1, #0.50000000
                	fmul	d0, d0, d1
                	ret
@@ -302,8 +300,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	cmp	x0, #0x77
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

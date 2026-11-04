@@ -52,42 +52,37 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	cmpl	$0x1, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x1, %eax
                	jne	<addr>
-               	movl	0x4(%rax), %ecx
-               	cmpl	$0x2, %ecx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0x2, %eax
                	jne	<addr>
-               	movl	0x8(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	cmpl	$0x0, (%rax)
+               	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	addq	$0xb, %rax
                	cmpl	$0x4d, %eax
                	je	<addr>
@@ -97,9 +92,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
+		...
                	addb	%al, (%rax)
-               	addb	%al, (%rax)
-               	addb	%al, (%rax)
+               	addb	%bh, 0x58(%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

@@ -15,46 +15,35 @@ Disassembly of section .text:
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x48]
                	cbz	x0, <addr>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x4, [x0]
+               	ldr	x4, [x0, #0x18]
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x5, [x1]
+               	ldr	x5, [x1, #0x30]
                	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	w6, [x2]
+               	ldr	w6, [x2, #0x38]
                	mov	x17, #-0x1              // =-1
                	cmp	x4, x17
                	b.ne	<addr>
                	cbnz	x3, <addr>
                	cbnz	x5, <addr>
                	cbnz	w6, <addr>
-               	ldr	x3, [x0]
-               	ldr	x4, [x1]
-               	ldr	w4, [x2]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
+               	ldr	x3, [x0, #0x18]
+               	ldr	x4, [x1, #0x30]
+               	ldr	w4, [x2, #0x38]
                	cmp	x3, #0x64
                	b.ls	<addr>
-               	ldr	x3, [x1]
-               	ldr	w3, [x2]
-               	ldr	x3, [x0]
-               	ldr	w2, [x2]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x3, x17
+               	ldr	x3, [x1, #0x30]
+               	ldr	w3, [x2, #0x38]
+               	ldr	x3, [x0, #0x18]
+               	ldr	w2, [x2, #0x38]
                	cmp	x3, #0x64
                	b.ls	<addr>
-               	ldr	x0, [x0]
-               	ldr	x1, [x1]
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
-               	b.ne	<addr>
+               	ldr	x0, [x0, #0x18]
+               	ldr	x1, [x1, #0x30]
                	cmp	x0, #0x64
                	b.ls	<addr>
                	mov	x0, #0x0                // =0
@@ -65,7 +54,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	ret
-               	cmp	x4, #0x64
                	mov	x0, #0x1                // =1
                	ret
                	mov	x3, #0x0                // =0

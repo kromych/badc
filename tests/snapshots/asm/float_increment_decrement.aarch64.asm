@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	fmov	s1, #1.50000000
                	fmov	d0, #1.00000000
-               	fcvt	d2, s1
-               	fadd	d2, d2, d0
+               	fmov	d5, #1.50000000
+               	fadd	d2, d5, d0
                	fcvt	s2, d2
                	fcmp	s1, s1
                	b.ne	<addr>
@@ -96,22 +96,20 @@ Disassembly of section .text:
                	fcmp	s2, s1
                	b.ne	<addr>
                	ldur	d1, [x29, #-0x8]
-               	fmov	d2, #1.50000000
-               	fcmp	d1, d2
+               	fcmp	d1, d5
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	d1, [x0]
+               	ldr	d1, [x0, #0x18]
                	fadd	d1, d1, d0
-               	str	d1, [x0]
-               	ldr	d1, [x0]
+               	str	d1, [x0, #0x18]
+               	ldr	d1, [x0, #0x18]
                	fadd	d1, d1, d0
-               	str	d1, [x0]
-               	ldr	d1, [x0]
+               	str	d1, [x0, #0x18]
+               	ldr	d1, [x0, #0x18]
                	fmov	d2, #7.00000000
                	fcmp	d1, d2
                	b.eq	<addr>
@@ -145,7 +143,8 @@ Disassembly of section .text:
                	ret
                	mov	x16, #0x4b800000        // =1266679808
                	fmov	s1, w16
-               	fcvt	d2, s1
+               	mov	x16, #0x4170000000000000 // =4715268809856909312
+               	fmov	d2, x16
                	fadd	d0, d2, d0
                	fcvt	s0, d0
                	fcmp	s0, s1

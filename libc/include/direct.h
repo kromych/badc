@@ -4,6 +4,8 @@
 
 #ifdef _WIN32
 
+#include <__badc_wdirect.h>
+
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::_mkdir,  "_mkdir")
 #pragma binding(msvcrt::_rmdir,  "_rmdir")

@@ -102,18 +102,6 @@ Disassembly of section .text:
                	leave
                	retq
 
-<members>:
-               	leaq	<rip>, %rax # <addr>
-               	movsbq	0x3(%rax), %rcx
-               	cmpl	$0x5, %ecx
-               	jne	<addr>
-               	cmpl	$0x0, 0x8(%rax)
-               	je	<addr>
-               	movl	$0x7, %eax
-               	retq
-               	xorl	%eax, %eax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -124,6 +112,12 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	movl	$0x71, %edi
-               	callq	<addr>
+               	movsbq	<rip>, %rax # <addr>
+               	cmpl	$0x5, %eax
+               	jne	<addr>
+               	cmpl	$0x0, <rip> # <addr>
+               	je	<addr>
+               	movl	$0x7, %eax
+               	jmp	<addr>
+               	xorl	%eax, %eax
                	jmp	<addr>

@@ -1,5 +1,9 @@
 use super::*;
 
+/// `brk #0xf004`, which Windows on ARM64 reports as
+/// STATUS_INTEGER_DIVIDE_BY_ZERO.
+const BRK_DIVIDE_BY_ZERO: u32 = 0xD43E_0080;
+
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
 pub(super) fn emit_extend(
@@ -461,7 +465,7 @@ pub(super) fn emit_binop(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
-    if let Some(cond) = fp_compare_cond(op) {
+    if crate::c5::ir::is_fp_comparison_op(op) {
         // The compare width follows the operands' precision.
         let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
         let dn = match materialize_fp_for(code, lhs, lhs_place, frame.fp_scratch[0], frame, alloc) {
@@ -486,7 +490,14 @@ pub(super) fn emit_binop(
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
         }
-        emit(code, enc_cset(rd, cond));
+        match fp_compare_cond(op) {
+            Some(cond) => emit(code, enc_cset(rd, cond)),
+            None => {
+                // `Fone`: less (N), or greater, which `le` excludes.
+                emit(code, enc_cset(rd, Cond::Mi));
+                emit(code, super::encode::enc_csinc(rd, rd, Reg::SP, Cond::Le));
+            }
+        }
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
@@ -527,6 +538,20 @@ pub(super) fn emit_binop(
         Some(r) => r,
         None => return fail("Binop: rhs not int reg / spill"),
     };
+    // Windows on ARM64: a zero divisor raises STATUS_INTEGER_DIVIDE_BY_ZERO
+    // through `brk #0xf004`, as cl's code does, where `sdiv` / `udiv` would
+    // yield 0.
+    if frame.raises_divide_by_zero
+        && matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
+    {
+        let skip = if narrow_div(alloc, v) {
+            super::encode::enc_cbnz_w(rm, 2)
+        } else {
+            super::encode::enc_cbnz(rm, 2)
+        };
+        emit(code, skip);
+        emit(code, BRK_DIVIDE_BY_ZERO);
+    }
     if let Some(cond) = compare_cond(op) {
         emit(code, cmp_reg_word(alloc, v, rn, rm));
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
@@ -652,7 +677,7 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
 }
 
 /// The condition of an FP comparison's `fcmp` + `cset`, `None`
-/// otherwise.
+/// otherwise. `Fone` has none: `less or greater` spans two conditions.
 pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
     Some(match op {
         BinOp::Feq => Cond::Eq,
@@ -661,8 +686,15 @@ pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
         BinOp::Fgt => Cond::Gt,
         BinOp::Fle => Cond::Ls,
         BinOp::Fge => Cond::Ge,
+        BinOp::Funo => Cond::Vs,
         _ => return None,
     })
+}
+
+/// Whether a comparison's flags decide a single `b.cond`, so the
+/// allocator may fuse it with the branch.
+pub(crate) fn compare_fuses(op: BinOp) -> bool {
+    compare_cond(op).or_else(|| fp_compare_cond(op)).is_some()
 }
 
 /// The condition of an integer comparison's `cmp` + `cset`.

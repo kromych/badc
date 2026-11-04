@@ -1,17 +1,18 @@
 // stdatomic.h -- C11 (7.17) atomic operations.
 //
-// The non-`_explicit` atomic operations (`atomic_load`, `atomic_store`,
-// `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
-// `atomic_compare_exchange_strong`) are compiler builtins, declared
-// below via `#pragma intrinsic` and lowered at the call site with
-// seq_cst order. The `_explicit` forms and the fences are the
-// `__atomic_*` builtins, which take the order operand. This header also
-// provides the rest of the 7.17 surface: the `memory_order`
-// enumeration, the lock-free and flag types, and the atomic typedefs.
+// The generic functions are macros, which 7.17.1 permits and gcc's and
+// clang's headers define: the `_explicit` forms and the fences are the
+// `__atomic_*` builtins, which take the order operand and lower at the
+// call site, and the other forms are the `_explicit` ones with seq_cst
+// order (7.17.1). No library function stands behind them, so
+// `-fno-builtin` leaves them as they are. This header also provides the
+// rest of the 7.17 surface: the `memory_order` enumeration, the lock-free
+// and flag types, and the atomic typedefs.
 //
-// Each operation is atomic against concurrent access when the object is
-// a naturally-aligned 1-, 2-, 4- or 8-byte scalar; a wider one is
-// rejected at compile time. Load and store carry the order named
+// On an `_Atomic` object of any type the operations take the access its
+// layout gives the operators (doc/std-conformance.md); on an object not
+// declared `_Atomic` they need a naturally-aligned 1-, 2-, 4- or 8-byte
+// scalar or a 16-byte integer. Load and store carry the order named
 // (7.17.1; `consume` is acquire): on aarch64 a relaxed access is a plain
 // `ldr` / `str`, an acquire or seq_cst load `ldar` and a release or
 // seq_cst store `stlr`; on x86-64 a load is a plain `mov` for every
@@ -19,8 +20,9 @@
 // `xchg`. The read-modify-write forms lower on x86-64 to `lock xadd`
 // (add, and sub with the operand negated), `xchg` (exchange, implicitly
 // locked), a `lock cmpxchg` retry loop (and / or / xor) and `lock
-// cmpxchg` (compare-exchange), and on aarch64 to an `ldaxr` / `stlxr`
-// retry loop: the seq_cst sequence whatever order they name.
+// cmpxchg` (compare-exchange), and on aarch64 to one LSE instruction
+// carrying the order they name (`ldadd`, `ldclr`, `ldset`, `ldeor`,
+// `swp`, `cas`).
 // `atomic_flag_test_and_set` is the byte-wide exchange and
 // `atomic_flag_clear` the byte-wide store.
 
@@ -28,16 +30,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-
-#pragma intrinsic("atomic_load")
-#pragma intrinsic("atomic_store")
-#pragma intrinsic("atomic_exchange")
-#pragma intrinsic("atomic_fetch_add")
-#pragma intrinsic("atomic_fetch_sub")
-#pragma intrinsic("atomic_fetch_and")
-#pragma intrinsic("atomic_fetch_or")
-#pragma intrinsic("atomic_fetch_xor")
-#pragma intrinsic("atomic_compare_exchange_strong")
 
 typedef enum memory_order {
     memory_order_relaxed = 0,
@@ -57,10 +49,11 @@ typedef enum memory_order {
 
 #define kill_dependency(y) (y)
 
-// 7.17.2 initialization. 7.17.2.2 requires no synchronization of
-// `atomic_init`, so it is the relaxed store.
+// 7.17.2 initialization. `atomic_init` is the object's non-atomic
+// initialization (7.17.2.2p2): a plain store, clearing a lock word the
+// object's layout carries without taking it, as clang's builtin does.
 #define ATOMIC_VAR_INIT(value) (value)
-#define atomic_init(obj, value) __atomic_store_n((obj), (value), memory_order_relaxed)
+#define atomic_init(obj, value) __c11_atomic_init((obj), (value))
 
 // 7.17.5 lock-free property. Naturally-aligned scalars are lock-free.
 #define ATOMIC_BOOL_LOCK_FREE 2
@@ -113,9 +106,8 @@ typedef _Atomic(ptrdiff_t) atomic_ptrdiff_t;
 typedef _Atomic(intmax_t) atomic_intmax_t;
 typedef _Atomic(uintmax_t) atomic_uintmax_t;
 
-// 7.17.7 operations. The non-`_explicit` forms are c5 builtins; the
-// `_explicit` forms pass their order operand(s) to the `__atomic_*`
-// builtins. `atomic_compare_exchange_weak` is the strong form.
+// 7.17.7 operations. The `_explicit` forms pass their order operand(s) to
+// the `__atomic_*` builtins; a weak compare-exchange is the strong one.
 #define atomic_load_explicit(obj, order) __atomic_load_n((obj), (order))
 #define atomic_store_explicit(obj, desired, order) __atomic_store_n((obj), (desired), (order))
 #define atomic_exchange_explicit(obj, desired, order) \
@@ -124,13 +116,26 @@ typedef _Atomic(uintmax_t) atomic_uintmax_t;
     __atomic_compare_exchange_n((obj), (expected), (desired), 0, (succ), (fail))
 #define atomic_compare_exchange_weak_explicit(obj, expected, desired, succ, fail) \
     __atomic_compare_exchange_n((obj), (expected), (desired), 1, (succ), (fail))
-#define atomic_compare_exchange_weak(obj, expected, desired) \
-    atomic_compare_exchange_strong((obj), (expected), (desired))
 #define atomic_fetch_add_explicit(obj, arg, order) __atomic_fetch_add((obj), (arg), (order))
 #define atomic_fetch_sub_explicit(obj, arg, order) __atomic_fetch_sub((obj), (arg), (order))
 #define atomic_fetch_or_explicit(obj, arg, order) __atomic_fetch_or((obj), (arg), (order))
 #define atomic_fetch_and_explicit(obj, arg, order) __atomic_fetch_and((obj), (arg), (order))
 #define atomic_fetch_xor_explicit(obj, arg, order) __atomic_fetch_xor((obj), (arg), (order))
+
+#define atomic_load(obj) atomic_load_explicit((obj), __ATOMIC_SEQ_CST)
+#define atomic_store(obj, desired) atomic_store_explicit((obj), (desired), __ATOMIC_SEQ_CST)
+#define atomic_exchange(obj, desired) atomic_exchange_explicit((obj), (desired), __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_strong(obj, expected, desired) \
+    atomic_compare_exchange_strong_explicit((obj), (expected), (desired), \
+                                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#define atomic_compare_exchange_weak(obj, expected, desired) \
+    atomic_compare_exchange_weak_explicit((obj), (expected), (desired), \
+                                          __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#define atomic_fetch_add(obj, arg) atomic_fetch_add_explicit((obj), (arg), __ATOMIC_SEQ_CST)
+#define atomic_fetch_sub(obj, arg) atomic_fetch_sub_explicit((obj), (arg), __ATOMIC_SEQ_CST)
+#define atomic_fetch_or(obj, arg) atomic_fetch_or_explicit((obj), (arg), __ATOMIC_SEQ_CST)
+#define atomic_fetch_and(obj, arg) atomic_fetch_and_explicit((obj), (arg), __ATOMIC_SEQ_CST)
+#define atomic_fetch_xor(obj, arg) atomic_fetch_xor_explicit((obj), (arg), __ATOMIC_SEQ_CST)
 
 // 7.17.8 atomic flag. A minimal `_Bool` cell exercised through the
 // integer atomics.

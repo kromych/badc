@@ -910,6 +910,65 @@ fn fp_vector() {
     assert_eq!(enc("fadd", &[d(0), d(1), d(2)]), 0x1E62_2820);
 }
 
+/// Scalar SIMD `add`/`sub` on d registers, as clang's assembler encodes them;
+/// the register fields hold the operands alone.
+#[test]
+fn scalar_simd_add_sub() {
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("add", &[d(0), d(1), d(2)]), 0x5EE2_8420);
+    assert_eq!(enc("sub", &[d(0), d(1), d(2)]), 0x7EE2_8420);
+    assert_eq!(enc("add", &[d(7), d(7), d(16)]), 0x5EF0_84E7);
+}
+
+/// The lane conversions, the words clang's assembler gives `v1, v2`.
+#[test]
+fn fp_vector_conversions() {
+    let reg = |num: u8, (size, q): (u8, bool)| Opnd::VecReg { num, size, q };
+    let v = |size: u8, q: bool| [reg(1, (size, q)), reg(2, (size, q))];
+    assert_eq!(enc("scvtf", &v(2, false)), 0x0E21_D841);
+    assert_eq!(enc("scvtf", &v(2, true)), 0x4E21_D841);
+    assert_eq!(enc("scvtf", &v(3, true)), 0x4E61_D841);
+    assert_eq!(enc("ucvtf", &v(2, true)), 0x6E21_D841);
+    assert_eq!(enc("ucvtf", &v(3, true)), 0x6E61_D841);
+    assert_eq!(enc("fcvtzs", &v(2, false)), 0x0EA1_B841);
+    assert_eq!(enc("fcvtzs", &v(2, true)), 0x4EA1_B841);
+    assert_eq!(enc("fcvtzs", &v(3, true)), 0x4EE1_B841);
+    assert_eq!(enc("fcvtzu", &v(2, true)), 0x6EA1_B841);
+    assert_eq!(enc("fcvtzu", &v(3, true)), 0x6EE1_B841);
+    assert!(encode("scvtf", &v(1, true)).is_err());
+    let pair = |dst: (u8, bool), src: (u8, bool)| [reg(1, dst), reg(2, src)];
+    assert_eq!(enc("fcvtl", &pair((3, true), (2, false))), 0x0E61_7841);
+    assert_eq!(enc("fcvtl2", &pair((3, true), (2, true))), 0x4E61_7841);
+    assert_eq!(enc("fcvtn", &pair((2, false), (3, true))), 0x0E61_6841);
+    assert_eq!(enc("fcvtn2", &pair((2, true), (3, true))), 0x4E61_6841);
+    assert!(encode("fcvtl", &pair((3, true), (2, true))).is_err());
+}
+
+#[test]
+fn scalar_shift_and_shift_left_long() {
+    // The AdvSIMD scalar shifts by immediate take the 64-bit element only;
+    // sshll/ushll take esize + shift over the source element size, and
+    // sxtl/uxtl are their shift-0 aliases. Words match GNU as 2.46.1.
+    let d = |n: u8| Opnd::VReg { num: n, is_d: true };
+    assert_eq!(enc("shl", &[d(8), d(8), Opnd::Imm(56)]), 0x5F78_5508);
+    assert_eq!(enc("ushr", &[d(29), d(22), Opnd::Imm(26)]), 0x7F66_06DD);
+    assert_eq!(enc("ushr", &[d(0), d(1), Opnd::Imm(64)]), 0x7F40_0420);
+    assert_eq!(enc("sshr", &[d(2), d(3), Opnd::Imm(1)]), 0x5F7F_0462);
+    assert!(encode("shl", &[d(0), d(1), Opnd::Imm(64)]).is_err());
+    assert!(encode("ushr", &[d(0), d(1), Opnd::Imm(0)]).is_err());
+    let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };
+    assert_eq!(enc("uxtl", &[v(28, 2, true), v(28, 1, false)]), 0x2F10_A79C);
+    assert_eq!(enc("uxtl2", &[v(1, 1, true), v(2, 0, true)]), 0x6F08_A441);
+    assert_eq!(enc("sxtl", &[v(0, 3, true), v(1, 2, false)]), 0x0F20_A420);
+    let ushll = [v(0, 1, true), v(1, 0, false), Opnd::Imm(7)];
+    assert_eq!(enc("ushll", &ushll), 0x2F0F_A420);
+    let sshll2 = [v(3, 3, true), v(4, 2, true), Opnd::Imm(31)];
+    assert_eq!(enc("sshll2", &sshll2), 0x4F3F_A483);
+    assert!(encode("uxtl", &[v(0, 2, true), v(1, 2, true)]).is_err());
+    assert!(encode("uxtl2", &[v(0, 2, true), v(1, 1, false)]).is_err());
+    assert!(encode("ushll", &[v(0, 1, true), v(1, 0, false), Opnd::Imm(8)]).is_err());
+}
+
 #[test]
 fn vector_shift() {
     let v = |n: u8, size: u8, q: bool| Opnd::VecReg { num: n, size, q };

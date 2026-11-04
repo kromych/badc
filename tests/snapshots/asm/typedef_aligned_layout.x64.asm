@@ -107,22 +107,21 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movl	$0x1, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
-               	movq	%rdx, %xmm14
+               	movl	$0x1, -0x8(%rbp)
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rdx
-               	testb	$0xf, %dl
+               	leaq	-0x20(%rbp), %rcx
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x35, %eax
                	leave
                	retq
-               	xorps	%xmm0, %xmm0
-               	cvtsi2sd	%rax, %xmm0
-               	movq	%rcx, %xmm15
-               	addsd	%xmm15, %xmm0
+               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
+               	movq	%rcx, %xmm14
+               	movq	%rax, %xmm15
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movsd	-0x20(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
@@ -160,26 +159,26 @@ Disassembly of section .text:
                	movl	$0x43, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx # <addr>
-               	testb	$0xf, %cl
+               	leaq	<rip>, %rax # <addr>
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x44, %eax
                	popq	%rbp
                	retq
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x45, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax # <addr>
-               	movl	$0x3, (%rax)
+               	movl	$0x3, <rip> # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x4c, %eax
                	popq	%rbp
                	retq
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	addq	$0x3, %rax
                	cmpl	$0x6, %eax
                	je	<addr>

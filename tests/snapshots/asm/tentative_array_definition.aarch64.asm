@@ -23,7 +23,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x0                // =0
                	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	ldrb	w1, [x1]
                	cbz	w1, <addr>
                	mov	x1, #0x1                // =1

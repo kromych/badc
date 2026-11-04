@@ -1,4 +1,4 @@
-//! A call of an MSVC intrinsic (`crate::c5::ms_intrinsic`): the arguments
+//! A call of a call-site intrinsic (`crate::c5::ms_intrinsic`): the arguments
 //! convert as for its prototype and the call becomes the operation's node.
 
 use alloc::format;
@@ -72,10 +72,12 @@ impl Compiler {
 
     /// A call of the intrinsic `name`, the `(` consumed.
     pub(super) fn parse_ms_intrinsic(&mut self, name: &str) -> Result<(), C5Error> {
-        let intr = ms_intrinsic::lookup(name, self.target).expect("an MSVC intrinsic");
+        let intr = ms_intrinsic::lookup(name, self.target).expect("a call-site intrinsic");
+        self.check_seh_intrinsic(intr.op, name)?;
         match intr.op {
             Op::Assume => return self.parse_ms_assume(),
             Op::Noop => return self.parse_ms_noop(),
+            Op::VaStart => return self.parse_ms_va_start(name),
             _ => {}
         }
         let mut operands = Vec::new();
@@ -225,6 +227,39 @@ impl Compiler {
         let int = Ty::Int as i64;
         self.ty = int;
         self.ast_acc = Some(self.ast_node(Expr::IntLit { val: 0, ty: int }));
+        Ok(())
+    }
+
+    /// `__va_start(&ap, ...)`, the `(` consumed, as clang lowers it: the first
+    /// argument converts to `va_list *` and the node is `__builtin_va_start`'s,
+    /// whose lowering reads the prototype; what follows, the last fixed
+    /// parameter (x64) or its address, size and alignment (arm64), is
+    /// unevaluated. The x64 form's parameter takes `va_start`'s `-Wvarargs`
+    /// checks; clang makes none on the arm64 form.
+    fn parse_ms_va_start(&mut self, name: &str) -> Result<(), C5Error> {
+        self.require_variadic_function()?;
+        let list_ty = add_ptr_level(add_ptr_level(plain_char_ty(self.lex.char_signed)));
+        let list = self.parse_builtin_value(name, 0, list_ty)?;
+        let mut rest = alloc::vec::Vec::new();
+        while self.list_separator(')', "argument")? {
+            rest.push((self.lex.line, self.discard_unevaluated_node()?));
+        }
+        if let [(line, last)] = rest[..] {
+            self.check_va_start_operand(last, line);
+        }
+        self.next()?;
+        self.mark_emit_other();
+        let unused = self.ast_node(Expr::IntLit {
+            val: 0,
+            ty: void_ptr_ty(),
+        });
+        let void = void_ty();
+        self.ty = void;
+        self.ast_acc = Some(self.ast_node(Expr::Intrinsic {
+            kind: Intrinsic::VaStart as i64,
+            args: alloc::vec![list, unused],
+            ty: void,
+        }));
         Ok(())
     }
 }

@@ -13,60 +13,46 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<reader>:
-               	mov	x2, #0x0                // =0
-               	mov	x0, #0x3                // =3
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	ldr	x1, [x5]
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	mov	x3, x2
-               	ldr	x6, [x4]
-               	add	x6, x6, x1
-               	str	x6, [x4]
-               	add	x3, x3, #0x1
-               	cmp	w0, #0x2
-               	b.lo	<addr>
-               	cmp	w0, #0x3
-               	b.lo	<addr>
-               	ldr	x0, [x5]
-               	cmp	x1, x0
-               	b.ne	<addr>
-               	mov	x0, x2
-               	b	<addr>
-               	mov	x0, #0x1                // =1
-               	b	<addr>
-               	mov	x0, x2
-               	cbnz	w0, <addr>
-               	mov	x0, x3
-               	ret
-
 <work>:
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x2, [x1]
+               	ldr	x2, [x1, #0x30]
                	add	x0, x2, x0
-               	str	x0, [x1]
+               	str	x0, [x1, #0x30]
                	ret
 
 <main>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	cmp	x0, #0x1
+               	mov	x2, #0x0                // =0
+               	mov	x1, #0x3                // =3
+               	adrp	x5, <page>
+               	ldr	x0, [x5, #0x18]
+               	adrp	x4, <page>
+               	mov	x3, x2
+               	ldr	x6, [x4, #0x30]
+               	add	x6, x6, x0
+               	str	x6, [x4, #0x30]
+               	add	x3, x3, #0x1
+               	cmp	w1, #0x2
+               	b.lo	<addr>
+               	cmp	w1, #0x3
+               	b.lo	<addr>
+               	ldr	x1, [x5, #0x18]
+               	cmp	x0, x1
+               	b.ne	<addr>
+               	mov	x1, x2
+               	b	<addr>
+               	mov	x1, #0x1                // =1
+               	b	<addr>
+               	mov	x1, x2
+               	cbnz	w1, <addr>
+               	cmp	x3, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
                	ret

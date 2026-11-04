@@ -12,7 +12,7 @@ fn block_of(blocks: &[AsmSectionBlock], label: &str) -> alloc::string::String {
         .find(|b| {
             b.items
                 .iter()
-                .any(|i| matches!(i, AsmSectionItem::Label(n) if n == label))
+                .any(|i| matches!(&i.item, AsmSectionItem::Label(n) if n == label))
         })
         .map(|b| b.name.clone())
         .unwrap_or_else(|| alloc::string::String::from("<none>"))
@@ -77,7 +77,9 @@ fn globl_binds_a_label_defined_in_another_section() {
 #[test]
 fn an_exported_constant_assignment_defines_an_absolute_symbol() {
     let text = ".globl len\n.section .rodata,\"a\"\nlen = 12345\nblob:\n.long len\n";
-    let prepared = prepare_file_asm_text(text, AsmComments::X86).unwrap();
+    let prepared = prepare_file_asm_text(text, AsmComments::X86)
+        .checked()
+        .unwrap();
     let blocks = extract_file_scope_asm_sections(&prepared, false).unwrap();
     let mut sink = AsmSectionSink::default();
     materialize_asm_sections(
@@ -102,6 +104,94 @@ fn an_exported_constant_assignment_defines_an_absolute_symbol() {
         .expect("symbol defined");
     assert_eq!(len.absolute, Some(12345));
     assert!(len.global);
+}
+
+#[test]
+fn value_is_an_x86_two_byte_element() {
+    // GNU as defines `.value` on x86 alone, as `.word` there; the AArch64
+    // assembler reports an unknown pseudo-op.
+    match parse_section_item(".value", "0x1234, 7", false) {
+        Ok(AsmSectionItem::Data { width: 2, values }) => assert_eq!(values.len(), 2),
+        other => panic!("{other:?}"),
+    }
+    assert!(parse_section_item(".value", "1", true).is_err());
+}
+
+#[test]
+fn mach_o_names_lose_one_leading_underscore() {
+    // Apple's `_g` is the C name `g`; a string, a comment, a named operand
+    // reference and a `.section`'s segment and section names are not
+    // symbols, and an underscore inside a name is part of it.
+    let text = ".section __TEXT,__const\n.globl _h\n_h: b ___g // _c\n\
+                adrp x0, _t@PAGE ; ldr x1, [x0, _t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+_b /* _d */\n";
+    let want = ".section __TEXT,__const\n.globl h\nh: b __g // _c\n\
+                adrp x0, t@PAGE ; ldr x1, [x0, t@PAGEOFF]\n\
+                .asciz \"_s\"\nmov %[_v], x_1\n.L_x: .quad a+b /* _d */\n";
+    assert_eq!(mach_o_symbol_names(text), want);
+}
+
+#[test]
+fn a_reentered_section_keeps_its_identity_or_is_refused() {
+    // gas 2.46.1: a section is its name, group and linked-to section; a
+    // second directive without flags keeps the first one's attributes, one
+    // that writes others is refused unless the name is special.
+    let blocks = |text: &str| {
+        extract_asm_sections(text, false).map(|e| {
+            let AsmExtract { blocks, .. } = e.expect("sections");
+            blocks
+                .into_iter()
+                .map(|b| {
+                    (
+                        b.name,
+                        b.flags,
+                        b.sh_type,
+                        b.group.map(|g| (g.name, g.comdat)),
+                    )
+                })
+                .collect::<alloc::vec::Vec<_>>()
+        })
+    };
+    for (second, err) in [
+        (
+            ".section .x,\"aG\",@progbits,g",
+            "changed section attributes for `.x`",
+        ),
+        (
+            ".section .x,\"awG\",@progbits,g,comdat",
+            "changed section attributes for `.x`",
+        ),
+        (
+            ".section .x,\"aG\",@nobits,g,comdat",
+            "changed section type for `.x`",
+        ),
+    ] {
+        let text = alloc::format!(".section .x,\"aG\",@progbits,g,comdat\n.byte 1\n{second}\n");
+        let got = blocks(&text).expect_err(second);
+        assert!(got.contains(err), "{second}: {got}");
+    }
+    let text = ".section .y,\"aM\",@progbits,4\n.section .y,\"aM\",@progbits,8\n";
+    assert!(
+        blocks(text)
+            .unwrap_err()
+            .contains("changed section entity size for `.y`")
+    );
+    // No flags, and a special name's other flags, take the first attributes;
+    // another group is another section.
+    let got = blocks(
+        ".section .z,\"aw\"\n.section .z\n.section .text.t,\"ax\"\n.section .text.t,\"a\"\n\
+         .section .z,\"aG\",@progbits,h\n",
+    )
+    .unwrap();
+    let z = (".z".into(), "aw".into(), None, None);
+    let t = (".text.t".into(), "ax".into(), Some("progbits".into()), None);
+    let h = (
+        ".z".into(),
+        "aG".into(),
+        Some("progbits".into()),
+        Some(("h".into(), false)),
+    );
+    assert_eq!(got, [z.clone(), z, t.clone(), t, h]);
 }
 
 #[test]
@@ -1073,6 +1163,7 @@ fn section_operand_constant_expression() {
         false,
         &mut sink2,
     )
+    .map_err(alloc::string::String::from)
     .unwrap_err();
     assert!(err.contains("non-constant"), "{err}");
 }
@@ -1163,7 +1254,7 @@ fn word_directive_width_is_target_dependent() {
             extract_asm_sections(".pushsection .x,\"a\"\n.word 0x1234\n.popsection\n", is_a64)
                 .unwrap()
                 .unwrap();
-        match &blocks[0].items[0] {
+        match &blocks[0].items[0].item {
             AsmSectionItem::Data { width, .. } => *width,
             _ => panic!("expected data"),
         }
@@ -1272,6 +1363,7 @@ fn cross_section_label_difference_across_sections_is_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("cross-section difference is not a constant");
     assert!(err.contains("crosses sections"), "{err}");
 }
@@ -1335,6 +1427,7 @@ fn section_label_difference_overflow_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("256 does not fit a byte");
     assert!(err.contains("does not fit"), "{err}");
 }
@@ -1471,7 +1564,7 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
     assert!(
         repl.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "call foo")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "call foo")),
         "instruction kept as Code: {:?}",
         repl.items
     );
@@ -1486,7 +1579,7 @@ fn replacement_instruction_kept_as_code_for_executable_section() {
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "wrmsr")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "wrmsr")),
         "instruction in a non-executable section is kept as Code: {:?}",
         sec.items
     );
@@ -1508,21 +1601,21 @@ fn label_without_whitespace_peels_from_following_instruction() {
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Label(n) if n == "wrapper")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Label(n) if n == "wrapper")),
         "label peeled as its own item: {:?}",
         sec.items
     );
     assert!(
         sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t == "push %rcx")),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t == "push %rcx")),
         "the instruction after the label is a single-instruction Code item: {:?}",
         sec.items
     );
     assert!(
         !sec.items
             .iter()
-            .any(|it| matches!(it, AsmSectionItem::Code(t) if t.contains(':'))),
+            .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t.contains(':'))),
         "no Code item retains the label colon: {:?}",
         sec.items
     );
@@ -1740,6 +1833,7 @@ fn duplicate_section_label_is_rejected() {
         false,
         &mut sink,
     )
+    .map_err(alloc::string::String::from)
     .expect_err("duplicate label must be rejected");
     assert!(err.contains("duplicate label"), "{err}");
 }
@@ -2630,6 +2724,7 @@ fn section_arguments_carry_the_group() {
     assert_eq!(group(".nogroup", 0), ("a", 0, None));
     assert_eq!(group(".text.t", 1), ("axG", 0, Some(("t2", false))));
     let err = extract_file_scope_asm_sections(".section .x,\"aG\",@progbits,g,unique\n", false)
+        .map_err(alloc::string::String::from)
         .unwrap_err();
     assert!(err.contains("bad section argument `unique`"), "{err}");
     let mut sink = AsmSectionSink::default();
@@ -2647,4 +2742,67 @@ fn section_arguments_carry_the_group() {
         .map(|s| s.group.as_ref().map(|g| g.name.as_str()))
         .collect();
     assert_eq!(groups, [Some("t"), Some("t2")]);
+}
+
+/// A marker numbers the lines after it and is blanked; `# 0 "" 2` returns to
+/// the physical position, and a `#` comment naming no file moves nothing.
+#[test]
+fn line_markers_give_each_line_its_file_and_line() {
+    let text =
+        "# 1 \"u.S\"\na\n# 7 \"h.h\" 1\nb\nc\n# 3 \"u.S\" 2\nd\n# 0 \"\" 2\ne\n# 16 bytes\nf";
+    let (out, map) = AsmSourceMap::read(text, "u.s");
+    assert_eq!(out, "\na\n\nb\nc\n\nd\n\ne\n# 16 bytes\nf");
+    let at = |line: u32| {
+        map.loc(line)
+            .map(|l| alloc::format!("{}:{}", l.file, l.line))
+    };
+    assert_eq!(at(2).as_deref(), Some("u.S:1"));
+    assert_eq!(at(4).as_deref(), Some("h.h:7"));
+    assert_eq!(at(5).as_deref(), Some("h.h:8"));
+    assert_eq!(at(7).as_deref(), Some("u.S:3"));
+    assert_eq!(at(9).as_deref(), Some("u.s:9"));
+    assert_eq!(at(11).as_deref(), Some("u.s:11"));
+    assert_eq!(at(0), None);
+    let (_, plain) = AsmSourceMap::read("nop\nnop\n", "p.s");
+    assert_eq!(plain.loc(2).map(|l| l.line), Some(2));
+}
+
+/// A statement after a block comment over lines stays on its line.
+#[test]
+fn a_block_comment_keeps_the_lines_after_it_in_place() {
+    let text = "nop /* one\ntwo\nthree */ nop\nbad\n";
+    for syntax in [AsmComments::X86, AsmComments::A64] {
+        let out = strip_asm_comments(text, syntax).unwrap();
+        let lines = split_asm_statement_lines(&out);
+        assert!(lines.contains(&(4, "bad")), "{lines:?}");
+    }
+}
+
+/// An expanded line is at its body line with the macro invocations,
+/// innermost first; `.rept` and `.irp` add none.
+#[test]
+fn an_expansion_takes_the_body_line_and_its_invocations() {
+    let text = ".macro inner\n.error \"in\"\nnop\n.endm\n.macro outer\ninner\n.endm\nouter\n\
+                .rept 2\n.error \"rept\"\n.endr\n.irp r, a\n\\r: ret\n.endr\n.purgem none\n";
+    let p = prepare_file_asm_text(text, AsmComments::X86);
+    let errors: Vec<(u32, Vec<u32>)> = (p.errors.iter())
+        .map(|(_, e)| (e.line, e.invoked_at.clone()))
+        .collect();
+    assert_eq!(
+        errors,
+        [
+            (2, alloc::vec![6, 8]),
+            (10, alloc::vec![]),
+            (10, alloc::vec![]),
+            (15, alloc::vec![])
+        ]
+    );
+    let at = |want: &str| {
+        let k = p.text.split('\n').position(|s| s == want).unwrap();
+        let mut e = AsmError::at(k as u32 + 1, alloc::string::String::new());
+        p.origin.place(&mut e);
+        (e.line, e.invoked_at)
+    };
+    assert_eq!(at("nop"), (3, alloc::vec![6, 8]));
+    assert_eq!(at("ret"), (13, alloc::vec![]));
 }

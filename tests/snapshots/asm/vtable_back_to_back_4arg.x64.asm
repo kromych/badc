@@ -47,8 +47,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x1, %edx
                	movl	$0x64, %ecx
@@ -70,8 +69,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x1, %edx
                	movl	$0x64, %ecx

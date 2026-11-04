@@ -80,13 +80,10 @@ pub(crate) struct Symbol {
     /// variadic call's ABI.
     pub h_fn_type: FnType,
 
-    /// True while the function's return type is the implicit `int`
-    /// default rather than a declared type: a `#pragma binding` seen
-    /// without a following prototype, or a C89 implicit declaration.
-    /// A call site warns once (the result is truncated to 32 bits if
-    /// the function really returns a pointer or wider type). Cleared
-    /// when a declaration supplies an explicit return type.
-    pub implicit_return_int: bool,
+    /// The flat index of the `#pragma binding` that names this identifier.
+    /// A binding declares nothing: a file-scope function declaration of the
+    /// name makes it a `Token::Sys` symbol that calls through the binding.
+    pub binding_slot: Option<i64>,
 
     /// True for a function declared `_Noreturn` / `noreturn` (C11
     /// 6.7.4) or one of the built-in non-returning library functions
@@ -150,6 +147,10 @@ pub(crate) struct Symbol {
     /// The link keeps any one unit's identical definition (MSVC's
     /// `IMAGE_COMDAT_SELECT_ANY`); the object states it by `is_weak`.
     pub pick_any: bool,
+
+    /// A pick-any definition the unit emits only when what it keeps
+    /// references it, as MSVC emits an inline function.
+    pub discardable: bool,
 
     /// `dllimport` on the declarations so far: references go through the
     /// import-address slot `__imp_<name>`.
@@ -499,6 +500,9 @@ pub(crate) struct Symbol {
     pub saw_static_decl: bool,
     pub saw_plain_inline_decl: bool,
     pub saw_extern_inline_decl: bool,
+    /// A declaration spelled `extern`, `inline` or not: under the Microsoft
+    /// model it keeps an inline function's definition unreferenced.
+    pub saw_extern_decl: bool,
 
     /// `__attribute__((gnu_inline))` on any declaration of this
     /// function: the GNU89 inline model applies to it whatever the
@@ -591,6 +595,12 @@ pub(crate) struct Symbol {
     pub binding: BindingInfo,
     /// Shadow slot for `binding` (see `h_class`).
     pub h_binding: BindingInfo,
+    /// A parameter named like the function its declarator declares is
+    /// bound here and parked in the `h_*` fields, which hold the
+    /// parameter while the live ones hold the function, for the rest of
+    /// the declarator (C99 6.2.1p4: the parameter is in scope from its
+    /// own declarator on, the function is what the declarator describes).
+    pub parked_param: bool,
 }
 
 /// One binding of a name: its declaration site and its uses. Each binding
@@ -678,6 +688,10 @@ pub(crate) struct BindingInfo {
     /// and dead-store diagnostics for this symbol, matching the
     /// documented effect of the attribute.
     pub maybe_unused: bool,
+
+    /// The object was declared `register` (C99 6.7.1): its address may
+    /// not be taken (6.5.3.2p1), nor an array of it converted (6.3.2.1p3).
+    pub register_storage: bool,
 }
 
 impl BindingInfo {
@@ -947,7 +961,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
             fn_type: _,
             h_fn_type: _,
-            implicit_return_int: _,
+            binding_slot: _,
             is_noreturn: _,
             is_thread_local,
             h_is_thread_local: _,
@@ -959,6 +973,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_asm_name: _, // scope-restore shadow
             is_weak: _,
             pick_any: _,
+            discardable: _,
             dllimport: _,
             is_used,
             visibility: _,
@@ -1021,6 +1036,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             saw_noninline_def: _,
             saw_plain_inline_decl: _,  // linkage model input, not an offset
             saw_extern_inline_decl: _, // linkage model input, not an offset
+            saw_extern_decl: _,        // linkage model input, not an offset
             is_gnu_inline: _,          // linkage model selector
             is_inline_definition: _,   // linkage model result
             inline_body_name: _,       // assembler name, not an offset
@@ -1038,6 +1054,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_string_literal: _,
             binding: _, // declaration site and uses, not an offset
             h_binding: _,
+            parked_param: _,
         } = self;
         if *class != crate::c5::token::Token::Glo as i64
             || !*defined_here

@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <ret_ptr_as_int>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, <lo12>]
                	ret
 
 <ret_int_as_ptr>:

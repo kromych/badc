@@ -28,16 +28,27 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     Each of these suites runs through `scripts/cargo_test.py`, which fails a test
     binary that ends without reporting every test it announced: cargo judges a
     binary by its exit status alone.
-  * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
+  * the gating demos, enumerated in `GATING_DEMOS` in the script -- openssl
+    (Linux lanes, one configuration per box per run, below), sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu at -O0 and at -O (`qemu@O`), edk2, bearssl, bzip2,
     kissfft, gui_hello, nt_loader, kernel, tinycc, chibicc, uemacs, picocom,
     tcl. Each entry names the lane kinds it runs on, and `scripts/run_demos.py`
-    runs the lane's set concurrently. An entry `path@config` runs a smoke in a
-    configuration the runner's `DEMO_ENV` defines; the configurations of one
-    smoke share its cache, so they run back to back in one slot, each with its
-    own verdict. `--demo-jobs` bounds how many run at a time, never which ones
-    run; the runner prints its roster and its width.
+    runs the lane's set concurrently; `run_demos.py --lane linux|windows|macos`
+    runs the gate's set for that kind. An entry `path@config` runs a smoke in a
+    configuration the runner's `DEMO_ENV` and `DEMO_ARGS` define; the
+    configurations of one smoke share its cache, so they run back to back in
+    one slot, each with its own verdict. tcl and openssl run their timer-bound
+    tests after the pool drains (the runner's `AFTER_POOL`): `tcl@untimed` and
+    the box's `openssl@untimed` or `openssl@asm-untimed` in the pool, then its
+    `openssl@timed` or `openssl@asm-timed` and `tcl@timed`, one at a time, with
+    the host to itself: the pool, every `cargo_test.py` suite and every
+    `demos/linux/verify.py` kernel build hold `~/.badc-load.lock` shared, and
+    the timed phase holds it exclusively (`scripts/host_load.py`), so another
+    lane's load on the same machine waits for it, and it for that load. Its
+    start line says how long it waited. `--demo-jobs` bounds how many run at a
+    time, never which ones run; the runner prints its roster and its width,
+    and `--dry-run` prints the schedule without running it.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
     median one. Both are ratios taken within the run, so the lane's own
@@ -53,7 +64,11 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
   * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
     `defconfig` release, on each Linux lane -- compile, link and boot. The
     boots are the ones CI runs, four plus a displacement probe per distinct
-    displacement, under the box's own `qemu-system-<arch>`; nothing else is
+    displacement. x86_64 cannot pin one, and its unpinned probe draws
+    displacement 0 on one boot in 479; such a probe is repeated, up to three
+    draws, and only a run with no displaced draw fails the coverage check
+    (`demos/linux/kaslr.py`). The boots run under the box's own
+    `qemu-system-<arch>`; nothing else is
     needed to reach them, since both machines take the emulator's `-kernel`
     loader and no firmware from elsewhere. Without them the step covers only
     what is decided at the vmlinux link, and an image that compiles and links
@@ -87,6 +102,45 @@ build without the verifier faults in its boot. The two configurations share
 the demo's cache, so they run in one slot: 67 s on the idle aarch64 box and
 85 s on the x86_64 one, against 24 s and 27 s for the -O0 build alone. The
 phase stays tcl-bound: 138 to 140 s and 155 to 164 s per lane.
+
+`demos/openssl` runs on the Linux lanes, one configuration per box per run.
+CI's openssl job builds the C implementations and the `--asm` build, each at -O0
+and -O with OpenSSL's whole suite, on both architectures at every push; the gate
+splits those four jobs over two consecutive runs. A front-end defect that
+stopped the build reached CI while the board was green on all five lanes.
+- `OPENSSL_ASSIGNMENTS` gives each architecture its configuration: one run has
+  the x86_64 box build C and the aarch64 box `--asm`, the next the reverse. The
+  lane picks its own by `uname -m`, passes it to `run_demos.py --openssl`, and
+  the closing summary names it (`built: openssl c on x86_64, assignment 0`).
+- The assignment the next run takes is in `badc-gate-openssl` in the
+  repository's common git directory (`git rev-parse --git-common-dir`), shared
+  by every worktree and held by no box; `--openssl-plan` prints it.
+- A run hands the next run the other assignment once every Linux lane in it
+  reached its demo phase, pass or fail. A lane that stopped earlier built no
+  configuration, so the assignment stays and the next run builds it; advancing
+  would leave those two jobs unbuilt for two more runs.
+- `--openssl-assignment 0|1|repeat` runs that assignment, or the last one
+  again, and leaves the state alone: the rerun of a run that failed in openssl.
+- Each configuration is split as tcl is: the untimed entry builds and runs every
+  recipe but the two that race a timer (`BADC_OPENSSL_TESTS=untimed`), in the
+  pool; the timed entry runs those two over the same builds after the pool, with
+  the host to itself.
+- Alone, the C configuration takes 501 s on the x86_64 box and 457 s on the
+  aarch64 one, `--asm` 243 s and 205 s, of which the timed recipes are 59, 60, 33
+  and 36 s. In the demo phase (155 s on the x86_64 box and 131 s on the aarch64
+  one without openssl), assignment 0 took 855 s and 253 s, assignment 1 338 s
+  and 519 s, so the gate, which waits for its slowest lane, grows by about 12
+  minutes with the x86_64 box building C and by about 3 with it building
+  `--asm`. The x86_64 box has 6 cores and 12 threads, which the suite's 12 jobs
+  and the pool oversubscribe; its 855 s include 80 s waiting for the load lock.
+
+The first run in
+a tree fetches the release (54 MB, sha256-verified) from the vendor-deps mirror,
+which answers without a token, and extracts 148 MB beside it. Each build
+directory takes 1.8 to 2.5 GB; the smoke removes one before building it and
+again once its last suite passes, so a green run leaves about 200 MB under
+`demos/openssl/.cache`, and a red one keeps the failing builds for their logs
+until the next run replaces them.
 
 `demos/kernel` runs both its architectures on the Linux lanes. Neither kernel
 exits once it has printed -- preempt.c ends in a halt loop and kernel.c returns

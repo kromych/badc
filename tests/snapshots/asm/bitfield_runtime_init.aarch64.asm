@@ -15,34 +15,31 @@ Disassembly of section .text:
 
 <build_packed>:
                	and	x0, x0, #0xf
-               	and	x4, x1, #0xf
-               	orr	x1, x0, x4, lsl #4
-               	and	x5, x2, #0x1f
+               	and	x3, x1, #0xf
+               	orr	x1, x0, x3, lsl #4
+               	and	x4, x2, #0x1f
                	and	x1, x1, #0xffffffffffffe0ff
-               	orr	x1, x1, x5, lsl #8
-               	and	x3, x3, #0xfffff
-               	and	x5, x1, #0xf
-               	eor	x5, x5, x0
+               	orr	x1, x1, x4, lsl #8
+               	and	x4, x1, #0xf
+               	eor	x4, x4, x0
                	mov	x0, #0x0                // =0
-               	cbnz	w5, <addr>
-               	mov	w5, w1
-               	ubfx	x5, x5, #4, #4
-               	eor	x4, x5, x4
-               	cmp	w4, #0x0
-               	cset	x4, eq
-               	cbz	x4, <addr>
+               	cbnz	w4, <addr>
+               	mov	w4, w1
+               	ubfx	x4, x4, #4, #4
+               	eor	x3, x4, x3
+               	cmp	w3, #0x0
+               	cset	x3, eq
+               	cbz	x3, <addr>
                	mov	w1, w1
                	sbfx	x1, x1, #8, #5
                	cmp	w1, w2
                	cset	x1, eq
                	cbz	x1, <addr>
-               	eor	x0, x3, x3
-               	cmp	w0, #0x0
-               	cset	x0, eq
+               	mov	x0, #0x1                // =1
                	ret
                	mov	x1, x0
                	b	<addr>
-               	mov	x4, x0
+               	mov	x3, x0
                	b	<addr>
 
 <build_mixed>:
@@ -58,12 +55,12 @@ Disassembly of section .text:
                	and	x1, x1, #0xfffffffffff8ffff
                	orr	x1, x1, x5, lsl #16
                	stur	w1, [x29, #-0x10]
-               	and	x6, x2, #0x3ff
+               	and	x2, x2, #0x3ff
                	and	x1, x1, #0xffffffffe007ffff
-               	orr	x1, x1, x6, lsl #19
+               	orr	x1, x1, x2, lsl #19
                	stur	w1, [x29, #-0x10]
-               	and	x2, x3, #0x7ffff
-               	stur	w2, [x29, #-0xc]
+               	and	x3, x3, #0x7ffff
+               	stur	w3, [x29, #-0xc]
                	stur	w4, [x29, #-0x8]
                	ldurh	w3, [x29, #-0x10]
                	and	x0, x0, #0xffff
@@ -78,16 +75,13 @@ Disassembly of section .text:
                	cbz	x3, <addr>
                	mov	w1, w1
                	ubfx	x1, x1, #19, #10
-               	eor	x1, x1, x6
+               	eor	x1, x1, x2
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>
-               	eor	x1, x2, x2
-               	cmp	w1, #0x0
-               	cset	x1, eq
+               	mov	x1, #0x1                // =1
                	cbz	x1, <addr>
-               	cmp	w4, w4
-               	cset	x0, eq
+               	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

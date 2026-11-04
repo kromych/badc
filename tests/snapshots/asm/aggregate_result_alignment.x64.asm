@@ -164,7 +164,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	subq	$0xe0, %rsp
+               	subq	$0xc0, %rsp
                	andq	$-0x20, %rsp
                	movsbq	%dil, %rbx
                	leaq	0x80(%rsp), %rdi
@@ -234,10 +234,10 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	leaq	0xb0(%rsp), %rdi
+               	leaq	0x40(%rsp), %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movsbq	0xcf(%rsp), %r12
+               	movsbq	0x5f(%rsp), %r12
                	movq	%rbx, %rdi
                	callq	<addr>
                	shrq	$0x38, %rdx

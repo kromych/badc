@@ -122,8 +122,9 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
 /// Entry PCs whose function can be reached other than through the
 /// `Inst::Call` sites in `funcs`: a body materialises the address, a
 /// static or `_Thread_local` initializer holds it, an alias gives it a
-/// second name, or an asm template names it. Any of those admits a call
-/// the pass cannot see the arguments of.
+/// second name, an asm template names it, or a scope table names it for
+/// the language handler. Any of those admits a call the pass cannot see
+/// the arguments of.
 pub(crate) fn escaping_functions(
     funcs: &[FunctionSsa],
     program: &crate::c5::program::Program,
@@ -141,6 +142,7 @@ pub(crate) fn escaping_functions(
     // is treated as a reference to it.
     let mut asm_texts: Vec<&[u8]> = program.file_asm.iter().map(|s| s.as_bytes()).collect();
     for f in funcs {
+        out.extend(f.seh_scopes.iter().filter_map(|s| s.handler.funclet()));
         for inst in &f.insts {
             match inst {
                 Inst::ImmCode(pc) => {

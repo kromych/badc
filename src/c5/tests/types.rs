@@ -269,7 +269,7 @@ fn warn_int_to_pointer_assignment() {
 #[test]
 fn an_ignored_row_leaves_no_diagnostic_behind() {
     use crate::{CompileOptions, Compiler, Target};
-    let src = super::with_prelude(&super::load_fixture("type_warning_int_to_ptr.c"));
+    let src = super::with_prelude("int *p;\nint main(void) { p = 5; return 0; }\n");
     let mut config = crate::diag::Config::new();
     config.set_level(
         crate::diag::Code::INT_CONVERSION,
@@ -293,8 +293,8 @@ fn warnings_as_errors_do_not_stop_the_parse() {
     use crate::{CompileOptions, Compiler, Target};
     let mut config = crate::diag::Config::new();
     config.warnings_as_errors(true);
-    let src = "int *p; int *q;\n\
-               int main(void) { p = 1; q = 2; return 0; }\n";
+    let src = "const int *c; int *p; int *q;\n\
+               int main(void) { p = c; q = c; return 0; }\n";
     let p = Compiler::with_options(
         src.to_string(),
         Target::default_target(),
@@ -384,6 +384,34 @@ fn a_pragma_overrides_werror_where_it_covers_the_position() {
     );
 }
 
+/// Diagnostic pragmas an expansion produces govern the declaration or
+/// statement between them on their line, as in gcc 16 and clang: only
+/// the conversions outside the macro report.
+#[test]
+fn pragma_operators_scope_a_parser_diagnostic_within_their_line() {
+    let src = "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+               _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+               _Pragma(\"GCC diagnostic pop\")\n\
+               QUIET(int *d1 = 1;) long *d2 = 2;\n\
+               int f(int *q) { return q != 0; }\n\
+               int main(void) { int *l; QUIET(l = 3;) l = 4; QUIET(f(5);) return f(6); }\n";
+    let p = super::compile_str_bare_with_diags(src, &["int-conversion"]);
+    let got: alloc::vec::Vec<(u32, alloc::string::String)> = p
+        .warnings
+        .iter()
+        .map(|d| (d.loc.as_ref().map_or(0, |l| l.line), d.to_string()))
+        .collect();
+    let want = [
+        (2, "declared=long*"),
+        (4, "in assignment"),
+        (4, "argument 1"),
+    ];
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((line, text), (want_line, needle)) in got.iter().zip(want) {
+        assert!(*line == want_line && text.contains(needle), "{got:?}");
+    }
+}
+
 /// The MSVC spelling reaches the same rows through the catalogue's
 /// number aliases: 4101 is `unused-variable`, 4505 `unused-function`.
 #[test]
@@ -419,26 +447,36 @@ fn warn_return_type_mismatch() {
     );
 }
 
+/// A `#pragma binding` declares nothing (C99 6.5.1p2): a call to a name only
+/// a binding names is a call to an undeclared function, refused rather than
+/// lowered with an `int` result, and a block-scope prototype gives the call
+/// its return type.
 #[test]
-fn call_without_return_prototype_warns_implicit_int() {
+fn a_binding_alone_declares_no_function() {
     use crate::{Compiler, Target};
-    // A `#pragma binding` seen without an accompanying prototype leaves
-    // the callee's return type at the implicit `int` default. A call
-    // warns once: the result truncates to 32 bits if the function really
-    // returns a pointer or wider type. Target-fixed so the bound dylib
-    // name (`libc`) is the same regardless of the host.
-    let src = "#pragma dylib(libc, \"libc.so.6\")\n\
-               #pragma binding(libc::mystery, \"getenv\")\n\
-               int main(void) { return mystery(\"PATH\") ? 0 : 1; }\n";
-    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
-        .compile()
-        .unwrap();
-    assert!(
-        p.warnings.iter().any(|w| w.to_string().contains("mystery")
-            && w.to_string().contains("without a return-type prototype")),
-        "expected implicit-int warning, got: {:?}",
-        p.warnings
+    let bound = "#pragma dylib(libc, \"libc.so.6\")\n\
+                 #pragma binding(libc::mystery, \"getenv\")\n";
+    let undeclared = format!("{bound}int main(void) {{ return mystery(\"PATH\") ? 0 : 1; }}\n");
+    let block = format!(
+        "{bound}int main(void) {{\n\
+             char *mystery(const char *name);\n\
+             _Static_assert(sizeof mystery(\"PATH\") == sizeof(char *), \"type\");\n\
+             return mystery(\"PATH\") ? 0 : 1;\n\
+         }}\n"
     );
+    for target in [Target::LinuxX64, Target::WindowsX64, Target::WindowsAarch64] {
+        let err = Compiler::with_target(undeclared.clone(), target)
+            .compile()
+            .expect_err("an undeclared call");
+        assert!(
+            err.to_string().contains("unknown function `mystery`"),
+            "{target:?}: {err}"
+        );
+        let p = Compiler::with_target(block.clone(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        assert!(p.warnings.is_empty(), "{target:?}: {:?}", p.warnings);
+    }
 }
 
 #[test]
@@ -1554,7 +1592,7 @@ fn bool_target_accepts_a_pointer_in_every_assignment_context() {
 
     // The reverse direction is still a mismatch: only `_Bool` on the left
     // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "void f(_Bool b) { int *q; q = b; (void)q; }\n\
          int main(void) { return 0; }",
     );
@@ -2234,6 +2272,27 @@ fn a_compatible_tag_redefinition_is_taken_from_c23() {
 /// such a use is an error, one never defined stays `int`-sized, and one
 /// reached through a pointer only takes the type badc's PE targets give
 /// any enum (the windows-gnu one).
+#[test]
+fn a_function_parameter_of_a_parameter_names_the_completed_enum() {
+    // C99 6.7.2.3: the definition completes every earlier use of the tag,
+    // including a parameter type of a function a parameter points to; a
+    // function declared after the definition then converts to it.
+    let src = "enum E;\n\
+               typedef int cb_t(enum E t, void *data);\n\
+               int setup(void *p, cb_t *cb);\n\
+               int nested(int (*(*pp)(cb_t *))(enum E, void *));\n\
+               enum E { E_A, E_B };\n\
+               static inline int cb(enum E t, void *data) { return t + (data != 0); }\n\
+               static cb_t *pass(cb_t *c) { return c; }\n\
+               int use(void *p) { return setup(p, cb) + nested(pass); }\n";
+    for target in [crate::Target::LinuxAarch64, crate::Target::LinuxX64] {
+        let options = crate::c5::compiler::CompileOptions::default().with_no_entry_point(true);
+        crate::Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
 #[test]
 fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
     use crate::{Compiler, Target};
@@ -3120,6 +3179,69 @@ fn a_return_mismatch_is_an_error_the_user_can_lower() {
     }
 }
 
+/// C99 6.5.16.1p1 admits an integer for a pointer, or a pointer for an
+/// integer, only as a null pointer constant or a `_Bool` target. Each other
+/// exchange -- an argument, an assignment, a static and an automatic
+/// initializer, a return, in both directions -- is an error by default, as
+/// gcc 14's and clang 15's `-Wint-conversion` is; `-Wno-error=` and
+/// `-fpermissive` lower it and the unit runs, an ignored row reports none.
+#[test]
+fn int_conversion_is_an_error_the_user_can_lower() {
+    use super::Vm;
+    use crate::c5::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let compile = |src: &str, config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        let src = super::with_prelude(src);
+        Compiler::with_options(src, Target::default_target(), opts).compile()
+    };
+    let main = "int main(void) { return 0; }\n";
+    for body in [
+        "void f(char *s) { (void)s; } void g(void) { f(42); }",
+        "void f(int n) { (void)n; } void g(int *p) { f(p); }",
+        "void g(int n) { int *q; q = n; (void)q; }",
+        "void g(int *p) { int x; x = p; (void)x; }",
+        "int *q = 1;",
+        "int g; long long q = &g;",
+        "void g(int *p) { long x = p; (void)x; }",
+        "void g(void) { char *c = 'a'; void (*fp)(void) = 2; (void)c; (void)fp; }",
+        "int *g(void) { return 1; }",
+        "int g(int *p) { return p; }",
+    ] {
+        let src = alloc::format!("{body}\n{main}");
+        let err = compile(&src, Config::new()).expect_err("an error by default");
+        assert!(
+            err.to_string().contains("error:") && err.to_string().contains("[B3001]"),
+            "{body}: {err}"
+        );
+        let mut lowered = Config::new();
+        lowered.error_for(Code::INT_CONVERSION, false);
+        let mut permissive = Config::new();
+        permissive.permissive(true);
+        for config in [lowered, permissive] {
+            let p = compile(&src, config).unwrap_or_else(|e| panic!("{body}: {e}"));
+            assert!(
+                p.warnings
+                    .iter()
+                    .any(|w| w.code == Code::INT_CONVERSION && w.level == Level::Warning),
+                "{body}: {:?}",
+                p.warnings
+            );
+            assert_eq!(Vm::new(p).run().unwrap(), 0, "{body}: runs");
+        }
+        let mut ignored = Config::new();
+        ignored.set_level(Code::INT_CONVERSION, Level::Ignore);
+        let p = compile(&src, ignored).unwrap_or_else(|e| panic!("{body}: {e}"));
+        assert!(p.warnings.is_empty(), "{body}: {:?}", p.warnings);
+    }
+    // Null pointer constants in every spelling, and a `_Bool` target.
+    let quiet = "int *a = 0, *b = 0L, *c = '\\0', *d = (1 - 1), *e = (void *)0;\n\
+                 int *g(void) { return 0; }\nvoid f(int *p) { (void)p; }\n\
+                 _Bool t(int *p) { _Bool b = p; f(0); a = 0; return b; }\n";
+    let p = compile(&alloc::format!("{quiet}{main}"), Config::new()).expect("compiles");
+    assert!(p.warnings.is_empty(), "{:?}", p.warnings);
+}
+
 /// C99 6.5.16.1p1, 6.7.5.3p15: a pointer to a function converts as if by
 /// assignment -- assigned, initialized at any storage duration or returned
 /// -- only to a pointer to a compatible function type, which gcc 14 and
@@ -3780,7 +3902,7 @@ fn a_pointer_initializer_folded_from_a_cast_is_not_read_as_an_integer() {
 
     // A bare non-zero integer is still the 6.5.16.1p1 mismatch, in both
     // the struct-pointer and the scalar-pointer spelling.
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "struct S { int x; };\n\
          static struct S *bad1 = 5;\n\
          static int *bad2 = 7;\n\
@@ -3805,19 +3927,17 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
     // null pointer constant, a `_Bool` target, the 128-bit integer --
     // quiet on both sides alike.
     use crate::diag::Code;
-    let p = compile_str(
+    let p = super::compile_str_int_conversion_warnings(
         "struct S { int x; };\n\
          static struct S *g1 = 5;\n\
          static int *g2 = 7;\n\
-         static struct S *g3 = 1.5;\n\
-         static int *g4 = 2.5;\n\
          void f(struct S *sp, int *ip, __int128 w) {\n\
-           char c; signed char sc; unsigned char uc; int i; double d; _Bool b;\n\
+           char c; signed char sc; unsigned char uc; int i; _Bool b;\n\
            struct S *a1; int *a2;\n\
            c = sp; c = ip; sc = sp; sc = ip; uc = sp; uc = ip;\n\
-           i = sp; i = ip; d = sp; d = ip; b = sp; b = ip;\n\
-           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = 1.5; a2 = 1.5; a1 = w; a2 = w;\n\
-           (void)c; (void)sc; (void)uc; (void)i; (void)d; (void)b; (void)a1; (void)a2;\n\
+           i = sp; i = ip; b = sp; b = ip;\n\
+           a1 = 0; a2 = 0; a1 = 9; a2 = 9; a1 = w; a2 = w;\n\
+           (void)c; (void)sc; (void)uc; (void)i; (void)b; (void)a1; (void)a2;\n\
          }\n\
          int main(void) { return 0; }",
     );
@@ -3835,9 +3955,30 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
             count("pointer assigned to integer in assignment"),
             rows.len(),
         ),
-        (4, 4, 10, 18),
+        (2, 2, 8, 12),
         "got: {rows:?}"
     );
+}
+
+#[test]
+fn a_pointer_against_a_floating_value_is_an_error() {
+    // C99 6.5.4p4: no conversion relates a pointer and a floating type, so
+    // C99 6.5.16.1p1 admits neither as the other's operand, as gcc and
+    // clang reject it.
+    for (what, src) in [
+        ("initializer", "static int *g = 2.5;"),
+        ("assignment", "void f(double d) { int *p; p = d; (void)p; }"),
+        ("assignment", "void f(int *p) { double d; d = p; (void)d; }"),
+        ("argument", "double g(double); void f(int *p) { g(p); }"),
+        ("argument", "void g(int *); void f(float x) { g(x); }"),
+    ] {
+        let err = crate::Compiler::new(alloc::format!("{src}\nint main(void) {{ return 0; }}"))
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("{what}: `{src}` compiled"));
+        let text = alloc::format!("{err}");
+        assert!(text.contains("incompatible types in"), "{what}: {text}");
+    }
 }
 
 #[test]
@@ -4934,7 +5075,7 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
             "int main(void) { return 0; }\n"
         };
         let src = alloc::format!("{pre}{body}\n{main}");
-        let p = compile_str(&src);
+        let p = super::compile_str_int_conversion_warnings(&src);
         let got: alloc::vec::Vec<Code> = p.warnings.iter().map(|w| w.code).collect();
         assert_eq!(
             got,
@@ -4942,7 +5083,9 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
             "{src}"
         );
     }
-    let p = compile_str("int g;\nlong long s = &g;\nint main(void) { return 0; }\n");
+    let p = super::compile_str_int_conversion_warnings(
+        "int g;\nlong long s = &g;\nint main(void) { return 0; }\n",
+    );
     let text = p.warnings[0].to_string();
     let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
     assert!(text.contains(row), "{text}");
@@ -5205,6 +5348,56 @@ fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
            return c ? s : s;\n\
          }\n",
     );
+}
+
+/// GNU C: a cast between a vector and an integer of the same size, `__int128`
+/// included, or between two vectors of the same size, keeps the bits; one
+/// to or from a pointer, a floating type, `_Bool` or another size is
+/// rejected, as gcc 16 and clang 21 reject it. The bits themselves are the
+/// `vector_casts_keep_the_bits.c` fixture's.
+#[test]
+fn a_vector_casts_only_to_an_integer_or_a_vector_of_its_size() {
+    use crate::{CompileOptions, Compiler, Target};
+    const DECLS: &str = "typedef int v2si __attribute__((vector_size(8)));\n\
+        typedef int v4si __attribute__((vector_size(16)));\n";
+    let accepted = [
+        "long long f(v2si v) { return (long long)v; }",
+        "v2si f(long long q) { return (v2si)q; }",
+        "unsigned long long f(v2si v) { return (unsigned long long)v; }",
+        "v4si f(__int128 q) { return (v4si)q; }",
+        "__int128 f(v4si v) { return (__int128)v; }",
+        "v4si f(v2si v) { return (v4si)(__int128)(long long)v; }",
+    ];
+    let rejected = [
+        "void *f(v2si v) { return (void *)v; }",
+        "v2si f(void *p) { return (v2si)p; }",
+        "double f(v2si v) { return (double)v; }",
+        "v2si f(double x) { return (v2si)x; }",
+        "int f(v2si v) { return (int)v; }",
+        "v4si f(long long q) { return (v4si)q; }",
+        "_Bool f(v2si v) { return (_Bool)v; }",
+        "v2si f(v4si v) { return (v2si)v; }",
+    ];
+    for target in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        let compile = |body: &str| {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(alloc::format!("{DECLS}{body}\n"), target, opts).compile()
+        };
+        for body in accepted {
+            if let Err(e) = compile(body) {
+                panic!("{target:?}: {body}: {e}");
+            }
+        }
+        for body in rejected {
+            match compile(body) {
+                Ok(_) => panic!("{target:?}: accepted {body}"),
+                Err(e) => assert!(
+                    alloc::format!("{e}").contains("invalid cast"),
+                    "{target:?}: {body}: {e}"
+                ),
+            }
+        }
+    }
 }
 
 /// A diagnostic presents a GNU vector type as a vector: it spells the type
@@ -6029,10 +6222,11 @@ fn a_call_through_any_callee_checks_its_arguments() {
         Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
     };
     let err = compile(Config::new()).err().map(|e| e.to_string());
-    let stops = ":15: error: incompatible pointer types in argument 1 of `v.cq`";
+    let stops = ":14: error: pointer assigned to integer in argument 1 of `s->cb`";
     assert!(err.as_deref().is_some_and(|e| e.contains(stops)), "{err:?}");
     let mut lowered = Config::new();
     lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    lowered.set_level(Code::INT_CONVERSION, Level::Warning);
     let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
     let got: alloc::vec::Vec<(u32, Code, Level, String)> = program
         .warnings
@@ -6326,6 +6520,52 @@ fn an_assignment_to_a_read_only_object_is_an_error() {
     }
 }
 
+/// C99 6.7.3, 6.7.5.1: in `char *const (*p)[2]` the `const` qualifies the
+/// array's element pointers and `p` itself is modifiable, while
+/// `char *(*const p)[2]` qualifies `p`. A pointer to an array of pointers
+/// keeps each qualifier at its own derivation, spelled with parentheses,
+/// through an array typedef, and as a member.
+#[test]
+fn a_pointer_to_an_array_of_pointers_keeps_each_qualifier_at_its_level() {
+    use crate::{Compiler, Target};
+    let pre = "typedef char *const A[2];\n\
+               struct M { const char *const (*names)[2]; };\n";
+    let compile = |body: &str| {
+        let src =
+            format!("{pre}void f(struct M *m) {{ {body} }}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for body in [
+        "char *const (*p)[2]; p = 0;",
+        "char *const *(*p)[2]; p = 0;",
+        "char *const (**pp)[2]; *pp = 0; pp = 0;",
+        "A *p; p = 0;",
+        "m->names = 0;",
+    ] {
+        compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
+    }
+    for (body, ty) in [
+        ("char *(*const p)[2] = 0; p = 0;", "char* (* const)[2]"),
+        (
+            "char *const (*const p)[2] = 0; p = 0;",
+            "char* const (* const)[2]",
+        ),
+        (
+            "char *const (*const *pp)[2] = 0; *pp = 0;",
+            "char* const (* const)[2]",
+        ),
+        ("A *const p = 0; p = 0;", "char* const (* const)[2]"),
+        ("char *const (*p)[2] = 0; (*p)[0] = 0;", "char* const"),
+    ] {
+        let msg = compile(body)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let text = format!("assignment of a read-only object of type `{ty}`");
+        assert!(msg.contains(&text), "`{body}`: {msg}");
+    }
+}
+
 /// C99 6.3.1.3: an integer converted to an integer type that cannot
 /// represent it changes value. For an integer constant converted
 /// implicitly -- in an initializer, an assignment, an argument or a
@@ -6442,4 +6682,59 @@ fn an_implicit_conversion_that_changes_a_constant_warns() {
         .filter_map(|w| w.loc.as_ref().map(|l| l.line))
         .collect();
     assert_eq!(lines, [13, 16, 17], "{:?}", program.warnings);
+}
+
+/// C99 6.5.3.2p1: the operand of `&` is not declared `register`, nor a
+/// member or element of such an object; 6.3.2.1p3 leaves a `register`
+/// array's conversion to a pointer undefined, and gcc 16 and clang 22
+/// reject it as the same request. gcc takes a `register` array as either
+/// operand of a subscript, which clang rejects; badc does as gcc does, and
+/// each outcome below is gcc 16's. A `register` struct's array member that
+/// converts is gcc's error and not clang's; badc accepts it, as clang does.
+#[test]
+fn the_address_of_a_register_object_is_an_error() {
+    use crate::{CompileOptions, Compiler, Target};
+    let pre = "struct S { int m; int a[2]; };\nvoid use(int *);\n";
+    let compile = |body: &str| {
+        let src = format!("{pre}int f(register int p, int *x, int n) {{ {body} return 0; }}\n");
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src, Target::LinuxX64, opts).compile()
+    };
+    let arr = "register int a[2] = {1, 2};";
+    let st = "register struct S s = {1, {2, 3}};";
+    let ptr = "register int *q = x;";
+    let one = "register int l = 1;";
+    let refused = [
+        ("p", String::from("int *r = &p; (void)r;")),
+        ("l", format!("{one} int *r = &l; (void)r;")),
+        ("l", format!("{one} (void)sizeof &l;")),
+        ("l", format!("{one} __typeof__(&l) r = 0; (void)r;")),
+        ("a", format!("{arr} int *r = a; (void)r;")),
+        ("a", format!("{arr} (void)*a;")),
+        ("a", format!("{arr} (void)(a + 1);")),
+        ("a", format!("{arr} use(a);")),
+        ("a", format!("{arr} (void)sizeof(a + 1);")),
+        ("a", format!("{arr} __typeof__(a + 1) r = 0; (void)r;")),
+        ("a", format!("{arr} (void)_Generic(a, int *: 1, int: 0);")),
+        ("a", format!("{arr} int *r = &a[1]; (void)r;")),
+        ("s", format!("{st} int *r = &s.m; (void)r;")),
+        ("s", format!("{st} int *r = &s.a[1]; (void)r;")),
+    ];
+    for (name, body) in &refused {
+        let err = compile(body).map(|_| ()).expect_err(body).to_string();
+        let want = format!("address of `register` object `{name}` requested");
+        assert!(err.contains(&want), "{body}\n{err}");
+    }
+    let accepted = [
+        format!("{arr} (void)a[0]; (void)(a)[1]; (void)1[a];"),
+        format!("{arr} (void)sizeof a; (void)sizeof(a); (void)sizeof((a));"),
+        format!("{arr} (void)_Alignof(a); (void)__alignof__ a; __typeof__(a) b = {{0}}; (void)b;"),
+        String::from("register int a[2][2] = {{1, 2}, {3, 4}}; (void)a[1][1];"),
+        String::from("register int a[n]; a[0] = 1;"),
+        format!("{st} (void)s.m; (void)s.a[1]; int *r = s.a; (void)r; struct S t = s; (void)t;"),
+        format!("{ptr} (void)q[1]; int *r = &q[1]; r = &*q; (void)r;"),
+    ];
+    for body in &accepted {
+        compile(body).unwrap_or_else(|e| panic!("{body}\n{e}"));
+    }
 }

@@ -68,9 +68,8 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%esi, %esi
-               	callq	<addr>
                	popq	%rbp
-               	retq
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

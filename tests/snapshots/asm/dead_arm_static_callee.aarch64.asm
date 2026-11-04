@@ -18,18 +18,16 @@ Disassembly of section .text:
 
 <f2>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0xa
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	ret
 
 <main>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0xa
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	mov	x0, x1
                	cmp	w0, #0xa
                	b.ne	<addr>

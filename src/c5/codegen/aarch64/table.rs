@@ -741,6 +741,60 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             _ => Err(String::from("inline asm: bad fcmp/fcmpe operands")),
         };
     }
+    // SIMD conversions `Vd.T, Vn.T` (T = 2s/4s/2d) between integer and FP
+    // lanes of one width; sz (bit 22) selects double.
+    if let Some(base) = match mnemonic {
+        "scvtf" => Some(0x0E21_D800u32),
+        "ucvtf" => Some(0x2E21_D800),
+        "fcvtzs" => Some(0x0EA1_B800),
+        "fcvtzu" => Some(0x2EA1_B800),
+        _ => None,
+    } && let [
+        Opnd::VecReg { num: rd, size, q },
+        Opnd::VecReg {
+            num: rn,
+            size: s1,
+            q: q1,
+        },
+    ] = *ops
+    {
+        if size != s1 || q != q1 || size < 2 || (size == 3 && !q) {
+            return Err(String::from(
+                "inline asm: vector conversions take 2s/4s/2d on both sides",
+            ));
+        }
+        let sz = if size == 3 { 0x40_0000u32 } else { 0 };
+        return Ok(base | (u32::from(q) << 30) | sz | ((rn as u32) << 5) | (rd as u32));
+    }
+    // SIMD single <-> double: `fcvtl{2} Vd.2d, Vn.2s|4s` widens the lower (upper)
+    // half, `fcvtn{2} Vd.2s|4s, Vn.2d` narrows into it.
+    if let Some((base, upper, widen)) = match mnemonic {
+        "fcvtl" => Some((0x0E61_7800u32, false, true)),
+        "fcvtl2" => Some((0x0E61_7800, true, true)),
+        "fcvtn" => Some((0x0E61_6800, false, false)),
+        "fcvtn2" => Some((0x0E61_6800, true, false)),
+        _ => None,
+    } {
+        let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+        ] = *ops
+        else {
+            return Err(String::from("inline asm: bad fcvtl/fcvtn operands"));
+        };
+        let (dst, src) = ((size, q), (s1, q1));
+        let (wide, narrow) = if widen { (dst, src) } else { (src, dst) };
+        if wide != (3, true) || narrow != (2, upper) {
+            return Err(String::from(
+                "inline asm: fcvtl/fcvtn pair 2d with 2s (4s for the `2` forms)",
+            ));
+        }
+        return Ok(base | (u32::from(upper) << 30) | ((rn as u32) << 5) | (rd as u32));
+    }
     // Integer -> FP: `scvtf|ucvtf Vd, Rn`. sf (bit 31) is the integer width,
     // the type bit (22) the FP width, bit 16 selects unsigned.
     if let Some(uns) = match mnemonic {
@@ -1097,8 +1151,8 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // SHA1 hash update `sha1h Sd, Sn`. Byte-identical to GNU as: `add d7, d7,
     // d16` is 0x5EF084E7 and `sha1h s14, s12` is 0x5E28098E.
     if let Some((base, is_d)) = match mnemonic {
-        "add" => Some((0x5EF0_8400u32, true)),
-        "sub" => Some((0x7EF0_8400, true)),
+        "add" => Some((0x5EE0_8400u32, true)),
+        "sub" => Some((0x7EE0_8400, true)),
         "sha1h" => Some((0x5E28_0800, false)),
         _ => None,
     } {
@@ -1273,20 +1327,51 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // field (bits 22..16) encodes both element size and amount: left shifts use
     // esize+shift, right shifts use 2*esize-shift. U at bit 29 selects ushr; the
     // .1d arrangement is reserved (only .2d exists for vectors).
-    if let Some((base, u, left)) = match mnemonic {
+    let shift_imm = match mnemonic {
         "shl" => Some((0x0F00_5400u32, 0u32, true)),
         "sshr" => Some((0x0F00_0400, 0, false)),
         "ushr" => Some((0x0F00_0400, 1, false)),
         _ => None,
-    } && let [
-        Opnd::VecReg { num: rd, size, q },
-        Opnd::VecReg {
-            num: rn,
-            size: s1,
-            q: q1,
-        },
-        Opnd::Imm(shift),
-    ] = *ops
+    };
+    // The scalar form `Dd, Dn, #shift` (bits 30 and 28 set) exists for the
+    // 64-bit element only.
+    if let Some((base, u, left)) = shift_imm
+        && let [
+            Opnd::VReg {
+                num: rd,
+                is_d: true,
+            },
+            Opnd::VReg {
+                num: rn,
+                is_d: true,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
+    {
+        let immhb = match left {
+            true if (0..64).contains(&shift) => 64 + shift,
+            false if (1..=64).contains(&shift) => 128 - shift,
+            _ => {
+                return Err(String::from("inline asm: scalar shift amount out of range"));
+            }
+        };
+        return Ok(base
+            | 0x5000_0000
+            | (u << 29)
+            | ((immhb as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    if let Some((base, u, left)) = shift_imm
+        && let [
+            Opnd::VecReg { num: rd, size, q },
+            Opnd::VecReg {
+                num: rn,
+                size: s1,
+                q: q1,
+            },
+            Opnd::Imm(shift),
+        ] = *ops
     {
         if size != s1 || q != q1 {
             return Err(String::from("inline asm: vector shift arrangements differ"));
@@ -1366,6 +1451,62 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
             | (1u32 << 10)
             | (if upper { 1u32 << 30 } else { 0 })
             | (((2 * esize - shift) as u32) << 16)
+            | ((rn as u32) << 5)
+            | (rd as u32));
+    }
+    // SIMD shift left long `<sshll|ushll>{2} Vd.<Ta>, Vn.<Tb>, #shift` and its
+    // `<sxtl|uxtl>{2} Vd.<Ta>, Vn.<Tb>` alias (shift 0): immh:immb is
+    // esize+shift over the source element size, the destination one size
+    // wider and 128-bit; the `2` form reads the source's upper half.
+    if let Some((wmnem, upper)) = strip_widen2(mnemonic)
+        && let Some((u, alias)) = match wmnem {
+            "sshll" => Some((0u32, false)),
+            "ushll" => Some((1, false)),
+            "sxtl" => Some((0, true)),
+            "uxtl" => Some((1, true)),
+            _ => None,
+        }
+        && let Some((rd, ds, dq, rn, ss, sq, shift)) = match *ops {
+            [
+                Opnd::VecReg { num, size, q },
+                Opnd::VecReg {
+                    num: n,
+                    size: s,
+                    q: sq,
+                },
+                Opnd::Imm(shift),
+            ] if !alias => Some((num, size, q, n, s, sq, shift)),
+            [
+                Opnd::VecReg { num, size, q },
+                Opnd::VecReg {
+                    num: n,
+                    size: s,
+                    q: sq,
+                },
+            ] if alias => Some((num, size, q, n, s, sq, 0)),
+            _ => None,
+        }
+    {
+        if ds != ss + 1 || ss > 2 || !dq {
+            return Err(String::from(
+                "inline asm: widening shift destination must be one element size wider and 128-bit",
+            ));
+        }
+        if sq != upper {
+            return Err(String::from(
+                "inline asm: the `2` form reads a 128-bit source; the base form a 64-bit one",
+            ));
+        }
+        let esize = 8i64 << ss;
+        if !(0..esize).contains(&shift) {
+            return Err(String::from(
+                "inline asm: widening shift amount out of range",
+            ));
+        }
+        return Ok(0x0F00_A400
+            | (u << 29)
+            | (if upper { 1u32 << 30 } else { 0 })
+            | (((esize + shift) as u32) << 16)
             | ((rn as u32) << 5)
             | (rd as u32));
     }

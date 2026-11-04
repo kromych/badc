@@ -124,14 +124,13 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	0x10(%rax), %r13
-               	movq	0x18(%rax), %r14
-               	movq	0x20(%rax), %r12
-               	movq	0x28(%rax), %r15
-               	movq	0x30(%rax), %rbx
-               	movq	(%rax), %rdi
-               	movq	0x8(%rax), %rsi
+               	movq	<rip>, %r13 # <addr>
+               	movq	<rip>, %r14 # <addr>
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %r15 # <addr>
+               	movq	<rip>, %rbx # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	movq	<rip>, %rsi # <addr>
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
@@ -226,13 +225,12 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x8(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0xc(%rax), %eax
+               	movl	<rip>, %eax # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rcx, %rax
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rcx, %rax
+               	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
                	cmpl	$0x6e, %eax
                	jne	<addr>

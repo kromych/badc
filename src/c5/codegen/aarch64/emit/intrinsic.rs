@@ -118,8 +118,23 @@ pub(super) fn emit_intrinsic(
         | I::Truncf => emit_unary_fp(code, intrinsic, args, dst, v, alloc, frame),
         // __builtin_frame_address(0); a level above 0 adds a load chain.
         I::FrameAddress => emit_frame_register(code, dst, frame, Reg(29), "FrameAddress"),
+        I::FuncletFrame => emit_frame_register(code, dst, frame, Reg(29), "FuncletFrame"),
+        // The frame record tops the frame, below a variadic callee's
+        // register save area.
+        I::EstablisherFrame => {
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                return fail("EstablisherFrame: dst not int reg / spill");
+            };
+            let above = 16 + i64::from(frame.va_save_bytes);
+            super::mem::emit_reg_disp(code, rd, Reg(29), above);
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         // A `register T v asm("sp")` read; `add` reads register 31 as sp.
         I::StackPointer => emit_frame_register(code, dst, frame, Reg(31), "StackPointer"),
+        // A `register T v asm("x18")` read: the allocator never assigns
+        // x18, so it holds the value the OS put there.
+        I::PlatformRegister => emit_frame_register(code, dst, frame, Reg(18), "PlatformRegister"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
         // The walker lowers the bit-count and byte-swap builtins to
         // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
@@ -139,18 +154,6 @@ pub(super) fn emit_intrinsic(
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64 => fail("intrinsic: bit builtin reached codegen"),
-        // C11 atomic operations are lowered to load / store /
-        // read-modify-write at the call site; they never reach codegen as
-        // an `Inst::Intrinsic`.
-        I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong => fail("intrinsic: atomic op reached codegen"),
     }
 }
 
@@ -164,7 +167,12 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         // fp-relative: the variadic areas, the frame address, the record's
         // return slot (staged through x30). A read of sp observes the same
         // frame, below its record.
-        I::VaStart | I::FrameAddress | I::ReturnAddress | I::StackPointer => true,
+        I::VaStart
+        | I::FrameAddress
+        | I::ReturnAddress
+        | I::StackPointer
+        | I::FuncletFrame
+        | I::EstablisherFrame => true,
         // sp moves for the rest of the function, or to another frame.
         I::Alloca | I::AllocaSave | I::AllocaRestore | I::SetjmpAArch64 | I::LongjmpAArch64 => true,
         // The AAPCS64 `va_list` forms borrow a register around a push / pop;
@@ -192,6 +200,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::AArch64DcCvau
         | I::AArch64IcIvau
         | I::AArch64ReadCacheType
+        | I::PlatformRegister
         | I::Sqrt
         | I::Sqrtf
         | I::Fabs
@@ -221,15 +230,6 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::Bswap16
         | I::Bswap32
         | I::Bswap64
-        | I::AtomicLoad
-        | I::AtomicStore
-        | I::AtomicExchange
-        | I::AtomicFetchAdd
-        | I::AtomicFetchSub
-        | I::AtomicFetchAnd
-        | I::AtomicFetchOr
-        | I::AtomicFetchXor
-        | I::AtomicCompareExchangeStrong
         | I::X87StoreControlWord
         | I::X87LoadControlWord
         | I::X86FxSave

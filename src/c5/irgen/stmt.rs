@@ -6,6 +6,10 @@ use super::types::{is_floating_scalar, type_size_bytes};
 use super::*;
 use crate::c5::ast::expr_ty;
 
+/// The label key of the exit returning `return` statements share; no label
+/// of a function takes it.
+const RETURN_EXIT: LabelId = LabelId::MAX;
+
 impl<'a> Walker<'a> {
     /// Walk a statement. Returns `true` when the statement
     /// terminates the current block (an unconditional return /
@@ -15,6 +19,16 @@ impl<'a> Walker<'a> {
         let src = self.ast.stmt_src[id as usize];
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
+            Stmt::SehTry {
+                body,
+                handler,
+                index,
+            } => self.walk_seh_try(b, *body, *handler, *index),
+            Stmt::SehLeave => self.walk_seh_leave(b),
+            Stmt::SehFinallyCall(index) => {
+                self.walk_seh_finally_call(b, *index);
+                Ok(false)
+            }
             Stmt::Return(Some(e)) => self.walk_return(b, *e),
             Stmt::Return(None) => {
                 self.return_without_value(b);
@@ -157,6 +171,21 @@ impl<'a> Walker<'a> {
                     self.goto_indirect(b, v);
                     Ok(true)
                 }
+                // The returns running one cleanup list from the same scopes
+                // share one exit, which runs the calls and returns the
+                // temporary each of them assigned.
+                Stmt::Return(_) => {
+                    let (exit, new) = self.cleanup_exit(b, RETURN_EXIT, 0, cleanups);
+                    b.jmp(exit);
+                    if new {
+                        b.switch_to(exit);
+                        for &c in cleanups {
+                            self.walk_stmt(b, c)?;
+                        }
+                        self.walk_stmt(b, *jump)?;
+                    }
+                    Ok(true)
+                }
                 _ => Err(WalkError::InvalidStmt {
                     id,
                     kind: "CleanupJump",
@@ -164,6 +193,8 @@ impl<'a> Walker<'a> {
             },
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
+                // A forward `goto` may have created the block in another region.
+                b.place_in_current_seh_scope(label_blk);
                 // C99 6.8.1: a labeled statement is reachable by
                 // fall-through and by any matching goto. An open block
                 // is spliced in; a closed one has already recorded its
@@ -666,7 +697,7 @@ impl<'a> Walker<'a> {
 
     /// Leave the scopes above `depth`: end their lifetimes and, unless
     /// `returning`, restore sp from the outermost VLA scope left.
-    fn leave_scopes(&self, b: &mut SsaBuilder, depth: usize, returning: bool) {
+    pub(super) fn leave_scopes(&self, b: &mut SsaBuilder, depth: usize, returning: bool) {
         let left = &self.scopes[depth.min(self.scopes.len())..];
         for scope in left.iter().rev() {
             for &slot in scope.ends {
@@ -757,6 +788,13 @@ impl<'a> Walker<'a> {
             | Stmt::Switch { body, .. }
             | Stmt::Case { body, .. }
             | Stmt::Default { body } => self.collect_label_scopes(*body, chain, out),
+            // A `__finally` block is a funclet of its own, with its labels.
+            Stmt::SehTry { body, handler, .. } => {
+                self.collect_label_scopes(*body, chain, out);
+                if let crate::c5::ast::SehHandler::Except { body, .. } = handler {
+                    self.collect_label_scopes(*body, chain, out);
+                }
+            }
             _ => {}
         }
     }

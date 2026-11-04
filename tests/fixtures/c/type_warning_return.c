@@ -5,6 +5,9 @@
 // matching return, and char*/void* interconversion stay silent. A
 // mismatch involving a structure or union object has no conversion and
 // is rejected instead -- see the constraint-violation tests.
+// -Wint-conversion is an error by default, as in gcc 14; the pragma lowers
+// it to the warning this fixture checks.
+#pragma GCC diagnostic warning "-Wint-conversion"
 
 static int *g;
 

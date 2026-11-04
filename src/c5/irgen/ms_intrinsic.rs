@@ -1,4 +1,4 @@
-//! The operations of the MSVC intrinsics (`crate::c5::ms_intrinsic`): the
+//! The operations of the call-site intrinsics (`crate::c5::ms_intrinsic`): the
 //! bit and multiply forms in IR, the 16-byte compare-exchange on
 //! `Inst::AtomicCas16`, and an instruction C has no operator for as the
 //! inline asm the target's assembler encodes.
@@ -25,6 +25,7 @@ fn asm_operand(constraint: AsmConstraint, is_output: bool, width: u8) -> AsmOper
         value: false,
         volatile_object: false,
         early_clobber: false,
+        fp_limit: 0,
     }
 }
 
@@ -69,6 +70,19 @@ fn asm_value(
     operands.extend(inputs);
     emit_asm(b, template, operands, 0, false);
     b.load_local(slot, load_kind_for_width(u32::from(width)))
+}
+
+/// The edx:eax pair `insn` leaves, as one value, `inputs` following.
+fn edx_eax(b: &mut SsaBuilder, insn: &str, inputs: Vec<(AsmOperand, ValueId)>) -> ValueId {
+    let (lo, hi) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
+    let out = |r| asm_operand(AsmConstraint::Fixed(r), true, 4);
+    let mut operands = alloc::vec![(out(0), b.local_addr(lo)), (out(2), b.local_addr(hi))];
+    operands.extend(inputs);
+    emit_asm(b, insn, operands, 0, false);
+    let lo = b.load_local(lo, LoadKind::U32);
+    let hi = b.load_local(hi, LoadKind::U32);
+    let hi = b.binop_imm(BinOp::Shl, hi, 32);
+    b.binop(BinOp::Or, hi, lo)
 }
 
 fn count_leading_zeros(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
@@ -191,6 +205,9 @@ impl<'a> Walker<'a> {
         let arm64 = target.is_aarch64();
         let reg = |width| asm_operand(AsmConstraint::Reg, false, width);
         Ok(match op {
+            Op::ExceptionCode => self.seh_exception_code(b)?,
+            Op::ExceptionInfo => self.seh_exception_info(b)?,
+            Op::AbnormalTermination => self.seh_abnormal_termination(b)?,
             Op::BitScan { reverse, width } => {
                 let found = b.binop_imm(BinOp::Ne, v[1], 0);
                 let (store, done) = (b.new_block(), b.new_block());
@@ -311,6 +328,26 @@ impl<'a> Walker<'a> {
                 emit_asm(b, &format!("{name} #{imm}"), Vec::new(), 0, true);
                 b.imm(0)
             }
+            Op::RepStos { width } | Op::RepMovs { width } => {
+                // rdi, then rax or rsi, then rcx, as the instruction reads them.
+                let stos = matches!(op, Op::RepStos { .. });
+                let (second, second_width) = if stos { (0, width) } else { (6, 8) };
+                let fixed = |r, w| asm_operand(AsmConstraint::Fixed(r), false, w);
+                let operands = alloc::vec![
+                    (fixed(7, 8), v[0]),
+                    (fixed(second, second_width), v[1]),
+                    (fixed(1, 8), v[2]),
+                ];
+                let suffix = match width {
+                    1 => 'b',
+                    2 => 'w',
+                    4 => 'l',
+                    _ => 'q',
+                };
+                let insn = if stos { "stos" } else { "movs" };
+                emit_asm(b, &format!("rep {insn}{suffix}"), operands, 0, true);
+                b.imm(0)
+            }
             Op::Pause => b.intrinsic(Intrinsic::CpuRelax as i64, Vec::new()),
             Op::Cpuid { sub } => {
                 let fixed = |r, out| asm_operand(AsmConstraint::Fixed(r), out, 4);
@@ -325,15 +362,20 @@ impl<'a> Walker<'a> {
                 emit_asm(b, "cpuid", operands, 0, true);
                 b.imm(0)
             }
-            Op::Rdtsc => {
-                let (lo, hi) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
-                let out = |r| asm_operand(AsmConstraint::Fixed(r), true, 4);
-                let operands = alloc::vec![(out(0), b.local_addr(lo)), (out(2), b.local_addr(hi))];
-                emit_asm(b, "rdtsc", operands, 0, false);
-                let lo = b.load_local(lo, LoadKind::U32);
-                let hi = b.load_local(hi, LoadKind::U32);
-                let hi = b.binop_imm(BinOp::Shl, hi, 32);
-                b.binop(BinOp::Or, hi, lo)
+            Op::Rdtsc => edx_eax(b, "rdtsc", Vec::new()),
+            Op::Rdtscp => {
+                let aux = asm_operand(AsmConstraint::Fixed(1), true, 4);
+                edx_eax(b, "rdtscp", alloc::vec![(aux, v[0])])
+            }
+            Op::Xgetbv => {
+                let ecx = asm_operand(AsmConstraint::Fixed(1), false, 4);
+                edx_eax(b, "xgetbv", alloc::vec![(ecx, v[0])])
+            }
+            Op::ReadEflags => asm_value(b, "pushfq\n\tpopq %0", Vec::new(), 8),
+            Op::WriteEflags => {
+                let flags = asm_operand(AsmConstraint::Reg, false, 8);
+                emit_asm(b, "pushq %0\n\tpopfq", alloc::vec![(flags, v[0])], 0, true);
+                b.imm(0)
             }
             Op::CompareExchange128 { order } => {
                 let desired = self.int128_materialize(b, (v[2], v[1]));
@@ -341,6 +383,7 @@ impl<'a> Walker<'a> {
             }
             Op::Assume
             | Op::Noop
+            | Op::VaStart
             | Op::CompilerBarrier
             | Op::ReturnAddress
             | Op::AddressOfReturnAddress

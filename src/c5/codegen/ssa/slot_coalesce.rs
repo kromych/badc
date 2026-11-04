@@ -30,7 +30,8 @@
 //! Reserved storage keeps a dedicated block: escaped objects, volatile
 //! slots, over-aligned region members, and slots the emit reaches through a
 //! `FunctionSsa` field rather than an instruction (`indirect_result_slot`,
-//! `param_local_slots`, both written by the prologue).
+//! `param_local_slots`, both written by the prologue, and `funclet_slots`,
+//! which filter funclets reach).
 //!
 //! The pass also fixes where each unit of storage lands, so it is where a
 //! protected frame's ordering constraint applies: storage holding an array
@@ -509,6 +510,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                         let Some((base, off)) = base_of(a) else {
                             continue;
                         };
+                        // The out-pointer of an aggregate return outside the
+                        // host ABI addresses the recorded result temporary the
+                        // callee writes whole, bounded by the call as the host
+                        // ABI's result slot is below.
+                        if k == 0
+                            && ret_agg.is_none()
+                            && base == *ret_slot_local
+                            && off == Some(0)
+                            && let Some(&cells) = recorded.get(&base)
+                        {
+                            if touch(&mut extent, &mut escaped, pc, base, off, cells * 8) {
+                                raw_events.push((pc, base, WRITE));
+                            }
+                            continue;
+                        }
                         // A by-value aggregate argument is read (and, on the
                         // memory-passed ABIs, scratched) during the call and
                         // the callee's copy dies at its return, so the call
@@ -648,12 +664,13 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // Slots the emit reaches only through a `FunctionSsa` field, never an
     // instruction: the prologue stores of the indirect-result pointer, of a
     // narrow float parameter, and of a by-value aggregate parameter all
-    // land here, so their lifetime starts at entry.
+    // land here, so their lifetime starts at entry, as a filter funclet's
+    // access does.
     let mut field_slots: BTreeSet<i64> = BTreeSet::new();
     if movable(f.indirect_result_slot) {
         field_slots.insert(f.indirect_result_slot);
     }
-    for &s in &f.param_local_slots {
+    for &s in f.param_local_slots.iter().chain(&f.funclet_slots) {
         if movable(s) {
             field_slots.insert(s);
         }
@@ -1469,7 +1486,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     if let Some(&nn) = new_off.get(&f.indirect_result_slot) {
         f.indirect_result_slot = nn;
     }
-    for s in &mut f.param_local_slots {
+    for s in f.param_local_slots.iter_mut().chain(&mut f.funclet_slots) {
         if let Some(&nn) = new_off.get(s) {
             *s = nn;
         }
@@ -1609,6 +1626,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 1,
@@ -1650,6 +1668,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 1,
@@ -1696,6 +1715,7 @@ mod tests {
                         kind: StoreKind::I8,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::LoadLocal {
                         disp: 0,
@@ -1827,6 +1847,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::StoreLocal {
                     disp: 0,
@@ -1865,6 +1886,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -1928,6 +1950,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: base + 1,
@@ -1935,6 +1958,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ]
         };
@@ -1980,6 +2004,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::LocalAddr(-4),
             Inst::Binop {
@@ -1994,6 +2019,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: 2,
@@ -2001,6 +2027,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: 5,
@@ -2008,6 +2035,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]);
         let mut f = one_block(insts, 8, 9);
@@ -2049,6 +2077,7 @@ mod tests {
                         kind: StoreKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::CallExt {
                         binding_idx: 0,
@@ -2078,6 +2107,7 @@ mod tests {
                         kind: StoreKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                     Inst::Load {
                         addr: 6,
@@ -2085,6 +2115,7 @@ mod tests {
                         kind: LoadKind::I64,
                         volatile: false,
                         align: 0,
+                        pc_rel: false
                     },
                 ],
                 8,
@@ -2131,6 +2162,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             insts[a + 2] = Inst::Load {
                 addr: a as ValueId,
@@ -2138,6 +2170,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             insts[5] = Inst::Load {
                 addr: b_take as ValueId,
@@ -2145,6 +2178,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false,
             };
             let mut f = one_block(insts, 5, 9);
             f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
@@ -2194,6 +2228,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             2,
@@ -2216,6 +2251,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 0,
@@ -2223,6 +2259,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::LocalAddr(-2),
                 Inst::Imm(7),
@@ -2233,6 +2270,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
                 Inst::Load {
                     addr: 3,
@@ -2240,6 +2278,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ],
             6,
@@ -2295,6 +2334,7 @@ mod tests {
                 kind: StoreKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
             Inst::Load {
                 addr: base + 1,
@@ -2302,6 +2342,7 @@ mod tests {
                 kind: LoadKind::I64,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]
     }
@@ -2325,6 +2366,7 @@ mod tests {
                     kind: StoreKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 },
             ];
             insts.extend(touch_group(-4, 3));
@@ -2335,6 +2377,7 @@ mod tests {
                     kind: LoadKind::I64,
                     volatile: false,
                     align: 0,
+                    pc_rel: false
                 }]
             } else {
                 alloc::vec![Inst::Imm(1)]
@@ -2386,6 +2429,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let build = |end_on_back_edge: bool| {
             let mut insts = alloc::vec![
@@ -2439,6 +2483,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let write = |addr: ValueId, value: ValueId| Inst::Store {
             addr,
@@ -2447,6 +2492,7 @@ mod tests {
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
+            pc_rel: false,
         };
         let build = |escape_at_entry: bool| {
             let mut insts = alloc::vec![Inst::Imm(0), Inst::LocalAddr(-8), write(1, 0)];

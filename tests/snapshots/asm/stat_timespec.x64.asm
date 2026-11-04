@@ -40,12 +40,6 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	-0x38(%rbp), %rax
-               	cmpq	%rax, %rax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movq	-0x38(%rbp), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jge	<addr>
                	movl	$0x3, %eax

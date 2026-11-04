@@ -599,11 +599,18 @@ impl AsmOperands<'_> {
                 "aarch64 inline asm: operand reference is not a register",
             ));
         };
-        Ok(match self.asm.operands[idx as usize].constraint {
-            // `%sN` selects the single view, `%dN` / bare the double.
-            AsmConstraint::Fp => Opnd::VReg {
-                num: r,
-                is_d: is64.unwrap_or(true),
+        Ok(match self.asm.operand_class(idx as usize) {
+            // `%sN` selects the single view and `%dN` the double; a bare `%N`
+            // is `vN`, as gcc and clang print it, which an instruction takes
+            // only with an arrangement.
+            AsmConstraint::Fp => match is64 {
+                Some(is_d) => Opnd::VReg { num: r, is_d },
+                None => {
+                    return Err(alloc::format!(
+                        "aarch64 inline asm: `%{idx}` names `v{r}`, which takes an arrangement \
+                         (`%{idx}.4s`) or a view (`%s{idx}`, `%d{idx}`, `%q{idx}`)"
+                    ));
+                }
             },
             // A memory operand (`m`, `Q`) substitutes as `[xN]`, the register
             // holding its address.
@@ -678,6 +685,10 @@ impl AsmOperands<'_> {
             AsmOpndA64::RefQ(idx) => {
                 let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
                 Opnd::QReg(r)
+            }
+            AsmOpndA64::RefScalar { idx, size } => {
+                let r = resolve_fp_ref(&self.op_reg, self.asm, idx)?;
+                Opnd::VScalar { num: r, size }
             }
             AsmOpndA64::Mem { base, off, pre } => {
                 let base = match base {
@@ -832,10 +843,12 @@ impl AsmRegion {
             cap_slot[i] = n_cap;
             n_cap += u;
         }
+        // TODO: bind a register output to a static object, as x86-64 stages it.
         if ops.func.is_naked && n_cap > 0 {
             return Err(alloc::string::String::from(
-                "aarch64 inline asm: a naked function has no frame to stage a register or \
-                 memory operand through",
+                "aarch64 inline asm: a naked function has no frame to stage an operand \
+                 through: a register output, a read-write, early-clobber or matching \
+                 operand, or more operands formed at the site than x16 and x17 hold",
             ));
         }
         let size = (((n_cap + save_list.len() + fp_save_list.len()) * 8) as u32 + 15) & !15;
@@ -942,9 +955,10 @@ impl AsmRegion {
                     "aarch64 inline asm: operand place missing",
                 ));
             };
-            // A double `w` input captures its FP value and a 16-byte value its 128
-            // bits; any other 16-byte operand captures its address. A scalar
-            // value operand captures its integer value.
+            // A `w` input or read-write value of up to 8 bytes captures its
+            // value's 64 bits, whose low bytes its view reads, and a 16-byte
+            // value its 128 bits; any other 16-byte operand captures its
+            // address. A scalar value operand captures its integer value.
             let op = &ops.asm.operands[i];
             if op.value && op.width == 16 {
                 let Some(q) = materialize_v128(code, place, 16, self.frame, Reg(16)) else {
@@ -953,7 +967,10 @@ impl AsmRegion {
                     ));
                 };
                 self.str_q(code, q, self.cap_off(i));
-            } else if matches!(op.constraint, AsmConstraint::Fp) && !op.is_output && op.width == 8 {
+            } else if matches!(ops.asm.operand_class(i), AsmConstraint::Fp)
+                && (!op.is_output || op.value)
+                && op.width <= 8
+            {
                 let Some(d) = materialize_fp(code, place, 16, self.frame) else {
                     return Err(alloc::string::String::from(
                         "aarch64 inline asm: `w` operand not a floating-point place",
@@ -983,7 +1000,7 @@ impl AsmRegion {
         use super::super::ir::AsmConstraint;
         for (i, op) in ops.asm.operands.iter().enumerate() {
             let Some(r) = ops.op_reg[i] else { continue };
-            if matches!(op.constraint, AsmConstraint::Fp) {
+            if matches!(ops.asm.operand_class(i), AsmConstraint::Fp) {
                 // A 16-byte `w` operand (input or read-write output) loads the full q
                 // register through its captured address; a read-write double output
                 // loads its current value the same way.
@@ -994,11 +1011,11 @@ impl AsmRegion {
                         self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = operand address
                         emit(code, super::encode::enc_ldr_q_imm(r, Reg(16), 0));
                     }
-                } else if !op.is_output {
+                } else if !op.is_output || (op.is_rw && op.value) {
                     self.ldr_d(code, r, self.cap_off(i));
                 } else if op.is_rw {
                     self.ldr_x(code, Reg(16), self.cap_off(i)); // x16 = destination address
-                    emit(code, super::encode::enc_ldr_d_imm(r, Reg(16), 0));
+                    emit(code, fp_access(true, op.width, r));
                 }
                 continue;
             }
@@ -1041,11 +1058,7 @@ impl AsmRegion {
             let Some(r) = ops.op_reg[i] else { continue };
             self.ldr_x(code, Reg(16), self.cap_off(i));
             if matches!(op.constraint, AsmConstraint::Fp) {
-                if op.width == 16 {
-                    emit(code, super::encode::enc_str_q_imm(r, Reg(16), 0));
-                } else {
-                    emit(code, super::encode::enc_str_d_imm(r, Reg(16), 0));
-                }
+                emit(code, fp_access(false, op.width, r));
                 continue;
             }
             match op.width {
@@ -1220,6 +1233,22 @@ struct BoundOperands {
     out_scratch: bool,
 }
 
+/// The load (or store) of a `w` operand's `width` bytes in SIMD register `vt`
+/// at the address in x16: `b`, `h`, `s`, `d` or `q`.
+fn fp_access(load: bool, width: u8, vt: u8) -> u32 {
+    use super::encode::*;
+    match (load, width) {
+        (true, 1 | 2) => enc_ldr_bh_imm(u32::from(width), vt, Reg(16), 0),
+        (false, 1 | 2) => enc_str_bh_imm(u32::from(width), vt, Reg(16), 0),
+        (true, 4) => enc_ldr_s_imm(vt, Reg(16), 0),
+        (false, 4) => enc_str_s_imm(vt, Reg(16), 0),
+        (true, 16) => enc_ldr_q_imm(vt, Reg(16), 0),
+        (false, 16) => enc_str_q_imm(vt, Reg(16), 0),
+        (true, _) => enc_ldr_d_imm(vt, Reg(16), 0),
+        (false, _) => enc_str_d_imm(vt, Reg(16), 0),
+    }
+}
+
 /// Bind each input to the register its value occupies, or to a scratch;
 /// each value output to its own register, or to a scratch no other output
 /// holds, which it may share with an input, as a template reads its inputs
@@ -1262,7 +1291,10 @@ fn bind_operands(
             .iter()
             .zip(args)
             .enumerate()
-            .filter(|(_, (op, a))| !op.is_output && !takes_imm(op, **a))
+            .filter(|(_, (op, a))| {
+                (!op.is_output || matches!(op.constraint, C::Mem | C::MemBase))
+                    && !takes_imm(op, **a)
+            })
     };
     for (i, (op, &a)) in inputs().filter(|(_, (op, _))| matches!(op.constraint, C::Fp)) {
         let place = place_of(alloc, a);
@@ -2471,7 +2503,7 @@ fn resolve_fp_ref(
 /// operands, so every instruction must be register-concrete.
 pub(crate) fn encode_a64_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
-) -> Result<(), alloc::string::String> {
+) -> Result<(), crate::c5::asm::AsmErrors> {
     use super::asm::AsmOpndA64;
     use super::table::Opnd;
     let conv = |o: &AsmOpndA64| -> Result<Opnd, alloc::string::String> {
@@ -2525,142 +2557,145 @@ pub(super) fn encode_a64_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
-) -> Result<(), alloc::string::String> {
-    use super::table::{self, Opnd};
-    use crate::c5::asm::AsmSectionItem;
-    assign_a64_literal_pools(blocks)?;
+) -> Result<(), crate::c5::asm::AsmErrors> {
+    let mut errors = Vec::new();
+    assign_a64_literal_pools(blocks, &mut errors);
     // An operand expression over labels is folded before encoding: on A64
     // the value selects the form (scaled or unscaled offset, `movz` or
     // `movn`), which a relocation on a finished word cannot.
-    let measured = a64_section_operand_layout(blocks)?;
-    a64_for_each_section_item_mut(blocks, &mut |key, site, item| {
-        {
-            let AsmSectionItem::Code(text) = item else {
-                return Ok(());
-            };
-            let mut insns = super::asm::parse_template(text.as_bytes())
-                .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-            if let Some(measured) = &measured {
-                let mut here = site.and_then(|s| measured.place(s));
-                for insn in &mut insns {
-                    fold_a64_layout_operands(insn, key, here, measured)
-                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                    here = here.map(|h| h + a64_insn_placeholder_len(insn) as i64);
-                }
-            }
-            let mut bytes: Vec<u8> = Vec::new();
-            let mut relocs: Vec<crate::c5::asm::AsmSectionReloc> = Vec::new();
-            for insn in &insns {
-                if !insn.bytes.is_empty() {
-                    bytes.extend_from_slice(&insn.bytes);
-                    continue;
-                }
-                if insn.label_def.is_some() {
-                    return Err(alloc::format!(
-                        "inline asm: `{text}` in a section needs a relocation"
-                    ));
-                }
-                // A branch or `adr` to an `asm goto` label leaves the section: a zero
-                // displacement and a relocation naming the block, rewritten after
-                // layout.
-                if let Some(&super::asm::AsmOpndA64::GotoLabel(k)) = insn.operands.last() {
-                    let bid = goto_block(k).ok_or_else(|| {
-                        alloc::format!(
-                            "inline asm: `%l{k}` names no `asm goto` label (section `{text}`)"
-                        )
-                    })?;
-                    let branch = build_label_branch(insn, conv)
-                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                    let (word, kind) = a64_label_branch_reloc(&branch)
-                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                    relocs.push(crate::c5::asm::AsmSectionReloc {
-                        offset: bytes.len() as u32,
-                        width: 4,
-                        kind,
-                        pcrel: false,
-                        branch: false,
-                        signed: false,
-                        target: crate::c5::asm::AsmSectionTarget::TextBlock(bid),
-                        addend: 0,
-                    });
-                    bytes.extend_from_slice(&word.to_le_bytes());
-                    continue;
-                }
-                if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, conv)
-                    .map_err(|m| alloc::format!("{m} (section `{text}`)"))?
-                {
-                    // An empty expression marks a `.`-relative form resolved
-                    // in place: the word is final, no relocation.
-                    if !expr.is_empty() {
-                        relocs.push(crate::c5::asm::AsmSectionReloc {
-                            offset: bytes.len() as u32,
-                            width: 4,
-                            kind,
-                            pcrel: false,
-                            branch: false,
-                            signed: false,
-                            target: crate::c5::asm::AsmSectionTarget::Expr(expr),
-                            addend: 0,
-                        });
-                    }
-                    bytes.extend_from_slice(&word.to_le_bytes());
-                    continue;
-                }
-                let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
-                for o in &insn.operands {
-                    ops.push(conv(o).map_err(|m| alloc::format!("{m} (section `{text}`)"))?);
-                }
-                let word = table::encode(&insn.mnemonic, &ops)
-                    .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                bytes.extend_from_slice(&word.to_le_bytes());
-            }
-            *item = AsmSectionItem::CodeBytes {
-                bytes,
-                relocs,
-                short: None,
-            };
+    let measured = match a64_section_operand_layout(blocks) {
+        Ok(m) => m,
+        Err(e) => {
+            errors.extend(e.0);
+            return crate::c5::asm::AsmErrors::check(errors);
         }
-        Ok(())
+    };
+    a64_for_each_section_item_mut(blocks, &mut |key, site, line, item| {
+        crate::c5::asm::encode_code_item(item, line, &mut errors, |text| {
+            encode_a64_section_insn(text, key, site, measured.as_ref(), conv, goto_block)
+        });
+    });
+    crate::c5::asm::AsmErrors::check(errors)
+}
+
+/// Encode one statement of a section; `site` places it in `measured`.
+fn encode_a64_section_insn(
+    text: &str,
+    key: &str,
+    site: Option<(usize, usize)>,
+    measured: Option<&crate::c5::asm::SectionLabelOffsets>,
+    conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
+    goto_block: &dyn Fn(u8) -> Option<u32>,
+) -> Result<crate::c5::asm::AsmSectionItem, alloc::string::String> {
+    use super::table::{self, Opnd};
+    use crate::c5::asm::AsmSectionItem;
+    let mut insns = super::asm::parse_template(text.as_bytes())?;
+    if let Some(measured) = measured {
+        let mut here = site.and_then(|s| measured.place(s));
+        for insn in &mut insns {
+            fold_a64_layout_operands(insn, key, here, measured)?;
+            here = here.map(|h| h + a64_insn_placeholder_len(insn) as i64);
+        }
+    }
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut relocs: Vec<crate::c5::asm::AsmSectionReloc> = Vec::new();
+    for insn in &insns {
+        if !insn.bytes.is_empty() {
+            bytes.extend_from_slice(&insn.bytes);
+            continue;
+        }
+        if insn.label_def.is_some() {
+            return Err(alloc::string::String::from(
+                "inline asm: a label definition in a section needs a relocation",
+            ));
+        }
+        // A branch or `adr` to an `asm goto` label leaves the section: a zero
+        // displacement and a relocation naming the block, rewritten after
+        // layout.
+        if let Some(&super::asm::AsmOpndA64::GotoLabel(k)) = insn.operands.last() {
+            let bid = goto_block(k)
+                .ok_or_else(|| alloc::format!("inline asm: `%l{k}` names no `asm goto` label"))?;
+            let branch = build_label_branch(insn, conv)?;
+            let (word, kind) = a64_label_branch_reloc(&branch)?;
+            relocs.push(crate::c5::asm::AsmSectionReloc {
+                offset: bytes.len() as u32,
+                width: 4,
+                kind,
+                pcrel: false,
+                branch: false,
+                signed: false,
+                target: crate::c5::asm::AsmSectionTarget::TextBlock(bid),
+                addend: 0,
+            });
+            bytes.extend_from_slice(&word.to_le_bytes());
+            continue;
+        }
+        if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, conv)? {
+            // An empty expression marks a `.`-relative form resolved
+            // in place: the word is final, no relocation.
+            if !expr.is_empty() {
+                relocs.push(crate::c5::asm::AsmSectionReloc {
+                    offset: bytes.len() as u32,
+                    width: 4,
+                    kind,
+                    pcrel: false,
+                    branch: false,
+                    signed: false,
+                    target: crate::c5::asm::AsmSectionTarget::Expr(expr),
+                    addend: 0,
+                });
+            }
+            bytes.extend_from_slice(&word.to_le_bytes());
+            continue;
+        }
+        let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
+        for o in &insn.operands {
+            ops.push(conv(o)?);
+        }
+        let word = table::encode(&insn.mnemonic, &ops)?;
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    Ok(AsmSectionItem::CodeBytes {
+        bytes,
+        relocs,
+        short: None,
     })
 }
 
 /// Visitor of [`a64_for_each_section_item_mut`]: the section identity key,
-/// the item's `(block, item)` index where it has one, and the item.
-type A64SectionItemFn<'a> = dyn FnMut(
-        &str,
-        Option<(usize, usize)>,
-        &mut crate::c5::asm::AsmSectionItem,
-    ) -> Result<(), alloc::string::String>
-    + 'a;
+/// the item's `(block, item)` index where it has one, its line, the item.
+type A64SectionItemFn<'a> =
+    dyn FnMut(&str, Option<(usize, usize)>, u32, &mut crate::c5::asm::AsmSectionItem) + 'a;
 
 /// Apply `f` to every item with the identity key of its section,
 /// descending into `.rept` bodies; `site` is the item's `(block, item)`
-/// index, `None` inside a `.rept` body.
+/// index, `None` inside a `.rept` body, whose items take the `.rept` line.
 fn a64_for_each_section_item_mut(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     f: &mut A64SectionItemFn<'_>,
-) -> Result<(), alloc::string::String> {
+) {
     fn walk(
         key: &str,
-        bi: usize,
-        top: bool,
-        items: &mut [crate::c5::asm::AsmSectionItem],
+        site: Option<(usize, usize)>,
+        line: u32,
+        it: &mut crate::c5::asm::AsmSectionItem,
         f: &mut A64SectionItemFn<'_>,
-    ) -> Result<(), alloc::string::String> {
-        for (ii, it) in items.iter_mut().enumerate() {
-            if let crate::c5::asm::AsmSectionItem::Rept { items, .. } = it {
-                walk(key, bi, false, items, f)?;
-            } else {
-                f(key, top.then_some((bi, ii)), it)?;
+    ) {
+        match it {
+            crate::c5::asm::AsmSectionItem::Rept { items, .. } => {
+                for it in items {
+                    walk(key, None, line, it, f);
+                }
             }
+            _ => f(key, site, line, it),
         }
-        Ok(())
     }
     for (bi, b) in blocks.iter_mut().enumerate() {
         let key = crate::c5::asm::section_key(b);
-        walk(&key, bi, true, &mut b.items, f)?;
+        for (ii, li) in b.items.iter_mut().enumerate() {
+            walk(&key, Some((bi, ii)), li.line, &mut li.item, f);
+        }
     }
-    Ok(())
 }
 
 /// The label layout an operand expression folds against, or `None` when
@@ -2669,29 +2704,32 @@ fn a64_for_each_section_item_mut(
 /// values served do not depend on.
 fn a64_section_operand_layout(
     blocks: &[crate::c5::asm::AsmSectionBlock],
-) -> Result<Option<crate::c5::asm::SectionLabelOffsets>, alloc::string::String> {
+) -> Result<Option<crate::c5::asm::SectionLabelOffsets>, crate::c5::asm::AsmErrors> {
     use super::asm::AsmOpndA64;
     use crate::c5::asm::AsmSectionItem;
     let mut sized = blocks.to_vec();
     let mut needs = false;
-    a64_for_each_section_item_mut(&mut sized, &mut |_, _, item| {
+    a64_for_each_section_item_mut(&mut sized, &mut |_, _, _, item| {
         let AsmSectionItem::Code(text) = item else {
-            return Ok(());
+            return;
         };
-        let insns = super::asm::parse_template(text.as_bytes())
-            .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-        needs |= insns
-            .iter()
-            .flat_map(|i| &i.operands)
-            .any(|o| matches!(o, AsmOpndA64::ImmExpr(_) | AsmOpndA64::MemExpr { .. }));
-        let len = insns.iter().map(a64_insn_placeholder_len).sum();
+        // An unparsed statement measures a word; the encoding reports it.
+        let len = match super::asm::parse_template(text.as_bytes()) {
+            Ok(insns) => {
+                needs |= insns
+                    .iter()
+                    .flat_map(|i| &i.operands)
+                    .any(|o| matches!(o, AsmOpndA64::ImmExpr(_) | AsmOpndA64::MemExpr { .. }));
+                insns.iter().map(a64_insn_placeholder_len).sum()
+            }
+            Err(_) => 4,
+        };
         *item = AsmSectionItem::CodeBytes {
             bytes: alloc::vec![0u8; len],
             relocs: Vec::new(),
             short: None,
         };
-        Ok(())
-    })?;
+    });
     if !needs {
         return Ok(None);
     }
@@ -2970,14 +3008,15 @@ fn a64_label_branch_reloc(
 /// the end of the subsection's content flush, as under GNU as.
 fn assign_a64_literal_pools(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
-) -> Result<(), alloc::string::String> {
+    errors: &mut Vec<crate::c5::asm::AsmError>,
+) {
     use crate::c5::asm::{AsmPoolEntry, AsmSectionItem, literal_pool_key, subsection_order};
     if !blocks
         .iter()
         .flat_map(|b| &b.items)
-        .any(|it| matches!(it, AsmSectionItem::Code(t) if t.contains('=')))
+        .any(|it| matches!(&it.item, AsmSectionItem::Code(t) if t.contains('=')))
     {
-        return Ok(());
+        return;
     }
     let order = subsection_order(blocks);
     // Where each pool's last block sits in the layout order: the flush point
@@ -2993,38 +3032,23 @@ fn assign_a64_literal_pools(
         alloc::collections::BTreeMap::new();
     for (pos, &bi) in order.iter().enumerate() {
         let key = literal_pool_key(&blocks[bi]);
-        for item in &mut blocks[bi].items {
-            match item {
+        for li in &mut blocks[bi].items {
+            match &mut li.item {
                 AsmSectionItem::LiteralPool(entries) => {
                     *entries = pending.remove(&key).unwrap_or_default();
                 }
                 AsmSectionItem::Code(text) if text.contains('=') => {
                     let Some(eq) = text.find('=') else { continue };
-                    let insns = super::asm::parse_template(text.as_bytes())
-                        .map_err(|m| alloc::format!("{m} (section `{text}`)"))?;
-                    let pool_ops = insns
-                        .iter()
-                        .flat_map(|i| &i.operands)
-                        .filter(|o| matches!(o, super::asm::AsmOpndA64::LitPool(_)))
-                        .count();
-                    if pool_ops == 0 {
-                        continue;
-                    }
-                    if insns.len() != 1 || pool_ops != 1 || insns[0].operands.len() != 2 {
-                        return Err(alloc::format!(
-                            "inline asm: `{text}` is not a literal-pool load"
-                        ));
-                    }
-                    let super::asm::AsmOpndA64::LitPool(expr) = &insns[0].operands[1] else {
-                        return Err(alloc::format!(
-                            "inline asm: `{text}` is not a literal-pool load"
-                        ));
+                    let (size, value) = match a64_pool_request(text) {
+                        Ok(Some(r)) => r,
+                        Ok(None) => continue,
+                        Err(m) => {
+                            crate::c5::asm::encode_code_item(&mut li.item, li.line, errors, |_| {
+                                Err(m)
+                            });
+                            continue;
+                        }
                     };
-                    let (_, size) = a64_ldr_literal_word(&insns[0].mnemonic, &insns[0].operands[0])
-                        .ok_or_else(|| {
-                            alloc::format!("inline asm: `{text}` has no literal-pool load form")
-                        })?;
-                    let value = a64_pool_value(expr, size)?;
                     let entries = pending.entry(key.clone()).or_default();
                     let label = match entries.iter().find(|e| e.size == size && e.value == value) {
                         Some(e) => e.label.clone(),
@@ -3049,10 +3073,34 @@ fn assign_a64_literal_pools(
             && let Some(entries) = pending.remove(&key)
             && !entries.is_empty()
         {
-            blocks[bi].items.push(AsmSectionItem::LiteralPool(entries));
+            blocks[bi].push(0, AsmSectionItem::LiteralPool(entries));
         }
     }
-    Ok(())
+}
+
+/// The entry width and value a `ldr Rt, =value` statement requests.
+fn a64_pool_request(
+    text: &str,
+) -> Result<Option<(u8, crate::c5::asm::AsmPoolValue)>, alloc::string::String> {
+    let insns = super::asm::parse_template(text.as_bytes())?;
+    let pool_ops = insns
+        .iter()
+        .flat_map(|i| &i.operands)
+        .filter(|o| matches!(o, super::asm::AsmOpndA64::LitPool(_)))
+        .count();
+    if pool_ops == 0 {
+        return Ok(None);
+    }
+    let not_a_load = || alloc::string::String::from("inline asm: not a literal-pool load");
+    if insns.len() != 1 || pool_ops != 1 || insns[0].operands.len() != 2 {
+        return Err(not_a_load());
+    }
+    let super::asm::AsmOpndA64::LitPool(expr) = &insns[0].operands[1] else {
+        return Err(not_a_load());
+    };
+    let (_, size) = a64_ldr_literal_word(&insns[0].mnemonic, &insns[0].operands[0])
+        .ok_or_else(|| alloc::string::String::from("inline asm: no literal-pool load form"))?;
+    Ok(Some((size, a64_pool_value(expr, size)?)))
 }
 
 /// The value a `ldr Rt, =value` deposits: a constant truncated to the entry

@@ -25,31 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<check_global>:
-               	xorl	%eax, %eax
-               	retq
-
-<check_runtime>:
-               	xorl	%eax, %eax
-               	retq
-
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	movl	$0x3, %edi
-               	movl	$0x5, %esi
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	popq	%rbp
-               	retq
                	xorl	%eax, %eax
-               	popq	%rbp
                	retq

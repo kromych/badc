@@ -471,8 +471,12 @@ impl<'a> Walker<'a> {
         let asm = self.ast.asm_blocks[idx as usize].clone();
         let mut args: alloc::vec::Vec<ValueId> =
             alloc::vec::Vec::with_capacity(asm.operand_exprs.len());
-        for &e in &asm.operand_exprs {
-            args.push(self.walk_expr_rvalue(b, e)?);
+        for (&e, op) in asm.operand_exprs.iter().zip(&asm.block.operands) {
+            // A bound operand is its register; reading it keeps the frame record.
+            args.push(match op.constraint {
+                crate::c5::ir::AsmConstraint::Bound(_) if self.naked => NO_VALUE,
+                _ => self.walk_expr_rvalue(b, e)?,
+            });
         }
         Ok(b.inline_asm(alloc::boxed::Box::new(asm.block), args))
     }

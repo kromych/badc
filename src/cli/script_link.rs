@@ -228,6 +228,6 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         fail(format!("error: cannot write map file {}: {e}", p.display()));
     }
     if cli.link.print_map {
-        print!("{}", res.map);
+        out!("{}", res.map);
     }
 }

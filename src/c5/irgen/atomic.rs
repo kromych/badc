@@ -10,7 +10,7 @@ use crate::c5::compiler::types::pointee_ty;
 
 /// The zero-extending integer load of `width` bytes, the access an
 /// `Inst::AtomicLoad` performs.
-fn int_load_kind(width: u8) -> LoadKind {
+pub(super) fn int_load_kind(width: u8) -> LoadKind {
     match width {
         1 => LoadKind::U8,
         2 => LoadKind::U16,
@@ -20,7 +20,7 @@ fn int_load_kind(width: u8) -> LoadKind {
 }
 
 /// The integer store of `width` bytes.
-fn int_store_kind(width: u8) -> StoreKind {
+pub(super) fn int_store_kind(width: u8) -> StoreKind {
     match width {
         1 => StoreKind::I8,
         2 => StoreKind::I16,
@@ -41,6 +41,12 @@ impl<'a> Walker<'a> {
         elem_ty: i64,
         order: MemOrder,
     ) -> Result<ValueId, WalkError> {
+        if kind == AtomicKind::Init {
+            return self.walk_atomic_init(b, args, elem_ty);
+        }
+        if is_atomic_object_ty(elem_ty) && self.atomic_builtin_takes_object_path(elem_ty) {
+            return self.walk_atomic_object_builtin(b, kind, args, elem_ty);
+        }
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
@@ -66,6 +72,7 @@ impl<'a> Walker<'a> {
         }
         let addr = self.walk_expr_rvalue(b, args[0])?;
         match kind {
+            AtomicKind::Init => unreachable!("lowered ahead of the match"),
             AtomicKind::Load => {
                 let bits = b.atomic_load(addr, width, order);
                 Ok(self.atomic_value_from_bits(b, bits, elem_ty))
@@ -197,6 +204,7 @@ impl<'a> Walker<'a> {
         let addr = self.walk_expr_rvalue(b, args[0])?;
         let zero = |b: &mut SsaBuilder| (b.imm(0), b.imm(0));
         match kind {
+            AtomicKind::Init => unreachable!("lowered by walk_atomic"),
             AtomicKind::Load | AtomicKind::LoadInto => {
                 let prior = if matches!(kind, AtomicKind::Load) {
                     let z = zero(b);
@@ -288,7 +296,7 @@ impl<'a> Walker<'a> {
     /// until the exchange matches; the prior contents and the value stored,
     /// as 16-byte objects. The first comparand is an unsynchronised read,
     /// which the exchange checks.
-    fn cas16_retry(
+    pub(super) fn cas16_retry(
         &mut self,
         b: &mut SsaBuilder,
         addr: ValueId,
@@ -360,7 +368,7 @@ impl<'a> Walker<'a> {
 
     /// Whether a compare-exchange's zero-extended prior contents `prior`
     /// match the low `width` bytes of the comparand, the bytes it compared.
-    fn cas_matched(
+    pub(super) fn cas_matched(
         &self,
         b: &mut SsaBuilder,
         prior: ValueId,
@@ -432,7 +440,12 @@ impl<'a> Walker<'a> {
     /// integer or pointer is its own bits; a floating value has no
     /// register-class move in the IR, so it is written to a frame slot
     /// at its own width and read back as an integer.
-    fn atomic_bits_of(&self, b: &mut SsaBuilder, value: ValueId, elem_ty: i64) -> ValueId {
+    pub(super) fn atomic_bits_of(
+        &self,
+        b: &mut SsaBuilder,
+        value: ValueId,
+        elem_ty: i64,
+    ) -> ValueId {
         if !is_floating_scalar(elem_ty) {
             return value;
         }
@@ -447,7 +460,12 @@ impl<'a> Walker<'a> {
     /// load represent: the element type's own representation for an
     /// integer (C99 6.3.1.3), and for a floating type the pattern read
     /// back through a frame slot, the inverse of [`Self::atomic_bits_of`].
-    fn atomic_value_from_bits(&self, b: &mut SsaBuilder, bits: ValueId, elem_ty: i64) -> ValueId {
+    pub(super) fn atomic_value_from_bits(
+        &self,
+        b: &mut SsaBuilder,
+        bits: ValueId,
+        elem_ty: i64,
+    ) -> ValueId {
         if !is_floating_scalar(elem_ty) {
             return self.extend_atomic_result(b, bits, elem_ty);
         }

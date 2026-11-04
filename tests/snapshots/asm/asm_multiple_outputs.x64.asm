@@ -156,11 +156,10 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %r12
-               	movq	0x8(%rax), %rbx
-               	movq	0x10(%rax), %r13
-               	movq	0x18(%rax), %r14
+               	movq	<rip>, %r12 # <addr>
+               	movq	<rip>, %rbx # <addr>
+               	movq	<rip>, %r13 # <addr>
+               	movq	<rip>, %r14 # <addr>
                	callq	<addr>
                	movabsq	$0x9abc12345678, %r11   # imm = 0x9ABC12345678
                	cmpq	%r11, %rax

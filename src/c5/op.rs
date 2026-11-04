@@ -22,11 +22,10 @@ pub enum Intrinsic {
     /// (used as the longjmp return target), SP, and d8-d15 into
     /// `env`. Returns 0 on the initial call; on a matching
     /// longjmp the saved return address is branched back to with
-    /// the caller-supplied value in x19. AArch64 lowering only;
-    /// only emitted by Windows AArch64 headers because that
-    /// target's msvcrt longjmp routes through SEH and refuses an
-    /// SEH-free `jmp_buf` -- the Linux / macOS bindings continue
-    /// to use the host libc setjmp.
+    /// the caller-supplied value in x19. AArch64 lowering only; it
+    /// replaces msvcrt's pair in a Windows AArch64 image run in-process,
+    /// which no function table describes to the unwinder msvcrt's
+    /// `longjmp` needs.
     SetjmpAArch64 = 2,
     /// `__c5_aarch64_longjmp(env, val)` -- partner to
     /// `SetjmpAArch64`. Args reach this op as (env on the c5
@@ -127,21 +126,6 @@ pub enum Intrinsic {
     /// for correctness, so the interpreter ignores it. Takes no
     /// argument and produces no value.
     CpuRelax = 31,
-    /// C11 7.17 atomic generic operations. Declared by `<stdatomic.h>`
-    /// via `#pragma intrinsic` and lowered at the call site to an
-    /// ordinary load / store / read-modify-write on the pointee width
-    /// of the first argument (see `Compiler::parse_atomic_builtin` and
-    /// `ast::AtomicKind`), so they never reach the `Inst::Intrinsic`
-    /// dispatch -- the same arrangement as the bit-count builtins above.
-    AtomicLoad = 32,
-    AtomicStore = 33,
-    AtomicExchange = 34,
-    AtomicFetchAdd = 35,
-    AtomicFetchSub = 36,
-    AtomicFetchAnd = 37,
-    AtomicFetchOr = 38,
-    AtomicFetchXor = 39,
-    AtomicCompareExchangeStrong = 40,
     /// `asm("fnstcw %0" : "=m"(cw))` -- store the x87 FPU control word to
     /// the 16-bit memory operand. The op takes the operand's address;
     /// codegen emits `fnstcw m16` (x86_64 only). The interpreter writes
@@ -290,6 +274,19 @@ pub enum Intrinsic {
     /// signal handler on the same thread needs no instruction on either
     /// target; the intrinsic is the compiler barrier.
     AtomicSignalFence = 82,
+    /// Read of a file-scope `register T name asm("x18")` variable where the
+    /// OS ABI reserves x18 (Windows and Darwin on AArch64): the register at
+    /// the width of `T`. No arguments. The interpreter has no such register.
+    PlatformRegister = 83,
+    /// The frame value the language handler passes the function's SEH
+    /// funclets: the establisher frame on x86_64, the frame's x29 on
+    /// AArch64. No arguments.
+    FuncletFrame = 84,
+    /// `__c5_establisher_frame()`: the establisher frame the unwinder
+    /// reports for the function -- rbp less the unwind FrameOffset on
+    /// x86_64, the sp at entry on AArch64 -- which `setjmp` stores as the
+    /// frame an unwinding `longjmp` stops at. No arguments.
+    EstablisherFrame = 85,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -397,15 +394,6 @@ impl Intrinsic {
             29 => Some(Intrinsic::Bswap64),
             30 => Some(Intrinsic::FrameAddress),
             31 => Some(Intrinsic::CpuRelax),
-            32 => Some(Intrinsic::AtomicLoad),
-            33 => Some(Intrinsic::AtomicStore),
-            34 => Some(Intrinsic::AtomicExchange),
-            35 => Some(Intrinsic::AtomicFetchAdd),
-            36 => Some(Intrinsic::AtomicFetchSub),
-            37 => Some(Intrinsic::AtomicFetchAnd),
-            38 => Some(Intrinsic::AtomicFetchOr),
-            39 => Some(Intrinsic::AtomicFetchXor),
-            40 => Some(Intrinsic::AtomicCompareExchangeStrong),
             41 => Some(Intrinsic::X87StoreControlWord),
             42 => Some(Intrinsic::X87LoadControlWord),
             43 => Some(Intrinsic::AtomicThreadFence),
@@ -448,6 +436,9 @@ impl Intrinsic {
             80 => Some(Intrinsic::AtomicAcquireFence),
             81 => Some(Intrinsic::AtomicReleaseFence),
             82 => Some(Intrinsic::AtomicSignalFence),
+            83 => Some(Intrinsic::PlatformRegister),
+            84 => Some(Intrinsic::FuncletFrame),
+            85 => Some(Intrinsic::EstablisherFrame),
             _ => None,
         }
     }

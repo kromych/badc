@@ -518,7 +518,8 @@ fn lp64_predefined_for_lp64_targets_only() {
 
 /// `set_unit_model` re-selects the whole data-model group, so an ILP32
 /// unit carries no macro from the LP64 one and back again is exact.
-/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`.
+/// Values are gcc 16.1.1's for `-m32` / `-m64` on `linux-x64`, the
+/// x86-64 baseline ISA (`__MMX__`, `__SSE2__`) with the 64-bit model only.
 #[test]
 fn elf_class_selects_the_data_model_predefines() {
     use crate::c5::{CodeModel, ElfClass};
@@ -527,13 +528,16 @@ fn elf_class_selects_the_data_model_predefines() {
         "#ifdef __i386__\ni386\n#endif\n#ifdef __i386\ni386_bare\n#endif\n",
         "#ifdef __LP64__\nlp64\n#endif\n#ifdef __ILP32__\nilp32\n#endif\n",
         "#ifdef __SIZEOF_INT128__\nint128\n#endif\n",
+        "#ifdef __MMX__\nmmx\n#endif\n#ifdef __SSE2__\nsse2\n#endif\n",
         "#ifdef __code_model_32__\ncm32\n#endif\n",
         "#ifdef __code_model_small__\ncmsmall\n#endif\n",
         "sizes __SIZEOF_POINTER__ __SIZEOF_LONG__ __SIZEOF_SIZE_T__ __SIZEOF_PTRDIFF_T__\n",
         "types __SIZE_TYPE__ / __PTRDIFF_TYPE__\n",
         "wchar __WCHAR_TYPE__ .\n",
     );
-    let names64 = ["x86_64", "amd64", "lp64", "int128", "cmsmall"];
+    let names64 = [
+        "x86_64", "amd64", "lp64", "int128", "cmsmall", "mmx", "sse2",
+    ];
     let names32 = ["i386", "i386_bare", "ilp32", "cm32"];
     let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
     pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
@@ -1153,6 +1157,233 @@ fn msvc_pragma_operator_ignored_inside_string_literal() {
 }
 
 #[test]
+fn push_macro_saves_a_definition_and_pop_macro_reinstates_it() {
+    // gcc, clang and MSVC keep a stack per name of what `push_macro` saw:
+    // an object-like or function-like definition, or none.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             #define X 2\n\
+             x2 = X;\n\
+             #pragma pop_macro(\"X\")\n\
+             x1 = X;\n\
+             #define F(a) (a + 1)\n\
+             #pragma push_macro ( \"F\" )\n\
+             #undef F\n\
+             #define F 7\n\
+             f7 = F(0);\n\
+             _Pragma(\"pop_macro(\\\"F\\\")\")\n\
+             f1 = F(0);\n\
+             __pragma(push_macro(\"U\"))\n\
+             #define U 3\n\
+             #pragma pop_macro(\"U\")\n\
+             #ifdef U\n\
+             u_defined;\n\
+             #endif\n\
+             #define N 1\n\
+             #define M 9\n\
+             #pragma push_macro(\"N\")\n\
+             #pragma push_macro(\"M\")\n\
+             #undef N\n\
+             #define N 2\n\
+             #pragma push_macro(\"N\")\n\
+             #undef M\n\
+             #undef N\n\
+             #pragma pop_macro(\"N\")\n\
+             n2 = N, m = M;\n\
+             #pragma pop_macro(\"N\")\n\
+             n1 = N;\n\
+             #pragma pop_macro(\"M\")\n\
+             m9 = M;\n",
+        )
+        .expect("preprocessor failed");
+    for want in [
+        "x2 = 2;",
+        "x1 = 1;",
+        "f7 = 7(0);",
+        "f1 = (0 + 1);",
+        "n2 = 2, m = M;",
+        "n1 = 1;",
+        "m9 = 9;",
+    ] {
+        assert!(out.contains(want), "{want}: {out:?}");
+    }
+    assert!(!out.contains("u_defined"), "{out:?}");
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
+    // clang reports it under -Wignored-pragmas, MSVC as C4602; gcc is
+    // silent. None of them changes the definition.
+    let src = "#define X 1\n\
+               #pragma pop_macro(\"X\")\n\
+               x = X;\n\
+               #pragma push_macro(\"X\")\n\
+               #pragma pop_macro(\"X\")\n\
+               #pragma pop_macro(\"X\")\n\
+               y = X;\n";
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp.process(src).expect("preprocessor failed");
+    assert!(out.contains("x = 1;") && out.contains("y = 1;"), "{out:?}");
+    assert_eq!(
+        codes(&pp),
+        vec![PRAGMA_POP_WITHOUT_PUSH, PRAGMA_POP_WITHOUT_PUSH]
+    );
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.process(&format!("#pragma warning(disable : 4602)\n{src}"))
+        .expect("preprocessor failed");
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_push_macro_operand_other_than_one_string_literal_is_an_error() {
+    // gcc: "invalid #pragma push_macro directive"; clang: "pragma
+    // push_macro requires a parenthesized string".
+    for pragma in [
+        "push_macro(X)",
+        "push_macro",
+        "pop_macro()",
+        "push_macro(\"X\" \"Y\")",
+        "pop_macro(\"X)",
+        "push_macro(\"X\\\")",
+        "push_macro(L\"X\")",
+        "pop_macro(\"X\"",
+    ] {
+        let err = process_err(&format!("#pragma {pragma}\n"));
+        assert!(
+            err.contains("expects a macro name in quotes"),
+            "{pragma}: {err}"
+        );
+    }
+    // A longer pragma name is another pragma.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.process("#pragma push_macros(\"X\")\n")
+        .expect("preprocessor failed");
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA]);
+}
+
+#[test]
+fn push_macro_and_pop_macro_leave_nothing_in_preprocessed_output() {
+    // gcc -E and clang -E consume the pair: the expansion already
+    // reflects it.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_keep_pragmas(true);
+    let out = pp
+        .process(
+            "#define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             _Pragma(\"pop_macro(\\\"X\\\")\")\n\
+             int x = X;\n",
+        )
+        .expect("preprocessor failed");
+    assert!(!out.contains("_macro"), "{out:?}");
+    assert!(out.contains("int x = 1;"), "{out:?}");
+}
+
+#[test]
+fn a_macro_stack_operator_applies_where_the_rescan_meets_it() {
+    // C99 6.10.9; gcc 16 and clang: the tokens after the operator on its
+    // line, from the source, a replacement or an argument, expand under the
+    // state it leaves. An argument's own expansion leaves the operator to
+    // the rescan, which meets it once per use of the parameter, and not at
+    // all for an unused or stringized one.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define ID(a) a\n\
+             #define TWICE(a) a a\n\
+             #define DROP(a)\n\
+             #define STR(a) #a\n\
+             #define X 1\n\
+             #pragma push_macro(\"X\")\n\
+             #undef X\n\
+             _Pragma(\"pop_macro(\\\"X\\\")\") x1 = X;\n\
+             #define Y 2\n\
+             #pragma push_macro(\"Y\")\n\
+             #undef Y\n\
+             #define POP_Y _Pragma(\"pop_macro(\\\"Y\\\")\") Y\n\
+             y2 = POP_Y, Y;\n\
+             #define Z 3\n\
+             #pragma push_macro(\"Z\")\n\
+             #undef Z\n\
+             z3 = ID(_Pragma(\"pop_macro(\\\"Z\\\")\") Z);\n\
+             #define W 4\n\
+             #pragma push_macro(\"W\")\n\
+             #undef W\n\
+             #define W 5\n\
+             #pragma push_macro(\"W\")\n\
+             #undef W\n\
+             w4 = TWICE(_Pragma(\"pop_macro(\\\"W\\\")\")) W;\n\
+             #define V 6\n\
+             #pragma push_macro(\"V\")\n\
+             #undef V\n\
+             v = DROP(_Pragma(\"pop_macro(\\\"V\\\")\")) V;\n\
+             s = STR(_Pragma(\"pop_macro(\\\"V\\\")\")) V;\n\
+             v6 = __pragma(pop_macro(\"V\")) V;\n",
+        )
+        .expect("preprocessor failed");
+    let out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    for want in [
+        "x1 = 1;",
+        "y2 = 2, 2;",
+        "z3 = 3;",
+        "w4 = 4;",
+        "v = V;",
+        "s = \"_Pragma(\\\"pop_macro(\\\\\\\"V\\\\\\\")\\\")\" V;",
+        "v6 = 6;",
+    ] {
+        assert!(out.contains(want), "{want}: {out:?}");
+    }
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn preprocessed_output_writes_an_expanded_pragma_operator_where_it_stands() {
+    // gcc -E writes each operator of an expansion as a `#pragma` line at
+    // its position among the tokens around it.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_keep_pragmas(true);
+    let out = pp
+        .process(
+            "#define QUIET(s) _Pragma(\"GCC diagnostic push\") \
+             _Pragma(\"GCC diagnostic ignored \\\"-Wint-conversion\\\"\") s \
+             _Pragma(\"GCC diagnostic pop\")\n\
+             QUIET(int *d1 = 1;) int *d2 = 2;\n",
+        )
+        .expect("preprocessor failed");
+    let mut from = 0;
+    for want in [
+        "\n#pragma GCC diagnostic push\n",
+        "\n#pragma GCC diagnostic ignored \"-Wint-conversion\"\n",
+        " int *d1 = 1;",
+        "\n#pragma GCC diagnostic pop\n",
+        " int *d2 = 2;",
+    ] {
+        let at = out[from..]
+            .find(want)
+            .unwrap_or_else(|| panic!("{want:?}: {out:?}"));
+        from += at + want.len();
+    }
+}
+
+#[test]
 fn named_rest_variadic_macro_binds_tail() {
     // `#define foo(rest...)` reaches the trailing args through `rest`.
     let out = process("#define F(args...) g(args)\nF(1, 2, 3);\n");
@@ -1660,7 +1891,7 @@ fn the_edition_sets_stdc_version_and_the_c23_if_keywords() {
         pp.process(src).expect("preprocessor failed")
     };
     let edition = |name| crate::c5::CStd::from_dialect(name);
-    assert!(run(None).contains("v = 201112L;"));
+    assert!(run(None).contains("v = 201710L;"));
     assert!(!run(edition("c90")).contains("v ="));
     assert!(run(edition("gnu99")).contains("v = 199901L;"));
     let c23 = run(edition("c23"));
@@ -1959,6 +2190,21 @@ fn line_directive_retargets_file_and_line() {
     assert!(out.contains("int x;"));
 }
 
+/// C99 6.10.4: `#line`'s file name is the string literal's value, and it
+/// becomes the presumed name `__FILE__` gives (6.10.8): the escapes are
+/// decoded once, then written back escaped in the marker and the literal.
+#[test]
+fn line_directive_names_the_presumed_file_by_its_literal_value() {
+    let out = process("#line 10 \"C:\\\\dir\\\\x.c\"\nconst char *f = __FILE__;\n");
+    assert!(out.contains("# 10 \"C:\\\\dir\\\\x.c\""), "{out}");
+    assert!(
+        out.contains("const char *f = \"C:\\\\dir\\\\x.c\";"),
+        "{out}"
+    );
+    let out = process("#line 5 \"caf\\303\\251.c\"\nconst char *f = __FILE__;\n");
+    assert!(out.contains("const char *f = \"caf\u{e9}.c\";"), "{out}");
+}
+
 #[test]
 fn line_directive_without_filename_keeps_current_file() {
     // C99 6.10.4: bare `#line N` retargets the line counter
@@ -1993,6 +2239,98 @@ fn defined_form_works_in_if() {
     let src = "#if defined(__BADC_VERSION__)\nint a;\n#endif\n";
     let out = process(src);
     assert!(out.contains("int a;"));
+}
+
+#[test]
+fn a_defined_a_replacement_produces_takes_its_operand_as_written() {
+    // C99 6.10.1p4 leaves it undefined; gcc and clang test the operand
+    // as the rescan meets it, pasted or not, from the replacement or from
+    // the source after it. A parameter's argument is expanded before it
+    // is substituted (6.10.3.1), so its operand is the expansion.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let out = pp
+        .process(
+            "#define PROLOG(name) (!defined(DONE_ ## name) && !defined DONE_ ## name)\n\
+             #define DONE_foo\n\
+             #define ALIAS NOT_DEFINED\n\
+             #define IS_DEF(x) defined(x)\n\
+             #define D defined\n\
+             #define BOTH defined(ALIAS) && defined ALIAS\n\
+             #define OUTER BOTH\n\
+             #if PROLOG(foo)\n\
+             foo_wrong;\n\
+             #endif\n\
+             #if PROLOG(bar)\n\
+             bar_right;\n\
+             #endif\n\
+             #if IS_DEF(ALIAS)\n\
+             argument_wrong;\n\
+             #endif\n\
+             #if D(ALIAS) && D ALIAS && OUTER\n\
+             produced_right;\n\
+             #endif\n\
+             #if defined ALIAS && defined(OUTER)\n\
+             written_right;\n\
+             #endif\n",
+        )
+        .expect("preprocessor failed");
+    for (arm, taken) in [
+        ("foo_wrong", false),
+        ("bar_right", true),
+        ("argument_wrong", false),
+        ("produced_right", true),
+        ("written_right", true),
+    ] {
+        assert_eq!(out.contains(arm), taken, "{arm}: {out:?}");
+    }
+    assert!(
+        pp.sink.diagnostics().is_empty(),
+        "{:?}",
+        pp.sink.diagnostics()
+    );
+}
+
+#[test]
+fn a_defined_inside_a_macro_argument_takes_the_expanded_operand() {
+    // The argument is expanded before substitution as any other, so a
+    // `defined` there meets the operand's expansion, as gcc and clang
+    // have it: an alias of an undefined name tests false, a name defined
+    // as a number leaves no identifier.
+    let src = "#define F(x) x\n\
+               #define ALIAS NOT_DEFINED\n\
+               #if F(defined(ALIAS))\n\
+               alias_wrong;\n\
+               #endif\n";
+    assert!(!process(src).contains("alias_wrong"));
+    let err = process_err("#define F(x) x\n#define ONE 1\n#if F(defined(ONE))\n#endif\n");
+    assert!(err.contains("identifier expected after `defined`"), "{err}");
+}
+
+#[test]
+fn a_produced_defined_is_reported_under_wextra_outside_a_system_header() {
+    // gcc puts -Wexpansion-to-defined under -Wextra and -Wpedantic, and
+    // reports nothing of a system header.
+    let text = "#define P(n) defined(D_ ## n)\n#if P(x)\n#endif\n#if defined(D_x)\n#endif\n";
+    let dir = std::env::temp_dir().join(format!("badc_pp_produced_defined_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("produced_defined.h");
+    std::fs::write(&hdr, text).unwrap();
+    let run = |src: &str, extra: bool| {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_isystem_path(dir.to_str().unwrap());
+        if extra {
+            let mut config = Config::new();
+            config.enable_group(crate::c5::diag::Groups::EXTRA);
+            pp.sink.set_config(config);
+        }
+        pp.process(src).expect("preprocessor failed");
+        codes(&pp)
+    };
+    assert_eq!(run(text, false), vec![]);
+    assert_eq!(run(text, true), vec![EXPANSION_TO_DEFINED]);
+    assert_eq!(run("#include <produced_defined.h>\n", true), vec![]);
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
 }
 
 #[test]
@@ -2315,6 +2653,20 @@ fn pragma_warning_enable_and_default_restore_reporting() {
         let _ = pp.process(&src).expect("preprocessor failed");
         assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA], "{action}");
     }
+}
+
+/// A level specifier (`3 : N`, MSVC's warning-level assignment) is
+/// accepted without effect, and a clause after it still applies.
+#[test]
+fn pragma_warning_level_specifiers_are_accepted() {
+    let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    let src = format!(
+        "#pragma warning(3: 4189 4100)\n\
+         #pragma warning(4: 4201; disable: 4068)\n\
+         {UNKNOWN_PRAGMA_LINE}"
+    );
+    let _ = pp.process(&src).expect("preprocessor failed");
+    assert_eq!(codes(&pp), Vec::<Code>::new());
 }
 
 #[test]
@@ -2925,11 +3277,12 @@ fn bundled_header_resolves_bundled_includes_over_search_paths() {
 }
 
 #[test]
-fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
-    // `-nostdinc` takes the standard library headers off the search, so a
-    // name only the bundled set carries stops resolving; a `-I` directory
-    // that carries it still does. The compiler's own headers stay
-    // reachable, since the flag withdraws the library, not the builtins.
+fn nostdinc_withdraws_the_bundled_headers_compilers_included() {
+    // `-nostdinc` takes the bundled headers off the search, so a name only
+    // the bundled set carries stops resolving; a `-I` directory that
+    // carries it still does. The compiler's own headers go too, as gcc's
+    // and clang's do; the directory `-print-file-name=include` names brings
+    // them back, and `-nostdlibinc` keeps them.
     let base = std::env::temp_dir().join(format!("badc-nostdinc-{}", std::process::id()));
     let sys = base.join("sys");
     std::fs::create_dir_all(&sys).unwrap();
@@ -2954,13 +3307,71 @@ fn nostdinc_withdraws_the_bundled_headers_but_keeps_the_compiler_owned_ones() {
         .expect("a -I directory still resolves the name");
     assert!(out.contains("tree_types_marker"), "{out}");
 
-    let mut owned = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
-    owned.set_nostdinc(true);
-    let out = owned
-        .process("#include <x86intrin.h>\n")
-        .expect("the compiler's intrinsic header stays reachable");
     std::fs::remove_dir_all(&base).ok();
-    assert!(out.contains("__bsfd"), "{out}");
+    let inc = "/opt/badc/lib/badc/include";
+    let run = |nostdinc: bool, nostdlibinc: bool, dir: Option<&str>, src: &str| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.set_nostdlibinc(nostdlibinc);
+        pp.set_hosted(false);
+        pp.set_compiler_include_dir(inc);
+        if let Some(dir) = dir {
+            pp.add_isystem_path(dir);
+        }
+        pp.process(src)
+    };
+    let compiler = "#include <x86intrin.h>\n#include <stdarg.h>\n#include <stdint.h>\n";
+    let err = run(true, false, None, compiler).expect_err("-nostdinc drops them");
+    assert!(not_found(&err, "x86intrin.h"), "{err:?}");
+    for (nostdinc, nostdlibinc, dir) in [
+        (true, false, Some(inc)),
+        (true, false, Some("/opt/badc/lib/badc/include/")),
+        (false, true, None),
+    ] {
+        let out = run(nostdinc, nostdlibinc, dir, compiler).expect("the compiler's headers");
+        assert!(out.contains("__bsfd") && out.contains("int32_t"), "{out}");
+        let err = run(nostdinc, nostdlibinc, dir, "#include <stdio.h>\n")
+            .expect_err("the C library's stay off");
+        assert!(not_found(&err, "stdio.h"), "{err:?}");
+    }
+}
+
+/// Whether `err` reports `name` as an include no search step resolves.
+fn not_found(err: &impl core::fmt::Debug, name: &str) -> bool {
+    format!("{err:?}").contains(&format!("`{name}` not found"))
+}
+
+#[test]
+fn a_compiler_header_under_nostdinc_searches_for_the_library_header_it_includes() {
+    // gcc's and clang's hosted `<xmmintrin.h>` includes `<mm_malloc.h>`,
+    // which includes `<stdlib.h>`; under `-nostdinc` with the compiler's
+    // directory restored, or `-nostdlibinc`, that is not found unless a
+    // search path carries it. Freestanding, `<mm_malloc.h>` is not included.
+    let base = std::env::temp_dir().join(format!("badc-nostdinc-lib-{}", std::process::id()));
+    std::fs::create_dir_all(&base).unwrap();
+    std::fs::write(base.join("stdlib.h"), "int tree_stdlib_marker;\n").unwrap();
+    std::fs::write(base.join("malloc.h"), "int tree_malloc_marker;\n").unwrap();
+    let inc = "/opt/badc/lib/badc/include";
+    let run = |hosted: bool, nostdlibinc: bool, tree: bool| {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        pp.set_nostdinc(!nostdlibinc);
+        pp.set_nostdlibinc(nostdlibinc);
+        pp.set_hosted(hosted);
+        pp.set_compiler_include_dir(inc);
+        pp.add_isystem_path(inc);
+        if tree {
+            pp.add_search_path(base.to_str().unwrap());
+        }
+        pp.process("#include <xmmintrin.h>\n")
+    };
+    for nostdlibinc in [false, true] {
+        let err = run(true, nostdlibinc, false).expect_err("hosted reaches <stdlib.h>");
+        assert!(not_found(&err, "stdlib.h"), "{err:?}");
+        let out = run(true, nostdlibinc, true).expect("a -I directory carries it");
+        assert!(out.contains("tree_stdlib_marker"), "{out}");
+        run(false, nostdlibinc, false).expect("freestanding includes no library header");
+    }
+    std::fs::remove_dir_all(&base).ok();
 }
 
 #[test]
@@ -3854,7 +4265,7 @@ fn builtin_table_answers_all_three_roles() {
     for (name, fn_name) in [
         ("__builtin_strlen", "strlen"),
         ("__builtin_memcmp", "memcmp"),
-        ("__builtin_abs", "abs"),
+        ("__builtin_strchr", "strchr"),
         ("__builtin_malloc", "malloc"),
         ("__builtin_printf", "printf"),
         ("__builtin_vsnprintf", "vsnprintf"),
@@ -3896,12 +4307,16 @@ fn builtin_table_answers_all_three_roles() {
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
     }
-    // The classifications gcc folds from the operand are no calls, so a
-    // freestanding unit can take them.
+    // The classifications gcc folds from the operand and the absolute
+    // values are no calls, so a freestanding unit can take them.
     for name in [
         "__builtin_isdigit",
         "__builtin_isascii",
         "__builtin_toascii",
+        "__builtin_abs",
+        "__builtin_llabs",
+        "__builtin_imaxabs",
+        "__builtin_fabsl",
     ] {
         assert_eq!(builtins::library_alias(name), None, "`{name}`");
         assert!(
@@ -3912,21 +4327,17 @@ fn builtin_table_answers_all_three_roles() {
     // The binary search needs the list sorted, and a builtin that the
     // other table supplies is not also an alias.
     assert!(
-        builtins::LIBRARY_BUILTINS.windows(2).all(|w| w[0] < w[1]),
+        builtins::LIBRARY_BUILTINS
+            .windows(2)
+            .all(|w| w[0].0 < w[1].0),
         "the library builtins must be sorted and unique"
     );
     for b in builtins::BUILTINS {
         assert_eq!(builtins::library_alias(b.name), None, "`{}`", b.name);
     }
-    // Library names a header binds: not seeded and not reported by
-    // `__has_builtin`, but `#pragma intrinsic` registers them.
-    for name in [
-        "alloca",
-        "sqrt",
-        "fma",
-        "atomic_load",
-        "__c5_aarch64_setjmp",
-    ] {
+    // Names `#pragma intrinsic` binds: not seeded and not reported by
+    // `__has_builtin`, but the pragma registers them.
+    for name in ["alloca", "sqrt", "fma", "__c5_aarch64_setjmp"] {
         assert!(
             !pp.intrinsics.contains_key(name),
             "`{name}` must need its header"
@@ -3945,6 +4356,100 @@ fn builtin_table_answers_all_three_roles() {
         "__builtin_bswap128",
         Target::MacOSAarch64
     ));
+}
+
+/// Each builtin's prototype agrees with the declaration in the bundled
+/// header that declares its library function for the target: redeclared
+/// after it, the function compiles, `size_t`, `wchar_t`, `wint_t` and
+/// `va_list` taking the target's types.
+#[test]
+fn builtin_prototypes_agree_with_the_bundled_headers() {
+    use super::builtins::{FALLBACK_FUNCTIONS, LIBRARY_BUILTINS};
+    use crate::{CompileOptions, Compiler};
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let mut headers: alloc::collections::BTreeSet<&str> =
+            ["stdarg.h", "stddef.h", "stdio.h", "time.h", "wchar.h"].into();
+        let mut decls = String::new();
+        for &(name, proto) in LIBRARY_BUILTINS.iter().chain(FALLBACK_FUNCTIONS) {
+            let Some(header) = crate::c5::headers::header_declaring(name, target) else {
+                continue;
+            };
+            headers.insert(header);
+            let open = proto.find('(').expect("a parameter list");
+            decls += &format!("{} {name}{};\n", &proto[..open], &proto[open..]);
+        }
+        let mut src = String::from("#define _GNU_SOURCE 1\n");
+        for h in headers {
+            src += &format!("#include <{h}>\n");
+        }
+        src += &decls;
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+            panic!("{target:?}: {e}");
+        }
+    }
+}
+
+/// With no header, a call to each `__builtin_` alias calls its library
+/// function with the type the prototype spells: the type a declaration
+/// spelling it over the predefined types gives.
+#[test]
+fn builtin_calls_take_the_prototype_they_spell() {
+    use super::builtins::LIBRARY_BUILTINS;
+    use crate::{CompileOptions, Compiler};
+    const TYPES: &str = "typedef __SIZE_TYPE__ size_t;\n\
+                         typedef __WCHAR_TYPE__ wchar_t;\n\
+                         typedef __WINT_TYPE__ wint_t;\n\
+                         typedef __builtin_va_list va_list;\n\
+                         typedef int pid_t;\n\
+                         typedef void FILE;\n";
+    for target in [
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::LinuxAarch64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let mut src = String::from(TYPES);
+        for &(name, proto) in LIBRARY_BUILTINS {
+            let open = proto.find('(').expect("a parameter list");
+            let params = &proto[open + 1..proto.len() - 1];
+            let fixed = params.split(", ").filter(|p| !matches!(*p, "void" | "..."));
+            let zeros: Vec<&str> = fixed.map(|_| "0").collect();
+            let spelled = proto.replace("struct tm", "void");
+            let (ret, list) = spelled.split_at(spelled.find('(').expect("a parameter list"));
+            src += &format!(
+                "void call_{name}(void) {{ if (0) __builtin_{name}({}); }}\n\
+                 {ret} spelled_{name}{list};\n",
+                zeros.join(", ")
+            );
+        }
+        let opts = CompileOptions::default()
+            .with_nostdinc(true)
+            .with_no_entry_point(true);
+        let program = Compiler::with_options(src, target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let symbol = |name: &str| {
+            let s = program.symbols.iter().find(|s| s.name == name);
+            let s = s.unwrap_or_else(|| panic!("{target:?}: no `{name}`"));
+            let params = &s.fn_type.params;
+            (s.type_, params.types.clone(), params.variadic)
+        };
+        for &(name, _) in LIBRARY_BUILTINS {
+            if super::builtins::library_alias_intrinsic(&format!("__builtin_{name}")).is_some() {
+                continue;
+            }
+            let (called, spelled) = (format!("{name}.builtin"), format!("spelled_{name}"));
+            assert_eq!(symbol(&called), symbol(&spelled), "{target:?} {name}");
+        }
+    }
 }
 
 /// `__has_builtin` answers 1 for every builtin badc accepts, however it is
@@ -3968,7 +4473,7 @@ fn has_builtin_reports_every_accepted_builtin() {
     names.extend(
         builtins::LIBRARY_BUILTINS
             .iter()
-            .map(|f| format!("__builtin_{f}")),
+            .map(|(f, _)| format!("__builtin_{f}")),
     );
     let simd: Vec<&str> = crate::c5::x86_simd::OPS.iter().map(|o| o.name).collect();
     let mut src = String::new();
@@ -4298,12 +4803,12 @@ fn has_include_matches_what_include_resolves() {
 }
 
 #[test]
-fn compiler_owned_header_resolves_embedded_before_search_paths() {
-    // A compiler-owned intrinsic header (arm_neon.h) resolves to the
-    // embedded copy even when a `-I` directory holds a same-named file (a
-    // foreign toolchain's private include directory folded onto the search
-    // path). An ordinary embedded name (stdarg.h) keeps `-I`-shadows-
-    // embedded, as gcc and clang do.
+fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
+    // An intrinsic header (arm_neon.h) resolves to the embedded copy where a
+    // `-I` directory holds a same-named file (a foreign toolchain's private
+    // include directory folded onto the search path), with or without
+    // `-nostdinc`. Any other name (stdarg.h) keeps `-I`-shadows-embedded,
+    // as gcc and clang do.
     use std::io::Write;
     let dir = std::env::temp_dir().join(format!("badc-owned-hdr-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -4315,25 +4820,28 @@ fn compiler_owned_header_resolves_embedded_before_search_paths() {
         .unwrap()
         .write_all(b"int shadow_stdarg_marker;\n")
         .unwrap();
-    let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
-    pp.add_search_path(dir.to_str().unwrap());
-    let out = pp
-        .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
-        .expect("owned + shadowed includes resolve");
+    for nostdinc in [false, true] {
+        let mut pp = Preprocessor::new("linux-aarch64", Target::LinuxAarch64, "0.1.0");
+        pp.set_nostdinc(nostdinc);
+        pp.add_search_path(dir.to_str().unwrap());
+        let out = pp
+            .process("#include <arm_neon.h>\n#include <stdarg.h>\n")
+            .expect("owned + shadowed includes resolve");
+        assert!(
+            !out.contains("foreign_neon_marker"),
+            "arm_neon.h must resolve to the embedded copy: {out}"
+        );
+        assert!(
+            out.contains("vld1q_u8"),
+            "embedded arm_neon.h body expected: {}",
+            &out[..out.len().min(400)]
+        );
+        assert!(
+            out.contains("shadow_stdarg_marker"),
+            "a -I shadow of stdarg.h must win, as in gcc/clang"
+        );
+    }
     std::fs::remove_dir_all(&dir).ok();
-    assert!(
-        !out.contains("foreign_neon_marker"),
-        "arm_neon.h must resolve to the embedded copy: {out}"
-    );
-    assert!(
-        out.contains("vld1q_u8"),
-        "embedded arm_neon.h body expected: {}",
-        &out[..out.len().min(400)]
-    );
-    assert!(
-        out.contains("shadow_stdarg_marker"),
-        "a -I shadow of stdarg.h must win, as in gcc/clang"
-    );
 }
 
 /// Scratch directory holding the given (name, body) headers, on the
@@ -4351,6 +4859,135 @@ fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::pat
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.add_search_path(base.to_str().unwrap());
     (pp, base)
+}
+
+/// With the Microsoft extensions, as clang has them for a Windows target,
+/// a `\` in a header name separates directories, in the quoted and the
+/// angled form and in a nested include, and the names the files go by in
+/// line markers and `__FILE__` use `/`. Another target keeps `\` as an
+/// ordinary character, so on a POSIX host the name finds no file.
+#[test]
+fn a_backslash_in_a_header_name_separates_directories_for_a_windows_target() {
+    let (_, base) = pp_with_headers("backslash-include", &[]);
+    for dir in ["sub/deep", "inc/sys"] {
+        std::fs::create_dir_all(base.join(dir)).unwrap();
+    }
+    for (name, body) in [
+        (
+            "sub/h.h",
+            "#pragma once\n#include \"deep\\d.h\"\nconst char *h_file = __FILE__;\n",
+        ),
+        ("sub/deep/d.h", "const char *d_file = __FILE__;\n"),
+        ("inc/sys/s.h", "#pragma once\nint s_def;\n"),
+    ] {
+        std::fs::write(base.join(name), body).unwrap();
+    }
+    let src = "#include \"sub\\h.h\"\n#include \"sub/h.h\"\n#include \"sub\\\\h.h\"\n\
+               #include <sys\\s.h>\n#include <sys/s.h>\n";
+    let run = |spec: &str, target: Target| {
+        let mut pp = Preprocessor::new(spec, target, "0.1.0");
+        pp.set_source_label(base.join("m.c").to_str().unwrap());
+        pp.add_search_path(base.join("inc").to_str().unwrap());
+        pp.process(src)
+    };
+    let out = run("windows-x64", Target::WindowsX64).expect("preprocessor failed");
+    let linux = run("linux-x64", Target::LinuxX64);
+    std::fs::remove_dir_all(&base).ok();
+    for (text, want) in [
+        ("/sub/h.h\";", 1),
+        ("/sub/deep/d.h\";", 1),
+        ("int s_def;", 1),
+    ] {
+        assert_eq!(out.matches(text).count(), want, "{text}: {out}");
+    }
+    let marker = |tail: &str| {
+        out.lines()
+            .any(|l| l.starts_with("# ") && l.ends_with(tail))
+    };
+    // The search directories end as the host spells them; the header names
+    // after them use `/`.
+    assert!(marker("/sub/h.h\"") && marker("inc/sys/s.h\""), "{out}");
+    if cfg!(unix) {
+        let err = linux.expect_err("a backslash is no separator off Windows");
+        assert!(format!("{err}").contains("not found"), "{err}");
+    }
+}
+
+/// `_Pragma("once")` from an expansion, with a declaration after it on its
+/// line, marks the header as the directive does (gcc 16, clang).
+#[test]
+fn a_pragma_once_operator_from_an_expansion_marks_its_header() {
+    let (mut pp, base) = pp_with_headers(
+        "once-expansion",
+        &[(
+            "o.h",
+            "#define ONCE _Pragma(\"once\")\nONCE int once_by_macro;\n",
+        )],
+    );
+    let out = pp.process("#include <o.h>\n#include <o.h>\n");
+    std::fs::remove_dir_all(&base).ok();
+    let out = out.expect("preprocessor failed");
+    assert_eq!(out.matches("int once_by_macro;").count(), 1, "{out}");
+}
+
+/// `#pragma once` and the include-guard drop identify a file as gcc and
+/// clang do, by device and inode, so another spelling of the same file
+/// (`./`, `//`, an absolute path, a symbolic link, another case where the
+/// file system folds it) is the same file, and a file of the same name
+/// in another directory is another.
+#[test]
+fn pragma_once_and_the_guard_drop_identify_a_file_by_its_identity() {
+    let (mut pp, base) = pp_with_headers(
+        "once-identity",
+        &[
+            ("b.h", "#pragma once\nint once_def;\n"),
+            ("p.h", "_Pragma(\"once\")\nint operator_def;\n"),
+            ("g.h", "#ifndef G_H\n#define G_H\nint guard_def;\n#endif\n"),
+        ],
+    );
+    std::fs::create_dir_all(base.join("sub")).unwrap();
+    std::fs::write(base.join("sub/b.h"), "#pragma once\nint other_def;\n").unwrap();
+    let dir = base.to_str().unwrap();
+    let mut spellings = vec![
+        "<b.h>".to_string(),
+        "<./b.h>".to_string(),
+        "<.//b.h>".to_string(),
+        "<sub/../b.h>".to_string(),
+        format!("\"{dir}/b.h\""),
+        format!("\"{dir}//./b.h\""),
+    ];
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(base.join("b.h"), base.join("link.h")).unwrap();
+        spellings.push("<link.h>".to_string());
+    }
+    if base.join("B.H").exists() {
+        spellings.push("<B.H>".to_string());
+    }
+    let mut src: String = spellings
+        .iter()
+        .map(|s| format!("#include {s}\n"))
+        .collect();
+    src.push_str("#include <p.h>\n#include <./p.h>\n#include <g.h>\n#include <./g.h>\n");
+    src.push_str("#include <sub/b.h>\n");
+    pp.set_track_includes(true);
+    let out = pp.process(&src).expect("preprocessor failed");
+    std::fs::remove_dir_all(&base).ok();
+    for (decl, want) in [
+        ("int once_def;", 1),
+        ("int operator_def;", 1),
+        ("int guard_def;", 1),
+        ("int other_def;", 1),
+    ] {
+        assert_eq!(out.matches(decl).count(), want, "{decl}: {out}");
+    }
+    let cached = |name: &str| {
+        pp.include_records
+            .iter()
+            .filter(|r| r.spelling == name && r.status == IncludeStatus::Cached)
+            .count()
+    };
+    assert_eq!((cached("./g.h"), cached("./p.h")), (1, 1));
 }
 
 /// A header wholly wrapped in `#ifndef G` / `#endif` contributes nothing
@@ -4750,6 +5387,34 @@ fn retry_reuse_follows_the_counter_position() {
     std::fs::remove_dir(&dir).ok();
 }
 
+#[test]
+fn retry_reuse_declines_when_the_extension_pushes_a_name_the_source_pops() {
+    // The macro tables at source entry agree, but the extension leaves a
+    // `push_macro` save of `N` that the source's `pop_macro` reinstates.
+    let dir = std::env::temp_dir().join(format!("badc_pp_reuse_push_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let hdr = dir.join("push.h");
+    std::fs::write(&hdr, "#define N 5\n#pragma push_macro(\"N\")\n#undef N\n").unwrap();
+    let src = "#pragma pop_macro(\"N\")\nint n = N;\n";
+    let (_, cache) = reuse_pp()
+        .process_recording(src)
+        .expect("recording run succeeds");
+    let extended = || {
+        let mut pp = reuse_pp();
+        pp.add_search_path(dir.to_str().unwrap());
+        pp.add_force_include("push.h");
+        pp
+    };
+    assert!(
+        extended().process_reusing(&cache).is_none(),
+        "a save the source pops must fall back to a full run"
+    );
+    let out = extended().process(src).expect("full run succeeds");
+    assert!(out.contains("int n = 5;"), "{out:?}");
+    std::fs::remove_file(&hdr).ok();
+    std::fs::remove_dir(&dir).ok();
+}
+
 /// C99 6.10 makes the directive name one preprocessing token: a longer
 /// identifier names no directive, and a punctuator ends the name the way
 /// white space does. gcc and clang reject `#elseelse`, read `#else(x)`
@@ -5074,6 +5739,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         DATE_TIME,
         UNDEF,
         super::MACRO_REDEFINED,
+        super::EXPANSION_TO_DEFINED,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
@@ -5370,17 +6036,13 @@ fn the_front_end_installs_the_command_line_on_this_passs_sink() {
 fn a_hard_error_carries_the_diagnostics_reported_before_it() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let err = pp
-        .process("#pragma frobnicate\n#warning first\n#error stop\n")
-        .expect_err("#error fails the pass");
+        .process("#pragma frobnicate\n#warning first\n#include \"no-such-header.h\"\n")
+        .expect_err("a missing include fails the pass");
     let reported: Vec<Code> = err.diagnostics().iter().map(|d| d.code).collect();
     let row = |name: &str| Code::from_selector(name).expect("catalogued");
     assert_eq!(
         reported,
-        [
-            row("unknown-pragmas"),
-            row("#warnings"),
-            Code::ERROR_DIRECTIVE
-        ]
+        [row("unknown-pragmas"), row("#warnings"), Code::DIRECTIVE]
     );
     assert!(
         codes(&pp).is_empty(),
@@ -5463,7 +6125,8 @@ fn subsystem_pragma_takes_every_kind_in_any_case_and_with_dashes() {
         ("WINDOWS", Windows),
         ("gui", Windows),
         ("nt", Native),
-        ("DRIVER", Native),
+        ("native", Native),
+        ("DRIVER", Driver),
         ("efi-application", EfiApplication),
         ("EFI_Application", EfiApplication),
         ("EFI-BOOT-SERVICE-DRIVER", EfiBootServiceDriver),

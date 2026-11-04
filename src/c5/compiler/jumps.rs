@@ -2,7 +2,8 @@
 //! of the variables in scope at it and not at its label, latest declared
 //! first. It may not pass a VLA declaration (C99 6.8.6.1p1, 6.8.4.2p2) or, as
 //! clang rules, a cleanup declaration into its scope, nor enter a statement
-//! expression.
+//! expression or a block of a `__try` statement, nor leave a `__finally`
+//! block.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -13,20 +14,22 @@ use super::super::ast::{LabelId, Stmt, StmtId};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::Compiler;
-use super::stmt::CleanupVar;
+use super::seh::SehPart;
+use super::stmt::Cleanup;
 
-/// An open scope: its id and its cleanup variables, in declaration order.
+/// An open scope: its id and its cleanups, in declaration order.
 pub(super) struct CleanupScope {
     pub(super) id: u32,
-    pub(super) vars: Vec<CleanupVar>,
+    pub(super) vars: Vec<Cleanup>,
 }
 
-/// A scope's barrier declarations as (name, is a VLA, line), and whether it
-/// is a statement expression's block.
+/// A scope's barrier declarations as (name, is a VLA, line), whether it is a
+/// statement expression's block, and the `__try` statement part it holds.
 #[derive(Default)]
 pub(super) struct ScopeBarriers {
     decls: Vec<(String, bool, usize)>,
     stmt_expr: bool,
+    seh: Option<SehPart>,
 }
 
 /// A program point: per open scope, outermost first, its id and how many of
@@ -46,8 +49,8 @@ struct PendingJump {
     stmt: StmtId,
     target: Target,
     from: JumpPoint,
-    /// The cleanup variables in scope at the jump, outermost first.
-    active: Vec<CleanupVar>,
+    /// The cleanups in scope at the jump, outermost first.
+    active: Vec<Cleanup>,
     line: usize,
 }
 
@@ -62,10 +65,21 @@ pub(super) struct Jumps {
 
 impl Compiler {
     pub(super) fn open_cleanup_scope(&mut self, stmt_expr: bool) {
+        self.open_barrier_scope(stmt_expr, None);
+    }
+
+    /// The scope of a `__try` statement's `part`, which no jump may enter
+    /// and none may leave from a `__finally` body.
+    pub(super) fn open_seh_scope(&mut self, part: SehPart) {
+        self.open_barrier_scope(false, Some(part));
+    }
+
+    fn open_barrier_scope(&mut self, stmt_expr: bool, seh: Option<SehPart>) {
         let id = self.jumps.scopes.len() as u32;
         self.jumps.scopes.push(ScopeBarriers {
             decls: Vec::new(),
             stmt_expr,
+            seh,
         });
         self.cleanup_scopes.push(CleanupScope {
             id,
@@ -158,11 +172,20 @@ impl Compiler {
             if self.jumps.scopes[id as usize].stmt_expr {
                 return Some("a statement expression".into());
             }
+            if let Some(part) = self.jumps.scopes[id as usize].seh {
+                return Some(part.block().into());
+            }
             if passed > 0 {
                 return Some(self.barrier(id, 0));
             }
         }
         None
+    }
+
+    /// Whether `from` is inside a `__finally` block that `to` is not.
+    fn leaves_finally(&self, from: &JumpPoint, to: &JumpPoint) -> bool {
+        let k = shared(from, to);
+        (from.0[k..].iter()).any(|s| self.jumps.scopes[s.0 as usize].seh == Some(SehPart::Finally))
     }
 
     fn barrier(&self, id: u32, i: u32) -> String {
@@ -181,20 +204,24 @@ impl Compiler {
         self.ast.label_addrs = self.jumps.label_addrs.iter().copied().collect();
         let pending = core::mem::take(&mut self.jumps.pending);
         // Jumps to one label running one list share its calls.
-        let mut shared: BTreeMap<(LabelId, Vec<CleanupVar>), Vec<StmtId>> = BTreeMap::new();
+        let mut shared: BTreeMap<(LabelId, Vec<Cleanup>), Vec<StmtId>> = BTreeMap::new();
         for j in &pending {
             let (targets, what): (Vec<LabelId>, _) = match j.target {
                 Target::Label(l) => (alloc::vec![l], "`goto`"),
                 Target::Computed => (self.ast.label_addrs.clone(), "computed `goto`"),
                 Target::Asm { label, .. } => (alloc::vec![label], "`asm goto`"),
             };
-            let mut run: Option<Vec<CleanupVar>> = None;
+            let mut run: Option<Vec<Cleanup>> = None;
             for l in targets {
                 let Some(to) = self.jumps.labels.get(&l) else {
                     continue;
                 };
                 if let Some(into) = self.entry_violation(&j.from, to) {
                     let msg = format!("{what} jumps into {into}");
+                    return Err(self.compile_err_at(Code::INVALID_STATEMENT, j.line, msg));
+                }
+                if self.leaves_finally(&j.from, to) {
+                    let msg = format!("{what} jumps out of a `__finally` block");
                     return Err(self.compile_err_at(Code::INVALID_STATEMENT, j.line, msg));
                 }
                 let list = cleanups_left(j, to);
@@ -233,7 +260,7 @@ impl Compiler {
     }
 
     /// The call statements running `list`, placed at jump statement `stmt`.
-    fn cleanup_calls(&mut self, stmt: StmtId, list: &[CleanupVar]) -> Vec<StmtId> {
+    fn cleanup_calls(&mut self, stmt: StmtId, list: &[Cleanup]) -> Vec<StmtId> {
         let pos = self.ast.stmt_src[stmt as usize];
         let mut calls = Vec::with_capacity(list.len());
         for cv in list {
@@ -251,9 +278,9 @@ fn shared(a: &JumpPoint, b: &JumpPoint) -> usize {
     a.0.iter().zip(&b.0).take_while(|(x, y)| x.0 == y.0).count()
 }
 
-/// The cleanup variables in scope at the jump and not at `to`, latest
-/// declared first.
-fn cleanups_left(j: &PendingJump, to: &JumpPoint) -> Vec<CleanupVar> {
+/// The cleanups in scope at the jump and not at `to`, latest declared
+/// first.
+fn cleanups_left(j: &PendingJump, to: &JumpPoint) -> Vec<Cleanup> {
     let k = shared(&j.from, to);
     let mut kept: usize = j.from.0[..k.saturating_sub(1)]
         .iter()

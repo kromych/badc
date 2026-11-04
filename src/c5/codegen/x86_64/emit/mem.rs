@@ -1,3 +1,4 @@
+use super::encode::Disp32Mem;
 use super::*;
 
 /// `Inst::TlsAddr`. Linux variant 2: `var = fs:[0] - (tls_total - offset)`.
@@ -194,12 +195,12 @@ pub(super) fn emit_tls_addr(
 
 /// rbp-relative offset of c5 slot `off`: parameter `off - 2`'s home
 /// (`param_home_off`) for `off >= 2`, the local at `[rbp + off*8]` below
-/// the canary region otherwise.
+/// the save block and the canary region otherwise.
 pub(super) fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
     if off >= 2 {
         param_home_off((off - 2) as usize, func, frame, abi)
     } else {
-        c5_slot_to_fp_offset(off, 16, frame.canary_bytes)
+        c5_slot_to_fp_offset(off, 16, frame.locals_shift())
     }
 }
 
@@ -979,10 +980,10 @@ pub(super) fn emit_abs_indexed(
     let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
     let width = width as u8;
     let field = if marked(&alloc.branch_fused) {
-        super::encode::emit_mi_index_abs(code, Mnem::Cmp, width, (ri, scale), 0)
+        super::encode::emit_mi_disp32(code, Mnem::Cmp, width, Disp32Mem::Index(ri, scale), 0)
     } else if marked(&alloc.imm_store) {
         let (_, imm) = store_imm_operand(inst, func)?;
-        super::encode::emit_mi_index_abs(code, Mnem::Mov, width, (ri, scale), imm)
+        super::encode::emit_mi_disp32(code, Mnem::Mov, width, Disp32Mem::Index(ri, scale), imm)
     } else {
         match inst {
             Inst::LoadIndexed { kind, .. } => {
@@ -990,7 +991,8 @@ pub(super) fn emit_abs_indexed(
                     return fail("LoadIndexed: dst not int reg / spill");
                 };
                 let hi = !alloc.high_dead(v);
-                let field = super::encode::emit_load_index_abs(code, *kind, rd, ri, scale, hi);
+                let mem = Disp32Mem::Index(ri, scale);
+                let field = super::encode::emit_load_disp32(code, *kind, rd, mem, hi);
                 spill_dst_to_slot(code, dst, rd, frame);
                 field
             }
@@ -1006,7 +1008,8 @@ pub(super) fn emit_abs_indexed(
                         None => return fail("StoreIndexed: value not int reg / spill"),
                     },
                 };
-                let field = super::encode::emit_store_index_abs(code, width, ri, scale, rv);
+                let mem = Disp32Mem::Index(ri, scale);
+                let field = super::encode::emit_store_disp32(code, width, mem, rv);
                 mirror_int_dst(code, dst, rv, frame);
                 field
             }
@@ -1017,6 +1020,111 @@ pub(super) fn emit_abs_indexed(
         field_offset: field,
         target,
     });
+    Ok(())
+}
+
+/// Lower an access marked `pc_rel`: `disp32(%rip)` names the object of its
+/// `ImmData`, recorded as an [`AddrPart::Disp32`] data fixup. The
+/// allocator's fused forms apply as to the register-based access.
+pub(super) fn emit_pc_rel(
+    code: &mut Vec<u8>,
+    data_fixups: &mut Vec<DataFixup>,
+    inst: &Inst,
+    v: u32,
+    dst: Place,
+    fcx: &FnCtx,
+) -> Emit {
+    let FnCtx {
+        func, alloc, frame, ..
+    } = *fcx;
+    let (Inst::Load { addr, disp, .. } | Inst::Store { addr, disp, .. }) = inst else {
+        unreachable!()
+    };
+    let Some(Inst::ImmData(off)) = abs_base_data(func, *addr).map(|d| &func.insts[d as usize])
+    else {
+        return fail("pc_rel access: address not a data address");
+    };
+    let mut record = |code: &Vec<u8>, field: usize| {
+        let trailing = (code.len() - field - 4) as i64;
+        data_fixups.push(DataFixup {
+            instr_offset: field,
+            data_offset: *off as u64,
+            addend: i64::from(*disp) - trailing,
+            part: AddrPart::Disp32,
+        });
+    };
+    let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
+    if marked(&alloc.branch_fused) {
+        let Inst::Load { kind, .. } = inst else {
+            return fail("zero test: not a load");
+        };
+        let width = int_load_shape(*kind).0 as u8;
+        let field = super::encode::emit_mi_disp32(code, Mnem::Cmp, width, Disp32Mem::Rip, 0);
+        record(code, field);
+        return Ok(());
+    }
+    if marked(&alloc.imm_store) {
+        let (width, imm) = store_imm_operand(inst, func)?;
+        let field = super::encode::emit_mi_disp32(code, Mnem::Mov, width, Disp32Mem::Rip, imm);
+        record(code, field);
+        return Ok(());
+    }
+    match inst {
+        Inst::Load { kind, .. } if matches!(kind, LoadKind::F32 | LoadKind::F64) => {
+            let Some(dd) = fp_or_spill_dst(dst, frame) else {
+                return fail("Load: dst not fp reg / spill");
+            };
+            let single = *kind == LoadKind::F32;
+            let field =
+                super::encode::emit_sse_mov_rip(code, if single { 0xF3 } else { 0xF2 }, false, dd);
+            record(code, field);
+            if single && !alloc.is_f32(v) {
+                emit_cvtss2sd(code, dd, dd);
+            }
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+        }
+        Inst::Load { kind, .. } => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("Load: dst not int reg / spill");
+            };
+            let hi = !alloc.high_dead(v);
+            let field = super::encode::emit_load_disp32(code, *kind, rd, Disp32Mem::Rip, hi);
+            record(code, field);
+            spill_dst_to_slot(code, dst, rd, frame);
+        }
+        Inst::Store { value, kind, .. } if matches!(kind, StoreKind::F32 | StoreKind::F64) => {
+            let Some(dn) = materialize_fp(
+                code,
+                place_of(alloc, *value),
+                Reg(frame.fp_scratch[0]),
+                frame,
+            ) else {
+                return fail("Store: value not fp reg / spill / int reg");
+            };
+            let single = *kind == StoreKind::F32;
+            let src = if single && !alloc.is_f32(*value) {
+                emit_cvtsd2ss(code, Reg(frame.fp_scratch[1]), dn);
+                Reg(frame.fp_scratch[1])
+            } else {
+                dn
+            };
+            let field =
+                super::encode::emit_sse_mov_rip(code, if single { 0xF3 } else { 0xF2 }, true, src);
+            record(code, field);
+            mirror_fp_dst(code, dst, dn, frame);
+        }
+        Inst::Store { value, kind, .. } => {
+            let Some(rs) = materialize_int(code, place_of(alloc, *value), SCRATCH_R11, frame)
+            else {
+                return fail("Store: value Place not int reg / spill");
+            };
+            let width = int_store_width(*kind) as u8;
+            let field = super::encode::emit_store_disp32(code, width, Disp32Mem::Rip, rs);
+            record(code, field);
+            mirror_int_dst(code, dst, rs, frame);
+        }
+        _ => unreachable!(),
+    }
     Ok(())
 }
 

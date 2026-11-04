@@ -154,11 +154,12 @@ pub(super) enum FusedBranch {
     JnpAnd(Cc),
 }
 
-/// Whether a fused `Flt` / `Fle` compare emits `ucomisd rhs, lhs`: the swap
+/// Whether an `Flt` / `Fle` compare emits `ucomisd rhs, lhs`: the swap
 /// turns them into the `>` / `>=` shapes whose `A` / `Ae` (and `Be` / `B`)
-/// codes are exact under the unordered flag state, so the branch needs no
-/// parity test. The compare and [`fused_branch_cc`] derive it alike.
-pub(super) fn fused_fp_swaps_operands(op: BinOp) -> bool {
+/// codes are exact under the unordered flag state, so neither the `setcc`
+/// nor the branch needs a parity test. The compare, its `setcc` and
+/// [`fused_branch_cc`] derive it alike.
+pub(super) fn fp_compare_swaps_operands(op: BinOp) -> bool {
     matches!(op, BinOp::Flt | BinOp::Fle)
 }
 
@@ -235,6 +236,8 @@ pub(super) fn fused_branch_cc(
                 FusedBranch::JpOr(Cc::Ne)
             }
         }
+        BinOp::Fone => FusedBranch::Jcc(if negate { Cc::E } else { Cc::Ne }),
+        BinOp::Funo => FusedBranch::Jcc(if negate { Cc::Np } else { Cc::P }),
         _ => return None,
     })
 }
@@ -321,6 +324,15 @@ pub(super) fn emit_inst(
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             emit_incoming(code, inst, dst, v, fcx)
         }
+        // The language handler leaves the code in rax.
+        Inst::ExceptionCode => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("ExceptionCode: dst not int reg / spill");
+            };
+            emit_mov_rr(code, rd, Reg::RAX);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 return fail("Imm: dst not int reg / spill");
@@ -344,8 +356,34 @@ pub(super) fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
         }
+        Inst::ParentLocalAddr {
+            establisher,
+            parent,
+            index,
+        } => {
+            let Some(rd) = int_or_spill_dst(dst) else {
+                return fail("ParentLocalAddr: dst not int reg / spill");
+            };
+            let Some(bytes) =
+                (cx.funclet_frames.get(parent)).and_then(|offsets| offsets.get(*index as usize))
+            else {
+                return fail("ParentLocalAddr: the filtered function's frame is not laid out");
+            };
+            let Ok(disp) = i32::try_from(*bytes) else {
+                return fail("ParentLocalAddr: offset doesn't fit in disp32");
+            };
+            let Some(rn) = materialize_int(code, place_of(alloc, *establisher), rd, frame) else {
+                return fail("ParentLocalAddr: frame value not int reg / spill");
+            };
+            emit_lea_r_mem(code, rd, rn, disp);
+            spill_dst_to_slot(code, dst, rd, frame);
+            Ok(())
+        }
         Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
             emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
+        }
+        Inst::Load { pc_rel: true, .. } | Inst::Store { pc_rel: true, .. } => {
+            emit_pc_rel(code, data_fixups, inst, v, dst, fcx)
         }
         Inst::Load { .. }
         | Inst::Store { .. }

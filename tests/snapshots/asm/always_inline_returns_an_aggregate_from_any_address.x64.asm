@@ -30,8 +30,7 @@ Disassembly of section .text:
                	retq
 
 <via_global>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	retq
 
 <via_pointer>:
@@ -96,8 +95,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	$0xb, (%rax)
+               	movq	$0xb, <rip> # <addr>
                	callq	<addr>
                	cmpq	$0xb, %rax
                	je	<addr>

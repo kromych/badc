@@ -18,15 +18,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0x30]
                	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x30]
                	mov	x1, #0x5                // =5
                	stur	w1, [x29, #-0x8]
-               	ldrsw	x2, [x0]
-               	add	x1, x2, x1
-               	str	w1, [x0]
+               	ldrsw	x1, [x0, #0x30]
+               	add	x1, x1, #0x5
+               	str	w1, [x0, #0x30]
                	mov	x0, x1
                	cmp	w0, #0x6
                	b.ne	<addr>

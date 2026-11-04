@@ -207,80 +207,6 @@ impl Compiler {
         }
     }
 
-    /// Parse a C11 7.17 atomic builtin call. The opening `(` has
-    /// already been consumed. The first operand is the atomic-object
-    /// pointer; its pointee type sets the operand width. The result
-    /// type follows C11 7.17.7: the pointee value for the load /
-    /// exchange / fetch forms, `int` for compare-exchange (the
-    /// predicate) and for store (used in statement position).
-    fn parse_atomic_builtin(
-        &mut self,
-        kind: super::super::ast::AtomicKind,
-        id_idx: usize,
-    ) -> Result<(), C5Error> {
-        use super::super::ast::{AtomicKind, Expr};
-        let fn_name = self.symbols[id_idx].name.clone();
-        let want = atomic_arity(kind);
-        let mut args: Vec<super::super::ast::ExprId> = Vec::new();
-        self.expr(Token::Assign as i64)?;
-        let ptr_ty = self.ty;
-        if let Some(a) = self.ast_acc {
-            args.push(a);
-        }
-        if !is_pointer_ty(ptr_ty) {
-            return Err(self.compile_err(
-                Code::INVALID_ARGUMENTS,
-                format!("`{fn_name}` first argument must be a pointer to the atomic object"),
-            ));
-        }
-        let elem_ty = pointee_ty(ptr_ty);
-        // C11 7.17.7: the value operand -- the last one -- has the object's
-        // type; a compare-exchange's `expected` operand is a pointer.
-        while args.len() < want {
-            if self.lex.tk != ',' {
-                return Err(self.compile_err(
-                    Code::INVALID_ARGUMENTS,
-                    format!("`{fn_name}` takes {want} arguments"),
-                ));
-            }
-            self.next()?;
-            self.expr(Token::Assign as i64)?;
-            if args.len() + 1 == want {
-                self.convert_assign_rhs(elem_ty);
-            }
-            if let Some(a) = self.ast_acc {
-                args.push(a);
-            }
-        }
-        if self.lex.tk != ')' {
-            return Err(self.compile_err(
-                Code::INVALID_ARGUMENTS,
-                format!("`{fn_name}` takes {want} arguments"),
-            ));
-        }
-        self.next()?;
-        self.mark_emit_other();
-        let result_ty = match kind {
-            AtomicKind::Store | AtomicKind::CompareExchangeStrong => Ty::Int as i64,
-            _ => elem_ty,
-        };
-        self.ty = result_ty;
-        let pos = self.ast_src_pos();
-        // C11 7.17.7: the non-`_explicit` forms are seq_cst.
-        let id = self.ast.push_expr(
-            Expr::Atomic {
-                kind,
-                args,
-                elem_ty,
-                ty: result_ty,
-                order: MemOrder::SeqCst,
-            },
-            pos,
-        );
-        self.ast_acc = Some(id);
-        Ok(())
-    }
-
     /// A GCC atomic builtin's value operand, converted to the type of the
     /// object it is stored into or combined with (C11 7.17.7).
     fn gcc_atomic_value(
@@ -543,11 +469,22 @@ impl Compiler {
         name: &str,
     ) -> Result<(), C5Error> {
         use super::super::ast::{Expr, ExprId, MemTransferOp};
+        // The operands convert to the library function's parameters, with
+        // the diagnostics of a call to it.
+        let params = self.library_param_types(mem_transfer_lib_name(op));
         let mut args: Vec<ExprId> = Vec::new();
         let mut ptr_align = MAX_MEM_TRANSFER_ALIGN;
         if self.lex.tk != ')' {
             loop {
+                let Some(&want) = params.get(args.len()) else {
+                    return Err(self.compile_err(
+                        Code::INVALID_ARGUMENTS,
+                        format!("too many arguments to `{name}` (expected 3)"),
+                    ));
+                };
+                let line = self.lex.line;
                 self.expr(Token::Assign as i64)?;
+                self.reject_void_value(self.ty)?;
                 // The pointer operands guarantee their pointee type's
                 // alignment (C99 6.3.2.3p7); the fill byte contributes
                 // nothing. `void *` is `unsigned char *` here, so an
@@ -560,20 +497,19 @@ impl Compiler {
                     };
                     ptr_align = ptr_align.min(a.max(1));
                 }
-                if let Some(a) = self.ast_acc {
-                    args.push(a);
+                args.push(self.convert_builtin_value(name, args.len(), want, line)?);
+                if !self.list_separator(')', "argument")? {
+                    break;
                 }
-                if self.lex.tk == ',' {
-                    self.next()?;
-                    continue;
-                }
-                break;
             }
         }
-        if self.lex.tk != ')' || args.len() != 3 {
+        if args.len() < params.len() {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("`{name}` expects (dst, src, count)"),
+                format!(
+                    "too few arguments to `{name}` (expected 3, got {})",
+                    args.len()
+                ),
             ));
         }
         self.next()?;
@@ -687,30 +623,21 @@ impl Compiler {
         ty: i64,
     ) -> Result<(), C5Error> {
         let callable = self.callable_symbol(name);
-        let retry_unavailable =
-            self.nostdinc || self.preprocessed || self.library_name_is_opaque(name);
         let idx = match callable {
             Some(i) => i,
             // The `__builtin_` spelling stays callable in every mode
             // (gcc documents the fallback call for freestanding units).
-            // Where the auto-include retry would decline the name, an
-            // undeclared library name binds here as the extern function
-            // the builtin implies and the environment defines it at link
-            // time; otherwise the error stands so the retry installs the
-            // header's own library binding.
-            None if retry_unavailable => {
-                let i = self.resolve_symbol_named(name);
-                if self.symbols[i].class != 0 {
+            // Where the auto-include retry cannot declare the name, it is
+            // declared here with the builtin's prototype and the
+            // environment defines it at link time; otherwise the error
+            // stands so the retry installs the header's own binding.
+            None if self.auto_include_unavailable(name) => {
+                let Some(i) = self.library_function_slot(name) else {
                     return Err(self.compile_err(
                         Code::UNDECLARED_IDENTIFIER,
                         format!("unknown function `{name}`"),
                     ));
-                }
-                self.symbols[i].class = Token::Fun as i64;
-                self.symbols[i].type_ = ty;
-                self.symbols[i].incomplete_enum_tag = None;
-                self.symbols[i].linkage = crate::c5::symbol::Linkage::External;
-                self.symbols[i].defined_here = false;
+                };
                 i
             }
             None => {
@@ -870,6 +797,15 @@ impl Compiler {
                     alloc::vec![ptr, v],
                     int_ty,
                     order_at(self, 2).for_store(),
+                )
+            }
+            "__c11_atomic_init" => {
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
+                (
+                    AtomicKind::Init,
+                    alloc::vec![ptr, v],
+                    int_ty,
+                    MemOrder::Relaxed,
                 )
             }
             // Generic forms: the value moves through a pointer rather than
@@ -1598,13 +1534,14 @@ impl Compiler {
         } else if class == Token::Fun as i64 || class == Token::Sys as i64 {
             self.parse_function_designator(id_idx)
         } else if class == Token::Loc as i64
-            && matches!(
-                self.symbols[id_idx].asm_register,
-                Some(
-                    crate::c5::symbol::AsmRegister::StackPointer
-                        | crate::c5::symbol::AsmRegister::FramePointer
-                )
-            )
+            && (self.symbols[id_idx].is_global_register
+                || matches!(
+                    self.symbols[id_idx].asm_register,
+                    Some(
+                        crate::c5::symbol::AsmRegister::StackPointer
+                            | crate::c5::symbol::AsmRegister::FramePointer
+                    )
+                ))
         {
             self.parse_register_variable(id_idx)
         } else {
@@ -1615,7 +1552,19 @@ impl Compiler {
     /// A call on a bare identifier, the `(` consumed: a builtin lowered
     /// at the call site, or a call to the declared function.
     fn parse_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
-        let id_idx = self.bind_call_target(id_idx)?;
+        // An alias of a library function its header binds to an intrinsic
+        // lowers to the intrinsic, whatever the unit declares.
+        if self.symbols[id_idx].class == 0
+            && let Some(kind) = super::super::preprocessor::builtins::library_alias_intrinsic(
+                &self.symbols[id_idx].name,
+            )
+        {
+            return self.parse_intrinsic_call(id_idx, kind as i64);
+        }
+        // A diagnostic about the call names it as written, `__builtin_strlen`
+        // where that binds `strlen`, as gcc and clang do.
+        let spelled = self.symbols[id_idx].name.clone();
+        let id_idx = self.bind_call_target(id_idx);
         match self.builtin_call(id_idx) {
             Some(BuiltinCall::Simd(op)) => {
                 let name = self.symbols[id_idx].name.clone();
@@ -1637,7 +1586,6 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_gcc_atomic_builtin(&name, id_idx)
             }
-            Some(BuiltinCall::Atomic(kind)) => self.parse_atomic_builtin(kind, id_idx),
             Some(BuiltinCall::Value(kind)) => {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_value_builtin(kind, &name)
@@ -1647,14 +1595,13 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_ms_intrinsic(&name)
             }
-            None => self.parse_direct_call(id_idx),
+            None => self.parse_direct_call(id_idx, spelled),
         }
     }
 
     /// The symbol a call binds to: a `__builtin_*` alias of a library
-    /// function binds to that function, and a name the driver listed for
-    /// C89 6.3.2.2 implicit declaration is declared here.
-    fn bind_call_target(&mut self, id_idx: usize) -> Result<usize, C5Error> {
+    /// function binds to that function.
+    fn bind_call_target(&mut self, id_idx: usize) -> usize {
         let mut id_idx = id_idx;
         // A `__builtin_*` alias of a library function binds to the function
         // itself, past any macro of the library name.
@@ -1663,31 +1610,16 @@ impl Compiler {
                 super::super::preprocessor::builtins::library_alias(&self.symbols[id_idx].name);
             if let Some(fn_name) = alias {
                 id_idx = self.resolve_symbol_named(fn_name);
+                if self.symbols[id_idx].class == 0
+                    && self.auto_include_unavailable(fn_name)
+                    && let Some(slot) = self.library_function_slot(fn_name)
+                {
+                    id_idx = slot;
+                }
                 id_idx = self.builtin_library_symbol(id_idx);
             }
         }
-        // C89 6.3.2.2 implicit declaration, for the names the driver listed:
-        // the call binds `extern int name();` against the link set's own
-        // definition.
-        if self.symbols[id_idx].class == 0
-            && !self.implicit_extern_fns.is_empty()
-            && self
-                .implicit_extern_fns
-                .iter()
-                .any(|n| n == &self.symbols[id_idx].name)
-        {
-            // The declaration lands in the innermost block and unbinds at its
-            // exit; the entity stays on the slot for link resolution.
-            self.rebind_scoped(id_idx)?;
-            self.symbols[id_idx].class = Token::Fun as i64;
-            self.symbols[id_idx].scoped_fn_decl = true;
-            self.symbols[id_idx].type_ = Ty::Int as i64;
-            self.symbols[id_idx].fn_type.params.prototyped = false;
-            self.symbols[id_idx].implicit_return_int = true;
-            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
-            self.symbols[id_idx].defined_here = false;
-        }
-        Ok(id_idx)
+        id_idx
     }
 
     /// The builtin a call on `id_idx` lowers to, or `None` for a call to
@@ -1725,11 +1657,11 @@ impl Compiler {
             if typed_overflow_builtin(name).is_some() {
                 return Some(BuiltinCall::Overflow);
             }
-            if name.starts_with("__atomic_") || name.starts_with("__sync_") {
+            if name.starts_with("__atomic_")
+                || name.starts_with("__sync_")
+                || name == "__c11_atomic_init"
+            {
                 return Some(BuiltinCall::GccAtomic);
-            }
-            if let Some(kind) = intrinsic_id.and_then(atomic_kind_from_intrinsic) {
-                return Some(BuiltinCall::Atomic(kind));
             }
         }
         intrinsic_id.map(BuiltinCall::Intrinsic)
@@ -1739,12 +1671,13 @@ impl Compiler {
         use crate::c5::op::Intrinsic;
         let is = |k: Intrinsic| intrinsic_id == k as i64;
         let fn_name = self.symbols[id_idx].name.clone();
-        // `__builtin_trap()` is the only nullary intrinsic;
-        // every other one needs at least one argument.
-        if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
+        // `__builtin_trap()` and `__c5_establisher_frame()` are the
+        // nullary intrinsics; every other one needs at least one argument.
+        let nullary = is(Intrinsic::Trap) || is(Intrinsic::EstablisherFrame);
+        if self.lex.tk == ')' && !nullary {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("intrinsic `{fn_name}` requires one argument"),
+                format!("too few arguments to `{fn_name}` (expected at least 1, got 0)"),
             ));
         }
         let IntrinsicOperands {
@@ -1756,7 +1689,7 @@ impl Compiler {
         if self.lex.tk != ')' {
             return Err(self.compile_err(
                 Code::INVALID_ARGUMENTS,
-                format!("intrinsic `{fn_name}` arity mismatch at close paren"),
+                format!("too many arguments to `{fn_name}`"),
             ));
         }
         self.next()?;
@@ -1857,8 +1790,8 @@ impl Compiler {
         let mut walked_return_slot = false;
         let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
             alloc::vec::Vec::new();
-        if is(Intrinsic::Trap) {
-            // __builtin_trap() -- no arguments.
+        if is(Intrinsic::Trap) || is(Intrinsic::EstablisherFrame) {
+            // No arguments.
         } else if is(Intrinsic::Fma) || is(Intrinsic::Fmaf) {
             // C99 7.12.13.1 `fma` / `fmaf`: three operands in the result
             // precision, lowered to one `Inst::Fma`.
@@ -1869,7 +1802,7 @@ impl Compiler {
             };
             let mut count = 0;
             loop {
-                self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+                self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, count)?;
                 count += 1;
                 if self.lex.tk == ',' {
                     self.next()?;
@@ -1878,9 +1811,10 @@ impl Compiler {
                 break;
             }
             if count != 3 {
+                let few = if count < 3 { "few" } else { "many" };
                 return Err(self.compile_err(
                     Code::INVALID_ARGUMENTS,
-                    format!("intrinsic `{fn_name}` takes (x, y, z)"),
+                    format!("too {few} arguments to `{fn_name}` (expected 3, got {count})"),
                 ));
             }
         } else if is_fp_unary {
@@ -1891,7 +1825,7 @@ impl Compiler {
             } else {
                 Ty::Double as i64
             };
-            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, 0)?;
         } else if is_int_bit_unary || is_bswap {
             // `__builtin_clz` / `ctz` / `popcount` and `__builtin_bswap*`: one
             // integer operand, zero-extended to the operation width so the count
@@ -1917,10 +1851,13 @@ impl Compiler {
             } else {
                 Ty::Int as i64 | super::types::UNSIGNED_BIT
             };
-            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args)?;
+            self.parse_converted_operand(elem_ty, &mut ast_intrinsic_args, fn_name, 0)?;
         } else if is(Intrinsic::VaArg) {
             va_arg_result_ty = Some(self.parse_va_arg_operands(fn_name, &mut ast_intrinsic_args)?);
         } else if is(Intrinsic::VaStart) || is(Intrinsic::VaCopy) {
+            if is(Intrinsic::VaStart) {
+                self.require_variadic_function()?;
+            }
             // The `va_list`, then the rightmost fixed parameter (`va_start`, C99
             // 7.15.1.4) or the source `va_list` (`va_copy`), both as addresses.
             self.expr(Token::Assign as i64)?;
@@ -1936,10 +1873,12 @@ impl Compiler {
                 ));
             }
             self.next()?;
+            let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
             if is(Intrinsic::VaCopy) {
                 self.va_list_operand_address();
             } else {
+                self.check_va_start_operand(self.ast_acc, line);
                 self.va_operand_take_address();
             }
             if let Some(a) = self.ast_acc {
@@ -2005,8 +1944,24 @@ impl Compiler {
         &mut self,
         to_ty: i64,
         args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
+        fn_name: &str,
+        index: usize,
     ) -> Result<(), C5Error> {
+        let line = self.lex.line;
         self.expr(Token::Assign as i64)?;
+        // C99 6.5.2.2p7: the operand converts as if by assignment to the
+        // builtin's parameter type, as gcc and clang check it.
+        let zero = self.value_is_null_pointer_constant();
+        if let Some(m) = Self::type_warning_with_flags(&self.structs, to_ty, self.ty, zero, false) {
+            let want = super::types::format_type(to_ty, &self.structs);
+            let got = super::types::format_type(self.ty, &self.structs);
+            let (reason, n) = (m.reason, index + 1);
+            let text = format!("{reason} in argument {n} of `{fn_name}` (param={want}, arg={got})");
+            if m.no_conversion {
+                return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
+            }
+            self.report_mismatch(&m, line, text)?;
+        }
         if let Some(child) = self.ast_acc {
             let pos = self.ast_src_pos();
             let cast_id = self
@@ -2091,6 +2046,60 @@ impl Compiler {
         Some((VaArgDesc::EIGHTBYTES, codes))
     }
 
+    /// C99 7.15.1.4p1: `va_start` reaches the variable arguments of the
+    /// function it appears in, so that function's parameter list ends in
+    /// `...`. gcc and clang reject it anywhere else, in every spelling.
+    pub(super) fn require_variadic_function(&self) -> Result<(), C5Error> {
+        if self.current_func_variadic {
+            return Ok(());
+        }
+        Err(self.compile_err(
+            Code::INVALID_ARGUMENTS,
+            "`va_start` used in function with fixed arguments",
+        ))
+    }
+
+    /// `-Wvarargs` on `va_start`'s second operand, read through casts and
+    /// parentheses as clang reads it: C99 7.15.1.4p4 makes it undefined
+    /// unless the operand is the last named parameter, neither `register`
+    /// nor of a type the default argument promotions change.
+    pub(super) fn check_va_start_operand(
+        &mut self,
+        operand: Option<super::super::ast::ExprId>,
+        line: usize,
+    ) {
+        use super::super::ast::Expr;
+        let mut node = operand;
+        while let Some(&Expr::Cast { child, .. }) = node.map(|id| self.ast.expr(id)) {
+            node = Some(child);
+        }
+        let named = node.and_then(|id| match *self.ast.expr(id) {
+            Expr::Ident {
+                sym, class, val, ..
+            } if class == Token::Loc as i64 => Some((sym as usize, val)),
+            _ => None,
+        });
+        let text = match (named, self.current_func_last_param) {
+            (Some(at), Some((sym, slot, register))) if at == (sym, slot) => {
+                let name = &self.symbols[sym].name;
+                let ty = self.symbols[sym].type_;
+                if register {
+                    format!("`va_start` on `{name}`, declared `register`, is undefined")
+                } else if super::types::argument_promotion(ty).is_some() {
+                    let t = super::types::format_type(ty, &self.structs);
+                    format!(
+                        "`va_start` on `{name}` of type `{t}`, which the default argument \
+                         promotions change, is undefined"
+                    )
+                } else {
+                    return;
+                }
+            }
+            _ => String::from("second operand of `va_start` is not the last named parameter"),
+        };
+        self.warn_at(Code::VARARGS, line, text);
+    }
+
     /// The operands of `__builtin_va_arg(ap, T)`: the `va_list` address
     /// and the packed descriptor of `T`. Returns `T`.
     fn parse_va_arg_operands(
@@ -2118,9 +2127,20 @@ impl Compiler {
                 format!("intrinsic `{fn_name}` second operand must be a type name"),
             ));
         }
+        let line = self.lex.line;
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
         let is_pointer = type_name.ptr_levels > 0;
+        // C99 7.15.1.1p2: the next argument arrived promoted, so a type the
+        // promotions change never matches it (clang's `-Wvarargs`).
+        if let Some(promoted) = super::types::argument_promotion(arg_ty).filter(|_| !is_pointer) {
+            let t = super::types::format_type(arg_ty, &self.structs);
+            let p = super::types::format_type(promoted, &self.structs);
+            let text = format!(
+                "`va_arg` of type `{t}` is undefined: the argument arrives promoted to `{p}`"
+            );
+            self.warn_at(Code::VARARGS, line, text);
+        }
         let arg_fn = self.type_name_fn(type_name);
         // C99 7.15.1.1p2: the type is an object type a pointer to which is
         // spelled by adding `*`.
@@ -2300,7 +2320,7 @@ impl Compiler {
         }
     }
 
-    fn parse_direct_call(&mut self, id_idx: usize) -> Result<(), C5Error> {
+    fn parse_direct_call(&mut self, id_idx: usize, spelled: String) -> Result<(), C5Error> {
         let s = &self.symbols[id_idx];
         let is_sys_call = s.class == Token::Sys as i64;
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
@@ -2308,7 +2328,7 @@ impl Compiler {
             params: s.params().to_vec(),
             param_fns: s.fn_type.params.fn_types.clone(),
             is_variadic: s.is_variadic(),
-            name: s.name.clone(),
+            name: spelled,
             is_sys_call,
             narrows_to_params: is_sys_call,
             ret_ty: s.type_,
@@ -2317,20 +2337,6 @@ impl Compiler {
             count_is_constraint: s.prototyped() && !is_sys_call,
             prototyped: s.prototyped(),
         };
-        // A callee left at the implicit `int` (a `#pragma binding` with no
-        // prototype, or a C89 implicit declaration) truncates a wider return
-        // to 32 bits; warn once.
-        if self.symbols[id_idx].implicit_return_int && self.warned_implicit_ret.insert(id_idx) {
-            let name = self.symbols[id_idx].name.clone();
-            let line = self.lex.line;
-            self.warn_at(
-                Code::IMPLICIT_FUNCTION_DECLARATION,
-                line,
-                alloc::format!(
-                    "`{name}` is called without a return-type prototype; assuming `int`"
-                ),
-            );
-        }
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
         // the right-to-left re-push and the out-pointer push do not, so the
@@ -2684,8 +2690,8 @@ impl Compiler {
     }
 
     fn parse_register_variable(&mut self, id_idx: usize) -> Result<(), C5Error> {
-        // A stack- or frame-pointer register variable reads as a register
-        // move; a write has no meaning.
+        // A stack-, frame- or platform-register variable reads as a
+        // register move; badc takes no write to one.
         if self.lex.tk == Token::Assign
             || self.lex.tk == Token::AssignOp
             || self.lex.tk == Token::Inc
@@ -2707,10 +2713,17 @@ impl Compiler {
             Some(crate::c5::symbol::AsmRegister::FramePointer) => {
                 crate::c5::op::Intrinsic::FrameAddress
             }
+            Some(crate::c5::symbol::AsmRegister::Gp(_)) => {
+                crate::c5::op::Intrinsic::PlatformRegister
+            }
             _ => crate::c5::op::Intrinsic::StackPointer,
         };
+        // The 32-bit view of the platform register (`w18`) is its low half:
+        // the 64-bit read, converted.
+        let narrow =
+            kind == crate::c5::op::Intrinsic::PlatformRegister && self.size_of_type(self.ty) < 8;
         let args = alloc::vec::Vec::new();
-        let intr_ty = self.ty;
+        let intr_ty = if narrow { Ty::LongLong as i64 } else { self.ty };
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(
             super::super::ast::Expr::Intrinsic {
@@ -2721,6 +2734,9 @@ impl Compiler {
             pos,
         );
         self.ast_acc = Some(id);
+        if narrow {
+            self.ast_emit_cast(id, self.ty);
+        }
         Ok(())
     }
 
@@ -2775,7 +2791,30 @@ impl Compiler {
         } else {
             self.load_scalar_variable(id_idx, identifier_is_local);
         }
+        if (is_vla_var || is_array_var)
+            && self.symbols[id_idx].binding.register_storage
+            && let Some(id) = self.ast_acc
+        {
+            self.register_decays.push((id, id_idx, self.lex.line));
+        }
         Ok(())
+    }
+
+    /// The `register` arrays (C99 6.3.2.1p3) converted since the parse was
+    /// `since` entries in, not taken by a subscript or read whole by
+    /// `sizeof` or `typeof`: each takes the array's address, which gcc and
+    /// clang reject.
+    pub(super) fn check_register_decays(&mut self, since: usize) -> Result<(), C5Error> {
+        match self.register_decays.get(since) {
+            Some(&(_, sym, line)) => Err(self.register_address_err(sym, line)),
+            None => Ok(()),
+        }
+    }
+
+    /// The operand `id` reads the `register` array it names, for a
+    /// subscript, `sizeof` or `typeof`, which does not convert it.
+    pub(super) fn take_register_decay(&mut self, id: Option<super::super::ast::ExprId>) {
+        self.register_decays.retain(|&(at, ..)| Some(at) != id);
     }
 
     /// The object a declared identifier designates, for
@@ -3168,6 +3207,9 @@ impl Compiler {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
         self.expr_or_void(Token::Inc as i64)?;
+        if let Some(sym) = self.ast_acc.and_then(|id| self.register_object(id)) {
+            return Err(self.register_address_err(sym, self.lex.line));
+        }
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -3266,6 +3308,40 @@ impl Compiler {
         Ok(())
     }
 
+    /// The `register` object the lvalue `id` designates, or is a member or
+    /// an element of, by its symbol (C99 6.5.3.2p1).
+    fn register_object(&self, id: super::super::ast::ExprId) -> Option<usize> {
+        use super::super::ast::Expr;
+        match *self.ast.expr(id) {
+            Expr::Ident {
+                sym, class, val, ..
+            } if class == Token::Loc as i64 => {
+                let s = &self.symbols[sym as usize];
+                (s.binding.register_storage && s.val == val).then_some(sym as usize)
+            }
+            Expr::Member { obj, .. } if !is_pointer_ty(self.ast.expr_value_ty(obj)) => {
+                self.register_object(obj)
+            }
+            // An element of an array object; a pointer's pointee is elsewhere.
+            Expr::Index { array, .. } => match *self.ast.expr(array) {
+                Expr::Ident { array_size, .. } | Expr::Member { array_size, .. }
+                    if array_size != 0 =>
+                {
+                    self.register_object(array)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// gcc's and clang's error for the address of a `register` object.
+    fn register_address_err(&self, sym: usize, line: usize) -> C5Error {
+        let name = &self.symbols[sym].name;
+        let text = format!("address of `register` object `{name}` requested");
+        self.compile_err_at(Code::INVALID_OPERANDS, line, text)
+    }
+
     /// C99 6.5.3.3p1; a GNU vector has its own rule.
     fn require_unary_operand(&self, op: &str, category: Category) -> Result<(), C5Error> {
         if is_vector_ty(&self.structs, self.ty) {
@@ -3292,20 +3368,28 @@ impl Compiler {
     /// C99 6.5.4p2 and C11 6.5.4p4: a cast to a non-`void` type converts a
     /// scalar to a scalar, and no pointer to or from a floating type. GNU C
     /// adds a cast to the operand's own type, a union from a member's type,
-    /// and a cast involving a vector.
+    /// and a cast between a vector and a vector or an integer (not `_Bool`)
+    /// of the same size, which gcc and clang accept and no other.
     pub(super) fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
         let bare = |ty: i64| {
             super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
         };
-        let fits = match (self.operand(to), self.operand(from)) {
-            (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => false,
-            (Operand::Other, _) | (_, Operand::Other) => {
-                bare(to) == bare(from)
-                    || is_vector_ty(&self.structs, to)
-                    || is_vector_ty(&self.structs, from)
-                    || self.union_cast_member(to, from).is_some()
+        let vector = |ty: i64| is_vector_ty(&self.structs, ty);
+        let lane_bits = |ty: i64| {
+            vector(ty) || (self.operand(ty) == Operand::Integer && !super::types::is_bool_ty(ty))
+        };
+        let fits = if vector(to) || vector(from) {
+            lane_bits(to) && lane_bits(from) && self.size_of_type(to) == self.size_of_type(from)
+        } else {
+            match (self.operand(to), self.operand(from)) {
+                (Operand::Pointer, Operand::Floating) | (Operand::Floating, Operand::Pointer) => {
+                    false
+                }
+                (Operand::Other, _) | (_, Operand::Other) => {
+                    bare(to) == bare(from) || self.union_cast_member(to, from).is_some()
+                }
+                _ => true,
             }
-            _ => true,
         };
         if fits {
             return Ok(());
@@ -4931,6 +5015,9 @@ impl Compiler {
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
         lhs_ty = base_ty;
+        // gcc subscripts a `register` array, either operand; clang rejects it.
+        self.take_register_decay(array_ast);
+        self.take_register_decay(idx_ast);
         if self.lex.tk == ']' {
             self.next()?;
         } else {
@@ -5162,6 +5249,14 @@ impl Compiler {
         // a member of a segment-qualified struct is reached through the
         // same segment.
         let obj_ty = if is_dot { lhs_ty } else { pointee_ty(lhs_ty) };
+        // C11 6.5.2.3p5: a member of an atomic structure or union is not
+        // accessed atomically, which is undefined; refused, as clang does.
+        if super::types::is_atomic_object_ty(obj_ty) {
+            return Err(self.compile_err(
+                Code::INVALID_OPERANDS,
+                "accessing a member of an atomic structure or union",
+            ));
+        }
         let obj_seg_bits = object_segment_bits(obj_ty);
         if obj_seg_bits != 0 && segment_of_ty(field.ty).is_some() {
             return Err(self.compile_err(
@@ -5572,20 +5667,28 @@ impl Compiler {
     /// relocations and AST it emitted; the lexer stays past it. The value
     /// is the integer constant the expression is, if it is one.
     pub(super) fn discard_unevaluated_expr(&mut self) -> Result<Option<i64>, C5Error> {
+        let node = self.discard_unevaluated_node()?;
+        Ok(node.and_then(|e| self.expr_const_int(e)))
+    }
+
+    /// [`Self::discard_unevaluated_expr`], answering the node it parsed.
+    pub(super) fn discard_unevaluated_node(
+        &mut self,
+    ) -> Result<Option<super::super::ast::ExprId>, C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
         let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
-        let constant = self.ast_acc.and_then(|e| self.expr_const_int(e));
+        let node = self.ast_acc;
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        result.map(|_| constant)
+        result.map(|_| node)
     }
 
     /// Parse one assignment-expression for its type only. The lexer
@@ -5669,23 +5772,13 @@ impl Compiler {
         if struct_ptr_depth(a) != struct_ptr_depth(b) || quals(a) != quals(b) {
             return false;
         }
-        let dims_of = |id: usize| -> alloc::vec::Vec<i64> {
-            let f = &self.structs[id].fields[0];
-            if f.array_dims.len() >= 2 {
-                f.array_dims.clone()
-            } else {
-                alloc::vec![f.array_size]
-            }
+        let shape = |id| super::types::array_shape(&self.structs, id);
+        let ((ea, da), (eb, db)) = (shape(ia), shape(ib));
+        let unqualified = |ty: i64| match pointee_unqualified && struct_ptr_depth(a) == 1 {
+            true => unqualified_version_ty(ty),
+            false => ty,
         };
-        let elem = |id: usize| {
-            let ty = self.structs[id].fields[0].ty;
-            if pointee_unqualified && struct_ptr_depth(a) == 1 {
-                unqualified_version_ty(ty)
-            } else {
-                ty
-            }
-        };
-        generic_type_match(elem(ia), elem(ib)) && array_dims_match(&dims_of(ia), &dims_of(ib))
+        generic_type_match(unqualified(ea), unqualified(eb)) && array_dims_match(&da, &db)
     }
 
     /// `__builtin_offsetof ( type-name , member-designator )` (GCC / C11
@@ -6080,10 +6173,15 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
         if t.vla_value {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "a non-constant inner array dimension is not supported",
-            ));
+            if n < 0 {
+                return Err(self.unknown_size_element_err());
+            }
+            let (pos, ty) = (self.ast_src_pos(), self.size_t_ty());
+            let dim = self
+                .ast
+                .push_expr(super::super::ast::Expr::IntLit { val: n, ty }, pos);
+            self.derive_array_of_vla(t, dim);
+            return Ok(());
         }
         t.dims.insert(0, n);
         self.require_complete_elements(t.ty, &t.dims)?;
@@ -6107,10 +6205,8 @@ impl Compiler {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
         if t.vla_value {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "a non-constant inner array dimension is not supported",
-            ));
+            self.derive_array_of_vla(t, dim);
+            return Ok(());
         }
         let mut dims = alloc::vec![-1];
         dims.extend_from_slice(&t.dims);
@@ -6132,15 +6228,39 @@ impl Compiler {
         Ok(())
     }
 
+    /// An array of `dim` of the variable-length array type `t` holds: another
+    /// one, whose size store runs after the element's, which it reads.
+    fn derive_array_of_vla(&mut self, t: &mut DerivedType, dim: super::super::ast::ExprId) {
+        let (ty, bound) = self.vla_bound_type(t.ty, dim);
+        let inner = t.vla.take().expect("a variable-length array type's bound");
+        let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+        let both = super::super::ast::Expr::Comma {
+            lhs: inner.store,
+            rhs: bound.store,
+            ty: size_t,
+        };
+        let store = self.ast.push_expr(both, pos);
+        t.ty = ty;
+        t.vla = Some(VmBound {
+            slot: bound.slot,
+            store,
+        });
+        if let Some(f) = t.fn_ty.as_mut() {
+            f.ptr_depth += 1;
+        }
+    }
+
     /// The variable-length array type of `dim` elements of `elem`, and the
     /// store of its byte count into the frame slot the type reads, which
     /// runs where the declaration or type name is evaluated (C99 6.7.5.2p4).
+    /// An element of variable-length array type contributes the byte count
+    /// its own slot holds.
     pub(super) fn vla_bound_type(
         &mut self,
         elem: i64,
         dim: super::super::ast::ExprId,
     ) -> (i64, VmBound) {
-        let elem_size = self.size_of_type(elem) as i64;
+        let scale = self.element_bytes(elem);
         let slot = self.reserve_slots(1);
         let size_t = self.size_t_ty();
         let pos = self.ast_src_pos();
@@ -6149,13 +6269,6 @@ impl Compiler {
             Expr::Cast {
                 child: dim,
                 to_ty: size_t,
-            },
-            pos,
-        );
-        let scale = self.ast.push_expr(
-            Expr::IntLit {
-                val: elem_size,
-                ty: size_t,
             },
             pos,
         );
@@ -6179,6 +6292,21 @@ impl Compiler {
         );
         self.vla_type_sizes.insert(slot, size);
         (self.vla_array_type(elem, slot), VmBound { slot, store })
+    }
+
+    /// The byte count of one `elem`, as a `size_t` expression: the frame slot
+    /// of a variable-length array type, else the constant size.
+    pub(super) fn element_bytes(&mut self, elem: i64) -> super::super::ast::ExprId {
+        use super::super::ast::Expr;
+        let pos = self.ast_src_pos();
+        match self.vla_value_slot(elem) {
+            Some(size_slot) => self.ast.push_expr(Expr::VlaSizeof { size_slot }, pos),
+            None => {
+                let val = self.size_of_type(elem) as i64;
+                let ty = self.size_t_ty();
+                self.ast.push_expr(Expr::IntLit { val, ty }, pos)
+            }
+        }
     }
 
     /// A function returning the type `t` holds, on convention `conv`, which
@@ -6512,7 +6640,6 @@ enum BuiltinCall {
     ObjectSize,
     Overflow,
     GccAtomic,
-    Atomic(super::super::ast::AtomicKind),
     Value(super::value_builtin::ValueBuiltin),
     Intrinsic(i64),
     /// One of the MSVC intrinsics the PE targets lower at the call site.
@@ -6679,28 +6806,6 @@ fn array_dims_match(a: &[i64], b: &[i64]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| *x < 0 || *y < 0 || x == y)
 }
 
-/// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)
-/// discriminant to its AST [`AtomicKind`](super::super::ast::AtomicKind).
-/// Returns `None` for any non-atomic intrinsic. The `#pragma intrinsic`
-/// registry stores the atomic operations under these discriminants; the
-/// call site converts them here for `parse_atomic_builtin`.
-fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> {
-    use super::super::ast::AtomicKind;
-    use crate::c5::op::Intrinsic;
-    Some(match Intrinsic::from_i64(id)? {
-        Intrinsic::AtomicLoad => AtomicKind::Load,
-        Intrinsic::AtomicStore => AtomicKind::Store,
-        Intrinsic::AtomicExchange => AtomicKind::Exchange,
-        Intrinsic::AtomicFetchAdd => AtomicKind::FetchAdd,
-        Intrinsic::AtomicFetchSub => AtomicKind::FetchSub,
-        Intrinsic::AtomicFetchAnd => AtomicKind::FetchAnd,
-        Intrinsic::AtomicFetchOr => AtomicKind::FetchOr,
-        Intrinsic::AtomicFetchXor => AtomicKind::FetchXor,
-        Intrinsic::AtomicCompareExchangeStrong => AtomicKind::CompareExchangeStrong,
-        _ => return None,
-    })
-}
-
 /// A type-specific checked-arithmetic builtin
 /// (`__builtin_{s,u}{add,sub,mul}{,l,ll}_overflow`), as
 /// `(op, unsigned, rank)`; `op` matches [`Expr::CheckedArith`] and `rank`
@@ -6737,15 +6842,4 @@ fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
         "__builtin_memset" => MemTransferOp::Fill,
         _ => return None,
     })
-}
-
-/// Argument count for each atomic operation: the object pointer
-/// plus the operation's value / expected / desired operands.
-fn atomic_arity(kind: super::super::ast::AtomicKind) -> usize {
-    use super::super::ast::AtomicKind;
-    match kind {
-        AtomicKind::Load => 1,
-        AtomicKind::CompareExchangeStrong => 3,
-        _ => 2,
-    }
 }

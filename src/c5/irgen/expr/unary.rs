@@ -1,6 +1,6 @@
 //! Unary operators and casts (C99 6.5.3, 6.5.4).
 
-use super::super::access::{load_kind_for, load_place};
+use super::super::access::{load_kind_for, load_place, store_kind_for};
 use super::super::types::{is_bool_scalar, is_float_ty, is_floating_scalar};
 use super::super::*;
 use crate::c5::ast::expr_ty;
@@ -104,6 +104,25 @@ impl<'a> Walker<'a> {
         // An asm statement yields no value, and is never a cast
         // operand.
         let src_ty = expr_ty(self.ast.expr(child)).unwrap_or(Ty::Int as i64);
+        // GNU C: a vector cast keeps the bits of an operand of the same size.
+        // A vector or 128-bit value is carried as its address, which passes
+        // through; a scalar integer is stored into a fresh object or loaded.
+        if is_vector_ty(self.structs, to_ty) || is_vector_ty(self.structs, src_ty) {
+            return Ok(match (is_struct_ty(src_ty), is_struct_ty(to_ty)) {
+                (true, true) => v,
+                (true, false) => {
+                    let v = self.flatten_copy_operand(b, child, v)?;
+                    b.load(v, load_kind_for(to_ty, self.target))
+                }
+                _ => {
+                    let size = self.struct_size(to_ty);
+                    let slot = b.alloc_synthetic_struct(size, i64::from(self.struct_align(to_ty)));
+                    let addr = b.local_addr(slot);
+                    b.store(addr, v, store_kind_for(src_ty, self.target));
+                    addr
+                }
+            });
+        }
         // A 128-bit rvalue is carried as its address, so a cast to an
         // integer or pointer loads the low 8 bytes -- the value mod
         // 2^64 -- and the convert narrows that to `to_ty`. A floating

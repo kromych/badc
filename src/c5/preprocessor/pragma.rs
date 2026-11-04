@@ -3,7 +3,7 @@ use super::directive::format_line_marker;
 use super::text::skip_literal;
 use super::{
     Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
-    Preprocessor, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
+    Preprocessor, SavedMacro, Site, Subsystem, UNKNOWN_PRAGMA, UNKNOWN_WARNING_OPTION,
 };
 use crate::c5::diag::{Code, Control, Level, Selector, rows};
 use crate::c5::error::C5Error;
@@ -16,9 +16,10 @@ use alloc::vec::Vec;
 impl Preprocessor {
     /// The intrinsic `#pragma intrinsic(name)` binds `name` to, or `None`
     /// when badc has none for this target or `-fno-builtin` has made the
-    /// library spelling opaque.
+    /// library spelling opaque. A reserved name is the implementation's
+    /// own, which the flag leaves bound as gcc leaves `__builtin_` names.
     fn registered_intrinsic(&self, name: &str) -> Option<i64> {
-        if self.no_builtin {
+        if self.no_builtin && !ident::is_reserved(name) {
             return None;
         }
         builtins::intrinsic_id(name, self.target)
@@ -62,7 +63,13 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
+                // The operator applies where it stands (C99 6.10.9), so a
+                // diagnostic pragma resolves on its own position in the line.
+                let at = Site {
+                    offset: site.offset + out.len() as u32,
+                    ..site
+                };
+                self.dispatch_pragma_operator(&args, at, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -78,7 +85,11 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
+                let at = Site {
+                    offset: site.offset + out.len() as u32,
+                    ..site
+                };
+                self.dispatch_pragma_operator(&args, at, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -102,9 +113,15 @@ impl Preprocessor {
         presumed_file: &str,
         out: &mut String,
     ) -> Result<(), C5Error> {
-        match parse_pragma_directive(args) {
+        match parse_pragma_directive(args, self.dollar()) {
             PragmaDirective::Once => {
-                self.pragma_once_files.insert(site.file.to_string());
+                let id = self.current_file_id(site.file);
+                self.pragma_once_files.insert(id);
+            }
+            // The expansion already read the rest of the line under the
+            // state this leaves (`Exp::macro_state_operator`).
+            PragmaDirective::MacroStack(verb, operand) => {
+                self.parse_pragma_macro_stack(verb, operand, site)?;
             }
             PragmaDirective::Other => {
                 let lexer_reads = pragma_is_pack(args)
@@ -507,7 +524,7 @@ impl Preprocessor {
                     format!(
                         "unrecognised `#pragma warning` action `{action}` \
                          -- expected `disable` / `enable` / `default` / \
-                         `error` / `once` / `suppress`"
+                         `error` / `once` / `suppress` / a level 1 to 4"
                     ),
                 );
                 continue;
@@ -733,10 +750,13 @@ impl Preprocessor {
     ///     default). Entry signature `main(argc, argv)`.
     ///   * `windows` / `gui` -- `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2).
     ///     Entry signature `WinMain(hinst, prev, cmdline, show)`.
-    ///   * `native` / `nt` / `driver` -- `IMAGE_SUBSYSTEM_NATIVE`
-    ///     (1). NT-native usermode and kernel drivers share this
-    ///     subsystem byte; the entry signature is selected by the
-    ///     source, not the pragma.
+    ///   * `native` / `nt` -- `IMAGE_SUBSYSTEM_NATIVE` (1), an
+    ///     NT-native user-mode program taking the C runtime from
+    ///     ntdll.dll.
+    ///   * `driver` -- `IMAGE_SUBSYSTEM_NATIVE` (1), a kernel-mode
+    ///     driver as `link.exe /DRIVER` builds it, taking the C runtime
+    ///     from ntoskrnl.exe. The entry signature of both is the
+    ///     source's.
     ///   * `efi_application` -- `IMAGE_SUBSYSTEM_EFI_APPLICATION`
     ///     (10).
     ///   * `efi_boot_service_driver` --
@@ -816,6 +836,67 @@ impl Preprocessor {
             self.exports.push(symbol.into_owned());
         }
         Ok(())
+    }
+
+    /// `#pragma push_macro("name")` saves the definition of `name`, or its
+    /// absence, on a stack per name, and `#pragma pop_macro("name")`
+    /// reinstates the latest save, as gcc, clang and MSVC read the pair. A
+    /// pop with no save is reported, as clang and MSVC report it; gcc and
+    /// clang reject an operand other than one parenthesized string literal.
+    pub(super) fn parse_pragma_macro_stack(
+        &mut self,
+        verb: &str,
+        operand: &str,
+        site: Site<'_>,
+    ) -> Result<(), C5Error> {
+        let Some(name) = macro_stack_name(operand) else {
+            return Err(C5Error::at(
+                Code::INVALID_PRAGMA,
+                site.file,
+                site.line,
+                format!("`#pragma {verb}` expects a macro name in quotes, got `{operand}`"),
+            ));
+        };
+        let name = ident::key(name).into_owned();
+        self.obs_note(&name);
+        if verb == "push_macro" {
+            let saved = self.saved_macro(&name);
+            self.pushed_macros.entry(name).or_default().push(saved);
+            return Ok(());
+        }
+        let Some(stack) = self.pushed_macros.get_mut(&name) else {
+            self.warn(
+                PRAGMA_POP_WITHOUT_PUSH,
+                site,
+                format!("`#pragma pop_macro(\"{name}\")` with no matching push"),
+            );
+            return Ok(());
+        };
+        let saved = stack.pop().expect("an emptied stack leaves the map");
+        if stack.is_empty() {
+            self.pushed_macros.remove(&name);
+        }
+        self.macros.remove(&name);
+        self.fn_macros.remove(&name);
+        match saved {
+            SavedMacro::Undefined => {}
+            SavedMacro::Object(body) => {
+                self.macros.insert(name, body);
+            }
+            SavedMacro::Function(f) => {
+                self.fn_macros.insert(name, f);
+            }
+        }
+        Ok(())
+    }
+
+    /// What `push_macro` saves for `name`: its definition or its absence.
+    pub(super) fn saved_macro(&self, name: &str) -> SavedMacro {
+        match (self.macros.get(name), self.fn_macros.get(name)) {
+            (Some(body), _) => SavedMacro::Object(body.clone()),
+            (_, Some(f)) => SavedMacro::Function(f.clone()),
+            (None, None) => SavedMacro::Undefined,
+        }
     }
 
     /// `#pragma weak name`, or `name = target` for a weak alias, as gcc reads it.
@@ -1000,7 +1081,7 @@ impl Preprocessor {
         self.dylibs[at].bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
-            return_type_tag: 0,
+            return_type_tag: None,
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
@@ -1109,23 +1190,36 @@ pub(super) fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(St
 
 /// Sub-classification of `#pragma` payloads. `dylib(...)` /
 /// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
-/// the dylib registry; `once` is structural (it tags the *current*
-/// header) and lives on the preprocessor itself.
-pub(super) enum PragmaDirective {
+/// the dylib registry. `once` (it tags the *current* header) and
+/// `push_macro` / `pop_macro` act on the preprocessor's own state and,
+/// as with gcc and clang, leave nothing in `-E` output.
+pub(super) enum PragmaDirective<'a> {
     Once,
+    /// The verb and its operand.
+    MacroStack(&'static str, &'a str),
     Other,
 }
 
-pub(super) fn parse_pragma_directive(args: &str) -> PragmaDirective {
-    if args.trim() == "once" {
-        PragmaDirective::Once
-    } else {
-        PragmaDirective::Other
+pub(super) fn parse_pragma_directive(args: &str, dollar: Dollar) -> PragmaDirective<'_> {
+    let args = args.trim();
+    if args == "once" {
+        return PragmaDirective::Once;
     }
+    for verb in ["push_macro", "pop_macro"] {
+        if let Some(operand) = args
+            .strip_prefix(verb)
+            .filter(|rest| ident::char_len(rest.as_bytes(), 0, dollar) == 0)
+        {
+            return PragmaDirective::MacroStack(verb, operand.trim());
+        }
+    }
+    PragmaDirective::Other
 }
 
 /// The actions MSVC's `#pragma warning(<action> : N ...)` takes, and
-/// the level each records for the rows the numbers resolve to.
+/// the level each records for the rows the numbers resolve to. A level
+/// specifier `1` to `4` moves the warnings to that MSVC verbosity level,
+/// which badc has no counterpart for, so it records nothing.
 #[derive(Clone, Copy)]
 enum WarningAction {
     Disable,
@@ -1134,6 +1228,7 @@ enum WarningAction {
     Error,
     Once,
     Suppress,
+    Level,
 }
 
 impl WarningAction {
@@ -1145,6 +1240,7 @@ impl WarningAction {
             "error" => WarningAction::Error,
             "once" => WarningAction::Once,
             "suppress" => WarningAction::Suppress,
+            "1" | "2" | "3" | "4" => WarningAction::Level,
             _ => return None,
         })
     }
@@ -1157,8 +1253,26 @@ impl WarningAction {
             WarningAction::Error => control.set_level(offset, code, Level::Error),
             WarningAction::Once => control.report_once(offset, code),
             WarningAction::Suppress => control.open_suppress(offset, code),
+            WarningAction::Level => {}
         }
     }
+}
+
+/// The name a `push_macro` / `pop_macro` operand `("name")` spells: one
+/// string literal in parentheses, taken as written, as clang takes it.
+pub(super) fn macro_stack_name(operand: &str) -> Option<&str> {
+    let literal = operand.strip_prefix('(')?.strip_suffix(')')?.trim();
+    let body = literal.strip_prefix('"')?;
+    let bytes = body.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'"' => return (i + 1 == bytes.len()).then(|| &body[..i]),
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 /// The operand of a `weak` pragma: `name` or `name = target`.

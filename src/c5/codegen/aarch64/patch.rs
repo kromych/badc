@@ -26,18 +26,22 @@ use alloc::string::String;
 ///
 /// A record built from one relocation covers one field. badc's own
 /// codegen emits the two halves as one adjacent pair and records
-/// [`AddrPart::Whole`], which is also the only shape on x86_64, where a
-/// reference is a single rip-relative displacement.
+/// [`AddrPart::Whole`]. An x86_64 reference is a single rip-relative
+/// displacement, recorded as `Whole` for a `lea` or as [`AddrPart::Disp32`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum AddrPart {
     /// The whole reference: an `adrp` at the site with its in-page half
-    /// at `+4` on aarch64, the displacement field on x86_64.
+    /// at `+4` on aarch64, a `lea` with its displacement at `+3` on x86_64.
     #[default]
     Whole,
     /// The `adrp` page half alone.
     Page,
     /// The in-page half alone.
     InPage,
+    /// x86_64: the displacement of any rip-relative operand, at the site
+    /// itself. RIP is 4 bytes past it; the addend takes back the bytes of
+    /// the instruction that follow the field.
+    Disp32,
 }
 
 /// Why a page-relative reference could not be patched.
@@ -54,6 +58,8 @@ pub(crate) enum PairError {
     /// The second instruction is neither an `add` immediate nor an
     /// unsigned-offset load/store.
     NotLo12(u32),
+    /// An x86_64 displacement record.
+    Disp32,
 }
 
 impl PairError {
@@ -70,6 +76,7 @@ impl PairError {
             Self::NotLo12(w) => {
                 format!("{label}: adrp paired with an unrecognized instruction {w:#010x}")
             }
+            Self::Disp32 => format!("{label}: an x86_64 displacement record"),
         }
     }
 }
@@ -329,6 +336,7 @@ pub(crate) fn patch_addr(
         AddrPart::Whole => patch_pair(code, at, site_addr, target_addr),
         AddrPart::Page => patch_adrp(code, at, site_addr, target_addr),
         AddrPart::InPage => patch_lo12(code, at, target_addr),
+        AddrPart::Disp32 => Err(PairError::Disp32),
     }
 }
 
@@ -346,6 +354,7 @@ pub(crate) fn patch_slot(
         AddrPart::Whole => patch_slot_load(code, at, site_addr, slot_addr, width),
         AddrPart::Page => patch_adrp(code, at, site_addr, slot_addr),
         AddrPart::InPage => patch_lo12_slot_load(code, at, slot_addr, width),
+        AddrPart::Disp32 => Err(PairError::Disp32),
     }
 }
 

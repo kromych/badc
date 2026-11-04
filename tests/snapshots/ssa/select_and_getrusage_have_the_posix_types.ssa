@@ -4,11 +4,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=55
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmExtCode(binding=71)                           -> x0
+    v1   ImmExtCode(binding=65)                           -> x0
     v2   Imm(0)                                           -> x0
-    v3   ImmExtCode(binding=72)                           -> x0
+    v3   ImmExtCode(binding=66)                           -> x0
     v4   Imm(0)                                           -> x0
-    v5   ImmExtCode(binding=68)                           -> x0
+    v5   ImmExtCode(binding=30)                           -> x0
     v6   Imm(0)                                           -> x0
     v7   ImmExtCode(binding=76)                           -> x0
     v8   Imm(0)                                           -> x0
@@ -108,7 +108,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=55
     v78  LocalAddr(-34)                                   -> x6
     v79  LocalAddr(-54)                                   -> x8
     v80  Imm(0)                                           -> x0
-    v81  ImmExtCode(binding=71)                           -> x0
+    v81  ImmExtCode(binding=65)                           -> x0
     v82  CallIndirect { target=v81, args=[v76, v78, v74, v74, v79], callee_variadic=false, fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v83  Extend { value=v82, kind=I32 }                   -> x1
     v84  BinopI { op=ne, lhs=v82, rhs_imm=1 }             -> x0
@@ -213,7 +213,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=55
     v171 LocalAddr(-52)                                   -> x8
     v172 LocalAddr(-50)                                   -> x9
     v173 Imm(0)                                           -> x0
-    v174 ImmExtCode(binding=72)                           -> x0
+    v174 ImmExtCode(binding=66)                           -> x0
     v175 CallIndirect { target=v174, args=[v168, v170, v166, v166, v171, v172], callee_variadic=false, fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v176 Extend { value=v175, kind=I32 }                  -> x1
     v177 BinopI { op=ne, lhs=v175, rhs_imm=1 }            -> x0
@@ -256,7 +256,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=55
     v220 Imm(0)                                           -> x7
     v221 LocalAddr(-18)                                   -> x6
     v222 Imm(0)                                           -> x0
-    v223 ImmExtCode(binding=68)                           -> x0
+    v223 ImmExtCode(binding=30)                           -> x0
     v224 CallIndirect { target=v223, args=[v220, v221], callee_variadic=false, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v225 Extend { value=v224, kind=I32 }                  -> x1
     v226 BinopI { op=ne, lhs=v224, rhs_imm=0 }            -> x1
@@ -431,12 +431,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

@@ -89,12 +89,6 @@ Disassembly of section .text:
                	fmov	d3, #2.50000000
                	fcmp	d2, d3
                	cset	x1, ne
-               	add	x0, x0, x1
-               	fmov	d2, #-3.00000000
-               	fcvtzs	x1, d2
-               	mov	x17, #-0x3              // =-3
-               	cmp	x1, x17
-               	cset	x1, ne
                	add	x1, x0, x1
                	fmov	d2, #8.00000000
                	stur	d2, [x29, #-0x10]

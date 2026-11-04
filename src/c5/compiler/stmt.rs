@@ -56,6 +56,27 @@ pub(super) struct CleanupVar {
     fn_binding: super::emit::CalleeBinding,
 }
 
+/// What a jump out of a scope runs: a cleanup variable's function, or the
+/// `__finally` block, if any, of the `__try` statement whose body the scope
+/// is, by the statement's index.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Cleanup {
+    Var(alloc::boxed::Box<CleanupVar>),
+    Finally(u32),
+}
+
+/// The cleanup list a `return` runs, and whether it returns a value.
+pub(super) type ReturnExitKey = (alloc::vec::Vec<Cleanup>, bool);
+
+/// What the returns running one cleanup list share: the call statements,
+/// the value's temporary (symbol, slot), and the returns' `CleanupJump`s.
+#[derive(Default)]
+pub(super) struct ReturnExit {
+    calls: alloc::vec::Vec<super::super::ast::StmtId>,
+    temp: Option<(usize, i64)>,
+    sites: alloc::vec::Vec<super::super::ast::StmtId>,
+}
+
 /// The case labels of one `switch` body.
 pub(super) struct SwitchLabels {
     /// The type of the controlling expression, before promotion.
@@ -815,11 +836,23 @@ impl Compiler {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
             self.emit_vm_bound_stores(id_idx, false)?;
+            // An array of a variable-length array type is one too, its byte
+            // count the element's times the bound.
+            if td_array > 0 && self.vla_value_slot(ty).is_some() {
+                let (pos, size_t) = (self.ast_src_pos(), self.size_t_ty());
+                let count = super::super::ast::Expr::IntLit {
+                    val: td_array,
+                    ty: size_t,
+                };
+                let count = self.ast.push_expr(count, pos);
+                let (vla_ty, bound) = self.vla_bound_type(ty, count);
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(bound.store), pos);
+                self.note_jump_barrier(id_idx, true);
+                (ty, td_array) = (vla_ty, 0);
+            }
             if td_array != 0 && self.vla_value_slot(ty).is_some() {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "a non-constant inner array dimension is not supported",
-                ));
+                return Err(self.unknown_size_element_err());
             }
             if td_array == super::VLA_ARRAY_SIZE {
                 let dim = self.pending.vla_dim_expr.take().ok_or_else(|| {
@@ -978,13 +1011,13 @@ impl Compiler {
             fn_binding: self.callee_binding(fn_sym),
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
-            scope.vars.push(cv);
+            scope.vars.push(Cleanup::Var(alloc::boxed::Box::new(cv)));
         }
         self.note_jump_barrier(var_sym, false);
     }
 
     /// The innermost scope's cleanup variables, latest declared first.
-    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<CleanupVar> {
+    pub(super) fn innermost_cleanups(&self) -> alloc::vec::Vec<Cleanup> {
         self.cleanup_scopes
             .last()
             .map_or_else(alloc::vec::Vec::new, |s| {
@@ -992,12 +1025,20 @@ impl Compiler {
             })
     }
 
-    /// Build the `Stmt::Expr` for one cleanup call `fn(&var)` and push it
-    /// into the AST statement stream. The `Ident` is built from the
-    /// registered snapshot, not the live symbol slot.
-    pub(super) fn push_cleanup_call(&mut self, cv: &CleanupVar) {
+    /// Build the `Stmt::Expr` for one cleanup call `fn(&var)`, or the
+    /// `__finally` run, and push it into the AST statement stream. The
+    /// `Ident` is built from the registered snapshot, not the live symbol
+    /// slot.
+    pub(super) fn push_cleanup_call(&mut self, cleanup: &Cleanup) {
         use super::super::ast::{Expr, Stmt, UnOp};
         let pos = self.ast_src_pos();
+        let cv = match cleanup {
+            Cleanup::Var(cv) => cv,
+            Cleanup::Finally(index) => {
+                self.ast.push_stmt(Stmt::SehFinallyCall(*index), pos);
+                return;
+            }
+        };
         let ident = self.ast.push_expr(
             Expr::Ident {
                 sym: cv.var_sym as u32,
@@ -1035,8 +1076,8 @@ impl Compiler {
     /// (innermost scope cleaned first; each scope's variables in reverse
     /// declaration order, C++-style, matching GCC). Used before a
     /// `return` (`from == 0`), `break`, or `continue`.
-    fn emit_cleanups_above(&mut self, from: usize) {
-        let mut pending: alloc::vec::Vec<CleanupVar> = alloc::vec::Vec::new();
+    pub(super) fn emit_cleanups_above(&mut self, from: usize) {
+        let mut pending: alloc::vec::Vec<Cleanup> = alloc::vec::Vec::new();
         for scope in self.cleanup_scopes[from..].iter().rev() {
             for cv in scope.vars.iter().rev() {
                 pending.push(cv.clone());
@@ -1045,6 +1086,68 @@ impl Compiler {
         for cv in pending {
             self.push_cleanup_call(&cv);
         }
+    }
+
+    /// The variables a jump out of the scopes at index `from` and above
+    /// cleans, in the order [`Self::emit_cleanups_above`] calls them.
+    fn cleanups_from(&self, from: usize) -> alloc::vec::Vec<Cleanup> {
+        let scopes = self.cleanup_scopes[from..].iter().rev();
+        scopes.flat_map(|s| s.vars.iter().rev().cloned()).collect()
+    }
+
+    /// The call statements every `return` running `key`'s cleanup list
+    /// shares, built on the first.
+    fn return_cleanup_calls(
+        &mut self,
+        key: ReturnExitKey,
+    ) -> alloc::vec::Vec<super::super::ast::StmtId> {
+        if let Some(exit) = self.return_exits.get(&key)
+            && !exit.calls.is_empty()
+        {
+            return exit.calls.clone();
+        }
+        let mut calls = alloc::vec::Vec::with_capacity(key.0.len());
+        for cv in &key.0 {
+            self.push_cleanup_call(cv);
+            calls.push((self.ast.stmts.len() - 1) as super::super::ast::StmtId);
+        }
+        self.return_exits.entry(key).or_default().calls = calls.clone();
+        calls
+    }
+
+    /// Run the calls of a cleanup list only one `return` takes at that
+    /// return: an exit block of its own would only add a jump.
+    pub(super) fn inline_unshared_return_exits(&mut self) {
+        for exit in core::mem::take(&mut self.return_exits).into_values() {
+            let [site] = exit.sites[..] else {
+                continue;
+            };
+            let calls = exit.calls;
+            let super::super::ast::Stmt::CleanupJump { jump, .. } = self.ast.stmts[site as usize]
+            else {
+                continue;
+            };
+            let items = calls.iter().chain([&jump]);
+            self.ast.stmts[site as usize] = super::super::ast::Stmt::Compound(
+                items
+                    .map(|&id| super::super::ast::BlockItem::Stmt(id))
+                    .collect(),
+            );
+        }
+    }
+
+    /// Assign `value` to the temporary the returns running `key`'s cleanup
+    /// list share, and read it back: the assignment and the read.
+    fn spill_to_return_temp(
+        &mut self,
+        key: &ReturnExitKey,
+        value: super::super::ast::ExprId,
+        ty: i64,
+    ) -> (super::super::ast::StmtId, super::super::ast::ExprId) {
+        let temp = self.return_exits.get(key).and_then(|e| e.temp);
+        let (sym, slot) = temp.unwrap_or_else(|| self.new_temp(ty));
+        self.return_exits.entry(key.clone()).or_default().temp = Some((sym, slot));
+        self.assign_to_temp(sym, slot, ty, value)
     }
 
     /// True when any cleanup scope at index `from` and above holds a
@@ -1062,7 +1165,7 @@ impl Compiler {
     /// loop) capture a body by its last arena entry, so a bare `return`
     /// under a cleanup must resolve to a single statement carrying all of
     /// them, not just the trailing jump.
-    fn coalesce_exit_since(&mut self, start: usize) {
+    pub(super) fn coalesce_exit_since(&mut self, start: usize) {
         if self.ast.stmts.len().saturating_sub(start) > 1 {
             let ids: alloc::vec::Vec<super::super::ast::StmtId> = (start..self.ast.stmts.len())
                 .map(|i| i as super::super::ast::StmtId)
@@ -1071,17 +1174,8 @@ impl Compiler {
         }
     }
 
-    /// Spill `value` (already converted to `ty`) into a fresh unnamed
-    /// stack temporary and return an lvalue-ident that reloads it. Used
-    /// so a `return <expr>;` under an active cleanup evaluates the value
-    /// before the cleanup functions run (C's scope-exit order): e.g.
-    /// `return dup(s)` copies before a scope-guarded local `s` is freed.
-    fn spill_expr_to_temp(
-        &mut self,
-        value: super::super::ast::ExprId,
-        ty: i64,
-    ) -> super::super::ast::ExprId {
-        use super::super::ast::{Expr, Stmt};
+    /// A fresh unnamed stack temporary of type `ty`: its symbol and slot.
+    fn new_temp(&mut self, ty: i64) -> (usize, i64) {
         let slot = self.reserve_slots(self.local_storage_slots(ty, 1));
         let sym_idx = self.symbols.len();
         // The shadow fields mirror the live ones so the function-exit
@@ -1101,31 +1195,79 @@ impl Compiler {
         // interned identifier lands at the wrong index. The empty name is
         // never the target of a source-level lookup.
         self.symbol_index.record(crate::c5::lexer::hash_name(b""));
+        (sym_idx, slot)
+    }
+
+    /// Assign `value` (already converted to `ty`) to the temporary `sym` at
+    /// `slot`: the assignment statement and an lvalue-ident that reloads it.
+    /// A `return <expr>;` under an active cleanup spills its value so the
+    /// value is evaluated before the cleanup functions run (C's scope-exit
+    /// order): `return dup(s)` copies before a scope-guarded local `s` is
+    /// freed.
+    fn assign_to_temp(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+        value: super::super::ast::ExprId,
+    ) -> (super::super::ast::StmtId, super::super::ast::ExprId) {
+        let assign = self.bind_temp_at(sym, slot, ty, value);
         let pos = self.ast_src_pos();
-        let mk_ident = |c: &mut Self| {
-            c.ast.push_expr(
-                Expr::Ident {
-                    sym: sym_idx as u32,
-                    ty,
-                    class: Token::Loc as i64,
-                    val: slot,
-                    is_thread_local: false,
-                    array_size: 0,
-                },
-                pos,
-            )
-        };
-        let lhs = mk_ident(self);
-        let assign = self.ast.push_expr(
-            Expr::Assign {
+        let stmt = self
+            .ast
+            .push_stmt(super::super::ast::Stmt::Expr(assign), pos);
+        (stmt, self.temp_ident(sym, slot, ty))
+    }
+
+    /// `value`, already of type `ty`, assigned to a fresh temporary: the
+    /// assignment expression and the temporary's symbol and slot.
+    pub(super) fn bind_temp(
+        &mut self,
+        value: super::super::ast::ExprId,
+        ty: i64,
+    ) -> (super::super::ast::ExprId, (usize, i64)) {
+        let (sym, slot) = self.new_temp(ty);
+        (self.bind_temp_at(sym, slot, ty, value), (sym, slot))
+    }
+
+    fn bind_temp_at(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+        value: super::super::ast::ExprId,
+    ) -> super::super::ast::ExprId {
+        let lhs = self.temp_ident(sym, slot, ty);
+        let pos = self.ast_src_pos();
+        self.ast.push_expr(
+            super::super::ast::Expr::Assign {
                 lhs,
                 rhs: value,
                 ty,
             },
             pos,
-        );
-        self.ast.push_stmt(Stmt::Expr(assign), pos);
-        mk_ident(self)
+        )
+    }
+
+    /// The temporary `sym` at `slot`, of type `ty`, as an lvalue.
+    pub(super) fn temp_ident(
+        &mut self,
+        sym: usize,
+        slot: i64,
+        ty: i64,
+    ) -> super::super::ast::ExprId {
+        let pos = self.ast_src_pos();
+        self.ast.push_expr(
+            super::super::ast::Expr::Ident {
+                sym: sym as u32,
+                ty,
+                class: Token::Loc as i64,
+                val: slot,
+                is_thread_local: false,
+                array_size: 0,
+            },
+            pos,
+        )
     }
 
     /// `{ ... }`. C99 block-scope: declarations may appear anywhere a
@@ -1540,12 +1682,22 @@ impl Compiler {
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
-        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        let (mut template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO
+            && let Ok(text) = core::str::from_utf8(&template)
+        {
+            template = crate::c5::asm::mach_o_symbol_names(text).into_bytes();
+        }
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
             return self.parse_extended_asm(template, is_volatile, true, line);
+        }
+        // A naked function's templates are assembled as written.
+        if self.current_func_attrs.is_naked {
+            self.truncate_data(tstart);
+            return self.parse_extended_asm(template, is_volatile, false, line);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1940,10 +2092,17 @@ impl Compiler {
             // from `__builtin_frame_address(0)` afterwards.
             let bound_reg = self.asm_operand_bound_register()?;
             let decayed_array = self.parse_asm_operand_expr()?;
+            // A matching input takes the class of the output it names.
+            let class = match constraint {
+                AsmConstraint::Match(n) => operands
+                    .get(n as usize)
+                    .map_or(constraint, |o: &AsmOperand| o.constraint),
+                c => c,
+            };
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.
-            let width = if matches!(constraint, AsmConstraint::Fp) {
+            let width = if matches!(class, AsmConstraint::Fp) {
                 self.size_of_type(self.ty).min(16) as u8
             } else {
                 self.size_of_type(self.ty).min(8) as u8
@@ -1965,7 +2124,7 @@ impl Compiler {
             let op_size = self.size_of_type(self.ty);
             if op_size > 8
                 && !matches!(
-                    constraint,
+                    class,
                     AsmConstraint::Mem
                         | AsmConstraint::MemBase
                         | AsmConstraint::Fp
@@ -1984,17 +2143,29 @@ impl Compiler {
             // An x86 `x` operand is a 16-byte vector, moved whole, or a
             // `float` / `double` in the low lane, as the SysV ABI passes one;
             // a matching input takes the class of the output it names.
-            // AArch64 `w` has its own (scalar-double) width check in the
-            // emitter.
-            let class = match constraint {
-                AsmConstraint::Match(n) => operands
-                    .get(n as usize)
-                    .map_or(constraint, |o: &AsmOperand| o.constraint),
-                c => c,
-            };
+            // An AArch64 `w` operand is a scalar of up to 8 bytes, floating
+            // or integer, or an 8- or 16-byte vector, as gcc takes it.
             let scalar_fp = matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && super::types::is_floating_scalar(self.ty);
+            let scalar = super::types::is_floating_scalar(self.ty)
+                || super::types::is_integer_scalar_ty(self.ty)
+                || super::types::is_pointer_ty(self.ty);
+            if matches!(class, AsmConstraint::Fp)
+                && self.target.is_aarch64()
+                && !(scalar && op_size <= 8
+                    || super::types::is_vector_ty(&self.structs, self.ty)
+                        && matches!(op_size, 8 | 16))
+            {
+                self.truncate_data(data_base);
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    alloc::format!(
+                        "inline asm: a `{cstr}` operand is a scalar of up to 8 bytes or an 8- or \
+                         16-byte vector"
+                    ),
+                ));
+            }
             if matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) != 16
@@ -2104,12 +2275,34 @@ impl Compiler {
                     }
                 }
             }
+            // The AArch64 emitter reads an 8-byte `w` input as a value, as it
+            // reads a double; an 8-byte vector passes its bits so.
+            let e = if self.target.is_aarch64()
+                && matches!(class, AsmConstraint::Fp)
+                && !is_output
+                && width == 8
+                && super::types::is_vector_ty(&self.structs, self.ty)
+            {
+                self.ast_node(Expr::Cast {
+                    child: e,
+                    to_ty: Ty::LongLong as i64 | super::types::UNSIGNED_BIT,
+                })
+            } else {
+                e
+            };
             operand_exprs.push(e);
             operand_names.push(op_name);
             let early_clobber = cstr
                 .chars()
                 .take_while(|c| matches!(c, '=' | '+' | '&' | '%'))
                 .any(|c| c == '&');
+            // AArch64 `x` and `y` take v0-v15 and v0-v7; `w` beside them any.
+            let fp_limit = match constraint {
+                AsmConstraint::Fp if self.target.is_aarch64() && !cstr.contains('w') => {
+                    if cstr.contains('x') { 16 } else { 8 }
+                }
+                _ => 0,
+            };
             operands.push(AsmOperand {
                 constraint,
                 is_output: stores_back,
@@ -2121,6 +2314,7 @@ impl Compiler {
                 value: scalar_fp && !stores_back,
                 volatile_object,
                 early_clobber,
+                fp_limit,
             });
             if is_output {
                 n_outputs += 1;
@@ -2748,11 +2942,13 @@ impl Compiler {
             }
             return Some((AsmConstraint::Fixed(reg), is_rw));
         }
-        // A SIMD/FP-register value: AArch64 `w`, or x86 `x` (an XMM register).
-        // Neither letter collides with the register/immediate/memory classes
-        // handled above, so the mapping is target-independent; the backend
-        // emitter reads the constraint to pick the v-register or xmm file.
-        if !has_general && (body.contains('w') || body.contains('x')) {
+        // A SIMD/FP-register value: AArch64 `w`, `x` (v0-v15) or `y` (v0-v7),
+        // or x86 `x` (an XMM register). None collides with the register,
+        // immediate and memory classes handled above; the backend emitter
+        // reads the constraint to pick the v-register or xmm file.
+        if !has_general
+            && (body.contains('w') || body.contains('x') || (!is_x86 && body.contains('y')))
+        {
             return Some((AsmConstraint::Fp, is_rw));
         }
         if has_reg {
@@ -3260,7 +3456,9 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
-        self.with_nesting("statement", |c| c.stmt_inner())
+        let decays = self.register_decays.len();
+        self.with_nesting("statement", |c| c.stmt_inner())?;
+        self.check_register_decays(decays)
     }
 
     fn stmt_inner(&mut self) -> Result<(), C5Error> {
@@ -3346,6 +3544,20 @@ impl Compiler {
 
         if self.lex.tk == Token::Asm {
             return self.parse_asm_stmt();
+        }
+        if self.lex.tk == Token::SehTry {
+            self.check_seh_filter("a `__try` statement")?;
+            return self.parse_seh_try();
+        }
+        if self.lex.tk == Token::SehLeave {
+            return self.parse_seh_leave();
+        }
+        if self.lex.tk == Token::SehExcept || self.lex.tk == Token::SehFinally {
+            let text = format!(
+                "{} without a `__try` block",
+                super::super::token::describe(self.lex.tk)
+            );
+            return Err(self.compile_err(Code::SYNTAX, text));
         }
 
         if self.lex.tk == Token::If {
@@ -3519,6 +3731,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
+            self.check_seh_filter("`goto`")?;
             let line = self.lex.line;
             self.next()?;
             if self.lex.tk == Token::MulOp {
@@ -3558,6 +3771,7 @@ impl Compiler {
                     self.compile_err(Code::INVALID_STATEMENT, "break outside of loop or switch")
                 );
             }
+            self.check_seh_exit("`break`", Some(super::seh::Depth::Break))?;
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after break")?;
             // Run the cleanup functions of every scope opened inside the
@@ -3572,6 +3786,7 @@ impl Compiler {
             if self.loop_continue_depth == 0 {
                 return Err(self.compile_err(Code::INVALID_STATEMENT, "continue outside of loop"));
             }
+            self.check_seh_exit("`continue`", Some(super::seh::Depth::Continue))?;
             self.flush_pending_stores();
             self.consume(b';', "semicolon expected after continue")?;
             let start = self.ast.stmts.len();
@@ -3581,6 +3796,7 @@ impl Compiler {
             self.coalesce_exit_since(start);
         } else if self.lex.tk == Token::Return {
             let line = self.lex.line;
+            self.check_seh_exit("`return`", None)?;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_value_ty(ret_ty);
@@ -3723,21 +3939,39 @@ impl Compiler {
             // to a temporary and run the cleanups between its evaluation
             // and the return; a void return's expression is evaluated for
             // side effects first, then discarded.
-            let start = self.ast.stmts.len();
             if self.has_cleanups_above(0) {
-                if returns_void {
-                    if let Some(v) = return_value {
-                        let pos = self.ast_src_pos();
-                        self.ast.push_stmt(super::super::ast::Stmt::Expr(v), pos);
-                        return_value = None;
-                    }
-                } else if let Some(v) = return_value {
-                    return_value = Some(self.spill_expr_to_temp(v, ret_ty));
+                let mut items = alloc::vec::Vec::new();
+                if returns_void && let Some(v) = return_value.take() {
+                    let pos = self.ast_src_pos();
+                    items.push(self.ast.push_stmt(super::super::ast::Stmt::Expr(v), pos));
                 }
-                self.emit_cleanups_above(0);
+                // The returns running one cleanup list share its calls and
+                // the value's temporary, so the walker builds one exit.
+                let key = (self.cleanups_from(0), return_value.is_some());
+                if let Some(v) = return_value {
+                    let (assign, value) = self.spill_to_return_temp(&key, v, ret_ty);
+                    items.push(assign);
+                    return_value = Some(value);
+                }
+                let key_of_site = key.clone();
+                let calls = self.return_cleanup_calls(key);
+                let jump = self.ast_emit_return(return_value);
+                let pos = self.ast_src_pos();
+                let cleanup_jump = super::super::ast::Stmt::CleanupJump {
+                    cleanups: calls,
+                    jump,
+                };
+                let site = self.ast.push_stmt(cleanup_jump, pos);
+                if let Some(exit) = self.return_exits.get_mut(&key_of_site) {
+                    exit.sites.push(site);
+                }
+                items.push(site);
+                self.ast_wrap_block_items(&items);
+            } else {
+                let start = self.ast.stmts.len();
+                self.ast_emit_return(return_value);
+                self.coalesce_exit_since(start);
             }
-            self.ast_emit_return(return_value);
-            self.coalesce_exit_since(start);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
             self.parse_block_stmt(false)?;

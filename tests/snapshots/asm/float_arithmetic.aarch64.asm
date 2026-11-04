@@ -88,10 +88,8 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	mov	x0, #0x7                // =7
-               	scvtf	d0, x0
-               	fmov	d1, #7.00000000
-               	fcmp	d0, d1
+               	fmov	d0, #7.00000000
+               	fcmp	d0, d0
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
@@ -107,14 +105,6 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
-               	ret
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x10]
-               	fcvtzs	x0, d0
-               	mov	x17, #-0x1              // =-1
-               	cmp	w0, w17
-               	b.eq	<addr>
-               	mov	x0, #0x11               // =17
                	ret
                	mov	x0, #0x0                // =0
                	ret

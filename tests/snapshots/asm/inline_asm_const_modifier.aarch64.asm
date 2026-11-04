@@ -22,8 +22,7 @@ Disassembly of section .text:
 
 <address_modifier>:
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	ret
 
 <call_modifier>:
@@ -40,8 +39,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x18]
                	cmp	w0, #0x21
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

@@ -42,19 +42,13 @@ Disassembly of section .text:
                	subq	$0x1000, %rsp           # imm = 0x1000
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
-               	movl	$0x1, %eax
-               	movb	%al, -0x1000(%rbp)
+               	movb	$0x1, -0x1000(%rbp)
                	leaq	-0x1020(%rbp), %rdi
-               	movq	%rax, -0x1020(%rbp)
-               	movl	$0x2, %ecx
-               	movq	%rcx, -0x1018(%rbp)
-               	movl	$0x3, %edx
-               	movq	%rdx, -0x1010(%rbp)
-               	movl	$0x4, %esi
-               	movq	%rsi, -0x1008(%rbp)
-               	addq	%rcx, %rax
-               	addq	%rdx, %rax
-               	addq	%rax, %rsi
+               	movq	$0x1, -0x1020(%rbp)
+               	movq	$0x2, -0x1018(%rbp)
+               	movq	$0x3, -0x1010(%rbp)
+               	movq	$0x4, -0x1008(%rbp)
+               	movl	$0xa, %esi
                	callq	<addr>
                	movq	-0x1020(%rbp), %rax
                	movq	-0x1018(%rbp), %rcx

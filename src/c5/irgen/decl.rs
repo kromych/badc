@@ -206,6 +206,7 @@ impl<'a> Walker<'a> {
         ty: i64,
         init: &LocalInit,
     ) -> Result<(), WalkError> {
+        self.release_atomic_lock_word(b, slot, ty);
         match init {
             LocalInit::None => Ok(()),
             LocalInit::Scalar(init_id) => {

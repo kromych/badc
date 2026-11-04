@@ -12,7 +12,7 @@ use super::super::error::C5Error;
 use super::aarch64;
 use super::elf_reloc_types::AbsCheck;
 use super::x86_64;
-use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image};
+use super::{AddrPart, Build, DataRegion, Machine, data_region_addr, image, nt_crt};
 use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
@@ -63,6 +63,7 @@ const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x0000_0080;
 const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
+const IMAGE_SCN_MEM_NOT_PAGED: u32 = 0x0800_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
@@ -216,6 +217,9 @@ struct PeLayout<'a> {
     /// runs move out.
     rdata_prefix_len: u32,
     jt_base_in_rdata: u32,
+    /// The unwind data the `.pdata` entries point into.
+    xdata: Vec<u8>,
+    xdata_base_in_rdata: u32,
     provenance: Vec<u8>,
     marker_base_in_rdata: u32,
     rdata_size: u32,
@@ -237,7 +241,9 @@ struct PeLayout<'a> {
     /// `(byte offset in .pdata, data-byte offset)` of each input entry's
     /// unwind-data address, written once the data is placed.
     pdata_info_slots: Vec<(usize, u64)>,
-    pdata_directory_size: u32,
+    /// The byte offset in `.pdata` of each entry's unwind-data address,
+    /// which holds its record's offset in `xdata`.
+    pdata_xdata_slots: Vec<usize>,
     pdata_raw_size: u32,
     idata_rva: u32,
     idata_file_off: u32,
@@ -288,6 +294,8 @@ struct PeWriter<'a> {
     target: super::Target,
     is_dll: bool,
     subsystem: u16,
+    /// A kernel-mode driver, as `link.exe /DRIVER` builds one.
+    driver: bool,
     passthrough_entry: bool,
     stub: EntryStub,
     /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
@@ -309,14 +317,49 @@ pub(super) fn write(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let mut w = PeWriter::new(program, build, machine, target);
+    let mut w = PeWriter::new(program, build, machine, target)?;
     w.layout_code_sections()?;
     w.layout_data_sections()?;
     w.layout_reloc_and_export_sections()?;
     w.layout_dwarf_and_coff();
     w.build_text()?;
     w.emit_headers()?;
-    w.emit_sections()
+    let native = w.subsystem == IMAGE_SUBSYSTEM_NATIVE;
+    let mut image = w.emit_sections()?;
+    if native {
+        store_checksum(&mut image);
+    }
+    Ok(image)
+}
+
+/// Offset of `OptionalHeader.CheckSum`: past the PE signature, the COFF
+/// header and 64 bytes of the PE32+ optional header.
+fn checksum_field(image: &[u8]) -> usize {
+    let pe = u32::from_le_bytes([image[0x3c], image[0x3d], image[0x3e], image[0x3f]]) as usize;
+    pe + 4 + 20 + 64
+}
+
+/// The PE image checksum (`CheckSumMappedFile`): the 16-bit words of the
+/// file, the CheckSum field read as zero, summed with the carry folded back
+/// in, plus the file length. A native-subsystem image carries it, as
+/// `link.exe /DRIVER` writes it.
+fn image_checksum(image: &[u8]) -> u32 {
+    let field = checksum_field(image);
+    let mut sum: u32 = 0;
+    for (i, pair) in image.chunks(2).enumerate() {
+        if (field..field + 4).contains(&(i * 2)) {
+            continue;
+        }
+        sum += u32::from(pair[0]) | u32::from(pair.get(1).copied().unwrap_or(0)) << 8;
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    (sum & 0xffff) + image.len() as u32
+}
+
+fn store_checksum(image: &mut [u8]) {
+    let field = checksum_field(image);
+    let sum = image_checksum(image);
+    image[field..field + 4].copy_from_slice(&sum.to_le_bytes());
 }
 
 impl<'a> PeWriter<'a> {
@@ -325,12 +368,12 @@ impl<'a> PeWriter<'a> {
         build: &'a Build,
         machine: Machine,
         target: super::Target,
-    ) -> Self {
+    ) -> Result<Self, C5Error> {
         use crate::c5::preprocessor::Subsystem;
         let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
         let subsystem = match program.subsystem {
             Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
-            Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
+            Some(Subsystem::Native | Subsystem::Driver) => IMAGE_SUBSYSTEM_NATIVE,
             Some(Subsystem::EfiApplication) => IMAGE_SUBSYSTEM_EFI_APPLICATION,
             Some(Subsystem::EfiBootServiceDriver) => IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
             Some(Subsystem::EfiRuntimeDriver) => IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER,
@@ -347,28 +390,23 @@ impl<'a> PeWriter<'a> {
         // Index N becomes IAT slot N. The CRT / kernel32 entries the stub
         // relies on ride the embedded runtime TU's `#pragma binding`, so
         // they already sit in `build.imports`.
-        let imports: Vec<(String, String, Option<u16>)> = build
-            .imports
-            .imports
-            .iter()
-            .map(|imp| {
-                (
-                    imp.real_symbol.clone(),
-                    build.imports.dylibs[imp.dylib_index].path.clone(),
-                    imp.ordinal,
-                )
-            })
-            .collect();
+        let native = match program.subsystem {
+            Some(Subsystem::Driver) => Some(true),
+            Some(Subsystem::Native) => Some(false),
+            _ => None,
+        };
+        let imports = image_imports(build, native, machine == Machine::X86_64)?;
         let dlls = group_imports_by_dll(&imports);
         let text_align = build.text_align.max(16) as u32;
         let text_prologue_len = round_up(stub.bytes.len() as u32, text_align);
-        PeWriter {
+        Ok(PeWriter {
             program,
             build,
             machine,
             target,
             is_dll,
             subsystem,
+            driver: native == Some(true),
             passthrough_entry,
             stub,
             imports,
@@ -378,7 +416,7 @@ impl<'a> PeWriter<'a> {
             text_bytes: Vec::new(),
             jt_bytes: Vec::new(),
             out: Vec::new(),
-        }
+        })
     }
 
     fn internal(msg: String) -> C5Error {
@@ -500,8 +538,53 @@ impl<'a> PeWriter<'a> {
         } else {
             round_up(l.rdata_prefix_len, 8)
         };
+        l.text_rva = l.section_align;
+        l.text_size = self.text_prologue_len + build.text.len() as u32;
+        // A scope table names `__C_specific_handler` by its stub in the image.
+        let handler = (build
+            .imports
+            .imports
+            .iter()
+            .zip(&build.plt_trampoline_offsets))
+        .find(|(i, _)| i.local_name == "__C_specific_handler")
+        .and_then(|(_, off)| *off);
+        let seh = match handler {
+            Some(stub) => Seh {
+                rows: &build.seh_rows,
+                handler: stub as u32,
+            },
+            None if build.seh_rows.is_empty() => Seh {
+                rows: &[],
+                handler: 0,
+            },
+            None => {
+                return Err(C5Error::hard(
+                    Code::UNSUPPORTED,
+                    "a `__try` region in a PE image written without a link: \
+                     compile with -c and link the object",
+                ));
+            }
+        };
+        let pdata = build_pdata(
+            self.machine,
+            l.text_rva,
+            l.text_size,
+            self.text_prologue_len,
+            &build.fn_unwind,
+            &build.a64_unwind,
+            &build.early_returns,
+            &build.pe_unwind,
+            seh,
+        )?;
+        // The unwind data follows the jump tables, as link.exe and lld-link
+        // place `.xdata` in `.rdata`; `.pdata` holds the array alone.
+        l.xdata_base_in_rdata = round_up(l.jt_base_in_rdata + build.rodata.bytes.len() as u32, 4);
+        l.xdata = pdata.xdata;
+        l.pdata_xdata_slots = pdata.xdata_slots;
+        l.pdata_info_slots = pdata.info_slots;
+        l.pdata_bytes = pdata.bytes;
         l.provenance = super::provenance_comment();
-        l.marker_base_in_rdata = round_up(l.jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
+        l.marker_base_in_rdata = round_up(l.xdata_base_in_rdata + l.xdata.len() as u32, 8);
         l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
         l.rdata_present = l.rdata_size > 0;
         l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
@@ -514,7 +597,6 @@ impl<'a> PeWriter<'a> {
             || !build.image_base_slots.is_empty();
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
-        l.text_rva = l.section_align;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = [
@@ -547,26 +629,11 @@ impl<'a> PeWriter<'a> {
         };
         l.headers_size = headers_raw_size(&l.plan) as u32;
         l.text_file_off = l.headers_size;
-        l.text_size = self.text_prologue_len + build.text.len() as u32;
         l.text_raw_size = round_up(l.text_size, FILE_ALIGNMENT);
         l.pdata_rva = round_up(l.text_rva + l.text_size, l.section_align);
         l.pdata_file_off = l.text_file_off + l.text_raw_size;
-        let pdata = build_pdata(
-            self.machine,
-            l.text_rva,
-            l.text_size,
-            l.pdata_rva,
-            self.text_prologue_len,
-            &build.fn_unwind,
-            &build.a64_unwind,
-            &build.early_returns,
-            &build.pe_unwind,
-        );
-        l.pdata_directory_size = pdata.directory_size;
-        l.pdata_info_slots = pdata.info_slots;
-        l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
-        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, l.section_align);
-        l.pdata_bytes = pdata.bytes;
+        l.pdata_raw_size = round_up(l.pdata_bytes.len() as u32, FILE_ALIGNMENT);
+        l.idata_rva = round_up(l.pdata_rva + l.pdata_bytes.len() as u32, l.section_align);
         l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
         l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
         l.idata_raw_size = round_up(l.idata.bytes.len() as u32, FILE_ALIGNMENT);
@@ -1301,7 +1368,7 @@ impl<'a> PeWriter<'a> {
                 import_table_rva: l.idata.import_directory_rva,
                 import_table_size: l.idata.import_directory_size,
                 exception_table_rva: l.pdata_rva,
-                exception_table_size: l.pdata_directory_size,
+                exception_table_size: l.pdata_bytes.len() as u32,
                 base_reloc_rva: l.reloc_rva,
                 base_reloc_size: reloc_size,
                 iat_rva: l.idata.iat_rva_base,
@@ -1318,18 +1385,33 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
+    /// `IMAGE_SCN_MEM_NOT_PAGED` for a section of a driver named `name`:
+    /// every resident section but a `PAGE*` one, as `link.exe /DRIVER` marks
+    /// them; it marks none of a native application's.
+    fn resident(&self, name: &[u8]) -> u32 {
+        if self.driver && !name.starts_with(b"PAGE") {
+            IMAGE_SCN_MEM_NOT_PAGED
+        } else {
+            0
+        }
+    }
+
     /// One header per section, in the plan's order.
     fn section_headers(&self) -> Result<Vec<SectionHeader>, C5Error> {
         let l = &self.layout;
         let reloc_size = l.reloc_bytes.len() as u32;
         let mut sections: Vec<SectionHeader> = Vec::with_capacity(l.plan.count());
+        let ro = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | self.resident(b".rdata");
         sections.push(SectionHeader {
             name: *b".text\0\0\0",
             virtual_size: l.text_size,
             virtual_address: l.text_rva,
             size_of_raw_data: l.text_raw_size,
             pointer_to_raw_data: l.text_file_off,
-            characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+            characteristics: IMAGE_SCN_CNT_CODE
+                | IMAGE_SCN_MEM_EXECUTE
+                | IMAGE_SCN_MEM_READ
+                | self.resident(b".text"),
         });
         sections.push(SectionHeader {
             name: *b".pdata\0\0",
@@ -1337,17 +1419,17 @@ impl<'a> PeWriter<'a> {
             virtual_address: l.pdata_rva,
             size_of_raw_data: l.pdata_raw_size,
             pointer_to_raw_data: l.pdata_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+            characteristics: ro,
         });
+        // The loaders write the IAT while they bind the image and protect it
+        // afterwards, so it is read-only, as in link.exe's `.rdata`.
         sections.push(SectionHeader {
             name: *b".idata\0\0",
             virtual_size: l.idata.bytes.len() as u32,
             virtual_address: l.idata_rva,
             size_of_raw_data: l.idata_raw_size,
             pointer_to_raw_data: l.idata_file_off,
-            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                | IMAGE_SCN_MEM_READ
-                | IMAGE_SCN_MEM_WRITE,
+            characteristics: ro,
         });
         if l.rdata_present {
             sections.push(SectionHeader {
@@ -1356,7 +1438,7 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.rdata_rva,
                 size_of_raw_data: l.rdata_raw_size,
                 pointer_to_raw_data: l.rdata_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+                characteristics: ro,
             });
         }
         if l.data_present {
@@ -1368,7 +1450,8 @@ impl<'a> PeWriter<'a> {
                 pointer_to_raw_data: l.data_file_off,
                 characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
                     | IMAGE_SCN_MEM_READ
-                    | IMAGE_SCN_MEM_WRITE,
+                    | IMAGE_SCN_MEM_WRITE
+                    | self.resident(b".data"),
             });
         }
         // Read-only families keep `.rdata`'s protection, the writable ones
@@ -1390,7 +1473,8 @@ impl<'a> PeWriter<'a> {
                 } else {
                     IMAGE_SCN_CNT_INITIALIZED_DATA
                 } | IMAGE_SCN_MEM_READ
-                    | if writable { IMAGE_SCN_MEM_WRITE } else { 0 },
+                    | if writable { IMAGE_SCN_MEM_WRITE } else { 0 }
+                    | self.resident(bytes),
             });
         }
         if l.reloc_present {
@@ -1412,7 +1496,7 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.edata_rva,
                 size_of_raw_data: l.edata_raw_size,
                 pointer_to_raw_data: l.edata_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+                characteristics: ro,
             });
         }
         for slot in &l.dwarf_sections {
@@ -1465,6 +1549,12 @@ impl<'a> PeWriter<'a> {
             let rva = self.data_off_to_rva(off as u32);
             out[at + slot..at + slot + 4].copy_from_slice(&rva.to_le_bytes());
         }
+        let xdata_rva = l.rdata_rva + l.xdata_base_in_rdata;
+        for &slot in &l.pdata_xdata_slots {
+            let field = &mut out[at + slot..at + slot + 4];
+            let rva = xdata_rva + u32::from_le_bytes(field[..].try_into().unwrap());
+            field.copy_from_slice(&rva.to_le_bytes());
+        }
         pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
         out.extend_from_slice(&l.idata.bytes);
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
@@ -1486,6 +1576,11 @@ impl<'a> PeWriter<'a> {
             tail(&mut out, l.relro_tail, l.rdata_file_off, &data, 0)?;
             pad_to(&mut out, (l.rdata_file_off + l.jt_base_in_rdata) as usize)?;
             out.extend_from_slice(&self.jt_bytes);
+            pad_to(
+                &mut out,
+                (l.rdata_file_off + l.xdata_base_in_rdata) as usize,
+            )?;
+            out.extend_from_slice(&l.xdata);
             pad_to(
                 &mut out,
                 (l.rdata_file_off + l.marker_base_in_rdata) as usize,
@@ -2132,6 +2227,56 @@ struct DllGroup {
     members: Vec<usize>,
 }
 
+/// `(name, DLL, ordinal)` per import of `build`. A native-subsystem image
+/// (`native`: `Some(driver)`) cannot load the user-mode C runtime and takes
+/// what it imports from msvcrt.dll or ucrtbase.dll, `__C_specific_handler`
+/// among it, by name from [`nt_crt::module`]; a name that module does not
+/// export is undefined.
+fn image_imports(
+    build: &Build,
+    native: Option<bool>,
+    x64: bool,
+) -> Result<Vec<(String, String, Option<u16>)>, C5Error> {
+    use crate::c5::diag::{Diagnostic, Level};
+    let mut undefined = Vec::new();
+    let mut refuse = |name: &str, driver: bool| {
+        let image = if driver {
+            "a driver"
+        } else {
+            "a native application"
+        };
+        let text = format!(
+            "undefined reference to `{name}`: {image} takes the C runtime from {}, which does \
+             not export it",
+            nt_crt::module(driver)
+        );
+        let error = Diagnostic::new(Code::UNDEFINED_SYMBOL, Level::Error, None, text);
+        undefined.push(error);
+    };
+    let imports = (build.imports.imports.iter())
+        .map(|imp| {
+            let dll = &build.imports.dylibs[imp.dylib_index].path;
+            let c_runtime = ["msvcrt.dll", "ucrtbase.dll"]
+                .iter()
+                .any(|d| dll.eq_ignore_ascii_case(d));
+            match native {
+                Some(driver) if c_runtime => {
+                    if !nt_crt::exports(driver, x64, &imp.real_symbol) {
+                        refuse(&imp.real_symbol, driver);
+                    }
+                    (imp.real_symbol.clone(), nt_crt::module(driver).into(), None)
+                }
+                _ => (imp.real_symbol.clone(), dll.clone(), imp.ordinal),
+            }
+        })
+        .collect();
+    if undefined.is_empty() {
+        Ok(imports)
+    } else {
+        Err(C5Error::Compile(undefined))
+    }
+}
+
 fn group_imports_by_dll(imports: &[(String, String, Option<u16>)]) -> Vec<DllGroup> {
     let mut groups: Vec<DllGroup> = Vec::new();
     for (idx, (_, dll, _)) in imports.iter().enumerate() {
@@ -2399,12 +2544,18 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
     }
 }
 
-/// `.pdata` builder result.
+/// `.pdata` builder result: the RUNTIME_FUNCTION array alone, which the
+/// exception directory covers, and the unwind data it points into, which
+/// goes to `.rdata` as link.exe and lld-link place `.xdata`.
 struct Pdata {
     bytes: Vec<u8>,
-    directory_size: u32,
     /// Where an input entry's unwind-data RVA goes, and its data offset.
     info_slots: Vec<(usize, u64)>,
+    /// The unwind data, 4-byte aligned records.
+    xdata: Vec<u8>,
+    /// Where an entry's unwind-data RVA goes, holding the record's offset
+    /// in `xdata` until the writer adds the RVA it places `xdata` at.
+    xdata_slots: Vec<usize>,
 }
 
 /// `.pdata` Exception Directory dispatcher. `foreign` are the functions
@@ -2415,31 +2566,69 @@ fn build_pdata(
     machine: Machine,
     text_rva: u32,
     text_size: u32,
-    pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
     a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
-) -> Pdata {
+    seh: Seh,
+) -> Result<Pdata, C5Error> {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
             text_rva,
             text_size,
-            pdata_rva,
             text_prologue_len,
             fn_unwind,
             early_returns,
             foreign,
+            seh,
         ),
         Machine::Aarch64 => build_aarch64_pdata(
             text_rva,
             text_size,
-            pdata_rva,
             text_prologue_len,
             a64_unwind,
+            early_returns,
             foreign,
+            seh,
         ),
+    }
+}
+
+/// The `__try` scope tables, and the text offset of the stub through which
+/// they name `__C_specific_handler`.
+#[derive(Clone, Copy)]
+struct Seh<'a> {
+    rows: &'a [super::SehRow],
+    handler: u32,
+}
+
+impl Seh<'_> {
+    /// The handler RVA and the scope table that follow the unwind codes of
+    /// the function at `func`, or nothing for a function without regions:
+    /// Count, then per row Begin, End, HandlerAddress -- the filter or
+    /// `__finally` funclet, or 1 for the constant filter
+    /// EXCEPTION_EXECUTE_HANDLER -- and JumpTarget, 0 for a `__finally`, all
+    /// RVAs. With them the x64 UNW_FLAG_EHANDLER (1) when a row has a
+    /// target and UNW_FLAG_UHANDLER (2) when one has none.
+    fn language_data(&self, func: u32, body: u32) -> Option<(u8, Vec<u8>)> {
+        let rows: Vec<&super::SehRow> = self.rows.iter().filter(|r| r.func == func).collect();
+        if rows.is_empty() {
+            return None;
+        }
+        let mut out = Vec::with_capacity(8 + 16 * rows.len());
+        out.extend((body + self.handler).to_le_bytes());
+        out.extend((rows.len() as u32).to_le_bytes());
+        let mut flags = 0;
+        for r in rows {
+            flags |= if r.target.is_some() { 1 } else { 2 };
+            let handler = r.handler.map_or(1, |f| body + f);
+            let target = r.target.map_or(0, |t| body + t);
+            for field in [body + r.begin, body + r.end, handler, target] {
+                out.extend(field.to_le_bytes());
+            }
+        }
+        Some((flags, out))
     }
 }
 
@@ -2450,9 +2639,7 @@ const UWOP_SET_FPREG: u8 = 3;
 /// Non-volatile GPR save at a scaled RSP offset.
 #[cfg(test)]
 const UWOP_SAVE_NONVOL: u8 = 4;
-/// 128-bit non-volatile xmm save (see `build_unwind_codes`: the saves
-/// are undescribed while the prologue keeps its frame-pointer layout).
-#[cfg(test)]
+/// 128-bit non-volatile xmm save at an RSP offset scaled by 16.
 const UWOP_SAVE_XMM128: u8 = 8;
 const UNWIND_REG_RBP: u8 = 5;
 
@@ -2476,95 +2663,75 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 }
 
 /// Build the `UNWIND_CODE` byte stream for one function, in the
-/// ABI-required descending-`CodeOffset` order. Returns `(codes,
-/// size_of_prolog, frame_register)`; `frame_register` is 0 for a
-/// frameless leaf and `UNWIND_REG_RBP` otherwise.
+/// ABI-required descending-`CodeOffset` order, one code per prologue step.
+/// Returns `(codes, size_of_prolog, frame)`; `frame` is the
+/// `UNWIND_INFO` byte holding FrameRegister (rbp) and FrameOffset, 0 for a
+/// frameless leaf.
 ///
-/// The prologue is `push rbp; mov rbp,rsp; [sub rsp,N]`, so the codes
-/// are, highest offset first: `UWOP_ALLOC N` (frame), `UWOP_SET_FPREG`
-/// (rbp, offset 0), `UWOP_PUSH_NONVOL rbp`. `RtlVirtualUnwind`
-/// processes them in array order: the alloc for `N` runs first but
-/// is immediately overwritten by `UWOP_SET_FPREG` (`RSP = RBP -
-/// 0`), which makes the recovery exact even though the body moves
-/// RSP for outgoing-call scratch; the push then restores rbp and
-/// leaves RSP at the return address.
-///
-/// The callee-saved GPRs are pushed after the frame allocation, at the
-/// frame bottom, and are not described; neither are the `movups` saves
-/// of the non-volatile xmms that follow them. RIP/RSP/RBP recover exactly
-/// at any body fault through the frame pointer, but a debugger / profiler /
-/// SEH / C++ unwind crossing this frame does not recover those register
-/// values. Codes are listed in descending prologue offset, so a
-/// `UWOP_PUSH_NONVOL` for one of these pushes would be processed before
-/// `UWOP_SET_FPREG`, against the running `context->Rsp`; and the body
-/// lowers each call as `sub rsp,scratch; call; add rsp,scratch` with
-/// per-site scratch, so at a call return address that RSP is
-/// `frame_rsp - scratch`. A `UWOP_SAVE_XMM128` reads its scaled,
-/// unsigned offset from the frame register's establishment point
-/// (`mov rbp,rsp` puts rbp at the frame top), so an in-frame xmm save
-/// is inexpressible while rbp sits above it. A faithful description
-/// pushes the GPRs before the frame pointer is established, so each
-/// recovers after `UWOP_SET_FPREG` resets RSP to rbp, and keeps the
-/// body's RSP fixed, so the xmm saves read their exact offsets at a
-/// call site too. TODO: that prologue restructure (prologue, epilogue
-/// and the decoder in lockstep, plus an 8*count shift of the
-/// rbp-relative offsets) with a frame-resident outgoing area and
-/// `UWOP_SAVE_XMM128` codes for the saves. badc emits no
-/// exception-using code today, so execution is unaffected until then.
+/// `RtlVirtualUnwind` processes the codes in array order. Whatever follows
+/// `UWOP_SET_FPREG` in the prologue -- the System V frame allocation --
+/// runs first and is overwritten by it (`RSP = RBP - FrameOffset * 16`),
+/// which makes the recovery exact even though the body moves RSP for
+/// outgoing-call scratch. The Win64 save block precedes it, so its
+/// `UWOP_SAVE_XMM128` offsets and `UWOP_PUSH_NONVOL` pops apply to the RSP
+/// it recovers. A frame of a page or more lowers to a stack-probe loop with
+/// no single `sub`, which runs after rbp is set and is left out.
 fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u8) {
+    use super::PrologueStep as S;
     if uw.leaf {
         return (Vec::new(), 0, 0);
     }
-    let mut codes = Vec::new();
-    // The `*_end` offsets count from the function's first byte, CodeOffset
-    // from the table entry's, `frame_start` (`build_x86_64_pdata`). A
-    // Win64 frame of a page or more lowers to a stack-probe loop with no
-    // single `sub`; it is left undescribed because the probe runs after the
-    // frame pointer is established, so `UWOP_SET_FPREG` recovers RSP
-    // exactly at any fault past it.
+    // The step offsets count from the function's first byte, CodeOffset
+    // from the table entry's, `frame_start` (`build_x86_64_pdata`).
     let at = |end: u32| (end - frame_start) as u8;
-    if uw.frame_alloc_end != 0 {
-        push_alloc_code(&mut codes, at(uw.frame_alloc_end), uw.frame_bytes);
+    let mut codes = Vec::new();
+    let mut frame = 0;
+    for &(end, step) in uw.steps.iter().rev() {
+        match step {
+            S::Push(r) => codes.extend([at(end), UWOP_PUSH_NONVOL | (r << 4)]),
+            S::Alloc(n) => push_alloc_code(&mut codes, at(end), n),
+            S::SaveXmm { xmm, off } => {
+                codes.extend([at(end), UWOP_SAVE_XMM128 | (xmm << 4)]);
+                codes.extend(((off / 16) as u16).to_le_bytes());
+            }
+            S::SetFrame(off) => {
+                codes.extend([at(end), UWOP_SET_FPREG]);
+                frame = UNWIND_REG_RBP | ((off / 16) as u8) << 4;
+            }
+        }
     }
-    codes.push(at(uw.set_fpreg_end));
-    codes.push(UWOP_SET_FPREG & 0x0F);
-    codes.push(at(uw.push_rbp_end));
-    codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
-    // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
-    // classifies the pre-frame-pointer region (push rbp) as prolog and the
-    // rest as body; PCs past `mov rbp,rsp` unwind correctly through the
-    // frame pointer whether labelled prolog or body.
-    let size_of_prolog = at(if uw.frame_alloc_end != 0 {
-        uw.frame_alloc_end
-    } else {
-        uw.set_fpreg_end
-    });
-    (codes, size_of_prolog, UNWIND_REG_RBP)
+    let size_of_prolog = uw.steps.last().map_or(0, |&(end, _)| at(end));
+    (codes, size_of_prolog, frame)
 }
 
 /// x86_64 `.pdata` builder.
 fn build_x86_64_pdata(
     text_rva: u32,
     text_size: u32,
-    pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
-) -> Pdata {
+    seh: Seh,
+) -> Result<Pdata, C5Error> {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
     if fn_unwind.is_empty() && foreign.is_empty() {
-        let mut bytes = Vec::with_capacity(16);
-        let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
+        let mut bytes = Vec::with_capacity(RUNTIME_FUNCTION_SIZE as usize);
         bytes.extend_from_slice(&text_rva.to_le_bytes());
         bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
-        bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
-        bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
-        return Pdata {
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        return Ok(Pdata {
             bytes,
-            directory_size: RUNTIME_FUNCTION_SIZE,
             info_slots: Vec::new(),
-        };
+            xdata: alloc::vec![0x01, 0x00, 0x00, 0x00],
+            xdata_slots: alloc::vec![8],
+        });
+    }
+    if let Some(uw) = fn_unwind.iter().find(|u| !u.leaf && u.steps.is_empty()) {
+        return Err(C5Error::internal(format!(
+            "the function at {:#x} has a frame and no recorded unwind steps",
+            uw.begin
+        )));
     }
 
     // Sort by begin so the RUNTIME_FUNCTION array is ascending (the loader
@@ -2588,76 +2755,83 @@ fn build_x86_64_pdata(
         })
         .collect();
     let array_size = (entries.len() + foreign.len()) as u32 * RUNTIME_FUNCTION_SIZE;
-    let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
-    let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
+    let mut info_offsets: Vec<u32> = Vec::with_capacity(entries.len());
+    let body = text_rva + text_prologue_len;
     for (uw, &(begin, _)) in entries.iter().zip(&spans) {
-        info_rvas.push(blobs_rva + blobs.len() as u32);
-        let (codes, size_of_prolog, frame_reg) = build_unwind_codes(uw, begin - uw.begin);
+        info_offsets.push(blobs.len() as u32);
+        let (codes, size_of_prolog, frame) = build_unwind_codes(uw, begin - uw.begin);
         let count_of_codes = (codes.len() / 2) as u8;
-        blobs.push(0x01); // Version 1, Flags 0.
+        let language = seh.language_data(uw.begin, body);
+        // Version 1, with the handler flags where a language handler follows.
+        let flags = language.as_ref().map_or(0, |l| l.0);
+        blobs.push(0x01 | flags << 3);
+        let language = language.map(|l| l.1);
         blobs.push(size_of_prolog);
         blobs.push(count_of_codes);
-        blobs.push(frame_reg & 0x0F);
+        blobs.push(frame);
         blobs.extend_from_slice(&codes);
         // The codes array holds an even number of slots; each slot is 2
         // bytes, so the blob is already u16-aligned.
         while !blobs.len().is_multiple_of(4) {
             blobs.push(0);
         }
+        blobs.extend(language.unwrap_or_default());
     }
 
     // The loader binary-searches the array, so the inputs' entries take
-    // their places among the writer's by start.
-    let body = text_rva + text_prologue_len;
-    let mut rows: Vec<(u32, u32, u32, Option<u64>)> = (spans.iter().zip(&info_rvas))
-        .map(|(&(begin, end), &info)| (body + begin, body + end, info, None))
+    // their places among the writer's by start. Each row's unwind data is
+    // the writer's record at an offset in `blobs`, or an input's.
+    let mut rows: Vec<(u32, u32, Result<u32, Option<u64>>)> = (spans.iter().zip(&info_offsets))
+        .map(|(&(begin, end), &info)| (body + begin, body + end, Ok(info)))
         .collect();
     rows.extend(foreign.iter().map(|r| {
         let info = match r.data {
             super::PeUnwindRef::Info(off) => Some(off),
             super::PeUnwindRef::Packed(_) => None,
         };
-        (body + r.begin as u32, body + r.end as u32, 0, info)
+        (body + r.begin as u32, body + r.end as u32, Err(info))
     }));
     rows.sort_by_key(|r| r.0);
-    let mut bytes = Vec::with_capacity((array_size + blobs.len() as u32) as usize);
-    let mut info_slots = Vec::new();
-    for (begin, end, info, foreign_info) in rows {
+    let mut bytes = Vec::with_capacity(array_size as usize);
+    let (mut info_slots, mut xdata_slots) = (Vec::new(), Vec::new());
+    for (begin, end, info) in rows {
         bytes.extend_from_slice(&begin.to_le_bytes());
         bytes.extend_from_slice(&end.to_le_bytes());
-        if let Some(off) = foreign_info {
-            info_slots.push((bytes.len(), off));
+        match info {
+            Ok(_) => xdata_slots.push(bytes.len()),
+            Err(Some(off)) => info_slots.push((bytes.len(), off)),
+            Err(None) => {}
         }
-        bytes.extend_from_slice(&info.to_le_bytes());
+        bytes.extend_from_slice(&info.unwrap_or(0).to_le_bytes());
     }
-    while pdata_rva + bytes.len() as u32 != blobs_rva {
-        bytes.push(0);
-    }
-    bytes.extend_from_slice(&blobs);
-    Pdata {
+    Ok(Pdata {
         bytes,
-        directory_size: array_size,
         info_slots,
-    }
+        xdata: blobs,
+        xdata_slots,
+    })
 }
 
-/// AArch64 `.pdata`: an `.xdata` record after the array for each frame `a64`
-/// describes, the inputs' entries, packed frameless ones over the rest.
+/// AArch64 `.pdata`: an entry with an `.xdata` record for each prologue `a64`
+/// describes, over the frame path alone where a return precedes the frame,
+/// the inputs' entries, packed frameless ones over the rest.
 fn build_aarch64_pdata(
     text_rva: u32,
     text_size: u32,
-    pdata_rva: u32,
     text_prologue_len: u32,
     a64: &[super::A64Unwind],
+    early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
-) -> Pdata {
+    seh: Seh,
+) -> Result<Pdata, C5Error> {
     enum Data {
         Packed(u32),
         Info(u64),
         Xdata(Vec<u8>),
     }
     let body = text_prologue_len;
+    let body_rva = text_rva + text_prologue_len;
     let mut rows: Vec<(u32, u32, Data)> = (foreign.iter())
         .map(|r| {
             let data = match r.data {
@@ -2667,10 +2841,39 @@ fn build_aarch64_pdata(
             (body + r.begin as u32, body + r.end as u32, data)
         })
         .collect();
-    rows.extend(a64.iter().filter_map(|u| {
-        let x = super::arm64_unwind::xdata(u.end - u.begin, &u.codes)?;
-        Some((body + u.begin, body + u.end, Data::Xdata(x)))
-    }));
+    for u in a64.iter().filter(|u| !u.steps.is_empty()) {
+        let describe = |what: &str, at: u32, steps: &[crate::c5::codegen::A64Step]| {
+            super::arm64_unwind::step_codes(steps).ok_or_else(|| {
+                C5Error::internal(format!(
+                    "no unwind code describes a step of the {what} at {at:#x}: {steps:?}"
+                ))
+            })
+        };
+        let codes = describe("prologue", u.begin, &u.steps)?;
+        let (begin, end) = (early_returns.iter())
+            .find(|e| e.begin == u.begin)
+            .map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
+        let mut exits = Vec::with_capacity(u.exits.len());
+        for e in &u.exits {
+            let at = u.begin + e.at;
+            let ret = at + 4 * e.steps.len() as u32;
+            if at < begin || ret >= end {
+                return Err(C5Error::internal(format!(
+                    "the epilogue at {at:#x} lies outside its unwind record [{begin:#x}, {end:#x})"
+                )));
+            }
+            exits.push((at - begin, describe("epilogue", at, &e.steps)?));
+        }
+        let Some(mut x) = super::arm64_unwind::xdata(end - begin, &codes, &exits) else {
+            continue;
+        };
+        // The X bit (header bit 20): the language handler and its data follow.
+        if let Some((_, language)) = seh.language_data(u.begin, body_rva) {
+            x[2] |= 0x10;
+            x.extend(language);
+        }
+        rows.push((body + begin, body + end, Data::Xdata(x)));
+    }
     rows.sort_by_key(|r| r.0);
     let mut entries: Vec<(u32, Data)> = Vec::new();
     let leaf = |entries: &mut Vec<(u32, Data)>, from: u32, to: u32| {
@@ -2689,10 +2892,9 @@ fn build_aarch64_pdata(
         covered = end;
     }
     leaf(&mut entries, covered, text_size);
-    let directory_size = entries.len() as u32 * 8;
-    let mut bytes = Vec::with_capacity(directory_size as usize);
-    let mut blobs: Vec<u8> = Vec::new();
-    let mut info_slots = Vec::new();
+    let mut bytes = Vec::with_capacity(entries.len() * 8);
+    let mut xdata: Vec<u8> = Vec::new();
+    let (mut info_slots, mut xdata_slots) = (Vec::new(), Vec::new());
     for (begin, data) in entries {
         bytes.extend_from_slice(&(text_rva + begin).to_le_bytes());
         let word = match data {
@@ -2702,19 +2904,20 @@ fn build_aarch64_pdata(
                 0
             }
             Data::Xdata(x) => {
-                let rva = pdata_rva + directory_size + blobs.len() as u32;
-                blobs.extend_from_slice(&x);
-                rva
+                xdata_slots.push(bytes.len());
+                let offset = xdata.len() as u32;
+                xdata.extend_from_slice(&x);
+                offset
             }
         };
         bytes.extend_from_slice(&word.to_le_bytes());
     }
-    bytes.extend_from_slice(&blobs);
-    Pdata {
+    Ok(Pdata {
         bytes,
-        directory_size,
         info_slots,
-    }
+        xdata,
+        xdata_slots,
+    })
 }
 
 /// Patch an IAT-lookup sequence: `call qword [rip+disp32]` on x86_64, or
@@ -2793,12 +2996,15 @@ fn patch_addr_load(
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
-            crate::c5::codegen::require_whole_addr(part, "PE: address load")?;
-            let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
+            let field = crate::c5::codegen::x86_disp32_field(
+                u64::from(instr_offset_in_text),
+                part,
+                "PE: address load",
+            )? as u32;
             patch_x86_64_disp32(
                 text,
-                (instr_offset_in_text + 3) as usize,
-                after_rva,
+                field as usize,
+                text_section_rva + field + 4,
                 target_rva,
             )
         }
@@ -2923,6 +3129,7 @@ fn pad_to(out: &mut Vec<u8>, target_len: usize) -> Result<(), C5Error> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::PrologueStep;
     use super::*;
     use alloc::string::ToString;
 
@@ -2999,7 +3206,11 @@ mod tests {
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
         let text_size = 2047 * 4 + 4 + 4;
-        let p = build_aarch64_pdata(0x1000, text_size, 0x4000, 0, &[], &[]);
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let p = build_aarch64_pdata(0x1000, text_size, 0, &[], &[], &[], seh).unwrap();
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
@@ -3073,6 +3284,99 @@ mod tests {
         (headers, word(optional_off + 32), word(optional_off + 56))
     }
 
+    /// Each section's name and characteristics.
+    fn section_flags(bytes: &[u8]) -> Vec<([u8; 8], u32)> {
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let coff_off = word(60) as usize + 4;
+        let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let table = coff_off + COFF_HEADER_SIZE + optional_size;
+        (0..n)
+            .map(|i| {
+                let h = table + i * SECTION_HEADER_SIZE;
+                (bytes[h..h + 8].try_into().unwrap(), word(h + 36))
+            })
+            .collect()
+    }
+
+    /// A windows-x64 image of `src` whose data carries the named sections
+    /// `PAGEDATA` and `mydata`.
+    fn windows_x64_image(src: &str) -> Vec<u8> {
+        let target = super::super::Target::WindowsX64;
+        let program = crate::Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let mut build =
+            lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+        build.data = alloc::vec![1; 64];
+        for (name, offset) in [("PAGEDATA", 16), ("mydata", 32)] {
+            build.named_sections.push(crate::c5::codegen::NamedSection {
+                name: name.into(),
+                offset,
+                size: 16,
+                align: 8,
+                bss: false,
+                write: true,
+            });
+        }
+        write(&program, &build, Machine::X86_64, target).expect("write PE")
+    }
+
+    /// A driver marks every resident section non-paged but a `PAGE*` one, as
+    /// `link.exe /DRIVER` does, and a native application none, as
+    /// `link.exe /SUBSYSTEM:NATIVE` does; both store the image checksum. A
+    /// console image keeps both clear. None leaves the IAT writable.
+    #[test]
+    fn a_driver_image_is_resident_and_checksummed() {
+        let entry = "#pragma entrypoint(Entry)\n\
+                     long Entry(long a, long b) { (void)a; (void)b; return 0; }";
+        let driver = windows_x64_image(&format!("#pragma subsystem(driver)\n{entry}"));
+        let native = windows_x64_image(&format!("#pragma subsystem(native)\n{entry}"));
+        let console = windows_x64_image("int main(void) { return 0; }");
+        for (bytes, driver, checksum) in [
+            (&driver, true, true),
+            (&native, false, true),
+            (&console, false, false),
+        ] {
+            let flags = section_flags(bytes);
+            for name in [&b"PAGEDATA"[..], b"mydata", b".idata"] {
+                assert!(flags.iter().any(|(n, _)| n.starts_with(name)));
+            }
+            for (name, flags) in flags {
+                if name.starts_with(b".idata") {
+                    assert_eq!(
+                        flags & IMAGE_SCN_MEM_WRITE,
+                        0,
+                        "driver {driver}: {flags:#x}"
+                    );
+                }
+                let resident = flags & IMAGE_SCN_MEM_DISCARDABLE == 0 && !name.starts_with(b"PAGE");
+                assert_eq!(
+                    flags & IMAGE_SCN_MEM_NOT_PAGED != 0,
+                    driver && resident,
+                    "driver {driver}: {} {flags:#x}",
+                    String::from_utf8_lossy(&name)
+                );
+            }
+            let field = checksum_field(bytes);
+            let stored = u32::from_le_bytes(bytes[field..field + 4].try_into().unwrap());
+            assert_eq!(stored, if checksum { image_checksum(bytes) } else { 0 });
+        }
+    }
+
+    /// The checksum sums the 16-bit words with the carry folded back in,
+    /// skips the CheckSum field and adds the file length.
+    #[test]
+    fn image_checksum_folds_the_carry_and_skips_its_field() {
+        let mut image = alloc::vec![0u8; 256];
+        image[0x3c] = 0x40;
+        image[..4].copy_from_slice(&[0xff, 0xff, 0x01, 0x00]);
+        image[0x40 + 88..0x40 + 92].copy_from_slice(&0x1234_5678u32.to_le_bytes());
+        // 0xffff + 0x0001 folds to 0x0001, then e_lfanew's 0x0040.
+        assert_eq!(image_checksum(&image), 0x41 + 256);
+    }
+
     /// An empty named section takes no header, and its bounds name where the next starts.
     #[test]
     fn an_empty_named_section_takes_no_header() {
@@ -3119,7 +3423,7 @@ mod tests {
                 .iter()
                 .find(|h| h.name.starts_with(b"full\0"))
                 .expect("full");
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
@@ -3163,7 +3467,7 @@ mod tests {
                 });
             }
             let bytes = write(&program, &build, machine, target).expect("write PE");
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             let l = &w.layout;
@@ -3240,7 +3544,7 @@ mod tests {
                 let rva = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
                 assert_eq!(rva % ALIGN, 0, "{target:?}: section {i} at {rva:#x}");
             }
-            let mut w = PeWriter::new(&program, &build, machine, target);
+            let mut w = PeWriter::new(&program, &build, machine, target).expect("imports");
             w.layout_code_sections().expect("code layout");
             w.layout_data_sections().expect("data layout");
             for (what, off) in [("relro head", ALIGN + 8), ("zero-fill tail", 3 * ALIGN + 8)] {
@@ -3683,13 +3987,10 @@ mod tests {
         );
     }
 
-    /// The two `FnUnwind` producers -- the structured single-TU path
-    /// (`emit_prologue`) and the link path's prologue-grammar decoder
-    /// (`decode_x86_64_prologue_unwind`) -- must agree, so a function
-    /// unwinds identically whether it is compiled in one unit or linked
-    /// from objects. The decoder reads the window the link path gives it,
-    /// up to the post-prologue anchor, on both x86-64 link targets. The
-    /// functions cover a leaf, the pushes as the whole frame (`saves`), an
+    /// The steps `emit_prologue` records agree with what the prologue
+    /// decoder (`decode_x86_64_prologue_unwind`) reads back from the
+    /// instructions, up to the post-prologue anchor, on both x86-64 link
+    /// targets. The functions cover a leaf, the pushes as the whole frame (`saves`), an
     /// imm8 and an imm32 `sub` ahead of pushes (`small`, `wide`), a probed
     /// allocation, and FP work, which on Win64 saves xmm scratch.
     #[test]
@@ -3703,10 +4004,15 @@ mod tests {
             long wide(long a) { char buf[1000]; snk(buf); return ext(a) + a + buf[0]; }
             int probed(int n) { char buf[8192]; buf[n & 4095] = (char)n; return buf[(n + 1) & 4095]; }
             double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
+            double every(double x) {
+                double a = x * 1.5, b = a + 2, c = b * x, d = c - a, e = d * 0.5, f = e + b;
+                double g = f * c, h = g - d, i = h * 0.25, j = i + x;
+                return fext(j) + a + b + c + d + e + f + g + h + i + j;
+            }
             int main(int argc, char **argv) {
                 (void)argv;
                 return add(argc, 2) + (int)saves(argc, 3) + (int)small(argc) + (int)wide(argc)
-                    + probed(argc) + (int)fpwork(1.5, argc);
+                    + probed(argc) + (int)fpwork(1.5, argc) + (int)every(argc);
             }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
@@ -3722,7 +4028,14 @@ mod tests {
                 optimize,
                 ..Default::default()
             };
-            let build = lower_for(&program, target, options).expect("lower");
+            // The full register pool, so the pressure caps do not change
+            // which frames push an even count and need no pad.
+            let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+                usize::MAX,
+                usize::MAX,
+                || lower_for(&program, target, options),
+            )
+            .expect("lower");
             let (mut framed, mut allocs, mut bare) = (0, 0, 0);
             for uw in &build.fn_unwind {
                 let prologue_end = build
@@ -3745,21 +4058,19 @@ mod tests {
                     frame_start,
                 );
                 assert_eq!(
-                    (uw.leaf, uw.push_rbp_end, uw.set_fpreg_end),
-                    (decoded.leaf, decoded.push_rbp_end, decoded.set_fpreg_end),
-                    "{target:?}: frame record of the function at {:#x}",
-                    uw.begin
-                );
-                assert_eq!(
-                    (uw.frame_bytes, uw.frame_alloc_end),
-                    (decoded.frame_bytes, decoded.frame_alloc_end),
-                    "{target:?}: allocation of the function at {:#x}",
+                    (uw.leaf, &uw.steps),
+                    (decoded.leaf, &decoded.steps),
+                    "{target:?}: prologue of the function at {:#x}",
                     uw.begin
                 );
                 assert_eq!(build_unwind_codes(uw, 0), build_unwind_codes(&decoded, 0));
+                let alloc = uw
+                    .steps
+                    .iter()
+                    .any(|s| matches!(s.1, PrologueStep::Alloc(_)));
                 framed += usize::from(!uw.leaf);
-                allocs += usize::from(uw.frame_alloc_end != 0);
-                bare += usize::from(!uw.leaf && uw.frame_alloc_end == 0);
+                allocs += usize::from(alloc);
+                bare += usize::from(!uw.leaf && !alloc);
             }
             // Described allocations and frames without one (probed, and
             // under `-O` the pushes alone) are both present.
@@ -3770,79 +4081,343 @@ mod tests {
         }
     }
 
-    /// Locks the documented unwind-metadata limitation: a non-leaf x64
-    /// Windows function that saves callee-saved GPRs or non-volatile
-    /// xmms describes only the frame-pointer prologue (SET_FPREG + one
-    /// PUSH_NONVOL, of rbp), never the saves (see `build_unwind_codes`).
+    /// A record of a frame with no steps, or with a step no unwind code
+    /// states, is an internal error rather than a frameless entry.
     #[test]
-    fn win64_gpr_spill_unwind_omits_save_nonvol() {
+    fn a_frame_the_steps_do_not_describe_is_an_internal_error() {
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let uw = super::super::FnUnwind {
+            begin: 0,
+            end: 16,
+            leaf: false,
+            steps: Vec::new(),
+        };
+        let x64 = build_x86_64_pdata(0x1000, 16, 0, &[uw], &[], &[], seh).map(|_| ());
+        let a64 = super::super::A64Unwind {
+            begin: 0,
+            end: 16,
+            steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
+            exits: Vec::new(),
+        };
+        let arm64 = build_aarch64_pdata(0x1000, 16, 0, &[a64], &[], &[], seh).map(|_| ());
+        for (got, why) in [
+            (x64, "has a frame and no recorded unwind steps"),
+            (arm64, "no unwind code describes a step"),
+        ] {
+            let msg = got.expect_err(why).to_string();
+            assert!(
+                msg.contains("internal compiler error") && msg.contains(why),
+                "{msg}"
+            );
+        }
+    }
+
+    /// Two Win64 prologue shapes the instruction decoder misreads, recorded
+    /// as emitted: a variadic callee's `sub rsp` after its home-area stores
+    /// takes an allocation step at its end, where the decoder stops at the
+    /// first store; and a realigning frame's `sub rsp` ahead of `and rsp`
+    /// takes none, where the decoder reads it as the frame's allocation.
+    /// Either way rbp, set first, recovers rsp in the body.
+    #[test]
+    fn win64_variadic_and_realigned_frames_record_what_they_allocate() {
         use crate::Compiler;
         let src = "
-            long g(long);
-            long f(long a, long b, long c, long d, long e, long h, long i) {
-                long r = g(a) + g(b);
-                return r + a * b + c * d + e * h + i * a + b * c + d * e;
+            void snk(char *); long ext(long);
+            long sum(int n, ...) {
+                __builtin_va_list ap; __builtin_va_start(ap, n);
+                long s = 0; for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);
+                __builtin_va_end(ap); return s + ext(s);
             }
-            int main(void) { return (int)f(1, 2, 3, 4, 5, 6, 7); }
+            long aligned(long a) { _Alignas(64) char buf[64]; snk(buf); return ext(a) + buf[a & 7]; }
+            int main(void) { return (int)sum(2, 3L, 4L) + (int)aligned(5); }
+        ";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::WindowsX64,
+        )
+        .compile()
+        .expect("compile");
+        // The full register pool, so the pressure caps leave the frame an
+        // allocation below the home stores.
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || {
+                lower_for(
+                    &program,
+                    super::super::Target::WindowsX64,
+                    Default::default(),
+                )
+            },
+        )
+        .expect("lower");
+        let record = |name: &str| {
+            let i = build.func_names.iter().position(|n| n == name).expect(name);
+            let begin = build.pc_to_native[build.func_ent_pcs[i]] as u32;
+            let uw = build
+                .fn_unwind
+                .iter()
+                .find(|u| u.begin == begin)
+                .expect(name);
+            let anchor = build.func_prologue_native[&build.func_ent_pcs[i]] as u32;
+            let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
+                &build.text,
+                uw.begin,
+                uw.end,
+                anchor,
+                0,
+            );
+            (uw.clone(), decoded)
+        };
+        let is_alloc = |s: &(u32, PrologueStep)| matches!(s.1, PrologueStep::Alloc(_));
+        let (sum, decoded) = record("sum");
+        let set = sum
+            .steps
+            .iter()
+            .position(|s| matches!(s.1, PrologueStep::SetFrame(_)));
+        let set = set.expect("rbp");
+        // The four home stores lie between rbp and the allocation after it.
+        let (at, _) = *sum.steps[set..]
+            .iter()
+            .find(|s| is_alloc(s))
+            .expect("an allocation");
+        assert!(at >= sum.steps[set].0 + 16, "{:?}", sum.steps);
+        assert_eq!(decoded.steps, sum.steps[..=set], "{:?}", sum.steps);
+        let (aligned, decoded) = record("aligned");
+        assert!(!aligned.steps.iter().any(is_alloc), "{:?}", aligned.steps);
+        let end = (aligned.begin + aligned.steps.last().expect("steps").0) as usize;
+        // `sub rsp, n` then `and rsp, -64`.
+        assert_eq!(
+            build.text[end..end + 2],
+            [0x48, 0x83],
+            "{:x?}",
+            &build.text[end..]
+        );
+        assert!(decoded.steps.iter().any(is_alloc), "{:?}", decoded.steps);
+    }
+
+    /// The unwind codes of the steps the arm64 emitter records equal the
+    /// ones `prologue_codes` reads back from the instructions, from the frame
+    /// path's start up to the post-prologue anchor, for a leaf, a folded and
+    /// an unfolded frame, a Windows variadic callee and a return ahead of the
+    /// frame, with and without `bti` and `pac-ret` (leaves signed too); a
+    /// function the decoder finds no prolog in records no steps. Each exit's
+    /// codes equal the ones `epilogue_codes` reads from its first
+    /// instruction to its `ret`, and every `ret` of the frame path ends one.
+    #[test]
+    fn structured_and_decoded_unwind_agree_arm64() {
+        use crate::Compiler;
+        use crate::c5::codegen::{A64Step, Hardening};
+        const RET: [u8; 4] = 0xD65F_03C0u32.to_le_bytes();
+        let src = "
+            void snk(char *); long ext(long); double fext(double);
+            int add(int a, int b) { return a + b; }
+            long saves(long a, long b) { return ext(a) + a + b; }
+            long wide(long a) { char buf[8192]; snk(buf); return ext(a) + a + buf[a & 7]; }
+            double fpwork(double x, long n) { return fext(x) * x + (double)(ext(n) + n); }
+            long fib(long n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }
+            long sum(int n, ...) {
+                __builtin_va_list ap; __builtin_va_start(ap, n);
+                long s = 0; for (int i = 0; i < n; i++) s += __builtin_va_arg(ap, long);
+                __builtin_va_end(ap); return s + ext(s);
+            }
+            long several(long a, long b) {
+                if (a > b) return ext(a) * 2;
+                if (a < 0) return ext(b) - a;
+                return a + b;
+            }
+            long vla(long n) { char buf[n + 1]; snk(buf); return ext(n) + buf[n]; }
+            long huge(long a) { char buf[70000]; snk(buf); return buf[a & 7]; }
+            int main(int argc, char **argv) {
+                (void)argv;
+                return add(argc, 2) + (int)saves(argc, 3) + (int)wide(argc)
+                    + (int)fpwork(1.5, argc) + (int)fib(argc) + (int)sum(2, 3L, 4L)
+                    + (int)several(argc, 1) + (int)vla(argc) + (int)huge(argc);
+            }
+        ";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::WindowsAarch64,
+        )
+        .compile()
+        .expect("compile");
+        let signed = Hardening {
+            bti: true,
+            pac_ret: true,
+            pac_ret_leaf: true,
+            ..Hardening::NONE
+        };
+        for (hardening, optimize) in [
+            (Hardening::NONE, false),
+            (Hardening::NONE, true),
+            (signed, false),
+            (signed, true),
+        ] {
+            let options = super::super::NativeOptions {
+                optimize,
+                hardening,
+                ..Default::default()
+            };
+            let build =
+                lower_for(&program, super::super::Target::WindowsAarch64, options).expect("lower");
+            let (mut framed, mut bare, mut most_exits) = (0, 0, 0);
+            for u in &build.a64_unwind {
+                let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+                let (start, stop) =
+                    early.map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
+                let anchor = (build.func_prologue_native.values())
+                    .map(|&p| p as u32)
+                    .filter(|p| (u.begin..u.end).contains(p))
+                    .min()
+                    .unwrap_or(u.begin);
+                let decoded = super::super::arm64_unwind::prologue_codes(
+                    &build.text,
+                    start,
+                    anchor.min(stop),
+                );
+                let recorded = (!u.steps.is_empty())
+                    .then(|| super::super::arm64_unwind::codes(&u.steps).expect("codes"));
+                assert_eq!(
+                    recorded, decoded,
+                    "{hardening:?} -O={optimize}: the function at {:#x}: {:?}",
+                    u.begin, u.steps
+                );
+                let sets_fp = |s: &A64Step| matches!(s, A64Step::SetFp | A64Step::AddFp(_));
+                framed += usize::from(u.steps.iter().any(sets_fp));
+                bare += usize::from(u.steps.is_empty());
+                if u.steps.is_empty() {
+                    assert!(u.exits.is_empty(), "{:#x}: {:?}", u.begin, u.exits);
+                    continue;
+                }
+                let mut rets = Vec::new();
+                for e in &u.exits {
+                    let at = u.begin + e.at;
+                    let steps = super::super::arm64_unwind::step_codes(&e.steps).expect("codes");
+                    let ret = at + 4 * e.steps.len() as u32;
+                    assert_eq!(
+                        super::super::arm64_unwind::epilogue_codes(&build.text, at),
+                        Some((steps.concat(), ret)),
+                        "{hardening:?} -O={optimize}: the exit at {at:#x}: {:?}",
+                        e.steps
+                    );
+                    rets.push(ret);
+                }
+                let words = (start..stop).step_by(4);
+                let all: Vec<u32> =
+                    (words.filter(|&at| build.text[at as usize..][..4] == RET)).collect();
+                assert_eq!(all, rets, "{hardening:?} -O={optimize}: {:#x}", u.begin);
+                most_exits = most_exits.max(rets.len());
+            }
+            // `-O` leaves `add` a full leaf, which `pac-ret+leaf` signs.
+            let leaf = optimize && hardening == Hardening::NONE;
+            assert!(
+                framed >= 5 && (bare > 0) == leaf && most_exits >= 2,
+                "{hardening:?} -O={optimize}: {framed} framed, {bare} without a prolog, \
+                 {most_exits} exits at most"
+            );
+        }
+    }
+
+    /// Replay of `codes` as `RtlVirtualUnwind` processes them from the body:
+    /// in array order, from the RSP the frame register gives, recording where
+    /// each register is read. Returns `(saved, rsp)`: each register's slot as
+    /// a byte offset from the entry RSP, and the RSP the replay leaves, which
+    /// must be the entry RSP, where the return address is.
+    fn replay(codes: &[u8], frame: u8, rbp: i64) -> (Vec<(u8, bool, i64)>, i64) {
+        let mut rsp = rbp;
+        let mut saved = Vec::new();
+        let mut i = 0;
+        while i < codes.len() {
+            let (op, info) = (codes[i + 1] & 0x0F, codes[i + 1] >> 4);
+            let next = |k: usize| u16::from_le_bytes([codes[i + 2 * k], codes[i + 2 * k + 1]]);
+            match op {
+                UWOP_PUSH_NONVOL => {
+                    saved.push((info, false, rsp));
+                    rsp += 8;
+                }
+                UWOP_ALLOC_SMALL => rsp += 8 * (i64::from(info) + 1),
+                UWOP_ALLOC_LARGE if info == 0 => {
+                    rsp += 8 * i64::from(next(1));
+                    i += 2;
+                }
+                UWOP_SET_FPREG => rsp = rbp - 16 * i64::from(frame >> 4),
+                UWOP_SAVE_XMM128 => {
+                    saved.push((info, true, rsp + 16 * i64::from(next(1))));
+                    i += 2;
+                }
+                other => panic!("unexpected unwind code {other}"),
+            }
+            i += 2;
+        }
+        (saved, rsp)
+    }
+
+    /// A Win64 function's `UNWIND_INFO` describes every non-volatile save:
+    /// replaying its codes reads each callee-saved GPR and xmm the prologue
+    /// saved from the slot the prologue stored it to, and returns RSP to the
+    /// return address. The codes include no `UWOP_SAVE_NONVOL`, the pushes
+    /// being `UWOP_PUSH_NONVOL`s.
+    #[test]
+    fn win64_unwind_codes_describe_every_save() {
+        use crate::Compiler;
+        let src = "
+            long g(long); double h(double);
+            long f(long a, long b, long c, long d, long e, long k, long i) {
+                long r = g(a) + g(b);
+                return r + a * b + c * d + e * k + i * a + b * c + d * e;
+            }
+            double fp(double x, double y, double z, double w) {
+                double t = h(x) * y;
+                double u = h(t) * z;
+                return t + u + h(y) * w + x * y * z * w;
+            }
+            int main(void) { return (int)(f(1, 2, 3, 4, 5, 6, 7) + fp(1, 2, 3, 4)); }
         ";
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        let build = lower_for(
-            &program,
-            super::super::Target::WindowsX64,
-            super::super::NativeOptions::default(),
-        )
-        .expect("lower");
-        fn ops_of(codes: &[u8]) -> Vec<u8> {
-            let mut ops = Vec::new();
-            let mut i = 0;
-            while i + 1 < codes.len() {
-                let op = codes[i + 1] & 0x0F;
-                let opinfo = codes[i + 1] >> 4;
-                ops.push(op);
-                let slots = match op {
-                    1 => {
-                        if opinfo == 0 {
-                            2
-                        } else {
-                            3
+        let (mut gprs, mut xmms) = (0, 0);
+        for optimize in [false, true] {
+            let options = super::super::NativeOptions {
+                optimize,
+                ..Default::default()
+            };
+            let build =
+                lower_for(&program, super::super::Target::WindowsX64, options).expect("lower");
+            for uw in build.fn_unwind.iter().filter(|u| !u.leaf) {
+                let (codes, _, frame) = build_unwind_codes(uw, 0);
+                assert_eq!(frame & 0x0F, UNWIND_REG_RBP);
+                assert!(codes.chunks(2).all(|c| c[1] & 0x0F != UWOP_SAVE_NONVOL));
+                // The prologue's own account of each slot, from the entry
+                // RSP: a push stores at the RSP it leaves, an xmm store at
+                // its offset from the RSP at that point.
+                let (mut rsp, mut rbp, mut want) = (0i64, 0i64, Vec::new());
+                for &(_, step) in &uw.steps {
+                    match step {
+                        PrologueStep::Push(r) => {
+                            rsp -= 8;
+                            want.push((r, false, rsp));
                         }
-                    } // ALLOC_LARGE
-                    _ => 1,
-                };
-                i += slots * 2;
+                        PrologueStep::Alloc(n) => rsp -= i64::from(n),
+                        PrologueStep::SaveXmm { xmm, off } => {
+                            want.push((xmm, true, rsp + i64::from(off)));
+                        }
+                        PrologueStep::SetFrame(off) => rbp = rsp + i64::from(off),
+                    }
+                }
+                let (mut saved, rsp) = replay(&codes, frame, rbp);
+                saved.sort();
+                want.sort();
+                assert_eq!(saved, want, "the function at {:#x}", uw.begin);
+                assert_eq!(rsp, 0, "RSP back at the return address");
+                gprs += want.iter().filter(|w| !w.1 && w.0 != 5).count();
+                xmms += want.iter().filter(|w| w.1).count();
             }
-            ops
         }
-        let mut saw_non_leaf = false;
-        for uw in &build.fn_unwind {
-            if uw.leaf {
-                continue;
-            }
-            saw_non_leaf = true;
-            let (codes, _size_of_prolog, frame_reg) = build_unwind_codes(uw, 0);
-            assert_eq!(frame_reg, UNWIND_REG_RBP);
-            let ops = ops_of(&codes);
-            assert!(
-                ops.contains(&UWOP_SET_FPREG),
-                "non-leaf must set the frame register"
-            );
-            assert_eq!(
-                ops.iter().filter(|&&op| op == UWOP_PUSH_NONVOL).count(),
-                1,
-                "non-leaf describes the push of rbp and no other"
-            );
-            assert!(
-                !ops.contains(&UWOP_SAVE_NONVOL),
-                "GPR saves are not (yet) described"
-            );
-            assert!(
-                !ops.contains(&UWOP_SAVE_XMM128),
-                "xmm saves are not described until the prologue restructure"
-            );
-        }
-        assert!(saw_non_leaf, "expected at least one non-leaf frame");
+        assert!(gprs >= 4 && xmms >= 2, "{gprs} GPR and {xmms} xmm saves");
     }
 
     /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every image we emit,
@@ -4325,7 +4900,7 @@ mod tests {
     }
 
     #[test]
-    fn driver_pragma_aliases_native_subsystem() {
+    fn driver_subsystem_skips_stub() {
         passthrough_subsystem_skips_stub("driver", IMAGE_SUBSYSTEM_NATIVE);
     }
 

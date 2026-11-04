@@ -73,12 +73,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rdx # <addr>
                	leaq	<rip>, %rax # <addr>
                	movl	$0x4, %ebx
                	movl	$0xf00d, %ecx           # imm = 0xF00D
                	movq	%rcx, 0x8(%rax,%rbx,2)
-               	movq	0x10(%rdx), %rax
+               	movq	<rip>, %rax # <addr>
                	cmpq	$0xf00d, %rax           # imm = 0xF00D
                	je	<addr>
                	movl	$0x5, %eax

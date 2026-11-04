@@ -51,6 +51,8 @@ mod got_relax;
 #[cfg(feature = "std")]
 mod image;
 mod import_slots;
+#[cfg(feature = "std")]
+pub(crate) mod kernel32;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod lds;
@@ -66,6 +68,8 @@ pub(crate) mod mach_o_shared;
 pub(crate) mod map;
 #[cfg(feature = "std")]
 pub(crate) mod object;
+#[cfg(feature = "std")]
+pub(crate) mod on_demand;
 #[cfg(feature = "std")]
 pub(crate) mod relocatable;
 #[cfg(feature = "std")]
@@ -103,16 +107,17 @@ fn tagged(module: &str, msg: &str) -> alloc::string::String {
     }
 }
 
-#[cfg(feature = "std")]
-pub use archive::read_archive_at;
 pub use archive::{
-    ArchiveMember, elf_archive_symbols, is_arm64x_archive, read_archive, write_archive,
+    ArchiveMember, IndexedArchive, elf_archive_symbols, is_arm64x_archive, read_archive,
+    write_archive,
 };
+#[cfg(feature = "std")]
+pub use archive::{read_archive_at, read_indexed_archive_at};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use coff_object::{
     ImportMember, import_libraries, is_arm64x_native_member, is_coff_import_member, is_coff_object,
-    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll,
+    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll, traditional_imports,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
@@ -150,6 +155,8 @@ pub use object::{
     detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
     parse_native_object_for, parse_shared_library,
 };
+#[cfg(feature = "std")]
+pub use on_demand::OnDemandSources;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use relocatable::{

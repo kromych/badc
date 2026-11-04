@@ -143,6 +143,7 @@ impl Compiler {
             let lev = Token::Inc as i64;
             self.drop_operand_array_decay();
             self.unevaluated(|c| c.expr_or_void(lev))?;
+            self.take_register_decay(self.ast_acc);
             // C99 6.5.3.4p2: an operand of variable-length array type is
             // evaluated -- a cast in it stores the size -- and the size read
             // at run time.
@@ -491,6 +492,13 @@ impl Compiler {
             let saved_reloc = me.code_reloc_sym_idx.len();
             let saved_acc = me.ast_acc.take();
             let vstack_depth = me.ast_vstack.len();
+            let p = &mut me.pending;
+            let saved_decay = (
+                p.last_array_decay_size,
+                p.last_array_decay_bytes,
+                core::mem::take(&mut p.last_array_decay_dims),
+                p.last_array_decay_vla,
+            );
             me.expr_or_void(Token::Assign as i64)?;
             me.next_ent_pc = saved_text_len;
             me.clear_recent_emits();
@@ -498,6 +506,13 @@ impl Compiler {
             me.ast_vstack.truncate(vstack_depth);
             me.ast_acc = saved_acc;
             me.ty = saved_ty;
+            let p = &mut me.pending;
+            (
+                p.last_array_decay_size,
+                p.last_array_decay_bytes,
+                p.last_array_decay_dims,
+                p.last_array_decay_vla,
+            ) = saved_decay;
             Ok(())
         };
         parse_arm(self, cond != 0)?;

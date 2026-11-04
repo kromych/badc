@@ -26,32 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	movl	<rip>, %eax # <addr>
                	imulq	$0xa, %rax, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx), %ecx
-               	leaq	(%rax,%rcx), %rsi
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rcx
-               	movl	(%rcx), %edx
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	movl	(%rax), %edx
                	incq	%rdx
-               	movl	%edx, (%rcx)
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rdx
-               	movl	0x4(%rdx), %edi
-               	addq	$0xa, %rdi
-               	movl	%edi, 0x4(%rdx)
-               	movq	(%rax), %rax
+               	movl	%edx, (%rax)
+               	movq	<rip>, %rax # <addr>
+               	movl	0x4(%rax), %edx
+               	addq	$0xa, %rdx
+               	movl	%edx, 0x4(%rax)
+               	movq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
-               	leaq	(%rsi,%rax), %rdx
-               	movq	(%rcx), %rax
-               	movl	(%rax), %ecx
+               	addq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	movl	(%rax), %edx
                	addq	%rdx, %rcx
                	movl	0x4(%rax), %eax
                	addq	%rcx, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
+               	movq	<rip>, %rcx # <addr>
                	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	subq	$0x64, %rax

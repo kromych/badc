@@ -6,7 +6,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::{Build, Target};
+use super::{Build, PrologueStep, Target};
 use crate::c5::compiler::{StructDef, types};
 use crate::c5::layout::pad_to_align as pad_to_alignment;
 use crate::c5::program::Program;
@@ -292,19 +292,15 @@ pub(crate) fn emit(
 }
 
 /// Where a subprogram's FDE installs its frame rules. The x86_64 lowering
-/// records the boundaries of `push rbp` and `mov rbp, rsp`, so each
-/// instruction gets the rule that holds after it; a full leaf keeps the
-/// CIE's entry rule throughout, as does an aarch64 function whose prologue
-/// is hints alone; otherwise the body rule installs at the post-prologue
-/// offset.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// records its prologue steps, so each instruction gets the rule that holds
+/// after it; a full leaf keeps the CIE's entry rule throughout, as does an
+/// aarch64 function whose prologue is hints alone; otherwise the body rule
+/// installs at the post-prologue offset.
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum FrameRules {
     PostPrologue,
     Leaf,
-    X86Frame {
-        push_rbp_end: u32,
-        set_fpreg_end: u32,
-    },
+    X86Frame(Vec<(u32, PrologueStep)>),
 }
 
 impl FrameRules {
@@ -315,10 +311,7 @@ impl FrameRules {
             }
             None => FrameRules::PostPrologue,
             Some(u) if u.leaf => FrameRules::Leaf,
-            Some(u) => FrameRules::X86Frame {
-                push_rbp_end: u.push_rbp_end,
-                set_fpreg_end: u.set_fpreg_end,
-            },
+            Some(u) => FrameRules::X86Frame(u.steps.clone()),
         }
     }
 }
@@ -541,7 +534,8 @@ fn collect_plt_subprograms(
                 name_off: strs.intern(&imp.local_name),
                 low_pc: code_vmaddr + off as u64,
                 high_pc: code_vmaddr + off as u64 + stub_size,
-                return_type_tag: imp.return_type_tag,
+                // Without a prototype, the C90 implicit declaration's `int`.
+                return_type_tag: imp.return_type_tag.unwrap_or(Ty::Int as i64),
                 param_types: imp.param_types.clone(),
                 param_name_offs,
                 is_variadic: imp.is_variadic,
@@ -656,7 +650,7 @@ fn collect_subprograms(
         // close, indexed by the Ent's ent_pc so a simple equality check
         // groups them.
         let function_bc_pc = ent_pc as u64;
-        let canary_shift = build.canary_frame_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
+        let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
         let param_homes = build.param_frame_offsets.get(&ent_pc);
         let variables = program
             .variables
@@ -699,7 +693,7 @@ fn collect_subprograms(
                         // the top of the locals, so every local slot sits
                         // that much lower; parameter cells are above the
                         // frame base and keep their offsets.
-                        eff * 8 - canary_shift
+                        eff * 8 - local_shift
                     },
                     promoted: region == Some(None)
                         || build
@@ -1969,19 +1963,59 @@ fn write_entry_rules(out: &mut Vec<u8>, arch: CfiArch, signed: bool) {
     }
 }
 
-/// The rules of an x86_64 frame, one per prologue instruction: past
-/// `push rbp` the CFA is `rsp + 16` with rbp saved at `CFA - 16`; past
-/// `mov rbp, rsp` the CFA is `rbp + 16`. The return address stays at
-/// `CFA - 8`, the CIE's rule.
-fn write_x86_64_frame_rules(out: &mut Vec<u8>, push_rbp_end: u32, set_fpreg_end: u32) {
-    write_advance_loc(out, CfiArch::X86_64, push_rbp_end);
-    out.push(DW_CFA_DEF_CFA_OFFSET);
-    write_uleb128(out, 16);
-    out.push(DW_CFA_OFFSET_HI | X86_64_REG_RBP);
-    write_uleb128(out, 2);
-    write_advance_loc(out, CfiArch::X86_64, set_fpreg_end - push_rbp_end);
-    out.push(DW_CFA_DEF_CFA_REGISTER);
-    write_uleb128(out, X86_64_REG_RBP as u64);
+/// The rules of an x86_64 frame, one per prologue step: while rsp carries
+/// the CFA each push and allocation moves it, a push or an xmm store saves a
+/// register at its slot, and setting rbp makes the CFA rbp-relative. The
+/// return address stays at `CFA - 8`, the CIE's rule. Returns the offset of
+/// the last rule.
+fn write_x86_64_frame_rules(out: &mut Vec<u8>, steps: &[(u32, PrologueStep)]) -> u32 {
+    // DWARF numbers the registers rax, rdx, rcx, rbx, rsi, rdi, rbp, rsp
+    // (AMD64 psABI 3.6.2); xmm0-15 are 17-32.
+    const DWARF_GPR: [u8; 16] = [0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15];
+    let (mut ruled, mut cfa, mut via_rsp) = (0, 8u32, true);
+    let mut at = |out: &mut Vec<u8>, end: u32| {
+        write_advance_loc(out, CfiArch::X86_64, end - ruled);
+        ruled = end;
+    };
+    let saved = |out: &mut Vec<u8>, reg: u8, below_cfa: u32| {
+        out.push(DW_CFA_OFFSET_HI | reg);
+        write_uleb128(out, u64::from(below_cfa / 8));
+    };
+    for &(end, step) in steps {
+        match step {
+            PrologueStep::Push(r) if via_rsp => {
+                cfa += 8;
+                at(out, end);
+                out.push(DW_CFA_DEF_CFA_OFFSET);
+                write_uleb128(out, u64::from(cfa));
+                saved(out, DWARF_GPR[r as usize], cfa);
+            }
+            PrologueStep::Alloc(n) if via_rsp => {
+                cfa += n;
+                at(out, end);
+                out.push(DW_CFA_DEF_CFA_OFFSET);
+                write_uleb128(out, u64::from(cfa));
+            }
+            PrologueStep::SaveXmm { xmm, off } if via_rsp => {
+                at(out, end);
+                saved(out, 17 + xmm, cfa - off);
+            }
+            PrologueStep::SetFrame(off) => {
+                at(out, end);
+                if off == 0 {
+                    out.push(DW_CFA_DEF_CFA_REGISTER);
+                    write_uleb128(out, X86_64_REG_RBP as u64);
+                } else {
+                    out.push(DW_CFA_DEF_CFA);
+                    write_uleb128(out, X86_64_REG_RBP as u64);
+                    write_uleb128(out, u64::from(cfa - off));
+                }
+                via_rsp = false;
+            }
+            _ => {}
+        }
+    }
+    ruled
 }
 
 /// Encode a `DW_CFA_advance_loc` covering `bytes` of native code, expanding
@@ -2127,7 +2161,7 @@ fn build_debug_frame(
     out.extend_from_slice(&cie);
 
     for sub in subs {
-        let Some(frame_rules) = sub.frame_rules else {
+        let Some(frame_rules) = &sub.frame_rules else {
             continue;
         };
         let mut fde_body: Vec<u8> = Vec::new();
@@ -2142,13 +2176,7 @@ fn build_debug_frame(
                 }
                 None => (0, false),
             },
-            FrameRules::X86Frame {
-                push_rbp_end,
-                set_fpreg_end,
-            } => {
-                write_x86_64_frame_rules(&mut fde_body, push_rbp_end, set_fpreg_end);
-                (set_fpreg_end, false)
-            }
+            FrameRules::X86Frame(steps) => (write_x86_64_frame_rules(&mut fde_body, steps), false),
             FrameRules::PostPrologue => {
                 let sign_end = sub.ra_signed_at.map(|at| at + 4);
                 let signed = sign_end.is_some_and(|end| sub.prologue_size >= end);
@@ -2845,13 +2873,16 @@ mod tests {
             }
             b
         };
+        use PrologueStep::{Alloc, Push, SaveXmm, SetFrame};
         // Past `push rbp` the CFA is rsp + 16 with rbp at CFA - 16; past
-        // `mov rbp, rsp` the CFA register is rbp.
+        // `mov rbp, rsp` the CFA register is rbp, and the allocation after it
+        // takes no rule.
         assert_eq!(
-            body(FrameRules::X86Frame {
-                push_rbp_end: 1,
-                set_fpreg_end: 4,
-            }),
+            body(FrameRules::X86Frame(alloc::vec![
+                (1, Push(5)),
+                (4, SetFrame(0)),
+                (8, Alloc(32)),
+            ])),
             [
                 DW_CFA_ADVANCE_LOC_HI | 1,
                 DW_CFA_DEF_CFA_OFFSET,
@@ -2861,6 +2892,39 @@ mod tests {
                 DW_CFA_ADVANCE_LOC_HI | 3,
                 DW_CFA_DEF_CFA_REGISTER,
                 X86_64_REG_RBP,
+            ]
+        );
+        // The Win64 save block: rbx (DWARF 3) at CFA - 24, the 24-byte pad and
+        // xmm area, xmm6 (DWARF 23) at CFA - 48, rbp = rsp + 32 = CFA - 16.
+        assert_eq!(
+            body(FrameRules::X86Frame(alloc::vec![
+                (1, Push(5)),
+                (2, Push(3)),
+                (6, Alloc(24)),
+                (10, SaveXmm { xmm: 6, off: 0 }),
+                (15, SetFrame(32)),
+            ])),
+            [
+                DW_CFA_ADVANCE_LOC_HI | 1,
+                DW_CFA_DEF_CFA_OFFSET,
+                16,
+                DW_CFA_OFFSET_HI | X86_64_REG_RBP,
+                2,
+                DW_CFA_ADVANCE_LOC_HI | 1,
+                DW_CFA_DEF_CFA_OFFSET,
+                24,
+                DW_CFA_OFFSET_HI | 3,
+                3,
+                DW_CFA_ADVANCE_LOC_HI | 4,
+                DW_CFA_DEF_CFA_OFFSET,
+                48,
+                DW_CFA_ADVANCE_LOC_HI | 4,
+                DW_CFA_OFFSET_HI | 23,
+                6,
+                DW_CFA_ADVANCE_LOC_HI | 5,
+                DW_CFA_DEF_CFA,
+                X86_64_REG_RBP,
+                16,
             ]
         );
         // A full leaf keeps the CIE's entry rule throughout.
@@ -3027,11 +3091,12 @@ mod tests {
                     real_symbol: "malloc".into(),
                     dylib_index: 0,
                     flat_lookup: false,
+                    weak: false,
                     ordinal: None,
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
                     fixed_args: 1,
-                    return_type_tag: 0,
+                    return_type_tag: None,
                     param_types: alloc::vec![1], // int
                 },
                 super::super::ResolvedImport {
@@ -3040,11 +3105,12 @@ mod tests {
                     real_symbol: "free".into(),
                     dylib_index: 0,
                     flat_lookup: false,
+                    weak: false,
                     ordinal: None,
                     kind: crate::c5::codegen::ImportKind::Function,
                     is_variadic: false,
                     fixed_args: 1,
-                    return_type_tag: 0,
+                    return_type_tag: None,
                     param_types: alloc::vec![1],
                 },
             ],

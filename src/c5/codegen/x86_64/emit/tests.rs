@@ -18,6 +18,7 @@ mod asm_scratch_tests {
                 value: false,
                 volatile_object: false,
                 early_clobber: false,
+                fp_limit: 0,
             }],
             clobber_regs,
             clobber_fp_regs: 0,
@@ -73,6 +74,7 @@ mod asm_scratch_tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         }];
         let op = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (0, 0)).unwrap();
         assert_eq!(op.0, 0);
@@ -127,6 +129,7 @@ mod asm_scratch_tests {
             value: is_output,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let statement = |operands: alloc::vec::Vec<AsmOperand>, clobber_regs: u32| {
             let n = operands.len();
@@ -289,6 +292,7 @@ mod asm_scratch_tests {
             value: is_output,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let asm = AsmBlock {
             template: b"nop".to_vec(),
@@ -894,7 +898,7 @@ mod two_address_tests {
 
     /// A difference placed in its subtrahend's register negates it in
     /// place and adds the minuend: `neg rax; add rax, rsi`. When the
-    /// minuend is the same register (`a - a`) or spilled, the subtrahend
+    /// minuend is in the same register or spilled, the subtrahend
     /// is copied to r10 first and `sub rax, r10` computes the difference.
     #[test]
     fn subtract_into_the_subtrahend_register() {
@@ -918,9 +922,8 @@ mod two_address_tests {
             emit(two, reg(Reg::RSI), reg(Reg::RAX)),
             [0x48, 0xF7, 0xD8, 0x48, 0x01, 0xF0]
         );
-        let same = "long f(long a){ return a - a; }";
         assert_eq!(
-            emit(same, reg(Reg::RAX), reg(Reg::RAX)),
+            emit(two, reg(Reg::RAX), reg(Reg::RAX)),
             [0x49, 0x89, 0xC2, 0x4C, 0x29, 0xD0]
         );
         let spilled = emit(two, Place::Spill(0), reg(Reg::RAX));
@@ -1516,7 +1519,9 @@ mod code_mode_tests {
         use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
         // The driver prepares the template (comment stripping, GNU as macro
         // and equate expansion) before the section parse reads it.
-        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let text = prepare_file_asm_text(text, AsmComments::X86)
+            .checked()
+            .expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(
             &[text],
@@ -1552,7 +1557,9 @@ mod code_mode_tests {
         use crate::c5::asm::AsmComments;
         use crate::c5::asm::AsmSectionSink;
         use crate::c5::asm::{materialize_file_asm, prepare_file_asm_text};
-        let text = prepare_file_asm_text(text, AsmComments::X86).expect("prepares");
+        let text = prepare_file_asm_text(text, AsmComments::X86)
+            .checked()
+            .expect("prepares");
         let mut sink = AsmSectionSink::default();
         materialize_file_asm(
             &[text],

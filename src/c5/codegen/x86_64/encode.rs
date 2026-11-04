@@ -185,14 +185,30 @@ fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
     }
 }
 
-/// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
-/// SIB loads extend (`I32` only when `hi`); returns the displacement's offset.
-pub(crate) fn emit_load_index_abs(
+/// A memory operand with no base register, ending in a 32-bit displacement
+/// the writer patches: `disp32(,%index,scale)` or `disp32(%rip)`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Disp32Mem {
+    Index(Reg, u8),
+    Rip,
+}
+
+impl Disp32Mem {
+    fn opnd(self, width: u8) -> super::table::Opnd {
+        match self {
+            Disp32Mem::Index(index, scale) => mindex(index, scale, width),
+            Disp32Mem::Rip => super::table::Opnd::RipRel { disp: 0, width },
+        }
+    }
+}
+
+/// Load of `kind` from `mem` into `dst`, extended as the SIB loads extend
+/// (`I32` only when `hi`); returns the displacement's offset.
+pub(crate) fn emit_load_disp32(
     code: &mut Vec<u8>,
     kind: crate::c5::ir::LoadKind,
     dst: Reg,
-    index: Reg,
-    scale: u8,
+    mem: Disp32Mem,
     hi: bool,
 ) -> usize {
     use crate::c5::ir::LoadKind;
@@ -205,52 +221,58 @@ pub(crate) fn emit_load_index_abs(
         LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
         LoadKind::U8 => (Mnem::Movzx, None, 8, 1),
         LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
-            unreachable!("indexed load of a floating kind")
+            unreachable!("disp32 load of a floating kind")
         }
     };
     super::table::encode_into_disp32(
         code,
         mnem,
         width_override,
-        &[rw(dst, dst_width), mindex(index, scale, width)],
+        &[rw(dst, dst_width), mem.opnd(width)],
     )
 }
 
-/// Store of the low `width` bytes of `src` to `disp32(,%index,scale)`;
-/// returns the offset of the displacement field.
-pub(crate) fn emit_store_index_abs(
-    code: &mut Vec<u8>,
-    width: u8,
-    index: Reg,
-    scale: u8,
-    src: Reg,
-) -> usize {
+/// Store of the low `width` bytes of `src` to `mem`; returns the offset of
+/// the displacement field.
+pub(crate) fn emit_store_disp32(code: &mut Vec<u8>, width: u8, mem: Disp32Mem, src: Reg) -> usize {
     super::table::encode_into_disp32(
         code,
         Mnem::Mov,
         Some(width),
-        &[mindex(index, scale, width), rw(src, width)],
+        &[mem.opnd(width), rw(src, width)],
     )
 }
 
-/// `op disp32(,%index,scale), imm`: [`emit_mi_sib`] with no base register;
-/// returns the offset of the displacement field.
-pub(crate) fn emit_mi_index_abs(
+/// `op mem, imm`: [`emit_mi`] with no base register; returns the offset of
+/// the displacement field.
+pub(crate) fn emit_mi_disp32(
     code: &mut Vec<u8>,
     mnem: Mnem,
     width: u8,
-    (index, scale): (Reg, u8),
+    mem: Disp32Mem,
     imm: i32,
 ) -> usize {
     super::table::encode_into_disp32(
         code,
         mnem,
         Some(width),
-        &[
-            mindex(index, scale, width),
-            super::table::Opnd::Imm(imm as i64),
-        ],
+        &[mem.opnd(width), super::table::Opnd::Imm(imm as i64)],
     )
+}
+
+/// `movss` (`F3`) or `movsd` (`F2`) between `xmm` and `disp32(%rip)`:
+/// `0F 10` loads, `0F 11` stores. Returns the offset of the displacement.
+pub(crate) fn emit_sse_mov_rip(code: &mut Vec<u8>, prefix: u8, store: bool, xmm: Reg) -> usize {
+    emit_byte(code, prefix);
+    if xmm.high() {
+        emit_byte(code, rex(false, true, false, false));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, if store { 0x11 } else { 0x10 });
+    emit_byte(code, modrm(0b00, xmm.lo(), 0b101));
+    let field = code.len();
+    emit_i32(code, 0);
+    field
 }
 
 fn emit_byte(code: &mut Vec<u8>, b: u8) {
@@ -1951,7 +1973,9 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
-        self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
+        self.ret_tags = (funcs.iter())
+            .filter_map(|f| f.ret_type_tag.map(|tag| (f.ent_pc, tag)))
+            .collect();
     }
 
     /// A cross-TU callee's return type comes off its declaration in this
@@ -2263,23 +2287,23 @@ fn apply_plt_call_fixups(
 }
 
 /// Recover a function's Win64 unwind descriptor from its emitted
-/// prologue bytes. Used by the multi-TU link path, which holds the
-/// merged `.text` and each function's `[begin, end)` extent but not
-/// the structured [`super::FnUnwind`] the single-TU lowering records
-/// directly. The decode matches this backend's own fixed prologue
+/// prologue bytes, which the tests check against the [`super::FnUnwind`]
+/// the emitter records. The decode matches this backend's own fixed prologue
 /// grammar, not arbitrary machine code: an optional `endbr64` and the
 /// patchable-entry NOPs and `-pg` call ahead of the frame, then `55`
-/// (push rbp), `48 89 E5` (mov rbp,rsp), and an optional `sub rsp,N`
-/// (`48 83 EC ib` or `48 81 EC id`) not followed by a probe store -- a
-/// larger frame lowers to probed page steps with no single `sub` to
-/// read, so the alloc is left out of the codes (the body still unwinds
-/// through the frame pointer). The pushes of the callee-saved registers
-/// follow the `sub`, or `mov rbp,rsp` when they are the whole frame, and
-/// are not described. A leaf emits none of the above, and any other
-/// shape is described as a frameless leaf -- safe (the unwinder returns
-/// off the top-of-stack RA) rather than codes that do not match the
+/// (push rbp) and either `48 89 E5` (mov rbp,rsp) or the Win64 save block
+/// (`emit_win64_saves`): pushes of callee-saved registers, an optional
+/// `sub rsp,ib`, `movups [rsp+d], xmm` saves and `lea rbp, [rsp+d]`. Then an
+/// optional `sub rsp,N` (`48 83 EC ib` or `48 81 EC id`) not followed by a
+/// probe store -- a larger frame lowers to probed page steps with no single
+/// `sub` to read, so the alloc is left out of the codes (the body still
+/// unwinds through the frame pointer). The System V pushes follow that
+/// `sub` and are not described. A leaf emits none of the above, and any
+/// other shape is described as a frameless leaf -- safe (the unwinder
+/// returns off the top-of-stack RA) rather than codes that do not match the
 /// prologue. The test of a return taken ahead of the frame places `push rbp`
 /// at `frame_start` (0 when none), where the decode starts.
+#[cfg(test)]
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
@@ -2287,7 +2311,7 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     prologue_end: u32,
     frame_start: u32,
 ) -> super::FnUnwind {
-    let mut uw = super::FnUnwind {
+    let uw = super::FnUnwind {
         begin,
         end,
         leaf: true,
@@ -2298,10 +2322,24 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     if b >= pe {
         return uw;
     }
-    let window = &text[b..pe];
+    match decode_frame(&text[b..pe], frame_start.saturating_sub(begin) as usize) {
+        Some(steps) => super::FnUnwind {
+            leaf: false,
+            steps,
+            ..uw
+        },
+        None => uw,
+    }
+}
+
+/// The steps of the frame [`decode_x86_64_prologue_unwind`] reads in
+/// `window`, `frame` bytes in when an early return's test precedes it.
+#[cfg(test)]
+fn decode_frame(window: &[u8], frame: usize) -> Option<Vec<(u32, super::PrologueStep)>> {
+    use super::PrologueStep as S;
+    let mut fp = frame;
     // Entry instructions that leave the stack alone: `endbr64`, the
     // one-byte NOP, the five-byte NOP of `-mnop-mcount`, `call rel32`.
-    let mut fp = frame_start.saturating_sub(begin) as usize;
     if fp == 0 {
         loop {
             let rest = &window[fp.min(window.len())..];
@@ -2317,26 +2355,73 @@ pub(crate) fn decode_x86_64_prologue_unwind(
             }
         }
     }
-    if !window[fp.min(window.len())..].starts_with(&[0x55, 0x48, 0x89, 0xE5]) {
-        return uw;
+    let at = |i: usize| window.get(i..).unwrap_or(&[]);
+    if at(fp).first() != Some(&0x55) {
+        return None;
     }
-    uw.leaf = false;
-    uw.push_rbp_end = (fp + 1) as u32;
-    uw.set_fpreg_end = (fp + 4) as u32;
-    // `sub rsp, N` == REX.W 0x83 /5 ib or REX.W 0x81 /5 id (modrm 0xEC),
-    // single when no probe store (`mov qword [rsp], 0`) follows it.
-    let at = fp + 4;
-    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
-    let (bytes, len) = match window[at.min(window.len())..] {
-        [0x48, 0x83, 0xEC, imm8, ..] if imm8 < 0x80 => (u32::from(imm8), 4),
-        [0x48, 0x81, 0xEC, a, b, c, d, ..] => (u32::from_le_bytes([a, b, c, d]), 7),
-        _ => return uw,
+    fp += 1;
+    let mut steps = alloc::vec![(fp as u32, S::Push(Reg::RBP.0))];
+    // `sub rsp, N` == REX.W 0x83 /5 ib or REX.W 0x81 /5 id (modrm 0xEC).
+    let sub = |rest: &[u8]| match *rest {
+        [0x48, 0x83, 0xEC, imm8, ..] if imm8 < 0x80 => Some((u32::from(imm8), 4)),
+        [0x48, 0x81, 0xEC, a, b, c, d, ..] => Some((u32::from_le_bytes([a, b, c, d]), 7)),
+        _ => None,
     };
-    if !window[at + len..].starts_with(&probe) {
-        uw.frame_bytes = bytes;
-        uw.frame_alloc_end = (at + len) as u32;
+    if at(fp).starts_with(&[0x48, 0x89, 0xE5]) {
+        fp += 3;
+        steps.push((fp as u32, S::SetFrame(0)));
+    } else {
+        // rbx, rsi, rdi, then r12..r15 behind REX.B.
+        loop {
+            let (r, len) = match *at(fp) {
+                [b @ (0x53 | 0x56 | 0x57), ..] => (b - 0x50, 1),
+                [0x41, b @ 0x54..=0x57, ..] => (b - 0x50 + 8, 2),
+                _ => break,
+            };
+            fp += len;
+            steps.push((fp as u32, S::Push(r)));
+        }
+        if let Some((n, len)) = sub(at(fp)) {
+            fp += len;
+            steps.push((fp as u32, S::Alloc(n)));
+        }
+        // `movups [rsp + d], xmm`: 0F 11, ModRM rm=100 with SIB 24, mod 00, 01
+        // or 10; xmm8..15 behind REX.R (0x44).
+        loop {
+            let (high, rest) = match at(fp) {
+                [0x44, rest @ ..] => (8, rest),
+                rest => (0, rest),
+            };
+            let (xmm, off, len) = match *rest {
+                [0x0F, 0x11, m, 0x24, ..] if m & 0xC7 == 0x04 => (high + (m >> 3 & 7), 0, 4),
+                [0x0F, 0x11, m, 0x24, d, ..] if m & 0xC7 == 0x44 && d < 0x80 => {
+                    (high + (m >> 3 & 7), u32::from(d), 5)
+                }
+                [0x0F, 0x11, m, 0x24, a, b, c, d, ..] if m & 0xC7 == 0x84 => {
+                    (high + (m >> 3 & 7), u32::from_le_bytes([a, b, c, d]), 8)
+                }
+                _ => break,
+            };
+            fp += len + usize::from(high > 0);
+            steps.push((fp as u32, S::SaveXmm { xmm, off }));
+        }
+        // `lea rbp, [rsp + d]`: 48 8D, ModRM reg=101 rm=100, SIB 24.
+        let (off, len) = match *at(fp) {
+            [0x48, 0x8D, 0x6C, 0x24, d, ..] if d < 0x80 => (u32::from(d), 5),
+            [0x48, 0x8D, 0xAC, 0x24, a, b, c, d, ..] => (u32::from_le_bytes([a, b, c, d]), 8),
+            _ => return None,
+        };
+        fp += len;
+        steps.push((fp as u32, S::SetFrame(off)));
     }
-    uw
+    // Single when no probe store (`mov qword [rsp], 0`) follows it.
+    let probe = [0x48u8, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00];
+    if let Some((n, len)) = sub(at(fp))
+        && !at(fp + len).starts_with(&probe)
+    {
+        steps.push(((fp + len) as u32, S::Alloc(n)));
+    }
+    Some(steps)
 }
 
 // ------------------------------------------------------------------
@@ -2834,32 +2919,68 @@ mod tests {
         decode_x86_64_prologue_unwind(prologue, 0, n, n, 0)
     }
 
+    use super::super::PrologueStep::{Alloc, Push, SaveXmm, SetFrame};
+
     #[test]
     fn prologue_decoder_reads_both_sub_forms() {
         // push rbp; mov rbp,rsp; sub rsp,0x20; push rbx
         let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x20, 0x53]);
         assert!(!uw.leaf);
-        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (1, 4));
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x20, 8));
+        assert_eq!(uw.steps, [(1, Push(5)), (4, SetFrame(0)), (8, Alloc(0x20))]);
         // push rbp; mov rbp,rsp; sub rsp,0x100; push r12
         let uw = decoded(&[
             0x55, 0x48, 0x89, 0xE5, 0x48, 0x81, 0xEC, 0x00, 0x01, 0x00, 0x00, 0x41, 0x54,
         ]);
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x100, 11));
+        assert_eq!(uw.steps[2], (11, Alloc(0x100)));
     }
 
     #[test]
     fn prologue_decoder_accepts_pushes_without_a_sub() {
-        // push rbp; mov rbp,rsp; push r12; push rbx: the pushes are the
-        // whole frame, so no allocation is described.
+        // push rbp; mov rbp,rsp; push r12; push rbx: the System V pushes are
+        // the whole frame, so no allocation is described.
         let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x41, 0x54, 0x53]);
         assert!(!uw.leaf);
-        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (1, 4));
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
-        // Win64's rsi / rdi: push rdi; push rsi.
-        let uw = decoded(&[0x55, 0x48, 0x89, 0xE5, 0x57, 0x56]);
-        assert!(!uw.leaf);
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
+        assert_eq!(uw.steps, [(1, Push(5)), (4, SetFrame(0))]);
+    }
+
+    /// The Win64 save block: each push, the pad and xmm area, each xmm
+    /// store, and rbp set back on the saved rbp.
+    #[test]
+    fn prologue_decoder_reads_the_win64_save_block() {
+        // push rbp; push rbx; push rsi; push r12; sub rsp,0x28;
+        // movups [rsp],xmm6; movups [rsp+0x10],xmm8; lea rbp,[rsp+0x40];
+        // sub rsp,0x30
+        let uw = decoded(&[
+            0x55, 0x53, 0x56, 0x41, 0x54, 0x48, 0x83, 0xEC, 0x28, 0x0F, 0x11, 0x34, 0x24, 0x44,
+            0x0F, 0x11, 0x44, 0x24, 0x10, 0x48, 0x8D, 0x6C, 0x24, 0x40, 0x48, 0x83, 0xEC, 0x30,
+        ]);
+        let want = [
+            (1, Push(5)),
+            (2, Push(3)),
+            (3, Push(6)),
+            (5, Push(12)),
+            (9, Alloc(0x28)),
+            (13, SaveXmm { xmm: 6, off: 0 }),
+            (19, SaveXmm { xmm: 8, off: 0x10 }),
+            (24, SetFrame(0x40)),
+            (28, Alloc(0x30)),
+        ];
+        assert_eq!(uw.steps, want);
+        // Past 0x7F the store and `lea rbp` take a 32-bit displacement:
+        // push rbp; sub rsp,0x90; movups [rsp+0x80],xmm14; lea rbp,[rsp+0x90]
+        let uw = decoded(&[
+            0x55, 0x48, 0x81, 0xEC, 0x90, 0, 0, 0, 0x44, 0x0F, 0x11, 0xB4, 0x24, 0x80, 0, 0, 0,
+            0x48, 0x8D, 0xAC, 0x24, 0x90, 0, 0, 0,
+        ]);
+        let want = [
+            (1, Push(5)),
+            (8, Alloc(0x90)),
+            (17, SaveXmm { xmm: 14, off: 0x80 }),
+            (25, SetFrame(0x90)),
+        ];
+        assert_eq!(uw.steps, want);
+        // A block that does not end in `lea rbp` describes nothing.
+        assert!(decoded(&[0x55, 0x53, 0x48, 0x89, 0xE5]).leaf);
     }
 
     #[test]
@@ -2870,7 +2991,7 @@ mod tests {
             0x24, 0x00, 0x00, 0x00, 0x00,
         ]);
         assert!(!uw.leaf);
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0, 0));
+        assert_eq!(uw.steps, [(1, Push(5)), (4, SetFrame(0))]);
     }
 
     #[test]
@@ -2880,8 +3001,10 @@ mod tests {
             0xF3, 0x0F, 0x1E, 0xFA, 0x90, 0xE8, 0, 0, 0, 0, 0x55, 0x48, 0x89, 0xE5, 0x48, 0x83,
             0xEC, 0x10,
         ]);
-        assert_eq!((uw.push_rbp_end, uw.set_fpreg_end), (11, 14));
-        assert_eq!((uw.frame_bytes, uw.frame_alloc_end), (0x10, 18));
+        assert_eq!(
+            uw.steps,
+            [(11, Push(5)), (14, SetFrame(0)), (18, Alloc(0x10))]
+        );
         // A frameless leaf: lea rax,[rdi+rsi]; ret.
         assert!(decoded(&[0x48, 0x8D, 0x04, 0x37, 0xC3]).leaf);
     }

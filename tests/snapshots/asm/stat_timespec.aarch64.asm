@@ -28,13 +28,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x0, [x29, #-0x28]
-               	cmp	x0, x0
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldur	x0, [x29, #-0x28]
                	mov	x17, #0xca00            // =51712
                	movk	x17, #0x3b9a, lsl #16
                	cmp	x0, x17

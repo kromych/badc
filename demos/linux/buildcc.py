@@ -208,11 +208,13 @@ FORWARD_PREFIX = (
     # the unit instead of assembling under different rules -- which is what
     # `-Wa,-mrelax-relocations=no` selects for the boot units that pass it.
     "-Wa,",
-    # Function entry alignment. Withheld, functions pack against their
-    # predecessors and CONFIG_FUNCTION_ALIGNMENT does not hold: measured, a
-    # three-function object placed the third at offset 0x61. badc validates
-    # the operand.
-    "-fmin-function-alignment=",
+    # Function entry alignment, under either spelling the kernel picks.
+    # Withheld, functions pack against their predecessors and
+    # CONFIG_FUNCTION_ALIGNMENT does not hold: measured, a three-function
+    # object placed the third at offset 0x61, and an arm64 kernel with
+    # CALL_OPS panicked in ftrace_init on a misaligned patch site. badc
+    # validates the operand.
+    "-fmin-function-alignment=", "-falign-functions=",
     # ftrace patch sites: the NOP area at every function entry and its
     # `__patchable_function_entries` record (CONFIG_CALL_PADDING on x86_64,
     # CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS on arm64). Withheld, the image
@@ -340,10 +342,10 @@ IGNORE_EXACT = {
 IGNORE_PREFIX = (
     "-fdiagnostics-", "-femit-struct-debug-detailed=",
     # Loop / jump / label alignment padding the kernel asks to be dropped,
-    # which badc emits none of. Function alignment it asks to be added
-    # arrives as `-fmin-function-alignment=`, forwarded above; the pinned
-    # defconfig passes no `-falign-functions`.
-    "-falign-",
+    # which badc emits none of. Function alignment is forwarded: a reference
+    # gcc without `-fmin-function-alignment=` (before GCC 14) leaves the
+    # configuration on `-falign-functions=`, which ftrace's patch sites need.
+    "-falign-jumps", "-falign-loops", "-falign-labels",
     # Instruction selection. badc emits its own baseline
     # (doc/native-compilation.md); off the FP/SIMD registers, as a kernel
     # object is, its integer lowering stays in the base architecture these
@@ -380,13 +382,16 @@ def warning_option(a: str) -> bool:
 
 
 def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
-    """Whether badc takes the diagnostic option `flag`, which it refuses
-    when no diagnostic, alias or group answers the selector. `badc <flag>
-    --version` checks it without compiling; the answers are kept in a file
-    per badc binary, so a build asks once per spelling."""
+    """Whether badc takes the diagnostic option `flag`: kbuild's
+    `cc-option` question, an empty unit compiled under `-Werror`. badc
+    refuses a selector no diagnostic, alias or group answers, and reports
+    one naming a gcc or clang warning it does not implement (B7012),
+    which `-Werror` makes an error, so neither is forwarded. The answers
+    are kept in a file per badc binary, so a build asks once per
+    spelling."""
     path = shutil.which(badc) or badc
     st = os.stat(path)
-    key = f"{os.path.realpath(path)}:{st.st_mtime_ns}:{st.st_size}"
+    key = f"{os.path.realpath(path)}:{st.st_mtime_ns}:{st.st_size}:werror"
     cache = os.path.join(cache_dir or tempfile.gettempdir(),
                          f"badc-wflags-{hashlib.sha1(key.encode()).hexdigest()[:16]}.json")
     try:
@@ -395,7 +400,8 @@ def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
     except (OSError, ValueError):
         known = {}
     if flag not in known:
-        r = subprocess.run([path, flag, "--version"], capture_output=True)
+        r = subprocess.run([path, "-Werror", flag, "-c", "-x", "c", os.devnull,
+                            "-o", os.devnull], capture_output=True)
         known[flag] = r.returncode == 0
         # Another unit may write the file meanwhile; each answer is
         # recomputed at worst, and a reader never sees a partial file.
@@ -696,6 +702,11 @@ def _self_test() -> int:
     assert rewrite(["-nostdinc"]).argv == ["-nostdinc"]
     assert rewrite(["-fmin-function-alignment=16"]).argv == \
         ["-fmin-function-alignment=16"]
+    # So does the spelling a reference gcc before 14 leaves the kernel on;
+    # the loop, jump and label padding badc emits none of is dropped.
+    assert rewrite(["-falign-functions=8"]).argv == ["-falign-functions=8"]
+    for flag in ("-falign-jumps=1", "-falign-loops=1", "-falign-labels=1"):
+        assert rewrite([flag]).argv == [] and not rewrite([flag]).unknown, flag
     # The ftrace patch sites reach badc verbatim on both architectures.
     for flag in ("-fpatchable-function-entry=16,16",
                  "-fpatchable-function-entry=4,2", "-pg", "-mfentry",
@@ -766,7 +777,7 @@ def _self_test() -> int:
         with tempfile.TemporaryDirectory() as d:
             fake, calls = os.path.join(d, "badc"), os.path.join(d, "calls")
             with open(fake, "w") as f:
-                f.write(f"#!/bin/sh\necho \"$1\" >> '{calls}'\n[ \"$1\" = -Wall ]\n")
+                f.write(f"#!/bin/sh\necho \"$2\" >> '{calls}'\n[ \"$2\" = -Wall ]\n")
             os.chmod(fake, 0o755)
             for _ in range(2):
                 assert badc_accepts(fake, "-Wall", d) is True

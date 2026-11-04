@@ -530,15 +530,15 @@ fn ent_pc=16 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
-    v2   Imm(0)                                           -> x0
-    v3   Imm(0)                                           -> x0
-    v4   Neg(v1)                                          -> x0
+    v1   ParamRef(0, kind=I32)                            -> x0
+    v2   Imm(0)                                           -> x1
+    v3   Imm(0)                                           -> x1
+    v4   Neg(v1)                                          -> x1
     v5   Extend { value=v4, kind=I32, nsw }               -> x1
-    v6   Neg(v4)                                          -> x0
-    v7   Extend { value=v6, kind=I32, nsw }               -> x1
-    v8   Extend { value=v6, kind=I32 }                    -> x1
-    terminator Return(v6)   (exit_acc=v6)
+    v6   Neg(v4)                                          -> x1
+    v7   Extend { value=v1, kind=I32, nsw }               -> x1
+    v8   Extend { value=v1, kind=I32 }                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=17 ---
 ; name=sub_of_neg
 fn ent_pc=17 n_params=2 variadic=false locals=0
@@ -1415,12 +1415,12 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v14  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x13
     v15  Imm(0)                                           -> x0
     v16  ImmData(16)                                      -> x0
-    v17  Imm(0)                                           -> x1
-    v18  Imm(0)                                           -> x1
-    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x1
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x1
-    v22  Store { addr=v16, disp=0, value=v21, kind=I64 }  -> -
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  BinopI { op=shl, lhs=v11, rhs_imm=3 }            -> x0
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x0
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x0
+    v22  Store { addr=v16, disp=0, value=v21, kind=I64 pc_rel } -> -
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0

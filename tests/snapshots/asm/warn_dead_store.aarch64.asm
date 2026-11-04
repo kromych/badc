@@ -34,6 +34,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
+               	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -53,9 +54,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
-               	add	x0, x0, #0x9
-               	add	x0, x0, #0x1
-               	add	x0, x0, #0x3
+               	mov	x0, #0xe                // =14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

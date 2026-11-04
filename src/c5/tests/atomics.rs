@@ -908,3 +908,481 @@ fn optimizer_keeps_atomic_accesses_and_their_ordering() {
         a64_words(bytes)
     );
 }
+
+/// What an operator on an `_Atomic` object owes, seq_cst (C11 6.2.6.1p9,
+/// 6.5.2.4p2, 6.5.16.2p3): an in-place read-modify-write instruction, or a
+/// compare-exchange retried after a load.
+#[derive(Clone, Copy, Debug)]
+enum OperatorOp {
+    Load(u8),
+    Store(u8),
+    Fetch(u8),
+    Retry(u8),
+}
+
+const OPERATOR_DECLS: &str = "_Atomic int ai; _Atomic char ac; _Atomic short as; \
+    _Atomic long al; _Atomic(int *) ap; _Atomic double ad; _Atomic float af; \
+    _Atomic _Bool ab;\n";
+
+const OPERATOR_FORMS: &[(&str, &str, OperatorOp)] = &[
+    (
+        "f_read",
+        "int f_read(void) { return ai; }",
+        OperatorOp::Load(4),
+    ),
+    (
+        "f_read_char",
+        "int f_read_char(void) { return ac; }",
+        OperatorOp::Load(1),
+    ),
+    (
+        "f_assign",
+        "void f_assign(int v) { ai = v; }",
+        OperatorOp::Store(4),
+    ),
+    (
+        "f_assign_ptr",
+        "void f_assign_ptr(int *v) { ap = v; }",
+        OperatorOp::Store(8),
+    ),
+    (
+        "f_post_inc",
+        "int f_post_inc(void) { return ai++; }",
+        OperatorOp::Fetch(4),
+    ),
+    (
+        "f_pre_dec_char",
+        "void f_pre_dec_char(void) { --ac; }",
+        OperatorOp::Fetch(1),
+    ),
+    (
+        "f_add_short",
+        "void f_add_short(short v) { as += v; }",
+        OperatorOp::Fetch(2),
+    ),
+    (
+        "f_sub",
+        "void f_sub(int v) { ai -= v; }",
+        OperatorOp::Fetch(4),
+    ),
+    (
+        "f_or_long",
+        "void f_or_long(long v) { al |= v; }",
+        OperatorOp::Fetch(8),
+    ),
+    (
+        "f_and",
+        "void f_and(int v) { ai &= v; }",
+        OperatorOp::Fetch(4),
+    ),
+    (
+        "f_xor",
+        "void f_xor(int v) { ai ^= v; }",
+        OperatorOp::Fetch(4),
+    ),
+    (
+        "f_ptr_inc",
+        "void f_ptr_inc(void) { ap++; }",
+        OperatorOp::Fetch(8),
+    ),
+    (
+        "f_mul",
+        "void f_mul(void) { ai *= 3; }",
+        OperatorOp::Retry(4),
+    ),
+    (
+        "f_div",
+        "void f_div(int v) { ai /= v; }",
+        OperatorOp::Retry(4),
+    ),
+    (
+        "f_shl",
+        "void f_shl(void) { al <<= 1; }",
+        OperatorOp::Retry(8),
+    ),
+    (
+        "f_double_add",
+        "void f_double_add(void) { ad += 1.5; }",
+        OperatorOp::Retry(8),
+    ),
+    (
+        "f_float_sub",
+        "void f_float_sub(void) { af -= 1.0f; }",
+        OperatorOp::Retry(4),
+    ),
+    (
+        "f_float_inc",
+        "void f_float_inc(void) { af++; }",
+        OperatorOp::Retry(4),
+    ),
+    (
+        "f_bool_inc",
+        "void f_bool_inc(void) { ab++; }",
+        OperatorOp::Retry(1),
+    ),
+    (
+        "f_int_add_double",
+        "void f_int_add_double(void) { ai += 0.5; }",
+        OperatorOp::Retry(4),
+    ),
+];
+
+fn operator_unit() -> String {
+    let mut src = String::from(OPERATOR_DECLS);
+    for (_, decl, _) in OPERATOR_FORMS {
+        src.push_str(decl);
+        src.push('\n');
+    }
+    src
+}
+
+/// x86-64: a load is a plain `MOV`, a store an `XCHG` against memory, and a
+/// read-modify-write a `LOCK`-prefixed `XADD` / `AND` / `OR` / `XOR` /
+/// `CMPXCHG`, at -O0 and -O.
+#[test]
+fn atomic_operators_lower_to_atomic_instructions_x86_64() {
+    for optimize in [false, true] {
+        let code = function_bytes_of(&operator_unit(), Target::LinuxX64, optimize);
+        for &(name, _, op) in OPERATOR_FORMS {
+            let (name, bytes) = lookup(&code, name);
+            let lock = has_lock_rmw(bytes);
+            let xchg = xchg_widths(bytes);
+            let ok = match op {
+                OperatorOp::Load(_) => !lock && xchg.is_empty(),
+                OperatorOp::Store(w) => !lock && xchg == [if w == 1 { 1 } else { 8 }],
+                OperatorOp::Fetch(_) | OperatorOp::Retry(_) => lock,
+            };
+            assert!(
+                ok,
+                "{name} (-O {optimize}): {op:?}, lock={lock} xchg={xchg:?} in {bytes:02x?}"
+            );
+        }
+    }
+}
+
+/// aarch64: a load is one `LDAR` and a store one `STLR` of the object's
+/// width; an in-place update one LSE instruction with both acquire and
+/// release set, and a retried one an `LDAR` and the `CASAL`.
+#[test]
+fn atomic_operators_lower_to_atomic_instructions_aarch64() {
+    for optimize in [false, true] {
+        let code = function_bytes_of(&operator_unit(), Target::LinuxAarch64, optimize);
+        for &(name, _, op) in OPERATOR_FORMS {
+            let (name, bytes) = lookup(&code, name);
+            let words = a64_words(bytes);
+            let expect = match op {
+                OperatorOp::Load(w) => A64Ordering {
+                    ldar: alloc::vec![w],
+                    ..Default::default()
+                },
+                OperatorOp::Store(w) => A64Ordering {
+                    stlr: alloc::vec![w],
+                    ..Default::default()
+                },
+                OperatorOp::Fetch(w) => A64Ordering {
+                    lse: alloc::vec![(w, true, true)],
+                    ..Default::default()
+                },
+                OperatorOp::Retry(w) => A64Ordering {
+                    ldar: alloc::vec![w],
+                    lse: alloc::vec![(w, true, true)],
+                    ..Default::default()
+                },
+            };
+            assert_eq!(
+                a64_ordering(&words),
+                expect,
+                "{name} (-O {optimize}): {words:08x?}"
+            );
+        }
+    }
+}
+
+/// A 16-byte integer and a 16-byte structure take the paired
+/// compare-exchange for every operator: `LOCK CMPXCHG16B` on x86-64,
+/// `CASP` on aarch64.
+#[test]
+fn atomic_operators_on_sixteen_bytes_take_the_paired_compare_exchange() {
+    let src = "struct pair { long a, b; };\n\
+               _Atomic __int128 q; _Atomic struct pair s;\n\
+               void f_inc(void) { q++; }\n\
+               void f_mul(void) { q *= 3; }\n\
+               __int128 f_read(void) { return q; }\n\
+               void f_assign(__int128 v) { q = v; }\n\
+               long f_read_pair(void) { struct pair p = s; return p.b; }\n\
+               void f_assign_pair(struct pair p) { s = p; }\n";
+    let x64 = function_bytes_of(src, Target::LinuxX64, false);
+    let a64 = function_bytes_of(src, Target::LinuxAarch64, false);
+    for name in [
+        "f_inc",
+        "f_mul",
+        "f_read",
+        "f_assign",
+        "f_read_pair",
+        "f_assign_pair",
+    ] {
+        let (_, bytes) = lookup(&x64, name);
+        assert!(
+            bytes.windows(5).any(|w| w[0] == 0xF0
+                && w[1] & 0xF8 == 0x48
+                && w[2..4] == [0x0F, 0xC7]
+                && (w[4] >> 3) & 7 == 1),
+            "{name}: no CMPXCHG16B in {bytes:02x?}"
+        );
+        let (_, bytes) = lookup(&a64, name);
+        assert!(
+            a64_words(bytes)
+                .iter()
+                .any(|w| w & 0xFFA0_7C00 == 0x4820_7C00),
+            "{name}: no CASP in {:08x?}",
+            a64_words(bytes)
+        );
+    }
+}
+
+/// The layout of an `_Atomic` object of `n` bytes and alignment 1, each row
+/// measured with `sizeof` and `_Alignof` under gcc 16 (Linux), Apple clang
+/// (macOS) and MSVC 19.4x `/experimental:c11atomics` (Windows, and every
+/// freestanding unit).
+#[test]
+fn atomic_layout_follows_the_system_compiler() {
+    use crate::c5::compiler::types::{AtomicAccess, atomic_layout};
+    let inline = |n: u8| (n as usize, n as usize, AtomicAccess::Inline(n));
+    let lock = |size: usize, at: usize| (size, 4, AtomicAccess::LockWord(at));
+    let gcc = [
+        (3, (3, 1, AtomicAccess::Library)),
+        (5, (5, 1, AtomicAccess::Library)),
+        (8, inline(8)),
+        (12, (12, 1, AtomicAccess::Library)),
+        (16, inline(16)),
+        (24, (24, 1, AtomicAccess::Library)),
+    ];
+    let clang = [
+        (3, inline(4)),
+        (5, inline(8)),
+        (8, inline(8)),
+        (12, inline(16)),
+        (16, inline(16)),
+        (24, (24, 1, AtomicAccess::Library)),
+    ];
+    let msvc = [
+        (1, inline(1)),
+        (2, inline(2)),
+        (3, lock(8, 4)),
+        (4, inline(4)),
+        (5, lock(12, 8)),
+        (7, lock(12, 8)),
+        (8, inline(8)),
+        (9, lock(16, 12)),
+        (12, lock(16, 12)),
+        (15, lock(20, 16)),
+        (16, lock(20, 16)),
+        (17, lock(24, 20)),
+        (24, lock(28, 24)),
+    ];
+    let check =
+        |target: Target, freestanding: bool, rows: &[(usize, (usize, usize, AtomicAccess))]| {
+            for &(n, want) in rows {
+                let got = atomic_layout(n, 1, target, freestanding);
+                assert_eq!(
+                    (got.size, got.align, got.access),
+                    want,
+                    "{target:?} freestanding={freestanding}: {n} bytes"
+                );
+            }
+        };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        check(target, false, &gcc);
+    }
+    check(Target::MacOSAarch64, false, &clang);
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        check(target, false, &msvc);
+    }
+    for target in Target::ALL {
+        check(target, true, &msvc);
+    }
+}
+
+/// A freestanding unit spins on its objects' lock words in its own code,
+/// so an image needs no runtime function for a large `_Atomic` object;
+/// hosted on Linux the same unit calls the generic functions.
+#[test]
+fn a_freestanding_large_atomic_needs_no_runtime_function() {
+    let src = "struct triple { long a, b, c; };\n\
+               _Atomic struct triple t;\n\
+               struct triple f_get(void) { return t; }\n\
+               void f_put(struct triple v) { t = v; }\n";
+    let atomic_refs = |target: Target, freestanding: bool| -> Vec<String> {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding);
+        let program = Compiler::with_options(String::from(src), target, opts)
+            .compile()
+            .expect("compile");
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let bytes = emit_native_with_options(&program, target, nopts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse");
+        (obj.symbols.iter())
+            .filter(|s| s.section == NativeSymSection::Undef && s.name.contains("__atomic_"))
+            .map(|s| s.name.clone())
+            .collect()
+    };
+    for target in Target::ALL {
+        let refs = atomic_refs(target, true);
+        assert!(refs.is_empty(), "{target:?} freestanding: {refs:?}");
+    }
+    let hosted = atomic_refs(Target::LinuxX64, false);
+    assert!(
+        hosted.iter().any(|n| n == "__atomic_load") && hosted.iter().any(|n| n == "__atomic_store"),
+        "hosted Linux: {hosted:?}"
+    );
+}
+
+/// Function `name`'s instructions in an `--dump-ssa` text.
+fn ssa_body(text: &str, name: &str) -> String {
+    let head = alloc::format!("; name={name}\n");
+    let start = text.find(&head).expect(name) + head.len();
+    let body = &text[start..];
+    String::from(body.split("\n; name=").next().unwrap_or(body))
+}
+
+/// `atomic_init` (C17 7.17.2.2) copies the value and clears the lock word
+/// with plain stores, taking no lock, wherever the object has one:
+/// freestanding on every target and hosted on Windows. A compound literal
+/// and a parameter start with theirs clear too.
+#[test]
+fn atomic_init_and_fresh_objects_take_no_lock() {
+    let src = "#include <stdatomic.h>\n\
+               struct s3 { char c[3]; };\n\
+               void f_init(_Atomic struct s3 *p, struct s3 v) { atomic_init(p, v); }\n\
+               int f_param(_Atomic struct s3 p) { struct s3 r = p; return r.c[0]; }\n\
+               int f_literal(void) { _Atomic struct s3 *p = &(_Atomic struct s3){{1, 2, 3}}; \
+                 struct s3 r = *p; return r.c[0]; }\n";
+    let cases = (Target::ALL.iter().map(|&t| (t, true)))
+        .chain([(Target::WindowsX64, false), (Target::WindowsAarch64, false)]);
+    for (target, freestanding) in cases {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding);
+        let program = Compiler::with_options(String::from(src), target, opts)
+            .compile()
+            .expect("compile");
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default().with_dump_ssa()
+        };
+        let text = crate::c5::codegen::lower_for(&program, target, nopts)
+            .expect("lower")
+            .ssa_dump;
+        let body = |name: &str| ssa_body(&text, name);
+        let init = body("f_init");
+        assert!(
+            !init.contains("Atomic") && init.contains("Mcpy") && init.contains("kind=I32"),
+            "{target:?} freestanding={freestanding}: {init}"
+        );
+        for name in ["f_param", "f_literal"] {
+            let f = body(name);
+            let clear = f.find("kind=I32").expect("a lock word store");
+            let acquire = f.find("AtomicRmw").expect("the lock acquired");
+            assert!(clear < acquire, "{target:?} {name}: {f}");
+        }
+    }
+}
+
+/// An automatic object with a lock word, alone or in an array, starts with
+/// its lock clear: the 4-byte store at offset 4 of a 3-byte structure, and
+/// a zero fill over the array.
+#[test]
+fn automatic_lock_words_start_clear() {
+    let src = "struct s3 { char c[3]; };\n\
+               int f_one(void) { _Atomic struct s3 a; struct s3 v = {{1, 2, 3}}; a = v; \
+                 struct s3 r = a; return r.c[2]; }\n\
+               int f_many(void) { _Atomic struct s3 a[3]; struct s3 v = {{1, 2, 3}}; a[2] = v; \
+                 struct s3 r = a[2]; return r.c[2]; }\n";
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::with_options(String::from(src), Target::WindowsX64, opts)
+        .compile()
+        .expect("compile");
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default().with_dump_ssa()
+    };
+    let text = crate::c5::codegen::lower_for(&program, Target::WindowsX64, nopts)
+        .expect("lower")
+        .ssa_dump;
+    let body = |name: &str| ssa_body(&text, name);
+    assert!(
+        body("f_one").contains("disp=0, value=") && body("f_one").contains("kind=I32"),
+        "{}",
+        body("f_one")
+    );
+    assert!(
+        body("f_many").contains("Mzero {") && body("f_many").contains("size=24"),
+        "{}",
+        body("f_many")
+    );
+}
+
+/// C11 6.2.7 (as gcc and clang), 6.7.2.1p5, 6.7.3p3, and 6.5.2.3p5, whose
+/// member access clang refuses.
+#[test]
+fn atomic_constraints_are_diagnosed() {
+    let member = "accessing a member of an atomic structure or union";
+    for (src, msg) in [
+        (
+            "_Atomic int ai; int *p = &ai;",
+            "incompatible pointer types",
+        ),
+        ("int i; _Atomic int *p = &i;", "incompatible pointer types"),
+        (
+            "struct b { _Atomic int f : 3; };",
+            "bit-field has atomic type",
+        ),
+        (
+            "typedef int a4[4]; _Atomic a4 x;",
+            "`_Atomic` qualifies an array type",
+        ),
+        (
+            "typedef int a4[4]; int f(void) { _Atomic a4 x; return 0; }",
+            "`_Atomic` qualifies an array type",
+        ),
+        (
+            "struct t { int x; }; _Atomic struct t v; int f(void) { return v.x; }",
+            member,
+        ),
+        (
+            "struct t { int x; }; _Atomic struct t *p; int f(void) { return p->x; }",
+            member,
+        ),
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let err = Compiler::with_options(String::from(src), Target::LinuxX64, opts)
+            .compile()
+            .expect_err(src);
+        assert!(err.to_string().contains(msg), "{src}: {err}");
+    }
+}
+
+/// The operators' values under the interpreter, single-threaded: the
+/// prior value of a postfix form, the new one of a prefix form and of a
+/// compound assignment, each converted to the object's type.
+#[test]
+fn atomic_operators_yield_their_values_under_the_interpreter() {
+    let src = "struct rgb { unsigned char r, g, b, a; };\n\
+               _Atomic int ai = 5; _Atomic unsigned char uc = 250; _Atomic double d = 1.5;\n\
+               _Atomic _Bool b; _Atomic struct rgb c;\n\
+               int main(void) {\n\
+                 if (ai++ != 5 || ++ai != 7 || (ai *= 3) != 21 || (ai -= 1) != 20) return 1;\n\
+                 if ((uc += 10) != 4 || uc-- != 4 || uc != 3) return 2;\n\
+                 if ((d += 0.25) != 1.75 || d-- != 1.75 || d != 0.75) return 3;\n\
+                 if (b++ != 0 || b != 1 || --b != 0 || (b += 2) != 1) return 4;\n\
+                 struct rgb w = {1, 2, 3, 4}; c = w; struct rgb r = c;\n\
+                 if (r.r != 1 || r.a != 4) return 5;\n\
+                 return 0;\n\
+               }\n";
+    let program = Compiler::new(String::from(src)).compile().expect("compile");
+    assert_eq!(crate::c5::Vm::new(program).run().expect("run"), 0);
+}

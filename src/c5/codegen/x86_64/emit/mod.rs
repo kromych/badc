@@ -402,6 +402,7 @@ struct OutputMark {
     text_align: usize,
     mcount_sites: usize,
     early_returns: usize,
+    seh_rows: usize,
     asm_section_text_refs: usize,
     asm_text_abs_refs: usize,
     asm_text_labels: usize,
@@ -426,6 +427,7 @@ impl Out<'_, '_> {
             text_align: *self.cx.text_align,
             mcount_sites: self.cx.mcount_sites.len(),
             early_returns: self.cx.early_returns.len(),
+            seh_rows: self.cx.seh_rows.len(),
             asm_section_text_refs: self.asm_section_text_refs.len(),
             asm_text_abs_refs: self.asm_text_abs_refs.len(),
             asm_text_labels: self.asm_text_labels.len(),
@@ -454,6 +456,7 @@ impl Out<'_, '_> {
         *self.cx.text_align = m.text_align;
         self.cx.mcount_sites.truncate(m.mcount_sites);
         self.cx.early_returns.truncate(m.early_returns);
+        self.cx.seh_rows.truncate(m.seh_rows);
         self.asm_section_text_refs.truncate(m.asm_section_text_refs);
         self.asm_text_abs_refs.truncate(m.asm_text_abs_refs);
         self.asm_text_labels.truncate(m.asm_text_labels);

@@ -33,8 +33,8 @@ Disassembly of section .text:
                	fmov	d0, x16
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, eq
-               	cmp	w1, #0x1
+               	cset	x2, eq
+               	cmp	w2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
@@ -45,17 +45,11 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	movi	d0, #0000000000000000
-               	fcvt	d0, s0
-               	fmov	d17, x0
-               	fcmp	d0, d17
-               	cset	x1, eq
                	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	fmov	s0, #3.50000000
-               	fcvt	d0, s0
+               	fmov	d0, #3.50000000
                	fmov	d17, x0
                	fcmp	d0, d17
                	b.ne	<addr>

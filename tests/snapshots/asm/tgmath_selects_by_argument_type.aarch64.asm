@@ -256,16 +256,14 @@ Disassembly of section .text:
                	orr	x14, x11, #0x7ff0000000000000
                	b	<addr>
                	mov	x14, x11
-               	fmov	d0, x14
+               	fmov	d1, x14
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
-               	fmov	d1, #2.00000000
-               	fcmp	d0, d1
+               	fmov	d0, #2.00000000
+               	fcmp	d1, d0
                	b.ne	<addr>
-               	mov	x0, #0x2                // =2
-               	scvtf	d0, x0
                	fmov	d1, #3.00000000
                	bl	<addr>
                	fmov	d1, #8.00000000

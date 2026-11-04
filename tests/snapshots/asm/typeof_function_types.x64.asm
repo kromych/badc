@@ -55,8 +55,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0xa, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movq	(%rax), %rax
+               	movq	<rip>, %rax # <addr>
                	movl	$0x7, %edi
                	callq	*%rax
                	cmpl	$0xe, %eax

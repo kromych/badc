@@ -142,7 +142,7 @@ fn seal(func: &mut FunctionSsa, ends: &Known) -> bool {
             &func.computed_goto_targets,
             &func.jump_tables,
         );
-        func.blocks.push(rest);
+        func.push_block_in_scope_of(rest, b as BlockId);
         for s in succs {
             for id in func.blocks[s as usize].inst_range.clone() {
                 let Inst::Phi { incoming, .. } = &mut func.insts[id as usize] else {

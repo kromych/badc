@@ -71,8 +71,8 @@ impl ZKeyword {
     }
 
     /// The answer of the link without -T, which writes the image itself;
-    /// `shared` is a `--shared` link.
-    pub fn in_hosted_link(self, shared: bool) -> ZSupport {
+    /// `shared` is a `--shared` link and `placed` an `ET_EXEC` one.
+    pub fn in_hosted_link(self, shared: bool, placed: bool) -> ZSupport {
         match self {
             ZKeyword::ExecStack(_) | ZKeyword::PackRelativeRelocs(_) => ZSupport::Applies,
             ZKeyword::Defs(true) if shared => ZSupport::Applies,
@@ -89,9 +89,10 @@ impl ZKeyword {
                 ZSupport::Refused("every import binds when the image is loaded")
             }
             ZKeyword::Muldefs => ZSupport::Refused("a symbol defined twice is an error"),
-            ZKeyword::MaxPageSize(n) if n <= 0x40_0000 => ZSupport::Applies,
+            ZKeyword::MaxPageSize(n) if !placed || n <= 0x40_0000 => ZSupport::Applies,
             ZKeyword::MaxPageSize(_) => ZSupport::Refused(
-                "the image's first load sits at 0x400000, which a larger page does not divide",
+                "the placed image's first load sits at 0x400000, which a larger page does not \
+                 divide",
             ),
             ZKeyword::SeparateCode(_) | ZKeyword::CommonPageSize(_) | ZKeyword::LoaderFlag(_) => {
                 ZSupport::Refused("it is not implemented")
@@ -334,8 +335,9 @@ mod tests {
     }
 
     /// Each link's answer to every keyword: the engine behind -T and the
-    /// `--ld` persona, and the link without -T for an executable and for
-    /// a shared library. `A` applies, `H` holds, `R` is refused.
+    /// `--ld` persona, and the link without -T for a position-independent
+    /// executable and for a shared library. `A` applies, `H` holds, `R` is
+    /// refused.
     #[test]
     fn the_table_answers_every_keyword_for_each_link() {
         let code = |s: ZSupport| match s {
@@ -360,7 +362,7 @@ mod tests {
             ("separate-code", 'R', 'R', 'R'),
             ("noseparate-code", 'H', 'R', 'R'),
             ("max-page-size=0x10000", 'A', 'A', 'A'),
-            ("max-page-size=0x800000", 'A', 'R', 'R'),
+            ("max-page-size=0x800000", 'A', 'A', 'A'),
             ("common-page-size=4096", 'A', 'R', 'R'),
         ]
         .into_iter()
@@ -369,11 +371,13 @@ mod tests {
             let kw = parse_z_keyword(spelling).expect("GNU ld has it");
             let got = (
                 code(kw.in_script_link()),
-                code(kw.in_hosted_link(false)),
-                code(kw.in_hosted_link(true)),
+                code(kw.in_hosted_link(false, false)),
+                code(kw.in_hosted_link(true, false)),
             );
             assert_eq!(got, (script, exe, shared), "-z {spelling}");
         }
+        let large = parse_z_keyword("max-page-size=0x800000").unwrap();
+        assert_eq!(code(large.in_hosted_link(false, true)), 'R');
     }
 
     /// The last keyword of a kind stands, as GNU ld applies them; each

@@ -92,6 +92,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Extend { .. }
         | Inst::Phi { .. }
         | Inst::LifetimeEnd(_)
+        | Inst::ParentLocalAddr { .. }
         | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. }
         | Inst::BitField { .. } => true,
@@ -99,6 +100,7 @@ fn pure(inst: &Inst) -> bool {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }
         Inst::ImmData(_)
+        | Inst::ExceptionCode
         | Inst::ImmCode(_)
         | Inst::ImmExtCode(_)
         | Inst::BlockAddr(_)

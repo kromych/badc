@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 
 use super::super::super::ir::AsmRegSize;
 use crate::c5::asm::AsmSectionItem;
-use crate::c5::asm::data_directive_width;
+use crate::c5::asm::x86_data_directive_width as data_directive_width;
 
 /// The width of one operand of a VEX form: `Vl` operands carry the
 /// instruction's vector length (VEX.L) and so must all name the same bank;
@@ -150,6 +150,18 @@ pub(crate) enum Mnemonic {
     /// vector in r/m. Covers pmovmskb and movmsk{ps,pd}.
     SseSignMask {
         prefix: u8,
+        opcode: u8,
+    },
+    /// The VEX sign-mask extract `<op> %xmm_or_ymm_src, %r32_dst`: VEX.L
+    /// from the source, the general register in ModRM.reg, the vector in
+    /// r/m. Covers vpmovmskb and vmovmsk{ps,pd}.
+    VexSignMask {
+        pp: u8,
+        opcode: u8,
+    },
+    /// A register-to-register SSE op `0F <opcode> /r` with no memory form:
+    /// movhlps and movlhps, whose memory encodings are movlps and movhps.
+    SseRegPair {
         opcode: u8,
     },
     /// A scalar conversion between an integer and an xmm register,
@@ -408,6 +420,16 @@ pub(crate) enum Mnemonic {
     /// is no REX.W; REX.R extends the register, REX.B the base.
     InvMem {
         opcode: u8,
+    },
+    /// An instruction whose one register operand holds an address, in
+    /// ModR/M.rm under a mandatory prefix and an opcode extension: `umonitor`
+    /// (F3 0F AE /6). The register's width is the address size, so the width
+    /// the mode does not default to takes the 0x67 prefix, as a memory operand
+    /// does.
+    AddrReg {
+        pp: u8,
+        opcode: &'static [u8],
+        ext: u8,
     },
     /// `xadd r, r/m` (0F C0/C1): exchange-and-add, the atomic primitive of
     /// the interlocked increment / decrement.
@@ -1210,6 +1232,12 @@ pub(crate) fn mnemonic_by_name(name: &str) -> Option<Mnemonic> {
         "rdpmc" => Mnemonic::Rdpmc,
         "monitor" => Mnemonic::Monitor,
         "mwait" => Mnemonic::Mwait,
+        // The user-mode monitor arm (WAITPKG).
+        "umonitor" => Mnemonic::AddrReg {
+            pp: 0xF3,
+            opcode: &[0x0F, 0xAE],
+            ext: 6,
+        },
         "hlt" => Mnemonic::Hlt,
         "lock" => Mnemonic::Prefix(0xF0),
         "rep" | "repe" | "repz" => Mnemonic::Prefix(0xF3),
@@ -1615,6 +1643,13 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
     if let Some(&(_, prefix, opcode)) = MASKS.iter().find(|(n, _, _)| *n == name) {
         return Some(Mnemonic::SseSignMask { prefix, opcode });
     }
+    if let Some(opcode) = match name {
+        "movhlps" => Some(0x12),
+        "movlhps" => Some(0x16),
+        _ => None,
+    } {
+        return Some(Mnemonic::SseRegPair { opcode });
+    }
     // The scalar integer conversions, `(name, prefix, opcode, to_gpr)`.
     #[rustfmt::skip]
     const CVTS: &[(&str, u8, u8, bool)] = &[
@@ -1674,6 +1709,23 @@ fn vex_len(name: &str) -> VexLen {
 /// SSE prefix (0 none, 1 0x66, 2 0xF3, 3 0xF2). All are 0F-map, VEX.W 0. The
 /// non-destructive 3-operand form `v-op %src2, %src1, %dst` mirrors the SSE
 /// two-operand op with an extra source. Byte-verified against clang.
+/// The VEX form `{vex}` selects: AVX-IFMA's multiply-adds (66 0F38 W1),
+/// whose EVEX form the bare name takes, else the name's ordinary VEX form.
+fn vex_requested(name: &str) -> Option<Mnemonic> {
+    let opcode = match name {
+        "vpmadd52luq" => 0xB4,
+        "vpmadd52huq" => 0xB5,
+        _ => return vex_op(name),
+    };
+    Some(Mnemonic::Vex {
+        pp: 1,
+        map: 2,
+        w: true,
+        opcode,
+        len: VexLen::Both,
+    })
+}
+
 fn vex_op(name: &str) -> Option<Mnemonic> {
     use VexWidth::{Vl, Xmm};
     let len = vex_len(name);
@@ -1684,6 +1736,14 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         _ => None,
     } {
         return Some(Mnemonic::VexNullary { l });
+    }
+    if let Some((pp, opcode)) = match name {
+        "vpmovmskb" => Some((1u8, 0xD7u8)),
+        "vmovmskps" => Some((0, 0x50)),
+        "vmovmskpd" => Some((1, 0x50)),
+        _ => None,
+    } {
+        return Some(Mnemonic::VexSignMask { pp, opcode });
     }
     // VEX general-register ops as `(name, pp, map, opcode, imm, vvvv_first)`:
     // the BMI / BMI2 set, which encodes with VEX but names no vector register.
@@ -1762,6 +1822,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vcvtdq2pd" => Some((2, 1, 0xE6, Xmm)),
         "vcvtps2pd" => Some((0, 1, 0x5A, Xmm)),
         "vmovddup" => Some((3, 1, 0x12, Vl)),
+        "vmovsldup" => Some((2, 1, 0x12, Vl)),
+        "vmovshdup" => Some((2, 1, 0x16, Vl)),
         "vbroadcastss" => Some((1, 2, 0x18, Xmm)),
         "vbroadcastsd" => Some((1, 2, 0x19, Xmm)),
         "vpbroadcastb" => Some((1, 2, 0x78, Xmm)),
@@ -1910,6 +1972,8 @@ fn vex_op(name: &str) -> Option<Mnemonic> {
         "vperm2f128" => Some((1, 3, false, 0x06, Vl)),
         "vperm2i128" => Some((1, 3, false, 0x46, Vl)),
         "vpblendd" => Some((1, 3, false, 0x02, Vl)),
+        "vblendps" => Some((1, 3, false, 0x0C, Vl)),
+        "vblendpd" => Some((1, 3, false, 0x0D, Vl)),
         "vpalignr" => Some((1, 3, false, 0x0F, Vl)),
         "vinsertf128" => Some((1, 3, false, 0x18, Xmm)),
         "vinserti128" => Some((1, 3, false, 0x38, Xmm)),
@@ -3110,6 +3174,15 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // exception: leading an instruction it merges into that
         // instruction's own REX byte, as GNU as merges it, and only a
         // statement of its own deposits a byte.
+        // gas's `{vex}` asks for the VEX form of an instruction it would
+        // otherwise encode with EVEX: AVX-IFMA's, which takes only this way.
+        let force_vex = mnem_tok == "{vex}" && !rest.is_empty();
+        if force_vex {
+            (mnem_tok, rest) = match rest.find(char::is_whitespace) {
+                Some(p) => (&rest[..p], rest[p..].trim()),
+                None => (rest, ""),
+            };
+        }
         let mut rex = None;
         while !rest.is_empty()
             && let Some((Mnemonic::Prefix(b), None)) = split_mnemonic(mnem_tok)
@@ -3138,8 +3211,11 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // branches below), so resolve its case once here.
         let folded = fold_mnemonic_case(mnem_tok);
         let mnem_tok = folded.as_deref().unwrap_or(mnem_tok);
-        let (mnemonic, suffix) = split_mnemonic(mnem_tok)
-            .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
+        let (mnemonic, suffix) = match force_vex {
+            true => vex_requested(mnem_tok).map(|m| (m, None)),
+            false => split_mnemonic(mnem_tok),
+        }
+        .ok_or_else(|| format!("inline asm: unsupported instruction `{mnem_tok}`"))?;
         // A direct `call` / `jmp` / `jcc` to a symbol name or to an expression
         // over symbols and labels (`call schedule`, `jmp sym + 4`) is a symbol
         // reference; the target is resolved to a rel32 by a relocation, not
@@ -3263,7 +3339,16 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
                 });
             }
         }
-        let mnemonic = resolve_evex(mnemonic, mnem_tok, &operands, decor)?;
+        let mnemonic = match force_vex {
+            // Any operand the VEX form cannot take is the encoder's refusal.
+            true if !decor.any() => mnemonic,
+            true => {
+                return Err(format!(
+                    "inline asm: `{{vex}} {mnem_tok}` takes no EVEX decorator"
+                ));
+            }
+            false => resolve_evex(mnemonic, mnem_tok, &operands, decor)?,
+        };
         insns.push(AsmInsn {
             mnemonic,
             suffix,
@@ -4348,6 +4433,39 @@ fn encode_bespoke(
             mr.emit(code, mode, addr, gpr & 7)?;
             Ok(())
         }
+        Mnemonic::AddrReg { pp, opcode, ext } => {
+            let [op] = ops else {
+                return Err(String::from(
+                    "inline asm: this instruction takes one register operand",
+                ));
+            };
+            let (reg, size) = as_reg(*op)?;
+            // Long mode addresses at 64 or 32 bits, the other modes at 32 or
+            // 16; the 0x67 prefix precedes the mandatory one, as GNU as
+            // places it.
+            let width = size.bytes();
+            let other = if mode == super::table::Mode::Bits32 {
+                2
+            } else {
+                4
+            };
+            if reg >= MMX_BASE || (width != mode.addrsize() && width != other) {
+                return Err(format!(
+                    "inline asm: {}-bit addressing is unavailable for this instruction",
+                    u32::from(width) * 8
+                ));
+            }
+            if width != mode.addrsize() {
+                code.push(0x67);
+            }
+            code.push(pp);
+            if reg >= 8 {
+                code.push(rex(false, false, false, true));
+            }
+            code.extend_from_slice(opcode);
+            code.push(modrm_reg(ext, reg));
+            Ok(())
+        }
         Mnemonic::SizedNullary { opcode, opw, stack } => {
             let dflt = if stack {
                 mode.stack_opsize()
@@ -4445,6 +4563,45 @@ fn encode_bespoke(
                     mr.emit(code, mode, addr, v_field & 7)?;
                 }
             }
+            Ok(())
+        }
+        Mnemonic::VexSignMask { pp, opcode } => {
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Some((s, ymm))) = (dst, vec_reg(&src)) else {
+                return Err(String::from(
+                    "inline asm: this VEX op takes a vector source and a general register",
+                ));
+            };
+            if d >= XMM_BASE {
+                return Err(String::from(
+                    "inline asm: this VEX op takes a vector source and a general register",
+                ));
+            }
+            emit_vex(code, d >= 8, false, s >= 8, 1, false, 0, u8::from(ymm), pp);
+            code.push(opcode);
+            code.push(modrm_reg(d & 7, s & 7));
+            Ok(())
+        }
+        Mnemonic::SseRegPair { opcode } => {
+            // `<op> %xmm_src, %xmm_dst`: [REX] 0F <opcode> /r, register form only.
+            let [src, dst] = two(ops)?;
+            let (Concrete::Reg { reg: d, .. }, Concrete::Reg { reg: s, .. }) = (dst, src) else {
+                return Err(String::from(
+                    "inline asm: this SSE op takes two xmm registers",
+                ));
+            };
+            let xmm = XMM_BASE..XMM_BASE + 16;
+            if !xmm.contains(&d) || !xmm.contains(&s) {
+                return Err(String::from(
+                    "inline asm: this SSE op takes two xmm registers",
+                ));
+            }
+            let (d, s) = (d - XMM_BASE, s - XMM_BASE);
+            if d >= 8 || s >= 8 {
+                code.push(rex(false, d >= 8, false, s >= 8));
+            }
+            code.extend_from_slice(&[0x0F, opcode]);
+            code.push(modrm_reg(d & 7, s & 7));
             Ok(())
         }
         Mnemonic::SseSignMask { prefix, opcode } => {
@@ -6101,6 +6258,106 @@ mod tests {
         }
     }
 
+    /// The WAITPKG and SVM system forms. `umonitor` takes its address in a
+    /// register whose width is the address size, so the mode's other width
+    /// takes 0x67 ahead of the F3; `skinit` and the VMCB ops take their
+    /// implicit register spelled or not. Bytes measured with GNU as 2.46.1
+    /// under each `.code` directive; llvm-mc 22.1.8 agrees in long mode.
+    #[test]
+    fn waitpkg_and_svm_forms_match_gnu_as() {
+        use super::super::table::Mode::{Bits16, Bits32, Bits64};
+        #[rustfmt::skip]
+        let cases: &[(super::super::table::Mode, &[u8], &[u8])] = &[
+            (Bits64, b"umonitor %%rax",  &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"umonitor %%eax",  &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"umonitor %%r10",  &[0xF3, 0x41, 0x0F, 0xAE, 0xF2]),
+            (Bits64, b"umonitor %%r10d", &[0x67, 0xF3, 0x41, 0x0F, 0xAE, 0xF2]),
+            (Bits32, b"umonitor %%eax",  &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits32, b"umonitor %%ax",   &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits16, b"umonitor %%ax",   &[0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits16, b"umonitor %%eax",  &[0x67, 0xF3, 0x0F, 0xAE, 0xF0]),
+            (Bits64, b"skinit",          &[0x0F, 0x01, 0xDE]),
+            (Bits64, b"skinit %%eax",    &[0x0F, 0x01, 0xDE]),
+            (Bits32, b"skinit %%eax",    &[0x0F, 0x01, 0xDE]),
+            (Bits64, b"umwait %%r9d",    &[0xF2, 0x41, 0x0F, 0xAE, 0xF1]),
+            (Bits64, b"tpause %%ecx",    &[0x66, 0x0F, 0xAE, 0xF1]),
+            (Bits64, b"invlpga %%rax, %%ecx", &[0x0F, 0x01, 0xDF]),
+            (Bits64, b"vmrun %%rax",     &[0x0F, 0x01, 0xD8]),
+            (Bits64, b"vmload %%rax",    &[0x0F, 0x01, 0xDA]),
+            (Bits64, b"vmsave %%rax",    &[0x0F, 0x01, 0xDB]),
+            (Bits64, b"stgi",            &[0x0F, 0x01, 0xDC]),
+            (Bits64, b"clgi",            &[0x0F, 0x01, 0xDD]),
+        ];
+        for (mode, tmpl, want) in cases {
+            let got = mode_asm_bytes(*mode, tmpl).unwrap();
+            assert_eq!(
+                got.as_slice(),
+                *want,
+                "{mode:?} {}",
+                core::str::from_utf8(tmpl).unwrap()
+            );
+        }
+        // GNU as: "16-bit addressing unavailable for `umonitor'"; a 64-bit
+        // address needs long mode.
+        for (mode, tmpl) in [
+            (Bits64, b"umonitor %%ax".as_slice()),
+            (Bits32, b"umonitor %%rax"),
+            (Bits64, b"umonitor %%xmm0"),
+        ] {
+            assert!(mode_asm_bytes(mode, tmpl).is_err(), "{tmpl:?}");
+        }
+    }
+
+    /// `umwait` and `tpause` take their implicit `edx:eax` deadline spelled
+    /// after the register, encoded as the one-operand form, in both modes.
+    /// The register is any 32-bit GPR, and the deadline only `%edx, %eax`.
+    /// Bytes and refusals measured with GNU as 2.46.1 (`--64` and `--32`);
+    /// llvm-mc 22.1.8 refuses the three-operand spelling.
+    #[test]
+    fn waitpkg_deadline_operands_match_gnu_as() {
+        use super::super::table::Mode::{Bits32, Bits64};
+        for (insn, prefix) in [("umwait", 0xF2u8), ("tpause", 0x66)] {
+            #[rustfmt::skip]
+            let cases: &[(super::super::table::Mode, &str, &[u8])] = &[
+                (Bits64, "%%ecx", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%ecx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%r9d, %%edx, %%eax", &[prefix, 0x41, 0x0F, 0xAE, 0xF1]),
+                (Bits64, "%%r15d, %%edx, %%eax", &[prefix, 0x41, 0x0F, 0xAE, 0xF7]),
+                (Bits64, "%%edx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF2]),
+                (Bits64, "%%eax, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF0]),
+                (Bits32, "%%ecx", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits32, "%%ecx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF1]),
+                (Bits32, "%%edx, %%edx, %%eax", &[prefix, 0x0F, 0xAE, 0xF2]),
+            ];
+            for (mode, ops, want) in cases {
+                let tmpl = alloc::format!("{insn} {ops}");
+                let got = mode_asm_bytes(*mode, tmpl.as_bytes()).unwrap();
+                assert_eq!(got.as_slice(), *want, "{mode:?} {tmpl}");
+            }
+            // A 64- or 16-bit register, a deadline in other registers, at
+            // another width or in the other order, two operands, and in
+            // 32-bit mode a register only long mode has.
+            #[rustfmt::skip]
+            let refused: &[(super::super::table::Mode, &str)] = &[
+                (Bits64, "%%rcx"), (Bits64, "%%cx"), (Bits64, "%%r9"),
+                (Bits64, "%%rcx, %%edx, %%eax"), (Bits64, "%%cx, %%edx, %%eax"),
+                (Bits64, "%%ecx, %%rdx, %%rax"), (Bits64, "%%rcx, %%rdx, %%rax"),
+                (Bits64, "%%ecx, %%dx, %%ax"), (Bits64, "%%ecx, %%eax, %%edx"),
+                (Bits64, "%%ecx, %%edx, %%ebx"), (Bits64, "%%ecx, %%ebx, %%eax"),
+                (Bits64, "%%ecx, %%edx"), (Bits64, "%%ecx, %%eax"),
+                (Bits32, "%%r9d"), (Bits32, "%%cx"), (Bits32, "%%r9d, %%edx, %%eax"),
+                (Bits32, "%%ecx, %%rdx, %%rax"), (Bits32, "%%ecx, %%eax, %%edx"),
+            ];
+            for (mode, ops) in refused {
+                let tmpl = alloc::format!("{insn} {ops}");
+                assert!(
+                    mode_asm_bytes(*mode, tmpl.as_bytes()).is_err(),
+                    "{mode:?} {tmpl}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn explicit_memory_operands() {
         // Every addressing shape vs clang: disp0 / disp8 / disp32, negative
@@ -7180,6 +7437,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
@@ -7207,6 +7465,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         // SysV pool order is rax(0) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
         // r10(10) r11(11) rbx(3) r12(12) r13(13) r14(14) r15(15). With
@@ -7259,6 +7518,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let any = C::RegOrImm {
             reg: None,
@@ -7298,6 +7558,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         };
         let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
         let t = crate::c5::codegen::Target::LinuxX64;

@@ -183,6 +183,44 @@ pub(crate) fn mark_compares(func: &mut FunctionSsa, with_ranges: bool) {
     func.cmp32 = out;
 }
 
+/// [`crate::c5::vm::eval::fold_binop`] on the low words, under the operator's sign, when `narrow`.
+pub(crate) fn fold_at_width(
+    op: crate::c5::ir::BinOp,
+    lhs: i64,
+    rhs: i64,
+    narrow: bool,
+) -> Option<i64> {
+    use crate::c5::ir::BinOp;
+    let unsigned = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
+    let low = |x: i64| {
+        if !narrow {
+            x
+        } else if unsigned {
+            i64::from(x as u32)
+        } else {
+            i64::from(x as i32)
+        }
+    };
+    crate::c5::vm::eval::fold_binop(op, low(lhs), low(rhs))
+}
+
+/// [`crate::c5::vm::eval::fold_binop`] of a division or remainder in the
+/// 32-bit form (`div32`): the low words under the operator's sign, and the
+/// result zero-extended as the 32-bit `div` / `idiv` leaves it.
+pub(crate) fn fold_div32(op: crate::c5::ir::BinOp, lhs: i64, rhs: i64) -> Option<i64> {
+    use crate::c5::ir::BinOp;
+    let unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
+    let low = |x: i64| {
+        if unsigned {
+            i64::from(x as u32)
+        } else {
+            i64::from(x as i32)
+        }
+    };
+    let q = crate::c5::vm::eval::fold_binop(op, low(lhs), low(rhs))?;
+    Some(i64::from(q as u32))
+}
+
 /// Whether `v` is a comparison marked for the 32-bit operand form.
 pub(crate) fn is_cmp32(cmp32: &[bool], v: ValueId) -> bool {
     cmp32.get(v as usize).copied().unwrap_or(false)
@@ -373,6 +411,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -517,6 +556,7 @@ mod tests {
             kind,
             volatile: false,
             align: 0,
+            pc_rel: false,
         }
     }
 
@@ -787,8 +827,28 @@ mod tests {
                 kind: StoreKind::I32,
                 volatile: false,
                 align: 0,
+                pc_rel: false
             },
         ]);
         assert!(m.iter().all(|b| !b));
+    }
+
+    /// A division in the 32-bit form folds the operands' low words: the
+    /// divisor's high word is what a dropped mask left, and the result is
+    /// zero-extended.
+    #[test]
+    fn a_narrow_division_folds_the_low_words() {
+        let divisor = 0u64.wrapping_sub(0xffff_ffec) as i64;
+        assert_eq!(fold_div32(BinOp::Modu, 87, divisor), Some(7));
+        assert_eq!(fold_div32(BinOp::Divu, 1000, divisor), Some(50));
+        assert_eq!(
+            fold_div32(BinOp::Div, -87, 4 | 1 << 40),
+            Some(i64::from(-21i32 as u32))
+        );
+        assert_eq!(
+            fold_div32(BinOp::Mod, -87, 4 | 1 << 40),
+            Some(i64::from(-3i32 as u32))
+        );
+        assert_eq!(fold_div32(BinOp::Divu, 1, 1 << 32), None);
     }
 }

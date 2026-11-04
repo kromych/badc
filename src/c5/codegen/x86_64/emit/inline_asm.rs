@@ -156,9 +156,9 @@ fn encode_x86_asm_section_code(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     op_reg: &[Option<u8>],
     operands: &[super::super::ir::AsmOperand],
-) -> Result<(), alloc::string::String> {
+) -> Result<(), crate::c5::asm::AsmErrors> {
     use super::super::ir::Inst;
-    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
+    use crate::c5::asm::AsmSectionTarget;
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
     // name here; a cross-TU one carries its name in `extern_code_names`.
     let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
@@ -199,33 +199,28 @@ fn encode_x86_asm_section_code(
     };
     let mut mode = super::table::Mode::Bits64;
     let mut fold = crate::c5::asm::AsmParseFold::default();
+    let mut errors = alloc::vec::Vec::new();
     for b in blocks.iter_mut() {
         fold.enter_block(&*b);
-        for item in b.items.iter_mut() {
-            if let AsmSectionItem::Code(text) = item {
-                let f = |e: &str| fold.fold(e, &imm_of);
-                let refs = SectionOperandRefs {
-                    op_reg,
-                    operands,
-                    imm_of: &imm_of,
-                    addr_of: &addr_of,
-                    form: &form,
-                    fold: &f,
-                    file_scope: false,
-                };
-                *item = encode_one_x86_section_insn(
-                    text,
-                    &mut mode,
-                    &operand_target,
-                    goto_block,
-                    &refs,
-                )?;
-            }
-            note_x86_align_mode(item, mode);
-            fold.note_item(item, &imm_of);
+        for li in b.items.iter_mut() {
+            let f = |e: &str| fold.fold(e, &imm_of);
+            let refs = SectionOperandRefs {
+                op_reg,
+                operands,
+                imm_of: &imm_of,
+                addr_of: &addr_of,
+                form: &form,
+                fold: &f,
+                file_scope: false,
+            };
+            crate::c5::asm::encode_code_item(&mut li.item, li.line, &mut errors, |text| {
+                encode_one_x86_section_insn(text, &mut mode, &operand_target, goto_block, &refs)
+            });
+            note_x86_align_mode(&mut li.item, mode);
+            fold.note_item(&li.item, &imm_of);
         }
     }
-    Ok(())
+    crate::c5::asm::AsmErrors::check(errors)
 }
 
 /// Encode a file-scope inline-asm section's instructions with an empty
@@ -236,8 +231,8 @@ fn encode_x86_asm_section_code(
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
-) -> Result<(), alloc::string::String> {
-    use crate::c5::asm::{AsmSectionItem, AsmSectionTarget};
+) -> Result<(), crate::c5::asm::AsmErrors> {
+    use crate::c5::asm::{AsmError, AsmSectionItem, AsmSectionTarget, encode_code_item};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
     let goto_block = |_: u8| -> Option<u32> { None };
     let imm_of = |_: u8| -> Option<i64> { None };
@@ -252,27 +247,30 @@ pub(crate) fn encode_x86_file_asm_section_code(
     // offset the body's copies take, is settled by the layout.
     fn encode_rept(
         items: &mut [crate::c5::asm::AsmSectionItem],
+        line: u32,
+        errors: &mut alloc::vec::Vec<AsmError>,
         mode: &mut super::table::Mode,
         operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
         goto_block: &dyn Fn(u8) -> Option<u32>,
         refs: &SectionOperandRefs<'_>,
-    ) -> Result<(), alloc::string::String> {
+    ) {
         use crate::c5::asm::AsmSectionItem;
         for it in items {
             if let AsmSectionItem::Rept { items, .. } = it {
-                encode_rept(items, mode, operand_target, goto_block, refs)?;
-            } else if let AsmSectionItem::Code(text) = it {
-                *it = encode_one_x86_section_insn(text, mode, operand_target, goto_block, refs)?;
+                encode_rept(items, line, errors, mode, operand_target, goto_block, refs);
             }
+            encode_code_item(it, line, errors, |text| {
+                encode_one_x86_section_insn(text, mode, operand_target, goto_block, refs)
+            });
             note_x86_align_mode(it, *mode);
         }
-        Ok(())
     }
     let mut fold = crate::c5::asm::AsmParseFold::default();
+    let mut errors = alloc::vec::Vec::new();
     for b in blocks.iter_mut() {
         fold.enter_block(&*b);
-        for item in b.items.iter_mut() {
-            if let AsmSectionItem::Rept { items, .. } = item {
+        for li in b.items.iter_mut() {
+            if let AsmSectionItem::Rept { items, .. } = &mut li.item {
                 let none = |_: &str| None;
                 let refs = SectionOperandRefs {
                     op_reg: &[],
@@ -283,31 +281,34 @@ pub(crate) fn encode_x86_file_asm_section_code(
                     fold: &none,
                     file_scope: true,
                 };
-                encode_rept(items, &mut mode, &operand_target, &goto_block, &refs)?;
-            } else if let AsmSectionItem::Code(text) = item {
-                let f = |e: &str| fold.fold(e, &imm_of);
-                let refs = SectionOperandRefs {
-                    op_reg: &[],
-                    operands: &[],
-                    imm_of: &imm_of,
-                    addr_of: &addr_of,
-                    form: &form,
-                    fold: &f,
-                    file_scope: true,
-                };
-                *item = encode_one_x86_section_insn(
-                    text,
+                encode_rept(
+                    items,
+                    li.line,
+                    &mut errors,
                     &mut mode,
                     &operand_target,
                     &goto_block,
                     &refs,
-                )?;
+                );
             }
-            note_x86_align_mode(item, mode);
-            fold.note_item(item, &imm_of);
+            let f = |e: &str| fold.fold(e, &imm_of);
+            let refs = SectionOperandRefs {
+                op_reg: &[],
+                operands: &[],
+                imm_of: &imm_of,
+                addr_of: &addr_of,
+                form: &form,
+                fold: &f,
+                file_scope: true,
+            };
+            encode_code_item(&mut li.item, li.line, &mut errors, |text| {
+                encode_one_x86_section_insn(text, &mut mode, &operand_target, &goto_block, &refs)
+            });
+            note_x86_align_mode(&mut li.item, mode);
+            fold.note_item(&li.item, &imm_of);
         }
     }
-    Ok(())
+    crate::c5::asm::AsmErrors::check(errors)
 }
 
 /// Record on an alignment directive the encoding mode it stands in, which
@@ -496,8 +497,7 @@ fn encode_one_x86_section_insn(
         super::asm::parse_file_template(text.as_bytes())
     } else {
         super::asm::parse_template(text.as_bytes())
-    }
-    .map_err(|m| alloc::format!("inline asm: replacement `{text}`: {m}"))?;
+    }?;
     // Each leading `lock` / `rep` / segment prefix parses as its own entry and
     // rides in front of the instruction's bytes. A prefix statement standing
     // alone is the instruction, so the run stops one short of the end.
@@ -511,12 +511,11 @@ fn encode_one_x86_section_insn(
         })
         .collect();
     let [insn] = &insns[prefix.len()..] else {
-        return Err(alloc::format!(
-            "inline asm: replacement `{text}` is not a single instruction"
+        return Err(alloc::string::String::from(
+            "inline asm: more than one instruction",
         ));
     };
     let si = SectionInsn {
-        text,
         mode,
         insn,
         prefix: &prefix,
@@ -532,7 +531,7 @@ fn encode_one_x86_section_insn(
         && (insn.rex.is_some()
             || matches!(insn.mnemonic, Mnemonic::Prefix(b) if (0x40..=0x4F).contains(&b)))
     {
-        return Err(si.err("takes a `rex` prefix outside 64-bit mode"));
+        return Err(si.err("a `rex` prefix outside 64-bit mode"));
     }
     // A prefixed branch or symbol push has no meaning; the prefix applies
     // on the general operand path below. The direct-branch forms are built
@@ -562,7 +561,6 @@ fn encode_one_x86_section_insn(
 /// One replacement instruction of a section, parsed, with the mode it
 /// assembles under.
 struct SectionInsn<'a> {
-    text: &'a str,
     mode: super::table::Mode,
     insn: &'a super::asm::AsmInsn,
     prefix: &'a [u8],
@@ -589,7 +587,7 @@ struct SectionOperands {
 
 impl SectionInsn<'_> {
     fn err(&self, what: &str) -> alloc::string::String {
-        alloc::format!("inline asm: replacement `{}` {what}", self.text)
+        alloc::format!("inline asm: {what}")
     }
 
     /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in a
@@ -648,8 +646,7 @@ impl SectionInsn<'_> {
         let Some(op) = short_branch_opcode(self.mnem) else {
             return Ok(None);
         };
-        let prefix = e3_branch_prefix(self.mnem, self.mode)
-            .map_err(|m| alloc::format!("{m} (`{}`)", self.text))?;
+        let prefix = e3_branch_prefix(self.mnem, self.mode)?;
         let target = if let Some(&super::asm::AsmOpnd::Label { num, forward }) =
             self.insn.operands.first()
         {
@@ -686,8 +683,7 @@ impl SectionInsn<'_> {
         // `jcxz` / `jecxz` have no catalogue row to fall back to.
         if matches!(self.mnem, "jcxz" | "jecxz") {
             return Err(alloc::format!(
-                "inline asm: replacement `{}`: `{}` takes a label target",
-                self.text,
+                "inline asm: `{}` takes a label target",
                 self.mnem
             ));
         }
@@ -725,7 +721,7 @@ impl SectionInsn<'_> {
                     plt = true;
                     bare
                 }
-                Some(_) => return Err(self.err("branches through a relocation other than `@PLT`")),
+                Some(_) => return Err(self.err("branch through a relocation other than `@PLT`")),
                 None => name.clone(),
             };
             Some(branch_section_target(&name))
@@ -999,11 +995,7 @@ impl SectionInsn<'_> {
                     }
                 }
                 _ => {
-                    return Err(alloc::format!(
-                        "inline asm: replacement instruction `{}` operand is not a \
-                         register or immediate",
-                        self.text
-                    ));
+                    return Err(self.err("operand is not a register or immediate"));
                 }
             };
             ops.concrete.push(c);
@@ -1305,10 +1297,7 @@ impl SectionInsn<'_> {
         if let (Some((_, _, idx)), Some(f)) = (&ops.sym_imm, &imm_field) {
             ops.concrete[*idx] = Concrete::Imm(f.probe);
         }
-        let body_err = |m: alloc::string::String| {
-            alloc::format!("inline asm: replacement `{}`: {m}", self.text)
-        };
-        let mut body = encode(&ops.concrete).map_err(body_err)?;
+        let mut body = encode(&ops.concrete)?;
         let mut bytes = alloc::vec::Vec::new();
         let sizes =
             push_legacy_prefixes(&mut bytes, &body, insn.seg.or(ops.operand_seg), self.prefix);
@@ -1355,7 +1344,7 @@ impl SectionInsn<'_> {
                 },
                 other => other,
             };
-            let probe_bytes = encode(&probe).map_err(body_err)?;
+            let probe_bytes = encode(&probe)?;
             let (field, width) = differing_run(&body, &probe_bytes)
                 .filter(|&(_, n)| matches!(n, 2 | 4))
                 .ok_or_else(|| self.err("displacement field is not a 2- or 4-byte run"))?;
@@ -1453,7 +1442,7 @@ impl SectionOperands {
         pcrel: bool,
     ) -> Result<(), alloc::string::String> {
         if self.sym_disp.is_some() {
-            return Err(si.err("has more than one memory operand"));
+            return Err(si.err("more than one memory operand"));
         }
         self.sym_disp = Some((target?, off, self.concrete.len(), pcrel));
         Ok(())
@@ -1467,7 +1456,7 @@ impl SectionOperands {
         off: i64,
     ) -> Result<(), alloc::string::String> {
         if self.sym_imm.is_some() {
-            return Err(si.err("has more than one symbol immediate"));
+            return Err(si.err("more than one symbol immediate"));
         }
         self.sym_imm = Some((target?, off, self.concrete.len()));
         Ok(())
@@ -1810,7 +1799,7 @@ fn prepare_template(
             &asm.operands,
         )
     {
-        return fail(m);
+        return fail(alloc::string::String::from(m));
     }
     let (code, blocks) = match extracted {
         Some(ex) => (ex.code, ex.blocks),
@@ -2167,17 +2156,10 @@ impl AsmScratch {
         let fp_save_list: alloc::vec::Vec<u8> =
             (0u8..16).filter(|r| fp_used & (1 << r) != 0).collect();
         let fp_area = fp_save_list.len() as i32 * 16;
-        // A naked function has storage for no operand but a bound or constant one.
         let staged_operand = stmt.asm.operands.iter().enumerate().any(|(i, op)| {
             !matches!(op.constraint, super::super::ir::AsmConstraint::Bound(_))
                 && (op_reg[i].is_some() || stmt.const_of(i as u8).is_none())
         });
-        if stmt.func.is_naked && staged_operand {
-            return fail(
-                "inline asm: a naked function has no frame to stage a register or memory \
-                 operand through",
-            );
-        }
         let staged = fp_area > 0 || !save_list.is_empty() || staged_operand;
         let writes_fp = stmt.asm.clobber_regs & (1 << Reg::RBP.0) != 0;
         if writes_fp && staged && stmt.frame.dynamic_sp {
@@ -3853,7 +3835,7 @@ impl AsmPass<'_> {
             out.cx.asm_sections,
         ) {
             Ok(d) => d,
-            Err(m) => return fail(m),
+            Err(m) => return fail(alloc::string::String::from(m)),
         };
         let label_name = |num: u32| -> Option<alloc::string::String> {
             if num >= super::asm::NAMED_LABEL_BASE {
@@ -4136,7 +4118,7 @@ fn emit_inline_asm_once(
         out.cx.asm_sections,
     ) {
         Ok(m) => m,
-        Err(m) => return fail(m),
+        Err(m) => return fail(alloc::string::String::from(m)),
     };
     let pass = AsmPass {
         stmt: &stmt,

@@ -2132,6 +2132,40 @@ fn deep_expression_nesting_is_diagnosed() {
 }
 
 #[test]
+fn a_parenthesized_constant_initializer_is_parsed_once_per_level() {
+    // Tokens advanced over, rewinds included, grow with the depth of the
+    // parentheses rather than with a power of it.
+    on_big_stack(|| {
+        let advanced = |shape: &str, depth: usize| {
+            let nest = format!("{}1{}", "(".repeat(depth), ")".repeat(depth));
+            let src = format!(
+                "{}\nint main(void) {{ return 0; }}",
+                shape.replace('@', &nest)
+            );
+            crate::c5::compiler::TOKENS_ADVANCED.with(|c| c.set(0));
+            super::compile_str_bare(&src);
+            crate::c5::compiler::TOKENS_ADVANCED.with(|c| c.get())
+        };
+        for shape in [
+            "int x = @;",
+            "int x = @ + 2;",
+            "double d = @ * 2.5;",
+            "int a[] = { 3, @, 4 };",
+            "struct s { int a; long b; } v = { .b = @ };",
+            "int f(void) { static int x = @; return x; }",
+            "int g; int *p = @ ? &g : 0;",
+        ] {
+            let (small, large) = (advanced(shape, 30), advanced(shape, 480));
+            assert!(
+                large < small * 32,
+                "`{shape}`: 16x the depth advanced {:.1}x the tokens ({small} -> {large})",
+                large as f64 / small as f64
+            );
+        }
+    });
+}
+
+#[test]
 fn deep_global_initializer_expression_nesting_is_diagnosed() {
     let n = 2000;
     let src = format!("int x = {}1{};", "(".repeat(n), ")".repeat(n));
@@ -2279,6 +2313,45 @@ fn constructor_is_not_reported_unused() {
         warns.contains("unused function `really_unused`"),
         "a genuinely unused static function should still be flagged; got:\n{warns}"
     );
+}
+
+/// A `static` `main` is no program entry point: gcc 16 and clang 22 report
+/// it unused under `-Wall`, hosted or freestanding, and clang's `-Wmain`, on
+/// by default, flags each hosted `static` declaration of it. An external
+/// `main` draws neither. `-Wno-main` and `-Wno-unused-function` silence
+/// their rows.
+#[test]
+fn a_static_main_is_reported_and_an_external_one_is_not() {
+    use crate::c5::diag::{Code, Level};
+    use crate::{CompileOptions, Target};
+    let codes = |src: &str, freestanding: bool, off: Option<Code>| -> Vec<Code> {
+        let mut diag = super::diag_config(&["all"]);
+        if let Some(code) = off {
+            diag.set_level(code, Level::Ignore);
+        }
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding)
+            .with_diag(diag);
+        let program = Compiler::with_options(src.to_string(), Target::default_target(), opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        program.warnings.iter().map(|w| w.code).collect()
+    };
+    let st = "static int main(void);\nstatic int main(void) { return 0; }\n";
+    let ext = "int main(void);\nint main(void) { return 0; }\n";
+    let (m, u) = (Code::MAIN, Code::UNUSED_FUNCTION);
+    for (src, freestanding, off, want) in [
+        (st, false, None, alloc::vec![m, m, u]),
+        (st, true, None, alloc::vec![u]),
+        (st, false, Some(m), alloc::vec![u]),
+        (st, false, Some(u), alloc::vec![m, m]),
+        (ext, false, None, alloc::vec![]),
+        (ext, true, None, alloc::vec![]),
+    ] {
+        let got = codes(src, freestanding, off);
+        assert_eq!(got, want, "{src} freestanding={freestanding} off={off:?}");
+    }
 }
 
 #[test]
@@ -2616,7 +2689,7 @@ fn file_scope_register_asm_binding() {
     );
     expect_compile_error(
         &format!("register long x asm(\"{gp}\"); int main(void) {{ return (int)x; }}"),
-        "supported for the stack and frame pointer only",
+        &format!("register `{gp}` unsuitable for global register variables on this target"),
     );
     expect_compile_error(
         &format!("static register long x asm(\"{sp}\"); int main(void) {{ return 0; }}"),
@@ -2650,6 +2723,93 @@ fn file_scope_register_asm_binding() {
             .map(crate::c5::symbol::Symbol::link_name),
         Some("renamed")
     );
+}
+
+/// Windows and Darwin reserve x18, AAPCS64's platform register (Windows
+/// keeps the TEB pointer there), so a file-scope variable may name it, as
+/// gcc and clang allow, and a read is a move from x18 (`add x0, x18, #0`).
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_platform_register_variable_reads_x18() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = "register void *teb __asm__(\"x18\");\nvoid *current(void) { return teb; }\n";
+    let move_from_x18 = 0x9100_0240u32.to_le_bytes();
+    for target in [Target::WindowsAarch64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let nopts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let obj = emit_native_with_options(&program, target, nopts).expect("emit");
+        assert!(
+            obj.windows(4).any(|w| w == move_from_x18),
+            "{target:?}: no move from x18"
+        );
+    }
+}
+
+#[test]
+fn a_file_scope_register_variable_names_the_reserved_platform_register() {
+    // clang refuses every register a function may allocate, x18 on Linux
+    // included, in the words badc uses.
+    use crate::Target;
+    // The 32-bit view.
+    compile_for_target(
+        "register unsigned int lo asm(\"w18\"); int main(void) { return (int)lo; }",
+        Target::WindowsAarch64,
+    )
+    .expect("w18");
+    let unsuitable = "unsuitable for global register variables on this target";
+    for (target, decl, needle) in [
+        (
+            Target::LinuxAarch64,
+            "register void *r asm(\"x18\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x17\");",
+            unsuitable,
+        ),
+        (
+            Target::MacOSAarch64,
+            "register void *r asm(\"x9\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsX64,
+            "register void *r asm(\"rbx\");",
+            unsuitable,
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x18\") = 0;",
+            "cannot be initialized",
+        ),
+        (
+            Target::WindowsAarch64,
+            "register char r asm(\"x18\");",
+            "size of register `x18` does not match variable size",
+        ),
+        (
+            Target::WindowsAarch64,
+            "register void *r asm(\"x18\"); void w(void) { r = 0; }",
+            "cannot write register variable",
+        ),
+        // A block-scope binding is an operand binding, which the emitters
+        // cannot give x18.
+        (
+            Target::WindowsAarch64,
+            "void l(void) { register void *r asm(\"x18\"); (void)r; }",
+            "reserved and cannot hold a register variable",
+        ),
+    ] {
+        let err = compile_for_target(decl, target).expect_err(decl);
+        assert!(err.contains(needle), "{target:?} {decl}: {err}");
+    }
 }
 
 #[test]
@@ -3292,40 +3452,31 @@ fn block_typedef_redeclaration_rules() {
     );
 }
 
+/// A library function another input defines loses the header's `#pragma
+/// binding` and keeps the header's declaration: an ordinary external
+/// function returning `double`.
 #[test]
-fn implicit_extern_fn_binding_unbinds_at_scope_exit() {
-    let opts = || {
-        crate::c5::compiler::CompileOptions::default()
-            .with_implicit_extern_fns(alloc::vec!["impfn".to_string()])
-    };
-    let target = super::super::codegen::Target::default_target();
-    // C89 6.3.2.2 puts the implicit declaration in the innermost block
-    // containing the call. Each caller re-binds; the calls resolve to
-    // the definition later in the unit.
-    let ok = "int f(void) { return impfn(4); }\n\
-              int h(void) { { return impfn(10); } }\n\
-              int impfn(int x) { return x + 1; }\n\
-              int main(void) { return f() + h() == 16 ? 0 : 1; }";
-    let prog = Compiler::with_options(ok.to_string(), target, opts())
-        .compile()
-        .unwrap();
-    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
-    // After the declaring function exits, the name is out of scope; a
-    // non-call use in the next function does not see it.
-    match Compiler::with_options(
-        "int f(void) { return impfn(4); } int g(void) { return impfn; } \
-         int impfn(int x) { return x + 1; } int main(void) { return 0; }"
-            .to_string(),
-        target,
-        opts(),
-    )
-    .compile()
-    {
-        Err(e) => assert!(
-            e.to_string().contains("undefined variable impfn"),
-            "unexpected error: {e}"
-        ),
-        Ok(_) => panic!("an out-of-scope implicit binding must not resolve"),
+fn a_link_defined_library_function_keeps_its_declaration_without_its_binding() {
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Target};
+    let src = "#include <time.h>\nint main(void) { return difftime(7, 2) == 5.0 ? 0 : 1; }";
+    for target in Target::ALL {
+        let id = target.id_str();
+        let compile = |opts: CompileOptions| {
+            let prog = (Compiler::with_options(src.into(), target, opts).compile())
+                .unwrap_or_else(|e| panic!("{id}: {e}"));
+            let s = (prog.symbols.iter().find(|s| s.name == "difftime")).expect("declared");
+            let binds =
+                (prog.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == "difftime"));
+            (s.class, s.type_, binds)
+        };
+        let (class, ty, binds) = compile(CompileOptions::default());
+        assert!(class == Token::Sys as i64 && binds, "{id}");
+        let defined =
+            CompileOptions::default().with_link_defined_fns(alloc::vec!["difftime".into()]);
+        let (class, link_ty, binds) = compile(defined);
+        assert!(class == Token::Fun as i64 && !binds, "{id}");
+        assert_eq!(link_ty, ty, "{id}: the declared return type");
     }
 }
 
@@ -3773,16 +3924,13 @@ fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
             "int main(int c, char **v) { (void)v; return _Generic(0, int[c]: 1, default: 0); }",
             "a generic association type may not be variably modified",
         ),
-        (
-            "int main(int c, char **v) { (void)v; return (int)sizeof(int[3][c]); }",
-            "a non-constant inner array dimension is not supported",
-        ),
     ] {
         expect_compile_error(src, needle);
     }
     Compiler::new(
         "int main(int c, char **v) { (void)v; int b[4];\n\
-         return (int)(sizeof(int[c]) + sizeof(int (*)[c])) + ((int (*)[c])b)[0][0] * 0; }"
+         return (int)(sizeof(int[c]) + sizeof(int (*)[c]) + sizeof(int[3][c])) \
+         + ((int (*)[c])b)[0][0] * 0; }"
             .to_string(),
     )
     .compile()
@@ -4083,11 +4231,15 @@ fn every_conversion_to_a_pointer_takes_the_same_null_pointer_constants() {
     // argument, a return and an initializer, as it does in `?:`; a value
     // read through a pointer cast is no integer constant expression, and a
     // floating constant cast to an integer type is one.
-    use crate::diag::Code;
+    use crate::diag::{Code, Config, Level};
+    // The row lowered to a warning, so each body's report is collected.
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INT_CONVERSION, Level::Warning);
     let warns = |body: &str| {
         let src =
             format!("int *ip; void take(int *); int x;\n{body}\nint main(void) {{ return 0; }}\n");
-        let program = Compiler::new(src)
+        let opts = crate::CompileOptions::default().with_diag(lowered.clone());
+        let program = Compiler::with_options(src, crate::Target::default_target(), opts)
             .compile()
             .unwrap_or_else(|e| panic!("{body}: {e}"));
         program
@@ -4515,8 +4667,13 @@ fn the_include_hint_names_only_a_header_the_target_ships() {
         let hinted = err.to_string().contains("try `#include <sys/epoll.h>`");
         assert_eq!(hinted, linux, "{id}: {err}");
         let src = "int main(void) { return epoll_create1(0); }";
+        let recorded = crate::AutoInclude {
+            name: "epoll_create1".into(),
+            header: "sys/epoll.h".into(),
+            bound: true,
+        };
         match Compiler::with_options(src.into(), target, opts).compile() {
-            Ok(program) => assert!(linux && program.auto_includes == ["epoll_create1"], "{id}"),
+            Ok(program) => assert!(linux && program.auto_includes == [recorded], "{id}"),
             Err(e) => assert!(
                 !linux && !e.to_string().contains("sys/epoll.h"),
                 "{id}: {e}"
@@ -4577,7 +4734,7 @@ fn an_address_constant_initializes_only_an_object_that_holds_it() {
     for (decl, what) in [
         ("int x = (int)(long)&g;", "an object of type `int`"),
         (
-            "struct { int a, b, c; } x = {1, &g, 3};",
+            "struct { int a, b, c; } x = {1, (int)(long)&g, 3};",
             "an object of type `int`",
         ),
         (
@@ -5218,6 +5375,41 @@ fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
                 .contains("control reaches end of non-void function `f`")
         });
         assert_eq!(fell, warns, "{src}: {:?}", prog.warnings);
+    }
+}
+
+/// A condition whose known operands decide it leaves the other branch
+/// dead for the fall-off analysis, as gcc 16.2.1 folds it for
+/// -Wreturn-type at -O0 and -O2: `x || 1`, `x | 1`, `!(x && 0)`,
+/// `(x & 0) == 0`, `!(x * 0)`, `x | ~0u`, `(x ^ x) == 0`, `x - x + 1` and
+/// `(x, 1)` are true whatever `x`; `x && 0` and `x * 0` false; `x || 0`,
+/// `x | 0` and `!x` undecided. The warnings match gcc's.
+#[test]
+fn fall_off_end_folds_conditions_their_known_operands_decide() {
+    let quiet = [
+        "x || 1",
+        "0 == 0 || x < 4",
+        "x | 1",
+        "!(0 && x)",
+        "(x & 0) == 0",
+        "!(x * 0)",
+        "x | 0xffffffff",
+        "(x ^ x) == 0",
+        "(x - x) + 1",
+        "(x, 1)",
+    ];
+    let warned = ["x && 0", "x * 0", "x || 0", "x | 0", "!x"];
+    for (cond, warns) in (quiet.iter().map(|s| (s, false))).chain(warned.iter().map(|s| (s, true)))
+    {
+        let src = alloc::format!(
+            "int f(unsigned x) {{ if ({cond}) return 0; }}\nint main(void) {{ return 0; }}"
+        );
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        let fell = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("control reaches end of non-void function `f`")
+        });
+        assert_eq!(fell, warns, "{cond}: {:?}", prog.warnings);
     }
 }
 
@@ -5893,17 +6085,86 @@ fn value_builtins_check_their_operands() {
             .contains("argument 3 of `__builtin_prefetch` is 4, not 0 to 3"),
         "{w:?}"
     );
-    let w = warnings("long f(int *p) { return __builtin_expect(p, 0); }");
-    assert!(
-        w.iter()
-            .any(|(c, t)| *c == crate::c5::diag::Code::INT_CONVERSION
-                && t.contains("argument 1 of `__builtin_expect`")),
-        "{w:?}"
+    // -Wint-conversion is an error by default, as in gcc 14.
+    expect_compile_error(
+        &with_main("long f(int *p) { return __builtin_expect(p, 0); }"),
+        "pointer assigned to integer in argument 1 of `__builtin_expect`",
     );
     // gcc takes any alignment value, constant or not.
     assert!(
         warnings("void *f(int *p, int a) { return __builtin_assume_aligned(p, a); }").is_empty()
     );
+}
+
+/// A diagnostic about a `__builtin_` call names the spelling the call used,
+/// as gcc 16 and clang 22 do: a library builtin (`__builtin_strlen` binds
+/// `strlen`, whether a header declares it or not) and an intrinsic one, for
+/// the argument count and an argument's type.
+#[test]
+fn a_builtin_call_is_named_as_written() {
+    use crate::{CompileOptions, Target};
+    let report = |src: &str, freestanding: bool| -> String {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_freestanding(freestanding);
+        match Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile() {
+            Ok(p) => p.warnings.iter().map(|w| w.to_string() + "\n").collect(),
+            Err(e) => e.to_string(),
+        }
+    };
+    let s = "struct S { int x; };\n";
+    for (body, needle) in [
+        (
+            "unsigned long f(void) { return __builtin_strlen(\"a\", 1); }",
+            "too many arguments to `__builtin_strlen` (expected 1, got at least 2)",
+        ),
+        (
+            "unsigned long f(void) { return __builtin_strlen(); }",
+            "too few arguments to `__builtin_strlen` (expected 1, got 0)",
+        ),
+        (
+            "unsigned long f(void) { return __builtin_strlen(5); }",
+            "integer assigned to pointer in argument 1 of `__builtin_strlen`",
+        ),
+        (
+            "unsigned long f(struct S s) { return __builtin_strlen(s); }",
+            "incompatible struct types in argument 1 of `__builtin_strlen`",
+        ),
+        (
+            "int f(void *p) { return __builtin_memcmp(p, p); }",
+            "too few arguments to `__builtin_memcmp` (expected 3, got 2)",
+        ),
+        (
+            "int f(void) { return __builtin_printf(); }",
+            "too few arguments to `__builtin_printf` (expected at least 1, got 0)",
+        ),
+        (
+            "double f(void) { return __builtin_sqrt(); }",
+            "too few arguments to `__builtin_sqrt` (expected at least 1, got 0)",
+        ),
+        (
+            "double f(struct S s) { return __builtin_sqrt(s); }",
+            "incompatible struct types in argument 1 of `__builtin_sqrt`",
+        ),
+        (
+            "int f(void) { return __builtin_popcount(1, 2); }",
+            "too many arguments to `__builtin_popcount`",
+        ),
+        (
+            "int f(int *p) { return __builtin_popcount(p); }",
+            "pointer assigned to integer in argument 1 of `__builtin_popcount`",
+        ),
+        (
+            "double f(double x) { return __builtin_fma(x, x); }",
+            "too few arguments to `__builtin_fma` (expected 3, got 2)",
+        ),
+    ] {
+        for freestanding in [false, true] {
+            let got = report(&format!("{s}{body}\n"), freestanding);
+            let what = format!("{body} freestanding={freestanding}\n{got}");
+            assert!(got.contains(needle) && !got.contains(".builtin"), "{what}");
+        }
+    }
 }
 
 /// gcc's `-Wstrict-prototypes` under C99's rules: a function declarator
@@ -6304,6 +6565,38 @@ fn implicit_fallthrough_reports_where_gcc_does() {
                }\n",
             &[6, 8, 14, 18, 20, 26, 34, 36, 38, 40],
         ),
+        // A nested switch completes only through a `break` control reaches
+        // or a value no label matches: the unreachable `break` after an
+        // `if` whose arms both return does not end it, and a switch with
+        // no `default` does (gcc 16.2.1 reports line 16 alone).
+        (
+            "int g(int);\n\
+               int f(int a, int b) {\n\
+               switch (a) {\n\
+               case 1: {\n\
+               switch (b) {\n\
+               case 1:\n\
+               if (g(b)) { return 1; } else { return 2; }\n\
+               break;\n\
+               default:\n\
+               return 3;\n\
+               }\n\
+               }\n\
+               case 2:\n\
+               return 4;\n\
+               case 3:\n\
+               switch (b) { case 1: return 1; }\n\
+               case 4:\n\
+               return 5;\n\
+               case 5:\n\
+               switch (b) { case 1: return 1; default: return 2; }\n\
+               case 6:\n\
+               return 6;\n\
+               }\n\
+               return 0;\n\
+               }\n",
+            &[16],
+        ),
         // What precedes a switch body's first label is never reached, so it
         // falls into nothing; gcc reports none of these.
         (
@@ -6312,6 +6605,35 @@ fn implicit_fallthrough_reports_where_gcc_does() {
                int b(int x) { switch (x) { static const char s[] = \"x\"; default: return s[0]; } }\n\
                int d(int x) { switch (x) { g(); case 1: return 1; } return 0; }\n\
                int e(int x) { switch (x) { int c = 3; case 1: return c; } return 0; }\n",
+            &[],
+        ),
+        // A `return` that leaves `cleanup` scopes runs their calls and
+        // leaves; gcc 16.2.1 reports none of these.
+        (
+            "void unlock(int *p);\n\
+               int g(int);\n\
+               int f(int x) {\n\
+               int m __attribute__((cleanup(unlock))) = 0;\n\
+               switch (x) {\n\
+               case 0:\n\
+               if (g(x)) return 1;\n\
+               return 3;\n\
+               case 1:\n\
+               return 2;\n\
+               default:\n\
+               break;\n\
+               }\n\
+               return 0;\n\
+               }\n\
+               int h(int x) {\n\
+               switch (x) {\n\
+               case 0: { int m __attribute__((cleanup(unlock))) = 0; return g(m); }\n\
+               case 1: { int m __attribute__((cleanup(unlock))) = 0; (void)m; return 5; }\n\
+               case 2:\n\
+               return 2;\n\
+               }\n\
+               return 0;\n\
+               }\n",
             &[],
         ),
     ];

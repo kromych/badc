@@ -21,14 +21,24 @@ use super::super::ir::{
 };
 use super::tape::{At, Insertion, insert};
 
-/// Output `op`, written through `addr` = slot `off`; `kind` as an `AsmOut`.
+/// Output `op`, written through `addr` = slot `off`; `kind` as an `AsmOut`
+/// and as the read of a `+` output, `store` the write-back.
 struct Out {
     op: usize,
     addr: ValueId,
     off: i64,
     rw: bool,
-    width: u8,
     kind: LoadKind,
+    read: LoadKind,
+    store: StoreKind,
+}
+
+impl Out {
+    /// A SIMD output's value is its register's own bits: a `float` stays
+    /// single precision.
+    fn is_f32(&self) -> bool {
+        self.kind == LoadKind::F32
+    }
 }
 
 /// The outputs of the statement at `at` that become values, in operand order.
@@ -39,37 +49,37 @@ struct Edit {
 
 /// Whether `op` is a register-class output of a slot access width into an
 /// object whose write is no access of its own: not a volatile one (C99
-/// 6.7.3p6), not one reached through a segment override.
+/// 6.7.3p6), not one reached through a segment override. A SIMD output
+/// takes the width of a floating or vector kind; no kind holds 1 or 2
+/// bytes in that file.
 fn register_output(op: &AsmOperand) -> bool {
     let width_ok = match op.constraint {
         AsmConstraint::Reg
         | AsmConstraint::Fixed(_)
         | AsmConstraint::RegOrImm { reg: Some(_), .. }
         | AsmConstraint::Flags(_) => matches!(op.width, 1 | 2 | 4 | 8),
-        AsmConstraint::Fp => op.width == 16,
+        AsmConstraint::Fp => matches!(op.width, 4 | 8 | 16),
         _ => false,
     };
     op.is_output && !op.value && !op.volatile_object && op.seg == AsmSeg::None && width_ok
 }
 
-/// The zero-extending read of a slot at the operand's width.
-fn load_kind(width: u8) -> LoadKind {
-    match width {
-        1 => LoadKind::U8,
-        2 => LoadKind::U16,
-        4 => LoadKind::U32,
-        16 => LoadKind::V128,
-        _ => LoadKind::I64,
-    }
-}
-
-fn store_kind(width: u8) -> StoreKind {
-    match width {
-        1 => StoreKind::I8,
-        2 => StoreKind::I16,
-        4 => StoreKind::I32,
-        16 => StoreKind::V128,
-        _ => StoreKind::I64,
+/// The value kind of a register output, the read of its slot (zero-extending
+/// for an integer) and the write of it.
+fn kinds(op: &AsmOperand) -> (LoadKind, LoadKind, StoreKind) {
+    let int = match op.width {
+        1 => (LoadKind::U8, StoreKind::I8),
+        2 => (LoadKind::U16, StoreKind::I16),
+        4 => (LoadKind::U32, StoreKind::I32),
+        _ => (LoadKind::I64, StoreKind::I64),
+    };
+    match (op.constraint, op.width) {
+        (AsmConstraint::Fp, 4) => (LoadKind::F32, LoadKind::F32, StoreKind::F32),
+        (AsmConstraint::Fp, 8) => (LoadKind::F64, LoadKind::F64, StoreKind::F64),
+        (AsmConstraint::Fp, _) => (LoadKind::V128, LoadKind::V128, StoreKind::V128),
+        // A flag output's `set<cc>` zero-extends its byte.
+        (AsmConstraint::Flags(_), _) => (LoadKind::U8, int.0, int.1),
+        _ => (LoadKind::I64, int.0, int.1),
     }
 }
 
@@ -113,18 +123,15 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             .enumerate()
             .filter_map(|(i, (op, &a))| match func.insts.get(a as usize) {
                 Some(Inst::LocalAddr(off)) if register_output(op) && uses[a as usize] == 1 => {
+                    let (kind, read, store) = kinds(op);
                     Some(Out {
                         op: i,
                         addr: a,
                         off: *off,
                         rw: op.is_rw,
-                        width: op.width,
-                        // A flag output's `set<cc>` zero-extends its byte.
-                        kind: match op.constraint {
-                            AsmConstraint::Flags(_) => LoadKind::U8,
-                            AsmConstraint::Fp => LoadKind::V128,
-                            _ => LoadKind::I64,
-                        },
+                        kind,
+                        read,
+                        store,
                     })
                 }
                 _ => None,
@@ -141,11 +148,11 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     // per later output, the stores; the last takes the old position.
     let mut ins: Vec<Insertion> = Vec::new();
     for e in &edits {
-        let put = |ins: &mut Vec<Insertion>, inst: Inst| {
+        let put = |ins: &mut Vec<Insertion>, inst: Inst, is_f32: bool| {
             ins.push(Insertion {
                 at: At::Before(e.at),
                 inst,
-                is_f32: false,
+                is_f32,
             })
         };
         for o in e.outs.iter().filter(|o| o.rw) {
@@ -154,9 +161,10 @@ pub(crate) fn run(func: &mut FunctionSsa) {
                 Inst::LoadLocal {
                     off: o.off,
                     disp: 0,
-                    kind: load_kind(o.width),
+                    kind: o.read,
                     volatile: false,
                 },
+                o.is_f32(),
             );
         }
         let Inst::InlineAsm { asm, args } = &func.insts[e.at as usize] else {
@@ -167,7 +175,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             asm.operands[o.op].value = true;
             args[o.op] = NO_VALUE;
         }
-        put(&mut ins, Inst::InlineAsm { asm, args });
+        put(&mut ins, Inst::InlineAsm { asm, args }, e.outs[0].is_f32());
         for o in &e.outs[1..] {
             put(
                 &mut ins,
@@ -175,10 +183,11 @@ pub(crate) fn run(func: &mut FunctionSsa) {
                     op: o.op as u8,
                     kind: o.kind,
                 },
+                o.is_f32(),
             );
         }
         for o in &e.outs[..e.outs.len() - 1] {
-            put(&mut ins, store(o, NO_VALUE));
+            put(&mut ins, store(o, NO_VALUE), false);
         }
     }
     let (rw, _) = insert(func, &ins);
@@ -230,7 +239,7 @@ fn store(o: &Out, value: ValueId) -> Inst {
         off: o.off,
         disp: 0,
         value,
-        kind: store_kind(o.width),
+        kind: o.store,
         volatile: false,
         nsw: false,
     }
@@ -272,6 +281,7 @@ mod tests {
             value: false,
             volatile_object: false,
             early_clobber: false,
+            fp_limit: 0,
         }
     }
 
@@ -388,6 +398,46 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// A SIMD output of 4 or 8 bytes is a single- or double-precision value
+    /// and its `+` read is one; a 2-byte one has no such kind and keeps its
+    /// address.
+    #[test]
+    fn simd_outputs_take_floating_kinds() {
+        for (width, kind, read) in [
+            (4, StoreKind::F32, LoadKind::F32),
+            (8, StoreKind::F64, LoadKind::F64),
+        ] {
+            let mut f = func_with(
+                vec![
+                    Inst::LocalAddr(-1),
+                    asm_of(
+                        "fneg %d0, %d0",
+                        vec![operand(AsmConstraint::Fp, true, true, width)],
+                        vec![0],
+                    ),
+                ],
+                vec![block(0..2, Terminator::Return(NO_VALUE))],
+            );
+            run(&mut f);
+            assert!(matches!(f.insts[1], Inst::LoadLocal { kind, .. } if kind == read));
+            assert!(matches!(f.insts[3], Inst::StoreLocal { kind: k, value: 2, .. } if k == kind));
+            assert_eq!(f.f32_values[1..3], [width == 4; 2]);
+        }
+        let mut f = func_with(
+            vec![
+                Inst::LocalAddr(-1),
+                asm_of(
+                    "",
+                    vec![operand(AsmConstraint::Fp, true, false, 2)],
+                    vec![0],
+                ),
+            ],
+            vec![block(0..2, Terminator::Return(NO_VALUE))],
+        );
+        run(&mut f);
+        assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
     }
 
     /// A memory output, a volatile object, an address read twice and an

@@ -261,6 +261,158 @@ fn a_headers_selectany_object_and_inline_function_link_once_per_program() {
     }
 }
 
+/// An inline function of external linkage on the Windows targets, as MSVC and
+/// clang's `*-windows-msvc` link one in C: each unit that references it emits
+/// a pick-any definition, one function program-wide; a unit that does not
+/// emits none, so what its body calls need not exist, even past a non-inline
+/// declaration; a declaration spelling `extern` keeps it for other units.
+#[test]
+fn msvc_inline_functions_link_once_and_drop_unreferenced() {
+    let dir = tempdir("msvc-inline");
+    write_source(
+        &dir,
+        "inl.h",
+        "void nowhere(void);\n\
+         __inline int unused_plain(void) { nowhere(); return 1; }\n\
+         __forceinline int unused_forced(void) { nowhere(); return 2; }\n\
+         int declared_first(int x);\n\
+         __inline int declared_first(int x) { nowhere(); return x; }\n\
+         __inline int shared(int x) { return x * 3; }\n\
+         __forceinline int forced(int x) { return x + 4; }\n\
+         int (*shared_there(void))(int);\n\
+         int (*forced_there(void))(int);\n\
+         int kept_there(void);\n",
+    );
+    write_source(
+        &dir,
+        "inl1.c",
+        "#include \"inl.h\"\n\
+         extern __inline int kept(int x) { return x + 100; }\n\
+         int main(void) {\n\
+         if (shared(2) != 6 || forced(1) != 5) return 1;\n\
+         if (shared_there() != shared || forced_there() != forced) return 2;\n\
+         return kept_there() == 107 ? 0 : 3; }\n",
+    );
+    write_source(
+        &dir,
+        "inl2.c",
+        "#include \"inl.h\"\n\
+         int kept(int x);\n\
+         int (*shared_there(void))(int) { return shared; }\n\
+         int (*forced_there(void))(int) { return forced; }\n\
+         int kept_there(void) { return kept(7); }\n",
+    );
+    let host = if cfg!(all(windows, target_arch = "x86_64")) {
+        Some("windows-x64")
+    } else if cfg!(windows) {
+        Some("windows-arm64")
+    } else {
+        None
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        for opt in ["-O0", "-O"] {
+            let badc_with = || {
+                let mut c = Command::new(badc());
+                c.args([&t, opt]).current_dir(&dir);
+                c
+            };
+            for unit in ["inl1", "inl2"] {
+                run(
+                    badc_with().args(["-c", &format!("{unit}.c"), "-o", &format!("{unit}.o")]),
+                    "compile -c",
+                );
+            }
+            for inputs in [["inl1.o", "inl2.o"], ["inl1.c", "inl2.c"]] {
+                let exe = dir.join(format!("inl{opt}-{target}-{}.exe", inputs[0]));
+                run(badc_with().args(inputs).arg("-o").arg(&exe), "link");
+                if host == Some(target) {
+                    let status = Command::new(&exe).status().expect("run the program");
+                    assert_eq!(status.code(), Some(0), "{target} {opt} {inputs:?}");
+                }
+            }
+        }
+    }
+}
+
+/// The Windows SDK include directories on this host holding the full
+/// `<windows.h>`, one per version, read in place.
+#[cfg(windows)]
+fn windows_sdk_includes() -> Vec<PathBuf> {
+    let root = Path::new(r"C:\Program Files (x86)\Windows Kits\10\Include");
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.join("um").join("windows.h").is_file())
+        .collect();
+    versions.sort();
+    versions
+}
+
+/// The SDK's full `<windows.h>` in two units with msvc_compat.h: each unit
+/// emits the `FORCEINLINE` helpers it references and merges them at link
+/// with the other's, so `RtlSecureZeroMemory` and `HandleToULong` are one
+/// function each across the program, and drops the rest along with what
+/// they call. winnt.h's `InterlockedCompareExchange` over a `LONG volatile *`
+/// reaches the intrinsic, with nothing of msvc_compat.h's in its way.
+#[cfg(windows)]
+#[test]
+fn two_units_including_the_sdk_windows_h_link_and_run() {
+    let sdks = windows_sdk_includes();
+    if sdks.is_empty() {
+        eprintln!("skip: no Windows SDK");
+    }
+    let dir = tempdir("sdk-windows-h");
+    write_source(
+        &dir,
+        "a.c",
+        "#include <windows.h>\n\
+         int b_side(PVOID (**zero)(PVOID, SIZE_T), unsigned long (*conv)(const void *));\n\
+         int main(void) {\n\
+         char buf[16];\n\
+         for (int i = 0; i < 16; i++) buf[i] = (char)(i + 1);\n\
+         if (SecureZeroMemory(buf, sizeof buf) != buf) return 1;\n\
+         for (int i = 0; i < 16; i++) if (buf[i]) return 2;\n\
+         if (HandleToULong((HANDLE)(ULONG_PTR)0x1234) != 0x1234) return 3;\n\
+         PVOID (*zero)(PVOID, SIZE_T) = 0;\n\
+         if (b_side(&zero, HandleToULong)) return 4;\n\
+         return zero != RtlSecureZeroMemory ? 5 : 0;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "#include <windows.h>\n\
+         static LONG volatile word = 3;\n\
+         int b_side(PVOID (**zero)(PVOID, SIZE_T), unsigned long (*conv)(const void *)) {\n\
+         *zero = RtlSecureZeroMemory;\n\
+         if (InterlockedCompareExchange(&word, 9, 3) != 3 || word != 9) return 1;\n\
+         if (InterlockedIncrement(&word) != 10 || InterlockedExchangeAdd(&word, 5) != 10) return 1;\n\
+         return conv != HandleToULong || HandleToULong((HANDLE)(ULONG_PTR)7) != 7;\n\
+         }\n",
+    );
+    for (k, sdk) in sdks.iter().enumerate() {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("sdk{k}{opt}.exe"));
+            let out = Command::new(badc())
+                .args([opt, "-include", "msvc_compat.h", "-I"])
+                .arg(sdk.join("um"))
+                .arg("-I")
+                .arg(sdk.join("shared"))
+                .args(["a.c", "b.c", "-o"])
+                .arg(&exe)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{} {opt}: {err}", sdk.display());
+            let status = Command::new(&exe).status().expect("run the program");
+            assert_eq!(status.code(), Some(0), "{} {opt}", sdk.display());
+        }
+    }
+}
+
 /// A call to another unit's function whose result the caller returns is a
 /// sibling call at -O where the target takes one: the callee returns
 /// straight to the caller's caller, with the arguments the caller set.
@@ -813,6 +965,41 @@ fn a_label_in_an_empty_section_names_that_section() {
         let status = link_units_and_run(&dir, "-O0", &units);
         assert_eq!(status, Some(0), "labels linked {order}");
     }
+}
+
+/// Records the order of the `.init` fragments, the constructor and the
+/// destructor; the `.fini` fragment exits 7 when all ran in the gABI order.
+#[cfg(target_os = "linux")]
+const INIT_FINI_STEPS: &str = "#include <unistd.h>\n\
+int seq;\n\
+void step_a(void) { seq = seq * 10 + 1; }\n\
+void step_b(void) { seq = seq * 10 + 2; }\n\
+__attribute__((constructor)) static void ctor(void) { seq = seq * 10 + 3; }\n\
+__attribute__((destructor)) static void dtor(void) { seq = seq * 10 + 4; }\n\
+void fini_check(void) { _exit(seq == 1234 ? 7 : 9); }\n\
+int main(void) { return seq == 123 ? 0 : 1; }\n";
+
+// `.init` and `.fini` fragments run as crti.o and crtn.o bracket them under
+// GNU ld: in input order, before the constructors and after the
+// destructors. The first fragment's section is named without flags.
+#[cfg(target_os = "linux")]
+#[test]
+fn init_and_fini_fragments_run_around_constructors_and_destructors() {
+    let dir = tempdir("init-fini");
+    let (call, progbits) = if cfg!(target_arch = "aarch64") {
+        ("bl", "%progbits")
+    } else {
+        ("call", "@progbits")
+    };
+    let first = format!(
+        ".section .init\n\t{call} step_a\n.section .fini,\"ax\",{progbits}\n\t{call} fini_check\n"
+    );
+    let second = format!(".section .init,\"ax\",{progbits}\n\t{call} step_b\n");
+    let steps = write_source(&dir, "steps.c", INIT_FINI_STEPS);
+    let first = write_source(&dir, "first.s", &first);
+    let second = write_source(&dir, "second.s", &second);
+    let units = [steps.as_path(), first.as_path(), second.as_path()];
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(7));
 }
 
 // Gated on Linux: same end-to-end exec + native-ELF-only
@@ -1805,6 +1992,204 @@ fn a_shared_library_exports_its_default_visibility_definitions() {
             }
         }
     }
+}
+
+/// A dylib's reference no input defines fails the link, as under ld64's
+/// default `-undefined error`. `-undefined warning`, `suppress` and
+/// `dynamic_lookup`, given with `-Wl,` or to the driver, leave it for a
+/// flat-namespace lookup at load time, `warning` naming it. An ELF shared
+/// library keeps GNU ld's default and links it; `-undefined` is ld64's and
+/// refused for an ELF or PE image.
+#[test]
+fn a_dylib_reference_no_input_defines_fails_as_under_ld64() {
+    let dir = tempdir("macho-undefined");
+    write_source(
+        &dir,
+        "bogus.c",
+        "int nosuch_function_xyz(void);\nint f(void) { return nosuch_function_xyz(); }\n",
+    );
+    let link = |target: &str, args: &[&str]| {
+        Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["--shared", "bogus.c", "-o", "out.lib"])
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let undefined = "undefined reference to `nosuch_function_xyz` [B6010]";
+    let looked_up = "undefined reference to `nosuch_function_xyz`, looked up at load time [B6008]";
+    for args in [&[][..], &["-Wl,-undefined,error"]] {
+        let out = link("macos-aarch64", args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(undefined),
+            "{args:?}: {err}"
+        );
+    }
+    for (args, warns) in [
+        (&["-Wl,-undefined,warning"][..], true),
+        (&["-Wl,-undefined,suppress"], false),
+        (&["-Wl,-undefined,dynamic_lookup"], false),
+        (&["-undefined", "dynamic_lookup"], false),
+    ] {
+        let out = link("macos-aarch64", args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{args:?}: {err}");
+        assert_eq!(err.contains(looked_up), warns, "{args:?}: {err}");
+    }
+    let out = link("linux-x64", &[]);
+    assert!(out.status.success(), "{out:?}");
+    for target in ["linux-x64", "windows-x64"] {
+        let out = link(target, &["-Wl,-undefined,dynamic_lookup"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("`-undefined` is not supported"),
+            "{target}: {err}"
+        );
+    }
+}
+
+/// A dylib linked under `-undefined dynamic_lookup` takes the function it
+/// leaves undefined from the program that loads it, through the flat
+/// namespace.
+#[test]
+fn a_dynamic_lookup_dylib_takes_its_function_from_the_program() {
+    let dir = tempdir("macho-dynamic-lookup");
+    write_source(
+        &dir,
+        "plugin.c",
+        "int host_value(void);\nint plugin_call(void) { return host_value() + 1; }\n",
+    );
+    write_source(
+        &dir,
+        "host.c",
+        "#include <dlfcn.h>\n\
+         int host_value(void) { return 41; }\n\
+         int main(void)\n\
+         { void *h = dlopen(\"./libplugin.dylib\", RTLD_NOW);\n\
+           if (!h) return 2;\n\
+           int (*call)(void) = (int (*)(void))dlsym(h, \"plugin_call\");\n\
+           return call && call() == 42 ? 0 : 1; }\n",
+    );
+    let build = |args: &[&str]| {
+        run(
+            Command::new(badc())
+                .arg("--target=macos-aarch64")
+                .args(args)
+                .current_dir(&dir),
+            &format!("{args:?}"),
+        )
+    };
+    build(&[
+        "--shared",
+        "plugin.c",
+        "-Wl,-undefined,dynamic_lookup",
+        "-o",
+        "libplugin.dylib",
+    ]);
+    build(&["host.c", "-o", "host"]);
+    if cfg!(target_os = "macos") {
+        let status = Command::new(dir.join("host"))
+            .current_dir(&dir)
+            .status()
+            .expect("run the program");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
+/// A weak reference no input defines fails a Mach-O link, an executable's
+/// or a dylib's, as ld64 reports it; under `-undefined dynamic_lookup` it
+/// is a flat-namespace weak import, which dyld sets to 0 when no loaded
+/// image defines it. An ELF link resolves it to 0, as GNU ld does.
+#[test]
+fn a_weak_reference_no_input_defines_fails_a_mach_o_link() {
+    let dir = tempdir("macho-weak-undefined");
+    write_source(
+        &dir,
+        "fn.c",
+        "int w_fn(void) __attribute__((weak));\nint main(void) { return w_fn ? 1 : 42; }\n",
+    );
+    write_source(
+        &dir,
+        "obj.c",
+        "extern int w_obj __attribute__((weak_import));\nint main(void) { return &w_obj ? 1 : 42; }\n",
+    );
+    let link = |target: &str, src: &str, args: &[&str]| {
+        Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args([src, "-o", "img"])
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    for (src, name) in [("fn.c", "w_fn"), ("obj.c", "w_obj")] {
+        let undefined = format!("undefined reference to `{name}` [B6010]");
+        for args in [&[][..], &["--shared"], &["-Wl,-undefined,error"]] {
+            let out = link("macos-aarch64", src, args);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && err.contains(&undefined),
+                "{src} {args:?}: {err}"
+            );
+        }
+        let out = link("macos-aarch64", src, &["-Wl,-undefined,dynamic_lookup"]);
+        assert!(out.status.success(), "{src}: {out:?}");
+        if cfg!(target_os = "macos") {
+            let status = Command::new(dir.join("img")).status().expect("run img");
+            assert_eq!(status.code(), Some(42), "{src}");
+        }
+    }
+    let out = link("linux-x64", "fn.c", &[]);
+    assert!(out.status.success(), "{out:?}");
+}
+
+/// A weak reference a linked dylib defines binds as a weak import, as
+/// under ld64: the program runs against the dylib, and against one of the
+/// same install name lacking the names, each reference reading 0.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_weak_import_from_a_dylib_reads_zero_when_the_dylib_lacks_it() {
+    let dir = tempdir("macos-weak-import");
+    let lacking = dir.join("lacking");
+    std::fs::create_dir_all(&lacking).expect("create the directory");
+    let dep = "int dep_fn(void) { return 7; }\nint dep_var = 9;\n";
+    write_source(&dir, "dep.c", dep);
+    write_source(&lacking, "dep.c", "int dep_other(void) { return 0; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "int dep_fn(void) __attribute__((weak_import));\n\
+         extern int dep_var __attribute__((weak));\n\
+         int main(void)\n\
+         { if (dep_fn && &dep_var) return dep_fn() == 7 && dep_var == 9 ? 0 : 1;\n\
+           return dep_fn || &dep_var ? 2 : 42; }\n",
+    );
+    let install_name = dir.join("libdep.dylib");
+    for d in [&*dir, &lacking] {
+        let ok = Command::new("cc")
+            .args(["-dynamiclib", "dep.c", "-o", "libdep.dylib"])
+            .arg("-install_name")
+            .arg(&install_name)
+            .current_dir(d)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !ok {
+            return; // no platform toolchain on this host
+        }
+    }
+    run(
+        Command::new(badc())
+            .args(["main.c", "-L.", "-ldep", "-o", "prog"])
+            .current_dir(&dir),
+        "link against the dylib",
+    );
+    let status = Command::new(dir.join("prog")).status().expect("run prog");
+    assert_eq!(status.code(), Some(0), "with the dylib's names");
+    std::fs::rename(lacking.join("libdep.dylib"), &install_name).expect("swap the dylib");
+    let status = Command::new(dir.join("prog")).status().expect("run prog");
+    assert_eq!(status.code(), Some(42), "without the dylib's names");
 }
 
 /// A link input whose suffix names no kind, such as `X.OBJ`, `libx.LIB` or a
@@ -2957,6 +3342,9 @@ fn a_static_function_no_body_defines_is_an_undefined_reference() {
     }
 }
 
+/// C99 6.7.4p7: the address of an inline definition names the external
+/// definition, which no unit provides here. The PE targets take MSVC's
+/// linkage, where the address emits the unit's own pick-any definition.
 #[test]
 fn inline_definition_address_without_an_external_definition_fails_link() {
     let dir = tempdir("inline-addr-undef");
@@ -2967,23 +3355,36 @@ fn inline_definition_address_without_an_external_definition_fails_link() {
          int (*p)(int) = f;\n\
          int main(void) { return p(41); }\n",
     );
-    let result = Command::new(badc())
-        .arg("-o")
-        .arg(dir.join("prog"))
-        .arg(dir.join("only.c"))
-        .current_dir(&dir)
-        .output()
-        .expect("invoke badc");
-    assert!(
-        !result.status.success(),
-        "link should have failed: stderr={:?}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let stderr = String::from_utf8_lossy(&result.stderr);
-    assert!(
-        stderr.contains("undefined reference") && stderr.contains('f'),
-        "expected an undefined reference to `f`, got: {stderr}"
-    );
+    for target in ["linux-x64", "linux-aarch64", "macos-aarch64"] {
+        let result = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(dir.join("only.c"))
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            !result.status.success(),
+            "{target}: link should have failed: {stderr}"
+        );
+        assert!(
+            stderr.contains("undefined reference") && stderr.contains('f'),
+            "{target}: expected an undefined reference to `f`, got: {stderr}"
+        );
+    }
+    for target in ["windows-x64", "windows-arm64"] {
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(dir.join(format!("prog-{target}.exe")))
+                .arg(dir.join("only.c"))
+                .current_dir(&dir),
+            target,
+        );
+    }
 }
 
 // C99 6.7.9p23 + 6.2.2: a function-pointer initializer whose
@@ -5052,6 +5453,629 @@ fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The file offset of `rva` in a PE32+ image.
+fn pe_rva_offset(pe: &[u8], rva: u32) -> Option<usize> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let pe_off = word(0x3c) as usize;
+    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+    (0..n_sec).find_map(|i| {
+        let s = pe_off + 24 + so_hdr + i * 40;
+        let (va, span, raw) = (word(s + 12), word(s + 8).max(word(s + 16)), word(s + 20));
+        (rva >= va && rva < va + span).then(|| (raw + rva - va) as usize)
+    })
+}
+
+/// The RVA of the import address table slot `dll` fills with `symbol`.
+fn pe_iat_slot(pe: &[u8], dll: &str, symbol: &str) -> Option<u32> {
+    let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
+    let opt = word(0x3c) as usize + 24;
+    let mut desc = pe_rva_offset(pe, word(opt + 120))?;
+    for (name, symbols) in pe_import_directory(pe) {
+        let iat = word(desc + 16);
+        if name.eq_ignore_ascii_case(dll)
+            && let Some(i) = symbols.iter().position(|s| s == symbol)
+        {
+            return Some(iat + 8 * i as u32);
+        }
+        desc += 20;
+    }
+    None
+}
+
+/// An image-relative field (ADDR32NB) naming an imported function, as a
+/// `.xdata` record names its language handler, holds the RVA of the
+/// import's stub inside the image, which jumps through the import's
+/// address table slot: `jmp [rip + disp]` on x64, `adrp x16; ldr x16;
+/// br x16` on arm64.
+#[test]
+fn an_image_relative_field_naming_an_import_takes_its_stub() {
+    const MAGIC: [u8; 4] = [0x5E, 0xB5, 0xEB, 0x5E];
+    let rows: [(&str, u16, u16); 2] = [("windows-x64", 0x8664, 3), ("windows-arm64", 0xAA64, 2)];
+    for (target, machine, addr32nb) in rows {
+        let dir = tempdir(&format!("addr32nb-import-{target}"));
+        let rdata = [MAGIC, [0; 4]].concat();
+        let relocs = [(4, 1, addr32nb)];
+        let object = coff_relocatable(
+            machine,
+            &[(".rdata", 0x4030_0040, &rdata, &relocs)],
+            &[("seh_table", 1, 0, 2), ("__C_specific_handler", 0, 0x20, 2)],
+        );
+        std::fs::write(dir.join("table.coff"), object).expect("write object");
+        let main = write_source(
+            &dir,
+            "main.c",
+            "extern const unsigned seh_table[2];\n\
+             int main(void) { return seh_table[1] == 0; }\n",
+        );
+        let exe = dir.join("t.exe");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&main)
+                .arg(dir.join("table.coff"))
+                .arg("-o")
+                .arg(&exe),
+            "link the table",
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let at = pe
+            .windows(4)
+            .position(|w| w == MAGIC)
+            .expect("the table in the image");
+        let field = u32::from_le_bytes(pe[at + 4..at + 8].try_into().unwrap());
+        let slot = pe_iat_slot(&pe, "msvcrt.dll", "__C_specific_handler").expect("the import");
+        let stub = pe_rva_offset(&pe, field).expect("the field names an RVA in the image");
+        let insn =
+            |i: usize| u32::from_le_bytes(pe[stub + 4 * i..stub + 4 * i + 4].try_into().unwrap());
+        let reached = if machine == 0x8664 {
+            assert_eq!(
+                pe[stub..stub + 2],
+                [0xFF, 0x25],
+                "{target}: no `jmp [rip + disp]`"
+            );
+            let disp = i32::from_le_bytes(pe[stub + 2..stub + 6].try_into().unwrap());
+            (i64::from(field) + 6 + i64::from(disp)) as u32
+        } else {
+            let (adrp, ldr) = (insn(0), insn(1));
+            assert_eq!(adrp & 0x9F00_001F, 0x9000_0010, "{target}: no `adrp x16`");
+            assert_eq!(
+                ldr & 0xFFC0_03FF,
+                0xF940_0210,
+                "{target}: no `ldr x16, [x16]`"
+            );
+            assert_eq!(insn(2), 0xD61F_0200, "{target}: no `br x16`");
+            let pages = (((adrp >> 5) & 0x7_FFFF) << 2 | (adrp >> 29) & 3) as i32;
+            let page = (field & !0xFFF) as i64 + ((i64::from(pages) << 44) >> 32);
+            (page + i64::from((ldr >> 10) & 0xFFF) * 8) as u32
+        };
+        assert_eq!(
+            reached, slot,
+            "{target}: the stub reaches {reached:#x}, the slot is {slot:#x}"
+        );
+    }
+}
+
+/// A kernel-mode (native-subsystem) image takes the language handler, and
+/// the rest of the C runtime it calls, from ntoskrnl.exe.
+/// A driver takes the C runtime it imports, `__C_specific_handler` among it,
+/// from ntoskrnl.exe and a native application from ntdll.dll; neither imports
+/// any other DLL.
+#[test]
+fn a_native_image_takes_the_c_runtime_from_its_system_module() {
+    for target in ["windows-x64", "windows-arm64"] {
+        for (kind, module) in [("driver", "ntoskrnl.exe"), ("native", "ntdll.dll")] {
+            let dir = tempdir(&format!("native-crt-{kind}-{target}"));
+            let src = write_source(
+                &dir,
+                "image.c",
+                &format!(
+                    "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n\
+                     #include <windows.h>\n#include <string.h>\n\
+                     long Entry(void *a, void *b)\n\
+                     {{ long r; (void)b;\n\
+                       __try {{ r = (long)strlen((const char *)a); }}\n\
+                       __except (EXCEPTION_EXECUTE_HANDLER) {{ r = -1; }}\n\
+                       return r; }}\n"
+                ),
+            );
+            let image = dir.join("image.sys");
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&image),
+                "link the image",
+            );
+            let pe = std::fs::read(&image).expect("read image");
+            let imports = pe_imports(&pe);
+            for name in ["__C_specific_handler", "strlen"] {
+                assert!(
+                    imports.contains(&(module.into(), name.into())),
+                    "{target} {kind}: {imports:?}"
+                );
+            }
+            assert_eq!(
+                pe_import_dll_names(&pe),
+                [module],
+                "{target} {kind}: {imports:?}"
+            );
+        }
+    }
+}
+
+/// A kernel32 function the unit declares itself, with no header or binding,
+/// imports from kernel32.dll, which a Windows image links by default as
+/// link.exe does through the C runtime library's `/DEFAULTLIB:kernel32.lib`.
+/// The image gains no other import, and runs on a host of its machine.
+#[test]
+fn a_self_declared_kernel32_function_imports_from_kernel32() {
+    let host = if cfg!(target_arch = "aarch64") {
+        "windows-arm64"
+    } else {
+        "windows-x64"
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let dir = tempdir(&format!("self-declared-kernel32-{target}"));
+        write_source(&dir, "plain.c", "int main(void) { return 0; }\n");
+        write_source(
+            &dir,
+            "own.c",
+            "typedef unsigned long DWORD;\ntypedef void *HMODULE;\n\
+             __declspec(dllimport) DWORD __stdcall GetLastError(void);\n\
+             __declspec(dllimport) HMODULE __stdcall GetModuleHandleA(const char *name);\n\
+             int __stdcall lstrlenA(const char *s);\n\
+             int main(void)\n\
+             { if (!GetModuleHandleA(0)) return 1;\n\
+               if (lstrlenA(\"abcd\") != 4) return 2;\n\
+               return (int)GetLastError() * 0; }\n",
+        );
+        let link = |src: &str| {
+            let exe = dir.join(src.replace(".c", ".exe"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args([src, "-o"])
+                    .arg(&exe)
+                    .current_dir(&dir),
+                &format!("link {src} for {target}"),
+            );
+            exe
+        };
+        let plain = pe_imports(&std::fs::read(link("plain.c")).unwrap());
+        let exe = link("own.c");
+        let mut own = pe_imports(&std::fs::read(&exe).unwrap());
+        for name in ["GetLastError", "GetModuleHandleA", "lstrlenA"] {
+            let import = ("kernel32.dll".to_string(), name.to_string());
+            assert!(own.contains(&import), "{target}: {own:?}");
+            if !plain.contains(&import) {
+                own.retain(|i| *i != import);
+            }
+        }
+        own.sort();
+        let mut plain = plain;
+        plain.sort();
+        assert_eq!(own, plain, "{target}: the imports besides the three");
+        if cfg!(windows) && target == host {
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "{target}");
+        }
+    }
+}
+
+/// A self-declared function kernel32.dll does not export stays an undefined
+/// reference: an unknown name, and a user32 one, which link.exe does not
+/// link by default either.
+#[test]
+fn a_name_kernel32_does_not_export_is_undefined() {
+    for target in ["windows-x64", "windows-arm64"] {
+        let dir = tempdir(&format!("kernel32-undefined-{target}"));
+        write_source(
+            &dir,
+            "u.c",
+            "int __stdcall MessageBoxA(void *, const char *, const char *, unsigned);\n\
+             void NotInKernel32(void);\n\
+             int main(void) { NotInKernel32(); return MessageBoxA(0, \"\", \"\", 0); }\n",
+        );
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["u.c", "-o", "u.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        for name in ["NotInKernel32", "MessageBoxA"] {
+            let want = format!("undefined reference to `{name}` [B6010]");
+            assert!(
+                !out.status.success() && err.contains(&want),
+                "{target}: {err}"
+            );
+        }
+    }
+}
+
+/// A driver or a native application cannot load kernel32.dll and takes none
+/// of its functions by default: a self-declared one is undefined.
+#[test]
+fn a_native_image_takes_no_kernel32_function() {
+    for target in ["windows-x64", "windows-arm64"] {
+        for kind in ["driver", "native"] {
+            let dir = tempdir(&format!("native-no-kernel32-{kind}-{target}"));
+            write_source(
+                &dir,
+                "image.c",
+                &format!(
+                    "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n\
+                     unsigned long __stdcall GetLastError(void);\n\
+                     long Entry(void *a, void *b) {{ (void)a; (void)b; \
+                     return (long)GetLastError(); }}\n"
+                ),
+            );
+            let out = Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["image.c", "-o", "image.sys"])
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success()
+                    && err.contains("undefined reference to `GetLastError` [B6010]"),
+                "{target} {kind}: {err}"
+            );
+        }
+    }
+}
+
+/// A C runtime name the system module of a native-subsystem image does not
+/// export is an undefined reference naming the module, unless an import
+/// library on the command line supplies it.
+#[test]
+fn a_native_image_refuses_a_name_its_system_module_does_not_export() {
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("native-crt-refused-{target}"));
+        let source = |kind: &str, call: &str| {
+            format!(
+                "#pragma subsystem({kind})\n#pragma entrypoint(Entry)\n#include <stdlib.h>\n\
+                 long Entry(void *a, void *b) {{ (void)b; return (long){call}; }}\n"
+            )
+        };
+        write_source(
+            &dir,
+            "drv.c",
+            &source("driver", "strtol((const char *)a, 0, 10)"),
+        );
+        write_source(
+            &dir,
+            "app.c",
+            &source("native", "(long long)malloc((size_t)a)"),
+        );
+        let lib = short_import_library("ntoskrnl.exe", &[(machine, "strtol", None)]);
+        std::fs::write(dir.join("krnl.lib"), lib).unwrap();
+        let link = |args: &[&str]| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        for (src, want) in [
+            (
+                "drv.c",
+                "undefined reference to `strtol`: a driver takes the C runtime from \
+                 ntoskrnl.exe, which does not export it",
+            ),
+            (
+                "app.c",
+                "undefined reference to `malloc`: a native application takes the C runtime \
+                 from ntdll.dll, which does not export it",
+            ),
+        ] {
+            let out = link(&[src, "-o", "image.sys"]);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && err.contains(want),
+                "{target} {src}: {err}"
+            );
+        }
+        let out = link(&["drv.c", "krnl.lib", "-o", "drv.sys"]);
+        assert!(out.status.success(), "{target}: {out:?}");
+        let pe = std::fs::read(dir.join("drv.sys")).expect("read image");
+        let imports = pe_imports(&pe);
+        assert!(
+            imports.contains(&("ntoskrnl.exe".into(), "strtol".into())),
+            "{target}: {imports:?}"
+        );
+    }
+}
+
+/// An import library on the command line that supplies a name the bundled
+/// headers bind to the C runtime outranks the binding, as with link.exe and
+/// GNU ld: the image imports the name from the library's DLL.
+#[test]
+fn an_import_library_outranks_a_header_binding() {
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("pe-import-library-precedence-{target}"));
+        write_source(
+            &dir,
+            "main.c",
+            "#include <string.h>\n\
+             int main(int argc, char **argv) { (void)argc; return (int)strlen(argv[0]); }\n",
+        );
+        let lib = short_import_library("mycrt.dll", &[(machine, "strlen", None)]);
+        std::fs::write(dir.join("mycrt.lib"), lib).unwrap();
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["main.c", "mycrt.lib", "-o", "main.exe"])
+                .current_dir(&dir),
+            "link with the import library",
+        );
+        let pe = std::fs::read(dir.join("main.exe")).expect("read image");
+        let imports = pe_imports(&pe);
+        assert!(
+            imports.contains(&("mycrt.dll".into(), "strlen".into()))
+                && !imports.contains(&("msvcrt.dll".into(), "strlen".into())),
+            "{target}: {imports:?}"
+        );
+    }
+}
+
+/// Objects cl compiled with `__except` and `__finally` (seh_cl.c beside
+/// them) link with badc and handle exceptions at run time, raised in the
+/// cl function itself and in badc functions it calls, so the unwinder
+/// passes badc frames and runs a `__finally` for an exception. A cl filter
+/// funclet decides over badc frames, and a badc filter funclet over a cl
+/// frame and over a cl filter that passed the exception on. A badc
+/// `__finally` runs between a raise and a cl `__except`, a cl one between a
+/// badc raise and a badc `__except`, and cl's `return` through a
+/// `__finally` reaches msvcrt's `_local_unwind`.
+#[cfg(windows)]
+#[test]
+fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
+    let (target, object) = if cfg!(target_arch = "aarch64") {
+        ("windows-arm64", "seh_cl.arm64.coff")
+    } else {
+        ("windows-x64", "seh_cl.x64.coff")
+    };
+    let object = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/coff")
+        .join(object);
+    let dir = tempdir("cl-seh-objects");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n\
+         int cl_read_or_minus_one(volatile int *p);\n\
+         int cl_finally(int *flag, void (*fn)(void));\n\
+         unsigned long cl_catch(void (*fn)(void));\n\
+         int cl_filter(void (*fn)(void), unsigned long want, int *seen);\n\
+         void cl_store(volatile int *p, int v);\n\
+         static volatile int seven = 7;\n\
+         static int flag;\n\
+         static void nothing(void) {}\n\
+         static void fault(void) { *(volatile int *)0 = 1; }\n\
+         static void raise_code(void) { RaiseException(0xE0001234, 0, 0, 0); }\n\
+         static void finally_inside(void) { cl_finally(&flag, fault); }\n\
+         __attribute__((noinline)) static void raise_deep(int n)\n\
+         {\n\
+             volatile int local = n;\n\
+             if (local) raise_deep(local - 1); else RaiseException(0xE0000099, 0, 0, 0);\n\
+         }\n\
+         static void raise_99(void) { raise_deep(3); }\n\
+         static void raise_aa(void) { RaiseException(0xE00000AA, 0, 0, 0); }\n\
+         static int badc_over_cl(void)\n\
+         {\n\
+             int code = 0;\n\
+             __try {\n\
+                 cl_store(0, 5);\n\
+             } __except (code = GetExceptionCode(), code == EXCEPTION_ACCESS_VIOLATION) {\n\
+                 code += 1;\n\
+             }\n\
+             return code == EXCEPTION_ACCESS_VIOLATION + 1;\n\
+         }\n\
+         static int badc_over_cl_filter(void)\n\
+         {\n\
+             int seen = -1, outer = 0;\n\
+             __try {\n\
+                 cl_filter(raise_aa, 0xE0000099, &seen);\n\
+             } __except (outer = seen, GetExceptionCode() == 0xE00000AA) {\n\
+                 outer += 100;\n\
+             }\n\
+             return outer == 110;\n\
+         }\n\
+         int cl_return_through(int *flag, int (*fn)(void));\n\
+         static int finally_flag;\n\
+         static void badc_finally_raiser(void)\n\
+         {\n\
+             __try {\n\
+                 RaiseException(0xE00000BB, 0, 0, 0);\n\
+             } __finally {\n\
+                 finally_flag = AbnormalTermination() ? 2 : 1;\n\
+             }\n\
+         }\n\
+         static int forty(void) { return 40; }\n\
+         static int raise_int(void) { RaiseException(0xE00000CC, 0, 0, 0); return 0; }\n\
+         static int finally_interop(void)\n\
+         {\n\
+             int flag = 0, r = 0;\n\
+             if (cl_catch(badc_finally_raiser) != 0xE00000BB || finally_flag != 2) return 1;\n\
+             __try {\n\
+                 cl_finally(&flag, raise_code);\n\
+             } __except (EXCEPTION_EXECUTE_HANDLER) {\n\
+                 r = GetExceptionCode() == 0xE0001234;\n\
+             }\n\
+             if (!r || flag != 2) return 2;\n\
+             flag = 0;\n\
+             if (cl_return_through(&flag, forty) != 41 || flag != 11) return 3;\n\
+             flag = 0;\n\
+             r = 0;\n\
+             __try {\n\
+                 cl_return_through(&flag, raise_int);\n\
+             } __except (EXCEPTION_EXECUTE_HANDLER) {\n\
+                 r = GetExceptionCode() == 0xE00000CC;\n\
+             }\n\
+             return !r || flag != 11 ? 4 : 0;\n\
+         }\n\
+         int main(void)\n\
+         {\n\
+             int seen = 0, fi = finally_interop();\n\
+             if (fi) return 20 + fi;\n\
+             if (cl_read_or_minus_one(&seven) != 7) return 1;\n\
+             if (cl_read_or_minus_one(0) != -1) return 2;\n\
+             if (cl_finally(&flag, nothing) != 0 || flag != 1) return 3;\n\
+             if (cl_catch(raise_code) != 0xE0001234) return 4;\n\
+             if (cl_catch(fault) != EXCEPTION_ACCESS_VIOLATION) return 5;\n\
+             flag = 0;\n\
+             if (cl_catch(finally_inside) != EXCEPTION_ACCESS_VIOLATION || flag != 2) return 6;\n\
+             if (cl_filter(raise_99, 0xE0000099, &seen) != -1 || seen != 11) return 7;\n\
+             if (cl_filter(nothing, 0xE0000099, &seen) != 2) return 8;\n\
+             if (!badc_over_cl()) return 9;\n\
+             if (!badc_over_cl_filter()) return 10;\n\
+             return 0;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("seh{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg(&main)
+                .arg(&object)
+                .arg("-o")
+                .arg(&exe),
+            "link the cl objects",
+        );
+        let out = Command::new(&exe).output().expect("run the image");
+        assert_eq!(out.status.code(), Some(0), "{target} {opt}: {out:?}");
+    }
+}
+
+/// Structured exception handling across a DLL boundary, both ways: a cl
+/// executable calls a badc DLL, and a badc executable a cl DLL (seh_host_cl.c
+/// and seh_dll_cl.c beside the images). Each side raises and the other
+/// catches with `__except`, the `__finally` blocks of both sides run during
+/// the unwind, innermost first, and a badc `longjmp` to a badc `setjmp` runs
+/// the `__finally` block of the cl frame between them.
+#[cfg(windows)]
+#[test]
+fn structured_exceptions_cross_a_dll_boundary() {
+    let (target, arch) = if cfg!(target_arch = "aarch64") {
+        ("windows-arm64", "arm64")
+    } else {
+        ("windows-x64", "x64")
+    };
+    let coff = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coff");
+    let dir = tempdir("seh-dll-boundary");
+    let dll_src = write_source(
+        &dir,
+        "seh_badc.c",
+        "#include <windows.h>\n#include <setjmp.h>\n\
+         #define NOTE(f) (*(f) = *(f) * 10 + (AbnormalTermination() ? 4 : 3))\n\
+         static jmp_buf jb;\n\
+         __declspec(dllexport) void badc_raise(unsigned long code, int *flag)\n\
+         {\n\
+             __try { RaiseException(code, 0, 0, 0); } __finally { NOTE(flag); }\n\
+         }\n\
+         __declspec(dllexport) unsigned long badc_catch(void (*fn)(int *), int *flag)\n\
+         {\n\
+             unsigned long code = 0;\n\
+             __try {\n\
+                 __try { fn(flag); } __finally { NOTE(flag); }\n\
+             } __except (code = GetExceptionCode(), code >= 0xE0000000) {\n\
+                 *flag = *flag * 10 + 7;\n\
+             }\n\
+             return code;\n\
+         }\n\
+         static void badc_longjmp(int *flag) { *flag = *flag * 10 + 5; longjmp(jb, 1); }\n\
+         __declspec(dllexport) int badc_jump_across(void (*fn)(void (*)(int *), int *), int *flag)\n\
+         {\n\
+             if (setjmp(jb) == 0) { fn(badc_longjmp, flag); return -1; }\n\
+             return *flag;\n\
+         }\n",
+    );
+    let main_src = write_source(
+        &dir,
+        "main.c",
+        "#include <windows.h>\n#include <setjmp.h>\n\
+         __declspec(dllimport) void cl_dll_raise(unsigned long code, int *flag);\n\
+         __declspec(dllimport) unsigned long cl_dll_catch(void (*fn)(int *), int *flag);\n\
+         __declspec(dllimport) void cl_dll_through(void (*fn)(int *), int *flag);\n\
+         #define NOTE(f) (*(f) = *(f) * 10 + (AbnormalTermination() ? 4 : 3))\n\
+         static int flag;\n\
+         static jmp_buf jb;\n\
+         static void badc_raiser(int *f)\n\
+         {\n\
+             __try { RaiseException(0xE0000B02, 0, 0, 0); } __finally { NOTE(f); }\n\
+         }\n\
+         static void badc_longjmp(int *f) { *f = *f * 10 + 5; longjmp(jb, 1); }\n\
+         static void nothing(int *f) { (void)f; }\n\
+         int main(void)\n\
+         {\n\
+             int caught = 0;\n\
+             __try {\n\
+                 __try { cl_dll_raise(0xE0000C01, &flag); } __finally { NOTE(&flag); }\n\
+             } __except (GetExceptionCode() == 0xE0000C01) {\n\
+                 caught = 1;\n\
+             }\n\
+             if (!caught || flag != 24) return 1;\n\
+             flag = 0;\n\
+             if (cl_dll_catch(badc_raiser, &flag) != 0xE0000B02 || flag != 426) return 2;\n\
+             flag = 0;\n\
+             if (setjmp(jb) == 0) { cl_dll_through(badc_longjmp, &flag); return 3; }\n\
+             if (flag != 52) return 4;\n\
+             flag = 0;\n\
+             cl_dll_through(nothing, &flag);\n\
+             return flag == 1 ? 0 : 5;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        let run_dir = dir.join(format!("run{opt}"));
+        std::fs::create_dir_all(&run_dir).expect("run directory");
+        let copy = |from: String, to: &str| {
+            std::fs::copy(coff.join(&from), run_dir.join(to)).expect(&from);
+        };
+        copy(format!("seh_host_cl.{arch}.pe"), "host.exe");
+        copy(
+            format!("seh_dll_cl.{arch}.pe"),
+            &format!("seh_dll_cl.{arch}.dll"),
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg("-shared")
+                .arg(&dll_src)
+                .arg("-o")
+                .arg(run_dir.join("seh_badc.dll")),
+            "build the badc DLL",
+        );
+        let exe = run_dir.join("main.exe");
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(opt)
+                .arg(&main_src)
+                .arg(coff.join(format!("seh_dll_cl.{arch}.lib")))
+                .arg("-o")
+                .arg(&exe),
+            "link against the cl DLL",
+        );
+        for image in [run_dir.join("host.exe"), exe] {
+            let out = Command::new(&image).output().expect("run the image");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{target} {opt} {}: {out:?}",
+                image.display()
+            );
+        }
+    }
+}
+
 /// An import library of short import members (PE/COFF specification), each
 /// `(machine, name, ordinal)` importing a function from `dll`.
 fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<u8> {
@@ -5082,6 +6106,67 @@ fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<
         }
     }
     out
+}
+
+/// A DLL link resolves a function only against what the link supplies --
+/// an import library, or the C library the bundled headers bind a
+/// self-declared `puts` to -- and reports any other reference undefined,
+/// as an executable link does: a PE import names its DLL.
+#[test]
+fn a_dll_link_reports_a_function_no_library_supplies() {
+    let dir = tempdir("pe-dll-undefined");
+    write_source(
+        &dir,
+        "bogus.c",
+        "int nosuch_function_xyz(void);\n#pragma export(f)\n\
+         int f(void) { return nosuch_function_xyz(); }\n",
+    );
+    write_source(
+        &dir,
+        "say.c",
+        "int puts(const char *);\n#pragma export(f)\nint f(void) { return puts(\"x\"); }\n",
+    );
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let link = |args: &[&str]| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("--shared")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .expect("run badc")
+        };
+        let out = link(&["bogus.c", "-o", "bogus.dll"]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("undefined reference to `nosuch_function_xyz`"),
+            "{target}: {err}"
+        );
+        let lib = short_import_library("nosuch.dll", &[(machine, "nosuch_function_xyz", None)]);
+        std::fs::write(dir.join("nosuch.lib"), lib).unwrap();
+        for (args, dll, import) in [
+            (
+                &["bogus.c", "nosuch.lib", "-o", "bogus.dll"][..],
+                "bogus.dll",
+                ("nosuch.dll", "nosuch_function_xyz"),
+            ),
+            (
+                &["say.c", "-o", "say.dll"][..],
+                "say.dll",
+                ("msvcrt.dll", "puts"),
+            ),
+        ] {
+            let out = link(args);
+            assert!(
+                out.status.success(),
+                "{target} {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let imports = pe_imports(&std::fs::read(dir.join(dll)).unwrap());
+            let want = (import.0.to_string(), import.1.to_string());
+            assert!(imports.contains(&want), "{target} {dll}: {imports:?}");
+        }
+    }
 }
 
 /// A PE link imports through what Windows toolchains name a library by:
@@ -5289,39 +6374,186 @@ fn coff_object(
     sections: &[(&str, u32, &[u8])],
     symbols: &[(&str, i16, bool)],
 ) -> Vec<u8> {
-    let name8 = |name: &str| {
+    let sections: Vec<CoffSection> = (sections.iter())
+        .map(|&(name, flags, content)| (name, flags, content, &[][..]))
+        .collect();
+    let symbols: Vec<CoffSymbol> = (symbols.iter())
+        .map(|&(name, section, function)| (name, section, u16::from(function) * 0x20, 2))
+        .collect();
+    coff_relocatable(machine, &sections, &symbols)
+}
+
+/// A section of [`coff_relocatable`]: name (8 bytes at most),
+/// characteristics, content and `(offset, symbol index, type)` relocations.
+type CoffSection<'a> = (&'a str, u32, &'a [u8], CoffRelocs<'a>);
+type CoffRelocs<'a> = &'a [(u32, u32, u16)];
+/// A symbol record at the start of its section: name, 1-based section (0
+/// undefined), type and storage class.
+type CoffSymbol<'a> = (&'a str, i16, u16, u8);
+
+/// A COFF object for `machine` (PE/COFF specification): the section table,
+/// each section's content then its relocations, the symbol table and the
+/// string table holding the symbol names over 8 bytes.
+fn coff_relocatable(machine: u16, sections: &[CoffSection], symbols: &[CoffSymbol]) -> Vec<u8> {
+    let mut strings = vec![0u8; 4];
+    let mut name8 = |name: &str| {
         let mut field = [0u8; 8];
-        field[..name.len()].copy_from_slice(name.as_bytes());
+        if name.len() <= 8 {
+            field[..name.len()].copy_from_slice(name.as_bytes());
+        } else {
+            field[4..].copy_from_slice(&(strings.len() as u32).to_le_bytes());
+            strings.extend([name.as_bytes(), b"\0"].concat());
+        }
         field
     };
     let mut at = 20 + 40 * sections.len();
-    let data: Vec<u8> = sections.iter().flat_map(|s| s.2.iter().copied()).collect();
+    let mut body = Vec::new();
+    let mut headers = Vec::new();
+    for &(name, flags, content, relocs) in sections {
+        let raw = at + body.len();
+        body.extend(content);
+        let rel = at + body.len();
+        for &(offset, symbol, kind) in relocs {
+            body.extend(offset.to_le_bytes());
+            body.extend(symbol.to_le_bytes());
+            body.extend(kind.to_le_bytes());
+        }
+        headers.extend(name8(name));
+        headers.extend([0; 8]);
+        headers.extend((content.len() as u32).to_le_bytes());
+        headers.extend((raw as u32).to_le_bytes());
+        headers.extend((rel as u32).to_le_bytes());
+        headers.extend([0; 4]);
+        headers.extend((relocs.len() as u16).to_le_bytes());
+        headers.extend([0; 2]);
+        headers.extend(flags.to_le_bytes());
+    }
+    at += body.len();
+    for &(name, section, kind, class) in symbols {
+        body.extend(name8(name));
+        body.extend(0u32.to_le_bytes());
+        body.extend(section.to_le_bytes());
+        body.extend(kind.to_le_bytes());
+        body.extend([class, 0]);
+    }
+    let len = strings.len() as u32;
+    strings[..4].copy_from_slice(&len.to_le_bytes());
     let mut out = machine.to_le_bytes().to_vec();
     out.extend((sections.len() as u16).to_le_bytes());
     out.extend(0u32.to_le_bytes());
-    out.extend(((at + data.len()) as u32).to_le_bytes());
+    out.extend((at as u32).to_le_bytes());
     out.extend((symbols.len() as u32).to_le_bytes());
     out.extend([0; 4]);
-    for &(name, flags, content) in sections {
-        out.extend(name8(name));
-        out.extend([0; 8]);
-        out.extend((content.len() as u32).to_le_bytes());
-        out.extend((at as u32).to_le_bytes());
-        out.extend([0; 12]);
-        out.extend(flags.to_le_bytes());
-        at += content.len();
-    }
-    out.extend(data);
-    for &(name, section, function) in symbols {
-        out.extend(name8(name));
-        out.extend(0u32.to_le_bytes());
-        out.extend(section.to_le_bytes());
-        out.extend(u16::from(function).wrapping_mul(0x20).to_le_bytes());
-        // IMAGE_SYM_CLASS_EXTERNAL, no auxiliary record.
-        out.extend([2, 0]);
-    }
-    out.extend(4u32.to_le_bytes());
+    out.extend(headers);
+    out.extend(body);
+    out.extend(strings);
     out
+}
+
+/// GNU dlltool's import library for `dll` (`dlltool -l`): a head member
+/// holding the import directory entry, whose Name field (offset 12)
+/// addresses the DLL name the tail member defines, and for each `(name,
+/// data, ordinal)` a member whose `.idata$5` slot holds a hint/name RVA or
+/// an ordinal, a code import's beside its `jmp` thunk. The import members'
+/// `.idata$` sections name no content type, as dlltool writes them.
+fn dlltool_import_library(
+    machine: u16,
+    dll: &str,
+    imports: &[(&str, bool, Option<u16>)],
+) -> Vec<u8> {
+    const IDATA: u32 = 0xC030_0000;
+    const IDATA_CNT: u32 = IDATA | 0x40;
+    const TEXT: u32 = 0x6030_0020;
+    // adrp x16, __imp_<name>; ldr x16, [x16, :lo12:__imp_<name>]; br x16
+    let arm64_thunk = [0x9000_0010u32, 0xF940_0210, 0xD61F_0200]
+        .map(u32::to_le_bytes)
+        .concat();
+    let (nb, thunk, thunk_relocs): (u16, &[u8], CoffRelocs) = if machine == 0x8664 {
+        (3, &[0xFF, 0x25, 0, 0, 0, 0, 0x90, 0x90], &[(2, 1, 4)])
+    } else {
+        (2, &arm64_thunk, &[(0, 1, 4), (4, 1, 7)])
+    };
+    let name = format!("{dll}\0").into_bytes();
+    let head = coff_relocatable(
+        machine,
+        &[
+            (
+                ".idata$2",
+                IDATA_CNT,
+                &[0; 20],
+                &[(0, 0, nb), (12, 3, nb), (16, 1, nb)],
+            ),
+            (".idata$5", IDATA_CNT, &[], &[]),
+            (".idata$4", IDATA_CNT, &[], &[]),
+        ],
+        &[
+            (".idata$4", 3, 0, 3),
+            (".idata$5", 2, 0, 3),
+            ("_head_libtest_a", 1, 0, 2),
+            ("__libtest_a_iname", 0, 0, 2),
+        ],
+    );
+    let tail = coff_relocatable(
+        machine,
+        &[
+            (".idata$4", IDATA_CNT, &[0; 8], &[]),
+            (".idata$5", IDATA_CNT, &[0; 8], &[]),
+            (".idata$7", IDATA_CNT, &name, &[]),
+        ],
+        &[("__libtest_a_iname", 3, 0, 2)],
+    );
+    let mut members = vec![
+        (
+            "libtesth.o".to_string(),
+            head,
+            vec!["_head_libtest_a".to_string()],
+        ),
+        (
+            "libtestt.o".to_string(),
+            tail,
+            vec!["__libtest_a_iname".to_string()],
+        ),
+    ];
+    // `.idata$5` / `.idata$4` address `.idata$6`, `.idata$7` the head.
+    let (hint_name_reloc, head_reloc) = ([(0, 0, nb)], [(0, 2, nb)]);
+    for (k, &(symbol, data, ordinal)) in imports.iter().enumerate() {
+        let slot = ordinal
+            .map_or(0, |n| 1u64 << 63 | u64::from(n))
+            .to_le_bytes();
+        let by_name: CoffRelocs = if ordinal.is_none() {
+            &hint_name_reloc
+        } else {
+            &[]
+        };
+        let hint_name = [&[0, 0], symbol.as_bytes(), b"\0"].concat();
+        let imp = format!("__imp_{symbol}");
+        let mut sections: Vec<CoffSection> = vec![
+            (".idata$7", IDATA, &[0; 4], &head_reloc),
+            (".idata$5", IDATA, &slot, by_name),
+            (".idata$4", IDATA, &slot, by_name),
+            (".idata$6", IDATA, &hint_name, &[]),
+        ];
+        let mut symbols: Vec<CoffSymbol> = vec![
+            (".idata$6", 4, 0, 3),
+            (&imp, 2, 0, 2),
+            ("_head_libtest_a", 0, 0, 2),
+        ];
+        let mut names = vec![imp.clone()];
+        if !data {
+            sections.push((".text", TEXT, thunk, thunk_relocs));
+            symbols.push((symbol, 5, 0x20, 2));
+            names.push(symbol.to_string());
+        }
+        let object = coff_relocatable(machine, &sections, &symbols);
+        members.push((format!("libtests{k:05}.o"), object, names));
+    }
+    let names: Vec<Vec<&str>> = (members.iter())
+        .map(|m| m.2.iter().map(String::as_str).collect())
+        .collect();
+    let members: Vec<(&str, Vec<u8>, &[&str])> = (members.iter().zip(&names))
+        .map(|(m, n)| (m.0.as_str(), m.1.clone(), &n[..]))
+        .collect();
+    indexed_archive(&members)
 }
 
 /// An archive in lib.exe's layout: the two `/` indexes and, for an ARM64X
@@ -5352,6 +6584,199 @@ fn lib_archive(members: &[(&str, Vec<u8>)], arm64x: bool) -> Vec<u8> {
         add(&format!("{name}/"), body);
     }
     out
+}
+
+/// An archive whose SysV `/` index lists, for each of `members`, its
+/// names, each entry the offset of the member's header (ar(5)).
+fn indexed_archive(members: &[(&str, Vec<u8>, &[&str])]) -> Vec<u8> {
+    let padded = |n: usize| n + n % 2;
+    let names: Vec<(usize, &str)> = (members.iter().enumerate())
+        .flat_map(|(i, m)| m.2.iter().map(move |n| (i, *n)))
+        .collect();
+    let index_len = 4 + 4 * names.len() + names.iter().map(|n| n.1.len() + 1).sum::<usize>();
+    let mut at = 8 + 60 + padded(index_len);
+    let headers: Vec<usize> = (members.iter())
+        .map(|m| {
+            let header = at;
+            at += 60 + padded(m.1.len());
+            header
+        })
+        .collect();
+    let mut index = (names.len() as u32).to_be_bytes().to_vec();
+    index.extend(
+        names
+            .iter()
+            .flat_map(|n| (headers[n.0] as u32).to_be_bytes()),
+    );
+    index.extend(names.iter().flat_map(|n| [n.1.as_bytes(), b"\0"].concat()));
+    let mut out = b"!<arch>\n".to_vec();
+    let bodies = std::iter::once(("/".to_string(), &index))
+        .chain((members.iter()).map(|m| (format!("{}/", m.0), &m.1)));
+    for (name, body) in bodies {
+        let header = format!(
+            "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            0,
+            0,
+            0,
+            644,
+            body.len()
+        );
+        out.extend(header.as_bytes());
+        out.extend(body);
+        if body.len() % 2 == 1 {
+            out.push(b'\n');
+        }
+    }
+    out
+}
+
+/// A link reads an archive member once the archive's symbol index lists a
+/// name the link still needs, as GNU ld and link.exe do: a member that is
+/// no object fails the link only when a reference reaches it. An archive
+/// without an index has every member read.
+#[test]
+fn an_archive_member_is_read_when_the_link_pulls_it() {
+    let dir = tempdir("pe-archive-lazy");
+    write_source(
+        &dir,
+        "pick.c",
+        "int pick(void);\nint main(void) { return pick() - 5; }\n",
+    );
+    write_source(
+        &dir,
+        "junk.c",
+        "int junk(void);\nint main(void) { return junk(); }\n",
+    );
+    const TEXT: u32 = 0x6030_0020;
+    let x64 = [0xB8, 5, 0, 0, 0, 0xC3];
+    let pick = coff_object(0x8664, &[(".text", TEXT, &x64)], &[("pick", 1, true)]);
+    let junk = b"not an object".to_vec();
+    let members = [
+        ("pick.obj", pick.clone(), &["pick"][..]),
+        ("junk.obj", junk.clone(), &["junk"][..]),
+    ];
+    std::fs::write(dir.join("indexed.lib"), indexed_archive(&members)).unwrap();
+    let plain = [("pick.obj", pick), ("junk.obj", junk)];
+    std::fs::write(dir.join("plain.lib"), lib_archive(&plain, false)).unwrap();
+    let link = |src: &str, lib: &str| {
+        Command::new(badc())
+            .args(["--target=windows-x64", src, lib, "-o"])
+            .arg(dir.join("a.exe"))
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let out = link("pick.c", "indexed.lib");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    for (src, lib) in [("junk.c", "indexed.lib"), ("pick.c", "plain.lib")] {
+        let out = link(src, lib);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("member `junk.obj`"),
+            "{src} {lib}: {err}"
+        );
+    }
+}
+
+/// A driver links against GNU dlltool's import library as GNU ld links it:
+/// a call through the thunk, a dllimport call, a data import and an import
+/// by ordinal each import from the DLL the descriptor names, and an import
+/// nothing references is not imported.
+#[test]
+fn a_pe_link_imports_through_a_traditional_import_library() {
+    let dir = tempdir("pe-traditional-imports");
+    write_source(
+        &dir,
+        "drv.c",
+        "#pragma subsystem(driver)\n#pragma entrypoint(DriverEntry)\n\
+         unsigned long DbgPrint(const char *, ...);\n\
+         __declspec(dllimport) unsigned long DbgPrintEx(unsigned long, unsigned long, \
+         const char *, ...);\n\
+         __declspec(dllimport) extern unsigned char KdDebuggerEnabled;\n\
+         void ByOrdinal(void);\n\
+         long DriverEntry(void *d, void *r) {\n\
+         ByOrdinal();\n DbgPrintEx(0, 0, \"x\");\n\
+         return (long)DbgPrint(\"%d\", KdDebuggerEnabled);\n}\n",
+    );
+    let imports = [
+        ("DbgPrint", false, None),
+        ("DbgPrintEx", false, None),
+        ("KdDebuggerEnabled", true, None),
+        ("ByOrdinal", false, Some(7)),
+        ("Unused", false, None),
+    ];
+    let mut want: Vec<(String, String)> = ["#7", "DbgPrint", "DbgPrintEx", "KdDebuggerEnabled"]
+        .map(|s| ("ntoskrnl.exe".to_string(), s.to_string()))
+        .into();
+    want.sort();
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let lib = dlltool_import_library(machine, "ntoskrnl.exe", &imports);
+        std::fs::write(dir.join("libntoskrnl.a"), lib).unwrap();
+        let sys = dir.join(format!("{target}.sys"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["drv.c", "libntoskrnl.a", "-o"])
+                .arg(&sys)
+                .current_dir(&dir),
+            &format!("link for {target}"),
+        );
+        let mut got = pe_imports(&std::fs::read(&sys).unwrap());
+        got.sort();
+        assert_eq!(got, want, "{target}");
+    }
+}
+
+/// An archive member the link pulls through a name another pulled member
+/// only lists, as the WDK's memset.obj lists `memset_$fo$`, links with the
+/// section defining it, which names no content type and no memory flag
+/// besides COMDAT: it is placed as read-only data.
+#[test]
+fn a_pulled_section_without_a_content_type_is_placed() {
+    let dir = tempdir("pe-no-content-type");
+    write_source(
+        &dir,
+        "main.c",
+        "int fill(void);\nint main(void) { return fill() - 5; }\n",
+    );
+    const TEXT: u32 = 0x6050_0020;
+    let x64 = [0xB8, 5, 0, 0, 0, 0xC3];
+    let fill = coff_relocatable(
+        0x8664,
+        &[(".text$mn", TEXT, &x64, &[])],
+        &[("fill", 1, 0x20, 2), ("fill_$fo$", 0, 0, 2)],
+    );
+    let fo = coff_relocatable(
+        0x8664,
+        &[("fill_$fo_bdd$", 0x1000, &[7; 48], &[])],
+        &[("fill_$fo$", 1, 0, 2)],
+    );
+    let members = [
+        ("fill.obj", fill, &["fill"][..]),
+        ("fo.obj", fo, &["fill_$fo$"][..]),
+    ];
+    std::fs::write(dir.join("fill.lib"), indexed_archive(&members)).unwrap();
+    let exe = dir.join("fill.exe");
+    run(
+        Command::new(badc())
+            .args(["--target=windows-x64", "main.c", "fill.lib", "-o"])
+            .arg(&exe)
+            .current_dir(&dir),
+        "link the members",
+    );
+    let image = std::fs::read(&exe).unwrap();
+    assert!(
+        image.windows(48).any(|w| w == [7; 48]),
+        "the section's bytes"
+    );
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        let status = Command::new(&exe).status().expect("run the image");
+        assert_eq!(status.code(), Some(0));
+    }
 }
 
 /// A PE link takes from an archive the members link.exe gives its machine:
@@ -7023,6 +8448,49 @@ fn link_defined_symbol_wins_over_auto_included_binding() {
     );
 }
 
+#[test]
+fn the_rebinding_compile_keeps_the_auto_included_declaration() {
+    // The caller takes <time.h>'s `double difftime(time_t, time_t)` with no
+    // header included. Another input defines difftime, so the caller is
+    // compiled again without the library binding; that compile includes
+    // <time.h> as the first did, the call reads a double, and the unit's
+    // diagnostics are reported once.
+    let dir = tempdir("auto-include-rebind-declaration");
+    write_source(
+        &dir,
+        "caller.c",
+        "int main(void) { int unused; return difftime(7, 2) == 2.5 ? 0 : 1; }\n",
+    );
+    write_source(
+        &dir,
+        "impl.c",
+        "#include <time.h>\ndouble difftime(time_t a, time_t b) { return (double)(a - b) / 2; }\n",
+    );
+    let exe = dir.join("prog");
+    let out = run(
+        Command::new(badc())
+            .args(["-Wall", "-o"])
+            .arg(&exe)
+            .arg(dir.join("caller.c"))
+            .arg(dir.join("impl.c"))
+            .current_dir(&dir),
+        "link with a user difftime",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("rebinding the call in"), "{stderr}");
+    assert_eq!(
+        stderr.matches("unused variable `unused`").count(),
+        1,
+        "{stderr}"
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "the call reads difftime's double"
+    );
+}
+
 // A program calling the GCC aarch64 outline-atomics helpers, one per op
 // family plus a 1-byte and a matching/non-matching compare-exchange.
 // Used only by the two tests below; gate the const to their combined cfg so
@@ -7649,6 +9117,12 @@ type SymtabRow = (String, u8, u64, u64, u16);
 
 /// `SHT_SYMTAB` entries of an ELF64 image and the table's `sh_info`.
 fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
+    elf_symbol_table(bytes, 2)
+}
+
+/// The entries of an ELF64 image's symbol table of type `sh_type`
+/// (`SHT_SYMTAB` 2, `SHT_DYNSYM` 11) and the table's `sh_info`.
+fn elf_symbol_table(bytes: &[u8], sh_type: u32) -> (Vec<SymtabRow>, u32) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -7657,8 +9131,8 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     let e_shnum = rd16(0x3c) as usize;
     let sh = |i: usize| e_shoff + i * e_shentsize;
     let symtab = (0..e_shnum)
-        .find(|&i| rd32(sh(i) + 4) == 2)
-        .expect("no .symtab");
+        .find(|&i| rd32(sh(i) + 4) == sh_type)
+        .expect("no symbol table of the type");
     let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
     let off = rd64(sh(symtab) + 24) as usize;
     let count = rd64(sh(symtab) + 32) as usize / 24;
@@ -7677,6 +9151,186 @@ fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
         })
         .collect();
     (rows, rd32(sh(symtab) + 44))
+}
+
+/// `<time.h>`'s data bindings import `tzname`, `timezone` and `daylight`
+/// only into an image that names them, which reads the C library's own
+/// objects as gcc's image does.
+#[test]
+fn tzset_outputs_are_imported_only_where_named() {
+    let dir = tempdir("tzset-outputs");
+    write_source(
+        &dir,
+        "quiet.c",
+        "#include <time.h>\nint main(void) { return 0; }\n",
+    );
+    write_source(
+        &dir,
+        "uses.c",
+        "#include <stdio.h>\n#include <time.h>\n\
+         int main(void) { tzset(); printf(\"%s %ld %d\\n\", tzname[0], timezone, daylight); \
+         return 0; }\n",
+    );
+    let names = ["tzname", "timezone", "daylight"];
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        for (src, named) in [("quiet.c", false), ("uses.c", true)] {
+            let args = ["-q", target, src, "-o", "prog"];
+            run(Command::new(badc()).args(args).current_dir(&dir), "link");
+            let dynsym = elf_symbol_table(&std::fs::read(dir.join("prog")).unwrap(), 11).0;
+            for name in names {
+                let row = dynsym.iter().find(|r| r.0 == name);
+                // An import, not a copy the image defines.
+                assert_eq!(
+                    row.map(|r| r.4),
+                    named.then_some(0),
+                    "{target} {src}: {name}"
+                );
+            }
+        }
+    }
+    if cfg!(target_os = "linux") {
+        run(
+            Command::new(badc())
+                .args(["-q", "uses.c", "-o", "uses"])
+                .current_dir(&dir),
+            "link",
+        );
+        let out = Command::new(dir.join("uses"))
+            .env("TZ", "UTC")
+            .output()
+            .expect("run");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "UTC 0 0\n");
+    }
+}
+
+/// On macOS, assembly names a C symbol with Apple's leading underscore,
+/// in an assembler source and in an `asm` statement alike.
+#[cfg(target_os = "macos")]
+#[test]
+fn mach_o_assembly_reaches_c_names_through_the_underscore() {
+    let dir = tempdir("mach-o-underscore");
+    write_source(
+        &dir,
+        "ia.c",
+        "int g(void) { return 3; }\nint h(void);\nint k(void);\n\
+         int main(void) { return h() + k(); }\n__asm__(\".globl _h\\n_h:\\n b _g\\n\");\n",
+    );
+    write_source(&dir, "k.s", ".text\n.globl _k\n.p2align 2\n_k:\n b _g\n");
+    let units = [dir.join("ia.c"), dir.join("k.s")];
+    let units: Vec<&Path> = units.iter().map(|p| p.as_path()).collect();
+    assert_eq!(link_units_and_run(&dir, "-O0", &units), Some(6));
+}
+
+/// An image with no import and no emitted relocation still lists its
+/// definitions in `.symtab`, as GNU ld writes one for every image.
+#[test]
+fn an_image_without_imports_lists_its_definitions() {
+    let dir = tempdir("symtab-no-imports");
+    write_source(&dir, "f.c", "int f(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "e.c",
+        "int g = 3;\nvoid __c5_entry(void) { for (;;); }\n",
+    );
+    for target in ["--target=linux-x64", "--target=linux-aarch64"] {
+        let shared = ["-q", target, "--shared", "f.c", "-o", "f.so"];
+        run(
+            Command::new(badc()).args(shared).current_dir(&dir),
+            "shared",
+        );
+        let bare = ["-q", target, "--freestanding", "e.c", "-o", "e"];
+        run(
+            Command::new(badc()).args(bare).current_dir(&dir),
+            "freestanding",
+        );
+        for (image, names) in [("f.so", &["f"][..]), ("e", &["g", "__c5_entry"][..])] {
+            let rows = elf_symtab(&std::fs::read(dir.join(image)).expect("image")).0;
+            for name in names {
+                let row = rows.iter().find(|r| r.0 == *name);
+                assert!(
+                    row.is_some_and(|r| r.1 >> 4 == 1),
+                    "{target} {image}: {name}"
+                );
+            }
+        }
+    }
+}
+
+/// A definition the assembler binds `STB_GNU_UNIQUE` keeps the binding in
+/// the image's symbol tables, `.dynsym` included, and the image is marked
+/// `ELFOSABI_GNU`, as GNU ld 2.46.1 writes both; through either link.
+#[test]
+fn a_unique_definition_keeps_its_binding_in_the_image() {
+    const STB_GNU_UNIQUE: u8 = 10;
+    let dir = tempdir("unique-binding");
+    write_source(
+        &dir,
+        "uv.s",
+        ".data\n.globl uv\n.type uv, @gnu_unique_object\n.size uv, 4\nuv: .long 7\n",
+    );
+    write_source(
+        &dir,
+        "m.c",
+        "extern int uv;\nint main(void) { return uv - 7; }\n",
+    );
+    let badc_in = |args: &[&str], what: &str| {
+        run(Command::new(badc()).args(args).current_dir(&dir), what);
+    };
+    badc_in(
+        &["-q", "-c", "--target=linux-x64", "uv.s", "-o", "uv.o"],
+        "assemble",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "uv.o", "-o", "prog"],
+        "link",
+    );
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "uv.o",
+            "-o",
+            "lib.so",
+        ],
+        "shared",
+    );
+    badc_in(
+        &["--ld", "-m", "elf_x86_64", "-shared", "uv.o", "-o", "ld.so"],
+        "--ld",
+    );
+    badc_in(
+        &["-q", "--target=linux-x64", "m.c", "-c", "-o", "m.o"],
+        "compile",
+    );
+    for (image, dynamic) in [("prog", false), ("lib.so", true), ("ld.so", true)] {
+        let bytes = std::fs::read(dir.join(image)).expect("image");
+        assert_eq!(bytes[7], 3, "{image}: EI_OSABI");
+        let mut tables = vec![("symtab", elf_symbol_table(&bytes, 2).0)];
+        if dynamic {
+            tables.push(("dynsym", elf_symbol_table(&bytes, 11).0));
+        }
+        for (table, rows) in tables {
+            let uv = rows.iter().find(|r| r.0 == "uv").expect("uv");
+            assert_eq!(uv.1 >> 4, STB_GNU_UNIQUE, "{image} {table}");
+        }
+    }
+    badc_in(
+        &[
+            "-q",
+            "--target=linux-x64",
+            "--shared",
+            "m.o",
+            "-o",
+            "plain.so",
+        ],
+        "plain",
+    );
+    let plain = std::fs::read(dir.join("plain.so")).expect("image");
+    assert_eq!(
+        plain[7], 0,
+        "an image with no unique definition stays System V"
+    );
 }
 
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
@@ -8250,7 +9904,7 @@ fn unknown_asm_section_flag_is_diagnosed() {
     let src = write_source(
         &dir,
         "t.c",
-        "__asm__(\".pushsection .tls.tab,\\\"awT\\\",@progbits\\n\"\n\
+        "__asm__(\".pushsection .excl.tab,\\\"awe\\\",@progbits\\n\"\n\
          \"       .long 1\\n\"\n\
          \"       .popsection\\n\");\n\
          int main(void) { return 0; }\n",
@@ -8262,11 +9916,41 @@ fn unknown_asm_section_flag_is_diagnosed() {
         .current_dir(&dir)
         .output()
         .expect("run badc");
-    assert!(!out.status.success(), "expected the T flag to be rejected");
+    assert!(
+        !out.status.success(),
+        "expected the `e` flag to be rejected"
+    );
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.contains("TLS") && err.contains(".tls.tab"),
+        err.contains("flag `e`") && err.contains(".excl.tab"),
         "diagnostic should name the section and the flag: {err}",
+    );
+}
+
+/// Two assembler statements that give one section different types are
+/// refused as gas refuses them within one source, not as an internal error.
+#[test]
+fn a_section_type_changed_across_asm_statements_is_diagnosed() {
+    let dir = tempdir("asm-section-type");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__asm__(\".section .x,\\\"a\\\",@progbits\\n.byte 1\\n.previous\");\n\
+         __asm__(\".section .x,\\\"a\\\",@nobits\\n.zero 1\\n.previous\");\n\
+         int main(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["-c", "--target=linux-x64", "-o"])
+        .arg(dir.join("t.o"))
+        .arg(&src)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "the second type must be refused");
+    assert!(
+        err.contains("changed section type for `.x`") && !err.contains("internal"),
+        "{err}"
     );
 }
 
@@ -8505,9 +10189,17 @@ fn arm64_pdata(image: &[u8]) -> Vec<(u32, Result<u32, Vec<u8>>)> {
             if data & 3 != 0 {
                 return (u32le(entry), Ok(data));
             }
-            let x = at(data);
-            let words = (u32le(x) >> 27) as usize;
-            (u32le(entry), Err(image[x + 4..x + 4 + words * 4].to_vec()))
+            let (x, header) = (at(data), u32le(at(data)));
+            let words = (header >> 27) as usize;
+            // The epilog scopes precede the codes unless the header holds
+            // the one epilog (the E bit).
+            let scopes = if header & 1 << 21 != 0 {
+                0
+            } else {
+                (header >> 22) as usize & 31
+            };
+            let codes = x + 4 + 4 * scopes;
+            (u32le(entry), Err(image[codes..codes + words * 4].to_vec()))
         })
         .collect()
 }
@@ -11580,7 +13272,10 @@ fn a_stack_walk_crosses_a_coff_objects_frame() {
          int main(void)\n\
          { if (function_of((char *)peer_walk + 4) != (char *)peer_walk) return 1;\n\
            if (function_of((char *)main + 8) != (char *)main) return 2;\n\
-           return peer_walk(callback); }\n",
+           // Stored, the call is not in return position: no sibling call\n\
+           // takes `main`'s frame off the stack the walk ends at.\n\
+           volatile int r = peer_walk(callback);\n\
+           return r; }\n",
     );
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64"
@@ -16374,15 +18069,17 @@ fn platform_ar_member_names_match_ar_t() {
     }
 }
 
-/// A member whose container is not ELF is named by its resolved member
-/// name and by its own format. badc's relocatable format is ELF on
-/// every target, so a Mach-O member cannot be linked even where the
-/// target's images are Mach-O; the diagnostic says that rather than
-/// reporting the raw header field.
+/// A member the link pulls whose container it cannot read is named by its
+/// resolved member name and by its own format, here a big-endian Mach-O
+/// object, rather than by the raw header field.
 #[test]
 fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
     let dir = tempdir("foreign-member");
-    let src = write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let src = write_source(
+        &dir,
+        "main.c",
+        "int unused(void);\nint main(void) { return unused(); }\n",
+    );
     // MH_CIGAM_64 leads a 64-bit Mach-O object; the rest is padding,
     // since the input is rejected on the container alone.
     let mut macho = vec![0xCFu8, 0xFA, 0xED, 0xFE];
@@ -16393,7 +18090,7 @@ fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
             name: "a_very_long_member_name_over_sixteen.o".into(),
             bytes: macho,
         }],
-        &[(0, vec!["_unused".into()])],
+        &[(0, vec!["unused".into()])],
     );
     std::fs::write(&lib, &blob).expect("write the archive");
 
@@ -16401,8 +18098,8 @@ fn foreign_format_archive_member_is_diagnosed_by_name_and_format() {
         let out = Command::new(badc())
             .arg(format!("--target={target}"))
             .args(["-o", "prog"])
-            .arg(&lib)
             .arg(&src)
+            .arg(&lib)
             .current_dir(&dir)
             .output()
             .expect("run badc");
@@ -16594,6 +18291,54 @@ fn macos_foreign_member_libc_references_resolve_implicitly() {
     );
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(10), "strlen result mismatch");
+}
+
+/// A Mach-O member is found through either archiver's index: ranlib lists
+/// `__forty` for the C name `_forty`, badc's archiver `_forty`, as the
+/// reader names it.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn macos_archive_index_finds_a_mach_o_member_in_either_spelling() {
+    let dir = tempdir("macos-index-spelling");
+    write_source(&dir, "forty.c", "int _forty(void) { return 40; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "int _forty(void);\nint main(void) { return _forty() + 2; }\n",
+    );
+    let ok = Command::new("cc")
+        .args(["-c", "forty.c", "-o", "forty.o"])
+        .current_dir(&dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        return; // no platform toolchain on this host
+    }
+    run(
+        Command::new("ar")
+            .args(["rcs", "libranlib.a", "forty.o"])
+            .current_dir(&dir),
+        "the system archiver",
+    );
+    run(
+        Command::new(badc())
+            .args(["--ar", "-o", "libbadc.a", "forty.o"])
+            .current_dir(&dir),
+        "badc's archiver",
+    );
+    for lib in ["ranlib", "badc"] {
+        let exe = dir.join(format!("prog_{lib}"));
+        run(
+            Command::new(badc())
+                .arg("-o")
+                .arg(&exe)
+                .args(["main.c", "-L.", &format!("-l{lib}")])
+                .current_dir(&dir),
+            &format!("link against lib{lib}.a"),
+        );
+        let out = Command::new(&exe).output().expect("run prog");
+        assert_eq!(out.status.code(), Some(42), "lib{lib}.a");
+    }
 }
 
 /// A shared library in a container the linker cannot read is reported

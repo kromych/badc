@@ -20,6 +20,12 @@
 //! not always the name itself -- `_puts` on Mach-O, `_write` on
 //! msvcrt. 7.1.4p2 makes a self-declared call the call the header
 //! would have made, so the import carries the binding's symbol.
+//!
+//! A PE image that loads the user-mode C runtime also links kernel32.dll
+//! by default, as link.exe does through the C runtime library's
+//! `/DEFAULTLIB:kernel32.lib`; a name no other input resolves is looked up
+//! in its export list ([`super::kernel32`]), which no bundled header's
+//! bindings cover in full.
 
 #![cfg(feature = "std")]
 
@@ -55,11 +61,14 @@ fn target_machine(target: Target) -> NativeMachine {
 }
 
 /// The target's C library, materialized from the bundled headers as
-/// names are queried.
+/// names are queried, and on PE the DLL a hosted image links by default.
 pub struct TargetCLibrary {
     target: Target,
     dylib: &'static str,
     lib: SharedLibrary,
+    /// kernel32.dll, whose functions a PE image loading the user-mode C
+    /// runtime takes by default ([`super::kernel32`]); `None` elsewhere.
+    default_dll: Option<SharedLibrary>,
     /// Headers already preprocessed for this target.
     scanned: BTreeSet<&'static str>,
     /// The header whose binding admitted each data export.
@@ -68,35 +77,49 @@ pub struct TargetCLibrary {
     queried: BTreeSet<String>,
 }
 
+/// A library with no export admitted yet.
+fn no_exports(soname: &str, target: Target) -> SharedLibrary {
+    SharedLibrary {
+        soname: soname.to_string(),
+        machine: target_machine(target),
+        exports: BTreeSet::new(),
+        data_exports: BTreeSet::new(),
+        tls_exports: BTreeSet::new(),
+        object_sizes: Default::default(),
+        export_symbols: BTreeMap::new(),
+        export_versions: BTreeMap::new(),
+        from_image: false,
+        export_ordinals: Default::default(),
+        references: Default::default(),
+        protected_exports: Default::default(),
+    }
+}
+
 impl TargetCLibrary {
     pub fn new(target: Target) -> Self {
+        let pe = target.binary_format() == BinaryFormat::Pe;
         Self {
             target,
             dylib: c_library_dylib(target),
-            lib: SharedLibrary {
-                soname: String::new(),
-                machine: target_machine(target),
-                exports: BTreeSet::new(),
-                data_exports: BTreeSet::new(),
-                tls_exports: BTreeSet::new(),
-                object_sizes: Default::default(),
-                export_symbols: BTreeMap::new(),
-                export_versions: BTreeMap::new(),
-                from_image: false,
-                export_ordinals: Default::default(),
-                references: Default::default(),
-                protected_exports: Default::default(),
-            },
+            lib: no_exports("", target),
+            default_dll: pe.then(|| no_exports(super::kernel32::DLL, target)),
             scanned: BTreeSet::new(),
             data_headers: BTreeMap::new(),
             queried: BTreeSet::new(),
         }
     }
 
-    /// Whether the target's C library exports `name`, admitting it to
-    /// the export set when it does.
+    /// An image that cannot load kernel32.dll, a native-subsystem or EFI
+    /// one, takes none of its functions by default.
+    pub fn drop_default_dll(&mut self) {
+        self.default_dll = None;
+    }
+
+    /// Whether the target's C library, or else the DLL linked by default,
+    /// exports `name`, admitting it to that export set when it does.
     pub fn admit(&mut self, name: &str) -> bool {
-        if self.lib.exports.contains(name) {
+        let default = self.default_dll.as_ref();
+        if self.lib.exports.contains(name) || default.is_some_and(|d| d.exports.contains(name)) {
             return true;
         }
         if !self.queried.insert(name.to_string()) {
@@ -113,6 +136,12 @@ impl TargetCLibrary {
                 return true;
             }
         }
+        if let Some(dll) = self.default_dll.as_mut()
+            && super::kernel32::exports(self.target.is_x86_64(), name)
+        {
+            dll.exports.insert(name.to_string());
+            return true;
+        }
         false
     }
 
@@ -120,6 +149,12 @@ impl TargetCLibrary {
     /// belongs to the target's C library.
     pub fn library(&self) -> &SharedLibrary {
         &self.lib
+    }
+
+    /// The C library, then the DLL linked by default, each with the
+    /// names admitted to it.
+    pub fn libraries(&self) -> impl Iterator<Item = &SharedLibrary> {
+        core::iter::once(&self.lib).chain(&self.default_dll)
     }
 
     /// A unit defining each of `names` the library exports as data,
@@ -382,6 +417,39 @@ mod tests {
             // admitting it would import a name msvcrt does not export.
             assert!(!win.admit("memmem"));
         }
+    }
+
+    /// On PE, a name the C library lacks and kernel32.dll exports joins
+    /// kernel32's set, unless the image cannot load it; a C library name
+    /// stays msvcrt's, and no other target has the default DLL.
+    #[test]
+    fn a_pe_target_takes_kernel32_by_default() {
+        let names = |lib: &TargetCLibrary| -> alloc::vec::Vec<(String, alloc::vec::Vec<String>)> {
+            (lib.libraries())
+                .map(|l| (l.soname.clone(), l.exports.iter().cloned().collect()))
+                .collect()
+        };
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut win = TargetCLibrary::new(target);
+            for name in ["puts", "GetLastError", "lstrlenA", "GetLastError"] {
+                assert!(win.admit(name), "{name}");
+            }
+            assert!(!win.admit("MessageBoxA"));
+            let libs = names(&win);
+            assert_eq!(libs.len(), 2);
+            let (msvcrt, kernel32) = (&libs[0], &libs[1]);
+            assert!(msvcrt.0 == "msvcrt.dll" && msvcrt.1.contains(&"puts".to_string()));
+            assert!(!msvcrt.1.contains(&"GetLastError".to_string()));
+            assert_eq!(kernel32.0, "kernel32.dll");
+            assert_eq!(kernel32.1, ["GetLastError", "lstrlenA"]);
+            let mut native = TargetCLibrary::new(target);
+            native.drop_default_dll();
+            assert!(native.admit("puts") && !native.admit("GetLastError"));
+            assert_eq!(names(&native).len(), 1);
+        }
+        let mut linux = TargetCLibrary::new(Target::LinuxX64);
+        assert!(!linux.admit("GetLastError"));
+        assert_eq!(names(&linux).len(), 1);
     }
 
     /// A name the library ships under another symbol carries that

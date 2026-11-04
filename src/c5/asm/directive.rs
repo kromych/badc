@@ -15,7 +15,10 @@ pub(crate) fn extract_asm_sections(
     text: &str,
     is_aarch64: bool,
 ) -> Result<Option<AsmExtract>, alloc::string::String> {
-    extract_asm_sections_impl(text, is_aarch64, false)
+    let mut errors = alloc::vec::Vec::new();
+    let ex = extract_asm_sections_impl(text, is_aarch64, false, &mut errors);
+    AsmErrors::check(errors)?;
+    Ok(ex)
 }
 
 /// What a function-scope template splits into: the code stream the arch
@@ -59,10 +62,21 @@ impl AsmExtract {
 pub(crate) fn extract_file_scope_asm_sections(
     text: &str,
     is_aarch64: bool,
-) -> Result<alloc::vec::Vec<AsmSectionBlock>, alloc::string::String> {
-    Ok(extract_asm_sections_impl(text, is_aarch64, true)?
+) -> Result<alloc::vec::Vec<AsmSectionBlock>, AsmErrors> {
+    let mut errors = alloc::vec::Vec::new();
+    let blocks = extract_file_scope_asm_sections_noting(text, is_aarch64, &mut errors);
+    AsmErrors::check(errors).map(|()| blocks)
+}
+
+/// As [`extract_file_scope_asm_sections`], going on past a bad statement.
+pub(crate) fn extract_file_scope_asm_sections_noting(
+    text: &str,
+    is_aarch64: bool,
+    errors: &mut alloc::vec::Vec<AsmError>,
+) -> alloc::vec::Vec<AsmSectionBlock> {
+    extract_asm_sections_impl(text, is_aarch64, true, errors)
         .expect("file-scope extraction always yields sections")
-        .blocks)
+        .blocks
 }
 
 /// ELF relocation type number for a `.reloc` type name. The names are
@@ -153,6 +167,7 @@ fn is_asm_sym_directive(tok: &str) -> bool {
             | ".hidden"
             | ".internal"
             | ".protected"
+            | ".private_extern"
             | ".type"
             | ".size"
             | ".set"
@@ -173,6 +188,7 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
         || text.contains(".hidden")
         || text.contains(".internal")
         || text.contains(".protected")
+        || text.contains(".private_extern")
         || text.contains(".type")
         || text.contains(".size")
         || text.contains(".set")
@@ -192,24 +208,30 @@ fn asm_text_has_sym_directive(text: &str) -> bool {
 
 /// Parse one symbol directive into items. `.globl a, b` declares each name;
 /// the rest take a name plus their own arguments.
-fn push_sym_directive_items(
+fn sym_directive_items(
     tok: &str,
     rest: &str,
     is_aarch64: bool,
-    out: &mut alloc::vec::Vec<AsmSectionItem>,
-) -> Result<(), alloc::string::String> {
+) -> Result<alloc::vec::Vec<AsmSectionItem>, alloc::string::String> {
     if matches!(
         tok,
         ".globl" | ".global" | ".weak" | ".local" | ".hidden" | ".internal" | ".protected"
     ) && rest.contains(',')
     {
-        for name in rest.split(',') {
-            out.push(parse_section_item(tok, name.trim(), is_aarch64)?);
-        }
-        return Ok(());
+        return rest
+            .split(',')
+            .map(|name| parse_section_item(tok, name.trim(), is_aarch64))
+            .collect();
     }
-    out.push(parse_section_item(tok, rest, is_aarch64)?);
-    Ok(())
+    // Apple's private external symbol: global to the link, hidden from the
+    // image's dynamic symbols.
+    if tok == ".private_extern" {
+        return Ok(alloc::vec![
+            parse_section_item(".globl", rest, is_aarch64)?,
+            parse_section_item(".hidden", rest, is_aarch64)?,
+        ]);
+    }
+    Ok(alloc::vec![parse_section_item(tok, rest, is_aarch64)?])
 }
 
 /// A bare section directive naming a well-known section (`.text` == `.section
@@ -226,14 +248,15 @@ fn extract_asm_sections_impl(
     text: &str,
     is_aarch64: bool,
     file_scope: bool,
-) -> Result<Option<AsmExtract>, alloc::string::String> {
+    errors: &mut alloc::vec::Vec<AsmError>,
+) -> Option<AsmExtract> {
     if !file_scope
         && !text.contains(".pushsection")
         && !text.contains(".section")
         && !text.contains(".subsection")
         && !asm_text_has_sym_directive(text)
     {
-        return Ok(None);
+        return None;
     }
     let mut code = alloc::string::String::with_capacity(text.len());
     let mut sym_items: alloc::vec::Vec<AsmSectionItem> = alloc::vec::Vec::new();
@@ -245,7 +268,7 @@ fn extract_asm_sections_impl(
     // as GNU as does, so a push/pop pair leaves a later `.previous` where the
     // `.section` before the pair put it.
     let mut now: Option<usize> = if file_scope {
-        blocks.push(parse_section_args(".text")?);
+        blocks.push(parse_section_args(".text").expect("`.text` is a section"));
         Some(0)
     } else {
         None
@@ -258,316 +281,335 @@ fn extract_asm_sections_impl(
     let mut code_mode: Option<&str> = None;
     let mut block_code_mode: alloc::collections::BTreeMap<usize, &str> =
         alloc::collections::BTreeMap::new();
-    // Open `.rept` bodies of the current section; items nest into the top
-    // until `.endr` closes it into a `Rept` item.
-    let mut rept_stack: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<AsmSectionItem>)> =
-        alloc::vec::Vec::new();
-    // Arms of an open deferred conditional; `None` outside one.
-    let mut cond_arms: Option<alloc::vec::Vec<AsmCondArm>> = None;
+    // Open `.rept` bodies of the current section and their lines; items nest
+    // into the top until `.endr` closes it into a `Rept` item.
+    let mut rept_stack: alloc::vec::Vec<(
+        u32,
+        alloc::string::String,
+        alloc::vec::Vec<AsmSectionItem>,
+    )> = alloc::vec::Vec::new();
+    // The line and the arms of an open deferred conditional.
+    let mut cond_arms: Option<(u32, alloc::vec::Vec<AsmCondArm>)> = None;
     // The names `.local` declared so far, which make a later `.comm` local.
     let mut locals: alloc::collections::BTreeSet<alloc::string::String> =
         alloc::collections::BTreeSet::new();
-    for piece in split_asm_statements(text) {
+    for (line, piece) in split_asm_statement_lines(text) {
         let piece = piece.trim();
         if piece.is_empty() {
             continue;
         }
-        // Peel any leading `name:` labels: GNU as treats them as statements
-        // preceding the rest of the line, so a section directive or an
-        // instruction may follow a label on the same line, with or without
-        // whitespace after the colon (`1:\t.pushsection ...`, `name:push %rcx`).
-        // A label goes to the current stream; a leading token that is not a
-        // valid label is left in place as the statement.
-        let mut stmt = piece;
-        while let Some((name, rest)) = peel_leading_label(stmt) {
-            if !rept_stack.is_empty() {
-                return Err(alloc::format!(
-                    "inline asm: label `{name}` inside `.rept` would be defined repeatedly"
-                ));
-            }
-            match now {
-                None => {
-                    code.push_str(name);
-                    code.push_str(":\n");
-                }
-                Some(idx) => blocks[idx]
-                    .items
-                    .push(AsmSectionItem::Label(alloc::string::String::from(name))),
-            }
-            stmt = rest;
-        }
-        if stmt.is_empty() {
-            continue;
-        }
-        let (tok, rest) = split_first_token(stmt);
-        // A `.rept` body collects items until its `.endr`; section switches
-        // inside it have no GNU as meaning worth carrying.
-        if !rept_stack.is_empty() {
-            match tok {
-                ".endr" => {
-                    let (count, items) = rept_stack.pop().expect("nonempty checked");
-                    let item = AsmSectionItem::Rept { count, items };
-                    match rept_stack.last_mut() {
-                        Some((_, outer)) => outer.push(item),
-                        None => match now {
-                            Some(idx) => blocks[idx].items.push(item),
-                            None => {
-                                return Err(alloc::string::String::from(
-                                    "inline asm: `.rept` outside a section",
-                                ));
-                            }
-                        },
-                    }
-                }
-                ".rept" | ".rep" => {
-                    rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()))
-                }
-                ".pushsection" | ".section" | ".popsection" | ".previous" | ".subsection" => {
+        // A bad statement is reported and left out; the rest assemble.
+        let mut statement = || -> Result<(), alloc::string::String> {
+            // Peel any leading `name:` labels: GNU as treats them as statements
+            // preceding the rest of the line, so a section directive or an
+            // instruction may follow a label on the same line, with or without
+            // whitespace after the colon (`1:\t.pushsection ...`, `name:push %rcx`).
+            // A label goes to the current stream; a leading token that is not a
+            // valid label is left in place as the statement.
+            let mut stmt = piece;
+            while let Some((name, rest)) = peel_leading_label(stmt) {
+                if !rept_stack.is_empty() {
                     return Err(alloc::format!(
-                        "inline asm: `{tok}` inside `.rept` is not supported"
+                        "inline asm: label `{name}` inside `.rept` would be defined repeatedly"
                     ));
                 }
-                _ => {
-                    let item = parse_section_item(tok, rest, is_aarch64)?;
-                    rept_stack
-                        .last_mut()
-                        .expect("nonempty checked")
-                        .1
-                        .push(item);
+                match now {
+                    None => {
+                        code.push_str(name);
+                        code.push_str(":\n");
+                    }
+                    Some(idx) => blocks[idx].push(
+                        line,
+                        AsmSectionItem::Label(alloc::string::String::from(name)),
+                    ),
                 }
+                stmt = rest;
             }
-            continue;
-        }
-        // A conditional the expansion deferred: its condition reads section
-        // labels and its branches emit no bytes, so the arms accumulate into
-        // one item the layout values.
-        if let Some(arms) = &mut cond_arms {
-            match tok {
-                ".endif" => {
-                    let item = AsmSectionItem::CondDiag(core::mem::take(arms));
-                    cond_arms = None;
-                    match now {
-                        Some(idx) => blocks[idx].items.push(item),
-                        None => {
-                            return Err(alloc::string::String::from(
-                                "inline asm: `.if` outside a section",
-                            ));
+            if stmt.is_empty() {
+                return Ok(());
+            }
+            let (tok, rest) = split_first_token(stmt);
+            // A `.rept` body collects items until its `.endr`; section switches
+            // inside it have no GNU as meaning worth carrying.
+            if !rept_stack.is_empty() {
+                match tok {
+                    ".endr" => {
+                        let (at, count, items) = rept_stack.pop().expect("nonempty checked");
+                        let item = AsmSectionItem::Rept { count, items };
+                        match rept_stack.last_mut() {
+                            Some((_, _, outer)) => outer.push(item),
+                            None => match now {
+                                Some(idx) => blocks[idx].push(at, item),
+                                None => {
+                                    return Err(alloc::string::String::from(
+                                        "inline asm: `.rept` outside a section",
+                                    ));
+                                }
+                            },
                         }
                     }
-                }
-                ".else" | ".elseif" => arms.push(AsmCondArm {
-                    tok: alloc::string::String::from(if tok == ".else" { "" } else { ".if" }),
-                    cond: alloc::string::String::from(rest.trim()),
-                    error: None,
-                }),
-                ".error" => {
-                    let arm = arms.last_mut().expect("an arm is open");
-                    if arm.error.is_none() {
-                        arm.error =
-                            Some(alloc::string::String::from(rest.trim().trim_matches('"')));
+                    ".rept" | ".rep" => rept_stack.push((
+                        line,
+                        alloc::string::String::from(rest),
+                        alloc::vec::Vec::new(),
+                    )),
+                    ".pushsection" | ".section" | ".popsection" | ".previous" | ".subsection" => {
+                        return Err(alloc::format!(
+                            "inline asm: `{tok}` inside `.rept` is not supported"
+                        ));
+                    }
+                    _ => {
+                        let item = parse_section_item(tok, rest, is_aarch64)?;
+                        rept_stack
+                            .last_mut()
+                            .expect("nonempty checked")
+                            .2
+                            .push(item);
                     }
                 }
-                _ => {
-                    return Err(alloc::format!(
-                        "inline asm: `{tok}` inside a conditional over section labels would emit bytes"
-                    ));
-                }
+                return Ok(());
             }
-            continue;
-        }
-        if matches!(
-            tok,
-            ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle"
-        ) {
-            cond_arms = Some(alloc::vec![AsmCondArm {
-                tok: alloc::string::String::from(tok),
-                cond: alloc::string::String::from(rest.trim()),
-                error: None,
-            }]);
-            continue;
-        }
-        if matches!(tok, ".rept" | ".rep") && now.is_some() {
-            rept_stack.push((alloc::string::String::from(rest), alloc::vec::Vec::new()));
-            continue;
-        }
-        if tok == ".local" {
-            locals.extend(
-                rest.split(',')
-                    .map(|n| alloc::string::String::from(n.trim())),
-            );
-        }
-        // gas: a common symbol in any section; a local one goes in `.bss`.
-        if matches!(tok, ".comm" | ".lcomm") {
-            let (name, size, align) = parse_common_args(tok, rest)?;
-            let local = tok == ".lcomm" || locals.contains(name);
-            let align = align.unwrap_or(match (tok, size) {
-                (".lcomm", 0) => 1,
-                (".lcomm", s) => (1u64 << s.ilog2()).min(8),
-                _ if local => 1,
-                (_, s) => s.max(1).next_power_of_two().min(16),
-            });
-            if local {
-                let idx = match blocks
-                    .iter()
-                    .position(|b| b.name == ".bss" && b.subsection == 0)
-                {
-                    Some(i) => i,
-                    None => {
-                        blocks.push(parse_section_args(".bss")?);
-                        blocks.len() - 1
+            // A conditional the expansion deferred: its condition reads section
+            // labels and its branches emit no bytes, so the arms accumulate into
+            // one item the layout values.
+            if let Some((at, arms)) = &mut cond_arms {
+                match tok {
+                    ".endif" => {
+                        let (at, item) = (*at, AsmSectionItem::CondDiag(core::mem::take(arms)));
+                        cond_arms = None;
+                        match now {
+                            Some(idx) => blocks[idx].push(at, item),
+                            None => {
+                                return Err(alloc::string::String::from(
+                                    "inline asm: `.if` outside a section",
+                                ));
+                            }
+                        }
                     }
-                };
-                for (t, r) in [
-                    (".balign", alloc::format!("{align}")),
-                    (".type", alloc::format!("{name}, @object")),
-                    (".size", alloc::format!("{name}, {size}")),
-                ] {
-                    blocks[idx]
-                        .items
-                        .push(parse_section_item(t, &r, is_aarch64)?);
-                }
-                blocks[idx]
-                    .items
-                    .push(AsmSectionItem::Label(alloc::string::String::from(name)));
-                let fill = parse_section_item(".zero", &alloc::format!("{size}"), is_aarch64)?;
-                blocks[idx].items.push(fill);
-            } else {
-                let item = AsmSectionItem::Common {
-                    name: alloc::string::String::from(name),
-                    size,
-                    align,
-                };
-                match now {
-                    Some(idx) => blocks[idx].items.push(item),
-                    None => sym_items.push(item),
-                }
-            }
-            continue;
-        }
-        match tok {
-            ".pushsection" | ".section" => {
-                let block = parse_section_args(rest)?;
-                let idx = blocks.len();
-                blocks.push(block);
-                if tok == ".pushsection" {
-                    pushed.push((now, prev));
-                }
-                prev = Some(now);
-                now = Some(idx);
-                continue;
-            }
-            ".popsection" => {
-                let Some(frame) = pushed.pop() else {
-                    return Err(alloc::string::String::from(
-                        "inline asm: `.popsection` without `.pushsection`",
-                    ));
-                };
-                (now, prev) = frame;
-                continue;
-            }
-            // Before any section change there is nothing to return to, and
-            // GNU as ignores the directive.
-            ".previous" => {
-                if let Some(p) = prev {
-                    prev = Some(now);
-                    now = p;
-                }
-                continue;
-            }
-            // File-scope base-section shorthands (`.text`, `.data`, ...): switch
-            // the current base to that section, reusing an existing block of the
-            // same name so repeated switches accumulate into one section.
-            _ if file_scope && base_section_shorthand(tok) => {
-                let idx = match blocks
-                    .iter()
-                    .position(|b| b.name == tok && b.subsection == 0)
-                {
-                    Some(i) => i,
-                    None => {
-                        blocks.push(parse_section_args(tok)?);
-                        blocks.len() - 1
+                    ".else" | ".elseif" => arms.push(AsmCondArm {
+                        tok: alloc::string::String::from(if tok == ".else" { "" } else { ".if" }),
+                        cond: alloc::string::String::from(rest.trim()),
+                        error: None,
+                    }),
+                    ".error" => {
+                        let arm = arms.last_mut().expect("an arm is open");
+                        if arm.error.is_none() {
+                            let msg = alloc::string::String::from(rest.trim().trim_matches('"'));
+                            arm.error = Some((line, msg));
+                        }
                     }
-                };
-                prev = Some(now);
-                now = Some(idx);
-                continue;
-            }
-            // `.subsection N` switches to the numbered subsection of the
-            // current section: same identity and address space, laid out
-            // after every lower-numbered block. The function-body path
-            // handles its replacement `.subsection` in the deferred-region
-            // splitter before extraction; one reaching here is rejected
-            // rather than emitted inline (both sequences would execute).
-            ".subsection" => {
-                if !file_scope {
-                    return Err(alloc::string::String::from(
-                        "inline asm: `.subsection` is not supported (deferred replacement code)",
-                    ));
+                    _ => {
+                        return Err(alloc::format!(
+                            "inline asm: `{tok}` inside a conditional over section labels would emit bytes"
+                        ));
+                    }
                 }
-                let n: u32 = rest
-                    .trim()
-                    .parse()
-                    .map_err(|_| alloc::format!("inline asm: bad `.subsection` number `{rest}`"))?;
-                let cur = now.expect("file scope always in a section");
-                blocks.push(AsmSectionBlock {
-                    subsection: n,
-                    items: alloc::vec::Vec::new(),
-                    ..blocks[cur].clone_identity()
+                return Ok(());
+            }
+            if matches!(
+                tok,
+                ".if" | ".ifeq" | ".ifne" | ".ifgt" | ".iflt" | ".ifge" | ".ifle"
+            ) {
+                cond_arms = Some((
+                    line,
+                    alloc::vec![AsmCondArm {
+                        tok: alloc::string::String::from(tok),
+                        cond: alloc::string::String::from(rest.trim()),
+                        error: None,
+                    }],
+                ));
+                return Ok(());
+            }
+            if matches!(tok, ".rept" | ".rep") && now.is_some() {
+                rept_stack.push((
+                    line,
+                    alloc::string::String::from(rest),
+                    alloc::vec::Vec::new(),
+                ));
+                return Ok(());
+            }
+            if tok == ".local" {
+                locals.extend(
+                    rest.split(',')
+                        .map(|n| alloc::string::String::from(n.trim())),
+                );
+            }
+            // gas: a common symbol in any section; a local one goes in `.bss`.
+            if matches!(tok, ".comm" | ".lcomm") {
+                let (name, size, align) = parse_common_args(tok, rest)?;
+                let local = tok == ".lcomm" || locals.contains(name);
+                let align = align.unwrap_or(match (tok, size) {
+                    (".lcomm", 0) => 1,
+                    (".lcomm", s) => (1u64 << s.ilog2()).min(8),
+                    _ if local => 1,
+                    (_, s) => s.max(1).next_power_of_two().min(16),
                 });
-                let idx = blocks.len() - 1;
-                prev = Some(now);
-                now = Some(idx);
-                continue;
-            }
-            _ => {}
-        }
-        match now {
-            // A symbol directive names a symbol of the unit, not a location in
-            // the stream it sits in, so it leaves the code stream here as it
-            // leaves the instruction stream of a section.
-            None if is_asm_sym_directive(tok) => {
-                push_sym_directive_items(tok, rest, is_aarch64, &mut sym_items)?;
-            }
-            // The remaining statement is an instruction, kept verbatim for the
-            // arch backend to encode.
-            None => {
-                code.push_str(stmt);
-                code.push('\n');
-            }
-            // GNU as assembles instructions in any section (an x86 replacement
-            // sequence in an `"ax"` section, a trampoline body in
-            // `.rodata`); the section flags set the object section's
-            // attributes, not whether code is admitted.
-            Some(idx) => {
-                // `.code16` / `.code32` / `.code64` is assembler state over the
-                // linear input, not a property of a section: GNU as keeps it
-                // across section switches. Blocks accumulate per section name,
-                // so re-entering one re-asserts the mode in effect.
-                if is_code_mode_directive(tok) {
-                    code_mode = Some(tok);
-                    block_code_mode.insert(idx, tok);
-                } else if let Some(m) = code_mode
-                    && block_code_mode.get(&idx) != Some(&m)
-                {
-                    blocks[idx]
-                        .items
-                        .push(AsmSectionItem::Code(alloc::string::String::from(m)));
-                    block_code_mode.insert(idx, m);
+                if local {
+                    let idx = match blocks
+                        .iter()
+                        .position(|b| b.name == ".bss" && b.subsection == 0)
+                    {
+                        Some(i) => i,
+                        None => {
+                            blocks.push(parse_section_args(".bss")?);
+                            blocks.len() - 1
+                        }
+                    };
+                    for (t, r) in [
+                        (".balign", alloc::format!("{align}")),
+                        (".type", alloc::format!("{name}, @object")),
+                        (".size", alloc::format!("{name}, {size}")),
+                    ] {
+                        let item = parse_section_item(t, &r, is_aarch64)?;
+                        blocks[idx].push(line, item);
+                    }
+                    blocks[idx].push(
+                        line,
+                        AsmSectionItem::Label(alloc::string::String::from(name)),
+                    );
+                    let fill = parse_section_item(".zero", &alloc::format!("{size}"), is_aarch64)?;
+                    blocks[idx].push(line, fill);
+                } else {
+                    let item = AsmSectionItem::Common {
+                        name: alloc::string::String::from(name),
+                        size,
+                        align,
+                    };
+                    match now {
+                        Some(idx) => blocks[idx].push(line, item),
+                        None => sym_items.push(item),
+                    }
                 }
-                push_sym_directive_items(tok, rest, is_aarch64, &mut blocks[idx].items)?;
+                return Ok(());
             }
+            match tok {
+                ".pushsection" | ".section" => {
+                    let block = reenter_section(&blocks, rest)?;
+                    let idx = blocks.len();
+                    blocks.push(block);
+                    if tok == ".pushsection" {
+                        pushed.push((now, prev));
+                    }
+                    prev = Some(now);
+                    now = Some(idx);
+                    return Ok(());
+                }
+                ".popsection" => {
+                    let Some(frame) = pushed.pop() else {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.popsection` without `.pushsection`",
+                        ));
+                    };
+                    (now, prev) = frame;
+                    return Ok(());
+                }
+                // Before any section change there is nothing to return to, and
+                // GNU as ignores the directive.
+                ".previous" => {
+                    if let Some(p) = prev {
+                        prev = Some(now);
+                        now = p;
+                    }
+                    return Ok(());
+                }
+                // File-scope base-section shorthands (`.text`, `.data`, ...): switch
+                // the current base to that section, reusing an existing block of the
+                // same name so repeated switches accumulate into one section.
+                _ if file_scope && base_section_shorthand(tok) => {
+                    let idx = match blocks
+                        .iter()
+                        .position(|b| b.name == tok && b.subsection == 0)
+                    {
+                        Some(i) => i,
+                        None => {
+                            blocks.push(parse_section_args(tok)?);
+                            blocks.len() - 1
+                        }
+                    };
+                    prev = Some(now);
+                    now = Some(idx);
+                    return Ok(());
+                }
+                // `.subsection N` switches to the numbered subsection of the
+                // current section: same identity and address space, laid out
+                // after every lower-numbered block. The function-body path
+                // handles its replacement `.subsection` in the deferred-region
+                // splitter before extraction; one reaching here is rejected
+                // rather than emitted inline (both sequences would execute).
+                ".subsection" => {
+                    if !file_scope {
+                        return Err(alloc::string::String::from(
+                            "inline asm: `.subsection` is not supported (deferred replacement code)",
+                        ));
+                    }
+                    let n: u32 = rest.trim().parse().map_err(|_| {
+                        alloc::format!("inline asm: bad `.subsection` number `{rest}`")
+                    })?;
+                    let cur = now.expect("file scope always in a section");
+                    blocks.push(AsmSectionBlock {
+                        subsection: n,
+                        items: alloc::vec::Vec::new(),
+                        ..blocks[cur].clone_identity()
+                    });
+                    let idx = blocks.len() - 1;
+                    prev = Some(now);
+                    now = Some(idx);
+                    return Ok(());
+                }
+                _ => {}
+            }
+            match now {
+                // A symbol directive names a symbol of the unit, not a location in
+                // the stream it sits in, so it leaves the code stream here as it
+                // leaves the instruction stream of a section.
+                None if is_asm_sym_directive(tok) => {
+                    sym_items.extend(sym_directive_items(tok, rest, is_aarch64)?);
+                }
+                // The remaining statement is an instruction, kept verbatim for the
+                // arch backend to encode.
+                None => {
+                    code.push_str(stmt);
+                    code.push('\n');
+                }
+                // GNU as assembles instructions in any section (an x86 replacement
+                // sequence in an `"ax"` section, a trampoline body in
+                // `.rodata`); the section flags set the object section's
+                // attributes, not whether code is admitted.
+                Some(idx) => {
+                    // `.code16` / `.code32` / `.code64` is assembler state over the
+                    // linear input, not a property of a section: GNU as keeps it
+                    // across section switches. Blocks accumulate per section name,
+                    // so re-entering one re-asserts the mode in effect.
+                    if is_code_mode_directive(tok) {
+                        code_mode = Some(tok);
+                        block_code_mode.insert(idx, tok);
+                    } else if let Some(m) = code_mode
+                        && block_code_mode.get(&idx) != Some(&m)
+                    {
+                        blocks[idx]
+                            .push(line, AsmSectionItem::Code(alloc::string::String::from(m)));
+                        block_code_mode.insert(idx, m);
+                    }
+                    for item in sym_directive_items(tok, rest, is_aarch64)? {
+                        blocks[idx].push(line, item);
+                    }
+                }
+            }
+            Ok(())
+        };
+        if let Err(text) = statement() {
+            errors.push(AsmError::at(line, text));
         }
     }
-    if !rept_stack.is_empty() {
-        return Err(alloc::string::String::from(
-            "inline asm: `.rept` without `.endr`",
-        ));
+    if let Some(&(line, ..)) = rept_stack.first() {
+        let text = alloc::string::String::from("inline asm: `.rept` without `.endr`");
+        errors.push(AsmError::at(line, text));
     }
-    Ok(Some(AsmExtract {
+    Some(AsmExtract {
         code,
         blocks,
         sym_items,
-    }))
+    })
 }
 
 /// `.comm` / `.lcomm name, size[, align]` as gas reads them on ELF. TODO:
@@ -604,6 +646,106 @@ fn is_code_mode_directive(tok: &str) -> bool {
     matches!(tok, ".code16" | ".code32" | ".code64")
 }
 
+/// The block a `.section` / `.pushsection` with arguments `rest` opens.
+/// gas identifies a section by its name, its group and the section it is
+/// ordered after: entering one again without a flags string keeps its
+/// attributes, and with a different type, attributes or entry size is an
+/// error -- except for a special name, whose first attributes stand.
+fn reenter_section(
+    prior: &[AsmSectionBlock],
+    rest: &str,
+) -> Result<AsmSectionBlock, alloc::string::String> {
+    let (block, written) = parse_section_directive(rest)?;
+    let group = |b: &AsmSectionBlock| b.group.as_ref().map(|g| g.name.clone());
+    let Some(first) = prior
+        .iter()
+        .find(|b| b.name == block.name && group(b) == group(&block) && b.link == block.link)
+    else {
+        return Ok(block);
+    };
+    let changed = |what: &str| {
+        Err(alloc::format!(
+            "inline asm: changed section {what} for `{}`",
+            block.name
+        ))
+    };
+    if special_section(&block.name).is_none() {
+        let kind = |b: &AsmSectionBlock| b.sh_type.clone().unwrap_or_else(|| "progbits".into());
+        if written.sh_type && kind(&block) != kind(first) {
+            return changed("type");
+        }
+        let attrs = |b: &AsmSectionBlock| {
+            let mut letters: alloc::vec::Vec<char> =
+                b.flags.chars().filter(|c| "awxeMST".contains(*c)).collect();
+            letters.sort_unstable();
+            letters.dedup();
+            (letters, b.group.as_ref().is_some_and(|g| g.comdat))
+        };
+        if written.flags && attrs(&block) != attrs(first) {
+            return changed("attributes");
+        }
+        if written.flags && block.flags.contains('M') && block.entsize != first.entsize {
+            return changed("entity size");
+        }
+    }
+    Ok(first.clone_identity())
+}
+
+/// The ELF section an Apple `.section SEGMENT,SECTION[,TYPE[,ATTRIBUTES]]`
+/// stands for: the one badc's Mach-O writer places in that section, as its
+/// Mach-O reader classifies one -- `__text` and `pure_instructions` code,
+/// the rest of `__TEXT` read-only data, `__DATA,__const` relocated
+/// read-only data, a `zerofill` or `__bss` section zero-fill. Another
+/// section keeps the pair as its name, with its segment's attributes.
+fn mach_o_section(
+    seg: &str,
+    sect: &str,
+    rest: &[&str],
+) -> Result<AsmSectionBlock, alloc::string::String> {
+    let code = rest
+        .iter()
+        .any(|a| a.split('+').any(|a| a.trim() == "pure_instructions"));
+    let zerofill = rest.first().is_some_and(|t| t.trim() == "zerofill");
+    let (name, flags, sh_type) = match (seg, sect) {
+        ("__TEXT", "__text") => (".text", "ax", "progbits"),
+        ("__TEXT", "__const") => (".rodata", "a", "progbits"),
+        ("__DATA" | "__DATA_CONST", "__const") => (".data.rel.ro", "aw", "progbits"),
+        ("__DATA", "__data") => (".data", "aw", "progbits"),
+        ("__DATA", "__bss") => (".bss", "aw", "nobits"),
+        ("__TEXT", _) if code => ("", "ax", "progbits"),
+        ("__TEXT", _) => ("", "a", "progbits"),
+        ("__DATA" | "__DATA_CONST", _) if zerofill => ("", "aw", "nobits"),
+        ("__DATA" | "__DATA_CONST", _) => ("", "aw", "progbits"),
+        _ => {
+            return Err(alloc::format!(
+                "inline asm: section `{seg},{sect}` is in a segment the Mach-O writer \
+                 places no section of"
+            ));
+        }
+    };
+    let name = match name {
+        "" => alloc::format!("{seg},{sect}"),
+        n => alloc::string::String::from(n),
+    };
+    Ok(AsmSectionBlock {
+        name,
+        flags: alloc::string::String::from(flags),
+        sh_type: Some(alloc::string::String::from(sh_type)),
+        entsize: 0,
+        link: None,
+        group: None,
+        subsection: 0,
+        items: alloc::vec::Vec::new(),
+    })
+}
+
+/// Whether a section directive wrote a flags string and a type.
+#[derive(Clone, Copy)]
+struct SectionWritten {
+    flags: bool,
+    sh_type: bool,
+}
+
 /// Parse the argument list of `.pushsection` / `.section`:
 /// `name[,"flags"[,@type][,entsize][,link][,group[,comdat]]]`. The entry
 /// size follows when the flags hold `M`, the ordering section when they
@@ -611,6 +753,13 @@ fn is_code_mode_directive(tok: &str) -> bool {
 /// reads them; `M` without an entry size and `G` without a group name are
 /// dropped, as GNU as drops them.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
+    parse_section_directive(rest).map(|(block, _)| block)
+}
+
+/// [`parse_section_args`], with what the directive wrote.
+fn parse_section_directive(
+    rest: &str,
+) -> Result<(AsmSectionBlock, SectionWritten), alloc::string::String> {
     let bad = |p: &str| alloc::format!("inline asm: bad section argument `{p}`");
     fn unquote(p: &str) -> Option<&str> {
         p.strip_prefix('"').and_then(|p| p.strip_suffix('"'))
@@ -623,6 +772,19 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         .map(|n| unquote(n).unwrap_or(n))
         .filter(|n| !n.is_empty())
         .ok_or_else(|| alloc::string::String::from("inline asm: section name expected"))?;
+    // Apple's `segment,section`, which no ELF directive spells: a second
+    // operand that is neither a flags string nor a type.
+    if !name.starts_with('.')
+        && let Some(sect) = parts.next_if(|p| is_asm_symbol_name(p))
+    {
+        let rest: alloc::vec::Vec<&str> = parts.collect();
+        let block = mach_o_section(name, sect, &rest)?;
+        let written = SectionWritten {
+            flags: true,
+            sh_type: true,
+        };
+        return Ok((block, written));
+    }
     let mut flags = alloc::string::String::new();
     if let Some(f) = parts.next_if(|p| p.starts_with('"')) {
         flags = alloc::string::String::from(unquote(f).ok_or_else(|| bad(f))?);
@@ -630,6 +792,10 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     let sh_type = parts
         .next_if(|p| p.starts_with(['@', '%', '"']))
         .map(|t| alloc::string::String::from(unquote(t).unwrap_or(&t[1..])));
+    let written = SectionWritten {
+        flags: !flags.is_empty(),
+        sh_type: sh_type.is_some(),
+    };
     let mut entsize = 0u32;
     if flags.contains('M') {
         if let Some(e) = parts.next() {
@@ -666,10 +832,14 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
     if let Some(p) = parts.next() {
         return Err(bad(p));
     }
-    if flags.is_empty() {
-        flags = alloc::string::String::from(default_section_flags(name));
-    }
-    Ok(AsmSectionBlock {
+    let sh_type = match special_section(name) {
+        Some(special) => {
+            special.merge_flags(name, &mut flags);
+            special.section_type(sh_type)
+        }
+        None => sh_type,
+    };
+    let block = AsmSectionBlock {
         name: alloc::string::String::from(name),
         flags,
         sh_type,
@@ -678,27 +848,113 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         group,
         subsection: 0,
         items: alloc::vec::Vec::new(),
+    };
+    Ok((block, written))
+}
+
+/// How a special section's name may continue past its prefix.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpecialRest {
+    /// The prefix is the whole name.
+    None,
+    /// The prefix alone or followed by `.` and anything.
+    Dotted,
+    /// Anything.
+    Any,
+}
+
+/// A name GNU as gives an ELF section type and attributes (bfd's
+/// `special_sections` table, first match wins).
+struct SpecialSection {
+    prefix: &'static str,
+    rest: SpecialRest,
+    sh_type: &'static str,
+    flags: &'static str,
+}
+
+/// The rows an assembler source names; the sections a link editor
+/// synthesizes (`.dynamic`, `.rela*`, `.symtab`, ...) are left out.
+/// TODO: the x86-64 large-model names (`.ldata`, `.lbss`, `.lrodata`),
+/// which take `SHF_X86_64_LARGE`.
+const SPECIAL_SECTIONS: &[SpecialSection] = {
+    use SpecialRest::{Any, Dotted, None};
+    const fn row(
+        prefix: &'static str,
+        rest: SpecialRest,
+        sh_type: &'static str,
+        flags: &'static str,
+    ) -> SpecialSection {
+        SpecialSection {
+            prefix,
+            rest,
+            sh_type,
+            flags,
+        }
+    }
+    &[
+        row(".bss", Dotted, "nobits", "aw"),
+        row(".data", Dotted, "progbits", "aw"),
+        row(".data1", None, "progbits", "aw"),
+        row(".fini", None, "progbits", "ax"),
+        row(".fini_array", Dotted, "fini_array", "aw"),
+        row(".gnu.linkonce.b", Dotted, "nobits", "aw"),
+        row(".gnu.linkonce.n", Dotted, "nobits", "aw"),
+        row(".gnu.linkonce.p", Dotted, "progbits", "aw"),
+        row(".init", None, "progbits", "ax"),
+        row(".init_array", Dotted, "init_array", "aw"),
+        row(".noinit", Dotted, "nobits", "aw"),
+        row(".note.GNU-stack", None, "progbits", ""),
+        row(".note", Any, "note", ""),
+        row(".persistent.bss", None, "nobits", "aw"),
+        row(".persistent", Dotted, "progbits", "aw"),
+        row(".preinit_array", Dotted, "preinit_array", "aw"),
+        row(".rodata", Dotted, "progbits", "a"),
+        row(".rodata1", None, "progbits", "a"),
+        row(".tbss", Dotted, "nobits", "awT"),
+        row(".tdata", Dotted, "progbits", "awT"),
+        row(".text", Dotted, "progbits", "ax"),
+    ]
+};
+
+fn special_section(name: &str) -> Option<&'static SpecialSection> {
+    SPECIAL_SECTIONS.iter().find(|s| {
+        name.strip_prefix(s.prefix)
+            .is_some_and(|rest| match s.rest {
+                SpecialRest::None => rest.is_empty(),
+                SpecialRest::Dotted => rest.is_empty() || rest.starts_with('.'),
+                SpecialRest::Any => true,
+            })
     })
 }
 
-/// GNU as default attributes for a well-known section name, used when the
-/// directive gives no explicit `"flags"`. GNU as knows these names carry
-/// allocation, write, and execute attributes; a `.pushsection .rodata`
-/// without flags is allocatable, an unknown name defaults to none. The
-/// match is exact or on the dotted-suffix form (`.rodata.str1.1`).
-fn default_section_flags(name: &str) -> &'static str {
-    // The leading `.` and first dotted component: `.rodata.str1.1` -> `.rodata`.
-    let base = match name.get(1..).and_then(|r| r.find('.')) {
-        Some(i) => &name[..1 + i],
-        None => name,
-    };
-    match base {
-        ".text" => "ax",
-        ".rodata" => "a",
-        ".data" | ".data1" | ".sdata" => "aw",
-        ".bss" | ".sbss" => "aw",
-        ".init_array" | ".fini_array" | ".preinit_array" => "aw",
-        _ => "",
+impl SpecialSection {
+    /// The type a directive gives the section: the name's when the
+    /// directive gives none, and the name's array type over any other, as
+    /// gas overrides `@progbits` on `.init_array`.
+    fn section_type(&self, given: Option<alloc::string::String>) -> Option<alloc::string::String> {
+        let array = self.sh_type.ends_with("_array");
+        match given {
+            Some(t) if !array => Some(t),
+            _ => Some(alloc::string::String::from(self.sh_type)),
+        }
+    }
+
+    /// gas adds the name's attributes to the written ones unless the
+    /// written ones hold another attribute; the link-order, retain and
+    /// exclude flags do not count, nor do `M` and `S` after a `.`-suffix
+    /// (`.rodata.str1.1`).
+    fn merge_flags(&self, name: &str, flags: &mut alloc::string::String) {
+        let suffixed = self.rest == SpecialRest::Dotted && name.len() > self.prefix.len();
+        let foreign = flags.chars().any(|c| {
+            !self.flags.contains(c)
+                && !matches!(c, 'o' | 'R' | 'e')
+                && !(suffixed && matches!(c, 'M' | 'S'))
+        });
+        if !foreign {
+            let missing: alloc::string::String =
+                self.flags.chars().filter(|&c| !flags.contains(c)).collect();
+            flags.push_str(&missing);
+        }
     }
 }
 
@@ -725,7 +981,11 @@ pub(crate) fn parse_section_item(
             short: None,
         });
     }
-    if let Some(w) = data_directive_width(tok) {
+    let width = match is_aarch64 {
+        true => data_directive_width(tok),
+        false => x86_data_directive_width(tok),
+    };
+    if let Some(w) = width {
         // `.word` is target-dependent: 2 bytes on x86 ELF, 4 on AArch64.
         let w = if tok == ".word" && is_aarch64 { 4 } else { w };
         let mut values = alloc::vec::Vec::new();

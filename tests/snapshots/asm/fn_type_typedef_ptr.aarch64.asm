@@ -22,8 +22,7 @@ Disassembly of section .text:
 <my_realloc>:
                	mov	x0, x1
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x2, [x1]
+               	str	x2, [x1, #0x30]
                	ret
 
 <inc>:
@@ -86,8 +85,7 @@ Disassembly of section .text:
                	mov	x2, #0x2a               // =42
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	cmp	x1, #0x2a
                	b.ne	<addr>
                	ldrsw	x0, [x0]
@@ -129,8 +127,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x6                // =6
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x7
                	b.eq	<addr>

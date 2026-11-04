@@ -10,7 +10,7 @@ keywords = ["c", "compiler", "c11", "jit", "cross-compiler"]
 categories = ["compilers", "development-tools"]
 # The bundled C headers, runtime and the data files next to the
 # sources are `include_str!`'d into the library at build time, so they
-# must ship in the published package.
+# must ship in the published package otherwise `cargo install` fails.
 include = [
     "src/**",
     "libc/**",

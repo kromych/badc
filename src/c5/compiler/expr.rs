@@ -3654,6 +3654,7 @@ impl Compiler {
         &mut self,
         what: &str,
     ) -> Result<(Option<super::super::ast::ExprId>, bool), C5Error> {
+        self.reject_function_designator(what)?;
         let lvalue = self.ast_acc;
         let fn_ptr_step = self.value_is_function_pointer();
         self.rewrite_trailing_load_as_psh().ok_or_else(|| {
@@ -3923,8 +3924,22 @@ impl Compiler {
         }
     }
 
+    /// C17 6.3.2.1p1: `*fp` designates a function, not an object, though its
+    /// node is the pointer's.
+    fn reject_function_designator(&self, what: &str) -> Result<(), C5Error> {
+        let designator = self
+            .ast_acc
+            .and_then(|id| self.expr_fn(id))
+            .is_some_and(|(_, d)| d == 0);
+        if designator {
+            return Err(self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {what}")));
+        }
+        Ok(())
+    }
+
     fn parse_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
         self.require_modifiable(lhs_ty, "assignment")?;
+        self.reject_function_designator("assignment")?;
         let lhs_fn = self.ast_acc.and_then(|id| self.expr_fn(id));
         self.next()?;
         // A parenthesized bitfield lvalue (`(s.f) = v`, C99 6.5.1p5) arrives
@@ -4068,6 +4083,7 @@ impl Compiler {
     }
 
     fn parse_compound_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        self.reject_function_designator("compound assignment")?;
         self.require_modifiable(lhs_ty, "assignment")?;
         // The lexer left the operator's token in `lex.ival`.
         let binop = self.lex.ival;

@@ -13,9 +13,9 @@ use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty, is_void_ty, pointee_ty,
-    ptr_depth_of, strip_unsigned, struct_id_of, struct_ptr_depth, unqualified_at_level,
-    unqualified_object_ty, unqualified_version_ty,
+    CONST_LVL_MASK, VOL_LVL_MASK, is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
+    is_void_ty, pointee_ty, ptr_depth_of, strip_unsigned, struct_id_of, struct_ptr_depth,
+    unqualified_at_level, unqualified_object_ty, unqualified_version_ty,
 };
 
 /// `tag` of a value leading to `f` at `depth`, each return type along the
@@ -114,7 +114,15 @@ impl Compiler {
         }
         let to_q = unqualified_returns(to_ty, tf, *td);
         let from_q = unqualified_returns(from_ty, ff, *fd);
-        let tags = self.tags_compatible(unqualified_object_ty(to_q), unqualified_object_ty(from_q));
+        // The levels from the return value outward are its own and the
+        // pointers to the function, whose qualifiers the conversion below
+        // judges; those within the return type must match (C17 6.7.6.3p15).
+        let returned = |tag: i64, depth: i64| {
+            let object = ptr_depth_of(tag);
+            let inner = unqualified_object_ty(tag) | (tag & (CONST_LVL_MASK | VOL_LVL_MASK));
+            ((object - depth.max(1))..=object).fold(inner, unqualified_at_level)
+        };
+        let tags = self.tags_compatible(returned(to_q, *td), returned(from_q, *fd));
         let compatible = tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd)));
         let discarded = Self::discarded_qualifiers(&self.structs, to_q, from_q);
         if compatible && discarded.is_none() {

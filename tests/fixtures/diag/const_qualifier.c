@@ -148,3 +148,34 @@ _Static_assert(_Generic(&k, const int *: 1, int *: 2, default: 0) == 1, "pointer
 //== redeclaration_differs_in_const: error invalid-declaration
 extern int g;
 extern const int g;
+//== function_pointer_return_gains_const: error incompatible-pointer-types
+const int *g(void);
+int *(*fp)(void) = g;
+//== function_pointer_return_loses_const: error incompatible-pointer-types
+int *g(void);
+const int *(*fp)(void) = g;
+//== function_pointer_return_argument_differs_in_const: error incompatible-pointer-types
+const int *g(void);
+void h(int *(*)(void));
+void use(void) { h(g); }
+//== function_return_type_drops_its_own_qualifier: ok
+const int g(void);
+int (*fp)(void) = g;
+//== function_pointer_object_may_be_const: ok
+int *g(void);
+int *(*const fp)(void) = g;
+//== assign_function_designator: error invalid-operands
+int *g(void);
+void use(void) { int *(*fp)(void) = g; *fp = 0; }
+//== increment_function_designator: error invalid-operands
+int *g(void);
+void use(void) { int *(*fp)(void) = g; (*fp)++; }
+//== compound_assign_function_designator: error invalid-operands
+int *g(void);
+void use(void) { int *(*fp)(void) = g; *fp += 1; }
+//== function_designator_reads: ok
+int *g(void);
+int *use(void) { int *(*fp)(void) = g; int *(*q)(void) = &*fp; fp = *fp; return (*q)(); }
+//== write_through_pointer_to_function_pointer: ok
+int *g(void);
+void use(void) { int *(*fp)(void) = g; int *(**pp)(void) = &fp; *pp = g; }

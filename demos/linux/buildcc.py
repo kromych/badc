@@ -69,7 +69,6 @@ BADC_TIMEOUT (seconds per badc run, default 300).
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import os
@@ -381,23 +380,25 @@ def warning_option(a: str) -> bool:
     return a.startswith("-W") and not a.startswith(("-Wa,", "-Wl,", "-Wp,"))
 
 
-def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
+def badc_accepts(badc: str, flag: str, cache: str | None = None) -> bool:
     """Whether badc takes the diagnostic option `flag`: kbuild's
     `cc-option` question, an empty unit compiled under `-Werror`. badc
     refuses a selector no diagnostic, alias or group answers, and reports
     one naming a gcc or clang warning it does not implement (B7012),
     which `-Werror` makes an error, so neither is forwarded. The answers
-    are kept in a file per badc binary, so a build asks once per
-    spelling."""
+    are kept in one file, `cache` or $BADC_WFLAGS_CACHE (which verify.py
+    places in the build's work directory), so a build asks once per
+    spelling; a file written for another badc binary is replaced."""
     path = shutil.which(badc) or badc
     st = os.stat(path)
     key = f"{os.path.realpath(path)}:{st.st_mtime_ns}:{st.st_size}:werror"
-    cache = os.path.join(cache_dir or tempfile.gettempdir(),
-                         f"badc-wflags-{hashlib.sha1(key.encode()).hexdigest()[:16]}.json")
+    cache = (cache or os.environ.get("BADC_WFLAGS_CACHE")
+             or os.path.join(tempfile.gettempdir(), f"badc-wflags-{os.getuid()}.json"))
     try:
         with open(cache) as f:
-            known = json.load(f)
-    except (OSError, ValueError):
+            stored = json.load(f)
+        known = stored["answers"] if stored.get("badc") == key else {}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         known = {}
     if flag not in known:
         r = subprocess.run([path, "-Werror", flag, "-c", "-x", "c", os.devnull,
@@ -405,9 +406,9 @@ def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
         known[flag] = r.returncode == 0
         # Another unit may write the file meanwhile; each answer is
         # recomputed at worst, and a reader never sees a partial file.
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cache))
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cache) or ".")
         with os.fdopen(fd, "w") as f:
-            json.dump(known, f)
+            json.dump({"badc": key, "answers": known}, f)
         os.replace(tmp, cache)
     return bool(known[flag])
 
@@ -772,18 +773,27 @@ def _self_test() -> int:
                  "-Werror=return-type", "-Wl,-r"], takes)
     assert r == Rewritten(["-Wall", "-Wno-pointer-sign", "-Wa,-x",
                            "-Werror=return-type"], [], []), r
-    # badc answers once per spelling, through a file a build's units share.
+    # badc answers once per spelling, through one file a build's units
+    # share, which another badc binary's answers replace.
     if os.name == "posix":
         with tempfile.TemporaryDirectory() as d:
             fake, calls = os.path.join(d, "badc"), os.path.join(d, "calls")
+            cache = os.path.join(d, "wflags.json")
             with open(fake, "w") as f:
                 f.write(f"#!/bin/sh\necho \"$2\" >> '{calls}'\n[ \"$2\" = -Wall ]\n")
             os.chmod(fake, 0o755)
             for _ in range(2):
-                assert badc_accepts(fake, "-Wall", d) is True
-                assert badc_accepts(fake, "-Wbogus", d) is False
+                assert badc_accepts(fake, "-Wall", cache) is True
+                assert badc_accepts(fake, "-Wbogus", cache) is False
             with open(calls) as f:
                 assert f.read() == "-Wall\n-Wbogus\n"
+            os.utime(fake, ns=(1, 1))
+            assert badc_accepts(fake, "-Wall", cache) is True
+            with open(calls) as f:
+                assert f.read() == "-Wall\n-Wbogus\n-Wall\n"
+            with open(cache) as f:
+                assert set(json.load(f)["answers"]) == {"-Wall"}
+            assert sorted(os.listdir(d)) == ["badc", "calls", "wflags.json"]
 
     # Success-path diagnostics: tagged with the unit when a log is
     # configured, left to the caller to forward when none is.

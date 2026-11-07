@@ -345,6 +345,7 @@ def build(args, arch: dict, tree: Path, manifest: Path,
         BADC_TIMEOUT=str(args.timeout),
         BADC_LD_REAL=args.real_ld,
         BADC_LD_MANIFEST=str(ld_manifest),
+        BADC_WFLAGS_CACHE=str(manifest.parent / "badc-wflags.json"),
     )
     if args.fallback:
         env["BADC_FALLBACK"] = str(Path(args.fallback).resolve())

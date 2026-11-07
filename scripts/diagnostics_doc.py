@@ -50,19 +50,19 @@ A selector names one diagnostic or one group:
 
 | option | effect |
 |---|---|
-| `-W<sel>` | turn the diagnostic on; one that is an error by default stays an error, as in gcc |
+| `-W<sel>` | turn the diagnostic on; one that is an error by default stays an error |
 | `-Wno-<sel>` | do not report it |
 | `-Werror=<sel>` | report it as an error, and turn it on if it is off |
 | `-Wno-error=<sel>` | report it as a warning again |
 | `-Werror` / `-Wno-error` | report every warning as an error / stop doing so |
 | `-w` | report no warnings |
-| `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name; the groups follow gcc's split |
+| `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name |
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
-| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings, as gcc 14 does |
+| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
 
-A gcc or clang warning that badc does not implement is accepted. Turning one
-on reports B7012 and has no other effect. Any other unknown name is an error,
-except after `-Wno-`, where gcc also accepts any name.
+A warning name of another compiler that badc does not implement is accepted.
+Turning one on reports B7012 and has no other effect. Any other unknown name is
+an error, except after `-Wno-`, which accepts any name.
 
 ## Pragmas
 
@@ -75,8 +75,8 @@ These pragmas take effect from their position in the source:
   `suppress` in place of `disable`, and `#pragma warning(push)` and `(pop)`.
   The number `<n>` selects the diagnostic whose alias is `C<n>`.
 
-A pragma that names an unknown selector reports B7002, or B7012 for a gcc or
-clang warning badc does not implement, and changes nothing else.
+A pragma that names an unknown selector reports B7002, or B7012 for another
+compiler's warning badc does not implement, and changes nothing else.
 
 ## Levels and classes
 

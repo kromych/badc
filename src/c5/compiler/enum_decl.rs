@@ -23,8 +23,7 @@ use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::types::{
-    UNSIGNED_BIT, enum_ty, is_struct_ty, rebase_enum_placeholder, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    UNSIGNED_BIT, enum_id_of, enum_ty, is_pointer_ty, rebase_enum_placeholder, struct_ty_for,
 };
 use super::{Compiler, EnumDef};
 
@@ -217,9 +216,9 @@ impl Compiler {
         if !self.enum_placeholder_tags.contains(&tag) {
             self.enum_placeholder_tags.push(tag);
         }
+        // cl and clang-cl type such an enum `int` until its definition.
         if self.is_ms_forward_enum(id) {
-            let s = &mut self.structs[id];
-            (s.size, s.align, s.natural_align, s.member_align) = (4, 4, 4, 4);
+            return Ok((enum_ty(Ty::Int as i64, id), Some(tag)));
         }
         Ok((struct_ty_for(id), Some(tag)))
     }
@@ -366,8 +365,7 @@ impl Compiler {
     /// definition is sized when the unit ends.)
     fn enum_sized_before_definition(&self, id: usize) -> bool {
         let tag = Some(id as u32);
-        let sized =
-            |ty: i64| is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && struct_id_of(ty) == id;
+        let sized = |ty: i64| !is_pointer_ty(ty) && enum_id_of(ty) == Some(id);
         self.symbols
             .iter()
             .any(|s| s.incomplete_enum_tag == tag && s.class == Token::Loc as i64 && sized(s.type_))

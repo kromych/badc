@@ -2310,8 +2310,18 @@ fn an_enum_named_before_its_definition_is_int_sized_on_the_pe_targets() {
         int main(void) { return sizeof *pw != 8; }\n";
     const NEVER: &str = "enum U u;\nstruct S { enum U m; int k; };\n\
         int main(void) { enum U l; return (int)(sizeof u + sizeof l + sizeof(struct S)) - 16; }\n";
+    // A member of an enum never defined in the unit reads and writes as
+    // `int`; a use before the definition does too, and the definition
+    // then gives the declarations its own type.
+    const UNDEFINED_USE: &str = "typedef enum _E E;\nstruct S { E v; };\n\
+        int main(void) { struct S s; unsigned long u; s.v = 0; u = s.v;\n\
+          return (int)u + (int)sizeof(s) - 4; }\n";
+    const USE_BEFORE: &str = "typedef enum _F F;\nstruct T { F v; };\nF get(struct T *t);\n\
+        int early(struct T *t) { t->v = 2; return t->v + 1; }\n\
+        enum _F { F_A, F_B, F_C };\nF get(struct T *t) { return t->v; }\n\
+        int main(void) { struct T t; return early(&t) - 3 + get(&t) - F_C; }\n";
     for t in [Target::WindowsX64, Target::WindowsAarch64] {
-        for src in [SRC, POINTER, NEVER] {
+        for src in [SRC, POINTER, NEVER, UNDEFINED_USE, USE_BEFORE] {
             let program = Compiler::with_target(src.to_string(), t)
                 .compile()
                 .unwrap_or_else(|e| panic!("{t:?}: {e}"));

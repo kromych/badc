@@ -764,16 +764,21 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
 }
 
 /// `ty`, declared through an enum tag before its definition and so built on
-/// the tag's incomplete entry `id`, over the integer type `underlying` the
-/// definition chose: the enumerated type at the same derivations and
-/// qualifiers. A type built on anything else is returned unchanged.
+/// the tag's incomplete entry `id`, or on the `int` placeholder the PE
+/// targets give it, over the integer type `underlying` the definition
+/// chose: the enumerated type at the same derivations and qualifiers. A
+/// type built on anything else is returned unchanged.
 pub(crate) fn rebase_enum_placeholder(ty: i64, id: usize, underlying: i64) -> i64 {
-    if !is_struct_ty(ty) || struct_id_of(ty) != id {
+    let placeholder = if is_struct_ty(ty) && struct_id_of(ty) == id {
+        struct_ty_for(id)
+    } else if !is_struct_ty(ty) && enum_id_of(ty) == Some(id) {
+        Ty::Int as i64
+    } else {
         return ty;
-    }
-    let bare = strip_unsigned(ty);
-    let rebased = (bare - struct_ty_for(id) + strip_unsigned(underlying))
-        | (ty ^ bare)
+    };
+    let (base, bare) = (without_enum(ty), strip_unsigned(ty));
+    let rebased = (bare - placeholder + strip_unsigned(underlying))
+        | (base ^ bare)
         | (underlying & UNSIGNED_BIT);
     enum_ty(rebased, id)
 }

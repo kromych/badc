@@ -25,35 +25,10 @@ Disassembly of section .text:
                	int3
                	int3
 
-<_mm_malloc>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x40, %edx
-               	movl	$0x20, %esi
-               	leaq	-0x8(%rbp), %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorl	%eax, %eax
-               	leave
-               	retq
-               	movq	-0x8(%rbp), %rax
-               	jmp	<addr>
-
-<_mm_free>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -62,26 +37,33 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	leave
                	retq
-               	movl	$0x40, %edi
+               	movl	$0x40, %edx
                	movl	$0x20, %esi
+               	leaq	-0x8(%rbp), %rdi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	testb	$0x1f, %dil
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	leave
                	retq
+               	movq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	testb	$0x1f, %al
+               	jne	<addr>
+               	movq	%rax, %rdi
+               	xorl	%eax, %eax
                	callq	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	leave
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	leave
                	retq

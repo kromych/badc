@@ -2561,7 +2561,7 @@ fn include_next_resumes_through_the_driver_search() {
 }
 
 // The source tree a badc was built from is not an input: a header
-// edited in the checkout's `libc/include` beside the executable changes
+// edited in the checkout's `libc` beside the executable changes
 // nothing until badc is rebuilt or the tree is named through
 // `--badc-home`, so the image does not follow where the binary sits.
 #[test]
@@ -2577,7 +2577,7 @@ fn the_source_tree_beside_the_executable_is_not_read() {
     let Some(root) = root else {
         return; // an installed binary has no source tree
     };
-    let header = root.join("libc/include/stdalign.h");
+    let header = root.join("libc/compiler/include/stdalign.h");
     let original = std::fs::read(&header).expect("read bundled header");
     let mut patched = original.clone();
     patched.extend_from_slice(b"\n#define BADC_SOURCE_TREE_OVERLAY 1\n");
@@ -2587,7 +2587,7 @@ fn the_source_tree_beside_the_executable_is_not_read() {
     std::fs::write(
         dir.join("m.c"),
         "#include <stdalign.h>\n#ifdef BADC_SOURCE_TREE_OVERLAY\n\
-         #error \"the source tree's libc/include was searched\"\n#endif\n\
+         #error \"the source tree's libc was searched\"\n#endif\n\
          int main(void){ return 0; }\n",
     )
     .expect("write source");

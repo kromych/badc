@@ -312,7 +312,7 @@ mod tests {
             ),
             rec(
                 "stddef.h",
-                Some("libc/include/stddef.h"),
+                Some("libc/compiler/include/stddef.h"),
                 IncludeOrigin::Own,
             ),
         ];
@@ -322,7 +322,7 @@ mod tests {
                 "m.c",
                 "inc/a.h",
                 "/usr/include/stdio.h",
-                "libc/include/stddef.h"
+                "libc/compiler/include/stddef.h"
             ])
         );
         assert_eq!(

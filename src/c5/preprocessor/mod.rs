@@ -1553,7 +1553,8 @@ impl Preprocessor {
     }
 
     /// Append an on-disk copy of the compiler's own header set (the
-    /// source tree's `libc/include`, `$BADC_HOME/include`). A bundled
+    /// source tree's `libc/include` or `libc/compiler/include`,
+    /// `$BADC_HOME/include`). A bundled
     /// name found there replaces the in-binary body, keeping one
     /// identity per header name so `#pragma once` and the include
     /// guards see a single file however the include was reached.

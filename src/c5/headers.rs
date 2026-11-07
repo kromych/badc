@@ -15,7 +15,9 @@
 //! is not found, as with the system compilers, so `__has_include` and
 //! `#include` probes select the target's own interfaces.
 //!
-//! Adding a header: drop the file under `libc/include/`, add an entry to
+//! Adding a header: drop the file under `libc/include/` (a header the
+//! compiler provides rather than the C library, as `COMPILER_HEADERS` lists
+//! them, under `libc/compiler/include/`), add an entry to
 //! [`EMBEDDED_HEADERS`], document the symbols it binds at the top of the
 //! file, and measure its targets with `scripts/measure_header_targets.py`.
 
@@ -187,10 +189,14 @@ pub fn embedded_headers() -> &'static [(&'static str, TargetSet, &'static str)] 
 }
 
 /// A registry entry: the name, the targets it is served on and the body
-/// of `libc/include/<file>`, `<file>` being the name unless given.
+/// of `libc/include/<file>`, `<file>` being the name unless given, or of
+/// `libc/compiler/include/<name>` for one of the compiler's own headers.
 macro_rules! header {
     ($name:literal, $targets:expr) => {
         header!($name => $name, $targets)
+    };
+    ($name:literal, $targets:expr, compiler) => {
+        ($name, $targets, include_str!(concat!("../../libc/compiler/include/", $name)))
     };
     ($name:literal => $file:literal, $targets:expr) => {
         ($name, $targets, include_str!(concat!("../../libc/include/", $file)))
@@ -200,26 +206,27 @@ macro_rules! header {
 /// Every header the registry knows about, with the targets it is served
 /// on.
 pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
-    header!("arm_neon.h", AARCH64),
-    header!("x86intrin.h", X86_64),
-    header!("immintrin.h", X86_64),
-    header!("mmintrin.h", X86_64),
-    header!("xmmintrin.h", X86_64),
-    header!("emmintrin.h", X86_64),
-    header!("pmmintrin.h", X86_64),
-    header!("tmmintrin.h", X86_64),
-    header!("smmintrin.h", X86_64),
-    header!("wmmintrin.h", X86_64),
+    header!("arm_neon.h", AARCH64, compiler),
+    header!("x86intrin.h", X86_64, compiler),
+    header!("immintrin.h", X86_64, compiler),
+    header!("mmintrin.h", X86_64, compiler),
+    header!("xmmintrin.h", X86_64, compiler),
+    header!("emmintrin.h", X86_64, compiler),
+    header!("pmmintrin.h", X86_64, compiler),
+    header!("tmmintrin.h", X86_64, compiler),
+    header!("smmintrin.h", X86_64, compiler),
+    header!("wmmintrin.h", X86_64, compiler),
     header!(
         "mm_malloc.h",
-        MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS)
+        MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS),
+        compiler
     ),
-    header!("stdalign.h", ALL),
-    header!("stddef.h", ALL),
-    header!("stdint.h", ALL),
+    header!("stdalign.h", ALL, compiler),
+    header!("stddef.h", ALL, compiler),
+    header!("stdint.h", ALL, compiler),
     header!("inttypes.h", ALL),
     header!("setjmp.h", ALL),
-    header!("limits.h", ALL),
+    header!("limits.h", ALL, compiler),
     header!("string.h", ALL),
     header!("sched.h", ALL),
     header!("spawn.h", POSIX),
@@ -227,15 +234,15 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("stdlib.h", ALL),
     header!("alloca.h", POSIX),
     header!("malloc.h", LINUX.or(WINDOWS)),
-    header!("stdarg.h", ALL),
-    header!("stdbool.h", ALL),
-    header!("iso646.h", ALL),
-    header!("stdnoreturn.h", ALL),
-    header!("stdatomic.h", ALL),
+    header!("stdarg.h", ALL, compiler),
+    header!("stdbool.h", ALL, compiler),
+    header!("iso646.h", ALL, compiler),
+    header!("stdnoreturn.h", ALL, compiler),
+    header!("stdatomic.h", ALL, compiler),
     header!("ctype.h", ALL),
     header!("math.h", ALL),
     header!("tgmath.h", ALL),
-    header!("float.h", ALL),
+    header!("float.h", ALL, compiler),
     header!("locale.h", ALL),
     header!("signal.h", ALL),
     header!("errno.h", ALL),
@@ -386,7 +393,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("fenv.h", ALL),
     header!("io.h", WINDOWS),
     header!("direct.h", WINDOWS),
-    header!("intrin.h", WINDOWS),
+    header!("intrin.h", WINDOWS, compiler),
     header!("bcrypt.h", WINDOWS),
     header!("TargetConditionals.h", MACOS),
     header!("AvailabilityMacros.h", MACOS),
@@ -427,7 +434,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("mbctype.h", WINDOWS),
     header!("winapifamily.h", WINDOWS),
     header!("sdkddkver.h", WINDOWS),
-    header!("cpuid.h", X86_64),
+    header!("cpuid.h", X86_64, compiler),
     header!("winerror.h", WINDOWS),
     header!("process.h", WINDOWS),
     header!("conio.h", WINDOWS),
@@ -448,13 +455,6 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("winternl.h", WINDOWS),
     header!("excpt.h", WINDOWS),
     header!("wchar.h", ALL),
-    // Opt-in MSVC-shape predefines: no `#pragma binding`
-    // here, just `#define _MSC_VER 1900`, `#define __int64 long
-    // long`, the `__declspec(x)` family of empty-decorator
-    // macros, etc. Build drivers that need to compile MSVC-
-    // shaped C against the Windows backend opt in via
-    // `badc -include msvc_compat.h ...`. Internally guarded by
-    // `#ifdef _WIN32` so the same command line stays valid on
     header!("scsi/sg.h", LINUX),
     header!("linux/magic.h", LINUX),
     header!("linux/falloc.h", LINUX),
@@ -470,6 +470,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("linux/fd.h", LINUX),
     header!("linux/can.h", LINUX),
     header!("linux/can/raw.h", LINUX),
+    // The MinGW identity and the decorator no-ops a unit opts into with
+    // `-include msvc_compat.h`; it is empty off Windows.
     header!("msvc_compat.h", ALL),
     // Legacy alias: <memory.h> predates POSIX's consolidation of
     // mem*/str* under <string.h>. The binding index leaves it out, so
@@ -478,8 +480,8 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
 ];
 
 // Build-time-generated `&[(name, headers)]` sorted by name. Produced
-// by `build.rs`'s `emit_binding_to_header_index`, which walks
-// `libc/include/*.h` once per build and harvests every
+// by `build.rs`'s `emit_binding_to_header_index`, which walks the
+// bundled headers once per build and harvests every
 // `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
 // file-scope function-prototype identifier. Each name's headers are
 // in priority-then-lexicographic scan order.
@@ -613,6 +615,25 @@ mod tests {
         for name in INTRINSIC_HEADERS.iter().chain(COMPILER_HEADERS) {
             assert!(registry_entry(name).is_some(), "{name}");
         }
+    }
+
+    /// The compiler's own headers are the files of `libc/compiler/include`,
+    /// and no other file is kept there.
+    #[test]
+    fn the_compiler_headers_are_the_compiler_include_directory() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("libc/compiler/include");
+        let mut on_disk: alloc::vec::Vec<String> = std::fs::read_dir(&dir)
+            .expect("libc/compiler/include")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        on_disk.sort();
+        let mut listed: alloc::vec::Vec<String> = INTRINSIC_HEADERS
+            .iter()
+            .chain(COMPILER_HEADERS)
+            .map(|n| String::from(*n))
+            .collect();
+        listed.sort();
+        assert_eq!(on_disk, listed);
     }
 
     #[test]

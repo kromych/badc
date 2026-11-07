@@ -3909,6 +3909,7 @@ fn unfold_matches_reference_on_repo_sources() {
     let mut files = Vec::new();
     collect_sources(&root.join("tests/fixtures/c"), &["c"], &mut files);
     collect_sources(&root.join("libc/include"), &["h"], &mut files);
+    collect_sources(&root.join("libc/compiler/include"), &["h"], &mut files);
     let mut checked = 0usize;
     for path in &files {
         let Ok(bytes) = std::fs::read(path) else {

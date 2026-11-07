@@ -144,11 +144,14 @@ fn install(dir: Option<PathBuf>, quiet: bool) {
 fn resolve_search_paths(cli: &mut Cli) {
     cli.badc_home = declared_home(cli.badc_home.as_deref());
     if let Some(home) = &cli.badc_home {
-        let include = home.join("include");
-        if include.is_dir() {
-            cli.front
-                .own_header_roots
-                .push(include.to_string_lossy().into_owned());
+        // An installed tree holds every header in `include`; a source
+        // tree's `libc` keeps the compiler's own in `compiler/include`.
+        for include in [home.join("include"), home.join("compiler").join("include")] {
+            if include.is_dir() {
+                cli.front
+                    .own_header_roots
+                    .push(include.to_string_lossy().into_owned());
+            }
         }
         let lib = home.join("lib");
         if lib.is_dir() {

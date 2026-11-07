@@ -545,7 +545,8 @@ pub struct CompileOptions {
     /// shadowing a standard header.
     pub system_include_paths: Vec<String>,
     /// On-disk copies of the compiler's own header set (the source
-    /// tree's `libc/include`, `$BADC_HOME/include`). A bundled name
+    /// tree's `libc/include` and `libc/compiler/include`,
+    /// `$BADC_HOME/include`). A bundled name
     /// found there replaces the in-binary body.
     pub own_header_roots: Vec<String>,
     /// `-nostdinc` -- the bundled standard headers and the system

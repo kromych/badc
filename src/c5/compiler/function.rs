@@ -351,13 +351,13 @@ impl Compiler {
         // the list keeps the one it saw.
         let outer_register = core::mem::take(&mut self.pending.saw_register_storage);
         let mut last_register = false;
-        // An empty list declares no prototype; `(void)` declares one with
-        // no parameters. A list is an identifier list until a parameter
-        // spells a type.
-        let mut form = if self.lex.tk == ')' {
-            ParamForm::Empty
-        } else {
-            ParamForm::IdentifierList
+        // An empty list declares no prototype before C23, and from C23 on
+        // the prototype `(void)` declares; a list is an identifier list until
+        // a parameter spells a type.
+        let mut form = match self.lex.tk == ')' {
+            true if self.std.prototypes_only() => ParamForm::Prototype,
+            true => ParamForm::Empty,
+            false => ParamForm::IdentifierList,
         };
         // `(void)` -- C's "no parameters" sigil. With `void` now
         // its own lexeme (`Token::Void`), the early-match below
@@ -670,6 +670,13 @@ impl Compiler {
             }
         }
         self.pending.saw_register_storage = outer_register;
+        if form == ParamForm::IdentifierList && self.std.prototypes_only() {
+            return Err(self.compile_err(
+                Code::SYNTAX,
+                "an identifier list is no parameter list from C23 on, which removed \
+                 K&R function definitions; declare each parameter's type",
+            ));
+        }
         self.next()?;
         // A parameter whose type is an array typedef (`va_list` is
         // `__va_list_tag[1]` on the SysV/AAPCS ABIs) leaves the typedef-array

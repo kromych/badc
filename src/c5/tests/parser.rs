@@ -6970,3 +6970,38 @@ fn enum_conversion_reports_where_gcc_does() {
         );
     }
 }
+
+/// C23 6.7.7.4p13: from C23 on an empty parameter list declares no
+/// parameters, as `(void)` does, and an identifier list is no parameter
+/// list, C23 having removed K&R definitions; C17 keeps both meanings.
+#[test]
+fn c23_empty_parameter_list_declares_no_parameters() {
+    use crate::{CStd, CompileOptions, Target};
+    let compile = |std: u32, src: &str| {
+        let opts = CompileOptions::default()
+            .with_std(CStd(Some(std)))
+            .with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::host(), opts).compile()
+    };
+    let call = "int f();\nint g(void) { return f(1); }\nint f(void) { return 0; }\n";
+    assert!(compile(201710, call).is_ok());
+    let err = compile(202311, call)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("too many arguments to `f`"), "{err}");
+    let knr = "int h(a) int a; { return a; }\n";
+    assert!(compile(201710, knr).is_ok());
+    let err = compile(202311, knr)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(err.contains("identifier list"), "{err}");
+    assert!(
+        compile(
+            202311,
+            "int k() { return 1; }\nint m(void) { return k(); }\n"
+        )
+        .is_ok()
+    );
+}

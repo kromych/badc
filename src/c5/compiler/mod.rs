@@ -742,6 +742,12 @@ impl CStd {
         self.0.is_some_and(|v| v >= 202311)
     }
 
+    /// C23 6.7.7.4p13: an empty parameter list declares no parameters, as
+    /// `(void)` does, and the identifier list of a K&R definition is gone.
+    pub fn prototypes_only(self) -> bool {
+        self.0.is_some_and(|v| v >= 202311)
+    }
+
     /// gcc's default inline model: GNU89's before C99, which introduced
     /// 6.7.4's, unless `-f[no-]gnu89-inline` says otherwise.
     pub fn gnu89_inline(self) -> bool {

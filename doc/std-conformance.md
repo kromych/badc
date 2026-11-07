@@ -359,7 +359,10 @@ other. It sets `__STDC_VERSION__` as gcc does:
 | `c2y`, `gnu2y`                                                | `202500L`          |
 
 From `c23` on, `bool`, `true` and `false` are keywords, `1` and `0` in `#if`
-as well, and `<stdbool.h>` defines only `__bool_true_false_are_defined`. The
+as well, and `<stdbool.h>` defines only `__bool_true_false_are_defined`. An
+empty parameter list declares no parameters, as `(void)` does (C23
+6.7.7.4p13), and an identifier list is an error, C23 having removed K&R
+function definitions. The
 GNU extensions are available in every dialect. `__STRICT_ANSI__` is defined
 only under `--gnu` ([GCC](#gcc)): a `gnu*` name leaves it undefined, and a
 `c*` or `iso9899:*` name defines it. With `--gnu` and no

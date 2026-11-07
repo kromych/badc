@@ -5167,3 +5167,32 @@ fn no_instruction_follows_a_trap_unreached() {
         );
     }
 }
+
+/// `-mno-sse` and `-mgeneral-regs-only` keep a unit off the SIMD register
+/// file, and the SSE feature macros go with it, as gcc and clang drop them;
+/// `__MMX__` stays.
+#[test]
+fn no_sse_drops_the_sse_feature_macros() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-no-sse");
+    let src = dir.join("e.c");
+    std::fs::write(&src, "int x;\n").expect("write source");
+    for (flags, sse) in [
+        (&[][..], true),
+        (&["-mno-sse"][..], false),
+        (&["-mgeneral-regs-only"][..], false),
+    ] {
+        let out = Command::new(badc)
+            .args(["--target=linux-x64", "-dM", "-E"])
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let text = String::from_utf8_lossy(&out.stdout);
+        for name in ["__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__"] {
+            let defined = text.contains(&format!("#define {name} 1\n"));
+            assert_eq!(defined, sse, "{flags:?}: {name}");
+        }
+        assert!(text.contains("#define __MMX__ 1\n"), "{flags:?}");
+    }
+}

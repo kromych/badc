@@ -1366,6 +1366,14 @@ impl Preprocessor {
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
     }
 
+    /// `-mno-sse` / `-mgeneral-regs-only`: the SSE feature macros go, as gcc
+    /// and clang drop them; `__MMX__` stays.
+    pub fn drop_simd_macros(&mut self) {
+        for name in ["__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__"] {
+            self.macros.remove(name);
+        }
+    }
+
     /// Select plain `char`'s signedness for this unit (`-fsigned-char` /
     /// `-funsigned-char`), moving `__CHAR_UNSIGNED__` with it so a
     /// header cannot read one answer while the front end uses another.

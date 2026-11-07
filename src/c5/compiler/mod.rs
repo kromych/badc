@@ -677,6 +677,9 @@ pub struct CompileOptions {
     /// every target, which narrows `L"..."` / `L'...'` elements and the
     /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
     pub short_wchar: bool,
+    /// `-mno-sse` / `-mgeneral-regs-only`: the unit keeps off the SIMD
+    /// register file, so the preprocessor drops the SSE feature macros.
+    pub no_fp_regs: bool,
     /// `-fsigned-char` / `-funsigned-char`, which C99 6.2.5p15 leaves to
     /// the implementation. `None` keeps the target ABI's own choice; see
     /// [`Self::plain_char_signed`], the sole resolution of the pair.
@@ -834,6 +837,11 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+
+    pub fn with_no_fp_regs(mut self, on: bool) -> Self {
+        self.no_fp_regs = on;
         self
     }
     /// Initialize the automatic objects the program leaves
@@ -2907,6 +2915,9 @@ impl Compiler {
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        if opts.no_fp_regs {
+            pp.drop_simd_macros();
+        }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);

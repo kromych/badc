@@ -65,8 +65,20 @@ The interpreter has its own C library. It provides `malloc`, `calloc`,
 `fileno`, `stdin`, `stdout`, `stderr`, `open`, `read`, `write`, `close`,
 `getenv`, `setenv`, `_putenv_s`, `exit`, and the `dlopen` family. Calls that
 badc compiles to instructions, such as `sqrt`, `fabs`, `floor` and `labs`,
-also work. `strlen` and `strcmp` work only on string literals, which badc
-evaluates at compile time.
+also work.
+
+The `<string.h>` functions are there: `strlen`, `strnlen`, `strcmp`,
+`strncmp`, `strcoll`, `strxfrm`, `strcpy`, `strncpy`, `stpcpy`, `stpncpy`,
+`strcat`, `strncat`, `strchr`, `strrchr`, `strchrnul`, `memchr`, `memrchr`,
+`strstr`, `strcasestr`, `memmem`, `strspn`, `strcspn`, `strpbrk`, `strdup`,
+`strndup`, `strtok` and `strtok_r`, with `strcasecmp`, `strncasecmp`,
+`bzero`, `bcopy`, `bcmp`, `index` and `rindex` from `<strings.h>` and the
+msvcrt spellings `_strdup`, `_stricmp` and `_strnicmp`. So are the
+`<ctype.h>` classification functions and `tolower` and `toupper`, in the
+"C" locale. A comparison returns what the target's C library returns: the
+byte difference from glibc and Apple's libc, -1 or 1 from msvcrt's
+`strcmp`. A true classification is glibc's table bit, 1 on macOS, and
+msvcrt's `_ctype` bits on Windows.
 
 The numeric conversions `atoi`, `atol`, `atoll`, `atof`, `strtol`,
 `strtoul`, `strtoll`, `strtoull`, `strtoimax`, `strtoumax`, `strtod`,
@@ -89,8 +101,8 @@ error: runtime: vm_ssa: library call `sscanf` is not implemented under --interp
 ```
 
 Among the calls not implemented are the `scanf` family, `sprintf`,
-`snprintf` and `vsnprintf`, `fopen` and `fgets`, `strcpy`, `strchr`,
-`qsort`, `time`, `setjmp`, `signal` and `pthread_create`.
+`snprintf` and `vsnprintf`, `fopen` and `fgets`, `strerror`, `qsort`,
+`time`, `setjmp`, `signal` and `pthread_create`.
 
 ### Other limits
 

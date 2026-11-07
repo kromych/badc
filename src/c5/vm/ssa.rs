@@ -21,6 +21,7 @@ use super::eval::{self, round_if_f32};
 use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
+mod string;
 mod strtox;
 
 /// `Inst::ImmCode` results are tagged with this bit set so
@@ -132,6 +133,8 @@ struct Memory {
     target: crate::c5::codegen::Target,
     /// The program's floating-point environment.
     fp: FpEnv,
+    /// Where `strtok` resumes, 0 before its first call.
+    strtok_next: usize,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -190,6 +193,7 @@ impl Memory {
             stdio: 0,
             target,
             fp: FpEnv::new(target),
+            strtok_next: 0,
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -1756,6 +1760,7 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
 /// native link takes the one its C library offers.
 pub(super) fn interp_supplies(name: &str) -> bool {
     strtox::NAMES.contains(&name)
+        || string::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -1907,6 +1912,9 @@ fn dispatch_callext<H: Host>(
         return r;
     }
     if let Some(r) = strtox::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = string::call(name, args, mem) {
         return r;
     }
     match name {
@@ -4648,7 +4656,8 @@ mod tests {
             "dlclose",
             "dlerror",
         ];
-        for name in names.into_iter().chain(strtox::NAMES.iter().copied()) {
+        let libraries = strtox::NAMES.iter().chain(string::NAMES);
+        for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =
                 dispatch_callext(name, &[0; 4], &mut mem, &mut NullHost)
@@ -4938,15 +4947,11 @@ mod tests {
 
     #[test]
     fn callext_unimplemented_returns_runtime_error() {
-        // `strlen` isn't in the SSA-VM dispatch yet; the
-        // unimplemented arm surfaces a runtime error pointing
-        // at the next port target. Programs that don't touch
-        // libc keep running.
+        // A library call the interpreter has no definition of stops the
+        // program with a runtime error naming it.
         use crate::Compiler;
         let program = Compiler::new(
-            "#include <string.h>\nstatic const char *s = \"hi\";\n\
-             int main(void) { return strlen(s); }"
-                .to_string(),
+            "#include <stdlib.h>\nint main(void) { return system(\"true\"); }".to_string(),
         )
         .compile()
         .expect("compile fixture");
@@ -4971,13 +4976,12 @@ mod tests {
             &mut host,
             super::super::super::Target::MacOSAarch64,
         )
-        .expect_err("strlen should land in the unimplemented arm");
+        .expect_err("system should land in the unimplemented arm");
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("library call `strlen` is not implemented")
-                        || msg.contains("library call `_strlen` is not implemented"),
-                    "expected strlen in the error, got: {msg}",
+                    msg.contains("library call `system` is not implemented"),
+                    "expected system in the error, got: {msg}",
                 );
             }
             other => panic!("expected Runtime, got {other:?}"),

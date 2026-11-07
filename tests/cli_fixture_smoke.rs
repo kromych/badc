@@ -5385,3 +5385,35 @@ fn interp_converts_numbers_as_the_target_library_does() {
         ],
     );
 }
+
+/// Under `--interp` the C99 7.21 string functions and the 7.4 character
+/// functions run on every target; a comparison or a classification returns
+/// what the target's C library returns. The macOS text is the native
+/// build's.
+#[test]
+fn interp_runs_the_string_functions_as_the_target_library_does() {
+    let text = |cmp: &str, classes: &str| {
+        format!(
+            "13 [hello, world!] {cmp} 0 1 4\n\
+             [o, world!] [orld!] [world!] 4 2 [, world!]\n1 1 1\n\
+             [Hello, world!] [hello, world!] [hell]\n\
+             <a><b><c>{{x=1}}{{y=2}} 000z ab\ndef 1 bc\n\
+             1 0 1 1 Qq -1 0|{classes}\n"
+        )
+    };
+    let (glibc, apple, msvcrt) = (
+        text("-2", "1024 2048 8192"),
+        text("-2", "1 1 1"),
+        text("-1", "258 4 8"),
+    );
+    interp_fixture_prints(
+        "string_functions_follow_the_target_library.c",
+        &[
+            ("linux-x64", &glibc),
+            ("linux-aarch64", &glibc),
+            ("macos-aarch64", &apple),
+            ("windows-x64", &msvcrt),
+            ("windows-arm64", &msvcrt),
+        ],
+    );
+}

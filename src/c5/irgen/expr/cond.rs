@@ -39,7 +39,7 @@ impl<'a> Walker<'a> {
         // that address would read every value as true. Test the value:
         // it is non-zero when either half is.
         if self.expr_is_int128_value(cond) {
-            let (lo, hi) = self.int128_load(b, val);
+            let (lo, hi) = Self::int128_load_at(b, val, false, self.int128_align(cond));
             return b.binop(BinOp::Or, lo, hi);
         }
         val

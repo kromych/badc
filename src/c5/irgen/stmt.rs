@@ -1182,7 +1182,7 @@ impl<'a> Walker<'a> {
             (BinOp::Ge, BinOp::Le)
         };
         if self.expr_is_int128_value(disc) {
-            let d = self.int128_load(b, disc_val);
+            let d = Self::int128_load_at(b, disc_val, false, self.int128_align(disc));
             self.emit_switch_dispatch_128(b, d, &labels, ge_op, le_op, deflt);
         } else {
             // A range case is dispatched by an explicit `lo <= disc <= hi`

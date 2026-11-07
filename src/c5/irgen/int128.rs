@@ -28,10 +28,27 @@ impl<'a> Walker<'a> {
         addr: ValueId,
         vol: bool,
     ) -> Halves {
-        let lo = b.load_vol(addr, LoadKind::I64, vol);
+        Self::int128_load_at(b, addr, vol, 0)
+    }
+
+    /// [`Self::int128_load_vol`] of an object whose address is proven
+    /// `align`-aligned, as [`Self::int128_align`] gives it.
+    pub(super) fn int128_load_at(
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        vol: bool,
+        align: u8,
+    ) -> Halves {
+        let lo = b.load_at(addr, LoadKind::I64, vol, align);
         let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
-        let hi = b.load_vol(hi_addr, LoadKind::I64, vol);
+        let hi = b.load_at(hi_addr, LoadKind::I64, vol, align);
         (lo, hi)
+    }
+
+    /// Alignment bound of each 8-byte half of the 128-bit object `id`
+    /// designates: below 8 only for a member of a packed aggregate.
+    pub(super) fn int128_align(&self, id: ExprId) -> u8 {
+        self.lvalue_align(id, 8)
     }
 
     /// [`Self::int128_store`] with the C99 6.7.3p6 volatile access rule
@@ -43,9 +60,21 @@ impl<'a> Walker<'a> {
         (lo, hi): Halves,
         vol: bool,
     ) {
-        b.store_vol(addr, lo, StoreKind::I64, vol);
+        Self::int128_store_at(b, addr, (lo, hi), vol, 0);
+    }
+
+    /// [`Self::int128_store_vol`] with the alignment bound of
+    /// [`Self::int128_load_at`].
+    pub(super) fn int128_store_at(
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        (lo, hi): Halves,
+        vol: bool,
+        align: u8,
+    ) {
+        b.store_at(addr, lo, StoreKind::I64, vol, align);
         let hi_addr = b.binop_imm(BinOp::Add, addr, 8);
-        b.store_vol(hi_addr, hi, StoreKind::I64, vol);
+        b.store_at(hi_addr, hi, StoreKind::I64, vol, align);
     }
 
     /// Materialise a half pair as a fresh 16-byte object and return its
@@ -70,7 +99,7 @@ impl<'a> Walker<'a> {
         let is128 = self.expr_is_int128_value(id);
         let v = self.walk_copy_operand(b, id)?;
         if is128 {
-            return Ok(self.int128_load(b, v));
+            return Ok(Self::int128_load_at(b, v, false, self.int128_align(id)));
         }
         let ty = if self.is_int128_value_ty(ty) {
             Ty::Int as i64
@@ -887,10 +916,11 @@ impl<'a> Walker<'a> {
             return Ok(saved.unwrap_or(stored));
         }
         let addr = self.walk_expr_lvalue(b, lvalue)?;
-        let old = self.int128_load(b, addr);
+        let align = self.int128_align(lvalue);
+        let old = Self::int128_load_at(b, addr, false, align);
         let saved = keep_old.then(|| self.int128_materialize(b, old));
         let new = update(self, b, old)?;
-        self.int128_store(b, addr, new);
+        Self::int128_store_at(b, addr, new, false, align);
         Ok(saved.unwrap_or(addr))
     }
 

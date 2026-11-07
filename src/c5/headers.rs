@@ -499,7 +499,22 @@ fn first_declaring(
     target: Target,
     mut declares: impl FnMut(&'static str) -> bool,
 ) -> Option<&'static str> {
-    (headers_declaring(name).iter().copied()).find(|&h| !withheld(h, target) && declares(h))
+    let own = headers_declaring(name);
+    let mut serves = |h: &'static str| !withheld(h, target) && declares(h);
+    // A declaring header the target withholds may reach it through one it
+    // serves: Windows has no <alloca.h>, and its <malloc.h> declares alloca.
+    own.iter()
+        .copied()
+        .find(|&h| serves(h))
+        .or_else(|| (own.iter().flat_map(|&h| header_includers(h)).copied()).find(|&h| serves(h)))
+}
+
+/// The bundled headers that `#include <header>`.
+fn header_includers(header: &str) -> &'static [&'static str] {
+    HEADER_INCLUDERS
+        .binary_search_by_key(&header, |&(n, _)| n)
+        .ok()
+        .map_or(&[], |i| HEADER_INCLUDERS[i].1)
 }
 
 /// The macros, bindings and file-scope functions and objects of
@@ -661,6 +676,22 @@ mod tests {
     }
 
     /// A `__badc_*.h` block's names count for the headers that include it.
+    /// A name whose declaring header a target withholds resolves through a
+    /// served header that includes it: Windows ships no <alloca.h>, and its
+    /// <malloc.h> declares `alloca` and `_alloca`.
+    #[test]
+    fn header_declaring_falls_back_to_a_served_includer() {
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            assert_eq!(header_declaring("alloca", t), Some("malloc.h"), "{t:?}");
+            assert_eq!(header_declaring("_alloca", t), Some("malloc.h"), "{t:?}");
+        }
+        assert_eq!(
+            header_declaring("alloca", Target::LinuxX64),
+            Some("alloca.h")
+        );
+        assert_eq!(header_declaring("_alloca", Target::LinuxX64), None);
+    }
+
     #[test]
     fn header_declaring_credits_a_block_to_its_includers() {
         assert_eq!(headers_declaring("_wcsrev"), ["string.h", "wchar.h"]);

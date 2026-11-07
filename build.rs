@@ -377,6 +377,28 @@ fn emit_binding_to_header_index() {
         out.push_str(&format!("    ({name:?}, &[{list}]),\n"));
     }
     out.push_str("];\n");
+    // The headers that include each bundled header, sorted by the included
+    // one: where a target withholds a declaring header, an includer it serves
+    // declares the name too.
+    let mut includers: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (_, rel) in &headers {
+        for inc in included_headers(&bodies[rel.as_str()]).filter(|h| bodies.contains_key(h)) {
+            let list = includers.entry(inc).or_default();
+            if !list.contains(&rel.as_str()) && inc != rel {
+                list.push(rel.as_str());
+            }
+        }
+    }
+    out.push_str("pub(super) const HEADER_INCLUDERS: &[(&str, &[&str])] = &[\n");
+    for (inc, hs) in &includers {
+        let list = hs
+            .iter()
+            .map(|h| format!("{h:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("    ({inc:?}, &[{list}]),\n"));
+    }
+    out.push_str("];\n");
     fs::write(&dest, out).expect("write binding index");
 }
 

@@ -219,6 +219,7 @@ pub(super) const BUILTINS: &[Builtin] = &[
     // Names `#pragma intrinsic` binds; a unit that has not bound one may
     // define its own function under the same name.
     library("alloca", Intrinsic::Alloca),
+    library("_alloca", Intrinsic::Alloca),
     library("fma", Intrinsic::Fma),
     library("fmaf", Intrinsic::Fmaf),
     library("sqrt", Intrinsic::Sqrt),

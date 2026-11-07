@@ -35,6 +35,9 @@ size_t _msize(void *memory);
 int _heapchk(void);
 int _heapmin(void);
 int _resetstkoflw(void);
+// The C runtime's spelling of alloca, bound to the same intrinsic.
+#pragma intrinsic("_alloca")
+void *_alloca(size_t size);
 #define _alloca(x) __builtin_alloca((x))
 
 #define _ALLOCA_S_THRESHOLD    1024

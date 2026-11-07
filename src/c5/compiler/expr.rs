@@ -1285,7 +1285,7 @@ impl Compiler {
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
         let outer = core::mem::replace(&mut self.operand_start, self.lex.tok_start());
         let r = self.parse_unary().and_then(|()| {
-            while self.lex.tk >= lev || self.lex.tk == '(' {
+            while self.lex.tk == '(' || (self.lex.tk >= lev && is_operator(self.lex.tk)) {
                 self.parse_operator()?;
             }
             Ok(())
@@ -6842,4 +6842,12 @@ fn mem_transfer_op(name: &str) -> Option<super::super::ast::MemTransferOp> {
         "__builtin_memset" => MemTransferOp::Fill,
         _ => return None,
     })
+}
+
+/// Tokens the precedence-climbing loop applies to an operand; any other token
+/// ends the expression.
+fn is_operator(tk: super::super::token::Tok) -> bool {
+    (Token::Assign as i64..=Token::Brak as i64).contains(&tk.raw())
+        || tk == Token::Arrow
+        || tk == Token::Dot
 }

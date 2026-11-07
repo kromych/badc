@@ -721,6 +721,18 @@ fn missing_semicolon_after_statement() {
 }
 
 #[test]
+fn keyword_or_literal_after_operand_is_a_syntax_error() {
+    for src in [
+        "int f(int x) { return x .0; }",
+        "int f(int x) { return x sizeof(int); }",
+        "int f(int x) { return x 'a'; }",
+        "int f(int x) { return x do; }",
+    ] {
+        expect_compile_error(src, "[B2020] [syntax]");
+    }
+}
+
+#[test]
 fn duplicate_global_definition() {
     // Two defining declarations -- both have an initializer -- must
     // fail. The tentative-definition merge (`int x; int x = 5;`) is

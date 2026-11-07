@@ -1990,6 +1990,18 @@ pub(crate) fn entry_read_run(
     run
 }
 
+/// Whether `b` ends in a trapping intrinsic: its `Unreachable` seal then
+/// needs no trap of its own.
+pub(crate) fn block_ends_in_trap(
+    func: &super::super::ir::FunctionSsa,
+    b: &super::super::ir::Block,
+) -> bool {
+    let trap = crate::c5::op::Intrinsic::Trap as i64;
+    b.inst_range.end > b.inst_range.start
+        && matches!(func.insts[b.inst_range.end as usize - 1],
+            super::super::ir::Inst::Intrinsic { kind, .. } if kind == trap)
+}
+
 /// Per value: a call that ends a block sealed `Unreachable`. Nothing
 /// after it runs, so its lowering stops at the call instruction; a stack
 /// release or result move there would be code no path reaches.

@@ -14023,6 +14023,59 @@ fn a_noreturn_call_is_followed_by_its_trap() {
     }
 }
 
+/// `__builtin_unreachable()` as an operand of `,` ends its block as the
+/// statement form does: one trap, and no move into the join after it.
+#[test]
+fn an_unreachable_operand_seals_its_block_with_one_trap() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        unsigned long f4(unsigned long *), f5(unsigned long *);\n\
+        static inline unsigned long pick(unsigned m, unsigned long *p) {\n\
+            switch (m) { case 4: return f4(p); case 5: return f5(p); }\n\
+            do { (void)0, __builtin_unreachable(); } while (0);\n\
+            return 0;\n\
+        }\n\
+        unsigned long g(unsigned m, unsigned long *p) {\n\
+            unsigned long r = pick(m, p);\n\
+            return r > 9 ? r : 9;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new().with_optimize()
+        };
+        let dump = crate::c5::codegen::lower_for(&prog, target, opts.clone().with_dump_ssa())
+            .expect("lower")
+            .ssa_dump;
+        let after = dump.split("kind=Trap").nth(1).expect("a trap in the dump");
+        let next = after.lines().nth(1).map(str::trim_start).unwrap_or("");
+        assert!(
+            next.starts_with("terminator Unreachable"),
+            "{target:?}: {dump}"
+        );
+        let obj = emit_native_with_options(&prog, target, opts)
+            .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let text = (elf_section_bodies(&obj).into_iter())
+            .find(|(n, _)| n == ".text")
+            .expect(".text")
+            .1;
+        let traps = match target {
+            crate::Target::LinuxX64 => text.windows(2).filter(|w| w == &[0x0F, 0x0B]).count(),
+            _ => (text.as_chunks::<4>().0.iter())
+                .filter(|w| matches!(u32::from_le_bytes(**w), 0xD420_0000 | 0xD420_0020))
+                .count(),
+        };
+        assert_eq!(traps, 1, "{target:?}: {text:02x?}");
+    }
+}
+
 /// A fortified inline's compile-time overflow check reaches its error
 /// function once inlining makes the object and the length constant:
 /// `__builtin_object_size` of a parameter answers the bytes left in the

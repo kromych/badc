@@ -1187,7 +1187,11 @@ impl FunctionEmitter<'_, '_> {
             // Sealed after a noreturn call (C11 6.7.4p8): a trap, so a
             // mis-marked returning call faults rather than falling into the
             // next block.
-            Terminator::Unreachable => emit(self.cx.code, 0xD420_0020), // brk #1
+            Terminator::Unreachable => {
+                if !super::ssa::emit_common::block_ends_in_trap(func, block) {
+                    emit(self.cx.code, 0xD420_0020); // brk #1
+                }
+            }
         }
         Ok(())
     }

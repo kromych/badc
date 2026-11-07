@@ -981,7 +981,9 @@ impl FnEmit<'_, '_> {
             // Sealed after a noreturn call (C11 6.7.4p8): `ud2` so a
             // mis-marked returning call faults instead of running on.
             Terminator::Unreachable => {
-                self.out.cx.code.extend_from_slice(&[0x0F, 0x0B]);
+                if !super::ssa::emit_common::block_ends_in_trap(func, block) {
+                    self.out.cx.code.extend_from_slice(&[0x0F, 0x0B]);
+                }
                 Ok(())
             }
         }

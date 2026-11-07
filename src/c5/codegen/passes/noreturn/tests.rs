@@ -118,6 +118,20 @@ fn a_library_binding_that_does_not_return_ends_its_block() {
 }
 
 #[test]
+fn a_trap_inside_an_expression_ends_its_block() {
+    // `return (x, __builtin_trap(), 0) + 1;`: the trap is an operand of
+    // `,`, not a statement the walker seals, and the rest is unreachable.
+    let mut f = returns_call_plus_one(10, 0);
+    f.insts[0] = Inst::Intrinsic {
+        kind: crate::c5::op::Intrinsic::Trap as i64,
+        args: Vec::new(),
+    };
+    let mut funcs = vec![f];
+    seal_all(&mut funcs, known(&[], &[], &[]), false);
+    assert!(sealed(&funcs[0]), "{:?}", funcs[0].blocks);
+}
+
+#[test]
 fn a_chain_of_functions_no_path_of_which_returns_is_inferred() {
     // f30 -> f20 -> f10 -> `die` (declared): each caller's return is
     // unreachable once its callee is known not to return. Without the

@@ -221,6 +221,15 @@ fn dispatch(cli: Cli) {
             ));
             std::process::exit(1);
         }
+        let format = cli.target.binary_format();
+        if format != badc::BinaryFormat::Elf {
+            eprint_diagnostic(format!(
+                "badc: error: -T/--script links write ELF images; {} takes {}",
+                cli.target.id_str(),
+                format.name()
+            ));
+            std::process::exit(1);
+        }
         if !inputs.sources.is_empty() {
             eprint_diagnostic(
                 "badc: error: -T/--script links take .o/.a inputs; compile sources with -c first",

@@ -118,8 +118,8 @@ Multi-TU knobs:
   -T <script>, --script=<script>
                            Lay out the image as the GNU ld script
                            directs. Inputs are objects and archives
-                           (compile sources with -c first); the image
-                           is ELF whatever --target names.
+                           (compile sources with -c first). ELF
+                           targets only.
   --ld <args>              As the first argument: run the GNU ld
                            surface on the rest, as badc does when named
                            `ld` / `*-ld`.

@@ -20603,3 +20603,43 @@ fn ar_s_fails_on_an_unreadable_member() {
         String::from_utf8_lossy(&ok.stderr)
     );
 }
+
+/// A `-T` link writes an ELF image, so a PE or Mach-O target refuses it by
+/// name rather than producing an image its loader does not take.
+#[test]
+fn script_link_refuses_a_non_elf_target() {
+    let dir = tempdir("script-link-format");
+    let src = write_source(&dir, "s.c", "int start(void) { return 0; }\n");
+    let script = write_source(&dir, "s.ld", "SECTIONS { .text : { *(.text) } }\n");
+    for (target, format) in [
+        ("windows-x64", "PE/COFF"),
+        ("windows-arm64", "PE/COFF"),
+        ("macos-aarch64", "Mach-O"),
+    ] {
+        let obj = dir.join(format!("{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-q", &format!("--target={target}"), "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile",
+        );
+        let out = Command::new(badc())
+            .args(["-q", &format!("--target={target}"), "-T"])
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join(format!("{target}.img")))
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target}: {err}");
+        assert!(
+            err.contains(&format!(
+                "-T/--script links write ELF images; {target} takes {format}"
+            )),
+            "{target}: {err}"
+        );
+    }
+}

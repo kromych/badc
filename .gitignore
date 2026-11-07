@@ -223,6 +223,8 @@ demos/openssl/*
 !demos/stb/alarm_ogg.h
 # gui_hello: per-target build outputs land in `.build/`.
 demos/gui_hello/.build/
+# wdm_driver: per-target driver images land in `.build/`.
+demos/wdm_driver/.build/
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

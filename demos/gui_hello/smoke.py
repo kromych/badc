@@ -24,11 +24,18 @@ The runner picks the matching source for the host -- the
 other two are still verified to build via the cross-target
 column (each runner builds for its own target). Override the
 badc binary via `BADC=path/to/badc`.
+
+`--sdk` builds `hello_win32_sdk.c` instead, against the installed Windows
+SDK's <windows.h> and import libraries, for both Windows targets; on a
+Windows host it runs the build of the host's architecture with `--smoke`.
+A target whose SDK is not installed is reported and skipped.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -69,7 +76,59 @@ BUILDS = (
 )
 
 
+def _win_kits():
+    spec = importlib.util.spec_from_file_location("_win_kits", GUI_DIR.parent / "_win_kits.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def host_windows_target() -> str | None:
+    if sys.platform != "win32":
+        return None
+    return {"AMD64": "windows-x64", "ARM64": "windows-arm64"}.get(platform.machine().upper())
+
+
+def sdk_main() -> int:
+    """Build the SDK form for each Windows target and run the host's."""
+    kits = _win_kits()
+    badc = resolve_badc()
+    work = GUI_DIR / ".build"
+    work.mkdir(parents=True, exist_ok=True)
+    built, failures = 0, []
+    for target in ("windows-x64", "windows-arm64"):
+        found = kits.sdk_flags(target, ["user32", "gdi32", "kernel32"])
+        if found is None:
+            print(f"skip [{target}]: no Windows SDK with um headers and {target} libraries")
+            continue
+        version, flags = found
+        out = work / f"hello-sdk-{target}.exe"
+        out.unlink(missing_ok=True)
+        cmd = [str(badc), "-O", f"--target={target}", *flags, str(GUI_DIR / "hello_win32_sdk.c")]
+        proc = subprocess.run([*cmd, "-o", str(out)], capture_output=True, text=True)
+        if proc.returncode != 0 or not out.is_file():
+            failures.append(f"[{target}] SDK {version}: exit {proc.returncode}\n{proc.stderr.strip()}")
+            continue
+        built += 1
+        print(f"build OK [{target}]: SDK {version} -> {out.name} ({out.stat().st_size} bytes)")
+        if target == host_windows_target():
+            run = subprocess.run([str(out), "--smoke"], capture_output=True, timeout=60)
+            if run.returncode != 0:
+                failures.append(f"[{target}] {out.name} --smoke: exit {run.returncode}")
+            else:
+                print(f"run OK [{target}]: {out.name} --smoke created and closed its window")
+    if failures:
+        print("\nsmoke FAIL:", file=sys.stderr)
+        for f in failures:
+            print(f"  {f}", file=sys.stderr)
+        return 1
+    print(f"\ngui_hello SDK smoke: {built} target(s) built")
+    return 0
+
+
 def main() -> int:
+    if "--sdk" in sys.argv[1:]:
+        return sdk_main()
     badc = resolve_badc()
     work = GUI_DIR / ".build"
     work.mkdir(parents=True, exist_ok=True)

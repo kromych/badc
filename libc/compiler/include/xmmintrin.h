@@ -1,6 +1,7 @@
 /* SSE intrinsics. This build carries the vector types, the shuffle selector,
-** the MXCSR access and the operations on __m64; the SSE1 packed-single
-** operations are not provided. As in gcc and clang, the MMX types come from
+** the MXCSR access, the cache hints, the bitwise packed-single operations
+** and the operations on __m64; the SSE1 packed-single arithmetic is not
+** provided. As in gcc and clang, the MMX types come from
 ** <mmintrin.h> and, in a hosted unit, _mm_malloc and _mm_free from
 ** <mm_malloc.h>. */
 #pragma once
@@ -42,6 +43,56 @@ static inline unsigned int _mm_getcsr(void) {
 
 static inline void _mm_setcsr(unsigned int __csr) {
     __asm__ __volatile__("ldmxcsr %0" : : "m"(__csr));
+}
+
+/* PREFETCHh hints. On the Windows targets they take MSVC's values, which
+** <winnt.h> defines again; elsewhere gcc's, bit 2 selecting a prefetch for
+** writing and bits 0-1 the locality. _mm_prefetch is a function of MSVC's
+** signature, which <winnt.h> declares again. */
+#ifdef _WIN32
+#define _MM_HINT_NTA 0
+#define _MM_HINT_T0 1
+#define _MM_HINT_T1 2
+#define _MM_HINT_T2 3
+#define _MM_HINT_ENTA 4
+#else
+#define _MM_HINT_ET0 7
+#define _MM_HINT_ET1 6
+#define _MM_HINT_T0 3
+#define _MM_HINT_T1 2
+#define _MM_HINT_T2 1
+#define _MM_HINT_NTA 0
+#endif
+
+static inline void _mm_prefetch(char const *__P, int __I) {
+    switch (__I) {
+    case _MM_HINT_T0: __builtin_prefetch(__P, 0, 3); break;
+    case _MM_HINT_T1: __builtin_prefetch(__P, 0, 2); break;
+    case _MM_HINT_T2: __builtin_prefetch(__P, 0, 1); break;
+#ifdef _WIN32
+    case _MM_HINT_ENTA: __builtin_prefetch(__P, 1, 0); break;
+#else
+    case _MM_HINT_ET0: __builtin_prefetch(__P, 1, 3); break;
+    case _MM_HINT_ET1: __builtin_prefetch(__P, 1, 2); break;
+#endif
+    default: __builtin_prefetch(__P, 0, 0); break;
+    }
+}
+
+static inline __m128 _mm_and_ps(__m128 __A, __m128 __B) {
+    return (__m128)__builtin_ia32_andps((__v4sf)__A, (__v4sf)__B);
+}
+
+static inline __m128 _mm_andnot_ps(__m128 __A, __m128 __B) {
+    return (__m128)__builtin_ia32_andnps((__v4sf)__A, (__v4sf)__B);
+}
+
+static inline __m128 _mm_or_ps(__m128 __A, __m128 __B) {
+    return (__m128)__builtin_ia32_orps((__v4sf)__A, (__v4sf)__B);
+}
+
+static inline __m128 _mm_xor_ps(__m128 __A, __m128 __B) {
+    return (__m128)__builtin_ia32_xorps((__v4sf)__A, (__v4sf)__B);
 }
 
 /* The SSE operations on __m64, written lane by lane over the vector

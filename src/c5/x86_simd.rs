@@ -47,6 +47,7 @@ pub(crate) enum Ret {
     V4si,
     V2di,
     V2df,
+    V4sf,
     Int,
     Void,
 }
@@ -60,6 +61,7 @@ impl Ret {
             Ret::V4si => Some(Ty::Int),
             Ret::V2di => Some(Ty::LongLong),
             Ret::V2df => Some(Ty::Double),
+            Ret::V4sf => Some(Ty::Float),
             Ret::Int | Ret::Void => None,
         }
     }
@@ -76,6 +78,15 @@ pub(crate) enum Sem {
     MulHi(u8),
     /// Signed products of adjacent word pairs, summed into doublewords.
     MulAddWords,
+    /// Products of the first operand's unsigned bytes and the second's
+    /// signed bytes, adjacent pairs summed into words with signed saturation.
+    MulAddBytes,
+    /// Lane-wise sum and difference, saturated to the signed (`true`) or
+    /// unsigned range of the lane.
+    AddSat(u8, bool),
+    SubSat(u8, bool),
+    /// Sum of the absolute byte differences of each quad, in its low word.
+    SadBytes,
     And,
     AndNot,
     Or,
@@ -178,6 +189,21 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_pcmpgtb128", "pcmpgtb", Form::Vv, Ret::V16qi, Sem::CmpGt(1), 0),
     op("__builtin_ia32_pcmpgtw128", "pcmpgtw", Form::Vv, Ret::V8hi, Sem::CmpGt(2), 0),
     op("__builtin_ia32_pcmpgtd128", "pcmpgtd", Form::Vv, Ret::V4si, Sem::CmpGt(4), 0),
+    // SSE2 saturating arithmetic and the sum of absolute differences.
+    op("__builtin_ia32_paddsb128", "paddsb", Form::Vv, Ret::V16qi, Sem::AddSat(1, true), 0),
+    op("__builtin_ia32_paddsw128", "paddsw", Form::Vv, Ret::V8hi, Sem::AddSat(2, true), 0),
+    op("__builtin_ia32_paddusb128", "paddusb", Form::Vv, Ret::V16qi, Sem::AddSat(1, false), 0),
+    op("__builtin_ia32_paddusw128", "paddusw", Form::Vv, Ret::V8hi, Sem::AddSat(2, false), 0),
+    op("__builtin_ia32_psubsb128", "psubsb", Form::Vv, Ret::V16qi, Sem::SubSat(1, true), 0),
+    op("__builtin_ia32_psubsw128", "psubsw", Form::Vv, Ret::V8hi, Sem::SubSat(2, true), 0),
+    op("__builtin_ia32_psubusb128", "psubusb", Form::Vv, Ret::V16qi, Sem::SubSat(1, false), 0),
+    op("__builtin_ia32_psubusw128", "psubusw", Form::Vv, Ret::V8hi, Sem::SubSat(2, false), 0),
+    op("__builtin_ia32_psadbw128", "psadbw", Form::Vv, Ret::V2di, Sem::SadBytes, 0),
+    // SSE logic on single-precision lanes.
+    op("__builtin_ia32_andps", "andps", Form::Vv, Ret::V4sf, Sem::And, 0),
+    op("__builtin_ia32_andnps", "andnps", Form::Vv, Ret::V4sf, Sem::AndNot, 0),
+    op("__builtin_ia32_orps", "orps", Form::Vv, Ret::V4sf, Sem::Or, 0),
+    op("__builtin_ia32_xorps", "xorps", Form::Vv, Ret::V4sf, Sem::Xor, 0),
     // SSE2 pack and interleave.
     op("__builtin_ia32_packsswb128", "packsswb", Form::Vv, Ret::V16qi, Sem::PackSigned(2), 0),
     op("__builtin_ia32_packssdw128", "packssdw", Form::Vv, Ret::V8hi, Sem::PackSigned(4), 0),
@@ -215,6 +241,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_storedqu", "movdqu", Form::Store, Ret::Void, Sem::Move, 0),
     // SSSE3.
     op("__builtin_ia32_pshufb128", "pshufb", Form::Vv, Ret::V16qi, Sem::ShufB, 0),
+    op("__builtin_ia32_pmaddubsw128", "pmaddubsw", Form::Vv, Ret::V8hi, Sem::MulAddBytes, 0),
     // SSE4.1.
     op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
     op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Ret::Int, Sem::Move, 4),
@@ -505,6 +532,42 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 let lo = slane(a, 2, 2 * i) * slane(b, 2, 2 * i);
                 let hi = slane(a, 2, 2 * i + 1) * slane(b, 2, 2 * i + 1);
                 set_lane(&mut o, 4, i, (lo + hi) as u64 & mask(4));
+            }
+        }
+        Sem::MulAddBytes => {
+            for i in 0..8 {
+                let p = |k: usize| a[k] as i64 * b[k] as i8 as i64;
+                let s = (p(2 * i) + p(2 * i + 1)).clamp(-0x8000, 0x7fff);
+                set_lane(&mut o, 2, i, s as u64 & mask(2));
+            }
+        }
+        Sem::AddSat(w, signed) | Sem::SubSat(w, signed) => {
+            let bits = 8 * w as u32;
+            let (lo, hi) = if signed {
+                (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+            } else {
+                (0, (1i64 << bits) - 1)
+            };
+            for i in 0..16 / w as usize {
+                let (x, y) = if signed {
+                    (slane(a, w, i), slane(b, w, i))
+                } else {
+                    (lane(a, w, i) as i64, lane(b, w, i) as i64)
+                };
+                let r = if matches!(sem, Sem::AddSat(..)) {
+                    x + y
+                } else {
+                    x - y
+                };
+                set_lane(&mut o, w, i, r.clamp(lo, hi) as u64 & mask(w));
+            }
+        }
+        Sem::SadBytes => {
+            for q in 0..2 {
+                let s: u64 = (0..8)
+                    .map(|k| a[8 * q + k].abs_diff(b[8 * q + k]) as u64)
+                    .sum();
+                set_lane(&mut o, 8, q, s);
             }
         }
         Sem::And => {

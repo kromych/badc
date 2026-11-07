@@ -14,6 +14,10 @@ static inline __m128i _mm_shuffle_epi8(__m128i __X, __m128i __Y) {
     return (__m128i)__builtin_ia32_pshufb128((__v16qi)__X, (__v16qi)__Y);
 }
 
+static inline __m128i _mm_maddubs_epi16(__m128i __X, __m128i __Y) {
+    return (__m128i)__builtin_ia32_pmaddubsw128((__v16qi)__X, (__v16qi)__Y);
+}
+
 /* PABS*: the magnitude as an unsigned lane, so the most negative value is
 ** its own. */
 static inline __m64 _mm_abs_pi8(__m64 __X) {

@@ -132,6 +132,22 @@ static inline __m128d _mm_castsi128_pd(__m128i __A) {
     return (__m128d)__A;
 }
 
+static inline __m128i _mm_castps_si128(__m128 __A) {
+    return (__m128i)__A;
+}
+
+static inline __m128 _mm_castsi128_ps(__m128i __A) {
+    return (__m128)__A;
+}
+
+static inline __m128 _mm_castpd_ps(__m128d __A) {
+    return (__m128)__A;
+}
+
+static inline __m128d _mm_castps_pd(__m128 __A) {
+    return (__m128d)__A;
+}
+
 /* The operations on __m64, lane by lane over the vector extension as
 ** <mmintrin.h>'s are. A double converts to an integer through CVTSD2SI,
 ** which rounds by MXCSR, or CVTTSD2SI; both give 0x80000000 for a NaN or a
@@ -257,6 +273,45 @@ static inline __m128i _mm_mulhi_epi16(__m128i __A, __m128i __B) {
 
 static inline __m128i _mm_madd_epi16(__m128i __A, __m128i __B) {
     return (__m128i)__builtin_ia32_pmaddwd128((__v8hi)__A, (__v8hi)__B);
+}
+
+/* Saturating lane arithmetic, and PSADBW's sum of absolute byte
+** differences per quad. */
+
+static inline __m128i _mm_adds_epi8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_paddsb128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_adds_epi16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_paddsw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_adds_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_paddusb128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_adds_epu16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_paddusw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_subs_epi8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_psubsb128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_subs_epi16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_psubsw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_subs_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_psubusb128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_subs_epu16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_psubusw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_sad_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_psadbw128((__v16qi)__A, (__v16qi)__B);
 }
 
 /* Bitwise logic and lane compares. */

@@ -20,6 +20,9 @@ pub const DWARF_FORMAT_BITS: u8 = 32;
 pub(crate) mod arm64_unwind;
 #[cfg(feature = "native-emit")]
 #[allow(dead_code)]
+pub(crate) mod codeview;
+#[cfg(feature = "native-emit")]
+#[allow(dead_code)]
 pub(crate) mod debug_model;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;

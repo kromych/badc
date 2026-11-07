@@ -1465,12 +1465,17 @@ fn pragma_export_with_unknown_name_is_refused() {
     );
 }
 
+/// A struct passed by value to a libc binding's struct parameter compiles;
+/// the runtime ABI is locked in by libc_struct_arg_by_value.c. A struct
+/// passed to a parameter of another type violates C99 6.5.2.2p2.
 #[test]
 fn libc_call_with_struct_arg_compiles() {
-    // A struct passed by value to a Token::Sys (libc) call is packed into the
-    // platform-ABI argument registers (SysV / AAPCS64), no longer refused. The
-    // runtime ABI is locked in by libc_struct_arg_by_value.c.
-    let mut src = super::with_prelude(
+    let ok = "#ifdef _WIN32\n#include <winsock2.h>\n#else\n#include <arpa/inet.h>\n#endif\n\
+              int main(void) { struct in_addr a; a.s_addr = 1; return inet_ntoa(a) != 0; }\n";
+    if let Err(e) = Compiler::new(ok.to_string()).compile() {
+        panic!("struct-by-value to a struct parameter: {e}");
+    }
+    let mut bad = super::with_prelude(
         "struct P { int x; int y; };\n\
          int main() {\n\
              struct P p;\n\
@@ -1479,11 +1484,11 @@ fn libc_call_with_struct_arg_compiles() {
              return 0;\n\
          }",
     );
-    src.push('\0');
-    assert!(
-        Compiler::new(src).compile().is_ok(),
-        "struct-by-value to a libc binding should compile"
-    );
+    bad.push('\0');
+    let err = Compiler::new(bad)
+        .compile()
+        .expect_err("struct to a pointer parameter");
+    assert!(err.to_string().contains("argument 2 of `write`"), "{err}");
 }
 
 #[test]

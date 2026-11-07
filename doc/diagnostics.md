@@ -133,8 +133,8 @@ output of `badc --list-diagnostics`.
 | B3001 | `int-conversion` | error | controllable | default | an integer and a pointer exchanged with no cast |
 | B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
-| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |
-| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition or a libc binding's prototype declares |
+| B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition declares |
+| B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition declares |
 | B3006 | `long-double-abi (retired)` | warning | controllable | default | a `long double` argument passed in a format this target's ABI does not use |
 | B3007 | `dead-store` | ignore | controllable | - | a value assigned to a local and replaced before any read |
 | B3008 | `switch-outside-range` | warning | controllable | default | a `case` label whose value lies outside the range of the controlling expression's type before promotion |

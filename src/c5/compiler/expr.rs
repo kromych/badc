@@ -2410,7 +2410,7 @@ impl Compiler {
             ret_ty: s.type_,
             returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
             count_known: s.prototyped() || old_style_def,
-            count_is_constraint: s.prototyped() && !is_sys_call,
+            count_is_constraint: s.prototyped(),
             prototyped: s.prototyped(),
         };
         let mut nargs = 0;
@@ -2633,10 +2633,9 @@ impl Compiler {
                 nargs + 1,
                 callee.name,
             );
-            // A `Token::Sys` prototype approximates the platform libc (`char *`
-            // for `void *`, `int` for `size_t`), so only a declared prototype
-            // raises the 6.5.2.2p2 constraint.
-            if m.no_conversion && !callee.is_sys_call {
+            // C99 6.5.2.2p2: an argument the parameter type cannot take by
+            // assignment violates the constraint, a library prototype's too.
+            if m.no_conversion {
                 return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_line, text));
             }
             self.report_mismatch(&m, arg_line, text)?;

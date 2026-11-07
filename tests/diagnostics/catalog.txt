@@ -42,8 +42,8 @@ B2024  incomplete-element-type                         error    hard          - 
 B3001  int-conversion                                  error    controllable  default            live     an integer and a pointer exchanged with no cast
 B3002  incompatible-struct-types                       warning  controllable  default            live     an aggregate or enumerated type used where a different one is expected
 B3003  return-type                                     ignore   controllable  all                live     control reaches the end of a value-returning function
-B3004  too-few-arguments                               warning  controllable  default            live     a call passing fewer arguments than an old-style definition or a libc binding's prototype declares
-B3005  too-many-arguments                              warning  controllable  default            live     a call passing more arguments than an old-style definition or a libc binding's prototype declares
+B3004  too-few-arguments                               warning  controllable  default            live     a call passing fewer arguments than an old-style definition declares
+B3005  too-many-arguments                              warning  controllable  default            live     a call passing more arguments than an old-style definition declares
 B3006  long-double-abi                                 warning  controllable  default            retired  a `long double` argument passed in a format this target's ABI does not use
 B3007  dead-store                                      ignore   controllable  -                  live     a value assigned to a local and replaced before any read
 B3008  switch-outside-range                            warning  controllable  default            live     a `case` label whose value lies outside the range of the controlling expression's type before promotion

@@ -1044,26 +1044,21 @@ mod tests {
                 names.extend(shadow);
             }
             names.extend(c99);
-            src.push_str("void calls(void) {\n");
-            for name in &names {
-                src.push_str(&alloc::format!("    (void){name}(0);\n"));
-            }
-            src.push_str("}\n");
-            let opts = CompileOptions::default().with_no_entry_point(true);
-            let program = Compiler::with_options(src.clone(), target, opts)
+            let opts = || CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.clone(), target, opts())
                 .compile()
                 .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
-            let warnings: alloc::vec::Vec<_> =
-                program.warnings.iter().map(|w| w.to_string()).collect();
+            // A call with an argument too many violates C99 6.5.2.2p2 only
+            // against a prototype, and the error ends the compile.
             for name in &names {
-                let text = alloc::format!(
-                    "too many arguments to `{name}` (expected 0, got at least 1) [B3005]"
-                );
-                assert!(
-                    warnings.iter().any(|w| w.contains(&text)),
-                    "{}: {name}: {warnings:?}",
-                    target.id_str()
-                );
+                let unit = alloc::format!("{src}void calls(void) {{ (void){name}(0); }}\n");
+                let err = Compiler::with_options(unit, target, opts())
+                    .compile()
+                    .expect_err(name)
+                    .to_string();
+                let text =
+                    alloc::format!("too many arguments to `{name}` (expected 0, got at least 1)");
+                assert!(err.contains(&text), "{}: {name}: {err}", target.id_str());
             }
         }
     }
@@ -1187,7 +1182,7 @@ mod tests {
     }
 
     /// The Windows CRT block declares its entry points with the SDK's
-    /// prototypes -- a call with one argument too many is diagnosed against
+    /// prototypes -- a call with one argument too many is an error against
     /// the declared count -- and msvcrt's `__argc`, `__argv` and `__wargv`
     /// as the objects they are, which a reference reads through the import.
     #[test]
@@ -1221,27 +1216,23 @@ mod tests {
                    && _Generic(&__wargv, wchar_t ***: 1, default: 0), \"data exports\");\n\
                  void calls(void) {\n",
             );
-            for (name, n) in FNS {
-                let args = alloc::vec!["0"; n + 1].join(", ");
-                src.push_str(&alloc::format!("    (void){name}({args});\n"));
-            }
             src.push_str("}\n");
-            let opts = CompileOptions::default().with_no_entry_point(true);
-            let program = Compiler::with_options(src.clone(), target, opts)
+            let opts = || CompileOptions::default().with_no_entry_point(true);
+            Compiler::with_options(src.clone(), target, opts())
                 .compile()
                 .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
-            let warnings: alloc::vec::Vec<_> =
-                program.warnings.iter().map(|w| w.to_string()).collect();
             for (name, n) in FNS {
+                let args = alloc::vec!["0"; n + 1].join(", ");
+                let unit = alloc::format!("{src}void more(void) {{ (void){name}({args}); }}\n");
+                let err = Compiler::with_options(unit, target, opts())
+                    .compile()
+                    .expect_err(name)
+                    .to_string();
                 let text = alloc::format!(
                     "too many arguments to `{name}` (expected {n}, got at least {})",
                     n + 1
                 );
-                assert!(
-                    warnings.iter().any(|w| w.contains(&text)),
-                    "{}: {name}: {warnings:?}",
-                    target.id_str()
-                );
+                assert!(err.contains(&text), "{}: {name}: {err}", target.id_str());
             }
         }
     }

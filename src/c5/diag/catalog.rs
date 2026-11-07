@@ -184,10 +184,10 @@ catalog! {
         "control reaches the end of a value-returning function";
     3004, "too-few-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing fewer arguments than an old-style definition or a libc binding's prototype declares";
+        "a call passing fewer arguments than an old-style definition declares";
     3005, "too-many-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing more arguments than an old-style definition or a libc binding's prototype declares";
+        "a call passing more arguments than an old-style definition declares";
     3006, "long-double-abi", ["psabi"], Warning, Controllable,
         [DEFAULT], Retired,
         "a `long double` argument passed in a format this target's ABI does not use";

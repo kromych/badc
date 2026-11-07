@@ -793,6 +793,16 @@ fn install_data_model(
         "8"
     };
     macros.insert("__SIZEOF_LONG__".to_string(), long_bytes.to_string());
+    // The i386 SysV ABI keeps the x87 `long double` in 12 bytes.
+    let long_double = if ilp32 {
+        12
+    } else {
+        target.long_double().size()
+    };
+    macros.insert(
+        "__SIZEOF_LONG_DOUBLE__".to_string(),
+        long_double.to_string(),
+    );
     // gcc leaves this undefined on i386, which has no `__int128`.
     if !ilp32 {
         macros.insert("__SIZEOF_INT128__".to_string(), "16".to_string());

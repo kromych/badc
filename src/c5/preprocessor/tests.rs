@@ -6557,6 +6557,20 @@ fn width_predefines_follow_the_targets_types() {
     assert!(out.contains(ilp32), "ILP32: {out}");
 }
 
+/// The i386 SysV ABI keeps the x87 `long double` in 12 bytes, as gcc -m32
+/// and clang for i386-linux-gnu predefine it; x86-64 keeps 16.
+#[test]
+fn i386_long_double_takes_twelve_bytes() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = "ld __SIZEOF_LONG_DOUBLE__ .\n";
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    assert!(pp.process(probe).unwrap().contains("ld 16 ."));
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
+    let out = pp.process(probe).expect("preprocessor failed");
+    assert!(out.contains("ld 12 ."), "-m32: {out}");
+}
+
 /// A scratch directory holding `files`, removed when the guard drops.
 struct EmbedDir(std::path::PathBuf);
 

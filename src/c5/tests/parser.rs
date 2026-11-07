@@ -4219,6 +4219,31 @@ fn msvc_takes_an_undeclared_alloca_for_the_intrinsic() {
 }
 
 #[test]
+fn vector_headers_hold_against_an_attribute_macro() {
+    // Code written for compilers without GNU attributes defines
+    // `__attribute__` away; the intrinsic headers included after it keep
+    // their vector types, and the unit's macro stands again after them.
+    let tail = "#ifndef __attribute__\n#error lost\n#endif\nint main(void) { return 0; }\n";
+    for (target, body) in [
+        (
+            crate::Target::LinuxAarch64,
+            "#include <arm_neon.h>\n\
+             uint64x2_t f(uint64x1_t a, uint64x1_t b) { return vcombine_u64(a, b); }\n",
+        ),
+        (
+            crate::Target::WindowsX64,
+            "#include <emmintrin.h>\n__m128i f(__m128i a) { return _mm_add_epi32(a, a); }\n",
+        ),
+    ] {
+        let src = format!("#define __attribute__(x)\n{body}{tail}");
+        let opts = crate::c5::compiler::CompileOptions::default();
+        Compiler::with_options(src, target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
+
+#[test]
 fn a_named_section_holds_one_kind_of_definition() {
     // GNU `section`: the first definition in a section sets its kind --
     // code, writable data or read-only data -- and a definition of another

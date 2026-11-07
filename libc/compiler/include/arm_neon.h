@@ -37,6 +37,11 @@
 #error "arm_neon.h requires an AArch64 target"
 #endif
 
+/* A unit may define `__attribute__` away, as code written for compilers
+** without it does; the declarations below need it. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+
 typedef signed char int8_t;
 typedef short int16_t;
 typedef int int32_t;
@@ -599,5 +604,7 @@ __BADC_NEON_CAST(vreinterpretq_u16_u64, uint16x8_t, uint64x2_t)
 #undef __BADC_NEON_CMP
 #undef __BADC_NEON_BSL
 #undef __BADC_NEON_CAST
+
+#pragma pop_macro("__attribute__")
 
 #endif /* BADC_ARM_NEON_H */

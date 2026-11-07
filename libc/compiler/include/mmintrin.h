@@ -9,6 +9,11 @@
 #error "mmintrin.h is only available when targeting x86"
 #endif
 
+/* A unit may define `__attribute__` away, as code written for compilers
+** without it does; the declarations below need it. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+
 typedef int __m64 __attribute__((__vector_size__(8), __may_alias__));
 /* The unaligned form of the vector type an unaligned access dereferences. */
 typedef int __m64_u __attribute__((__vector_size__(8), __may_alias__, __aligned__(1)));
@@ -463,3 +468,5 @@ static inline __m64 _mm_cmpgt_pi32(__m64 __m1, __m64 __m2) {
 #define _m_pcmpgtb _mm_cmpgt_pi8
 #define _m_pcmpgtw _mm_cmpgt_pi16
 #define _m_pcmpgtd _mm_cmpgt_pi32
+
+#pragma pop_macro("__attribute__")

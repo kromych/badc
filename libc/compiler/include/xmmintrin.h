@@ -9,6 +9,11 @@
 #error "xmmintrin.h is only available when targeting x86"
 #endif
 
+/* A unit may define `__attribute__` away, as code written for compilers
+** without it does; the declarations below need it. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+
 #include <mmintrin.h>
 #if __STDC_HOSTED__
 #include <mm_malloc.h>
@@ -245,3 +250,5 @@ static inline void _mm_stream_pi(__m64 *__P, __m64 __A) {
 #define _m_pavgb _mm_avg_pu8
 #define _m_pavgw _mm_avg_pu16
 #define _m_psadbw _mm_sad_pu8
+
+#pragma pop_macro("__attribute__")

@@ -13,6 +13,11 @@
 #error "emmintrin.h is only available when targeting x86"
 #endif
 
+/* A unit may define `__attribute__` away, as code written for compilers
+** without it does; the declarations below need it. */
+#pragma push_macro("__attribute__")
+#undef __attribute__
+
 #include <xmmintrin.h>
 
 typedef long long __m128i __attribute__((__vector_size__(16)));
@@ -393,3 +398,5 @@ static inline int _mm_movemask_epi8(__m128i __A) {
     ((int)__builtin_ia32_vec_ext_v8hi((__v8hi)(__m128i)(A), (int)(N)))
 #define _mm_insert_epi16(A, D, N) \
     ((__m128i)__builtin_ia32_vec_set_v8hi((__v8hi)(__m128i)(A), (int)(D), (int)(N)))
+
+#pragma pop_macro("__attribute__")

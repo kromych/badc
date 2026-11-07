@@ -488,7 +488,8 @@ impl Inputs {
         // Objects and archives in command-line order for the script link.
         let mut link_inputs: Vec<LinkInputCli> = Vec::new();
         let mut named: Vec<Named> = Vec::new();
-        let mut prog_args_start: usize = cli.positional.len();
+        let inputs_end = cli.program_args_from.unwrap_or(cli.positional.len());
+        let mut prog_args_start: usize = inputs_end;
         // Program argv is consumed only by --jit / --interp; every other
         // mode links or preprocesses its inputs and has no argv tail.
         let takes_prog_args = matches!(cli.mode, Mode::Jit | Mode::Interp);
@@ -506,7 +507,7 @@ impl Inputs {
                 }
             }
         };
-        for (i, a) in cli.positional.iter().enumerate().skip(1) {
+        for (i, a) in cli.positional[..inputs_end].iter().enumerate().skip(1) {
             take_markers(i, &mut named, &mut whole);
             let ext = std::path::Path::new(a)
                 .extension()

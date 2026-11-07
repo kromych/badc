@@ -401,6 +401,9 @@ pub(crate) struct Cli {
     pub(crate) link: Link,
     /// Positional tokens in command-line order, `argv[0]` first.
     pub(crate) positional: Vec<String>,
+    /// Where in `positional` a `--jit` / `--interp` program's arguments
+    /// start: after `--`, or after the first input of the run.
+    pub(crate) program_args_from: Option<usize>,
     /// Diagnostics the command line itself raised, rendered once the
     /// whole line was read. The driver prints them before any input is
     /// opened.
@@ -624,6 +627,9 @@ struct Parser {
     /// The mode-picking flag seen, with its spelling for the
     /// mutual-exclusion diagnostic.
     mode: Option<(Mode, &'static str)>,
+    /// The index in `positional` where a `--jit` / `--interp` program's
+    /// own arguments start.
+    program_args_from: Option<usize>,
     /// `-h` / `-v` stop the loop with text for stdout.
     print: Option<&'static str>,
     /// The `--explain` selector, resolved once the whole line is read.
@@ -709,6 +715,24 @@ pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     let mut iter = argv.into_iter().peekable();
     p.positional.push(iter.next().unwrap_or_default());
     while let Some(arg) = iter.next() {
+        // A `--jit` / `--interp` program takes everything after its input,
+        // as `tcc -run` does, and `--` ends badc's arguments in any mode.
+        let runs = matches!(p.mode, Some((Mode::Jit | Mode::Interp, _)));
+        if arg == "--" || (runs && p.positional.len() > 1) {
+            if arg != "--" {
+                p.program_args_from = Some(p.positional.len());
+                p.positional.push(arg);
+            } else {
+                if p.positional.len() == 1
+                    && let Some(input) = iter.next()
+                {
+                    p.positional.push(input);
+                }
+                p.program_args_from = Some(p.positional.len());
+            }
+            p.positional.extend(iter);
+            break;
+        }
         if linker_group(&arg) {
             p.linker_args(&arg, &mut iter)?;
             continue;
@@ -2266,6 +2290,12 @@ impl Parser {
             )));
         }
         self.check_jit_target(mode, target)?;
+        if self.program_args_from.is_some() && !matches!(mode, Mode::Jit | Mode::Interp) {
+            return Err(ParseError::diag(
+                "badc: error: `--` passes arguments to a --jit or --interp program, \
+                 and no such mode was selected before it",
+            ));
+        }
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
@@ -2349,6 +2379,7 @@ impl Parser {
             codegen: self.codegen,
             link: self.link,
             positional: self.positional,
+            program_args_from: self.program_args_from,
             diagnostics,
             #[cfg(feature = "codegen_test")]
             pressure_caps: self.pressure_caps,
@@ -2911,6 +2942,25 @@ mod tests {
             reject(&["-U"]),
             ("badc: error: -U requires a NAME".to_string(), 1)
         );
+    }
+
+    /// A `--jit` / `--interp` program takes everything after its input, as
+    /// `tcc -run` does, and `--` ends badc's arguments; with no input
+    /// before it, the first argument after `--` is the input.
+    #[test]
+    fn a_run_takes_the_arguments_after_its_input() {
+        let cli = parse(&["--interp", "-O", "p.c", "-v", "q.c", "--", "-x"]);
+        assert_eq!(cli.positional[1..], ["p.c", "-v", "q.c", "--", "-x"]);
+        assert_eq!(cli.program_args_from, Some(2));
+        let cli = parse(&["--interp", "p.c", "--", "-v"]);
+        assert_eq!(cli.positional[1..], ["p.c", "-v"]);
+        assert_eq!(cli.program_args_from, Some(2));
+        let cli = parse(&["--interp", "--", "p.c", "-o", "x"]);
+        assert_eq!(cli.positional[1..], ["p.c", "-o", "x"]);
+        assert_eq!(cli.program_args_from, Some(2));
+        assert_eq!(parse(&["--interp", "p.c"]).program_args_from, None);
+        let (message, _) = reject(&["a.c", "--", "-x"]);
+        assert!(message.contains("`--` passes arguments"), "{message}");
     }
 
     #[test]

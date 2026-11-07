@@ -1780,6 +1780,55 @@ fn function_designator_address_constants_keep_their_offsets() {
     }
 }
 
+// A `--jit` / `--interp` program receives the arguments after its input,
+// options and `--` included, and a shebang script without an extension
+// receives its own.
+#[test]
+fn a_run_passes_option_like_arguments_to_the_program() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-run-args");
+    let body = "#include <stdio.h>\n\
+                int main(int argc, char **argv) {\n\
+                \x20   for (int i = 1; i < argc; i++)\n\
+                \x20       printf(\"[%s]\", argv[i]);\n\
+                \x20   return argc;\n\
+                }\n";
+    let src = dir.join("args.c");
+    std::fs::write(&src, body).expect("write source");
+    let script = dir.join("args");
+    std::fs::write(&script, format!("#!/usr/bin/env -S badc --interp\n{body}"))
+        .expect("write script");
+    for mode in ["--jit", "--interp"] {
+        let run = |before: &[&str], input: &std::path::Path, after: &[&str]| {
+            let out = Command::new(badc)
+                .arg(mode)
+                .args(before)
+                .arg(input)
+                .args(after)
+                .output()
+                .expect("run badc");
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            (out.status.code(), text)
+        };
+        let after = ["-v", "--", "x y", "-o"];
+        assert_eq!(
+            run(&[], &src, &after),
+            (Some(5), "[-v][--][x y][-o]".into()),
+            "{mode}"
+        );
+        assert_eq!(
+            run(&["--"], &src, &["-h"]),
+            (Some(2), "[-h]".into()),
+            "{mode}"
+        );
+        assert_eq!(
+            run(&[], &script, &["-x"]),
+            (Some(2), "[-x]".into()),
+            "{mode}"
+        );
+    }
+}
+
 // `--jit` exits with the status a program passes to `exit` from a nested
 // call, after the output the program wrote (C99 7.20.4.3).
 #[test]

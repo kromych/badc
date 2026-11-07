@@ -567,6 +567,10 @@ VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
+Under --interp and --jit, every argument after the input goes to the
+program; `--` ends badc's arguments, and with no input before it the
+first argument after it is the input.
+
 Mutually exclusive: --interp / --jit / --shared /
 --list-symbols / --dump-headers / --install all pick the output
 mode; only one applies. --track-pointers and --trace require

@@ -130,9 +130,10 @@ that run the program.
 | `--track-pointers`, `--trace` | interpreter options; `--interp` only |
 
 Options may come before or after the inputs. Under `--jit` and `--interp`,
-the arguments after the source go to the program, except arguments badc
-recognizes as its own options: `badc --jit prog.c -v` prints badc's version.
-badc has no `--` separator.
+every argument after the source goes to the program, as for `tcc -run`:
+`badc --jit prog.c -v` passes `-v` to `prog.c`, and a script whose first line
+is `#!/usr/bin/env -S badc --interp` receives its own options. `--` ends
+badc's arguments: `badc --jit -- prog.c -v` does the same.
 
 An option badc does not implement is an error, not a warning. Some build
 settings that other compilers take as options come from `#pragma`s in the

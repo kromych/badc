@@ -98,15 +98,24 @@ library does: `0xcp-3` for 1.5L on linux-x64, `0x1.8p+0` on the AArch64
 targets, `0x1.8000000000000p+0` on Windows. `%p` writes a null pointer as
 `(nil)` on Linux, `0x0` on macOS and `0000000000000000` on Windows.
 
+`sscanf`, `scanf`, `fscanf` and their `va_list` forms read every C99
+conversion and length modifier, field widths, `*`, `%[` and `%n`, and
+return the count of assignments, or `EOF` when the input ends before the
+first. A floating field converts as `strtod` does, `%Lf` storing the
+target's `long double`. A field that only begins a number, such as `100e`
+before `rgs`, is backed up to the number on macOS and Windows; glibc
+converts the number and leaves the rest read. The interpreter's only
+locale is "C": `setlocale` answers it for `""`, `"C"` and `"POSIX"` and
+fails for any other name, and `localeconv` describes it.
+
 Any other library call stops the program when it is reached:
 
 ```console
-error: runtime: vm_ssa: library call `sscanf` is not implemented under --interp
+error: runtime: vm_ssa: library call `fopen` is not implemented under --interp
 ```
 
-Among the calls not implemented are the `scanf` family, `fopen` and
-`fgets`, `strerror`, `qsort`, `time`, `setjmp`, `signal` and
-`pthread_create`.
+Among the calls not implemented are `fopen` and `fgets`, `strerror`,
+`qsort`, `time`, `setjmp`, `signal` and `pthread_create`.
 
 ### Other limits
 

@@ -21,7 +21,10 @@ use super::eval::{self, round_if_f32};
 use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
+mod locale;
 mod printf;
+mod scan;
+mod stream;
 mod string;
 mod strtox;
 
@@ -136,6 +139,10 @@ struct Memory {
     fp: FpEnv,
     /// Where `strtok` resumes, 0 before its first call.
     strtok_next: usize,
+    /// The open streams by the address of their `FILE` object.
+    streams: alloc::collections::BTreeMap<usize, stream::Stream>,
+    /// The "C" locale's strings and `struct lconv`, 0 before first use.
+    locale: usize,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -195,6 +202,8 @@ impl Memory {
             target,
             fp: FpEnv::new(target),
             strtok_next: 0,
+            streams: alloc::collections::BTreeMap::new(),
+            locale: 0,
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -203,6 +212,8 @@ impl Memory {
             let file = (base + i * STDIO_FILE_BYTES) as u64;
             let slot = base + STDIO_SLOTS + i * 8;
             mem.bytes[slot..slot + 8].copy_from_slice(&file.to_le_bytes());
+            mem.streams
+                .insert(file as usize, stream::Stream::new(i as i64));
         }
         mem.stdio = base;
         mem
@@ -1763,6 +1774,8 @@ pub(super) fn interp_supplies(name: &str) -> bool {
     strtox::NAMES.contains(&name)
         || string::NAMES.contains(&name)
         || printf::NAMES.contains(&name)
+        || scan::NAMES.contains(&name)
+        || locale::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -1915,6 +1928,12 @@ fn dispatch_callext<H: Host>(
         return r;
     }
     if let Some(r) = string::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = scan::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = locale::call(name, args, mem) {
         return r;
     }
     if let Some(r) = printf::call(name, args, mem, host) {
@@ -4703,7 +4722,9 @@ mod tests {
         ];
         let libraries = (strtox::NAMES.iter())
             .chain(string::NAMES)
-            .chain(printf::NAMES);
+            .chain(printf::NAMES)
+            .chain(scan::NAMES)
+            .chain(locale::NAMES);
         for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =

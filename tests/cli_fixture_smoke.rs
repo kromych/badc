@@ -5332,14 +5332,27 @@ fn interp_printf_writes_a_nan_as_the_target_library_does() {
 /// Run the fixture `name` under `--interp` for each target and compare its
 /// standard output with the text given for that target.
 fn interp_fixture_prints(name: &str, expected: &[(&str, &str)]) {
+    interp_fixture_reads(name, "", expected);
+}
+
+/// [`interp_fixture_prints`] with `input` on the standard input.
+fn interp_fixture_reads(name: &str, input: &str, expected: &[(&str, &str)]) {
+    use std::io::Write;
     let badc = env!("CARGO_BIN_EXE_badc");
     let src = fixtures_dir().join(name);
     for (target, want) in expected {
-        let out = Command::new(badc)
+        let mut child = Command::new(badc)
             .args(["-q", &format!("--target={target}"), "--interp"])
             .arg(&src)
-            .output()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .expect("run badc");
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin.write_all(input.as_bytes()).expect("write stdin");
+        drop(stdin);
+        let out = child.wait_with_output().expect("wait for badc");
         assert!(
             out.status.success(),
             "{target}: {}",
@@ -5440,6 +5453,51 @@ fn interp_formats_to_buffers_and_from_va_lists() {
             ("macos-aarch64", &apple),
             ("windows-x64", &msvcrt),
             ("windows-arm64", &msvcrt),
+        ],
+    );
+}
+
+/// Under `--interp` sscanf reads back what printf wrote on every target,
+/// `long double` through `%Lf`, `%Lg` and `%La` in the target's format
+/// included, and returns the assignment count or EOF. The macOS text is the
+/// native build's.
+#[test]
+fn interp_scans_what_printf_wrote() {
+    let text = |la: &str, p: &str| {
+        format!(
+            "-100 -12345 -2147483647 -1234567890 9007199254740993 4000000000 deadbeef 755 \
+             0.100000001 2.7182818284590451 3.250000 -1e-300 {la} word q {p}\n\
+             16 1 same\n2 abc x\n-1 -1 0 2 1\n"
+        )
+    };
+    let ieee = text("0x1.8p+0", "0x1234");
+    let ucrt = text("0x1.8000000000000p+0", "0000000000001234");
+    interp_fixture_prints(
+        "scanf_reads_what_printf_wrote.c",
+        &[
+            ("linux-x64", &text("0xcp-3", "0x1234")),
+            ("linux-aarch64", &ieee),
+            ("macos-aarch64", &ieee),
+            ("windows-x64", &ucrt),
+            ("windows-arm64", &ucrt),
+        ],
+    );
+}
+
+/// Under `--interp` scanf and fscanf read the standard input through one
+/// buffer, and localeconv describes the "C" locale.
+#[test]
+fn interp_scans_the_standard_input() {
+    let want = "2 12 34 2 25 word -1\nC [.][] 127\n1\n";
+    interp_fixture_reads(
+        "scanf_reads_the_standard_input.c",
+        " 12,34\n2.5e1  word\n",
+        &[
+            ("linux-x64", want),
+            ("linux-aarch64", want),
+            ("macos-aarch64", want),
+            ("windows-x64", want),
+            ("windows-arm64", want),
         ],
     );
 }

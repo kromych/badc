@@ -24,6 +24,7 @@ mod asm_a64;
 mod locale;
 mod printf;
 mod scan;
+mod sort;
 mod stream;
 mod string;
 mod strtox;
@@ -1096,21 +1097,68 @@ fn finish_agg_return(
     Ok(dst as i64)
 }
 
-/// A call of the interpreter's C library function `name` with the values
-/// of `args`. A result the caller takes as an object (`ret_agg`), a `long
-/// double` wider than `double`, is returned as the object's address.
+/// A call of the interpreter's C library function `name`. A result the
+/// caller takes as an object (`ret_agg`), a `long double` wider than
+/// `double`, is returned as the object's address.
+struct LibraryCall<'a> {
+    name: &'a str,
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+}
+
+/// Run `call` with the values of `args`, made at instruction `v` of
+/// `frame`. The sorting and searching functions call the program's
+/// comparison function back from there.
 fn call_library<H: Host>(
+    prog: &Program<'_>,
     mem: &mut Memory,
     host: &mut H,
     frame: &Frame<'_>,
-    name: &str,
+    v: ValueId,
+    call: LibraryCall<'_>,
     args: &[ValueId],
-    ret_agg: Option<u32>,
-    ret_slot_local: i64,
 ) -> Result<i64, C5Error> {
     let arg_vals: Vec<i64> = args.iter().map(|&a| frame.regs[a as usize]).collect();
-    let ret = dispatch_callext(name, &arg_vals, mem, host)?;
-    finish_agg_return(frame, mem, ret_agg, ret_slot_local, ret)
+    let mut compare = |mem: &mut Memory, f: i64, operands: &[i64]| -> Result<i64, C5Error> {
+        if f & IMPORT_ADDR_TAG != 0 {
+            let name = prog.binding_name(f & !IMPORT_ADDR_TAG)?;
+            return dispatch_callext(name, operands, mem, host);
+        }
+        let link = frame.link_to(function_at(prog, f)?, v);
+        run_func(prog, mem, host, link, operands, &[])
+    };
+    let ret = match sort::call(call.name, &arg_vals, mem, &mut compare) {
+        Some(r) => r?,
+        None => dispatch_callext(call.name, &arg_vals, mem, host)?,
+    };
+    finish_agg_return(frame, mem, call.ret_agg, call.ret_slot_local, ret)
+}
+
+/// The function a function pointer value `raw` designates, by its index:
+/// `Inst::ImmCode` tags it with `CODE_ADDR_TAG`, a static initializer's
+/// slot with the `CODE_BASE` bias. A label or a return address is no
+/// function.
+fn function_at(prog: &Program<'_>, raw: i64) -> Result<usize, C5Error> {
+    let position = CODE_ADDR_TAG | CODE_POSITION_TAG;
+    let target_pc = if raw & position == position {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: target 0x{raw:016x} is a label or return address, \
+             not a function",
+        )));
+    } else if raw & CODE_ADDR_MASK != 0 {
+        (raw & !CODE_ADDR_MASK) as usize
+    } else if (raw as usize) >= super::super::CODE_BASE {
+        (raw as usize) - super::super::CODE_BASE
+    } else {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
+        )));
+    };
+    prog.lookup(target_pc).ok_or_else(|| {
+        C5Error::Runtime(format!(
+            "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
+        ))
+    })
 }
 
 /// Build the callee's flat argument list. A variadic by-value
@@ -1604,35 +1652,15 @@ fn run_inst<H: Host>(
             if raw & IMPORT_ADDR_TAG != 0 {
                 let name = prog.binding_name(raw & !IMPORT_ADDR_TAG)?;
                 let (agg, slot) = (*ret_agg, *ret_slot_local);
-                frame.regs[v as usize] = call_library(mem, host, frame, name, args, agg, slot)?;
+                let call = LibraryCall {
+                    name,
+                    ret_agg: agg,
+                    ret_slot_local: slot,
+                };
+                frame.regs[v as usize] = call_library(prog, mem, host, frame, v, call, args)?;
                 return Ok(());
             }
-            // Code pointers may be tagged two ways: SSA-VM bit 62
-            // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
-            // form `with_host` writes when it patches the data
-            // segment's `CodeReloc` entries so static initialisers
-            // can carry function pointers without an SSA-aware
-            // fix-up.
-            let position = CODE_ADDR_TAG | CODE_POSITION_TAG;
-            let target_pc = if raw & position == position {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: target 0x{raw:016x} is a label or return address, \
-                     not a function",
-                )));
-            } else if raw & CODE_ADDR_MASK != 0 {
-                (raw & !CODE_ADDR_MASK) as usize
-            } else if (raw as usize) >= super::super::CODE_BASE {
-                (raw as usize) - super::super::CODE_BASE
-            } else {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
-                )));
-            };
-            let callee = prog.lookup(target_pc).ok_or_else(|| {
-                C5Error::Runtime(format!(
-                    "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
-                ))
-            })?;
+            let callee = function_at(prog, raw)?;
             let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let link = frame.link_to(callee, v);
             let ret = run_func(prog, mem, host, link, &arg_vals, arg_aggs)?;
@@ -1646,9 +1674,12 @@ fn run_inst<H: Host>(
             ret_slot_local,
             ..
         } => {
-            let name = prog.binding_name(*binding_idx)?;
-            let (agg, slot) = (*ret_agg, *ret_slot_local);
-            frame.regs[v as usize] = call_library(mem, host, frame, name, args, agg, slot)?;
+            let call = LibraryCall {
+                name: prog.binding_name(*binding_idx)?,
+                ret_agg: *ret_agg,
+                ret_slot_local: *ret_slot_local,
+            };
+            frame.regs[v as usize] = call_library(prog, mem, host, frame, v, call, args)?;
             return Ok(());
         }
         Inst::TailExt(_) => "TailExt",
@@ -1776,6 +1807,7 @@ pub(super) fn interp_supplies(name: &str) -> bool {
         || scan::NAMES.contains(&name)
         || locale::NAMES.contains(&name)
         || stream::NAMES.contains(&name)
+        || sort::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -4737,6 +4769,7 @@ mod tests {
                 assert!(!m.contains("is not implemented"), "{name}: {m}");
             }
         }
+        assert!(sort::NAMES.iter().all(|name| interp_supplies(name)));
         assert!(!interp_supplies("system"));
     }
 

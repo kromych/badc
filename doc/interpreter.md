@@ -116,14 +116,20 @@ standard streams. Output is unbuffered. A failed `fopen` sets `errno`
 from the host's error. A true `feof` or `ferror` is 1, or msvcrt's flag bit
 on Windows.
 
+`qsort` and `bsearch`, and msvcrt's `qsort_s` and `bsearch_s`, call the
+program's comparison function. `qsort` is glibc's merge sort on Linux and
+Windows, which keeps equal elements in order, and Apple's quicksort on
+macOS. `bsearch` probes in the order of the target's C library, which
+decides which of several equal elements it finds.
+
 Any other library call stops the program when it is reached:
 
 ```console
-error: runtime: vm_ssa: library call `qsort` is not implemented under --interp
+error: runtime: vm_ssa: library call `time` is not implemented under --interp
 ```
 
-Among the calls not implemented are `strerror`, `qsort`, `time`,
-`remove`, `rename`, `tmpfile`, `setjmp`, `signal` and `pthread_create`.
+Among the calls not implemented are `strerror`, `time`, `remove`,
+`rename`, `tmpfile`, `setjmp`, `signal` and `pthread_create`.
 
 ### Other limits
 

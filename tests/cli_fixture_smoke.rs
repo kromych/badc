@@ -5542,3 +5542,38 @@ fn interp_streams_write_and_read_back_a_file() {
         );
     }
 }
+
+/// Under `--interp` qsort and bsearch call the program's comparison
+/// function: glibc's merge sort keeps equal elements in order, Apple's
+/// quicksort leaves them as the native build does, comparison count
+/// included, and msvcrt's bsearch finds another of several equal elements.
+#[test]
+fn interp_sorts_and_searches_through_the_comparison_function() {
+    let text = |order: &str, found: &str| {
+        format!(
+            "-8 -3 0 1 2 3 4 5 6 7 7 9 | apple banana fig kiwi pear\n1{order}\n\
+             0:-1 1:0 2:2 3:4 4:-1 5:5 6:-1 7:-1 8:8 9:10 kiwi {found}\n"
+        )
+    };
+    let glibc = text(
+        " 164: 0 2 19 20 25 34 37 38 39 5 8 9 10 14 16 24 27 30 1 3 6 7 12 13 15 17 18 23 \
+         28 29 31 32 33 4 11 21 22 26 35 36",
+        "3",
+    );
+    let apple = text(
+        " 108: 39 2 19 20 25 34 37 38 0 8 10 14 16 24 27 30 5 9 17 33 1 12 13 32 15 3 18 23 \
+         7 28 29 6 31 36 21 22 11 4 35 26",
+        "3",
+    );
+    let msvcrt = text("", "2");
+    interp_fixture_prints(
+        "qsort_and_bsearch_call_the_comparison_back.c",
+        &[
+            ("linux-x64", &glibc),
+            ("linux-aarch64", &glibc),
+            ("macos-aarch64", &apple),
+            ("windows-x64", &msvcrt),
+            ("windows-arm64", &msvcrt),
+        ],
+    );
+}

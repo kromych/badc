@@ -724,6 +724,9 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   an `__except` inside a `__finally` block (C2702); badc accepts it there too.
   `--interp` and `--jit` refuse a `__try` region.
 - `__COUNTER__` and `__BASE_FILE__`.
+- `#pragma section("name", ...)` and `__declspec(allocate("name"))` on the
+  PE targets: the object goes to the named section, as with GNU `section`, and
+  the image keeps it under the name's first eight bytes.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory on the search path does not
   supply it, as clang's copy shadows MSVC's.

@@ -233,6 +233,16 @@ impl Preprocessor {
             self.parse_pragma_comment_lib(lib, site);
             return Ok(());
         }
+        // MSVC's `#pragma section("name", attributes)` declares a section a
+        // later `__declspec(allocate("name"))` places objects in; the section
+        // takes the kind of what it holds, as with GNU `section`.
+        if self.target.ms_extensions()
+            && args
+                .strip_prefix("section(")
+                .is_some_and(|s| s.trim_start().starts_with('"') && s.ends_with(')'))
+        {
+            return Ok(());
+        }
         if let Some(operand) = pragma_weak_operand(args) {
             self.parse_pragma_weak(operand, site);
             return Ok(());

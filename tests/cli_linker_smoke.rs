@@ -6413,6 +6413,44 @@ fn a_ucrt_program_starts_with_the_legacy_wide_specifiers() {
     assert_eq!(status.code(), Some(0));
 }
 
+/// MSVC's `#pragma section` declares a section and `__declspec(allocate)`
+/// places an object in it, which the image keeps as its own section under
+/// the name's first eight bytes, as link.exe writes it.
+#[test]
+fn declspec_allocate_places_an_object_in_its_named_section() {
+    let dir = tempdir("pe-declspec-allocate");
+    write_source(
+        &dir,
+        "sect.c",
+        "#pragma section(\"StateTable\", read, write)\n\
+         __declspec(allocate(\"StateTable\")) int marker = 0x12345678;\n\
+         __declspec(dllexport) int get(void) { return marker; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["--shared", "sect.c", "-o", "sect.dll"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success() && !err.contains("warning"),
+            "{target}: {err}"
+        );
+        let pe = std::fs::read(dir.join("sect.dll")).expect("read DLL");
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+        let coff = u32_at(0x3c) + 4;
+        let table = coff + 20 + u16_at(coff + 16);
+        let body = (0..u16_at(coff + 2))
+            .map(|i| table + 40 * i)
+            .find(|&h| &pe[h..h + 8] == b"StateTab")
+            .map(|h| &pe[u32_at(h + 20)..u32_at(h + 20) + 4]);
+        assert_eq!(body, Some(&0x12345678u32.to_le_bytes()[..]), "{target}");
+    }
+}
+
 /// A DLL whose `DllMain` one of several units defines enters there, as a
 /// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
 /// the export table gives where the test exports it.

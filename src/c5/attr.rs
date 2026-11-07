@@ -82,6 +82,8 @@ const TABLE: &[(&str, Attr, Spelling)] = &[
     ("mode", Mode, Gnu),
     ("cleanup", Cleanup, Gnu),
     ("section", Section, Gnu),
+    // MSVC's `__declspec(allocate("name"))`: the object's section, as GNU `section`.
+    ("allocate", Section, Other),
     ("alias", Alias, Gnu),
     ("visibility", Visibility, Gnu),
     ("patchable_function_entry", PatchableFunctionEntry, Gnu),

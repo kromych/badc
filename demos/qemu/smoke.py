@@ -341,12 +341,9 @@ def main() -> int:
     jobs = int(os.environ.get("BADC_QEMU_JOBS") or (os.cpu_count() or 4))
     out_dir = cache / ("objs-O" if optimize else "objs")
     out_dir.mkdir(parents=True, exist_ok=True)
+    # QEMU forbids NDEBUG (osdep.h #error): it is built optimized with
+    # assertions kept on, which plain -O gives.
     opt = ["-O"] if optimize else []
-    # QEMU forbids NDEBUG (osdep.h #error): it is built optimized but with
-    # assertions kept on. badc's -O predefines NDEBUG for release semantics, so
-    # the -O compile lane undefines it to match QEMU's build (optimization,
-    # asserts on). The link keeps plain -O.
-    opt_compile = [*opt, "-U", "NDEBUG"] if optimize else []
     # The SSA checks after every pass: a pass that breaks the form stops the
     # unit's compile rather than reaching the emulator's run time.
     verify = ["--verify-ssa"] if os.environ.get("BADC_QEMU_VERIFY_SSA") == "1" else []
@@ -363,7 +360,7 @@ def main() -> int:
         # Retry a unit needing a host SIMD-intrinsics header on the portable path.
         for scalar in (False, True):
             flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar, host_accel)
-            cmd = [str(badc), "--gnu", "-q", *opt_compile, *verify, *_syslib.sysroot_args(),
+            cmd = [str(badc), "--gnu", "-q", *opt, *verify, *_syslib.sysroot_args(),
                    "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:

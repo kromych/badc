@@ -28,8 +28,9 @@ Legs probed (skipped when the compiler or the flag is absent):
 * cl /O2 /arch:<ext> -- the same at the level's extensions (MSVC_ARCH).
 
 A leg is named by the flags that distinguish it, so two legs of one
-compiler are two rows. badc -O implies NDEBUG; the -O2 and /O2 legs pass
--DNDEBUG explicitly to match. The unoptimized entries keep asserts live.
+compiler are two rows. Every optimized leg passes -DNDEBUG, as a release
+build does; no compiler's -O implies it. The unoptimized entries keep
+asserts live.
 
 Override the badc binary via $BADC, the tcc binary via $TCC and the ccc
 binary via $CCC.
@@ -315,7 +316,7 @@ def probe_compilers() -> list[Compiler]:
         badc = REPO_ROOT / "target" / "release" / f"badc{EXE}"
     if badc.is_file():
         found.append(Compiler("badc", [str(badc)]))
-        found.append(Compiler("badc -O", [str(badc), "-O"]))
+        found.append(Compiler("badc -O", [str(badc), "-O", "-DNDEBUG"]))
     else:
         print(f"info: badc not at {badc}; skipping badc rows", file=sys.stderr)
 

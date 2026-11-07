@@ -6376,6 +6376,57 @@ fn a_dll_link_writes_its_import_library() {
     }
 }
 
+/// A DLL whose `DllMain` one of several units defines enters there, as a
+/// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
+/// the export table gives where the test exports it.
+#[test]
+fn a_linked_dll_enters_at_its_dllmain() {
+    let dir = tempdir("pe-dll-dllmain-entry");
+    write_source(
+        &dir,
+        "work.c",
+        "__declspec(dllexport) int work(int x) { return x + 1; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "__declspec(dllexport) int DllMain(void *h, unsigned long r, void *p) {\n\
+         (void)h; (void)r; (void)p; return 1; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["--shared", "work.c", "main.c", "-o", "two.dll"])
+                .current_dir(&dir),
+            &format!("{target}: DLL"),
+        );
+        let pe = std::fs::read(dir.join("two.dll")).expect("read DLL");
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        let opt = u32_at(0x3c) as usize + 24;
+        let entry = u32_at(opt + 16);
+        let exports = pe_rva_offset(&pe, u32_at(opt + 112)).expect("export directory");
+        let (count, functions, names, ordinals) = (
+            u32_at(exports + 24) as usize,
+            u32_at(exports + 28),
+            u32_at(exports + 32),
+            u32_at(exports + 36),
+        );
+        let rva_of = |want: &str| {
+            (0..count).find_map(|i| {
+                let name = pe_rva_offset(&pe, u32_at(pe_rva_offset(&pe, names)? + 4 * i))?;
+                let end = pe[name..].iter().position(|&b| b == 0)?;
+                (&pe[name..name + end] == want.as_bytes()).then(|| {
+                    let at = pe_rva_offset(&pe, ordinals).unwrap() + 2 * i;
+                    let ordinal = u16::from_le_bytes([pe[at], pe[at + 1]]) as usize;
+                    u32_at(pe_rva_offset(&pe, functions).unwrap() + 4 * ordinal)
+                })
+            })
+        };
+        assert_eq!(Some(entry), rva_of("DllMain"), "{target}");
+    }
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

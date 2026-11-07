@@ -436,7 +436,7 @@ fn synth_program_and_build(
         } else {
             None
         },
-        dllmain_pc: None,
+        dllmain_pc: dll_entry(merged, output_kind, target),
         // Empty merged blobs mean no input unit carried DWARF; the
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
@@ -981,6 +981,15 @@ fn check_target_machine(target: Target, machine: NativeMachine) -> Result<(), C5
         ));
     }
     Ok(())
+}
+
+/// A PE DLL an input defines `DllMain` for enters there, as the single-unit
+/// writer has it; without one it takes the writer's stub.
+fn dll_entry(merged: &MergedNative, output_kind: OutputKind, target: Target) -> Option<usize> {
+    let dll = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
+    let sym = merged.defined.get("DllMain").filter(|_| dll)?;
+    matches!(sym.section, NativeSymSection::Text).then_some(sym.value as usize)
 }
 
 fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize, C5Error> {

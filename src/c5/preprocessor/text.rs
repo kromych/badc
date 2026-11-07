@@ -302,7 +302,9 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
         }
         if f.mode == ScanMode::Block {
             // An open block comment joins the next line; the newline
-            // moves to the padding after the logical line.
+            // moves to the padding after the logical line. Only a splice
+            // joins `*` to a `/` on the next line (C99 5.1.1.2p1).
+            f.star = false;
             padding += 1;
             i = next_start;
             continue;
@@ -503,7 +505,11 @@ pub(super) fn unfold_line_continuations(source: &str) -> String {
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !scan.ends_in_open_block_comment(joined.as_bytes()) {
+            } else if scan.ends_in_open_block_comment(joined.as_bytes()) {
+                // The newline is comment text: a `*` before it does not
+                // close the comment with a `/` after it.
+                joined.push(' ');
+            } else {
                 break;
             }
             padding += 1;
@@ -677,7 +683,9 @@ pub(super) fn unfold_ref(source: &str) -> String {
         loop {
             if joined.ends_with('\\') {
                 joined.pop();
-            } else if !ends_in_open_block_comment_ref(&joined) {
+            } else if ends_in_open_block_comment_ref(&joined) {
+                joined.push(' ');
+            } else {
                 break;
             }
             padding += 1;

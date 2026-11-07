@@ -4115,6 +4115,9 @@ fn unfold_and_strip_edge_cases() {
         ("a /\\\n* c *\\\n/ b\n", "a   b\n\n\n"),
         ("a /\\\n/ c\nb\n", "a  \n\nb\n"),
         ("/*x*\\\n/y\n", " y\n\n"),
+        // A newline between `*` and `/` is no splice: the comment stays open.
+        ("/* a *\n/ b */ c\nx\n", "  c\n\nx\n"),
+        ("/* a *\r\n/ b */ c\r\nx\n", "  c\n\nx\n"),
         // A pending `/` whose splice pops the following backslash but
         // no comment forms.
         ("x/\\\nay\n", "x/ay\n\n"),

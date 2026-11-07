@@ -15,6 +15,15 @@ evaluator, the object and memory model, Unicode, and the parser.
   per-target `manifest.json` + `config.c` + `pyconfig.h`; Windows targets parse
   the link set from `PCbuild/pythoncore.vcxproj` and wire the `PC/config.c`
   inittab.
+- `build_sdk.py` -- the Windows distribution as PCbuild builds it: evaluates
+  `pcbuild.proj` and each `.vcxproj` for the Release configuration and runs
+  badc with `--msvc` where MSBuild runs cl, link and lib, against the MSVC
+  headers and the Windows SDK (not badc's bundled C library), linking the SDK
+  and UCRT import libraries. It builds `python314.dll`, `python3.dll`,
+  `python.exe`, `pythonw.exe`, the launchers and every C extension module,
+  with the external libraries from source; `--test` runs the whole regrtest
+  suite. `BADC_WINDOWS_KITS` / `BADC_MSVC_TOOLS` point it at a copied kit for
+  a cross build from macOS or Linux.
 - `smoke.py` -- the reference build: `./configure --without-mimalloc` + `make`
   with the host compiler, producing a reference `python` for `bench.py`.
 - `bench.py` + `benchmarks/` -- runs the dependency-free pure-Python benchmarks
@@ -40,6 +49,7 @@ reference.
 python3 demos/python/setup.py                                # once, to fetch the source
 python3 demos/python/build.py --target=macos-aarch64 --test  # build + run the test slice
 python3 demos/python/build.py --target=windows-x64 --link    # build + link only
+python3 demos/python/build_sdk.py --target=windows-x64 --test # PCbuild's distribution + regrtest
 python3 demos/python/bench.py                                # parity + timings vs the reference
 ```
 

@@ -735,6 +735,9 @@ fn collect_inputs<T: InputObject>(
     struct PendingArchive {
         members: Vec<(String, Vec<u8>)>,
         taken: Vec<bool>,
+        /// The names the symbol index lists per member; a member none of
+        /// whose names is wanted is not read. `None` without an index.
+        index: Option<Vec<Vec<String>>>,
     }
     let mut objs: Vec<T> = Vec::new();
     let mut libs: Vec<SharedInput> = Vec::new();
@@ -773,6 +776,11 @@ fn collect_inputs<T: InputObject>(
                     if ar.taken[i] {
                         continue;
                     }
+                    if let Some(names) = ar.index.as_ref().and_then(|x| x.get(i))
+                        && !names.iter().any(|n| undef.contains(n))
+                    {
+                        continue;
+                    }
                     let (name, bytes) = &ar.members[i];
                     let o = match T::parse(name, bytes.clone()) {
                         Ok(o) => o,
@@ -790,12 +798,14 @@ fn collect_inputs<T: InputObject>(
             }
         }
     };
-    let load_archive = |path: &Path| -> Result<Vec<(String, Vec<u8>)>, i32> {
+    type Loaded = (Vec<(String, Vec<u8>)>, Option<Vec<Vec<String>>>);
+    let load_archive = |path: &Path| -> Result<Loaded, i32> {
         let blob = std::fs::read(path)
             .map_err(|e| ld_err(format!("cannot read `{}`: {e}", path.display())))?;
-        let members = archive::read_archive_at(&blob, path.parent())
+        let ar = archive::read_indexed_archive_at(&blob, path.parent())
             .map_err(|e| ld_err(format!("`{}`: {e}", path.display())))?;
-        Ok(members.into_iter().map(|m| (m.name, m.bytes)).collect())
+        let members = ar.members.into_iter().map(|m| (m.name, m.bytes)).collect();
+        Ok((members, ar.symbols))
     };
     // GNU ld takes the first directory holding either spelling, and
     // prefers the shared one there unless the search is static. A file
@@ -920,7 +930,7 @@ fn collect_inputs<T: InputObject>(
         };
         let is_archive = head.starts_with(b"!<arch>\n") || head.starts_with(b"!<thin>\n");
         if is_archive {
-            let members = load_archive(path)?;
+            let (members, index) = load_archive(path)?;
             if whole {
                 for (name, bytes) in members {
                     let label = format!("{}({})", path.display(), name);
@@ -931,7 +941,11 @@ fn collect_inputs<T: InputObject>(
                 }
             } else {
                 let taken = alloc::vec![false; members.len()];
-                let mut ar = PendingArchive { members, taken };
+                let mut ar = PendingArchive {
+                    members,
+                    taken,
+                    index,
+                };
                 match group.as_mut() {
                     Some(span) => span.push(ar),
                     None => {

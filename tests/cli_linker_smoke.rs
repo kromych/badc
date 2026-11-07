@@ -20705,3 +20705,72 @@ fn ld64_reads_an_archive_of_mach_o_objects() {
     let status = Command::new(&exe).status().expect("run the program");
     assert_eq!(status.code(), Some(0));
 }
+
+/// The ld persona and the `-T` link read an archive member only when the
+/// symbol index lists a name the link still needs, as the native link does:
+/// a member the index names under nothing wanted is never read, so one
+/// that would not parse does not fail the link.
+#[test]
+fn script_links_read_only_the_members_the_index_pulls() {
+    let dir = tempdir("index-pull");
+    let compile = |name: &str, body: &str| {
+        let src = write_source(&dir, &format!("{name}.c"), body);
+        let obj = dir.join(format!("{name}.o"));
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile",
+        );
+        obj
+    };
+    let main = compile(
+        "main",
+        "int helper(void);\nint main(void) { return helper(); }\n",
+    );
+    let helper = compile("helper", "int helper(void) { return 0; }\n");
+    let blob = badc::write_archive(
+        &[
+            badc::ArchiveMember {
+                name: "helper.o".into(),
+                bytes: std::fs::read(&helper).unwrap(),
+            },
+            badc::ArchiveMember {
+                name: "junk.o".into(),
+                bytes: b"not an object at all".to_vec(),
+            },
+        ],
+        &[(0, vec!["helper".into()]), (1, vec!["never_wanted".into()])],
+    );
+    let lib = dir.join("libpull.a");
+    std::fs::write(&lib, blob).unwrap();
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let persona = Command::new(badc())
+        .args(["--ld", "-m", "elf_x86_64", "-T"])
+        .arg(&script)
+        .arg(&main)
+        .arg(&lib)
+        .arg("-o")
+        .arg(dir.join("persona"))
+        .output()
+        .expect("run badc --ld");
+    let driver = Command::new(badc())
+        .args(["-q", "--target=linux-x64", "-T"])
+        .arg(&script)
+        .arg(&main)
+        .arg(&lib)
+        .arg("-o")
+        .arg(dir.join("driver"))
+        .output()
+        .expect("run badc");
+    for (front, out) in [("--ld", &persona), ("-T", &driver)] {
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{front}: {err}");
+    }
+}

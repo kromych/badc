@@ -2,7 +2,9 @@
 ** release. As in gcc and clang, posix_memalign provides it where the C
 ** library has it and _aligned_malloc on Windows, whose blocks _aligned_free
 ** releases; an alignment below a pointer's is raised to it. An alignment
-** that is not a power of two yields a null pointer. */
+** that is not a power of two yields a null pointer. The names are
+** parenthesized where defined: a C library header may have made them
+** macros already, as the UCRT's <malloc.h> does. */
 #pragma once
 
 #include <stdlib.h>
@@ -10,7 +12,7 @@
 #include <malloc.h>
 #endif
 
-static inline void *_mm_malloc(size_t __size, size_t __align) {
+static inline void *(_mm_malloc)(size_t __size, size_t __align) {
     if (__align & (__align - 1))
         return 0;
     if (__align < sizeof(void *))
@@ -23,7 +25,7 @@ static inline void *_mm_malloc(size_t __size, size_t __align) {
 #endif
 }
 
-static inline void _mm_free(void *__p) {
+static inline void (_mm_free)(void *__p) {
 #ifdef _WIN32
     _aligned_free(__p);
 #else

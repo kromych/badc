@@ -84,6 +84,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("mm_malloc_name_macros.c", 42),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
@@ -2681,6 +2682,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
+    ("mm_malloc_name_macros.c", 42),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
     ("cpuid_h_reads_the_processor.c", 0),
@@ -3812,6 +3814,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("mm_malloc_name_macros.c", 42),
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),
     ("spawn_nowait_handle_is_pointer_sized.c", 0),
@@ -4709,6 +4712,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("mm_malloc_name_macros.c", 42),
     ("arm_neon_halfword_lanes.c", 42),
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),

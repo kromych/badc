@@ -39,8 +39,8 @@ use super::enum_conversion::{common_enum, original_enum};
 use super::types::{
     LONG_DOUBLE_BIT, UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_scalar,
     is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
-    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
-    unqualified_version_ty,
+    is_unsigned_ty, is_void_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth, unqualified_version_ty, void_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -214,6 +214,11 @@ enum ConstBinOp {
 }
 
 impl ConstVal {
+    /// The operand of a cast to `void`.
+    fn is_void(&self) -> bool {
+        matches!(self, ConstVal::Int { ty, .. } if is_void_ty(*ty))
+    }
+
     /// An `int`-typed value: comparison and logical results, and
     /// the other places C99 mandates `int`.
     fn int(v: i64) -> ConstVal {
@@ -1161,6 +1166,22 @@ impl Compiler {
         &mut self,
         seed: ConstVal,
     ) -> Result<ConstVal, C5Error> {
+        let v = self.parse_const_expr_chain_from(seed)?;
+        if v.is_void() {
+            self.reject_void_value(void_ty())?;
+        }
+        Ok(v)
+    }
+
+    /// A constant comma operand whose value is discarded.
+    pub(super) fn parse_const_expr_discarded(&mut self) -> Result<(), C5Error> {
+        let seed = self.parse_const_expr_unary_val()?;
+        self.parse_const_expr_chain_from(seed).map(drop)
+    }
+
+    /// [`Self::parse_const_expr_cond_from`] that passes a `(void)` operand
+    /// through, for the comma operator to discard.
+    fn parse_const_expr_chain_from(&mut self, seed: ConstVal) -> Result<ConstVal, C5Error> {
         let cond = self.parse_const_expr_or_from(seed)?;
         if self.lex.tk == Token::Cond {
             self.next()?;
@@ -1238,20 +1259,20 @@ impl Compiler {
         }
     }
 
-    /// A parenthesized constant expression, which may hold a comma operator
-    /// only where it is not evaluated (C99 6.6p3); its value is the right
-    /// operand's.
+    /// A parenthesized constant expression; its value is the right
+    /// operand's. C99 6.6p3 keeps an evaluated comma out of a constant
+    /// expression; as gcc and clang do under 6.6p10, one whose operands are
+    /// constant folds, and its discarded operands may be cast to `void`.
     fn parse_const_expr_comma_val(&mut self) -> Result<ConstVal, C5Error> {
-        let mut v = self.parse_const_expr_cond_val()?;
+        let seed = self.parse_const_expr_unary_val()?;
+        let mut v = self.parse_const_expr_chain_from(seed)?;
         while self.lex.tk == ',' {
-            if self.const_unevaluated == 0 {
-                return Err(self.compile_err(
-                    Code::CONSTANT_EXPRESSION,
-                    "a comma operator is evaluated in this constant expression",
-                ));
-            }
             self.next()?;
-            v = self.parse_const_expr_cond_val()?;
+            let seed = self.parse_const_expr_unary_val()?;
+            v = self.parse_const_expr_chain_from(seed)?;
+        }
+        if v.is_void() {
+            self.reject_void_value(void_ty())?;
         }
         Ok(v)
     }
@@ -3094,7 +3115,19 @@ impl Compiler {
                 }
                 self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
-                self.reject_void_value(target_ty)?;
+                // A `void` operand has a value only to discard, as a comma
+                // operand (C99 6.5.17p2).
+                if is_void_ty(target_ty) {
+                    self.parse_const_expr_unary_val()?;
+                    if self.lex.tk != ',' {
+                        self.reject_void_value(target_ty)?;
+                    }
+                    return Ok(ConstVal::Int {
+                        val: 0,
+                        ty: target_ty,
+                        enumeration: None,
+                    });
+                }
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
                 // brace holds a single value; the result is that value
                 // converted to `T` through the cast fold below.

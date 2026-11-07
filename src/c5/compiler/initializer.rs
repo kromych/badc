@@ -24,8 +24,8 @@ use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
     add_ptr_level, is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_unsigned_ty, is_vector_ty, pointee_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth, struct_ty_for,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ty, pointee_ty, strip_unsigned,
+    struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -2346,7 +2346,14 @@ impl Compiler {
         // the operator chain past the `)`.
         {
             let inner_snap = self.lex.snapshot();
+            let cp = self.init_checkpoint();
             let leaf = self.parse_constant_init_value()?;
+            // A comma operand: the evaluator folds the comma expression.
+            if self.lex.tk == ',' {
+                self.restore_init_checkpoint(cp);
+                self.restore_lex(snap);
+                return self.parse_constant_init_scalar();
+            }
             if self.lex.tk == ')'
                 && let Some(seed) = leaf.arith()
             {
@@ -2451,6 +2458,15 @@ impl Compiler {
             return Ok(InitLeaf::of(v, reloc, ty));
         }
         self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
+        // A `void` operand of a comma; see `parse_const_expr_comma_val`.
+        if is_void_ty(cast_ty) {
+            self.restore_lex(snap);
+            self.parse_const_expr_discarded()?;
+            if self.lex.tk != ',' {
+                self.reject_void_value(cast_ty)?;
+            }
+            return Ok(InitLeaf::of(0, InitElemReloc::None, cast_ty));
+        }
         // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
         // brace holds a single value; the result is that value
         // converted to `T`, keeping any relocation it carries.

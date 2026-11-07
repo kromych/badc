@@ -4214,26 +4214,35 @@ fn derived_type_spellings_agree_and_a_cast_names_no_array() {
 }
 
 #[test]
-fn a_comma_operator_stands_in_an_unevaluated_constant_subexpression() {
-    // C99 6.6p3: a constant expression holds no comma operator except in a
-    // subexpression that is not evaluated.
+fn a_comma_operator_of_constants_folds_to_its_right_operand() {
+    // C99 6.6p3 keeps an evaluated comma out of a constant expression;
+    // gcc and clang accept one of constant operands (6.6p10), whose
+    // discarded operands may be cast to `void`. A `void` value is no
+    // constant, and neither is a call.
     for src in [
         "enum { E = 1 ? 2 : (3, 4) }; int main(void) { return E - 2; }",
         "int g = 0 ? (1, 2) : 3; int main(void) { return g - 3; }",
         "int a[1 ? 2 : (3, 4)]; int main(void) { return sizeof a / sizeof a[0] - 2; }",
         "int k = 1 || (2, 3); int main(void) { return k - 1; }",
         "int main(void) { switch (2) { case 0 ? (1, 2) : 2: return 0; } return 1; }",
+        "enum { F = (3, 4) }; int main(void) { return F - 4; }",
+        "int h = (1, 2); int main(void) { return h - 2; }",
+        "int main(void) { static int h = ((void)1, 2); return h - 2; }",
+        "int h[] = { ((void)0, 1, 2) }; int main(void) { return h[0] - 2; }",
     ] {
         assert_eq!(super::run_str(src), 0, "{src}");
     }
     for src in [
-        "enum { F = (3, 4) }; int main(void) { return F; }",
-        "int h = (1, 2); int main(void) { return h; }",
-        "int main(void) { static int h = (1, 2); return h; }",
-        "int h[] = { (1, 2) }; int main(void) { return h[0]; }",
+        "int h = (1, (void)2); int main(void) { return h; }",
+        "int h[] = { (void)2 }; int main(void) { return h[0]; }",
+        "enum { F = (void)3 }; int main(void) { return F; }",
     ] {
-        expect_compile_error(src, "a comma operator is evaluated");
+        expect_compile_error(src, "`void` expression used as a value");
     }
+    expect_compile_error(
+        "int f(void); int h = (f(), 2); int main(void) { return h; }",
+        "constant integer expected",
+    );
 }
 
 #[test]

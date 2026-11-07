@@ -641,11 +641,14 @@ impl Compiler {
             // which handles the address and function-reference forms.
             let after_open = self.lex.snapshot();
             let mut depth: i64 = 1;
+            let mut commas = 0usize;
             while depth > 0 && self.lex.tk != 0 {
                 if self.lex.tk == '(' {
                     depth += 1;
                 } else if self.lex.tk == ')' {
                     depth -= 1;
+                } else if self.lex.tk == ',' && depth == 1 {
+                    commas += 1;
                 }
                 self.next()?;
             }
@@ -660,14 +663,12 @@ impl Compiler {
                 self.restore_lex(pre_paren);
             } else {
                 self.restore_lex(after_open);
-                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
-                // C99 6.6p3: the evaluated comma of `(a, b)`.
-                if self.lex.tk == ',' {
-                    return Err(self.compile_err(
-                        Code::CONSTANT_EXPRESSION,
-                        "a comma operator is evaluated in this constant expression",
-                    ));
+                // `(a, b)` takes the value of `b`; see `parse_const_expr_comma_val`.
+                for _ in 0..commas {
+                    self.parse_const_expr_discarded()?;
+                    self.accept(',')?;
                 }
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local, target_fn)?;
                 self.accept(')')?;
                 return Ok(true);
             }

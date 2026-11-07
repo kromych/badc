@@ -83,6 +83,7 @@ struct SectionPlan {
     data: bool,
     reloc: bool,
     edata: bool,
+    rsrc: bool,
     dwarf: usize,
     named: usize,
 }
@@ -95,6 +96,7 @@ impl SectionPlan {
             + self.data as usize
             + self.reloc as usize
             + self.edata as usize
+            + self.rsrc as usize
             + self.dwarf
             + self.named
     }
@@ -166,6 +168,7 @@ const IMAGE_ORDINAL_FLAG64: u64 = 1 << 63;
 
 const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
+const DATA_DIRECTORY_RESOURCE: usize = 2;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
 const DATA_DIRECTORY_DEBUG: usize = 6;
@@ -286,6 +289,10 @@ struct PeLayout<'a> {
     edata_file_off: u32,
     edata_bytes: Vec<u8>,
     edata_raw_size: u32,
+    rsrc_rva: u32,
+    rsrc_file_off: u32,
+    rsrc_bytes: Vec<u8>,
+    rsrc_raw_size: u32,
     pre_dwarf_end_file_off: u32,
     pre_dwarf_end_rva: u32,
     coff_strtab: Vec<u8>,
@@ -297,6 +304,28 @@ struct PeLayout<'a> {
     coff_strtab_file_off: u32,
     total_file_size: usize,
     image_size: u32,
+}
+
+impl PeLayout<'_> {
+    /// The RVA and file offset where the sections laid out before `.rsrc`
+    /// end.
+    fn end_before_rsrc(&self) -> (u32, u32) {
+        if self.edata_present {
+            let rva = self.edata_rva + self.edata_bytes.len() as u32;
+            (rva, self.edata_file_off + self.edata_raw_size)
+        } else if self.reloc_present {
+            let rva = self.reloc_rva + self.reloc_bytes.len() as u32;
+            (rva, self.reloc_file_off + self.reloc_raw_size)
+        } else if self.data_present || !self.named_out.is_empty() {
+            (self.named_rva_end, self.named_file_end)
+        } else if self.rdata_present {
+            let rva = self.rdata_rva + self.rdata_size;
+            (rva, self.rdata_file_off + self.rdata_raw_size)
+        } else {
+            let rva = self.idata_rva + self.idata.bytes.len() as u32;
+            (rva, self.rdata_file_off + self.rdata_raw_size)
+        }
+    }
 }
 
 /// One PE image's writer. [`write`] runs the phases in order: the entry
@@ -657,6 +686,7 @@ impl<'a> PeWriter<'a> {
             data: l.data_present,
             reloc: l.reloc_present,
             edata: l.edata_present,
+            rsrc: !build.resources.is_empty(),
             dwarf: dwarf_section_count,
             named: build.named_sections.iter().filter(|n| n.size > 0).count(),
         };
@@ -999,6 +1029,13 @@ impl<'a> PeWriter<'a> {
         l.edata_file_off = edata_file_off;
         l.edata_bytes = edata_bytes;
         l.edata_raw_size = edata_raw_size;
+        if l.plan.rsrc {
+            let (end_rva, end_file) = l.end_before_rsrc();
+            l.rsrc_rva = round_up(end_rva, l.section_align);
+            l.rsrc_file_off = end_file;
+            l.rsrc_bytes = super::pe_rsrc::build_rsrc(l.rsrc_rva, &build.resources)?;
+            l.rsrc_raw_size = round_up(l.rsrc_bytes.len() as u32, FILE_ALIGNMENT);
+        }
         Ok(())
     }
 
@@ -1013,25 +1050,13 @@ impl<'a> PeWriter<'a> {
         let build = self.build;
         let text_body_rva = self.text_body_rva();
         let l = &mut self.layout;
-        l.pre_dwarf_end_file_off = if l.edata_present {
-            l.edata_file_off + l.edata_raw_size
-        } else if l.reloc_present {
-            l.reloc_file_off + l.reloc_raw_size
-        } else if l.data_present || !l.named_out.is_empty() {
-            l.named_file_end
+        (l.pre_dwarf_end_rva, l.pre_dwarf_end_file_off) = if l.plan.rsrc {
+            (
+                l.rsrc_rva + l.rsrc_bytes.len() as u32,
+                l.rsrc_file_off + l.rsrc_raw_size,
+            )
         } else {
-            l.rdata_file_off + l.rdata_raw_size
-        };
-        l.pre_dwarf_end_rva = if l.edata_present {
-            l.edata_rva + l.edata_bytes.len() as u32
-        } else if l.reloc_present {
-            l.reloc_rva + l.reloc_bytes.len() as u32
-        } else if l.data_present || !l.named_out.is_empty() {
-            l.named_rva_end
-        } else if l.rdata_present {
-            l.rdata_rva + l.rdata_size
-        } else {
-            l.idata_rva + l.idata.bytes.len() as u32
+            l.end_before_rsrc()
         };
         let emit_plt_coff_symbols = !build.plt_trampoline_offsets.is_empty();
         let need_coff_strtab = l.dwarf_present || emit_plt_coff_symbols;
@@ -1126,6 +1151,8 @@ impl<'a> PeWriter<'a> {
             (l.dwarf_end_file_off + coff_symbols.len() as u32 + coff_strtab.len() as u32) as usize;
         l.image_size = if l.dwarf_present {
             l.dwarf_end_rva
+        } else if l.plan.rsrc {
+            round_up(l.rsrc_rva + l.rsrc_bytes.len() as u32, l.section_align)
         } else if l.edata_present {
             round_up(l.edata_rva + l.edata_bytes.len() as u32, l.section_align)
         } else if l.reloc_present {
@@ -1501,6 +1528,8 @@ impl<'a> PeWriter<'a> {
                 tls_table_size,
                 export_table_rva: l.edata_rva,
                 export_table_size: l.edata_bytes.len() as u32,
+                resource_table_rva: l.rsrc_rva,
+                resource_table_size: l.rsrc_bytes.len() as u32,
                 debug_rva: debug_dir.0,
                 debug_size: debug_dir.1,
                 subsystem: self.subsystem,
@@ -1622,6 +1651,16 @@ impl<'a> PeWriter<'a> {
                 virtual_address: l.edata_rva,
                 size_of_raw_data: l.edata_raw_size,
                 pointer_to_raw_data: l.edata_file_off,
+                characteristics: ro,
+            });
+        }
+        if l.plan.rsrc {
+            sections.push(SectionHeader {
+                name: *b".rsrc\0\0\0",
+                virtual_size: l.rsrc_bytes.len() as u32,
+                virtual_address: l.rsrc_rva,
+                size_of_raw_data: l.rsrc_raw_size,
+                pointer_to_raw_data: l.rsrc_file_off,
                 characteristics: ro,
             });
         }
@@ -1773,6 +1812,10 @@ impl<'a> PeWriter<'a> {
         if l.edata_present {
             pad_to(&mut out, l.edata_file_off as usize)?;
             out.extend_from_slice(&l.edata_bytes);
+        }
+        if l.plan.rsrc {
+            pad_to(&mut out, l.rsrc_file_off as usize)?;
+            out.extend_from_slice(&l.rsrc_bytes);
         }
         for slot in &l.dwarf_sections {
             pad_to(&mut out, slot.file_off as usize)?;
@@ -2233,6 +2276,8 @@ struct OptionalHeaderInputs {
     tls_table_size: u32,
     export_table_rva: u32,
     export_table_size: u32,
+    resource_table_rva: u32,
+    resource_table_size: u32,
     debug_rva: u32,
     debug_size: u32,
     subsystem: u16,
@@ -2256,6 +2301,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_EXPORT] = DataDirectoryEntry {
         rva: inp.export_table_rva,
         size: inp.export_table_size,
+    };
+    data_directory[DATA_DIRECTORY_RESOURCE] = DataDirectoryEntry {
+        rva: inp.resource_table_rva,
+        size: inp.resource_table_size,
     };
     data_directory[DATA_DIRECTORY_EXCEPTION] = DataDirectoryEntry {
         rva: inp.exception_table_rva,

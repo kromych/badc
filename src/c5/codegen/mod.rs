@@ -2488,6 +2488,8 @@ pub(crate) struct Build {
     /// The path a PE image's debug directory names for its program
     /// database; the PE writer then also writes the PDB.
     pub pdb_path: Option<String>,
+    /// The compiled resource files (`.res`) a PE image carries in `.rsrc`.
+    pub resources: Vec<Vec<u8>>,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the

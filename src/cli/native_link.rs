@@ -143,7 +143,15 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     // gcc's order: the startup runtime where crt1.o stands, then the inputs.
     let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
+    // Compiled resource files, which link.exe takes for the image's `.rsrc`.
+    let mut resources = Vec::new();
     for input in ordered {
+        if let LinkInput::Object(path) = &input
+            && let Some(res) = read_resource_input(path, cli.target)
+        {
+            resources.push(res);
+            continue;
+        }
         let slot = match input {
             LinkInput::Source(i) => {
                 source_slots[i] = slots.len();
@@ -259,6 +267,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             entry: entry_override.as_deref(),
             subsystem: subsystem_override,
             first_source: sources.first().map(|s| s.as_str()).unwrap_or("a"),
+            resources: &resources,
         },
         &mut stats,
     );
@@ -492,6 +501,25 @@ fn parse_input_object(bytes: &[u8], label: String, target: badc::Target) -> badc
     }
     o.source = label;
     o
+}
+
+/// A compiled resource file's bytes, when the input is one: a PE image
+/// takes it into `.rsrc`, and another image refuses it.
+fn read_resource_input(path: &str, target: badc::Target) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut head = [0u8; 32];
+    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    if !badc::is_resource_file(&head) {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        eprint_diagnostic(format!(
+            "badc: error: `{path}` is a compiled resource file, which only a PE image takes"
+        ));
+        std::process::exit(1);
+    }
+    Some(bytes)
 }
 
 /// Read and parse a `.o` input.
@@ -1271,6 +1299,8 @@ struct ImageInputs<'a> {
     subsystem: Option<badc::Subsystem>,
     /// Names the default output path when `-o` is absent.
     first_source: &'a str,
+    /// Compiled resource files for a PE image's `.rsrc`.
+    resources: &'a [Vec<u8>],
 }
 
 /// A freestanding Linux image runs without the dynamic loader unless it
@@ -1450,6 +1480,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         shared_lib_name,
         &image_options,
         pdb_name.as_deref(),
+        image.resources,
     );
 
     let linked = match write_result {

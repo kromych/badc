@@ -38,6 +38,8 @@ mod tests;
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
 pub use object::elf_class::ElfClass;
+#[cfg(feature = "native-emit")]
+pub use object::pe_rsrc::is_res as is_resource_file;
 pub use object::{DWARF_FORMAT_BITS, DWARF_VERSION};
 #[allow(unused_imports)]
 #[cfg(feature = "native-emit")]

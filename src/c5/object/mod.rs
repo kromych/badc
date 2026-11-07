@@ -48,6 +48,8 @@ pub(crate) mod pdb;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
 #[cfg(feature = "native-emit")]
+pub(crate) mod pe_rsrc;
+#[cfg(feature = "native-emit")]
 pub(crate) mod relr;
 pub(crate) mod section_table;
 #[cfg(feature = "native-emit")]
@@ -962,6 +964,7 @@ pub(crate) mod test_support {
             debug_info: false,
             merged_dwarf: None,
             pdb_path: None,
+            resources: Vec::new(),
             plt_trampoline_offsets: Vec::new(),
         }
     }

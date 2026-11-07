@@ -6502,6 +6502,103 @@ fn a_linked_dll_enters_at_its_dllmain() {
     }
 }
 
+/// One entry of a compiled resource file as rc.exe writes it: sizes, the
+/// type and name as ordinals, the fixed fields, then the data.
+fn res_entry(ty: u16, name: u16, language: u16, data: &[u8]) -> Vec<u8> {
+    let mut e = (data.len() as u32).to_le_bytes().to_vec();
+    e.extend(32u32.to_le_bytes());
+    for id in [ty, name] {
+        e.extend([0xff, 0xff]);
+        e.extend(id.to_le_bytes());
+    }
+    e.extend(0u32.to_le_bytes());
+    e.extend(0x30u16.to_le_bytes());
+    e.extend(language.to_le_bytes());
+    e.extend([0u8; 8]);
+    e.extend(data);
+    e.resize(e.len().next_multiple_of(4), 0);
+    e
+}
+
+/// A compiled resource file among the link's inputs becomes the image's
+/// `.rsrc` section, which the resource data directory names and whose
+/// tree leads by type, name and language to each resource's bytes, as
+/// link.exe takes rc.exe's output; the loader reads the manifest from it
+/// and finds a resource by them.
+#[test]
+fn a_compiled_resource_file_becomes_the_images_rsrc() {
+    let dir = tempdir("pe-rsrc");
+    let manifest: &[u8] = b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\
+        <assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\"></assembly>";
+    let res = [
+        res_entry(0, 0, 0, &[]),
+        res_entry(24, 1, 0x409, manifest),
+        res_entry(10, 7, 0x409, b"seven"),
+    ]
+    .concat();
+    std::fs::write(dir.join("app.res"), res).expect("write .res");
+    write_source(
+        &dir,
+        "app.c",
+        "__declspec(dllimport) void *__stdcall FindResourceA(void *, const char *, const char *);\n\
+         __declspec(dllimport) unsigned long __stdcall SizeofResource(void *, void *);\n\
+         int main(void) {\n\
+         void *r = FindResourceA(0, (const char *)7, (const char *)10);\n\
+         return r && SizeofResource(0, r) == 5 ? 0 : 1; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["app.c", "app.res", "-o", "app.exe"])
+                .current_dir(&dir),
+            &format!("{target}: link"),
+        );
+        let pe = std::fs::read(dir.join("app.exe")).expect("read image");
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as u32;
+        let opt = u32_at(0x3c) as usize + 24;
+        let (root_rva, size) = (u32_at(opt + 128), u32_at(opt + 132));
+        let table = opt + u16_at(opt - 4) as usize;
+        let rsrc = (0..u16_at(opt - 18) as usize)
+            .map(|i| table + 40 * i)
+            .find(|&h| &pe[h..h + 8] == b".rsrc\0\0\0");
+        assert_eq!(rsrc.map(|h| u32_at(h + 12)), Some(root_rva), "{target}");
+        let root = pe_rva_offset(&pe, root_rva).expect("resource directory");
+        let child = |table: usize, id: u32| {
+            let n = u16_at(table + 12) + u16_at(table + 14);
+            (0..n as usize)
+                .map(|i| table + 16 + 8 * i)
+                .find(|&e| u32_at(e) == id)
+                .map(|e| root + (u32_at(e + 4) & 0x7fff_ffff) as usize)
+                .unwrap_or_else(|| panic!("{target}: no entry {id}"))
+        };
+        let data_of = |ty: u32, name: u32| {
+            let entry = child(child(child(root, ty), name), 0x409);
+            let at = pe_rva_offset(&pe, u32_at(entry)).expect("data rva");
+            assert!(
+                u32_at(entry) + u32_at(entry + 4) <= root_rva + size,
+                "{target}"
+            );
+            pe[at..at + u32_at(entry + 4) as usize].to_vec()
+        };
+        assert_eq!(data_of(24, 1), manifest, "{target}");
+        assert_eq!(data_of(10, 7), b"seven", "{target}");
+    }
+    if cfg!(windows) {
+        run(
+            Command::new(badc())
+                .args(["app.c", "app.res", "-o", "host.exe"])
+                .current_dir(&dir),
+            "host link",
+        );
+        let status = Command::new(dir.join("host.exe"))
+            .status()
+            .expect("run the image");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

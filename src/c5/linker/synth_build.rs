@@ -135,7 +135,7 @@ pub fn write_native_image_from_merged_ex(
 
 /// As [`write_native_image_from_merged_ex`]; a PE image whose
 /// `pdb_path` is given names that program database in its debug
-/// directory and comes with it.
+/// directory and comes with it, and carries `resources` in `.rsrc`.
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_and_pdb(
     merged: &MergedNative,
@@ -147,6 +147,7 @@ pub fn write_native_image_and_pdb(
     shared_lib_name: Option<&str>,
     opts: &ImageOptions,
     pdb_path: Option<&str>,
+    resources: &[Vec<u8>],
 ) -> Result<crate::c5::object::NativeImage, C5Error> {
     let (program, mut build) = synth_program_and_build(
         merged,
@@ -159,6 +160,7 @@ pub fn write_native_image_and_pdb(
         opts,
     )?;
     build.pdb_path = pdb_path.map(alloc::string::String::from);
+    build.resources = resources.to_vec();
     crate::c5::object::write_native_image_and_pdb(&program, &build, target)
 }
 
@@ -443,6 +445,7 @@ fn synth_program_and_build(
         debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         pdb_path: None,
+        resources: Vec::new(),
         plt_trampoline_offsets,
     };
 

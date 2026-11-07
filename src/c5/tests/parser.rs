@@ -4156,6 +4156,27 @@ fn pragma_export_names_a_function_or_an_object_this_unit_defines() {
 }
 
 #[test]
+fn dllexport_exports_from_the_unit_that_defines_the_entity() {
+    // As with MSVC, `__declspec(dllexport)` on a declaration exports the
+    // entity from the unit that defines it, a later definition without the
+    // attribute included; a unit that only declares it exports nothing.
+    let src = "extern __declspec(dllexport) int declared;\n\
+               __declspec(dllexport) int prototyped(void);\n\
+               extern __declspec(dllexport) int defined;\n\
+               __declspec(dllexport) int body(void);\n\
+               int defined = 1;\n\
+               int body(void) { return declared + prototyped(); }\n";
+    let opts = crate::c5::compiler::CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::with_options(src.to_string(), crate::Target::WindowsX64, opts)
+        .compile()
+        .expect("compile");
+    let functions: alloc::vec::Vec<&str> =
+        program.exports.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(functions, ["body"]);
+    assert_eq!(program.exported_objects, ["defined"]);
+}
+
+#[test]
 fn a_named_section_holds_one_kind_of_definition() {
     // GNU `section`: the first definition in a section sets its kind --
     // code, writable data or read-only data -- and a definition of another

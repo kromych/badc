@@ -2394,6 +2394,10 @@ pub struct Compiler {
     /// ent_pc. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
+    /// The names in `pending_exports` only `__declspec(dllexport)` asked
+    /// for. As with MSVC, the attribute exports the entity from the unit
+    /// that defines it; a unit that only declares it exports nothing.
+    declspec_exports: alloc::collections::BTreeSet<String>,
     /// Functions defined with `__attribute__((constructor))` /
     /// `((destructor))`, accumulated in source order and copied onto
     /// `Program::init_funcs`. Populated at each function-body open
@@ -3290,6 +3294,7 @@ impl Compiler {
             pending_label_relocs: Vec::new(),
             in_function_body: false,
             pending_exports,
+            declspec_exports: alloc::collections::BTreeSet::new(),
             init_funcs: Vec::new(),
             function_aliases: Vec::new(),
             pending_aliases: Vec::new(),
@@ -3466,6 +3471,10 @@ impl Compiler {
                 && !sym.is_thread_local
             {
                 objects.push(sym.link_name().into());
+                continue;
+            }
+            let defined_fn = sym.class == Token::Fun as i64 && sym.defined_here;
+            if self.declspec_exports.contains(&name) && !defined_fn {
                 continue;
             }
             if sym.class != Token::Fun as i64 {

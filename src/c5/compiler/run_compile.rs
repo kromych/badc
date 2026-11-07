@@ -611,7 +611,8 @@ impl Compiler {
             self.pending.attrs.dllexport = false;
             let name = self.symbols[id_idx].name.clone();
             if !self.pending_exports.contains(&name) {
-                self.pending_exports.push(name);
+                self.pending_exports.push(name.clone());
+                self.declspec_exports.insert(name);
             }
         }
         // A declarator may carry a trailing attribute before the

@@ -1,14 +1,10 @@
-// C99 7.19.6.1p8 converts an infinity or a NaN to "[-]inf" or "[-]infinity" /
-// "[-]nan" or "[-]NAN" in every floating conversion, and the # flag affects
-// only finite values. ucrtbase mangles the words when the # flag meets an
-// empty fraction -- "%#.0e" of INFINITY prints "i.nf", "%#.0f" of -INFINITY
-// prints "-.inf" and "%#.0a" of -INFINITY prints "-0x.inf" -- and marks an
-// indeterminate NaN "(ind)". libc/lib/printf_ext.c replaces the offending
-// conversion, so the fixture pins the C99 words together with the text and
-// the counts a printf call may not disturb. C99 fixes neither the sign of a
-// NaN nor the "(ind)" suffix, so those cases compare the word after an
-// optional minus. This runs on the PE targets, where the mangling exists;
-// glibc prints the same words.
+// C99 7.19.6.1p8 converts an infinity or a NaN to "[-]inf" / "[-]nan" in
+// every floating conversion and gives # no say over either. ucrtbase mangles
+// the word when # meets the empty fraction -- "%#.0e" of INFINITY prints
+// "i.nf" -- so the conversion drops # (and the 0 flag, which p9 already
+// excludes) from such a directive and lets ucrtbase print the word itself,
+// keeping its own "(ind)" suffix, width, sign flags, %n and return counts.
+// This runs on the PE targets, where the mangling exists; glibc agrees.
 
 #include <math.h>
 #include <stdio.h>
@@ -26,15 +22,16 @@ static void narrow(const char *fmt, double v, const char *want) {
     }
 }
 
-// A NaN carries no required sign, so strip one before comparing.
-static void narrow_nan(const char *fmt, double v, const char *want) {
+// C99 7.21.6.1p8 fixes only the word: the sign of a NaN and any
+// (n-char-sequence) after it are the library's to choose.
+static void narrow_nan(const char *fmt, double v) {
     char b[64];
     const char *word = b;
     (void)snprintf(b, sizeof b, fmt, v);
     if (*word == '-')
         word++;
-    if (strcmp(word, want) != 0) {
-        fprintf(stderr, "%s: got \"%s\", want \"%s\"\n", fmt, b, want);
+    if (strncmp(word, "nan", 3) != 0 || (word[3] != 0 && word[3] != '(')) {
+        fprintf(stderr, "%s: got \"%s\", want [-]nan[(n-char-sequence)]\n", fmt, b);
         bad++;
     }
 }
@@ -64,6 +61,10 @@ int main() {
     narrow("%#.0a", -INFINITY, "-inf");
     narrow("%#.0A", INFINITY, "INF");
     narrow("%#.0A", -INFINITY, "-INF");
+    narrow("%#.0Le", INFINITY, "inf");
+    narrow("%#.0Le", -INFINITY, "-inf");
+    narrow("%#.0g", INFINITY, "inf");
+    narrow("%#.0g", -INFINITY, "-inf");
 
     // The field width keeps its own padding, the - flag its side, and the
     // sign flags their sign.
@@ -72,12 +73,13 @@ int main() {
     narrow("%#+.0f", INFINITY, "+inf");
     narrow("%# .0f", INFINITY, " inf");
     narrow("%#+10.0e|", -INFINITY, "      -inf|");
+    narrow("%#010.0f|", -INFINITY, "      -inf|");
 
     // A NaN keeps only the word C99 pins.
-    narrow_nan("%#.0e", (double)NAN, "nan");
-    narrow_nan("%#.0e", -(double)NAN, "nan");
-    narrow_nan("%#.0f", (double)NAN, "nan");
-    narrow_nan("%#.0a", -(double)NAN, "nan");
+    narrow_nan("%#.0e", (double)NAN);
+    narrow_nan("%#.0e", -(double)NAN);
+    narrow_nan("%#.0f", (double)NAN);
+    narrow_nan("%#.0a", -(double)NAN);
 
     // User text and %s arguments are not text to rewrite: neither the words
     // nor anything that looks like them may be touched.
@@ -127,6 +129,16 @@ int main() {
         int k = swprintf(w, 64, L"%ls%#.0e", L"i.nf", INFINITY);
         if (wcscmp(w, L"i.nfinf") != 0 || k != 7) {
             fprintf(stderr, "wide mixed: \"%ls\" (%d)\n", w, k);
+            bad++;
+        }
+    }
+    // A directive the walk does not model (the MSVC %I64 length) ends it,
+    // and the edits found so far stand: nothing regresses.
+    {
+        wchar_t w[64];
+        int k = swprintf(w, 64, L"%#.0e %I64d", INFINITY, 1LL);
+        if (wcscmp(w, L"inf 1") != 0 || k != 5) {
+            fprintf(stderr, "wide unknown modifier: \"%ls\" (%d)\n", w, k);
             bad++;
         }
     }

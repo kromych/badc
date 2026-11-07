@@ -2347,9 +2347,14 @@ fn the_ar_persona_builds_a_library_over_several_calls() {
         std::fs::read(dir.join("x/a1.o")).unwrap(),
         std::fs::read(dir.join("a1.o")).unwrap()
     );
-    // The personas by program name, on a link or a copy of the binary.
+    // The personas by program name. A copy's write descriptor, inherited by
+    // a child another test forks, fails exec with ETXTBSY until that child
+    // execs (Linux), so Unix names the binary through a symlink.
     for name in ["cross-ar", "cross-ranlib"] {
         let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(badc(), &path).unwrap();
+        #[cfg(not(unix))]
         if std::fs::hard_link(badc(), &path).is_err() {
             std::fs::copy(badc(), &path).unwrap();
         }

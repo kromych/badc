@@ -25,41 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<fill>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	leaq	<rip>, %rdi # <addr>
-               	movl	$0x1, %esi
-               	movl	$0x10, %edx
-               	movq	%rbx, %rcx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cmpq	$0x10, %rax
-               	je	<addr>
-               	movq	$-0x1, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movq	$-0x1, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movq	%rbx, %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbx
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -85,9 +50,15 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
-               	movq	%r13, %rdi
+               	leaq	<rip>, %rdi # <addr>
+               	movl	$0x1, %esi
+               	movl	$0x10, %edx
+               	movq	%r13, %rcx
+               	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
+               	cmpq	$0x10, %rax
+               	je	<addr>
+               	movq	$-0x1, %r12
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -425,3 +396,16 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
+               	movq	%r13, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	movq	$-0x1, %r12
+               	jmp	<addr>
+               	movq	%r13, %rdi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	movq	%rax, %r12
+               	jmp	<addr>

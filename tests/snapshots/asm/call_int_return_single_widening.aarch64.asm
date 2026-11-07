@@ -13,36 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<via_int_slot>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<direct_libc_use>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<pointer_offset>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	mov	x20, x0
-               	mov	x0, x1
-               	bl	<addr>
-               	sxtw	x0, w0
-               	add	x0, x20, x0
-               	sub	x0, x0, x20
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -50,7 +20,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x17, #-0x80000000       // =-2147483648
-               	cmp	x0, x17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
@@ -58,7 +28,7 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	cmp	x0, #0x2a
+               	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
@@ -66,6 +36,7 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
+               	sxtw	x0, w0
                	mov	x17, #-0x1              // =-1
                	cmp	x0, x17
                	b.eq	<addr>
@@ -74,9 +45,12 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	bl	<addr>
+               	sxtw	x0, w0
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	bl	<addr>
+               	add	x0, x1, x0
+               	sub	x0, x0, x1
                	cmp	x0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

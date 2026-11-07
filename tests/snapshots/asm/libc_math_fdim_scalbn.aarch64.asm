@@ -13,31 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<scalbn>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<scalbln>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x4                // =4
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<scalbnf>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x0, #0x2                // =2
-               	fcvt	d0, s0
-               	bl	<addr>
-               	fcvt	s0, d0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -108,9 +83,10 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	s0, #1.00000000
                	mov	x0, #0x2                // =2
+               	fmov	d0, #1.00000000
                	bl	<addr>
+               	fcvt	s0, d0
                	fmov	s1, #4.00000000
                	fcmp	s0, s1
                	b.eq	<addr>

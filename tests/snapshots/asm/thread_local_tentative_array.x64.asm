@@ -36,12 +36,15 @@ Disassembly of section .text:
                	movl	$0x63, %eax
                	retq
 
-<second_thread_result>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
+               	movq	%fs:0x0, %rax
+               	addq	$-0x8, %rax
+               	movl	$0x7, (%rax)
                	xorl	%edi, %edi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
@@ -66,21 +69,11 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rsi
                	callq	*%rbx
                	movq	-0x8(%rbp), %rax
+               	cmpq	$0x63, %rax
+               	je	<addr>
                	popq	%rbx
                	popq	%r12
                	leave
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
-               	movl	$0x7, (%rax)
-               	callq	<addr>
-               	cmpq	$0x63, %rax
-               	je	<addr>
-               	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
@@ -88,8 +81,12 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%rbx
+               	popq	%r12
+               	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%rbx
+               	popq	%r12
+               	leave
                	retq

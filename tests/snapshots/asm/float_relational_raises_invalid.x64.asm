@@ -25,22 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<invalid_after>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	testl	%edi, %edi
-               	jne	<addr>
-               	movl	$0x1, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -61,10 +45,12 @@ Disassembly of section .text:
                	movsd	-0x20(%rbp), %xmm0
                	movsd	-0x18(%rbp), %xmm1
                	comisd	%xmm0, %xmm1
-               	seta	%dil
-               	movzbq	%dil, %rdi
+               	ja	<addr>
+               	movl	$0x1, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	leave
@@ -75,10 +61,12 @@ Disassembly of section .text:
                	movsd	-0x18(%rbp), %xmm0
                	movsd	-0x20(%rbp), %xmm1
                	comisd	%xmm1, %xmm0
-               	setae	%dil
-               	movzbq	%dil, %rdi
+               	jae	<addr>
+               	movl	$0x1, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
@@ -89,10 +77,12 @@ Disassembly of section .text:
                	movss	-0x10(%rbp), %xmm0
                	movss	-0x8(%rbp), %xmm1
                	comiss	%xmm1, %xmm0
-               	seta	%dil
-               	movzbq	%dil, %rdi
+               	ja	<addr>
+               	movl	$0x1, %edi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
                	leave

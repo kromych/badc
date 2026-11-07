@@ -25,29 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<reported>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movsbq	(%rdi), %rcx
-               	testl	%ecx, %ecx
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0xa, %esi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	testq	%rax, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	popq	%rbp
-               	retq
-               	movq	%rax, %rcx
-               	jmp	<addr>
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -66,9 +43,15 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdi
+               	testq	%rdi, %rdi
+               	je	<addr>
+               	cmpb	$0x0, (%rdi)
+               	je	<addr>
+               	movl	$0xa, %esi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	leave
@@ -123,9 +106,15 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdi
+               	testq	%rdi, %rdi
+               	je	<addr>
+               	cmpb	$0x0, (%rdi)
+               	je	<addr>
+               	movl	$0xa, %esi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
-               	jne	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx
                	leave

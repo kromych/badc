@@ -1330,6 +1330,14 @@ fn is_inline_candidate(
                 // in a frame of its own -- so it constrains neither the
                 // frame-region choice nor cycle membership (`region_key`).
             }
+            // A library call is as opaque as a direct one. One that passes
+            // or returns an aggregate names descriptors of the callee's own
+            // table, which the splice does not translate.
+            Inst::CallExt {
+                ret_agg: None,
+                arg_aggs,
+                ..
+            } if arg_aggs.iter().all(Option::is_none) => {}
             // A phi merging values across the callee's own blocks. The
             // multi-block splice translates its incoming values through
             // `callee_remap` and shifts its predecessor block ids into the

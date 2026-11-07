@@ -25,26 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<__c5_lazy_stream>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	cmpq	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	popq	%rbp
-               	retq
-               	xorl	%edi, %edi
-               	leaq	<rip>, %rsi # <addr>
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movq	(%rax), %rax
-               	movq	%rax, <rip> # <addr>
-               	movq	<rip>, %rax # <addr>
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -183,9 +163,9 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
+               	cmpq	$0x0, <rip> # <addr>
+               	je	<addr>
+               	movq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi # <addr>
                	movsd	0x18(%rsp), %xmm14
                	cvtss2sd	%xmm14, %xmm0
@@ -196,15 +176,25 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
+               	xorl	%edi, %edi
+               	leaq	<rip>, %rsi # <addr>
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movq	(%rax), %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	jmp	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
                	leave
                	retq
                	movq	%rdi, %r12
-               	movl	$0x2, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
+               	cmpq	$0x0, <rip> # <addr>
+               	je	<addr>
+               	movq	<rip>, %rdi # <addr>
                	leaq	<rip>, %rsi # <addr>
                	leaq	<rip>, %rcx # <addr>
                	movq	%rbx, %rax
@@ -229,6 +219,16 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
+               	xorl	%edi, %edi
+               	leaq	<rip>, %rsi # <addr>
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movq	(%rax), %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	jmp	<addr>
                	movq	%r8, %r12
                	jmp	<addr>
                	movq	%r8, %r12

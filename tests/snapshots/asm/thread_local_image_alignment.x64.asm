@@ -66,12 +66,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<second_thread_result>:
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
+               	xorl	%edi, %edi
+               	callq	<addr>
+               	testl	%eax, %eax
+               	je	<addr>
+               	popq	%rbx
+               	popq	%r12
+               	leave
+               	retq
                	xorl	%edi, %edi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
@@ -99,17 +107,4 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	leave
-               	retq
-
-<main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%edi, %edi
-               	callq	<addr>
-               	testl	%eax, %eax
-               	je	<addr>
-               	popq	%rbp
-               	retq
-               	callq	<addr>
-               	popq	%rbp
                	retq

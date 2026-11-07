@@ -25,35 +25,17 @@ Disassembly of section .text:
                	int3
                	int3
 
-<mtime_of>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
-               	leaq	<rip>, %rdi # <addr>
-               	leaq	-0x90(%rbp), %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	testq	%rax, %rax
-               	je	<addr>
-               	movq	$-0x1, %rax
-               	leave
-               	retq
-               	movq	-0x38(%rbp), %rax
-               	leave
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0xa0, %rsp
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rax
+               	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -95,7 +77,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
-               	leaq	-0x10(%rbp), %rsi
+               	leaq	-0xa0(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -110,10 +92,17 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
+               	leaq	<rip>, %rdi # <addr>
+               	leaq	-0x90(%rbp), %rsi
+               	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x47868c00, %rax       # imm = 0x47868C00
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %ebx
                	jmp	<addr>
+               	movq	-0x38(%rbp), %rax
+               	cmpq	$0x47868c00, %rax       # imm = 0x47868C00
+               	jne	<addr>
                	xorl	%ebx, %ebx
                	jmp	<addr>

@@ -25,34 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<scalbn>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
-<scalbln>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x4, %edi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
-<scalbnf>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x2, %edi
-               	cvtss2sd	%xmm0, %xmm0
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	cvtsd2ss	%xmm0, %xmm0
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -135,6 +107,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movl	$0x3, %edi
                	movq	%rax, %xmm0
+               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
                	movq	%rax, %xmm15
@@ -147,6 +120,7 @@ Disassembly of section .text:
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	$-0x1, %rdi
                	movq	%rax, %xmm0
+               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm15
@@ -159,6 +133,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movl	$0x4, %edi
                	movq	%rax, %xmm0
+               	xorl	%eax, %eax
                	callq	<addr>
                	movabsq	$0x4030000000000000, %rax # imm = 0x4030000000000000
                	movq	%rax, %xmm15
@@ -168,10 +143,12 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x2, %edi
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm0
+               	xorl	%eax, %eax
                	callq	<addr>
+               	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40800000, %eax       # imm = 0x40800000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

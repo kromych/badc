@@ -13,39 +13,15 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<held_across_call>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	add	x20, x0, #0x1
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	bl	<addr>
-               	mov	x0, x20
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0xa                // =10
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
-               	cmp	x0, #0x1f
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x0, #-0x4               // =-4
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
-               	mov	x17, #-0xb              // =-11
-               	cmp	x0, x17
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret

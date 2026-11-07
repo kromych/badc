@@ -13,20 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<invalid_after>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	mov	x1, #0x0                // =0
-               	cbnz	w0, <addr>
-               	mov	x0, #0x1                // =1
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
-               	cset	x1, ne
-               	mov	x0, x1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -45,9 +31,11 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x18]
                	fcmpe	d0, d1
-               	cset	x0, mi
+               	b.mi	<addr>
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cbnz	w0, <addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -57,9 +45,11 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x18]
                	ldur	d1, [x29, #-0x20]
                	fcmpe	d0, d1
-               	cset	x0, ge
+               	b.ge	<addr>
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cbnz	w0, <addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -69,9 +59,11 @@ Disassembly of section .text:
                	ldur	s0, [x29, #-0x10]
                	ldur	s1, [x29, #-0x8]
                	fcmpe	s0, s1
-               	cset	x0, gt
+               	b.gt	<addr>
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	cbnz	w0, <addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

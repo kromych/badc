@@ -25,32 +25,13 @@ Disassembly of section .text:
                	int3
                	int3
 
-<strtoimax>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%esi, %esi
-               	movl	$0xa, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
-<strtoumax>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%esi, %esi
-               	movl	$0x10, %edx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	popq	%rbp
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	movl	$0xa, %edx
+               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x3039, %rax           # imm = 0x3039
                	je	<addr>
@@ -60,6 +41,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%esi, %esi
                	movl	$0x10, %edx
+               	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0xff, %rax
                	je	<addr>

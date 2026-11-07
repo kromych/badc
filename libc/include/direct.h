@@ -12,9 +12,9 @@
 #pragma binding(msvcrt::_chdir,  "_chdir")
 #pragma binding(msvcrt::_getcwd, "_getcwd")
 
-int   _mkdir(char *path);
-int   _rmdir(char *path);
-int   _chdir(char *path);
+int   _mkdir(const char *path);
+int   _rmdir(const char *path);
+int   _chdir(const char *path);
 char *_getcwd(char *buf, int size);
 
 #endif

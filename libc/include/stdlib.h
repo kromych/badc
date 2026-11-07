@@ -518,7 +518,11 @@ _Noreturn void _exit(int status);
 #else
 int setenv(const char *name, const char *value, int overwrite);
 #endif
+#ifdef _WIN32
+int putenv(const char *string);
+#else
 int putenv(char *string);
+#endif
 // Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
 // and `size_t` come from <stddef.h>.
 // Per-character conversion (C99 7.20.7): mblen reports the length of
@@ -564,7 +568,7 @@ unsigned long long _strtoui64(const char *s, char **endp, int base);
 // Resolves a relative path against the current directory and
 // writes the canonical absolute form into `absPath`.
 #pragma binding(msvcrt::_fullpath, "_fullpath")
-char *_fullpath(char *absPath, char *relPath, int maxLength);
+char *_fullpath(char *absPath, const char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);

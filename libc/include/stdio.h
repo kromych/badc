@@ -427,8 +427,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, __builtin_va_list ap);
 // spelling through a per-platform `#define`. The msvcrt path
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
 #ifdef _WIN32
-int _snprintf(char *buf, int size, char *fmt, ...);
-int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+int _snprintf(char *buf, int size, const char *fmt, ...);
+int _vsnprintf(char *buf, int size, const char *fmt, char *ap);
 #endif
 // C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
 // and from a stream. The string sibling sscanf reads from a buffer.
@@ -549,12 +549,12 @@ int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
 FILE *_fsopen(const char *path, const char *mode, int shflag);
 int   freopen_s(FILE **pfile, const char *path, const char *mode, FILE *stream);
-FILE *_popen(char *cmd, char *mode);
+FILE *_popen(const char *cmd, const char *mode);
 int   _pclose(FILE *stream);
 int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
-int   _access(char *path, int mode);
+int   _access(const char *path, int mode);
 int   _findclose(long long handle);
 // The Windows SDK's prototypes: `errno_t` is `int`, and `time_t` the
 // 64-bit `long long` the CRT's `_*64_s` entries take.
@@ -584,15 +584,15 @@ int _open_osfhandle(long long osfhandle, int flags);
 int   _heapmin(void);
 int   _close(int fd);
 int   _read(int fd, void *buf, unsigned int n);
-int   _write(int fd, void *buf, unsigned int n);
+int   _write(int fd, const void *buf, unsigned int n);
 long  _lseek(int fd, long off, int whence);
 long long _lseeki64(int fd, long long off, int whence);
 int   _chsize(int fd, long long size);
 int   _chsize_s(int fd, long long size);
-int   _chmod(char *path, int mode);
-int   _unlink(char *path);
+int   _chmod(const char *path, int mode);
+int   _unlink(const char *path);
 char *_getcwd(char *buf, int n);
-int   _chdir(char *path);
+int   _chdir(const char *path);
 int   _getpid(void);
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);

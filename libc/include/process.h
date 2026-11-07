@@ -34,9 +34,9 @@ void _endthread(void);
 #pragma binding(msvcrt::_spawnvp,  "_spawnvp")
 #pragma binding(msvcrt::_spawnv,   "_spawnv")
 #pragma binding(msvcrt::_spawnl,   "_spawnl")
-int _spawnvp(int mode, char *cmdname, char **argv);
-int _spawnv(int mode, char *cmdname, char **argv);
-int _spawnl(int mode, char *cmdname, char *arg0, ...);
+int _spawnvp(int mode, const char *cmdname, const char *const *argv);
+int _spawnv(int mode, const char *cmdname, const char *const *argv);
+int _spawnl(int mode, const char *cmdname, const char *arg0, ...);
 // `_cwait` action flag: wait for the supplied child handle.
 #define _WAIT_CHILD       0
 #define _WAIT_GRANDCHILD  1

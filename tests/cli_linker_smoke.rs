@@ -5930,6 +5930,84 @@ fn a_coff_alias_weak_external_binds_to_its_import() {
     }
 }
 
+/// A program whose link supplies the UCRT (ucrt.lib names its startup
+/// interface) starts through it, as the VC startup code does: the app type,
+/// the argument vector and environment in the entry's width, `_crt_atexit`
+/// for the destructors and the program's `atexit`, and the UCRT's `exit`.
+/// msvcrt.dll, the C library otherwise, is not loaded beside it.
+#[test]
+fn a_pe_link_that_supplies_the_ucrt_starts_through_it() {
+    const UCRT: &str = "ucrtbase.dll";
+    let names = [
+        "exit",
+        "_crt_atexit",
+        "_set_app_type",
+        "_configure_narrow_argv",
+        "_configure_wide_argv",
+        "_initialize_narrow_environment",
+        "_initialize_wide_environment",
+        "__p___argc",
+        "__p___argv",
+        "__p___wargv",
+    ];
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("pe-ucrt-startup-{target}"));
+        write_source(
+            &dir,
+            "narrow.c",
+            "int atexit(void (*)(void));\nstatic void bye(void) {}\n\
+             int main(int argc, char **argv) { (void)argv; atexit(bye); return argc; }\n",
+        );
+        write_source(
+            &dir,
+            "wide.c",
+            "int wmain(int argc, unsigned short **argv) { (void)argv; return argc; }\n",
+        );
+        let members: Vec<(u16, &str, Option<u16>)> =
+            names.iter().map(|&n| (machine, n, None)).collect();
+        std::fs::write(dir.join("ucrt.lib"), short_import_library(UCRT, &members)).unwrap();
+        for (src, width, wanted) in [
+            ("narrow.c", "narrow", "_crt_atexit"),
+            ("wide.c", "wide", "_configure_wide_argv"),
+        ] {
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args([src, "ucrt.lib", "-o", "a.exe"])
+                    .current_dir(&dir),
+                &format!("{target} {src}"),
+            );
+            let imports = pe_imports(&std::fs::read(dir.join("a.exe")).expect("read image"));
+            for name in ["exit", "_set_app_type", wanted] {
+                assert!(
+                    imports.contains(&(UCRT.into(), name.into())),
+                    "{target} {src}: {imports:?}"
+                );
+            }
+            let env = format!("_initialize_{width}_environment");
+            assert!(
+                imports.contains(&(UCRT.into(), env)),
+                "{target} {src}: {imports:?}"
+            );
+            assert!(
+                !imports.iter().any(|(dll, _)| dll == "msvcrt.dll"),
+                "{target} {src}: {imports:?}"
+            );
+        }
+        // Without it the startup takes msvcrt.dll's interface.
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["wide.c", "-o", "a.exe"])
+                .current_dir(&dir),
+            &format!("{target} msvcrt"),
+        );
+        let imports = pe_imports(&std::fs::read(dir.join("a.exe")).expect("read image"));
+        let wgetmainargs = ("msvcrt.dll".into(), "__wgetmainargs".into());
+        assert!(imports.contains(&wgetmainargs), "{target}: {imports:?}");
+    }
+}
+
 /// Objects cl compiled with `__except` and `__finally` (seh_cl.c beside
 /// them) link with badc and handle exceptions at run time, raised in the
 /// cl function itself and in badc functions it calls, so the unwinder

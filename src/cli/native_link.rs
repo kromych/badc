@@ -191,9 +191,17 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     {
         lib.drop_default_dll();
     }
+    // The startup runtime calls the C runtime the link's own libraries supply
+    // when they supply the UCRT's startup interface (ucrt.lib, ucrtbase.dll).
+    let ucrt = cli.target.binary_format() == badc::BinaryFormat::Pe
+        && (shared_libs.iter()).any(|l| l.exports.contains("_configure_narrow_argv"));
     let mut runtime = Vec::new();
-    let runtime_dump =
-        embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
+    let runtime_dump = embedded.push_runtime(
+        entry_override.as_deref(),
+        subsystem_override,
+        ucrt,
+        &mut runtime,
+    );
     slots[0] = Slot::Fixed(runtime);
     stats.mark("runtime");
     let recompiled = rebind_auto_includes(
@@ -313,7 +321,8 @@ impl EmbeddedSources<'_> {
         // driver sets per image: `__BADC_C5_START__`
         // (an entry stub is emitted), `__BADC_WIN_WINMAIN__`
         // (WinMain-shaped entry), `__BADC_WIN_WIDE__` (wide
-        // `wmain` / `wWinMain` entry).
+        // `wmain` / `wWinMain` entry), `__BADC_WIN_UCRT__` (the link
+        // supplies the UCRT).
         let defines = (extra.iter()).map(|(k, v)| (k.to_string(), v.to_string()));
         let copts = (embedded_compile_options(cli, label))
             .with_defines(defines.collect())
@@ -333,6 +342,7 @@ impl EmbeddedSources<'_> {
         &self,
         entry_override: Option<&str>,
         subsystem_override: Option<badc::Subsystem>,
+        ucrt: bool,
         objs: &mut Vec<badc::NativeObject>,
     ) -> String {
         let mut dumps = String::new();
@@ -364,6 +374,9 @@ impl EmbeddedSources<'_> {
                 Some("wmain") => runtime_defines.push(("__BADC_WIN_WIDE__", "1")),
                 _ => {}
             }
+        }
+        if ucrt {
+            runtime_defines.push(("__BADC_WIN_UCRT__", "1"));
         }
         // An installed runtime source (`<badc-home>/lib/<name>`) replaces
         // the embedded body on the header overlay's terms: the unit keeps

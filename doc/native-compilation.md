@@ -292,6 +292,14 @@ headers bind it to `ucrtbase.dll` (much of `<math.h>`, for example), or
 through `ucrtbase.dll`. A definition in `libc/lib/` joins the link as an
 archive member would.
 
+A program built against the Windows SDK's UCRT headers links the UCRT itself
+(`ucrt.lib`, or `ucrtbase.dll` named on the command line). When the link's
+libraries supply the UCRT's startup interface, the startup runtime calls it as
+the VC startup code does: `_set_app_type`, the argument vector and the
+environment in the entry's character width, `_crt_atexit` for the destructors
+and for the program's `atexit`, and the UCRT's `exit`; msvcrt.dll is not
+loaded beside it.
+
 A bundled header declares the names mingw-w64's header of the same name
 declares. A name mingw-w64 leaves undeclared stays undeclared, so a program's
 own Windows fallback for it compiles under badc as under mingw-w64. `setenv`

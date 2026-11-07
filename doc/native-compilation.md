@@ -226,9 +226,9 @@ Target macros:
 | `__APPLE__`                                | macOS                             |
 | `__linux__`, `__ELF__`                     | Linux                             |
 
-The C99 and C11 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,
+The C17 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,
 `__SIZEOF_*__`, `__BYTE_ORDER__`, the `__ATOMIC_*` orders), and under `--gnu`
-the GCC identity macros. `std-conformance.md` lists them all.
+the GNU C identity macros. `std-conformance.md` lists them all.
 
 `__DATE__` and `__TIME__` give the time of translation in UTC, one instant for
 every unit of an invocation. `SOURCE_DATE_EPOCH` fixes it, so a build that

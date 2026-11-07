@@ -3,10 +3,10 @@ name = "badc"
 version = "0.4.9"
 edition = "2024"
 license = "MIT"
-description = "A quick, slim cross-platform C compiler (also a compiler-as-library) (C99, C11, and more) with a JIT and native ELF / PE / Mach-O backends."
+description = "A quick, slim cross-platform C compiler (also a compiler-as-library) (C17, also older and newer versions) with a JIT and native ELF / PE / Mach-O backends."
 repository = "https://github.com/kromych/badc"
 readme = "README.md"
-keywords = ["c", "compiler", "c11", "jit", "cross-compiler"]
+keywords = ["c", "compiler", "c17", "jit", "cross-compiler"]
 categories = ["compilers", "development-tools"]
 # The bundled C headers, runtime and the data files next to the
 # sources are `include_str!`'d into the library at build time, so they

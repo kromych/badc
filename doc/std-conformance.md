@@ -19,6 +19,7 @@ says nothing, badc follows C17. It records:
   - [Floating-point contraction](#floating-point-contraction)
   - [`_Atomic` objects](#_atomic-objects)
   - [Standard predefined macros](#standard-predefined-macros)
+  - [Translation and the library](#translation-and-the-library)
 - [Divergences](#divergences)
   - [Features not implemented](#features-not-implemented)
   - [An inline definition serves the calls of its unit](#an-inline-definition-serves-the-calls-of-its-unit)
@@ -181,20 +182,31 @@ option that leaves out the startup runtime, does not change
 `__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` is undefined: `_Atomic` objects are
 atomic ([`_Atomic` objects](#_atomic-objects)).
 
+### Translation and the library
+
+- Trigraphs (5.2.1.1) are replaced under an ISO dialect before C23
+  (`-std=c89` through `-std=c17`, `-std=iso9899:*`) and under `-trigraphs` or
+  `-ftrigraphs`; `-fno-trigraphs` turns them off. The default dialect, the
+  GNU dialects and C23, which removed them, keep `??` sequences as written.
+- `MB_LEN_MAX` is the C library's: 16 on Linux, 6 on macOS, 5 on Windows.
+- `<uchar.h>` (7.28) on every target. glibc defines its conversions; on macOS
+  and Windows badc's runtime defines them over `mbrtowc` and `wcrtomb`. A
+  character outside the Basic Multilingual Plane has no multibyte form on
+  Windows, whose code pages hold none.
+- `timespec_get` with `TIME_UTC` (7.27.2.5), `quick_exit` and `at_quick_exit`
+  (7.22.4.3, 7.22.4.7) on every target, from badc's runtime on Windows.
+- `aligned_alloc` (7.22.3.1) on every target. On Windows it takes the
+  alignments up to 16, those msvcrt's `malloc` provides and `free` releases;
+  a wider one fails with `EINVAL`, as 7.22.3.1p3 allows.
+
 ## Divergences
 
 ### Features not implemented
 
-- `_Complex` and `_Imaginary` (C99 6.2.5), and `<complex.h>`.
-  `__STDC_NO_COMPLEX__` is `1`.
-- Trigraphs (C17 5.2.1.1). `-trigraphs` is refused.
-- `<threads.h>` (C17 7.26), an optional feature: `__STDC_NO_THREADS__` is `1`.
+- The optional complex types (6.10.8.3): `_Complex`, `_Imaginary` and
+  `<complex.h>`. `__STDC_NO_COMPLEX__` is `1`.
+- The optional `<threads.h>` (7.26): `__STDC_NO_THREADS__` is `1`.
   `_Thread_local` is implemented.
-- `timespec_get` and `TIME_UTC` (C17 7.27.2.5), on every target.
-- `aligned_alloc`, `quick_exit` and `at_quick_exit` (C17 7.22.3.1, 7.22.4.3,
-  7.22.4.7) on Windows. The other targets provide them.
-- `<uchar.h>`, `char16_t` and `char32_t` (C11 7.28). The `u` and `U` literal
-  prefixes are implemented.
 - Most of C23. `-std=c23` sets the version macro and makes `bool`, `true` and
   `false` keywords, and the C23 features under [C11 and C23](#c11-and-c23) are
   available in every dialect. Not implemented: `nullptr`, `constexpr`, `auto`

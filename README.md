@@ -7,7 +7,7 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](./doc/native-compilation.md)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](./doc/native-compilation.md)
 
-`badc` is a cross-platform optimizing C compiler, also usable as a Rust
+`badc` is a cross-platform optimizing C17 compiler, also usable as a Rust
 library. From any host it builds native executables, shared libraries and
 objects for five targets: macOS on ARM64, Linux on ARM64 and x86-64, and
 Windows on ARM64 and x86-64. It has its own preprocessor, assembler, linker,

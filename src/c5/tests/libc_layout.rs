@@ -1045,6 +1045,21 @@ fn windows_h_leaves_the_dpi_enums_to_shellscalingapi_h() {
     }
 }
 
+/// winnt.h's spin-wait hint, `YieldProcessor()`, is `_mm_pause` on x64 and
+/// `__yield` on arm64, and `NtCurrentTeb()` reads gs:0x30 and x18, as the
+/// SDK defines them.
+#[test]
+fn windows_h_defines_yield_processor_and_nt_current_teb() {
+    let src = "#include <windows.h>\n#include <fibersapi.h>\n\
+               void spin(volatile long *f) { while (!*f) YieldProcessor(); }\n\
+               void *teb(void) { return NtCurrentTeb(); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(err) = compile(src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
 /// `<stdint.h>` gives each target its platform's types: glibc's `long` for
 /// `int64_t`, `intptr_t`, `intmax_t` and the fastest 16- and 32-bit types on
 /// LP64 Linux; Apple's `long long`, `long`, `long`, `short` and `int`; and

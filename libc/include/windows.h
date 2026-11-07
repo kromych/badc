@@ -64,8 +64,10 @@
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
+#define NTAPI
 #define APIENTRY
 #define CALLBACK
+#define DECLSPEC_ALIGN(x) __declspec(align(x))
 #define FAR
 #define NEAR
 #define VOID void
@@ -138,7 +140,7 @@ typedef LPSTR              PTSTR, LPTSTR;
 typedef LPCSTR             PCTSTR, LPCTSTR;
 #endif
 typedef long long          LONGLONG;
-typedef unsigned long long ULONGLONG;
+typedef unsigned long long ULONGLONG, *PULONGLONG;
 typedef ULONGLONG          DWORDLONG;
 typedef long long          INT_PTR, *PINT_PTR;
 typedef unsigned long long UINT_PTR, *PUINT_PTR;
@@ -325,6 +327,12 @@ typedef enum {
 #pragma binding(kernel32::VirtualAlloc,            "VirtualAlloc")
 #pragma binding(kernel32::VirtualProtect,          "VirtualProtect")
 #pragma binding(kernel32::VirtualFree,             "VirtualFree")
+#pragma binding(kernel32::VirtualLock,             "VirtualLock")
+#pragma binding(kernel32::VirtualUnlock,           "VirtualUnlock")
+#pragma binding(kernel32::GetLargePageMinimum,     "GetLargePageMinimum")
+#pragma binding(kernel32::GetCurrentProcessorNumber, "GetCurrentProcessorNumber")
+#pragma binding(kernel32::GetNumaHighestNodeNumber, "GetNumaHighestNodeNumber")
+#pragma binding(kernel32::GetNumaNodeProcessorMask, "GetNumaNodeProcessorMask")
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
 #pragma binding(kernel32::LoadLibraryExA,          "LoadLibraryExA")
 #pragma binding(kernel32::LoadLibraryExW,          "LoadLibraryExW")
@@ -636,6 +644,20 @@ struct _SYSTEM_INFO {
 };
 typedef struct _SYSTEM_INFO SYSTEM_INFO;
 typedef struct _SYSTEM_INFO *LPSYSTEM_INFO;
+
+// Processor groups (winnt.h): a group's affinity mask and a processor's
+// group and number.
+typedef ULONG_PTR KAFFINITY;
+typedef struct _GROUP_AFFINITY {
+    KAFFINITY Mask;
+    WORD Group;
+    WORD Reserved[3];
+} GROUP_AFFINITY, *PGROUP_AFFINITY;
+typedef struct _PROCESSOR_NUMBER {
+    WORD Group;
+    BYTE Number;
+    BYTE Reserved;
+} PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
 
 // Function-table entries (winnt.h): the x64 entry names its unwind info,
 // the AArch64 entry packs the unwind codes into the second word.
@@ -2043,6 +2065,12 @@ LPVOID VirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType,
 BOOL VirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect,
                     PDWORD lpflOldProtect);
 BOOL VirtualFree(LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
+BOOL VirtualLock(LPVOID lpAddress, SIZE_T dwSize);
+BOOL VirtualUnlock(LPVOID lpAddress, SIZE_T dwSize);
+SIZE_T GetLargePageMinimum(void);
+DWORD GetCurrentProcessorNumber(void);
+BOOL GetNumaHighestNodeNumber(PULONG HighestNodeNumber);
+BOOL GetNumaNodeProcessorMask(UCHAR Node, PULONGLONG ProcessorMask);
 HMODULE LoadLibraryA(LPCSTR lpLibFileName);
 // LoadLibraryExA: name, hFile (reserved, must be NULL), dwFlags.
 // dwFlags bits (LOAD_*) control search-path and binding semantics.
@@ -2112,6 +2140,16 @@ static __inline LONG64 InterlockedAdd64(LONG64 volatile *Addend, LONG64 Value)
 {
     return _InterlockedExchangeAdd64(Addend, Value) + Value;
 }
+#endif
+// winnt.h's spin-wait hint, and the current thread's environment block:
+// NT_TIB.Self at gs:0x30 on x64, x18 on arm64.
+struct _TEB;
+#ifdef __aarch64__
+#define YieldProcessor __yield
+static __inline struct _TEB *NtCurrentTeb(void) { return (struct _TEB *)__getReg(18); }
+#else
+#define YieldProcessor _mm_pause
+static __inline struct _TEB *NtCurrentTeb(void) { return (struct _TEB *)__readgsqword(0x30); }
 #endif
 
 // CreateThread returns a thread HANDLE (kernel object). Args

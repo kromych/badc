@@ -421,6 +421,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("winioctl.h", WINDOWS),
     header!("pathcch.h", WINDOWS),
     header!("psapi.h", WINDOWS),
+    header!("fibersapi.h", WINDOWS),
     header!("versionhelpers.h", WINDOWS),
     header!("crtdbg.h", WINDOWS),
     header!("aclapi.h", WINDOWS),

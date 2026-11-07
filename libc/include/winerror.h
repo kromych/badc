@@ -101,6 +101,7 @@
 #define ERROR_NO_DATA                  232
 #define ERROR_MORE_DATA                234
 #define ERROR_DIRECTORY                267
+#define ERROR_INVALID_ADDRESS          487
 #define ERROR_PIPE_CONNECTED           535
 #define ERROR_OPERATION_ABORTED        995
 #define ERROR_IO_INCOMPLETE            996

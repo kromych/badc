@@ -126,6 +126,7 @@ pub(crate) struct FrontEnd {
     pub(crate) undefines: Vec<String>,
     pub(crate) include_paths: Vec<String>,
     pub(crate) quote_include_paths: Vec<String>,
+    pub(crate) embed_paths: Vec<String>,
     pub(crate) isystem_paths: Vec<String>,
     pub(crate) force_includes: Vec<String>,
     /// `-H` / `--show-includes`: print the resolved path of every
@@ -1257,6 +1258,16 @@ impl Parser {
             )?),
             s if s.starts_with("-iquote") && s.len() > 7 => {
                 front.quote_include_paths.push(s[7..].to_string());
+            }
+            // gcc / clang --embed-dir DIR: a search path for `#embed`.
+            "--embed-dir" => front.embed_paths.push(operand(
+                iter,
+                "badc: error: --embed-dir requires a path argument",
+            )?),
+            s if s.starts_with("--embed-dir=") => {
+                front
+                    .embed_paths
+                    .push(s["--embed-dir=".len()..].to_string());
             }
             // gcc / clang -isystem DIR: a directory of system headers,
             // probed after the -I paths and before the bundled headers.
@@ -2754,6 +2765,7 @@ impl FrontEnd {
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
             .with_quote_include_paths(self.quote_include_paths.clone())
+            .with_embed_paths(self.embed_paths.clone())
             .with_isystem_paths(self.isystem_paths.clone())
             .with_system_include_paths(self.system_include_paths.clone())
             .with_own_header_roots(self.own_header_roots.clone())

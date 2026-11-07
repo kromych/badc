@@ -255,6 +255,12 @@ pub(super) enum Directive<'a> {
         line: usize,
         file: Option<&'a str>,
     },
+    /// `#embed <resource> params` or `#embed "resource" params`, or the
+    /// macro-replaced pp-token form (C23 6.10.4): the operand as written.
+    Embed(&'a str),
+    /// `#ident "text"` / `#sccs "text"`, gcc's and clang's version-string
+    /// directives, accepted without effect.
+    Ident,
     /// `#include <pp-tokens>` -- C99 6.10.2p4, or the same form of
     /// `#include_next` (`next`). The operand isn't
     /// already in `<...>` or `"..."` form, so the preprocessor
@@ -453,6 +459,8 @@ pub(super) fn parse_directive(rest: &str, asm: bool) -> Directive<'_> {
         "error" => Some(Directive::Error(after.trim_start())),
         "warning" => Some(Directive::Warning(after.trim_start())),
         "line" => line_operand(after),
+        "embed" => Some(Directive::Embed(after.trim())),
+        "ident" | "sccs" => Some(Directive::Ident),
         "include" | "include_next" => {
             let next = name == "include_next";
             header_name(after)

@@ -22,6 +22,7 @@ impl Preprocessor {
         let out = scan_operators(expr, |s, i, out| {
             resolve_has_operator(s, i, self.target, self.dollar(), out)
                 .or_else(|| self.resolve_has_include(s, i, filename, line_no, out))
+                .or_else(|| self.resolve_has_embed(s, i, filename, line_no, out))
         });
         // Expand the remaining identifiers, then strip comments from the
         // result: driver-predefined bodies never went through phase 3
@@ -106,6 +107,18 @@ impl Preprocessor {
         // via several layers of `#define`) expand before the
         // parser sees them; the substitution leaves a `defined`
         // operand as written.
+        let (value, _) = self.eval_integer(expr, line_no, filename)?;
+        Ok(value != 0)
+    }
+
+    /// The value of `expr` by the `#if` rules (C99 6.10.1p4) and whether it
+    /// is unsigned; also the operand of an `#embed` `limit`.
+    pub(super) fn eval_integer(
+        &self,
+        expr: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(i64, bool), C5Error> {
         let prepared = self.expand_for_if(expr, line_no, filename);
         self.take_pending_error()?;
         let mut p = IfExprParser::new(&prepared, self, filename, line_no);
@@ -119,7 +132,7 @@ impl Preprocessor {
                 alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             ));
         }
-        p.bool_operand(&v, "#if")
+        Ok((p.int_operand(&v, "#if")?, v.is_unsigned()))
     }
 }
 
@@ -1217,7 +1230,7 @@ fn operator_operand<'a>(
 /// Match `kw ( operand )` at `at`, the operand running to the balancing
 /// `)`. Returns the operand text and the index just past the call.
 /// String and char literals inside the operand are skipped opaquely.
-fn balanced_operand<'a>(
+pub(super) fn balanced_operand<'a>(
     s: &'a str,
     at: usize,
     kw: &str,

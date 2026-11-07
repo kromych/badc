@@ -226,6 +226,9 @@ pub(crate) struct Preprocessor {
     /// scope), after the including file's directory and before
     /// `search_paths`. An angle include never reads them.
     quote_search_paths: SearchPaths,
+    /// `--embed-dir` directories: where `#embed <...>` searches, and
+    /// `#embed "..."` after the including file's directory.
+    embed_search_paths: SearchPaths,
     /// `-isystem` directories: probed after `search_paths` and before the
     /// bundled headers, as gcc probes them ahead of its standard
     /// directories, and their headers are system headers.
@@ -991,6 +994,11 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             ("__STDC__", "1"),
             ("__STDC_HOSTED__", "1"),
             ("__STDC_VERSION__", "201710L"),
+            // C23 6.10.8.1: the `__has_embed` results, for `#embed`, which
+            // every edition takes, as in gcc and clang.
+            ("__STDC_EMBED_NOT_FOUND__", "0"),
+            ("__STDC_EMBED_FOUND__", "1"),
+            ("__STDC_EMBED_EMPTY__", "2"),
             // C17 6.10.8.3: the optional features badc does not provide.
             // `<stdatomic.h>` and variable-length arrays are provided.
             ("__STDC_NO_COMPLEX__", "1"),
@@ -1291,6 +1299,7 @@ impl Preprocessor {
             search_paths: SearchPaths::default(),
             own_header_roots: SearchPaths::default(),
             quote_search_paths: SearchPaths::default(),
+            embed_search_paths: SearchPaths::default(),
             isystem_paths: SearchPaths::default(),
             system_fallback_paths: SearchPaths::default(),
             nostdinc: false,
@@ -1567,6 +1576,11 @@ impl Preprocessor {
     /// the `-I` paths; angle includes never read it.
     pub fn add_quote_path(&mut self, path: &str) {
         self.quote_search_paths.add(path);
+    }
+
+    /// Append an `--embed-dir` directory (see `embed_search_paths`).
+    pub fn add_embed_path(&mut self, path: &str) {
+        self.embed_search_paths.add(path);
     }
 
     /// Append an `-isystem` directory (see `isystem_paths`).
@@ -2293,7 +2307,6 @@ impl Preprocessor {
 
 /// The catalogue rows this pass reports. `preprocessor_codes_are_live`
 /// checks each against the catalogue.
-pub(crate) const UNKNOWN_DIRECTIVE: Code = Code::new(1001);
 pub(crate) const WARNING_DIRECTIVE: Code = Code::new(1002);
 pub(crate) const MALFORMED_DIRECTIVE: Code = Code::new(1003);
 pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
@@ -2558,6 +2571,8 @@ impl<'p, 's> LinePass<'p, 's> {
                 }
                 Directive::Line { line, file } => self.line_directive(*line, *file),
                 Directive::LineMacro(args) => self.line_macro(args, line_no),
+                Directive::Embed(operand) => self.embed(operand, line_no)?,
+                Directive::Ident => Emitted::No,
                 Directive::Other => {
                     self.unknown(spelling, line_no);
                     Emitted::No
@@ -2665,8 +2680,8 @@ impl<'p, 's> LinePass<'p, 's> {
     }
 
     /// C99 6.10.2p4: expand the operand and reparse the result as a
-    /// `<...>` / `"..."` header name. Anything else is malformed;
-    /// warn and skip, as for an unrecognised directive. The
+    /// `<...>` / `"..."` header name. Anything else is an error, as for
+    /// an unrecognised directive. The
     /// spelling-faithful expansion keeps re-lex separators out of the
     /// header name.
     fn include_macro(
@@ -2684,7 +2699,7 @@ impl<'p, 's> LinePass<'p, 's> {
             let site = self.site(line_no);
             let directive = if next { "include_next" } else { "include" };
             self.pp.warn(
-                MALFORMED_DIRECTIVE,
+                Code::DIRECTIVE,
                 site,
                 format!(
                     "#{directive} `{args}` expands to `{trimmed}`, \
@@ -2694,6 +2709,17 @@ impl<'p, 's> LinePass<'p, 's> {
             return Ok(Emitted::No);
         };
         self.include(name, quoted, next, line_no)
+    }
+
+    /// C23 6.10.4: the directive line becomes the resource's byte list.
+    fn embed(&mut self, operand: &str, line_no: usize) -> Result<Emitted, C5Error> {
+        if !self.active {
+            return Ok(Emitted::No);
+        }
+        let list = self.pp.embed_expansion(operand, self.filename, line_no)?;
+        self.out.push_str(&list);
+        self.blank();
+        Ok(Emitted::Yes)
     }
 
     /// C99 6.10.4: `#line N` retargets the next line's number, and with
@@ -2743,10 +2769,9 @@ impl<'p, 's> LinePass<'p, 's> {
         Emitted::No
     }
 
-    /// C99 6.10.6 reserves every non-directive `#` form for the
-    /// implementation; gcc and clang warn and drop the line, and c5
-    /// names the dropped directive in the warning. A bare `#` is the
-    /// 6.10p9 null directive: consumed without effect or diagnostic.
+    /// A non-directive (C17 6.10p1) in a group that is not skipped is an
+    /// error, as in gcc and clang: dropping the line loses what it meant.
+    /// A bare `#` is the 6.10p9 null directive: consumed without effect.
     fn unknown(&mut self, spelling: &str, line_no: usize) {
         if !self.active || spelling.is_empty() {
             return;
@@ -2762,9 +2787,9 @@ impl<'p, 's> LinePass<'p, 's> {
         };
         let site = self.site(line_no);
         self.pp.warn(
-            UNKNOWN_DIRECTIVE,
+            Code::DIRECTIVE,
             site,
-            format!("unknown preprocessor directive {label} -- ignoring"),
+            format!("invalid preprocessing directive {label}"),
         );
     }
 
@@ -2893,10 +2918,27 @@ impl<'p, 's> LinePass<'p, 's> {
             let dline = self.presumed + *consumed - 1;
             if let Some(rest) = self.pp.directive_text(cont) {
                 let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
-                // TODO: `#include`, `#line` and `#pragma` inside an
-                // argument list are consumed without effect; their
-                // output would have to interleave with the joined
+                // `#embed` joins its byte list to the invocation, as gcc
+                // and clang do. TODO: `#include`, `#line` and `#pragma`
+                // inside an argument list are consumed without effect;
+                // their output would have to interleave with the joined
                 // expansion.
+                if self.active {
+                    match &parsed {
+                        Directive::Embed(operand) => {
+                            let list = self.pp.embed_expansion(operand, self.filename, dline)?;
+                            let appended = buffer.len();
+                            buffer.push('\n');
+                            buffer.push_str(&list);
+                            join.feed(&buffer[appended..], self.pp);
+                            continue;
+                        }
+                        Directive::Other if !self.pp.asm_source => {
+                            self.unknown(rest.trim_start(), dline);
+                        }
+                        _ => {}
+                    }
+                }
                 let site = self.site(dline);
                 if let Some(next) = self.pp.apply_cond_or_macro_directive(
                     &parsed,
@@ -2921,6 +2963,7 @@ impl<'p, 's> LinePass<'p, 's> {
 pub(super) mod builtins;
 mod cond;
 mod directive;
+mod embed;
 mod expand;
 mod include;
 mod pragma;

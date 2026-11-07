@@ -536,6 +536,8 @@ pub struct CompileOptions {
     /// probed after the including file's directory and before the
     /// `-I` paths (gcc scope).
     pub quote_include_paths: Vec<String>,
+    /// `--embed-dir path` -- the directories `#embed` searches.
+    pub embed_paths: Vec<String>,
     /// `-isystem path` -- system header directories probed after the `-I`
     /// paths and before the bundled headers (gcc scope).
     pub isystem_paths: Vec<String>,
@@ -968,6 +970,11 @@ impl CompileOptions {
         self
     }
     /// Replace the `-iquote` (quoted-include-only) search-path list.
+    pub fn with_embed_paths(mut self, paths: Vec<String>) -> Self {
+        self.embed_paths = paths;
+        self
+    }
+
     pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
         self.quote_include_paths = paths;
         self
@@ -2730,6 +2737,7 @@ impl Compiler {
     pub fn include_trace(&self) -> Vec<String> {
         self.include_records
             .iter()
+            .filter(|r| r.status != crate::IncludeStatus::Embedded)
             .map(IncludeRecord::trace_line)
             .collect()
     }
@@ -2909,6 +2917,9 @@ impl Compiler {
         }
         for path in &opts.quote_include_paths {
             pp.add_quote_path(path);
+        }
+        for path in &opts.embed_paths {
+            pp.add_embed_path(path);
         }
         for path in &opts.isystem_paths {
             pp.add_isystem_path(path);

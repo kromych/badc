@@ -510,6 +510,7 @@ pub(super) fn has_builtin(name: &str, target: Target) -> bool {
 pub(super) const OPERATORS: &[&str] = &[
     "__has_include",
     "__has_include_next",
+    "__has_embed",
     "__has_builtin",
     "__has_attribute",
 ];

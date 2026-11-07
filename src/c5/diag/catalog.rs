@@ -54,14 +54,14 @@ macro_rules! catalog {
 // raises.
 catalog! {
     1001, "unknown-directive", [], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a `#` line naming no directive badc implements; the line is dropped";
     1002, "#warnings", ["cpp"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#warning` directive reached in an active conditional block";
     1003, "malformed-directive", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a macro-expanded `#include` or `#line` operand that does not reparse";
+        "a macro-expanded `#line` operand that does not reparse";
     1004, "unknown-pragmas", ["C4068"], Warning, Controllable,
         [DEFAULT, ALL], Live,
         "a `#pragma` badc does not implement; the directive is ignored";
@@ -82,7 +82,7 @@ catalog! {
         "an identifier that names no macro evaluated in a `#if` or `#elif` expression, where it is 0";
     1010, "directive", [], Error, Hard,
         [], Live,
-        "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
+        "a directive name the preprocessor does not implement, a directive whose operand it cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
     1011, "invalid-pragma", [], Error, Hard,
         [], Live,
         "a pragma badc implements whose operand cannot be applied";

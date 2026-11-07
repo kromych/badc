@@ -178,6 +178,9 @@ pub enum IncludeStatus {
     Cached,
     /// No search path or header set matched.
     Missing,
+    /// A `#embed` resource: a `-M` prerequisite, absent from the `-H`
+    /// trace, as in gcc.
+    Embedded,
 }
 
 /// One `#include` resolution. Recorded when include tracking is on;
@@ -212,6 +215,7 @@ impl IncludeRecord {
             IncludeStatus::Opened => "",
             IncludeStatus::Cached => " (cached)",
             IncludeStatus::Missing => " (missing)",
+            IncludeStatus::Embedded => " (embedded)",
         };
         let name = self.path.as_deref().unwrap_or(&self.spelling);
         format!("{} {name}{suffix}", mark.repeat(self.depth))
@@ -289,6 +293,48 @@ impl Preprocessor {
             return self.find_include(&name.replace('\\', "/"), start);
         }
         self.find_include(name, start)
+    }
+
+    /// The bytes of the resource `#embed` names, searched as gcc and clang
+    /// search: an absolute name as written, the quoted form in the
+    /// including file's directory and then the `--embed-dir` directories,
+    /// the `<...>` form in those directories alone.
+    /// The path is the one read, for the `-M` prerequisites.
+    pub(super) fn find_embed(
+        &self,
+        name: &str,
+        quoted: bool,
+        filename: &str,
+    ) -> Option<(String, Vec<u8>)> {
+        #[cfg(feature = "std")]
+        {
+            let name = if self.target.ms_extensions() {
+                name.replace('\\', "/")
+            } else {
+                name.to_string()
+            };
+            let read = |dir: &str| {
+                let path = join_include_path(dir, &name);
+                std::fs::read(&path).ok().map(|bytes| (path, bytes))
+            };
+            if std::path::Path::new(&name).is_absolute() {
+                return read("");
+            }
+            if quoted && let Some(found) = read(&include_parent_dir(filename).unwrap_or_default()) {
+                return Some(found);
+            }
+            self.embed_search_paths.iter().find_map(|dir| read(dir))
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            let _ = (name, quoted, filename);
+            None
+        }
+    }
+
+    /// Whether no `--embed-dir` directory was given.
+    pub(super) fn embed_paths_empty(&self) -> bool {
+        self.embed_search_paths.order.is_empty()
     }
 
     /// Shared tail of `process_include` / `process_include_next`: error on
@@ -369,7 +415,7 @@ impl Preprocessor {
 
     /// Append one `#include` resolution to the tracking list. A no-op
     /// unless `-H` or a `-M`-family flag asked for it.
-    fn record_include(
+    pub(super) fn record_include(
         &mut self,
         spelling: &str,
         path: Option<String>,

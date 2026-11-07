@@ -232,6 +232,9 @@ Compile knobs:
   -iquote path             Add a search path for #include \"...\" only,
                            probed after the including file's directory
                            and before the -I paths. Repeatable.
+  --embed-dir path         Add a directory #embed searches: the only one
+                           for #embed <...>, after the including file's
+                           directory for #embed \"...\". Repeatable.
   -isystem path            Add a directory of system headers, probed
                            after the -I paths and before the bundled
                            headers; its headers are left out of -MM and

@@ -787,9 +787,15 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   has no file and is never a prerequisite.
 - The `__has_include`, `__has_include_next`, `__has_builtin` and
   `__has_attribute` operators. `__has_feature` is not implemented.
-- An unknown preprocessor directive is a warning (`unknown-directive`, B1001),
-  so older sources keep compiling; gcc and clang reject it. A missing
-  `#include` file is an error. An unknown `#pragma` warns
+- A directive name badc does not implement is an error in a group that is
+  not skipped (`directive`, B1010), as in gcc and clang; `#ident` and `#sccs`
+  are accepted without effect. A missing `#include` file is an error.
+- C23 6.10.4 `#embed` is accepted in every edition, as gcc and clang accept
+  it: the `limit`, `prefix`, `suffix` and `if_empty` parameters, gcc's and
+  clang's `offset`, the `__has_embed` operator and the
+  `__STDC_EMBED_NOT_FOUND__` / `__STDC_EMBED_FOUND__` / `__STDC_EMBED_EMPTY__`
+  values. `#embed "..."` searches the including file's directory and then the
+  `--embed-dir` directories; `#embed <...>` searches only the latter. An unknown `#pragma` warns
   too (`unknown-pragmas`, B1004), except that pragmas headed `pack`, `once`,
   `STDC`, `GCC`, `clang`, `region` or `endregion` are accepted silently.
 - The predefines `__BADC_VERSION__` and `__BADC_TARGET__`, both string

@@ -1868,7 +1868,7 @@ fn unterminated_quote_stops_at_end_of_line() {
                #define FLAG_64 (1<<0)\n\
                # define F0 FLAG_64\t/* 64-bit image */\n\
                \t.word F0\n";
-    let out = process(src);
+    let out = process_asm(src);
     let last = out
         .lines()
         .rfind(|l| !l.trim().is_empty())
@@ -2012,8 +2012,8 @@ fn asm_hash_comment_line_passes_through() {
 
 /// The passed-through line's tail is macro-expanded and its comments
 /// are stripped (`gcc -E -x assembler-with-cpp` produces `# hello 1`);
-/// an inactive branch still drops the line; C input still diagnoses
-/// and drops an unknown directive instead of passing it through.
+/// an inactive branch still drops the line; C input rejects an unknown
+/// directive instead of passing it through.
 #[test]
 fn asm_hash_line_tail_is_macro_expanded() {
     let out = process_asm("#define BAR 1\n# hello BAR /* gone */\n");
@@ -2022,7 +2022,7 @@ fn asm_hash_line_tail_is_macro_expanded() {
     let out = process_asm("#if 0\n# hidden\n#endif\n\t.word 1\n");
     assert!(!out.contains("hidden"), "{out}");
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let out = pp.process("# hello\nint x;\n").expect("preprocess");
+    let out = pp.process_to_end("# hello\nint x;\n").expect("preprocess");
     assert!(!out.contains("# hello"), "{out}");
     assert!(
         pp.sink
@@ -2899,25 +2899,6 @@ fn pragma_warn_empty_warns() {
             .iter()
             .any(|w| w.text.contains("no payload")),
         "expected empty-payload warning: {:?}",
-        pp.sink.diagnostics()
-    );
-}
-
-#[test]
-fn unknown_directive_warns() {
-    // C99 6.10.6 reserves non-directive forms for the
-    // implementation; gcc / clang warn rather than fail.
-    // c5 follows that shape.
-    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-    let _ = pp
-        .process("#frobnicate args\nint main() { return 0; }\n")
-        .expect("preprocessor failed");
-    assert!(
-        pp.sink
-            .diagnostics()
-            .iter()
-            .any(|w| w.text.contains("`#frobnicate`")),
-        "expected a warning naming `#frobnicate`; got {:?}",
         pp.sink.diagnostics()
     );
 }
@@ -4243,6 +4224,7 @@ fn strip_c_comments_preserves_non_ascii_outside_literals() {
 /// `X` and `#definex FOO 1` defined a macro named `x`.
 #[test]
 fn directive_keyword_requires_a_word_boundary() {
+    let process = |src: &str| embed_pp().process_to_end(src).expect("preprocess");
     let out = process("#define X 1\n#undefX\nint a = X;\n");
     assert!(
         out.contains("int a = 1;"),
@@ -5014,7 +4996,7 @@ fn pragma_once_and_the_guard_drop_identify_a_file_by_its_identity() {
     let mut spellings = vec![
         "<b.h>".to_string(),
         "<./b.h>".to_string(),
-        "<.//b.h>".to_string(),
+        "<././b.h>".to_string(),
         "<sub/../b.h>".to_string(),
         format!("\"{dir}/b.h\""),
         format!("\"{dir}//./b.h\""),
@@ -5486,7 +5468,7 @@ fn retry_reuse_declines_when_the_extension_pushes_a_name_the_source_pops() {
 fn a_directive_name_is_one_preprocessing_token() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     let out = pp
-        .process("#if 1\nA\n#elseelse\nB\n#endif\n")
+        .process_to_end("#if 1\nA\n#elseelse\nB\n#endif\n")
         .expect("preprocess");
     assert!(out.contains('A') && out.contains('B'), "{out}");
     assert!(
@@ -5552,6 +5534,8 @@ fn directive_kind(line: &str) -> &'static str {
         Directive::LineMacro(_) => "line-macro",
         Directive::Error(_) => "error",
         Directive::Warning(_) => "warning",
+        Directive::Embed(_) => "embed",
+        Directive::Ident => "ident",
         Directive::Shebang => "shebang",
         Directive::Other => "other",
     }
@@ -5572,6 +5556,10 @@ fn directives_are_recognised_by_their_whole_name() {
         ("ifdef A", "ifdef"),
         ("ifndef A", "ifndef"),
         ("ifdefined(A)", "other"),
+        ("embed \"d.bin\"", "embed"),
+        ("embedded", "other"),
+        ("ident \"v\"", "ident"),
+        ("sccs \"v\"", "ident"),
         ("elif 1", "elif"),
         // C23 spells a `defined` conditional this way; badc has no such
         // directive, and `elif` must not swallow the name.
@@ -5792,7 +5780,6 @@ fn target_predefines_are_locked() {
 #[test]
 fn preprocessor_codes_are_live_catalogue_rows() {
     for code in [
-        UNKNOWN_DIRECTIVE,
         WARNING_DIRECTIVE,
         MALFORMED_DIRECTIVE,
         UNKNOWN_PRAGMA,
@@ -5822,14 +5809,10 @@ fn preprocessor_diagnostics_carry_their_code() {
     let _ = pp
         .process(
             "#pragma frobnicate\n\
-             #frobnicate\n\
              #warning hello\n",
         )
         .expect("preprocessor failed");
-    assert_eq!(
-        codes(&pp),
-        vec![UNKNOWN_PRAGMA, UNKNOWN_DIRECTIVE, WARNING_DIRECTIVE]
-    );
+    assert_eq!(codes(&pp), vec![UNKNOWN_PRAGMA, WARNING_DIRECTIVE]);
     let rendered = pp.sink.diagnostics()[0].to_string();
     assert!(
         rendered.ends_with("[B1004] [-Wunknown-pragmas]"),
@@ -6567,4 +6550,211 @@ fn width_predefines_follow_the_targets_types() {
     let out = pp.process(probe).expect("preprocessor failed");
     let ilp32 = "w 8 16 32 32 64 64 32 32 32 8 16 32 64 8 32 32 64 32 32 32";
     assert!(out.contains(ilp32), "ILP32: {out}");
+}
+
+/// A scratch directory holding `files`, removed when the guard drops.
+struct EmbedDir(std::path::PathBuf);
+
+impl EmbedDir {
+    fn new(tag: &str, files: &[(&str, &[u8])]) -> Self {
+        let dir = std::env::temp_dir().join(format!("badc_embed_{tag}_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, bytes) in files {
+            std::fs::write(dir.join(name), bytes).unwrap();
+        }
+        EmbedDir(dir)
+    }
+
+    fn path(&self, name: &str) -> String {
+        self.0.join(name).to_str().unwrap().to_string()
+    }
+}
+
+impl Drop for EmbedDir {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
+fn embed_pp() -> Preprocessor {
+    Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0")
+}
+
+/// C23 6.10.4: the directive becomes the resource's bytes as integer
+/// literals; `limit` and gnu's / clang's `offset` select them, `prefix` and
+/// `suffix` frame a non-empty list, `if_empty` replaces an empty one, and
+/// the clauses and a pp-token operand are macro-replaced, as gcc does.
+#[test]
+fn embed_lists_the_selected_bytes_with_their_clauses() {
+    let dir = EmbedDir::new(
+        "clauses",
+        &[("d.bin", b"ABC"), ("e.bin", b""), ("x.bin", &[0, 9, 255])],
+    );
+    let (d, e, x) = (dir.path("d.bin"), dir.path("e.bin"), dir.path("x.bin"));
+    let lines = |src: String| -> Vec<String> {
+        let out = embed_pp().process(&src).expect("preprocessor failed");
+        let content = |l: &&str| !l.trim().is_empty() && !l.starts_with("# ");
+        out.lines()
+            .filter(content)
+            .map(|l| l.trim().to_string())
+            .collect()
+    };
+    assert_eq!(lines(format!("#embed \"{d}\"\n")), ["65,66,67"]);
+    assert_eq!(lines(format!("#embed \"{x}\"\n")), ["0,9,255"]);
+    assert_eq!(
+        lines(format!(
+            "#define P 7,\n#define L 2\n#embed \"{d}\" limit(L) prefix(P) suffix(,9)\n"
+        )),
+        ["7, 65,66 ,9"]
+    );
+    assert_eq!(
+        lines(format!("#embed \"{d}\" gnu::offset(1) __limit__(1)\n")),
+        ["66"]
+    );
+    assert_eq!(
+        lines(format!("#embed \"{d}\" clang::offset(5)\n")),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        lines(format!("#embed \"{e}\" prefix(p) if_empty(none)\n")),
+        ["none"]
+    );
+    assert_eq!(
+        lines(format!("#define F \"{d}\"\n#embed F limit(1)\n")),
+        ["65"]
+    );
+}
+
+/// The directive line keeps one output line, and inside a macro's
+/// argument list the bytes join the invocation, as in gcc and clang.
+#[test]
+fn embed_keeps_the_line_count_and_joins_an_argument_list() {
+    let dir = EmbedDir::new("lines", &[("d.bin", b"AB")]);
+    let d = dir.path("d.bin");
+    let src = format!("#define N(...) n(__VA_ARGS__)\nint a = N(\n#embed \"{d}\"\n);\nint b;\n");
+    let out = embed_pp().process(&src).expect("preprocessor failed");
+    let body: Vec<&str> = out.lines().skip_while(|l| !l.contains("int a")).collect();
+    assert_eq!(body[0].trim(), "int a = n(65,66);", "{out}");
+    assert_eq!(
+        body.iter().position(|l| l.contains("int b")),
+        Some(3),
+        "{out}"
+    );
+}
+
+/// `#embed "..."` searches the including file's directory, then the
+/// `--embed-dir` directories; `#embed <...>` searches only the latter.
+#[test]
+fn embed_searches_the_including_directory_then_the_embed_dirs() {
+    let dir = EmbedDir::new("search", &[("h.h", b"#embed \"d.bin\"\n"), ("d.bin", b"Z")]);
+    let data = EmbedDir::new("search_data", &[("q.bin", b"Q")]);
+    let mut pp = embed_pp();
+    pp.add_search_path(dir.0.to_str().unwrap());
+    let out = pp
+        .process("#include \"h.h\"\n")
+        .expect("preprocessor failed");
+    assert!(out.lines().any(|l| l.trim() == "90"), "{out}");
+    let angle = embed_pp()
+        .process("#embed <q.bin>\n")
+        .unwrap_err()
+        .to_string();
+    assert!(angle.contains("only --embed-dir"), "{angle}");
+    let mut pp = embed_pp();
+    pp.add_embed_path(data.0.to_str().unwrap());
+    let out = pp
+        .process("#embed <q.bin>\n#embed \"q.bin\"\n")
+        .expect("preprocessor failed");
+    assert_eq!(out.lines().filter(|l| l.trim() == "81").count(), 2, "{out}");
+}
+
+/// C23 6.10.1: `__has_embed` is `__STDC_EMBED_FOUND__`, `_EMPTY__` when
+/// the parameters select no byte, and `_NOT_FOUND__` for a missing resource
+/// or a parameter badc does not implement.
+#[test]
+fn has_embed_answers_found_empty_and_not_found() {
+    let dir = EmbedDir::new("has", &[("d.bin", b"AB"), ("e.bin", b"")]);
+    let (d, e) = (dir.path("d.bin"), dir.path("e.bin"));
+    let cases = [
+        (format!("\"{d}\""), "__STDC_EMBED_FOUND__"),
+        (format!("\"{e}\""), "__STDC_EMBED_EMPTY__"),
+        (format!("\"{d}\" limit(0)"), "__STDC_EMBED_EMPTY__"),
+        (
+            format!("\"{d}\" vendor::param(1)"),
+            "__STDC_EMBED_NOT_FOUND__",
+        ),
+        (format!("\"{d}.missing\""), "__STDC_EMBED_NOT_FOUND__"),
+    ];
+    for (operand, want) in cases {
+        let src =
+            format!("#if defined(__has_embed) && __has_embed({operand}) == {want}\nyes\n#endif\n");
+        let out = embed_pp().process(&src).expect("preprocessor failed");
+        assert!(out.lines().any(|l| l.trim() == "yes"), "{operand}: {out}");
+    }
+}
+
+/// A repeated parameter, one badc does not implement, and a missing
+/// resource are errors, as gcc reports them.
+#[test]
+fn embed_rejects_what_it_cannot_honor() {
+    let dir = EmbedDir::new("errors", &[("d.bin", b"A")]);
+    let d = dir.path("d.bin");
+    for (params, want) in [
+        ("limit(1) limit(2)", "duplicate parameter `limit`"),
+        (
+            "vendor::param(1)",
+            "unsupported #embed parameter `vendor::param`",
+        ),
+        ("limit", "`limit` takes a parenthesized operand"),
+        ("limit(-1)", "negative"),
+    ] {
+        let err = embed_pp()
+            .process(&format!("#embed \"{d}\" {params}\n"))
+            .unwrap_err();
+        assert!(err.to_string().contains(want), "{params}: {err}");
+    }
+    let err = embed_pp()
+        .process("#embed \"no_such_resource.bin\"\n")
+        .unwrap_err();
+    assert!(err.to_string().contains("not found"), "{err}");
+}
+
+/// A non-directive in a group that is not skipped is an error, as in gcc
+/// and clang; a skipped one, `#ident` / `#sccs`, the null directive and an
+/// assembler-with-cpp `#` comment are not.
+#[test]
+fn unknown_directive_is_an_error_where_it_is_not_skipped() {
+    let err = embed_pp()
+        .process("#frobnicate\nint x;\n")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("invalid preprocessing directive `#frobnicate`"),
+        "{err}"
+    );
+    let err = embed_pp()
+        .process("#define F(x) x\nint y = F(1\n#frobnicate\n);\n")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("`#frobnicate`"), "{err}");
+    let out = embed_pp()
+        .process("#if 0\n#frobnicate\n#endif\n#ident \"v1\"\n#sccs \"v2\"\n#\nint x;\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("int x;"), "{out}");
+    let mut asm = embed_pp();
+    asm.set_asm_source(true);
+    let out = asm
+        .process("# a comment\nnop\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("# a comment"), "{out}");
+}
+
+/// An `#include` operand that expands to no header name is an error: the
+/// header it meant is not included.
+#[test]
+fn include_operand_expanding_to_no_header_name_is_an_error() {
+    let err = embed_pp()
+        .process("#define H 42\n#include H\n")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("not a `<header>`"), "{err}");
 }

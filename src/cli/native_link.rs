@@ -1310,6 +1310,26 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
     emit_link_warnings(cli, warnings);
 }
 
+/// `--out-implib`: the import library of the DLL just written, read back
+/// from its export directory.
+fn write_import_library(path: &std::path::Path, dll: &[u8], cli: &Cli) {
+    if cli.mode != Mode::SharedLibrary || !badc::is_pe_dll(dll) {
+        eprint_diagnostic("badc: error: --out-implib applies to a PE shared library");
+        std::process::exit(1);
+    }
+    let lib = badc::parse_pe_dll(dll).unwrap_or_else(|e| {
+        eprint_diagnostic(format!("badc: {e}"));
+        std::process::exit(1);
+    });
+    write_output(
+        path,
+        &badc::write_import_library(&lib),
+        cli.target,
+        cli.quiet,
+        false,
+    );
+}
+
 /// Report link warnings at the levels the command line set; under
 /// `--fatal-warnings` or `-Werror` one fails the link.
 fn emit_link_warnings(cli: &Cli, warnings: impl IntoIterator<Item = (badc::diag::Code, String)>) {
@@ -1442,6 +1462,9 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     let bytes = linked.image;
     stats.mark("image");
     write_output(out, &bytes, cli.target, cli.quiet, true);
+    if let Some(path) = &cli.link.out_implib {
+        write_import_library(path, &bytes, cli);
+    }
     if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
         write_output(path, pdb, cli.target, cli.quiet, false);
     }

@@ -138,6 +138,9 @@ Multi-TU knobs:
                            symbol addresses) to <file>. ELF output
                            only.
   --print-map              Print the link map to stdout.
+  --out-implib=<file>, --out-implib <file>
+                           Write a PE DLL's import library to <file>,
+                           as link.exe writes one beside the DLL.
   --entry=<sym>            Enter the image at <sym>; overrides
                            `#pragma entrypoint` and `main`.
   -Wl,<arg>[,<arg>...], -Xlinker <arg>

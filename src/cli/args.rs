@@ -238,6 +238,8 @@ pub(crate) struct Link {
     /// The `-l`, group and `--whole-archive` entries in command-line
     /// order, each with the index of the positional input it precedes.
     pub(crate) markers: Vec<(usize, LinkMarker)>,
+    /// `--out-implib`: where a PE DLL link writes its import library.
+    pub(crate) out_implib: Option<PathBuf>,
     pub(crate) library_paths: Vec<String>,
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
@@ -344,6 +346,7 @@ impl Default for Link {
     fn default() -> Self {
         Self {
             markers: Vec::new(),
+            out_implib: None,
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
@@ -2106,6 +2109,15 @@ impl Parser {
                 );
             }
             "--emit-relocs" => link.emit_relocs = true,
+            // GNU ld's `--out-implib`: a PE DLL's import library, as link.exe
+            // writes beside the DLL.
+            "--out-implib" => {
+                let path = operand(iter, "badc: error: --out-implib requires a file argument")?;
+                link.out_implib = Some(PathBuf::from(path));
+            }
+            s if s.starts_with("--out-implib=") => {
+                link.out_implib = Some(PathBuf::from(&s["--out-implib=".len()..]));
+            }
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,

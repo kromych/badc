@@ -50,6 +50,8 @@ pub(crate) mod gnu_property;
 mod got_relax;
 #[cfg(feature = "std")]
 mod image;
+#[cfg(feature = "std")]
+mod implib;
 mod import_slots;
 #[cfg(feature = "std")]
 pub(crate) mod kernel32;
@@ -122,6 +124,8 @@ pub use coff_object::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
+#[cfg(feature = "std")]
+pub use implib::write_import_library;
 pub use ld_driver::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

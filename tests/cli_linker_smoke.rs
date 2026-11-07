@@ -6293,6 +6293,89 @@ fn short_import_library(dll: &str, members: &[(u16, &str, Option<u16>)]) -> Vec<
     out
 }
 
+/// `--out-implib` writes a DLL's import library, as link.exe writes one
+/// beside the DLL: a function export defines its name and `__imp_` slot, a
+/// data export the slot alone. A consumer naming it by `#pragma
+/// comment(lib, ...)` imports both from the DLL. The option is refused on
+/// an executable.
+#[test]
+fn a_dll_link_writes_its_import_library() {
+    let dir = tempdir("pe-out-implib");
+    write_source(
+        &dir,
+        "lib.c",
+        "__declspec(dllexport) int lib_value = 42;\n\
+         __declspec(dllexport) int lib_fn(int x) { return x + lib_value; }\n",
+    );
+    write_source(
+        &dir,
+        "user.c",
+        "#pragma comment(lib, \"lib.lib\")\n\
+         __declspec(dllimport) extern int lib_value;\n\
+         __declspec(dllimport) int lib_fn(int x);\n\
+         int main(void) { return lib_fn(1) - 43 + lib_value - 42; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let badc_for = || {
+            let mut c = Command::new(badc());
+            c.arg(format!("--target={target}")).current_dir(&dir);
+            c
+        };
+        run(
+            badc_for().args([
+                "--shared",
+                "lib.c",
+                "-Wl,--out-implib,lib.lib",
+                "-o",
+                "lib.dll",
+            ]),
+            &format!("{target}: DLL"),
+        );
+        let lib = std::fs::read(dir.join("lib.lib")).expect("import library written");
+        let members: Vec<(String, bool)> = (lib.windows(4))
+            .enumerate()
+            .filter(|(_, w)| *w == [0, 0, 0xff, 0xff])
+            .map(|(at, _)| {
+                let kind = u16::from_le_bytes([lib[at + 18], lib[at + 19]]);
+                let names = &lib[at + 20..];
+                let end = names.iter().position(|&b| b == 0).unwrap();
+                (
+                    String::from_utf8_lossy(&names[..end]).into_owned(),
+                    kind & 3 == 1,
+                )
+            })
+            .collect();
+        assert_eq!(
+            members,
+            [
+                ("lib_fn".to_string(), false),
+                ("lib_value".to_string(), true)
+            ],
+            "{target}"
+        );
+        run(
+            badc_for().args(["user.c", "-L.", "-o", "user.exe"]),
+            &format!("{target}: consumer"),
+        );
+        let imports = pe_imports(&std::fs::read(dir.join("user.exe")).expect("read image"));
+        for name in ["lib_fn", "lib_value"] {
+            assert!(
+                imports.contains(&("lib.dll".into(), name.into())),
+                "{target}: {imports:?}"
+            );
+        }
+        let out = badc_for()
+            .args(["user.c", "-L.", "-Wl,--out-implib,x.lib", "-o", "x.exe"])
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("--out-implib applies to a PE shared library"),
+            "{target}: {err}"
+        );
+    }
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

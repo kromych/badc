@@ -90,8 +90,8 @@ pub use linker::{
     parse_linker_script, parse_mach_o_dylib, parse_native_elf, parse_native_mach_o,
     parse_native_object, parse_native_object_for, parse_pe_dll, parse_shared_library, parse_tbd,
     parse_z_keyword, render_link_map, resolve_exec_stack, traditional_imports,
-    write_executable_elf64, write_native_image_and_pdb, write_native_image_from_merged,
-    write_native_image_from_merged_ex,
+    write_executable_elf64, write_import_library, write_native_image_and_pdb,
+    write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

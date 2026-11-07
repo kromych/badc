@@ -34,6 +34,9 @@ Output mode -- pick at most one (defaults to a native binary):
                            suppress or dynamic_lookup (also as
                            -Wl,-undefined,<value>) has a Mach-O image
                            look it up at load time.
+  -bundle, -flat_namespace On Mach-O: a library only dlopen loads
+                           (MH_BUNDLE), and an image whose imports
+                           name no library (flat lookup).
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --list-diagnostics       Print the diagnostic catalogue -- code,

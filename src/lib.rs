@@ -145,12 +145,12 @@ pub use c5::{
     AUTO_VAR_INIT_PATTERN_BYTE, AutoInclude, AutoVarInit, BinaryFormat, BuildId, C5Error, CStd,
     CodeModel, CompileOptions, Compiler, DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION,
     ElfClass, ElfImageOptions, ExecForm, FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol,
-    Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch, NativeOptions,
-    OutputKind, Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Preprocessed,
-    Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector,
-    SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm, dep_escape, dep_prerequisites,
-    dep_render, embedded_headers, fixed_register, jit_run, jit_run_with_options,
-    predefined_symbols, stack_guard_sysreg,
+    Hardening, Host, IncludeOrigin, IncludeRecord, IncludeStatus, IndirectBranch,
+    MachOImageOptions, NativeOptions, OutputKind, Overwrite, PatchableEntry, PredefinedKind,
+    PredefinedSymbol, Preprocessed, Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard,
+    StackProtect, StackProtector, SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm,
+    dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
+    jit_run_with_options, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
 pub use c5::{

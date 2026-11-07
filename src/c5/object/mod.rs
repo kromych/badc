@@ -968,6 +968,7 @@ pub(crate) mod test_support {
             pdb_path: None,
             resources: Vec::new(),
             stack_size: None,
+            mach_o: Default::default(),
             plt_trampoline_offsets: Vec::new(),
         }
     }

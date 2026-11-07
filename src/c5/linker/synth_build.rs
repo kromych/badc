@@ -108,6 +108,7 @@ pub struct ImageOptions {
     /// `--stack reserve[,commit]`: a PE image's initial thread stack.
     pub pe_stack: Option<(u64, u64)>,
     pub elf: ElfImageOptions,
+    pub mach_o: crate::c5::codegen::MachOImageOptions,
 }
 
 /// As [`write_native_image_from_merged`], shaped by `opts`.
@@ -453,6 +454,7 @@ fn synth_program_and_build(
         pdb_path: None,
         resources: Vec::new(),
         stack_size: opts.pe_stack,
+        mach_o: opts.mach_o,
         plt_trampoline_offsets,
     };
 

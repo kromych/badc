@@ -205,6 +205,12 @@ that only weak references reach binds as a weak import: its address is 0 when
 the loaded dylib lacks the name. `__attribute__((weak_import))` is `weak` on
 Mach-O and ignored elsewhere.
 
+`-bundle` (also `-Wl,-bundle`) links a Mach-O library only `dlopen` loads,
+an `MH_BUNDLE` image with no install name; its undefined references follow
+`-undefined` as a dylib's do. `-flat_namespace` gives every import of the
+image a flat lookup and clears `MH_TWOLEVEL`. `-bundle_loader` is refused: a
+bundle reaches its loader's symbols through `-undefined dynamic_lookup`.
+
 ### Unwind tables
 
 - PE: every function has a `RUNTIME_FUNCTION` entry in `.pdata`. Its unwind

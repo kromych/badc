@@ -28,6 +28,7 @@ const CPU_SUBTYPE_ARM64_ALL: u32 = 0;
 
 const MH_EXECUTE: u32 = 0x2;
 const MH_DYLIB: u32 = 0x6;
+const MH_BUNDLE: u32 = 0x8;
 
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
@@ -1260,18 +1261,20 @@ struct DataBind {
 }
 
 /// The bind stream: each import's `__got` slot at the head of `segment` and
-/// the data slots naming it, then the TLV descriptors' bootstrap slots.
+/// the data slots naming it, then the TLV descriptors' bootstrap slots. A
+/// flat-namespace image names no library: every bind is a flat lookup.
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
     data_binds: &[DataBind],
     tlv_ctx: Option<TlvBindContext>,
+    flat_namespace: bool,
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
     let mut current_source: Option<BindSource> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
-        let source = if imp.flat_lookup {
+        let source = if flat_namespace || imp.flat_lookup {
             BindSource::Flat
         } else {
             BindSource::Dylib((imp.dylib_index + 1) as u64)
@@ -1308,7 +1311,10 @@ fn build_bind_opcodes(
         }
     }
     if let Some(ctx) = tlv_ctx {
-        let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
+        let bootstrap_source = match flat_namespace {
+            true => BindSource::Flat,
+            false => BindSource::Dylib(ctx.bootstrap_ordinal),
+        };
         if current_source != Some(bootstrap_source) {
             push_bind_source(&mut out, bootstrap_source);
         }
@@ -1995,7 +2001,7 @@ impl<'a> MachOWriter<'a> {
         c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
         // The install name is `@rpath/<name>`, so a consumer linking by
         // name resolves it through its rpath at runtime.
-        c.id_dylib = self.is_dylib.then(|| {
+        c.id_dylib = (self.is_dylib && !build.mach_o.bundle).then(|| {
             let install_name = match build.shared_lib_name.as_deref() {
                 Some(name) => alloc::format!("@rpath/{name}"),
                 None => alloc::string::String::from("@rpath/c5-output.dylib"),
@@ -2005,6 +2011,7 @@ impl<'a> MachOWriter<'a> {
         let dylibs_total: u64 = c.dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
         let entry_lc_size = match &c.id_dylib {
             Some(lc) => lc.len() as u64,
+            None if self.is_dylib => 0,
             None => ENTRY_POINT_COMMAND_SIZE as u64,
         };
         c.sizeofcmds = SEGMENT_COMMAND_64_SIZE as u64
@@ -2247,6 +2254,7 @@ impl<'a> MachOWriter<'a> {
             } else {
                 None
             },
+            build.mach_o.flat_namespace,
         );
         self.linkedit.rebase_ops = build_rebase_opcodes(
             &build.data_relocs,
@@ -2364,11 +2372,17 @@ impl<'a> MachOWriter<'a> {
         }
         for (j, imp) in build.imports.imports.iter().enumerate() {
             let n_strx = str_indices[n_locals + n_exports + j];
-            let ordinal = import_library_ordinal(imp);
+            let ordinal = match build.mach_o.flat_namespace {
+                true => DYNAMIC_LOOKUP_ORDINAL,
+                false => import_library_ordinal(imp),
+            };
             symtab.extend_from_slice(&nlist_undef(n_strx, ordinal, imp.weak));
         }
         if self.tls_present {
-            let bootstrap_dylib_ordinal = tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8;
+            let bootstrap_dylib_ordinal = match build.mach_o.flat_namespace {
+                true => DYNAMIC_LOOKUP_ORDINAL,
+                false => tlv_bootstrap_ordinal(&build.imports.dylibs)? as u8,
+            };
             let bootstrap_strx = str_indices[symbol_names.len() - 1];
             symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal, false));
         }
@@ -2611,6 +2625,8 @@ impl<'a> MachOWriter<'a> {
         lcs.push(c.uuid.clone());
         match &c.id_dylib {
             Some(lc) => lcs.push(lc.clone()),
+            // A bundle names itself by its path and enters nowhere.
+            None if self.is_dylib => {}
             None => {
                 let entry_native =
                     c5_entry_native_offset(build).unwrap_or(build.entry_offset as u64);
@@ -2629,11 +2645,15 @@ impl<'a> MachOWriter<'a> {
         let le = &self.linkedit;
         let total_filesize = le.linkedit_fileoff + le.linkedit_filesize;
         let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
-        let ncmds: u32 = 11
-            + (l.data_const_present as u32)
-            + (self.emit_dwarf as u32)
-            + build.imports.dylibs.len() as u32;
-        let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
+        let ncmds: u32 = self.lcs.len() as u32;
+        // ASLR applies to an executable; a library loads where dyld puts it.
+        let mut header_flags = MH_DYLDLINK;
+        if !self.is_dylib {
+            header_flags |= MH_PIE;
+        }
+        if !build.mach_o.flat_namespace {
+            header_flags |= MH_TWOLEVEL;
+        }
         if self.tls_present {
             header_flags |= MH_HAS_TLV_DESCRIPTORS;
         }
@@ -2643,7 +2663,11 @@ impl<'a> MachOWriter<'a> {
                 magic: MH_MAGIC_64,
                 cputype: CPU_TYPE_ARM64,
                 cpusubtype: CPU_SUBTYPE_ARM64_ALL,
-                filetype: if self.is_dylib { MH_DYLIB } else { MH_EXECUTE },
+                filetype: match (self.is_dylib, build.mach_o.bundle) {
+                    (false, _) => MH_EXECUTE,
+                    (true, false) => MH_DYLIB,
+                    (true, true) => MH_BUNDLE,
+                },
                 ncmds,
                 sizeofcmds: self.commands.sizeofcmds as u32,
                 flags: header_flags,
@@ -2651,7 +2675,6 @@ impl<'a> MachOWriter<'a> {
             },
         );
         debug_assert_eq!(out.len(), MACH_HEADER_64_SIZE);
-        debug_assert_eq!(self.lcs.len() as u32, ncmds);
         for lc in &self.lcs {
             out.extend_from_slice(lc);
         }
@@ -3330,7 +3353,7 @@ mod tests {
             imports: (0..20).map(|i| sample_import(i, false)).collect(),
             dylibs,
         };
-        let out = build_bind_opcodes(&imports, 1, &[], None);
+        let out = build_bind_opcodes(&imports, 1, &[], None, false);
         assert!(
             out.windows(2)
                 .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x10]),

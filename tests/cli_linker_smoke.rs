@@ -2098,6 +2098,93 @@ fn a_dynamic_lookup_dylib_takes_its_function_from_the_program() {
     }
 }
 
+/// ld64's `-bundle` writes an `MH_BUNDLE` image that names itself by no
+/// install name and enters nowhere; `-flat_namespace` clears `MH_TWOLEVEL`
+/// and gives every import a flat lookup. A host `dlopen`s either form and
+/// the bundle reaches the host's function. A library carries no `MH_PIE`,
+/// and a non-Mach-O link refuses the options.
+#[test]
+fn a_bundle_loads_into_its_host() {
+    const MH_BUNDLE: u32 = 0x8;
+    const MH_TWOLEVEL: u32 = 0x80;
+    const MH_PIE: u32 = 0x20_0000;
+    const LC_MAIN: u32 = 0x8000_0028;
+    const LC_ID_DYLIB: u32 = 0xD;
+    let dir = tempdir("macho-bundle");
+    write_source(
+        &dir,
+        "plugin.c",
+        "int host_value(void);\nint plugin_fn(int x) { return x * 10 + host_value(); }\n",
+    );
+    write_source(
+        &dir,
+        "host.c",
+        "#include <dlfcn.h>\n\
+         int host_value(void) { return 7; }\n\
+         int main(int argc, char **argv)\n\
+         { void *h = dlopen(argv[1], RTLD_NOW);\n\
+           if (!h) return 2;\n\
+           int (*f)(int) = (int (*)(int))dlsym(h, \"plugin_fn\");\n\
+           return f && f(4) == 47 ? 0 : 1; }\n",
+    );
+    let build = |args: &[&str]| {
+        run(
+            Command::new(badc())
+                .arg("--target=macos-aarch64")
+                .args(args)
+                .current_dir(&dir),
+            &format!("{args:?}"),
+        )
+    };
+    build(&["host.c", "-o", "host"]);
+    let u32le = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    for (form, flat) in [
+        (&["-undefined", "dynamic_lookup"][..], false),
+        (&["-flat_namespace", "-undefined", "suppress"], true),
+    ] {
+        build(&[&["-bundle", "plugin.c", "-o", "p.bundle"][..], form].concat());
+        let image = std::fs::read(dir.join("p.bundle")).expect("read the bundle");
+        let (filetype, ncmds, flags) = (u32le(&image, 12), u32le(&image, 16), u32le(&image, 24));
+        assert_eq!(filetype, MH_BUNDLE, "{form:?}");
+        assert_eq!(flags & MH_TWOLEVEL == 0, flat, "{form:?}: flags {flags:#x}");
+        assert_eq!(flags & MH_PIE, 0, "{form:?}: flags {flags:#x}");
+        let mut off = 32;
+        for _ in 0..ncmds {
+            let cmd = u32le(&image, off);
+            assert!(
+                cmd != LC_MAIN && cmd != LC_ID_DYLIB,
+                "{form:?}: command {cmd:#x}"
+            );
+            off += u32le(&image, off + 4) as usize;
+        }
+        if cfg!(target_os = "macos") {
+            let status = Command::new(dir.join("host"))
+                .arg("./p.bundle")
+                .current_dir(&dir)
+                .status()
+                .expect("run the host");
+            assert_eq!(status.code(), Some(0), "{form:?}");
+        }
+    }
+    for args in [
+        &["--target=linux-x64", "-bundle"][..],
+        &[
+            "--target=macos-aarch64",
+            "-bundle",
+            "-bundle_loader",
+            "host",
+        ],
+    ] {
+        let out = Command::new(badc())
+            .args(args)
+            .args(["plugin.c", "-o", "p2"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        assert!(!out.status.success(), "{args:?} links");
+    }
+}
+
 /// A weak reference no input defines fails a Mach-O link, an executable's
 /// or a dylib's, as ld64 reports it; under `-undefined dynamic_lookup` it
 /// is a flat-namespace weak import, which dyld sets to 0 when no loaded

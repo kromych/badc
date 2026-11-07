@@ -3460,6 +3460,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pdb_path: None,
         resources: alloc::vec::Vec::new(),
         stack_size: None,
+        mach_o: Default::default(),
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),

@@ -242,6 +242,10 @@ pub(crate) struct Link {
     pub(crate) out_implib: Option<PathBuf>,
     /// `--stack reserve[,commit]`, link.exe's `/STACK`.
     pub(crate) stack: Option<(u64, u64)>,
+    /// ld64's `-bundle` and `-flat_namespace`.
+    pub(crate) mach_o: badc::MachOImageOptions,
+    /// ld64's `-bundle_loader`: the executable a bundle binds its imports to.
+    pub(crate) bundle_loader: Option<PathBuf>,
     pub(crate) library_paths: Vec<String>,
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
@@ -350,6 +354,8 @@ impl Default for Link {
             markers: Vec::new(),
             out_implib: None,
             stack: None,
+            mach_o: badc::MachOImageOptions::default(),
+            bundle_loader: None,
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
@@ -459,6 +465,7 @@ impl Cli {
             strip_debug: link.strip_debug,
             discard_temporaries: link.discard_locals,
             pe_stack: link.stack,
+            mach_o: link.mach_o,
             elf: badc::ElfImageOptions {
                 build_id: link.build_id,
                 max_page_size: link.z.max_page_size(),
@@ -535,6 +542,22 @@ impl Cli {
             (
                 String::from("-undefined"),
                 "it is ld64's, for a Mach-O image",
+            )
+        } else if !mach_o && (link.mach_o != Default::default() || link.bundle_loader.is_some()) {
+            (
+                String::from("-bundle / -bundle_loader / -flat_namespace"),
+                "they are ld64's, for a Mach-O image",
+            )
+        } else if link.bundle_loader.is_some() && !link.mach_o.bundle {
+            (
+                String::from("-bundle_loader"),
+                "it names a bundle's loader, and -bundle is absent",
+            )
+        } else if link.bundle_loader.is_some() {
+            // TODO(#1903): bind the loader's exports to the main executable.
+            (
+                String::from("-bundle_loader"),
+                "a bundle binds to its loader's symbols here through -undefined dynamic_lookup",
             )
         } else if let Some((kw, why)) = z_refusal {
             (format!("-z {}", kw.name()), why)
@@ -2013,8 +2036,18 @@ impl Parser {
     /// Options that shape a link, including the GNU ld surface a build
     /// system passes through the compiler driver.
     fn link_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
+        if arg == "-bundle" {
+            self.claim(Mode::SharedLibrary)?;
+            self.link.mach_o.bundle = true;
+            return Ok(true);
+        }
         let link = &mut self.link;
         match arg {
+            "-flat_namespace" => link.mach_o.flat_namespace = true,
+            "-bundle_loader" => {
+                let exe = operand(iter, "badc: error: -bundle_loader requires an executable")?;
+                link.bundle_loader = Some(PathBuf::from(exe));
+            }
             "-Map" => {
                 link.map_path = Some(PathBuf::from(operand(
                     iter,

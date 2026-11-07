@@ -2494,6 +2494,8 @@ pub(crate) struct Build {
     pub resources: Vec<Vec<u8>>,
     /// A PE image's `--stack` reserve and commit; `None` keeps the default.
     pub stack_size: Option<(u64, u64)>,
+    /// A Mach-O image's form, see [`MachOImageOptions`].
+    pub mach_o: MachOImageOptions,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the
@@ -4853,6 +4855,15 @@ pub struct ElfImageOptions {
     pub no_apply_dynamic_relocs: bool,
     pub exec_stack: bool,
     pub symbolic: bool,
+}
+
+/// The image forms ld64 selects with `-bundle`, a Mach-O image that only
+/// `dlopen` loads (`MH_BUNDLE`), and `-flat_namespace`, whose imports name
+/// no library and resolve in every image loaded (no `MH_TWOLEVEL`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MachOImageOptions {
+    pub bundle: bool,
+    pub flat_namespace: bool,
 }
 
 impl Default for NativeOptions {

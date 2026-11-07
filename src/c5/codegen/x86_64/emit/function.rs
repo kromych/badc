@@ -269,6 +269,7 @@ pub(crate) fn emit_function(
     let bulk_xmm = (!abi.no_fp_regs && !abi.strict_align)
         .then(|| super::ssa::reg_alloc::free_fp_register(func, alloc, target, abi.fixed_regs))
         .flatten();
+    let ends_path = super::ssa::emit_common::calls_ending_paths(func);
     let fcx = FnCtx {
         func,
         alloc,
@@ -285,6 +286,7 @@ pub(crate) fn emit_function(
         param_from_home: &param_from_home,
         param_plan: &param_plan,
         name2entpc,
+        ends_path: &ends_path,
     };
     // A full leaf builds no frame to leave ahead of, and `-pg` without
     // `-mfentry` calls `mcount` once the frame stands; the evaluation may

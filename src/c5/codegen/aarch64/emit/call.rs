@@ -452,6 +452,8 @@ pub(super) struct CallOperands<'a> {
     pub(super) arg_aggs: &'a [Option<u32>],
     pub(super) ret_agg: Option<u32>,
     pub(super) ret_slot_off: i64,
+    /// Nothing runs after the call: its lowering ends at the `bl` / `blr`.
+    pub(super) ends_path: bool,
 }
 
 impl CallOperands<'_> {
@@ -532,6 +534,9 @@ pub(super) fn emit_call_ext(
     });
     // The patcher rewrites only imm26, so the placeholder must be `bl`.
     emit(code, enc_bl(0));
+    if ops.ends_path {
+        return Ok(());
+    }
     emit_add_sp_imm(code, lowered);
     if ret_agg.is_some() {
         finish_call_result(
@@ -640,6 +645,9 @@ pub(super) fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
+    if ops.ends_path {
+        return Ok(());
+    }
     emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,
@@ -947,6 +955,9 @@ pub(super) fn emit_call_indirect(
         None => target_reg,
     };
     emit(code, enc_blr(call_reg));
+    if ops.ends_path {
+        return Ok(());
+    }
     emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,

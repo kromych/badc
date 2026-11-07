@@ -296,6 +296,7 @@ pub(crate) fn emit_function(
         text_map_state: *text_map_state,
     };
     let page_only = super::mem::page_only_data(func, alloc, extern_data_names);
+    let ends_path = super::ssa::emit_common::calls_ending_paths(func);
     let mut em = FunctionEmitter {
         cx,
         fixups,
@@ -321,6 +322,7 @@ pub(crate) fn emit_function(
             name2entpc,
             data_sym_offsets,
             page_only: &page_only,
+            ends_path: &ends_path,
         },
         abs_jump_tables,
         entry,

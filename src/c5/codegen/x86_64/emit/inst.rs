@@ -724,8 +724,10 @@ fn emit_call_inst(
         target,
         imports,
         variadic_targets,
+        ends_path,
         ..
     } = *fcx;
+    let ends_path = ends_path[v as usize];
     let cx = &mut *out.cx;
     let fixups = &mut *out.fixups;
     let code = &mut *cx.code;
@@ -761,6 +763,7 @@ fn emit_call_inst(
             *ret_agg,
             *ret_slot_local,
             func,
+            ends_path,
         ),
         Inst::CallExt {
             binding_idx,
@@ -790,6 +793,7 @@ fn emit_call_inst(
             *ret_agg,
             *ret_slot_local,
             func,
+            ends_path,
         ),
         Inst::CallIndirect {
             target: callee,
@@ -819,6 +823,7 @@ fn emit_call_inst(
             *ret_slot_local,
             func,
             asm_extern_call_sites,
+            ends_path,
         ),
         _ => unreachable!(),
     }

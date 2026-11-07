@@ -372,6 +372,9 @@ struct FnCtx<'a> {
     /// Function name -> entry PC, for resolving an inline-asm `call`/`jmp` to a
     /// bare symbol into a relocation.
     name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
+    /// Per value: a call after which nothing runs
+    /// (`emit_common::calls_ending_paths`).
+    ends_path: &'a [bool],
 }
 
 /// The output buffers a function's lowering appends to: the bundle shared

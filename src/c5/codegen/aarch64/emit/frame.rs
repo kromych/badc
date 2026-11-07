@@ -458,6 +458,7 @@ pub(super) fn outgoing_bytes(
                             arg_aggs,
                             ret_agg: None,
                             ret_slot_off: 0,
+                            ends_path: false,
                         },
                         variadic_targets.contains(target_pc),
                         *fixed_args,
@@ -485,6 +486,7 @@ pub(super) fn outgoing_bytes(
                                 arg_aggs,
                                 ret_agg: None,
                                 ret_slot_off: 0,
+                                ends_path: false,
                             },
                             imp.is_variadic,
                             imp.fixed_args,
@@ -509,6 +511,7 @@ pub(super) fn outgoing_bytes(
                         arg_aggs,
                         ret_agg: *ret_agg,
                         ret_slot_off: 0,
+                        ends_path: false,
                     };
                     let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
                     // Mirror `emit_call_indirect`'s register selection: a

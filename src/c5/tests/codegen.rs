@@ -13967,6 +13967,62 @@ fn literal_index_guarded_assert_call_folds_away() {
     }
 }
 
+/// A call to a noreturn function ends its path: the lowering stops at the
+/// call, so the trap that seals the block follows it directly. A stack
+/// argument area released after the call would be an instruction no path
+/// reaches.
+#[test]
+fn a_noreturn_call_is_followed_by_its_trap() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        __attribute__((noreturn)) void die(const char *, ...);\n\
+        long sink;\n\
+        void f(int x, long a, long b, long c, long d, long e, long g, long h, long i) {\n\
+            if (x) die(\"%ld\", a, b, c, d, e, g, h, i, a, b);\n\
+            sink = x;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for optimize in [false, true] {
+            let prog = crate::Compiler::with_options(
+                alloc::string::String::from(SRC),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+            let mut opts = NativeOptions::new();
+            if optimize {
+                opts = opts.with_optimize();
+            }
+            let obj = emit_native_with_options(
+                &prog,
+                target,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..opts
+                },
+            )
+            .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+            let text = (elf_section_bodies(&obj).into_iter())
+                .find(|(n, _)| n == ".text")
+                .expect(".text")
+                .1;
+            let (site, ..) = (text_relocs(&obj).into_iter())
+                .find(|(_, n, _)| n == "die")
+                .expect("a relocation against die");
+            let (next, trap): (usize, &[u8]) = match target {
+                crate::Target::LinuxX64 => (site as usize + 4, &[0x0F, 0x0B]),
+                _ => (site as usize + 4, &0xD420_0020u32.to_le_bytes()),
+            };
+            assert_eq!(
+                &text[next..next + trap.len()],
+                trap,
+                "{target:?} -O={optimize}: the call to die must be followed by the trap"
+            );
+        }
+    }
+}
+
 /// A fortified inline's compile-time overflow check reaches its error
 /// function once inlining makes the object and the length constant:
 /// `__builtin_object_size` of a parameter answers the bytes left in the

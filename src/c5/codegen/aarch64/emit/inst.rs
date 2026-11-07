@@ -29,6 +29,9 @@ pub(super) struct FnCtx<'a> {
     pub(super) data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
     /// Per value: an `ImmData` that holds its page alone ([`page_only_data`]).
     pub(super) page_only: &'a [bool],
+    /// Per value: a call after which nothing runs
+    /// (`emit_common::calls_ending_paths`).
+    pub(super) ends_path: &'a [bool],
 }
 
 /// Emit one SSA instruction. An op with no lowering is an `Err`, so the
@@ -333,6 +336,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *target_pc,
             *fixed_args,
@@ -361,6 +365,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *binding_idx,
             cx.plt_call_fixups,
@@ -388,6 +393,7 @@ pub(super) fn emit_inst(
                 arg_aggs,
                 ret_agg: *ret_agg,
                 ret_slot_off: *ret_slot_local,
+                ends_path: fcx.ends_path[v as usize],
             },
             *target,
             *callee_variadic,

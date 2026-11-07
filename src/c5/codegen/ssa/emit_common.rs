@@ -1990,6 +1990,28 @@ pub(crate) fn entry_read_run(
     run
 }
 
+/// Per value: a call that ends a block sealed `Unreachable`. Nothing
+/// after it runs, so its lowering stops at the call instruction; a stack
+/// release or result move there would be code no path reaches.
+pub(crate) fn calls_ending_paths(func: &super::super::ir::FunctionSsa) -> alloc::vec::Vec<bool> {
+    use super::super::ir::{Inst, Terminator};
+    let mut ends = alloc::vec![false; func.insts.len()];
+    for b in &func.blocks {
+        let last = b
+            .inst_range
+            .end
+            .checked_sub(1)
+            .filter(|&v| v >= b.inst_range.start);
+        if let (Terminator::Unreachable, Some(v)) = (b.terminator, last)
+            && let Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. } =
+                func.insts[v as usize]
+        {
+            ends[v as usize] = true;
+        }
+    }
+    ends
+}
+
 /// Whether `inst` lowers to no machine code and records nothing: a phi,
 /// whose value the predecessors' exit moves place, or a dead pure value.
 /// The one definition both emitters skip by and the block plan reads, so a

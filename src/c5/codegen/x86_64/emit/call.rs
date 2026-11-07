@@ -549,6 +549,7 @@ pub(super) fn emit_call(
     ret_agg: Option<u32>,
     ret_slot_local: i64,
     func: &FunctionSsa,
+    ends_path: bool,
 ) -> Emit {
     // With no tagged aggregate `aggs` is empty and `plan_call_args_aggs`
     // reduces to the scalar placement, so every branch runs the aggregate
@@ -600,6 +601,9 @@ pub(super) fn emit_call(
         super::encode::emit_mov_al_imm8(code, n);
     }
     emit_call_to(code, fixups, target_pc);
+    if ends_path {
+        return Ok(());
+    }
     if plan.scratch_bytes > 0 {
         emit_add_rsp(code, plan.scratch_bytes);
     }
@@ -637,6 +641,7 @@ pub(super) fn emit_call_ext(
     ret_agg: Option<u32>,
     ret_slot_local: i64,
     func: &FunctionSsa,
+    ends_path: bool,
 ) -> Emit {
     let Some(import_index) = imports.index_of_binding(binding_idx) else {
         return fail("CallExt: binding index has no resolved import");
@@ -687,6 +692,9 @@ pub(super) fn emit_call_ext(
         is_addr: false,
     });
     super::encode::emit_call_rel32(code, 0);
+    if ends_path {
+        return Ok(());
+    }
     if plan.scratch_bytes > 0 {
         emit_add_rsp(code, plan.scratch_bytes);
     }
@@ -747,6 +755,7 @@ pub(super) fn emit_call_indirect(
     ret_slot_local: i64,
     func: &super::super::ir::FunctionSsa,
     extern_sites: &mut Vec<super::UserExternCallSite>,
+    ends_path: bool,
 ) -> Emit {
     let target_place = place_of(alloc, target);
     // A Win64 indirect call to a variadic or unprototyped callee places every
@@ -831,6 +840,9 @@ pub(super) fn emit_call_indirect(
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
         emit_hardened_call_r(code, target_scratch, abi, extern_sites);
+        if ends_path {
+            return Ok(());
+        }
         if plan.scratch_bytes > 0 {
             emit_add_rsp(code, plan.scratch_bytes);
         }
@@ -868,6 +880,9 @@ pub(super) fn emit_call_indirect(
             super::encode::emit_mov_al_imm8(code, xmm_used);
         }
         emit_hardened_call_r(code, SCRATCH_R10, abi, extern_sites);
+        if ends_path {
+            return Ok(());
+        }
         if plan.scratch_bytes > 0 {
             emit_add_rsp(code, plan.scratch_bytes);
         }

@@ -98,7 +98,7 @@ _LINUX_X64_UNDEF = ["HAVE_EPOLL", "HAVE_EPOLL_CREATE1", "HAVE_SYS_EPOLL_H"]
 
 # PC precedes the source root so PC/pyconfig.h wins over the root pyconfig.h.
 _WIN_INCLUDES = [
-    "PC", "Include", "Include/internal", "Python",
+    "PC", "Include", "Include/internal", "Include/internal/mimalloc", "Python",
     "Modules", "Modules/_hacl", "Modules/_hacl/include", ".",
 ]
 # MS_WIN32/MS_WINDOWS come from PC/pyconfig.h; MS_WIN64 is gated on
@@ -241,17 +241,6 @@ def badc_path() -> str:
 
 # --- input preparation -----------------------------------------------------
 
-def _disable_mimalloc() -> None:
-    # The distribution's PC/pyconfig.h enables WITH_MIMALLOC (the POSIX targets'
-    # configure-generated pyconfig.h does not); mimalloc's per-thread heap needs
-    # a TLS-template relocation badc does not emit, so pymalloc serves instead.
-    cfg = SRC / "PC/pyconfig.h"
-    text = cfg.read_text()
-    needle = "#define WITH_MIMALLOC 1"
-    if needle in text:
-        cfg.write_text(text.replace(needle, "/* WITH_MIMALLOC disabled (badc) */"))
-
-
 def _wire_builtin_inittab() -> None:
     # Register the additional builtins in PC/config.c: add the extern and the
     # _PyImport_Inittab entry, or the linked PyInit_* stay unreachable and
@@ -312,21 +301,6 @@ def _fix_winsock_fd_gates() -> None:
         sys.exit("build: select() fd-range gate not found in selectmodule.c")
 
 
-def _widen_stack_margin() -> None:
-    """badc's register allocator does not yet split live ranges, so
-    _PyEval_EvalFrameDefault's frame is several times larger than the
-    reference compilers'. CPython requires the recursion-check margin to
-    exceed one eval frame (pycore_pythonrun.h); raise it from 2^11 to
-    2^13 words until the allocator work shrinks the frame."""
-    pythonrun = SRC / "Include/internal/pycore_pythonrun.h"
-    text = pythonrun.read_text()
-    needle = "#  define _PyOS_LOG2_STACK_MARGIN 11"
-    if needle in text:
-        pythonrun.write_text(text.replace(needle, "#  define _PyOS_LOG2_STACK_MARGIN 13", 1))
-    elif "#  define _PyOS_LOG2_STACK_MARGIN 13" not in text:
-        sys.exit("build: _PyOS_LOG2_STACK_MARGIN not found in pycore_pythonrun.h")
-
-
 def _check_frozen() -> None:
     missing = [
         h for h in re.findall(r'frozen_modules/[\w.]+\.h', (SRC / "Python/frozen.c").read_text())
@@ -344,14 +318,12 @@ def ensure_inputs(target: str, log) -> None:
         sys.stderr.write(r.stdout + r.stderr)
         sys.exit("build: setup.py failed")
     cfg = TARGETS[target]
-    _widen_stack_margin()
     if cfg.get("windows"):
         # Windows derives its config from the in-tree PC/ files rather than a
-        # committed manifest: disable mimalloc, wire the extra builtins into the
-        # inittab, and confirm setup.py fetched the frozen headers.
+        # committed manifest: wire the extra builtins into the inittab and
+        # confirm setup.py fetched the frozen headers.
         if not (SRC / "PC/pyconfig.h").is_file():
             sys.exit(f"build: source not extracted at {SRC}")
-        _disable_mimalloc()
         _wire_builtin_inittab()
         _fix_winsock_fd_gates()
         _check_frozen()

@@ -356,15 +356,15 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x78, %rax
+               	xorq	$0x78, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x79, %edi
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x79, %rax
+               	xorq	$0x79, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rdi # <addr>
                	movq	%rbx, %rsi
@@ -406,8 +406,8 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0xa, %rax
+               	xorq	$0xa, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rsi # <addr>
                	leaq	-0x68(%rbp), %rdx
@@ -426,15 +426,15 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x78, %rax
+               	xorq	$0x78, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x78, %edi
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x78, %rax
+               	xorq	$0x78, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x10, %eax
                	popq	%rbx
@@ -457,8 +457,9 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
+               	movl	%eax, %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
                	jne	<addr>
                	movq	%rbx, %rdi
                	xorl	%eax, %eax

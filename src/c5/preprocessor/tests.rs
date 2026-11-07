@@ -706,8 +706,13 @@ fn type_size_predefines_match_the_layout_engine() {
         "phantom-float\n#endif\n",
     );
     for (t, wchar, ld, (wint, wint_size)) in [
-        (Target::LinuxX64, "int = 4", 16, ("int", 4)),
-        (Target::LinuxAarch64, "unsigned int = 4", 16, ("int", 4)),
+        (Target::LinuxX64, "int = 4", 16, ("unsigned int", 4)),
+        (
+            Target::LinuxAarch64,
+            "unsigned int = 4",
+            16,
+            ("unsigned int", 4),
+        ),
         (Target::MacOSAarch64, "int = 4", 8, ("int", 4)),
         (
             Target::WindowsX64,

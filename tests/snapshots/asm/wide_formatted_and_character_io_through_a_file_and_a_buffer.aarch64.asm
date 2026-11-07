@@ -371,14 +371,15 @@ Disassembly of section .text:
                	mov	x0, #0x78               // =120
                	mov	x1, x20
                	bl	<addr>
-               	eor	x0, x0, #0x78
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x78
+               	b.ne	<addr>
                	mov	x0, #0x79               // =121
                	mov	x1, x20
                	bl	<addr>
-               	mov	x17, #0x79              // =121
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x79
+               	b.ne	<addr>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, x20
@@ -416,9 +417,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	mov	x17, #0xa               // =10
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0xa
+               	b.ne	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
@@ -435,13 +436,15 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
-               	eor	x0, x0, #0x78
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x78
+               	b.ne	<addr>
                	mov	x0, #0x78               // =120
                	mov	x1, x20
                	bl	<addr>
-               	eor	x0, x0, #0x78
-               	cbz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x78
+               	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp, #0x80]
                	ldr	x20, [sp], #0x90
@@ -459,8 +462,8 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	mov	x0, x20
                	bl	<addr>
-               	sxtw	x0, w0
-               	mov	x17, #-0x1              // =-1
+               	mov	w0, w0
+               	mov	x17, #0xffffffff        // =4294967295
                	cmp	x0, x17
                	b.ne	<addr>
                	mov	x0, x20

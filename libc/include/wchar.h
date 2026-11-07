@@ -9,9 +9,9 @@
 // and as a 16-bit unit anywhere under `-fshort-wchar`.
 #include <stddef.h>
 
-// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1): `int` on
-// the Unix targets, and on Windows the C runtime's `unsigned short`, whose
-// WEOF is 0xFFFF.
+// `wint_t` holds any `wchar_t` value plus `WEOF` (C99 7.24.1): glibc's
+// `unsigned int`, Apple's `int`, and on Windows the C runtime's
+// `unsigned short`, whose WEOF is 0xFFFF.
 typedef __WINT_TYPE__ wint_t;
 #ifdef _WIN32
 #define WEOF ((wint_t)0xFFFF)

@@ -135,21 +135,21 @@ Disassembly of section .text:
                	mov	x0, #0x71               // =113
                	mov	x1, x23
                	bl	<addr>
-               	mov	x17, #0x51              // =81
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x51
+               	b.ne	<addr>
                	mov	x0, #0x51               // =81
                	mov	x1, x24
                	bl	<addr>
-               	mov	x17, #0x71              // =113
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x71
+               	b.ne	<addr>
                	mov	x0, #0x35               // =53
                	mov	x1, x23
                	bl	<addr>
-               	mov	x17, #0x35              // =53
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x35
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x24, [sp, #0x20]
@@ -158,9 +158,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x7a               // =122
                	bl	<addr>
-               	mov	x17, #0x7a              // =122
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	mov	w0, w0
+               	cmp	x0, #0x7a
+               	b.ne	<addr>
                	mov	x0, #0x7a               // =122
                	bl	<addr>
                	sxtw	x0, w0

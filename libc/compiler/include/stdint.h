@@ -99,13 +99,8 @@ typedef uint64_t            uint_fast64_t;
 #define WCHAR_MIN __WCHAR_MIN__
 #define WCHAR_MAX __WCHAR_MAX__
 #endif
-#ifdef _WIN32
-#define WINT_MIN 0
-#define WINT_MAX 65535
-#else
-#define WINT_MIN INT32_MIN
-#define WINT_MAX INT32_MAX
-#endif
+#define WINT_MIN __WINT_MIN__
+#define WINT_MAX __WINT_MAX__
 
 // Limits of the minimum-width and fastest minimum-width types
 // (7.18.2.2 / 7.18.2.3), each its type's.

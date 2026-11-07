@@ -896,15 +896,18 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     let (max, umax) = limits(intptr);
     macros.insert("__PTRDIFF_MAX__".to_string(), max);
     macros.insert("__SIZE_MAX__".to_string(), umax);
-    // `wint_t`: the bundled <wchar.h>'s `int`, and on Windows the C runtime's
-    // `unsigned short`, which gcc for x86_64-w64-mingw32 predefines too.
-    let (wint, wint_size) = if target.is_windows() {
-        ("unsigned short", "2")
-    } else {
-        ("int", "4")
+    // `wint_t`, as each platform's C library and gcc's predefines for it make
+    // it: glibc's `unsigned int`, Apple's `int`, the Windows C runtime's
+    // `unsigned short`.
+    let (wint, wint_size, wint_min, wint_max) = match target {
+        Target::WindowsX64 | Target::WindowsAarch64 => ("unsigned short", "2", "0", "0xffff"),
+        Target::LinuxX64 | Target::LinuxAarch64 => ("unsigned int", "4", "0U", "0xffffffffU"),
+        Target::MacOSAarch64 => ("int", "4", "(-__WINT_MAX__ - 1)", "2147483647"),
     };
     macros.insert("__WINT_TYPE__".to_string(), wint.to_string());
     macros.insert("__SIZEOF_WINT_T__".to_string(), wint_size.to_string());
+    macros.insert("__WINT_MIN__".to_string(), wint_min.to_string());
+    macros.insert("__WINT_MAX__".to_string(), wint_max.to_string());
     // gcc's `__<T>_WIDTH__`, each the width of the type predefined for `T`.
     let bits = |ty: &str| match ty {
         "short" => 16,

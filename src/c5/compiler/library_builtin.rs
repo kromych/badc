@@ -152,9 +152,15 @@ impl Compiler {
             "wchar_t" => self
                 .prefixed_char_ty(crate::c5::lexer::StrPrefix::Wide)
                 .expect("wchar_t"),
-            // The bundled <wchar.h>'s, and the Windows C runtime's.
-            "wint_t" if self.target.is_windows() => Ty::Short as i64 | UNSIGNED_BIT,
-            "wint_t" => Ty::Int as i64,
+            // The platform C library's, as <wchar.h> declares it.
+            "wint_t" => {
+                use crate::c5::codegen::Target;
+                match self.target {
+                    Target::WindowsX64 | Target::WindowsAarch64 => Ty::Short as i64 | UNSIGNED_BIT,
+                    Target::LinuxX64 | Target::LinuxAarch64 => Ty::Int as i64 | UNSIGNED_BIT,
+                    Target::MacOSAarch64 => Ty::Int as i64,
+                }
+            }
             "va_list" => self.va_list_param_ty(),
             other => unreachable!("no base type `{other}` in the builtin prototypes"),
         }

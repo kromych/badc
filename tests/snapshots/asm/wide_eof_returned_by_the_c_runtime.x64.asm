@@ -31,23 +31,26 @@ Disassembly of section .text:
                	movq	$-0x1, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
+               	movl	%eax, %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movq	$-0x1, %rdi
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
+               	movl	%eax, %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
                	jne	<addr>
-               	movq	$-0x1, %rdi
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$-0x1, %rax
+               	movl	%eax, %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
@@ -55,14 +58,14 @@ Disassembly of section .text:
                	movl	$0x61, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x61, %rax
+               	xorq	$0x61, %rax
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x61, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	%eax, %rax
-               	cmpq	$0x41, %rax
+               	xorq	$0x41, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp

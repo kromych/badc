@@ -199,7 +199,8 @@ also writes the program database beside it (`hello.exe` gets `hello.pdb`),
 which the image's debug directory names by its absolute path. The PDB holds
 the CodeView types, the procedures with their frame-pointer-relative locals,
 the line tables, and the global and public symbols of every unit the image
-carries DWARF for. `-S` drops both.
+carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc writes no
+assembly, so the driver's own `-S` is refused.
 
 Two options help when badc itself is the suspect:
 

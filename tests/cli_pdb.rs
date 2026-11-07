@@ -476,7 +476,7 @@ fn a_structure_without_members_links_with_its_pdb() {
 #[test]
 fn no_pdb_without_debug_info() {
     for (target, ..) in TARGETS {
-        for flags in [&[][..], &["-g", "-S"][..]] {
+        for flags in [&[][..], &["-g", "-Wl,-S"][..]] {
             let dir = TempDir::new(&format!("badc-pdb-none-{target}"));
             link(&dir, target, flags);
             assert!(!dir.join("a.pdb").exists(), "{target} {flags:?}");

@@ -813,6 +813,15 @@ impl Parser {
     /// in: no family's prefix match covers a spelling a later family
     /// takes exactly.
     fn option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
+        // gcc's `-S` stops after compilation and writes assembly, which badc
+        // does not produce; ld's `-S` is `-Wl,-S` or `--strip-debug` here.
+        if arg == "-S" {
+            return Err(ParseError::diag(
+                "badc: error: `-S` (assembly output) is not implemented: badc writes \
+                 objects (`-c`) and images; the linker's strip-debug is `-Wl,-S` or \
+                 `--strip-debug`",
+            ));
+        }
         Ok(self.mode_option(arg, iter)?
             || self.preprocess_option(arg, iter)?
             || self.assembler_option(arg, iter)?
@@ -2943,6 +2952,16 @@ mod tests {
             reject(&["-U"]),
             ("badc: error: -U requires a NAME".to_string(), 1)
         );
+    }
+
+    /// The driver's `-S` asks for assembly, which badc does not write, and
+    /// is refused; ld's `-S` is reached through `-Wl,` or `--strip-debug`.
+    #[test]
+    fn driver_dash_s_is_refused_and_ld_dash_s_strips_debug() {
+        let (message, _) = reject(&["-S", "a.c"]);
+        assert!(message.contains("`-S` (assembly output)"), "{message}");
+        assert!(parse(&["-Wl,-S", "a.o"]).link.strip_debug);
+        assert!(parse(&["--strip-debug", "a.o"]).link.strip_debug);
     }
 
     /// gcc's inline model follows the edition: GNU89's before C99, 6.7.4's

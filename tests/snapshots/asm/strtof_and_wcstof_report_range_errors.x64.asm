@@ -158,11 +158,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsd	0x18(%rsp), %xmm0
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x800000, %eax         # imm = 0x800000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm0, %xmm15
+               	comiss	%xmm0, %xmm15
                	ja	<addr>
                	movl	$0xa, %eax
                	leave

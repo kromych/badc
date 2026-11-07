@@ -47,13 +47,13 @@ Disassembly of section .text:
                	ldr	d0, [x0, #0x18]
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	adrp	x0, <page>
                	ldr	s0, [x0, #0x20]
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x10]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]

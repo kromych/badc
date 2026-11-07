@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x400b333333333333, %rcx # imm = 0x400B333333333333
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x4, %eax
                	leave
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm0
                	movabsq	$0x400ccccccccccccd, %rcx # imm = 0x400CCCCCCCCCCCCD
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
                	leave

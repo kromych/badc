@@ -48,13 +48,13 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm14
+               	comiss	%xmm15, %xmm14
                	jbe	<addr>
                	movl	$0x40500000, %r11d      # imm = 0x40500000
                	movq	%r11, %xmm0
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm14, %xmm15
+               	comiss	%xmm14, %xmm15
                	jbe	<addr>
                	movl	$0xc0500000, %r11d      # imm = 0xC0500000
                	movq	%r11, %xmm1

@@ -654,7 +654,7 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x40(%rbp)
                	movsd	-0x40(%rbp), %xmm0
                	movsd	<rip>, %xmm1 # <addr>
-               	ucomisd	%xmm0, %xmm1
+               	comisd	%xmm0, %xmm1
                	seta	%al
                	movzbq	%al, %rax
                	movl	%eax, -0x38(%rbp)

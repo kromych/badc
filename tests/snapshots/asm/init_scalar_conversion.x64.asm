@@ -146,11 +146,11 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x4078f5c3, %eax       # imm = 0x4078F5C3
                	movq	%rax, %xmm15
-               	ucomiss	%xmm0, %xmm15
+               	comiss	%xmm0, %xmm15
                	ja	<addr>
                	movl	$0x407a3d71, %eax       # imm = 0x407A3D71
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
                	leave

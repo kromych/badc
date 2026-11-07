@@ -2675,23 +2675,23 @@ Disassembly of section .text:
                	sub	x6, x29, #0x50
                	ldur	s0, [x29, #-0x60]
                	ldur	s1, [x29, #-0x50]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x1, mi
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	s0, [x29, #-0x5c]
                	ldur	s1, [x29, #-0x4c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x3, mi
                	neg	x3, x3
                	ldur	s0, [x29, #-0x58]
                	ldur	s1, [x29, #-0x48]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x4, mi
                	neg	x4, x4
                	ldur	s0, [x29, #-0x54]
                	ldur	s1, [x29, #-0x44]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x7, mi
                	neg	x7, x7
                	stur	w1, [x29, #-0x40]
@@ -2704,7 +2704,7 @@ Disassembly of section .text:
                	ldr	s0, [x4]
                	add	x1, x6, x1
                	ldr	s1, [x1]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>
@@ -2727,23 +2727,23 @@ Disassembly of section .text:
                	sub	x6, x29, #0x50
                	ldur	s0, [x29, #-0x60]
                	ldur	s1, [x29, #-0x50]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x1, ls
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	s0, [x29, #-0x5c]
                	ldur	s1, [x29, #-0x4c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x3, ls
                	neg	x3, x3
                	ldur	s0, [x29, #-0x58]
                	ldur	s1, [x29, #-0x48]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x4, ls
                	neg	x4, x4
                	ldur	s0, [x29, #-0x54]
                	ldur	s1, [x29, #-0x44]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x7, ls
                	neg	x7, x7
                	stur	w1, [x29, #-0x40]
@@ -2756,7 +2756,7 @@ Disassembly of section .text:
                	ldr	s0, [x4]
                	add	x1, x6, x1
                	ldr	s1, [x1]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.hi	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>
@@ -2779,23 +2779,23 @@ Disassembly of section .text:
                	sub	x6, x29, #0x50
                	ldur	s0, [x29, #-0x60]
                	ldur	s1, [x29, #-0x50]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x1, gt
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	s0, [x29, #-0x5c]
                	ldur	s1, [x29, #-0x4c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x3, gt
                	neg	x3, x3
                	ldur	s0, [x29, #-0x58]
                	ldur	s1, [x29, #-0x48]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x4, gt
                	neg	x4, x4
                	ldur	s0, [x29, #-0x54]
                	ldur	s1, [x29, #-0x44]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x7, gt
                	neg	x7, x7
                	stur	w1, [x29, #-0x40]
@@ -2808,7 +2808,7 @@ Disassembly of section .text:
                	ldr	s0, [x4]
                	add	x1, x6, x1
                	ldr	s1, [x1]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>
@@ -2831,23 +2831,23 @@ Disassembly of section .text:
                	sub	x6, x29, #0x50
                	ldur	s0, [x29, #-0x60]
                	ldur	s1, [x29, #-0x50]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x1, ge
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	s0, [x29, #-0x5c]
                	ldur	s1, [x29, #-0x4c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x3, ge
                	neg	x3, x3
                	ldur	s0, [x29, #-0x58]
                	ldur	s1, [x29, #-0x48]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x4, ge
                	neg	x4, x4
                	ldur	s0, [x29, #-0x54]
                	ldur	s1, [x29, #-0x44]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	cset	x7, ge
                	neg	x7, x7
                	stur	w1, [x29, #-0x40]
@@ -2860,7 +2860,7 @@ Disassembly of section .text:
                	ldr	s0, [x4]
                	add	x1, x6, x1
                	ldr	s1, [x1]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.lt	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>
@@ -2882,20 +2882,20 @@ Disassembly of section .text:
                	sub	x4, x29, #0x60
                	fmov	s0, #2.00000000
                	ldur	s1, [x29, #-0x60]
-               	fcmp	s1, s0
+               	fcmpe	s1, s0
                	cset	x1, gt
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	s1, [x29, #-0x5c]
-               	fcmp	s1, s0
+               	fcmpe	s1, s0
                	cset	x3, gt
                	neg	x3, x3
                	ldur	s1, [x29, #-0x58]
-               	fcmp	s1, s0
+               	fcmpe	s1, s0
                	cset	x5, gt
                	neg	x5, x5
                	ldur	s1, [x29, #-0x54]
-               	fcmp	s1, s0
+               	fcmpe	s1, s0
                	cset	x6, gt
                	neg	x6, x6
                	stur	w1, [x29, #-0x40]
@@ -2907,7 +2907,7 @@ Disassembly of section .text:
                	add	x1, x4, x1
                	ldr	s0, [x1]
                	fmov	s1, #2.00000000
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>
@@ -3025,13 +3025,13 @@ Disassembly of section .text:
                	sub	x6, x29, #0x50
                	ldur	d0, [x29, #-0x60]
                	ldur	d1, [x29, #-0x50]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x1, mi
                	mov	x0, #0x0                // =0
                	neg	x1, x1
                	ldur	d0, [x29, #-0x58]
                	ldur	d1, [x29, #-0x48]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x3, mi
                	neg	x3, x3
                	stur	x1, [x29, #-0x40]
@@ -3042,7 +3042,7 @@ Disassembly of section .text:
                	ldr	d0, [x4]
                	add	x1, x6, x1
                	ldr	d1, [x1]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	mov	x1, #-0x1               // =-1
                	b	<addr>

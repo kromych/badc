@@ -33,19 +33,19 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vdivsd	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x1, %esi
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	orq	$0x2, %rsi
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	orq	$0x4, %rsi
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jb	<addr>
                	orq	$0x8, %rsi
                	movq	%rax, %xmm15
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	orq	$0x20, %rsi
-               	ucomisd	%xmm0, %xmm0
+               	comisd	%xmm0, %xmm0
                	jbe	<addr>
                	orq	$0x40, %rsi
                	ucomisd	%xmm0, %xmm0

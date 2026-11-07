@@ -28,11 +28,11 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

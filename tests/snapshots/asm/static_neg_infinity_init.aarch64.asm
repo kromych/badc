@@ -18,7 +18,7 @@ Disassembly of section .text:
                	ldr	d0, [x0, #0x18]
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	fadd	d2, d0, d0
                	fcmp	d2, d0
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	d0, [x1, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	fadd	d2, d0, d0
                	fcmp	d2, d0
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	ldr	d0, [x1, #0x30]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	fadd	d1, d0, d0
                	fcmp	d1, d0
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	fneg	d0, d0
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret

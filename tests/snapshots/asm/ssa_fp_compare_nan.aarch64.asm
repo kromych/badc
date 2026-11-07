@@ -21,19 +21,19 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fdiv	d0, d16, d17
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	mov	x1, #0x1                // =1
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.le	<addr>
                	orr	x1, x1, #0x2
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.hi	<addr>
                	orr	x1, x1, #0x4
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.lt	<addr>
                	orr	x1, x1, #0x8
                	fmov	d17, x0
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	fcmp	d0, d17
                	b.ne	<addr>
                	orr	x1, x1, #0x20
-               	fcmp	d0, d0
+               	fcmpe	d0, d0
                	b.pl	<addr>
                	orr	x1, x1, #0x40
                	fcmp	d0, d0

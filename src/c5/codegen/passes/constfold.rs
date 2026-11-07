@@ -1439,6 +1439,10 @@ mod tests {
             BinOp::Fgt,
             BinOp::Fle,
             BinOp::Fge,
+            BinOp::FltQuiet,
+            BinOp::FgtQuiet,
+            BinOp::FleQuiet,
+            BinOp::FgeQuiet,
             BinOp::Fone,
             BinOp::Funo,
         ] {

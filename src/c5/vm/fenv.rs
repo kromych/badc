@@ -570,6 +570,13 @@ impl FpEnv {
             self.flags |= INVALID;
         }
     }
+
+    /// A signaling comparison: any NaN operand raises invalid (5.11).
+    pub(super) fn compare_signaling(&mut self, a: u64, b: u64) {
+        if f64::from_bits(a).is_nan() || f64::from_bits(b).is_nan() {
+            self.flags |= INVALID;
+        }
+    }
 }
 
 /// The bundled `<fenv.h>` macros and the C library's `fenv_t` layouts.

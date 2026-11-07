@@ -41,13 +41,13 @@ Disassembly of section .text:
                	ldr	s0, [x0, #0x4]
                	adrp	x16, <addr>
                	ldr	s1, [x16, #0x10]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x16, #0x7ff0000000000000 // =9218868437227405312
                	fmov	d0, x16
                	adrp	x16, <addr>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.gt	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20

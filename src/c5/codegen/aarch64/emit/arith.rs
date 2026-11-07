@@ -481,11 +481,14 @@ pub(super) fn emit_binop(
             Place::Spill(_) => scratch.primary,
             _ => return fail("Fcmp: dst not int reg / spill"),
         };
-        if is_f32 {
-            emit(code, enc_fcmp_s(dn, dm));
-        } else {
-            emit(code, enc_fcmp_d(dn, dm));
-        }
+        // A relational operator signals on any NaN: `fcmpe` (C99 F.3).
+        let word = match (is_f32, crate::c5::ir::fp_compare_signals(op)) {
+            (true, false) => enc_fcmp_s(dn, dm),
+            (false, false) => enc_fcmp_d(dn, dm),
+            (true, true) => enc_fcmp_s(dn, dm) | FCMPE,
+            (false, true) => enc_fcmp_d(dn, dm) | FCMPE,
+        };
+        emit(code, word);
         // A fused branch consumes the flags; the value is dead.
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return Ok(());
@@ -676,10 +679,13 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
     })
 }
 
+/// The bit that turns `fcmp` into the signaling `fcmpe`.
+const FCMPE: u32 = 1 << 4;
+
 /// The condition of an FP comparison's `fcmp` + `cset`, `None`
 /// otherwise. `Fone` has none: `less or greater` spans two conditions.
 pub(super) fn fp_compare_cond(op: BinOp) -> Option<Cond> {
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Feq => Cond::Eq,
         BinOp::Fne => Cond::Ne,
         BinOp::Flt => Cond::Mi,

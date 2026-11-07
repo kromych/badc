@@ -303,7 +303,7 @@ Disassembly of section .text:
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	movi	d1, #0000000000000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]

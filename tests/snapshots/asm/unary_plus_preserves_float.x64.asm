@@ -41,7 +41,7 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	movq	%rcx, %xmm14
                	movq	%rsi, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %xmm14
                	movq	%rsi, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	retq
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	movabsq	$-0x4008000000000000, %rcx # imm = 0xBFF8000000000000
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0

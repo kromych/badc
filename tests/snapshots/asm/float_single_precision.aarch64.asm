@@ -21,12 +21,12 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fsub	s0, s0, s1
                	movi	d1, #0000000000000000
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0
                	adrp	x16, <page>
                	ldr	s3, [x16, #0x4]
-               	fcmp	s0, s3
+               	fcmpe	s0, s3
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
@@ -46,12 +46,12 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	s0, [x16, #0xc]
                	fsub	s0, s3, s0
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0
                	adrp	x16, <page>
                	ldr	s4, [x16, #0x10]
-               	fcmp	s0, s4
+               	fcmpe	s0, s4
                	b.le	<addr>
                	mov	x0, #0x2                // =2
                	cbz	w0, <addr>
@@ -64,12 +64,12 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	s2, [x16, #0x18]
                	fsub	s0, s0, s2
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x1c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0x4                // =4
                	cbz	w0, <addr>

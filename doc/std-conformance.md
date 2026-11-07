@@ -120,6 +120,11 @@ the product has no other use.
 `#pragma STDC FENV_ACCESS` and `#pragma STDC CX_LIMITED_RANGE` are accepted
 and have no effect.
 
+The relational operators `<`, `>`, `<=` and `>=` on floating operands raise
+`FE_INVALID` for an unordered operand, as IEC 60559's signaling predicates do
+(C99 F.3) and gcc's code does; `==`, `!=` and the 7.12.14 comparison macros
+are quiet, raising it only for a signaling NaN.
+
 ### `_Atomic` objects
 
 `_Atomic` qualifies a type (C17 6.7.2.4, 6.7.3), so `_Atomic int` and `int`

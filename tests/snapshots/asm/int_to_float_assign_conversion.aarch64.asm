@@ -64,11 +64,11 @@ Disassembly of section .text:
                	fsub	s0, s0, s1
                	mov	x16, #0xc22c0000        // =3257663488
                	fmov	s1, w16
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.gt	<addr>
                	mov	x16, #0xc2300000        // =3257925632
                	fmov	s1, w16
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

@@ -42,10 +42,10 @@ Disassembly of section .text:
                	fadd	d2, d2, d3
                	fmov	d3, #0.50000000
                	fadd	d3, d0, d3
-               	fcmp	d2, d3
+               	fcmpe	d2, d3
                	b.gt	<addr>
                	fsub	d0, d0, d1
-               	fcmp	d2, d0
+               	fcmpe	d2, d0
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	ret

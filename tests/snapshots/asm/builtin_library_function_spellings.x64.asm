@@ -188,7 +188,7 @@ Disassembly of section .text:
                	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
                	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	comisd	%xmm15, %xmm14
                	ja	<addr>
                	movq	%rcx, %xmm14
                	movq	%rcx, %xmm15

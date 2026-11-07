@@ -7610,7 +7610,7 @@ Disassembly of section .text:
                	fmov	d0, x16
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]

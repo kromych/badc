@@ -724,7 +724,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	d0, [x29, #-0xd0]
                	ldur	d1, [x29, #-0xc8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x0, gt
                	neg	x0, x0
                	mov	x17, #-0x1              // =-1
@@ -732,7 +732,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	d0, [x29, #-0xd0]
                	ldur	d1, [x29, #-0xc8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x0, ls
                	neg	x0, x0
                	cbz	x0, <addr>

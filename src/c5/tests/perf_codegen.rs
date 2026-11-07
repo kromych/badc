@@ -3202,7 +3202,8 @@ fn floating_compare_through_an_int_result_fuses_into_the_branch() {
 int flt(double a, double b) { if (lt(a, b)) return 2; return 3; }\n";
     let mut m = Misses::default();
     let ws = a64(SRC, "flt");
-    let fcmp = |w: u32| w & 0xFF20_FC1F == 0x1E20_2000;
+    // `fcmp` or the signaling `fcmpe` the relational operator takes.
+    let fcmp = |w: u32| w & 0xFF20_FC0F == 0x1E20_2000;
     // `cset` / `csinc` of either width.
     let cset = |w: u32| w & 0x7FE0_0C00 == 0x1A80_0400;
     m.expect(
@@ -3212,7 +3213,7 @@ int flt(double a, double b) { if (lt(a, b)) return 2; return 3; }\n";
     let insns = x64(SRC, "flt");
     let setcc = |i: &X64Insn| matches!(i.op, 0x0F90..=0x0F9F);
     m.expect(
-        insns.iter().any(|i| i.op == 0x0F2E) && !insns.iter().any(setcc),
+        insns.iter().any(|i| matches!(i.op, 0x0F2E | 0x0F2F)) && !insns.iter().any(setcc),
         || format!("x86-64: the comparison is materialized: {insns:x?}"),
     );
     m.finish();

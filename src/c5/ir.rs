@@ -1192,10 +1192,19 @@ pub(crate) enum BinOp {
     Fdiv,
     Feq,
     Fne,
+    /// The relational operators on floating operands (C99 6.5.8): an
+    /// unordered operand raises invalid, as IEC 60559's signaling
+    /// predicates do (F.3).
     Flt,
     Fgt,
     Fle,
     Fge,
+    /// The quiet `isless`, `isgreater`, `islessequal` and `isgreaterequal`
+    /// (C99 7.12.14.1-4): the relations above without the exception.
+    FltQuiet,
+    FgtQuiet,
+    FleQuiet,
+    FgeQuiet,
     /// Ordered and unequal, the quiet `islessgreater` (C99 7.12.14.5).
     Fone,
     /// Unordered, the quiet `isunordered` (C99 7.12.14.6).
@@ -1237,9 +1246,30 @@ pub(crate) fn is_fp_comparison_op(op: BinOp) -> bool {
             | BinOp::Fgt
             | BinOp::Fle
             | BinOp::Fge
+            | BinOp::FltQuiet
+            | BinOp::FgtQuiet
+            | BinOp::FleQuiet
+            | BinOp::FgeQuiet
             | BinOp::Fone
             | BinOp::Funo
     )
+}
+
+/// The relation a floating compare tests: a quiet relational form maps to
+/// its signaling one, from which it differs only in the exception.
+pub(crate) fn fp_relation(op: BinOp) -> BinOp {
+    match op {
+        BinOp::FltQuiet => BinOp::Flt,
+        BinOp::FgtQuiet => BinOp::Fgt,
+        BinOp::FleQuiet => BinOp::Fle,
+        BinOp::FgeQuiet => BinOp::Fge,
+        op => op,
+    }
+}
+
+/// Whether a floating compare raises invalid for a quiet NaN operand too.
+pub(crate) fn fp_compare_signals(op: BinOp) -> bool {
+    matches!(op, BinOp::Flt | BinOp::Fgt | BinOp::Fle | BinOp::Fge)
 }
 
 /// Floating-point arithmetic or comparison.
@@ -1340,6 +1370,10 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fgt
         | BinOp::Fle
         | BinOp::Fge
+        | BinOp::FltQuiet
+        | BinOp::FgtQuiet
+        | BinOp::FleQuiet
+        | BinOp::FgeQuiet
         | BinOp::Fone
         | BinOp::Funo => unreachable!("eval_int_binop reached on {op:?}"),
     };

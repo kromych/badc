@@ -26,19 +26,19 @@ Disassembly of section .text:
                	fdiv	s2, s2, s3
                	adrp	x0, <page>
                	ldr	s3, [x0, #0x20]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.hi	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.lt	<addr>
                	mov	x0, #0x4                // =4
                	ret
@@ -54,25 +54,25 @@ Disassembly of section .text:
                	b.eq	<addr>
                	fcmp	d0, d0
                	b.eq	<addr>
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.pl	<addr>
                	mov	x0, #0x9                // =9
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.le	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.hi	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.lt	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.ge	<addr>
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -81,28 +81,28 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	ret
                	fmov	d0, #2.00000000
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.pl	<addr>
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.le	<addr>
                	mov	x0, #0x12               // =18
                	ret
                	fmov	d0, #1.00000000
                	fcmp	d1, d0
                	b.ne	<addr>
-               	fcmp	s2, s3
+               	fcmpe	s2, s3
                	b.pl	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	fcmp	s2, s3
+               	fcmpe	s2, s3
                	b.le	<addr>
                	mov	x0, #0x15               // =21
                	ret
-               	fcmp	s2, s3
+               	fcmpe	s2, s3
                	b.hi	<addr>
                	mov	x0, #0x16               // =22
                	ret
-               	fcmp	s2, s3
+               	fcmpe	s2, s3
                	b.lt	<addr>
                	mov	x0, #0x17               // =23
                	ret
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	fcmp	s2, s2
                	b.eq	<addr>
                	fmov	s0, #2.00000000
-               	fcmp	s3, s0
+               	fcmpe	s3, s0
                	b.pl	<addr>
                	mov	x0, #0x0                // =0
                	ret

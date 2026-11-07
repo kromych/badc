@@ -73,10 +73,18 @@ pub(crate) fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, EvalTrap
         BinOp::Fdiv => (f64::from_bits(lhs as u64) / f64::from_bits(rhs as u64)).to_bits() as i64,
         BinOp::Feq => (f64::from_bits(lhs as u64) == f64::from_bits(rhs as u64)) as i64,
         BinOp::Fne => (f64::from_bits(lhs as u64) != f64::from_bits(rhs as u64)) as i64,
-        BinOp::Flt => (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
-        BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
+        BinOp::Flt | BinOp::FltQuiet => {
+            (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fgt | BinOp::FgtQuiet => {
+            (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fle | BinOp::FleQuiet => {
+            (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64
+        }
+        BinOp::Fge | BinOp::FgeQuiet => {
+            (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64
+        }
         BinOp::Fone | BinOp::Funo => {
             let order = f64::from_bits(lhs as u64).partial_cmp(&f64::from_bits(rhs as u64));
             match op {

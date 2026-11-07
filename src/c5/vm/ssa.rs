@@ -4248,7 +4248,9 @@ fn binop(fp: &mut FpEnv, op: BinOp, lhs: i64, rhs: i64, f: Format) -> Result<i64
         BinOp::Fmul | BinOp::FmulContractible => fp.mul(a, b, f),
         BinOp::Fdiv => fp.div(a, b, f),
         _ => {
-            if super::super::ir::is_fp_op(op) {
+            if super::super::ir::fp_compare_signals(op) {
+                fp.compare_signaling(a, b);
+            } else if super::super::ir::is_fp_op(op) {
                 fp.compare_operands(a, b);
             }
             return eval::apply_binop(op, lhs, rhs)

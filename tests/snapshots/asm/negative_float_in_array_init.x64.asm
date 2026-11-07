@@ -59,12 +59,12 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movq	%rdx, %xmm15
                	vaddsd	%xmm15, %xmm14, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	comisd	%xmm1, %xmm0
                	ja	<addr>
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
                	vsubsd	%xmm15, %xmm14, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x4, %eax
                	retq

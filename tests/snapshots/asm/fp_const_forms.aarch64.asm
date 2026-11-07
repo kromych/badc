@@ -138,7 +138,7 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	fmov	d3, #1.00000000
                	fdiv	d1, d3, d1
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.hi	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	fdiv	d1, d3, d2
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.lt	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x20]

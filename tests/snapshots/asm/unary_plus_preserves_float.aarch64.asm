@@ -24,7 +24,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fmov	d3, #-0.50000000
                	fcmp	d3, d1
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fmov	d1, #-0.50000000
                	fadd	d1, d0, d1
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fmov	d1, #-0.50000000
                	fadd	d1, d0, d1
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ret
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fmov	d1, #-0.50000000
                	fadd	d0, d0, d1
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #-1.50000000
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fmov	d1, #-0.50000000
                	fadd	d0, d0, d1

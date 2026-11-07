@@ -206,7 +206,7 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	movabsq	$0x7e031cfd3999f7b0, %rax # imm = 0x7E031CFD3999F7B0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x1, %eax
                	addq	%rcx, %rax

@@ -169,7 +169,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	vdivsd	%xmm1, %xmm14, %xmm2
                	movq	%rax, %xmm15
-               	ucomisd	%xmm2, %xmm15
+               	comisd	%xmm2, %xmm15
                	jb	<addr>
                	movl	$0x1, %eax
                	leave
@@ -182,7 +182,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	vdivsd	%xmm0, %xmm14, %xmm1
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	comisd	%xmm15, %xmm1
                	jb	<addr>
                	movl	$0x2, %eax
                	leave

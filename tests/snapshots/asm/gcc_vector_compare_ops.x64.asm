@@ -2970,26 +2970,26 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %r8
                	movss	-0x60(%rbp), %xmm0
                	movss	-0x50(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
                	movss	-0x5c(%rbp), %xmm0
                	movss	-0x4c(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
                	movss	-0x58(%rbp), %xmm0
                	movss	-0x48(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
                	movss	-0x54(%rbp), %xmm0
                	movss	-0x44(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	seta	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
@@ -3005,7 +3005,7 @@ Disassembly of section .text:
                	movss	(%rsi), %xmm0
                	addq	%r8, %rcx
                	movss	(%rcx), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	jbe	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>
@@ -3028,26 +3028,26 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %r8
                	movss	-0x60(%rbp), %xmm0
                	movss	-0x50(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	setae	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
                	movss	-0x5c(%rbp), %xmm0
                	movss	-0x4c(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
                	movss	-0x58(%rbp), %xmm0
                	movss	-0x48(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	setae	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
                	movss	-0x54(%rbp), %xmm0
                	movss	-0x44(%rbp), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	setae	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
@@ -3063,7 +3063,7 @@ Disassembly of section .text:
                	movss	(%rsi), %xmm0
                	addq	%r8, %rcx
                	movss	(%rcx), %xmm1
-               	ucomiss	%xmm0, %xmm1
+               	comiss	%xmm0, %xmm1
                	jb	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>
@@ -3086,26 +3086,26 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %r8
                	movss	-0x60(%rbp), %xmm0
                	movss	-0x50(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	seta	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
                	movss	-0x5c(%rbp), %xmm0
                	movss	-0x4c(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	seta	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
                	movss	-0x58(%rbp), %xmm0
                	movss	-0x48(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	seta	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
                	movss	-0x54(%rbp), %xmm0
                	movss	-0x44(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	seta	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
@@ -3121,7 +3121,7 @@ Disassembly of section .text:
                	movss	(%rsi), %xmm0
                	addq	%r8, %rcx
                	movss	(%rcx), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	jbe	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>
@@ -3144,26 +3144,26 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %r8
                	movss	-0x60(%rbp), %xmm0
                	movss	-0x50(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	setae	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
                	movss	-0x5c(%rbp), %xmm0
                	movss	-0x4c(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	setae	%dl
                	movzbq	%dl, %rdx
                	negq	%rdx
                	movss	-0x58(%rbp), %xmm0
                	movss	-0x48(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	setae	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
                	movss	-0x54(%rbp), %xmm0
                	movss	-0x44(%rbp), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	setae	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
@@ -3179,7 +3179,7 @@ Disassembly of section .text:
                	movss	(%rsi), %xmm0
                	addq	%r8, %rcx
                	movss	(%rcx), %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	comiss	%xmm1, %xmm0
                	jb	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>
@@ -3202,26 +3202,26 @@ Disassembly of section .text:
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movss	-0x60(%rbp), %xmm0
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	seta	%sil
                	movzbq	%sil, %rsi
                	xorl	%eax, %eax
                	negq	%rsi
                	movss	-0x5c(%rbp), %xmm0
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	seta	%r8b
                	movzbq	%r8b, %r8
                	negq	%r8
                	movss	-0x58(%rbp), %xmm0
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	seta	%r9b
                	movzbq	%r9b, %r9
                	negq	%r9
                	movss	-0x54(%rbp), %xmm0
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	seta	%cl
                	movzbq	%cl, %rcx
                	negq	%rcx
@@ -3236,7 +3236,7 @@ Disassembly of section .text:
                	movss	(%rcx), %xmm0
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movq	%rcx, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>
@@ -3372,14 +3372,14 @@ Disassembly of section .text:
                	leaq	-0x50(%rbp), %r9
                	movsd	-0x60(%rbp), %xmm0
                	movsd	-0x50(%rbp), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	comisd	%xmm0, %xmm1
                	seta	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	negq	%rcx
                	movsd	-0x58(%rbp), %xmm0
                	movsd	-0x48(%rbp), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	comisd	%xmm0, %xmm1
                	seta	%sil
                	movzbq	%sil, %rsi
                	negq	%rsi
@@ -3392,7 +3392,7 @@ Disassembly of section .text:
                	movsd	(%rdi), %xmm0
                	addq	%r9, %rcx
                	movsd	(%rcx), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	comisd	%xmm0, %xmm1
                	jbe	<addr>
                	movq	$-0x1, %rcx
                	jmp	<addr>

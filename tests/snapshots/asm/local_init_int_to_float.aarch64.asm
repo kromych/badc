@@ -20,11 +20,11 @@ Disassembly of section .text:
                	fmov	s0, w16
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x68]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x6c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -38,11 +38,11 @@ Disassembly of section .text:
                	ldr	s0, [x16, #0x70]
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x74]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x78]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -54,10 +54,10 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #-7.00000000
                	fmov	d1, #-7.50000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	fmov	d1, #-6.50000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -69,11 +69,11 @@ Disassembly of section .text:
                	fmov	s0, w16
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x7c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x80]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

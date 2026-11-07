@@ -1169,7 +1169,7 @@ Disassembly of section .text:
                	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	comisd	%xmm15, %xmm14
                	jbe	<addr>
                	movq	<rip>, %rax # <addr>
                	fldt	-0x70(%rbp)

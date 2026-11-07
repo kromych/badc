@@ -73,7 +73,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm0
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	fldt	-0x20(%rbp)
                	fstpl	-0x8(%rsp)

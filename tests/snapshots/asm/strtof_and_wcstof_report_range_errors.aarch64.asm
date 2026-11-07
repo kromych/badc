@@ -126,11 +126,11 @@ Disassembly of section .text:
                	cmp	w0, #0x22
                	b.ne	<addr>
                	movi	d0, #0000000000000000
-               	fcmp	s8, s0
+               	fcmpe	s8, s0
                	b.le	<addr>
                	mov	x16, #0x800000          // =8388608
                	fmov	s0, w16
-               	fcmp	s8, s0
+               	fcmpe	s8, s0
                	b.mi	<addr>
                	mov	x0, #0xa                // =10
                	ldr	d8, [sp, #0x40]

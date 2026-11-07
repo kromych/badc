@@ -38,7 +38,7 @@ Disassembly of section .text:
                	vaddsd	%xmm15, %xmm14, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	ucomisd	%xmm1, %xmm0
+               	comisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
                	cmpl	$0x1, %eax
@@ -48,12 +48,12 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4062d00000000000, %rax # imm = 0x4062D00000000000
                	movq	%rax, %xmm14
-               	ucomisd	%xmm14, %xmm0
+               	comisd	%xmm14, %xmm0
                	jbe	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	ucomisd	%xmm0, %xmm0
+               	comisd	%xmm0, %xmm0
                	setae	%al
                	movzbq	%al, %rax
                	cmpl	$0x1, %eax
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	vaddsd	%xmm15, %xmm0, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	comisd	%xmm1, %xmm0
                	jb	<addr>
                	movl	$0x4, %eax
                	popq	%rbp

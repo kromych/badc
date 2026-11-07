@@ -50,13 +50,13 @@ Disassembly of section .text:
                	movss	<rip>, %xmm0 # <addr>
                	movl	$0x7f61b1e6, %eax       # imm = 0x7F61B1E6
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movabsq	$0x7ff0000000000000, %rax # imm = 0x7FF0000000000000
                	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	comisd	%xmm15, %xmm14
                	ja	<addr>
                	movl	$0x8, %eax
                	leave

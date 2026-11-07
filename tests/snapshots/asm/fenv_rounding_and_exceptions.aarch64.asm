@@ -634,7 +634,7 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x40]
                	adrp	x0, <page>
                	ldr	d1, [x0, #0x30]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x0, mi
                	stur	w0, [x29, #-0x38]
                	ldur	d0, [x29, #-0x40]

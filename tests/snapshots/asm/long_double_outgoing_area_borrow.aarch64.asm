@@ -314,7 +314,7 @@ Disassembly of section .text:
                	add	x1, x0, x1
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x1                // =1
                	add	x0, x1, x0

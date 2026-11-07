@@ -35,7 +35,7 @@ enum FpCmpNanFix {
 /// needed after the `setcc`. Returns `None` for any non-FP-compare
 /// op.
 fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Feq => (Cc::E, FpCmpNanFix::AndNotP),
         BinOp::Fne => (Cc::Ne, FpCmpNanFix::OrP),
         // `Flt` / `Fle` compare the swapped operands (`fp_compare_swaps_operands`).
@@ -922,11 +922,14 @@ fn emit_fp_compare(
     } else {
         (dn, dm)
     };
-    // The compare width follows the operands' precision (C99 6.3.1.8).
-    if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
-        emit_ucomiss(code, dn, dm);
-    } else {
-        emit_ucomisd(code, dn, dm);
+    // The compare width follows the operands' precision (C99 6.3.1.8); a
+    // relational operator signals on any NaN: `comisd` (C99 F.3).
+    let f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
+    match (f32, crate::c5::ir::fp_compare_signals(op)) {
+        (true, false) => emit_ucomiss(code, dn, dm),
+        (false, false) => emit_ucomisd(code, dn, dm),
+        (true, true) => super::encode::emit_comiss(code, dn, dm),
+        (false, true) => super::encode::emit_comisd(code, dn, dm),
     }
     if fused {
         return Ok(());

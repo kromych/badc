@@ -160,7 +160,7 @@ pub(super) enum FusedBranch {
 /// nor the branch needs a parity test. The compare, its `setcc` and
 /// [`fused_branch_cc`] derive it alike.
 pub(super) fn fp_compare_swaps_operands(op: BinOp) -> bool {
-    matches!(op, BinOp::Flt | BinOp::Fle)
+    matches!(crate::c5::ir::fp_relation(op), BinOp::Flt | BinOp::Fle)
 }
 
 /// Return the branch shape to use when the terminator's cond was
@@ -219,7 +219,7 @@ pub(super) fn fused_branch_cc(
     // FP compares: `ucomisd` leaves ZF=PF=CF=1 on NaN, so `A` / `Ae` and
     // their inversions match C99 6.5.8p6 for the operand-swapped `Flt` /
     // `Fle`; `==` / `!=` carry the parity test in the branch shape.
-    Some(match op {
+    Some(match crate::c5::ir::fp_relation(op) {
         BinOp::Fgt | BinOp::Flt => FusedBranch::Jcc(if negate { Cc::Be } else { Cc::A }),
         BinOp::Fge | BinOp::Fle => FusedBranch::Jcc(if negate { Cc::B } else { Cc::Ae }),
         BinOp::Feq => {

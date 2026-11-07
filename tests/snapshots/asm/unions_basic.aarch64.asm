@@ -29,7 +29,7 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x8]
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	ldur	d0, [x29, #-0x8]
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10

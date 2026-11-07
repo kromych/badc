@@ -36,11 +36,11 @@ Disassembly of section .text:
                	subsd	%xmm15, %xmm0
                	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movabsq	$-0x40af9db22d0e5604, %rcx # imm = 0xBF50624DD2F1A9FC
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0x1, %eax
                	retq
@@ -49,10 +49,10 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	subsd	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0x2, %eax
                	retq
@@ -61,10 +61,10 @@ Disassembly of section .text:
                	movq	%rdx, %xmm15
                	subsd	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0x3, %eax
                	retq
@@ -74,11 +74,11 @@ Disassembly of section .text:
                	subsd	%xmm15, %xmm0
                	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movabsq	$-0x40af9db22d0e5604, %rax # imm = 0xBF50624DD2F1A9FC
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0x4, %eax
                	retq

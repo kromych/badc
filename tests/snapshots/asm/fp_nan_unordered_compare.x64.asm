@@ -82,61 +82,61 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	retq
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x14, %eax
                	retq
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x15, %eax
                	retq
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movl	$0x16, %eax
                	retq
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jb	<addr>
                	movl	$0x17, %eax
                	retq
                	movq	%rcx, %xmm14
-               	ucomisd	%xmm14, %xmm0
+               	comisd	%xmm14, %xmm0
                	jbe	<addr>
                	movl	$0x18, %eax
                	retq
                	movq	%rcx, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
                	movl	$0x19, %eax
                	retq
                	movq	%rcx, %xmm14
-               	ucomisd	%xmm14, %xmm0
+               	comisd	%xmm14, %xmm0
                	jb	<addr>
                	movl	$0x1a, %eax
                	retq
                	movq	%rcx, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	comisd	%xmm0, %xmm14
                	jb	<addr>
                	movl	$0x1b, %eax
                	retq
-               	ucomisd	%xmm0, %xmm0
+               	comisd	%xmm0, %xmm0
                	jbe	<addr>
                	movl	$0x1c, %eax
                	retq
-               	ucomisd	%xmm0, %xmm0
+               	comisd	%xmm0, %xmm0
                	jb	<addr>
                	movl	$0x1d, %eax
                	retq
-               	ucomisd	%xmm0, %xmm0
+               	comisd	%xmm0, %xmm0
                	jb	<addr>
                	movl	$0x1e, %eax
                	retq
                	movabsq	$0x4018000000000000, %rdx # imm = 0x4018000000000000
                	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	ja	<addr>
                	movl	$0x28, %eax
                	retq
@@ -148,13 +148,13 @@ Disassembly of section .text:
                	movl	$0x29, %eax
                	retq
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	comisd	%xmm15, %xmm1
                	ja	<addr>
                	movl	$0x2a, %eax
                	retq
                	movabsq	$0x7e37e43c8800759c, %rcx # imm = 0x7E37E43C8800759C
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm1
+               	comisd	%xmm15, %xmm1
                	ja	<addr>
                	movl	$0x2b, %eax
                	retq

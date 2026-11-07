@@ -235,7 +235,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movsd	0x8(%rsp), %xmm14
                	movq	%rax, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jb	<addr>
                	movl	$0x2, %eax
                	leave

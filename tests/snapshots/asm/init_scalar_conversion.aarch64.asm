@@ -85,11 +85,11 @@ Disassembly of section .text:
                	fcvt	s0, d0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x18]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.mi	<addr>
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x1c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20

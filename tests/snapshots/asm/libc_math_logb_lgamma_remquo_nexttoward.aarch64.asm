@@ -175,7 +175,7 @@ Disassembly of section .text:
                	fabs	d0, d0
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x3                // =3
                	ldr	d8, [sp, #0x40]
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	fabs	s0, s0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x8]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0x4                // =4
                	ldr	d8, [sp, #0x40]
@@ -557,7 +557,7 @@ Disassembly of section .text:
                	ldr	x15, [sp, #0x30]
                	adrp	x16, <page>
                	ldr	d1, [x16]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
                	ldr	d8, [sp, #0x40]
@@ -1171,7 +1171,7 @@ Disassembly of section .text:
                	ldp	x13, x14, [sp, #0x20]
                	ldr	x15, [sp, #0x30]
                	fmov	d1, #1.00000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	fmov	d0, #2.00000000
                	sub	x7, x29, #0x20
@@ -1360,7 +1360,7 @@ Disassembly of section .text:
                	fabs	s0, s0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x8]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0xe                // =14
                	ldr	d8, [sp, #0x40]

@@ -155,7 +155,7 @@ Disassembly of section .text:
                	fcmp	d0, d3
                	b.ne	<addr>
                	fmov	d0, #5.00000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.gt	<addr>
                	fcmp	d0, d0
                	b.ne	<addr>

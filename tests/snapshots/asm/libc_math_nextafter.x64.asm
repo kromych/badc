@@ -36,7 +36,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	jb	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jb	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm0, %xmm15
+               	comiss	%xmm0, %xmm15
                	jb	<addr>
                	movl	$0x7, %eax
                	popq	%rbp

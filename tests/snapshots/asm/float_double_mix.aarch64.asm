@@ -24,12 +24,12 @@ Disassembly of section .text:
                	fsub	d0, d0, d2
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
                	ldr	d2, [x16, #0x18]
-               	fcmp	d0, d2
+               	fcmpe	d0, d2
                	b.le	<addr>
                	mov	x1, #0x1                // =1
                	cbz	x1, <addr>
@@ -37,12 +37,12 @@ Disassembly of section .text:
                	ret
                	fsub	d0, d1, d1
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x20]
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x1, #0x2                // =2
                	cbz	w1, <addr>
@@ -54,12 +54,12 @@ Disassembly of section .text:
                	ldr	s0, [x16, #0x40]
                	fsub	s0, s0, s0
                	movi	d1, #0000000000000000
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0
                	adrp	x16, <page>
                	ldr	s3, [x16, #0x44]
-               	fcmp	s0, s3
+               	fcmpe	s0, s3
                	b.le	<addr>
                	mov	x0, #0x3                // =3
                	cbz	w0, <addr>
@@ -71,12 +71,12 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	s2, [x16, #0x48]
                	fsub	s0, s0, s2
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.pl	<addr>
                	fneg	s0, s0
                	adrp	x16, <page>
                	ldr	s1, [x16, #0x4c]
-               	fcmp	s0, s1
+               	fcmpe	s0, s1
                	b.le	<addr>
                	mov	x0, #0x5                // =5
                	cbz	w0, <addr>
@@ -89,12 +89,12 @@ Disassembly of section .text:
                	ldr	d0, [x16, #0x30]
                	fsub	d0, d0, d2
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	adrp	x16, <page>
                	ldr	d2, [x16, #0x38]
-               	fcmp	d0, d2
+               	fcmpe	d0, d2
                	b.pl	<addr>
                	mov	x0, #0x4                // =4
                	b	<addr>

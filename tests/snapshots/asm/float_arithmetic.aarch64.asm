@@ -37,13 +37,13 @@ Disassembly of section .text:
                	fdiv	d2, d1, d0
                	adrp	x16, <page>
                	ldr	d3, [x16]
-               	fcmp	d2, d3
+               	fcmpe	d2, d3
                	b.hi	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x16, <page>
                	ldr	d3, [x16, #0x8]
-               	fcmp	d2, d3
+               	fcmpe	d2, d3
                	b.lt	<addr>
                	mov	x0, #0x5                // =5
                	ret
@@ -56,13 +56,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	cset	x0, mi
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0x9                // =9
                	ret
@@ -78,13 +78,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	fcmp	d0, d0
+               	fcmpe	d0, d0
                	cset	x0, ls
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.lt	<addr>
                	mov	x0, #0xd                // =13
                	ret

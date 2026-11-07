@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	comisd	%xmm15, %xmm14
                	ja	<addr>
                	movl	$0x1, %eax
                	retq
@@ -38,13 +38,13 @@ Disassembly of section .text:
                	movl	$0x7f61b1e6, %esi       # imm = 0x7F61B1E6
                	movq	%rdx, %xmm14
                	movq	%rsi, %xmm15
-               	ucomiss	%xmm15, %xmm14
+               	comiss	%xmm15, %xmm14
                	ja	<addr>
                	movl	$0x2, %eax
                	retq
                	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	ucomisd	%xmm14, %xmm15
+               	comisd	%xmm14, %xmm15
                	jb	<addr>
                	movl	$0x3, %eax
                	retq

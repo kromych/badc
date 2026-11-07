@@ -104,7 +104,7 @@ Disassembly of section .text:
                	andpd	%xmm15, %xmm0
                	movabsq	$0x3d719799812dea11, %rax # imm = 0x3D719799812DEA11
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x3, %eax
                	leave
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	andpd	%xmm15, %xmm0
                	movl	$0x3727c5ac, %eax       # imm = 0x3727C5AC
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x4, %eax
                	leave
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$0x3d719799812dea11, %rax # imm = 0x3D719799812DEA11
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm0
+               	comisd	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0x5, %eax
                	leave
@@ -436,7 +436,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
-               	ucomisd	%xmm0, %xmm15
+               	comisd	%xmm0, %xmm15
                	ja	<addr>
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	leaq	-0x30(%rbp), %r9
@@ -501,7 +501,7 @@ Disassembly of section .text:
                	andpd	%xmm15, %xmm0
                	movl	$0x3727c5ac, %eax       # imm = 0x3727C5AC
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	jbe	<addr>
                	movl	$0xe, %eax
                	leave

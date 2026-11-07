@@ -71,45 +71,45 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.mi	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.pl	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.gt	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.le	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	fcmp	d0, d0
+               	fcmpe	d0, d0
                	b.ls	<addr>
                	mov	x0, #0xf                // =15
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.ls	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.hi	<addr>
                	mov	x0, #0x11               // =17
                	ret
-               	fcmp	d0, d0
+               	fcmpe	d0, d0
                	b.ge	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.ge	<addr>
                	mov	x0, #0x13               // =19
                	ret
                	fmov	d1, #1.00000000
                	fmov	d0, #2.00000000
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.lt	<addr>
                	mov	x0, #0x14               // =20
                	ret

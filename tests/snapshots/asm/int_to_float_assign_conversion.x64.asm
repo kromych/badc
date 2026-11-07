@@ -85,11 +85,11 @@ Disassembly of section .text:
                	subss	%xmm15, %xmm0
                	movl	$0xc22c0000, %eax       # imm = 0xC22C0000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm15, %xmm0
+               	comiss	%xmm15, %xmm0
                	ja	<addr>
                	movl	$0xc2300000, %eax       # imm = 0xC2300000
                	movq	%rax, %xmm15
-               	ucomiss	%xmm0, %xmm15
+               	comiss	%xmm0, %xmm15
                	jbe	<addr>
                	movl	$0x5, %eax
                	popq	%rbp

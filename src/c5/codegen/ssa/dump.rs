@@ -574,6 +574,10 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Fgt => "fgt",
         BinOp::Fle => "fle",
         BinOp::Fge => "fge",
+        BinOp::FltQuiet => "flt.quiet",
+        BinOp::FgtQuiet => "fgt.quiet",
+        BinOp::FleQuiet => "fle.quiet",
+        BinOp::FgeQuiet => "fge.quiet",
         BinOp::Fone => "fone",
         BinOp::Funo => "funo",
     }

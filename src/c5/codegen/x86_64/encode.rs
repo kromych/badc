@@ -1052,6 +1052,24 @@ pub(crate) fn emit_xorpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `COMISS xmm, xmm` -- as `UCOMISS`, raising invalid for a quiet NaN
+/// too. Encoding: `0F 2F /r`.
+pub(crate) fn emit_comiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+    if lhs.high() || rhs.high() {
+        emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2F);
+    emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
+}
+
+/// `COMISD xmm, xmm` -- as `UCOMISD`, raising invalid for a quiet NaN
+/// too. Encoding: `66 0F 2F /r`.
+pub(crate) fn emit_comisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+    emit_byte(code, 0x66);
+    emit_comiss(code, lhs, rhs);
+}
+
 /// `UCOMISD xmm, xmm` -- ordered scalar double-precision compare,
 /// sets EFLAGS. Encoding: `66 0F 2E /r`.
 pub(crate) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {

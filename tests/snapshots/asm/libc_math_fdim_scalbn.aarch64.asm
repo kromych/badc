@@ -43,7 +43,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	fmov	d1, #5.00000000
                	fmov	d0, #3.00000000
-               	fcmp	d1, d0
+               	fcmpe	d1, d0
                	b.gt	<addr>
                	fcmp	d1, d1
                	b.ne	<addr>
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.gt	<addr>
                	fcmp	d0, d0
                	b.ne	<addr>
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fcmp	d0, d0
+               	fcmpe	d0, d0
                	b.gt	<addr>
                	fcmp	d0, d0
                	b.ne	<addr>
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	ret
                	fmov	d0, #5.00000000
                	fmov	d1, #3.00000000
-               	fcmp	d0, d1
+               	fcmpe	d0, d1
                	b.gt	<addr>
                	fcmp	d0, d0
                	b.ne	<addr>

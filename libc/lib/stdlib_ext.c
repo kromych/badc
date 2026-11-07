@@ -1,7 +1,9 @@
-// mkstemp and mkdtemp on the Windows targets, as libmingwex defines them over
-// msvcrt: the template's trailing run of six or more X's takes random letters
-// and digits until `_open` or `_mkdir` creates the name. Elsewhere the file is
-// empty; the link offers it like an archive member.
+// aligned_alloc, quick_exit and at_quick_exit, and mkstemp and mkdtemp, on
+// the Windows targets, which msvcrt does not define; mkstemp and mkdtemp as
+// libmingwex defines them over msvcrt: the template's trailing run of six or
+// more X's takes random letters and digits until `_open` or `_mkdir` creates
+// the name. Elsewhere the file is empty; the link offers it like an archive
+// member.
 
 #ifdef _WIN32
 
@@ -65,6 +67,47 @@ char *mkdtemp(char *templ) {
             return NULL;
     }
     return NULL;
+}
+
+
+// C17 7.22.3.1: msvcrt's `malloc` returns blocks aligned to 16 on both
+// targets, which `free` releases; it has no block of a wider alignment that
+// `free` can release, so such an alignment is refused as 7.22.3.1p3 allows.
+void *aligned_alloc(size_t alignment, size_t size) {
+    if (alignment == 0 || (alignment & (alignment - 1)) || alignment > 16) {
+        errno = EINVAL;
+        return NULL;
+    }
+    return malloc(size);
+}
+
+// C17 7.22.4.3 and 7.22.4.7: at least 32 handlers, run last first by
+// `quick_exit`, which then ends the process as `_Exit` does.
+#define QUICK_EXIT_HANDLERS 32
+static void (*quick_handlers[QUICK_EXIT_HANDLERS])(void);
+static int quick_count;
+static _Atomic int quick_lock;
+
+int at_quick_exit(void (*handler)(void)) {
+    int registered = 0;
+    while (__atomic_exchange_n(&quick_lock, 1, __ATOMIC_ACQUIRE))
+        ;
+    if (quick_count < QUICK_EXIT_HANDLERS) {
+        quick_handlers[quick_count++] = handler;
+        registered = 1;
+    }
+    __atomic_store_n(&quick_lock, 0, __ATOMIC_RELEASE);
+    return !registered;
+}
+
+_Noreturn void quick_exit(int status) {
+    while (__atomic_exchange_n(&quick_lock, 1, __ATOMIC_ACQUIRE))
+        ;
+    int n = quick_count;
+    __atomic_store_n(&quick_lock, 0, __ATOMIC_RELEASE);
+    while (n > 0)
+        quick_handlers[--n]();
+    _Exit(status);
 }
 
 #endif

@@ -59,6 +59,7 @@ sys/endian.h	y	-	-	-	-
 machine/endian.h	y	-	-	-	-
 assert.h	y	y	y	y	y
 time.h	y	y	y	y	y
+uchar.h	-	y	y	y	y
 utime.h	y	y	y	y	y
 sys/utime.h	-	-	-	y	y
 netdb.h	y	y	y	-	-

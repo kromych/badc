@@ -70,15 +70,27 @@ fn build_and_run_outcome_bare(src: &str, stem: &str) -> RunOutcome {
 
 /// Emit `program` for macOS arm64, write, ad-hoc-sign, exec, classify.
 fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
-    let bytes = match emit_native_with_options(program, Target::MacOSAarch64, opts) {
-        Ok(b) => b,
-        Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
-    };
+    match emit_native_with_options(program, Target::MacOSAarch64, opts) {
+        Ok(bytes) => sign_run(&bytes, stem),
+        Err(e) => RunOutcome::BuildError(format!("emit_native: {e}")),
+    }
+}
 
+/// [`emit_sign_run`] through the link the driver runs, which joins the
+/// on-demand runtime sources a fixture's library calls may need.
+fn link_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) -> RunOutcome {
+    match super::link_executable_with_runtime(program, Target::MacOSAarch64, opts) {
+        Ok(bytes) => sign_run(&bytes, stem),
+        Err(e) => RunOutcome::BuildError(format!("link: {e}")),
+    }
+}
+
+/// Write the image `bytes`, ad-hoc-sign it, exec it, classify the outcome.
+fn sign_run(bytes: &[u8], stem: &str) -> RunOutcome {
     let path = super::unique_temp_path("badc-test", stem, ".bin");
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
-        f.write_all(&bytes).expect("write temp file");
+        f.write_all(bytes).expect("write temp file");
     }
     set_executable(&path);
     codesign(&path);
@@ -924,7 +936,11 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let stem = name.trim_end_matches(".c");
-    build_and_run_outcome_with_options(&src, &format!("{stem}{suffix}"), opts)
+    let program = match Compiler::new(super::with_prelude(&src)).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    link_sign_run(&program, &format!("{stem}{suffix}"), opts)
 }
 
 /// Build a fixture, sign it, run it with the given args, and return

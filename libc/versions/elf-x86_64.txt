@@ -88,6 +88,8 @@ bindtextdomain                           GLIBC_2.2.5
 bsearch                                  GLIBC_2.2.5
 btowc                                    GLIBC_2.2.5
 bzero                                    GLIBC_2.2.5
+c16rtomb                                 GLIBC_2.16
+c32rtomb                                 GLIBC_2.16
 calloc                                   GLIBC_2.2.5
 catclose                                 GLIBC_2.2.5
 catgets                                  GLIBC_2.2.5
@@ -430,6 +432,8 @@ malloc_trim                              GLIBC_2.2.5
 malloc_usable_size                       GLIBC_2.2.5
 mblen                                    GLIBC_2.2.5
 mbrlen                                   GLIBC_2.2.5
+mbrtoc16                                 GLIBC_2.16
+mbrtoc32                                 GLIBC_2.16
 mbrtowc                                  GLIBC_2.2.5
 mbsinit                                  GLIBC_2.2.5
 mbsrtowcs                                GLIBC_2.2.5
@@ -884,6 +888,7 @@ timerfd_create                           GLIBC_2.8
 timerfd_gettime                          GLIBC_2.8
 timerfd_settime                          GLIBC_2.8
 times                                    GLIBC_2.2.5
+timespec_get                             GLIBC_2.16
 timezone                                 GLIBC_2.2.5
 tmpfile                                  GLIBC_2.2.5
 tmpnam                                   GLIBC_2.2.5

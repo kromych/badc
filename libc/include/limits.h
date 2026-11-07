@@ -15,7 +15,15 @@
 #pragma once
 
 #define CHAR_BIT      8
-#define MB_LEN_MAX    1
+// C17 5.2.4.2.1: the most bytes of a multibyte character in any locale the
+// C library supports, its own <limits.h> value.
+#if defined(__linux__)
+#define MB_LEN_MAX    16
+#elif defined(__APPLE__)
+#define MB_LEN_MAX    6
+#else
+#define MB_LEN_MAX    5
+#endif
 
 #define SCHAR_MIN   (-128)
 #define SCHAR_MAX     127

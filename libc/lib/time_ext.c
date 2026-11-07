@@ -1,6 +1,6 @@
-// <time.h>'s POSIX clocks, sleeps and reentrant conversions on the Windows
-// targets, which mingw-w64 declares and msvcrt does not define. They are
-// defined over kernel32 as winpthreads and mingwex define them: realtime
+// <time.h>'s POSIX clocks, sleeps and reentrant conversions, and C17's
+// `timespec_get`, on the Windows targets, which msvcrt does not define. They
+// are defined over kernel32 as winpthreads and mingwex define them: realtime
 // from the system time, monotonic from the performance counter, the CPU-time
 // clocks from the kernel and user times of the process or thread. The file
 // compiles to nothing elsewhere; the native-link driver offers it like an
@@ -209,6 +209,13 @@ char *asctime_r(const struct tm *restrict tm, char *restrict buf) {
     }
     memcpy(buf, p, 26);
     return buf;
+}
+
+
+int timespec_get(struct timespec *ts, int base) {
+    if (base != TIME_UTC || clock_gettime(CLOCK_REALTIME, ts))
+        return 0;
+    return base;
 }
 
 #endif

@@ -91,6 +91,22 @@ typedef uint64_t            uint_fast64_t;
 #define PTRDIFF_MIN  (-PTRDIFF_MAX-1)
 #define PTRDIFF_MAX  __PTRDIFF_MAX__
 
+// C17 7.20.3: `sig_atomic_t` is `int`; `wint_t` is `unsigned short` on
+// Windows, which promotes to `int`, and `int` elsewhere.
+#define SIG_ATOMIC_MIN INT32_MIN
+#define SIG_ATOMIC_MAX INT32_MAX
+#ifndef WCHAR_MIN
+#define WCHAR_MIN __WCHAR_MIN__
+#define WCHAR_MAX __WCHAR_MAX__
+#endif
+#ifdef _WIN32
+#define WINT_MIN 0
+#define WINT_MAX 65535
+#else
+#define WINT_MIN INT32_MIN
+#define WINT_MAX INT32_MAX
+#endif
+
 // Limits of the minimum-width and fastest minimum-width types
 // (7.18.2.2 / 7.18.2.3), each its type's.
 #define INT_LEAST8_MIN   INT8_MIN

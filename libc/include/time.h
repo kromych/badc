@@ -119,6 +119,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "_time")
 #pragma binding(libc::clock,         "_clock")
 #pragma binding(libc::clock_gettime, "_clock_gettime")
+#pragma binding(libc::timespec_get,  "_timespec_get")
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::nanosleep,     "_nanosleep")
@@ -147,6 +148,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "time")
 #pragma binding(libc::clock,         "clock")
 #pragma binding(libc::clock_gettime, "clock_gettime")
+#pragma binding(libc::timespec_get,  "timespec_get")
 #pragma binding(libc::clock_settime, "clock_settime")
 #pragma binding(libc::clock_getres,  "clock_getres")
 #pragma binding(libc::clock_nanosleep, "clock_nanosleep")
@@ -234,6 +236,10 @@ typedef int clockid_t;
 time_t time(time_t *out);
 clock_t clock(void);
 int clock_gettime(clockid_t clk_id, struct timespec *ts);
+// C17 7.27.2.5: the calendar time in `*ts` for the time base `TIME_UTC`;
+// libc/lib/time_ext.c defines it on Windows, whose msvcrt has none.
+#define TIME_UTC 1
+int timespec_get(struct timespec *ts, int base);
 #ifndef __APPLE__
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
 // `remain` receives the unslept interval on EINTR. libSystem has none.

@@ -107,6 +107,11 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
         "libc/lib/dlfcn_ext.c defines dlopen, dlsym, dlclose and dlerror over kernel32",
     ),
     (
+        "uchar.h",
+        MACOS,
+        "libc/lib/uchar_ext.c defines mbrtoc16, c16rtomb, mbrtoc32 and c32rtomb over mbrtowc / wcrtomb",
+    ),
+    (
         "fnmatch.h",
         WINDOWS,
         "libc/lib/pattern.c defines fnmatch, which msvcrt lacks",
@@ -240,6 +245,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("machine/endian.h", MACOS),
     header!("assert.h", ALL),
     header!("time.h", ALL),
+    header!("uchar.h", ALL),
     header!("utime.h", ALL),
     header!("sys/utime.h", WINDOWS),
     header!("netdb.h", POSIX),

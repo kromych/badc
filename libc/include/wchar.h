@@ -24,6 +24,12 @@ typedef __WINT_TYPE__ wint_t;
 // it wrote, so an oversized zeroed buffer is safe across libcs.
 typedef struct { unsigned char __opaque[128]; } mbstate_t;
 
+// C17 7.29.1p2, as <stdint.h> defines them.
+#ifndef WCHAR_MIN
+#define WCHAR_MIN __WCHAR_MIN__
+#define WCHAR_MAX __WCHAR_MAX__
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::wcslen,   "_wcslen")

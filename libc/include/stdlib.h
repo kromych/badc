@@ -407,11 +407,13 @@ void *malloc(size_t size);
 void *calloc(size_t n, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
+// C17 7.22.3.1. On Windows libc/lib/stdlib_ext.c defines it over malloc,
+// for the alignments up to 16 that msvcrt's blocks have.
+void *aligned_alloc(size_t alignment, size_t size);
 #ifndef _WIN32
 // Aligned allocation. posix_memalign stores the block through memptr and
 // returns 0 or an errno value; memalign is a glibc extension.
 int posix_memalign(void **memptr, size_t alignment, size_t size);
-void *aligned_alloc(size_t alignment, size_t size);
 void *valloc(size_t size);
 #endif
 #ifdef __linux__
@@ -494,17 +496,16 @@ static inline lldiv_t lldiv(long long n, long long d) {
 _Noreturn void abort(void);
 _Noreturn void exit(int status);
 _Noreturn void _Exit(int status);
-#ifndef _WIN32
-// C11 7.22.4.7 and 7.22.4.3, where the C library defines them; msvcrt.dll
-// exports neither. The Linux C library's `at_quick_exit` is a static
-// wrapper over `__cxa_at_quick_exit`, reached as `atexit` is.
+// C17 7.22.4.7 and 7.22.4.3; msvcrt.dll exports neither, and
+// libc/lib/stdlib_ext.c defines both on Windows. The Linux C library's
+// `at_quick_exit` is a static wrapper over `__cxa_at_quick_exit`, reached as
+// `atexit` is.
 _Noreturn void quick_exit(int status);
 #ifdef __linux__
 int __cxa_at_quick_exit(void (*handler)(void), void *dso);
 #define at_quick_exit(handler) __cxa_at_quick_exit((handler), 0)
 #else
 int at_quick_exit(void (*handler)(void));
-#endif
 #endif
 int system(const char *cmd);
 char *getenv(const char *name);

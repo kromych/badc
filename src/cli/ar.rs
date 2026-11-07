@@ -62,9 +62,16 @@ fn write_members(path: &str, members: &[badc::ArchiveMember], index: bool) {
     let symbols: Vec<(usize, Vec<String>)> = if index {
         (members.iter().enumerate())
             .filter(|(_, m)| badc::is_native_object(&m.bytes))
-            .filter_map(|(i, m)| {
-                let defined = native_defined_globals(&m.bytes, &m.name, badc::Target::host());
-                Some((i, defined.ok()?))
+            .map(|(i, m)| {
+                // A member that reads as an object but does not parse fails the
+                // write, as GNU ar fails it, rather than leaving its symbols out.
+                match native_defined_globals(&m.bytes, &m.name, badc::Target::host()) {
+                    Ok(defined) => (i, defined),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    }
+                }
             })
             .collect()
     } else {

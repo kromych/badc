@@ -20500,3 +20500,38 @@ fn a_shared_librarys_thread_locals_take_the_dynamic_models() {
         );
     }
 }
+
+/// `ar rcs` fails on a member that reads as an object but does not parse,
+/// naming the member and the reader's error, rather than writing an index
+/// that leaves the member's symbols out.
+#[test]
+fn ar_s_fails_on_an_unreadable_member() {
+    let dir = tempdir("ar-unreadable");
+    write_source(&dir, "good.c", "int good(void) { return 1; }\n");
+    run(
+        Command::new(badc())
+            .args(["-q", "-c", "good.c"])
+            .current_dir(&dir),
+        "compile good.c",
+    );
+    let object = std::fs::read(dir.join("good.o")).expect("read good.o");
+    std::fs::write(dir.join("bad.o"), &object[..64]).expect("write bad.o");
+    let out = Command::new(badc())
+        .args(["--ar", "rcs", "lib.a", "good.o", "bad.o"])
+        .current_dir(&dir)
+        .output()
+        .expect("run badc --ar");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{err}");
+    assert!(err.contains("bad.o") && err.contains("truncated"), "{err}");
+    let ok = Command::new(badc())
+        .args(["--ar", "rcs", "lib.a", "good.o"])
+        .current_dir(&dir)
+        .output()
+        .expect("run badc --ar");
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+}

@@ -1454,6 +1454,74 @@ fn typedefs_get_their_own_die() {
     }
 }
 
+/// A typedef stands for the type its own declaration gives it, pointer
+/// levels included (C99 6.7.7p3): a declarator adds only the levels past
+/// those. A typedef spelling the return type of a function-pointer
+/// declarator names that return type, not the pointer.
+#[test]
+fn a_typedef_stands_for_its_own_pointer_levels() {
+    let u = compile_unit(
+        "typedef-levels",
+        "typedef struct node { int v; struct node *next; } Node;\n\
+         typedef struct node *NodeP;\n\
+         typedef NodeP (*maker)(int);\n\
+         typedef maker factory;\n\
+         typedef const char *str_t;\n\
+         struct holder {\n\
+           NodeP head;\n\
+           NodeP *tail;\n\
+           Node *(*first)(Node *);\n\
+           NodeP (*make)(int);\n\
+           maker m;\n\
+           maker *pm;\n\
+           factory f;\n\
+           str_t s;\n\
+         };\n\
+         struct holder h;\n",
+    );
+    // `u.named` finds one DIE per name: no alias sits over a type it does
+    // not name.
+    let node = u.named(DW_TAG_STRUCTURE_TYPE, "node");
+    let nodep = u.named(DW_TAG_TYPEDEF, "NodeP");
+    let ptr = u.type_of(nodep);
+    assert_eq!(ptr.tag, DW_TAG_POINTER_TYPE, "NodeP is a pointer");
+    assert_eq!(u.type_of(ptr).offset, node.offset);
+    assert_eq!(
+        u.type_of(u.named(DW_TAG_TYPEDEF, "Node")).offset,
+        node.offset
+    );
+
+    let holder = u.named(DW_TAG_STRUCTURE_TYPE, "holder");
+    let ty = |name: &str| u.type_of(u.member(holder, name));
+    assert_eq!(ty("head").offset, nodep.offset);
+    assert_eq!(ty("tail").tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(ty("tail")).offset, nodep.offset);
+    // The return types: `Node *` and `NodeP`, under the declarator's pointer.
+    for (member, ret) in [("first", "Node"), ("make", "NodeP")] {
+        let fp = ty(member);
+        assert_eq!(fp.tag, DW_TAG_POINTER_TYPE, "{member}");
+        let sub = u.type_of(fp);
+        assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE, "{member}");
+        let mut r = u.type_of(sub);
+        if member == "first" {
+            assert_eq!(r.tag, DW_TAG_POINTER_TYPE);
+            r = u.type_of(r);
+        }
+        assert_eq!((r.tag, r.name()), (DW_TAG_TYPEDEF, Some(ret)), "{member}");
+    }
+    let maker = u.named(DW_TAG_TYPEDEF, "maker");
+    assert_eq!(u.type_of(maker).tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(ty("m").offset, maker.offset);
+    assert_eq!(u.type_of(ty("pm")).offset, maker.offset);
+    // A typedef spelled through another names it; one's own qualifiers stay.
+    let factory = u.named(DW_TAG_TYPEDEF, "factory");
+    assert_eq!(ty("f").offset, factory.offset);
+    assert_eq!(u.type_of(factory).offset, maker.offset);
+    let str_t = u.type_of(u.named(DW_TAG_TYPEDEF, "str_t"));
+    assert_eq!(str_t.tag, DW_TAG_POINTER_TYPE);
+    assert_eq!(u.type_of(str_t).tag, DW_TAG_CONST_TYPE);
+}
+
 /// DWARF 4 5.2 describes a qualifier with a wrapper DIE. Which level it
 /// wraps is what tells `const T *` from `T *const`.
 #[test]

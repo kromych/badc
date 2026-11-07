@@ -774,7 +774,9 @@ impl Compiler {
         decl_fn: Option<crate::c5::symbol::FnType>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
-            base_type_align, ..
+            base_type_align,
+            base_spelling,
+            ..
         } = decl;
         let &DeclaratorBinding {
             id_idx,
@@ -846,6 +848,9 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Typedef as i64;
         self.symbols[id_idx].type_ = typedef_ty;
         self.symbols[id_idx].val = 0;
+        // The alias's own qualifiers and the typedef it is spelled through
+        // (`typedef const char *str_t`), for the debug-info type.
+        self.symbols[id_idx].binding.decl_spelling = self.decl_spelling(base_spelling);
         // `typedef union {...} T __attribute__((transparent_union))`:
         // a declarator-position attribute binds to the aliased union.
         if declarator_transparent && super::types::is_struct_value_ty(typedef_ty) {

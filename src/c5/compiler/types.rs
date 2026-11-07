@@ -670,8 +670,9 @@ pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
 /// gives the value of an lvalue the unqualified version of the
 /// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
 /// types, so a qualifier on the object itself never takes part in
-/// compatibility. `const` and `volatile` go at every level, the
-/// constraint on a pointee's qualification being undiagnosed (TODO); an
+/// compatibility. `const` and `volatile` go at every level; the
+/// constraint on a pointee's qualification is the conversion's check
+/// (`discarded-qualifiers`, `incompatible-pointer-types`). An
 /// `_Atomic` and a named address space are dropped only when they
 /// qualify the object, a pointee's being part of its type.
 pub(crate) fn unqualified_object_ty(ty: i64) -> i64 {

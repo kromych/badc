@@ -5240,3 +5240,51 @@ fn general_regs_only_copies_floating_values_and_refuses_arithmetic() {
         }
     }
 }
+
+/// Under `--interp`, printf writes a NaN as the target's C library does
+/// (C99 7.19.6.1p8 "[-]nan"): the expectations are the native outputs of
+/// the same program built for each target -- glibc's sign bit, Apple's
+/// unsigned `nan`, the UCRT's `-nan(ind)` for the x86 default NaN -- and
+/// the default NaN `0.0 / 0.0` yields is the target's own.
+#[test]
+fn interp_printf_writes_a_nan_as_the_target_library_does() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-nan");
+    let src = dir.join("nan.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <math.h>\n\
+         int main(void) {\n\
+             volatile double z = 0.0;\n\
+             double n = z / z, p = fabs(n), m = -fabs(n);\n\
+             printf(\"%f %E|%f %f %+f %+f % f\\n\", n, n, p, m, p, m, p);\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for (target, want) in [
+        ("linux-x64", "-nan -NAN|nan -nan +nan -nan  nan\n"),
+        ("linux-aarch64", "nan NAN|nan -nan +nan -nan  nan\n"),
+        ("macos-aarch64", "nan NAN|nan nan nan nan nan\n"),
+        (
+            "windows-x64",
+            "-nan(ind) -NAN(IND)|nan -nan(ind) +nan -nan(ind)  nan\n",
+        ),
+        (
+            "windows-arm64",
+            "nan NAN|nan -nan(ind) +nan -nan(ind)  nan\n",
+        ),
+    ] {
+        let out = Command::new(badc)
+            .args(["-q", &format!("--target={target}"), "--interp"])
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{target}");
+    }
+}

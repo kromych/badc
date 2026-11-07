@@ -2518,7 +2518,10 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
                 let raw = next_arg(&mut arg_idx)?;
                 let (v, hex) = float_arg(mem, raw, s.long_double)?;
-                let sign = if v.is_sign_negative() && !v.is_nan() {
+                let libc = HexStyle::of(mem.target);
+                let sign = if v.is_nan() {
+                    nan_sign(v, &s, libc)
+                } else if v.is_sign_negative() {
                     "-"
                 } else if s.plus {
                     "+"
@@ -2528,6 +2531,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                     ""
                 };
                 let (prefix, body) = match hex {
+                    _ if v.is_nan() => (sign.into(), nan_body(v, conv, libc)),
                     Some(h) if matches!(conv, b'a' | b'A') => {
                         let radix = if conv == b'A' { "0X" } else { "0x" };
                         let style = HexStyle::of(mem.target);
@@ -2616,6 +2620,36 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
     out.extend_from_slice(digits.as_bytes());
     if s.minus {
         out.resize(out.len() + pad, b' ');
+    }
+}
+
+/// The sign a NaN takes (7.19.6.1p8 "[-]nan") from the target's C library:
+/// glibc and the UCRT write the sign bit and honor `+` and space; Apple's
+/// writes none of the three.
+fn nan_sign(v: f64, s: &PrintfSpec, libc: HexStyle) -> &'static str {
+    match libc {
+        HexStyle::Apple => "",
+        _ if v.is_sign_negative() => "-",
+        _ if s.plus => "+",
+        _ if s.space => " ",
+        _ => "",
+    }
+}
+
+/// A NaN's text after its sign: `nan`, and in the UCRT's form `nan(ind)` for
+/// the x86 default NaN (sign bit, quiet bit, no payload) and `nan(snan)` for
+/// a signaling one; upper-case under an upper-case conversion.
+fn nan_body(v: f64, conv: u8, libc: HexStyle) -> alloc::string::String {
+    let bits = v.to_bits();
+    let text = match libc {
+        HexStyle::Ucrt if bits == 0xFFF8_0000_0000_0000 => "nan(ind)",
+        HexStyle::Ucrt if bits & (1 << 51) == 0 => "nan(snan)",
+        _ => "nan",
+    };
+    if conv.is_ascii_uppercase() {
+        text.to_ascii_uppercase()
+    } else {
+        text.into()
     }
 }
 
@@ -4321,6 +4355,31 @@ mod tests {
         let mut mem = Memory::new(data, target);
         let out = format_printf(fmt, args, &mut mem).expect("format");
         String::from_utf8(out).expect("utf8")
+    }
+
+    /// C99 7.19.6.1p8 "[-]nan" as each target's C library writes it: glibc
+    /// the sign bit with `+` and space honored, Apple's libc neither sign nor
+    /// flag, the UCRT the sign bit and `nan(ind)` / `nan(snan)` for the x86
+    /// default and a signaling NaN.
+    #[test]
+    fn printf_nan_follows_the_target_library() {
+        use crate::c5::codegen::Target::{LinuxX64, MacOSAarch64, WindowsX64};
+        let (pos, neg, ind) = (
+            0x7FF8_0000_0000_0001_u64,
+            0xFFF8_0000_0000_0001_u64,
+            0xFFF8_u64 << 48,
+        );
+        let snan = 0x7FF0_0000_0000_0001_u64;
+        let on = |t, f: &[u8], bits: u64| fmt_on(t, &[], f, &[bits as i64]);
+        assert_eq!(on(LinuxX64, b"%f|", neg), "-nan|");
+        assert_eq!(on(LinuxX64, b"%+F|", pos), "+NAN|");
+        assert_eq!(on(LinuxX64, b"% e|", pos), " nan|");
+        assert_eq!(on(MacOSAarch64, b"%f|", neg), "nan|");
+        assert_eq!(on(MacOSAarch64, b"%+f|", pos), "nan|");
+        assert_eq!(on(WindowsX64, b"%f|", ind), "-nan(ind)|");
+        assert_eq!(on(WindowsX64, b"%E|", ind), "-NAN(IND)|");
+        assert_eq!(on(WindowsX64, b"%g|", neg), "-nan|");
+        assert_eq!(on(WindowsX64, b"%+f|", snan), "+nan(snan)|");
     }
 
     #[test]

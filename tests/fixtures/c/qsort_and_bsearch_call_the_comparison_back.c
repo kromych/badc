@@ -3,6 +3,7 @@
 // elements bsearch finds are the C library's: glibc merge-sorts, keeping
 // equal elements in order, and Apple's libc quicksorts.
 
+// snapshot-budget: exempt
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -4,6 +4,7 @@
 // end-of-file indicator, and a missing file failing with ENOENT. What
 // feof returns when set is the C library's: 1, or msvcrt's _IOEOF bit.
 
+// snapshot-budget: exempt
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

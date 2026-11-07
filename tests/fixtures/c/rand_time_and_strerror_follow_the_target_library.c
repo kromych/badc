@@ -4,6 +4,7 @@
 // and clock read the host's clocks; strerror gives the C library's message
 // and perror writes it to the standard error.
 
+// snapshot-budget: exempt
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

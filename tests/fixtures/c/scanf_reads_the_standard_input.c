@@ -3,6 +3,7 @@
 // end of input makes the count EOF. The "C" locale is the one in effect
 // (7.11.1.1p4), with "." as its decimal point (7.11.2.1).
 
+// snapshot-budget: exempt
 #include <locale.h>
 #include <stdio.h>
 

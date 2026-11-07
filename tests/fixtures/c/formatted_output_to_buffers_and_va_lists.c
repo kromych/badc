@@ -4,6 +4,7 @@
 // msvcrt's _snprintf writes no terminator when the output fills the buffer
 // and returns -1 when it does not fit.
 
+// snapshot-budget: exempt
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>

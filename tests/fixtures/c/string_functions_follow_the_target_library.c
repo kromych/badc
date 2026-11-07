@@ -4,6 +4,7 @@
 // C library's: glibc's and Apple's strcmp the byte difference, msvcrt's -1
 // or 1; glibc's isalpha its table bit, Apple's 1, msvcrt's its mask.
 
+// snapshot-budget: exempt
 #define _GNU_SOURCE
 #include <ctype.h>
 #include <stdio.h>

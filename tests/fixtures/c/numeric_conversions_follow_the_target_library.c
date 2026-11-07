@@ -5,6 +5,7 @@
 // target's; the `errno` a missing subject leaves and atoi's out-of-range
 // value are the C library's.
 
+// snapshot-budget: exempt
 #include <errno.h>
 #include <fenv.h>
 #include <stdio.h>

@@ -4,6 +4,7 @@
 // scansets, `%n` and `*` -- and the count is the number of assignments, or
 // EOF when the input ends first.
 
+// snapshot-budget: exempt
 #include <stdio.h>
 #include <string.h>
 

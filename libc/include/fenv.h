@@ -25,7 +25,13 @@
 #define FE_OVERFLOW   0x04
 #define FE_UNDERFLOW  0x08
 #define FE_INEXACT    0x10
+#ifdef __APPLE__
+/* Apple's set adds the FPSR's input-denormal flag, which flush-to-zero raises. */
+#define FE_FLUSHTOZERO 0x80
+#define FE_ALL_EXCEPT 0x9f
+#else
 #define FE_ALL_EXCEPT 0x1f
+#endif
 #else
 #define FE_TONEAREST  0x000
 #define FE_DOWNWARD   0x400

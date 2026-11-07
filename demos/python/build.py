@@ -31,12 +31,14 @@ from pathlib import Path
 
 
 def _first_diagnostic(text: str, rc: int) -> str:
-    """The first line naming a severity, so the echoed source line that follows
-    a diagnostic is not mistaken for the message."""
+    """The first error, else the first warning, so neither a warning printed
+    ahead of the error nor the echoed source line after a diagnostic is
+    mistaken for the reason the unit failed."""
     lines = text.strip().splitlines()
-    for line in lines:
-        if ": error: " in line or ": warning: " in line:
-            return line
+    for severity in (": error: ", ": warning: "):
+        for line in lines:
+            if severity in line:
+                return line
     return lines[-1] if lines else f"rc{rc}"
 
 PY_DIR = Path(__file__).resolve().parent
@@ -109,7 +111,7 @@ _WIN_INCLUDES = [
 # names live in win_excluded_stubs.c.
 _WIN_DEFINES = [
     "Py_BUILD_CORE", "Py_BUILD_CORE_BUILTIN", "Py_NO_ENABLE_SHARED",
-    "WIN32", "MS_WINDOWS", "MS_WIN64", "MS_COREDLL",
+    "WIN32", "MS_WIN64", "MS_COREDLL",
     f'MS_DLL_ID="{WINVER_XY}"', 'VPATH="."',
 ]
 # getpath.c reads the install layout from these; bytes-only placeholders, the
@@ -221,9 +223,11 @@ def _compile_one(job):
     obj = os.path.join(out_dir, src.replace("/", "_")[:-2] + ".o")
     # sys.version reports the build compiler; badc presents the GNU C surface
     # (__GNUC__), so name the actual compiler rather than let getcompiler.c
-    # report GCC. Every target is built by badc, so this applies to all of them.
+    # report GCC. PC/pyconfig.h defines COMPILER itself under __GNUC__, so a
+    # Windows build keeps its "[gcc]".
+    name = [] if TARGETS[target].get("windows") else ['-DCOMPILER="[badc]"']
     cmd = [badc, "--gnu", "-c", f"--target={target}",
-           '-DCOMPILER="[badc]"', *dbg, *opt, *defs, *incs, src, "-o", obj]
+           *name, *dbg, *opt, *defs, *incs, src, "-o", obj]
     r = subprocess.run(cmd, cwd=src_root, capture_output=True, text=True, errors="replace", timeout=240)
     if r.returncode != 0:
         msg = _first_diagnostic(r.stderr or r.stdout, r.returncode)

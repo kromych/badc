@@ -15,11 +15,13 @@ use alloc::vec::Vec;
 
 impl Preprocessor {
     /// The intrinsic `#pragma intrinsic(name)` binds `name` to, or `None`
-    /// when badc has none for this target or `-fno-builtin` has made the
-    /// library spelling opaque. A reserved name is the implementation's
-    /// own, which the flag leaves bound as gcc leaves `__builtin_` names.
+    /// when badc has none for this target or `-fno-builtin` or
+    /// `-fno-builtin-<name>` has made the library spelling opaque. A
+    /// reserved name is the implementation's own, which the flags leave
+    /// bound as gcc leaves `__builtin_` names.
     fn registered_intrinsic(&self, name: &str) -> Option<i64> {
-        if self.no_builtin && !ident::is_reserved(name) {
+        let opaque = self.no_builtin || self.no_builtin_names.contains(name);
+        if opaque && !ident::is_reserved(name) {
             return None;
         }
         builtins::intrinsic_id(name, self.target)

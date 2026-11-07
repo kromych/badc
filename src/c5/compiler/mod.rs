@@ -2936,6 +2936,9 @@ impl Compiler {
             pp.set_compiler_include_dir(dir);
         }
         pp.set_no_builtin(opts.no_builtin);
+        for name in &opts.no_builtin_fns {
+            pp.set_no_builtin_name(name);
+        }
         pp.set_hosted(!opts.freestanding);
         for name in &opts.force_includes {
             pp.add_force_include(name);

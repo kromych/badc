@@ -10924,10 +10924,11 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
     );
 
     // The same for a `#pragma intrinsic` name: the instruction badc has
-    // for it is a substitution the flag withdraws.
-    const SQRT: &str = "#pragma intrinsic(sqrt)\n\
-                        double sqrt(double x);\n\
-                        double f(double x) { return sqrt(x); }\n";
+    // for it is a substitution either flag withdraws, the per-name one for
+    // that name alone.
+    const SQRT: &str = "#pragma intrinsic(sqrt)\n#pragma intrinsic(fabs)\n\
+                        double sqrt(double x);\ndouble fabs(double x);\n\
+                        double f(double x) { return sqrt(x) + fabs(x); }\n";
     let intrinsic = |co: CompileOptions| -> alloc::vec::Vec<String> {
         let prog = Compiler::with_options(SQRT.to_string(), target, co)
             .compile()
@@ -10945,6 +10946,11 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
             .iter()
             .any(|n| n == "sqrt"),
         "-fno-builtin must leave sqrt as a call"
+    );
+    let one = intrinsic(base().with_no_builtin_fns(alloc::vec!["sqrt".to_string()]));
+    assert!(
+        one.iter().any(|n| n == "sqrt") && !one.iter().any(|n| n == "fabs"),
+        "-fno-builtin-sqrt must leave sqrt alone as a call: {one:?}"
     );
 }
 

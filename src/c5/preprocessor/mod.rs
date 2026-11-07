@@ -255,6 +255,8 @@ pub(crate) struct Preprocessor {
     /// name, so a call spelled with it lowers as a call rather than as
     /// the instruction badc has for it. A reserved name stays bound.
     no_builtin: bool,
+    /// `-fno-builtin-<name>`: the same for the names given.
+    no_builtin_names: BTreeSet<String>,
     /// The `-include FILE` set: headers processed as if the user had
     /// written `#include "name"` at the top of the unit, resolved
     /// through the same chain.
@@ -1309,6 +1311,7 @@ impl Preprocessor {
             nostdlibinc: false,
             compiler_include_dir: None,
             no_builtin: false,
+            no_builtin_names: BTreeSet::new(),
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
             sink: Sink::default(),
@@ -1622,6 +1625,12 @@ impl Preprocessor {
     /// half. See [`Preprocessor::no_builtin`].
     pub fn set_no_builtin(&mut self, on: bool) {
         self.no_builtin = on;
+    }
+
+    /// gcc / clang `-fno-builtin-<name>`, the preprocessor's half: `name`
+    /// alone is opaque, as `-fno-builtin` makes every library name.
+    pub fn set_no_builtin_name(&mut self, name: &str) {
+        self.no_builtin_names.insert(name.to_string());
     }
 
     /// `__STDC_HOSTED__`: 1 for a hosted implementation, 0 for a

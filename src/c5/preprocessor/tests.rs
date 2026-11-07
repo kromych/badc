@@ -282,7 +282,8 @@ fn gnu_identity_macros_are_opt_in() {
 #[test]
 fn msvc_identity_set_is_locked() {
     // `--msvc` adds cl 19.28's identity and removes `__STDC__`, as cl
-    // leaves it undefined; the `_M_*` macro follows the architecture.
+    // leaves it undefined; the `_M_*` macro follows the architecture. cl's
+    // C17 mode reports no atomics and no variable length arrays.
     for (target, arch) in [
         (
             Target::WindowsX64,
@@ -306,6 +307,8 @@ fn msvc_identity_set_is_locked() {
             ("_MSC_EXTENSIONS", "1"),
             ("_MSC_FULL_VER", "192829333"),
             ("_MSC_VER", "1928"),
+            ("__STDC_NO_ATOMICS__", "1"),
+            ("__STDC_NO_VLA__", "1"),
         ]
         .iter()
         .chain(arch)

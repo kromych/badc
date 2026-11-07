@@ -1407,6 +1407,10 @@ impl Preprocessor {
         set("_MSC_BUILD", "0");
         set("_MSC_EXTENSIONS", "1");
         set("_INTEGRAL_MAX_BITS", "64");
+        // cl's C17 mode leaves out the optional atomics and variable length
+        // arrays too (C17 6.10.8.3), as measured on cl 19.44 and 19.52.
+        set("__STDC_NO_ATOMICS__", "1");
+        set("__STDC_NO_VLA__", "1");
         if target.is_x86_64() {
             set("_M_X64", "100");
             set("_M_AMD64", "100");

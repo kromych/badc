@@ -179,12 +179,14 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 | `__DATE__`, `__TIME__`                  | the time of translation in UTC; `SOURCE_DATE_EPOCH` fixes it |
 | `__STDC_NO_COMPLEX__`, `__STDC_NO_THREADS__` | `1`                                                                  |
 | `__STDC_UTF_16__`, `__STDC_UTF_32__`    | `1`                                                                       |
-| `__STDC_IEC_559__`, `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined                                         |
+| `__STDC_IEC_559__`                      | not defined                                                               |
+| `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined; `1` under `--msvc`                                          |
 
 `-ffreestanding` also implies `-fno-builtin`. `--freestanding`, the link
 option that leaves out the startup runtime, does not change
 `__STDC_HOSTED__`. `__STDC_NO_ATOMICS__` is undefined: `_Atomic` objects are
-atomic ([`_Atomic` objects](#_atomic-objects)).
+atomic ([`_Atomic` objects](#_atomic-objects)). Under `--msvc` it and
+`__STDC_NO_VLA__` are `1`, as cl's C17 mode defines them.
 
 ### Translation and the library
 
@@ -743,7 +745,8 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   `_MSC_FULL_VER`, `_MSC_BUILD`, `_MSC_EXTENSIONS`, `_INTEGRAL_MAX_BITS` and
   `_M_X64` / `_M_AMD64` or `_M_ARM64`. `__STDC__` is then undefined, as cl
   leaves it without `/Zc:__STDC__`, so the SDK headers that test it take their
-  Microsoft layouts; `__STDC_VERSION__` stays. The Microsoft extensions above
+  Microsoft layouts; `__STDC_VERSION__` stays, and `__STDC_NO_ATOMICS__` and
+  `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. The Microsoft extensions above
   apply with or without it. `-include msvc_compat.h` adds the MinGW identity
   and the calling-convention and SAL no-ops.
 

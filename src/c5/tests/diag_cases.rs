@@ -23,6 +23,8 @@ fn cases(text: &str) -> (String, Vec<Case<'_>>) {
     let cases = parts
         .map(|part| {
             let (head, body) = part.split_once('\n').unwrap_or((part, ""));
+            // A checkout may end the file's lines with CR LF.
+            let head = head.trim_end_matches('\r');
             let (name, verdict) = head.split_once(": ").expect("`<name>: <verdict>`");
             let expect = match verdict.split_once(' ') {
                 None if verdict == "ok" => None,
@@ -88,4 +90,19 @@ fn const_qualifier_cases() {
         "../../../tests/fixtures/diag/const_qualifier.c"
     ));
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// A checkout that ends the lines with CR LF reads the same cases.
+#[test]
+fn case_files_parse_alike_with_crlf_line_ends() {
+    let lf = include_str!("../../../tests/fixtures/diag/const_qualifier.c").replace("\r\n", "\n");
+    let crlf = lf.replace('\n', "\r\n");
+    let heads = |text: &str| -> Vec<(String, Option<(Level, Code)>)> {
+        cases(text)
+            .1
+            .iter()
+            .map(|c| (String::from(c.name), c.expect))
+            .collect()
+    };
+    assert_eq!(heads(&lf), heads(&crlf));
 }

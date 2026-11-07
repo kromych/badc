@@ -209,7 +209,7 @@ atomic ([`_Atomic` objects](#_atomic-objects)).
 - Most of C23. `-std=c23` sets the version macro and makes `bool`, `true` and
   `false` keywords, and the C23 features under [C11 and C23](#c11-and-c23) are
   available in every dialect. Not implemented: `nullptr`, `constexpr`, `auto`
-  type inference, `_BitInt`, `#embed`, `#elifdef` and `#elifndef`,
+  type inference, `_BitInt`, `#elifdef` and `#elifndef`,
   `__has_c_attribute`, digit separators, `u8` character constants, the
   `alignas`, `alignof` and `thread_local` keywords, a label before a
   declaration, `unreachable`, one-argument `va_start` and `<stdbit.h>`.

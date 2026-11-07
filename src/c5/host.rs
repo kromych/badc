@@ -80,7 +80,31 @@ pub trait Host {
     /// if no error has occurred since the last call). Mirrors POSIX:
     /// fetching the error consumes it.
     fn dlerror(&mut self) -> Option<String>;
+
+    /// Open `name` as `fopen`'s `mode` asks (C99 7.19.5.3): `r` reads, `w`
+    /// creates or truncates, `a` appends, `+` adds the other direction.
+    /// Returns a fresh fd, or minus the `errno` value of the failure, as
+    /// every target numbers it. The default opens `r` through [`Self::open`]
+    /// and fails a writing mode with `EROFS`.
+    fn open_mode(&mut self, name: &str, mode: &str) -> i64 {
+        if mode.starts_with('r') && !mode.contains('+') {
+            let fd = self.open(name);
+            return if fd >= 0 { fd } else { -ENOENT };
+        }
+        -EROFS
+    }
+
+    /// Move `fd`'s file position as `lseek` does, from the start, the
+    /// current position or the end for `whence` 0, 1 or 2. Returns the new
+    /// position, or -1; the default cannot seek.
+    fn seek(&mut self, _fd: i64, _offset: i64, _whence: i32) -> i64 {
+        -1
+    }
 }
+
+/// The `errno` values [`Host::open_mode`] reports, the same on every target.
+const ENOENT: i64 = 2;
+const EROFS: i64 = 30;
 
 #[cfg(feature = "std")]
 mod std_host {
@@ -109,16 +133,67 @@ mod std_host {
         }
     }
 
+    impl StdHost {
+        fn install(&mut self, file: File) -> i64 {
+            let fd = self.next_fd;
+            self.next_fd += 1;
+            self.fd_table.insert(fd, file);
+            fd
+        }
+    }
+
+    /// The `errno` value of an open failure, numbered as on every target.
+    fn errno_of(e: &std::io::Error) -> i64 {
+        use std::io::ErrorKind;
+        match e.kind() {
+            ErrorKind::NotFound => 2,
+            ErrorKind::PermissionDenied => 13,
+            ErrorKind::AlreadyExists => 17,
+            ErrorKind::NotADirectory => 20,
+            ErrorKind::IsADirectory => 21,
+            ErrorKind::InvalidInput => 22,
+            _ => 5,
+        }
+    }
+
     impl Host for StdHost {
         fn open(&mut self, name: &str) -> i64 {
             match File::open(name) {
-                Ok(file) => {
-                    let fd = self.next_fd;
-                    self.next_fd += 1;
-                    self.fd_table.insert(fd, file);
-                    fd
-                }
+                Ok(file) => self.install(file),
                 Err(_) => -1,
+            }
+        }
+
+        fn open_mode(&mut self, name: &str, mode: &str) -> i64 {
+            let mut options = std::fs::OpenOptions::new();
+            let plus = mode.contains('+');
+            match mode.as_bytes().first() {
+                Some(b'r') => options.read(true).write(plus),
+                Some(b'w') => options.write(true).create(true).truncate(true).read(plus),
+                Some(b'a') => options.append(true).create(true).read(plus),
+                _ => return -22,
+            };
+            // C11 7.21.5.3p5: `x` fails when the file exists.
+            if mode.contains('x') {
+                options.create_new(true);
+            }
+            match options.open(name) {
+                Ok(file) => self.install(file),
+                Err(e) => -errno_of(&e),
+            }
+        }
+
+        fn seek(&mut self, fd: i64, offset: i64, whence: i32) -> i64 {
+            use std::io::{Seek, SeekFrom};
+            let pos = match whence {
+                0 => SeekFrom::Start(offset as u64),
+                1 => SeekFrom::Current(offset),
+                2 => SeekFrom::End(offset),
+                _ => return -1,
+            };
+            match self.fd_table.get_mut(&fd) {
+                Some(file) => file.seek(pos).map_or(-1, |p| p as i64),
+                None => -1,
             }
         }
 

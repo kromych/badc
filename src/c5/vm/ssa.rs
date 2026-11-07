@@ -1746,16 +1746,15 @@ fn std_stream_index(sym: &str) -> Option<usize> {
     }
 }
 
-/// The descriptor of the standard stream argument `idx` of `name` names.
-fn stdio_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
+/// The descriptor of the open stream argument `idx` of `name` names.
+fn stream_fd(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<i64, C5Error> {
     let stream = args.get(idx).copied().unwrap_or(0);
-    let off = (stream as usize).wrapping_sub(mem.stdio);
-    if mem.stdio != 0 && off < STDIO_SLOTS && off.is_multiple_of(STDIO_FILE_BYTES) {
-        return Ok((off / STDIO_FILE_BYTES) as i64);
+    match mem.streams.get(&(stream as usize)) {
+        Some(s) => Ok(s.fd),
+        None => Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: 0x{stream:x} is not an open stream"
+        ))),
     }
-    Err(C5Error::Runtime(format!(
-        "vm_ssa: {name}: 0x{stream:x} is not a standard stream"
-    )))
 }
 
 fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec<u8>, C5Error> {
@@ -1776,6 +1775,7 @@ pub(super) fn interp_supplies(name: &str) -> bool {
         || printf::NAMES.contains(&name)
         || scan::NAMES.contains(&name)
         || locale::NAMES.contains(&name)
+        || stream::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -1931,6 +1931,9 @@ fn dispatch_callext<H: Host>(
         return r;
     }
     if let Some(r) = scan::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = stream::call(name, args, mem, host) {
         return r;
     }
     if let Some(r) = locale::call(name, args, mem) {
@@ -2133,7 +2136,7 @@ fn dispatch_callext<H: Host>(
         "__iob_func" => Ok(mem.stdio() as i64),
         "errno_location" => Ok((mem.stdio() + STDIO_ERRNO) as i64),
         "fputs" => {
-            let fd = stdio_fd(name, args, 1, mem)?;
+            let fd = stream_fd(name, args, 1, mem)?;
             let _ = host.write(fd, &cstring_arg(name, args, 0, mem)?);
             Ok(0)
         }
@@ -2144,20 +2147,20 @@ fn dispatch_callext<H: Host>(
             Ok(0)
         }
         "fputc" | "putc" => {
-            let fd = stdio_fd(name, args, 1, mem)?;
+            let fd = stream_fd(name, args, 1, mem)?;
             let byte = args.first().copied().unwrap_or(-1) as u8;
             let _ = host.write(fd, &[byte]);
             Ok(i64::from(byte))
         }
         "fwrite" => {
-            let fd = stdio_fd(name, args, 3, mem)?;
+            let fd = stream_fd(name, args, 3, mem)?;
             let (buf, size, n) = libc_three_arg(name, args)?;
             let bytes = mem.read_bytes(buf, size.saturating_mul(n))?.to_vec();
             let _ = host.write(fd, &bytes);
             Ok(if size == 0 { 0 } else { n as i64 })
         }
         "fflush" => Ok(0),
-        "fileno" => stdio_fd(name, args, 0, mem),
+        "fileno" => stream_fd(name, args, 0, mem),
         // `int putchar(int c)` -- write one byte to stdout, returns
         // the byte (or EOF on error; we return the byte unconditionally).
         "putchar" => {
@@ -4670,7 +4673,7 @@ mod tests {
         expect_runtime_err(
             "#include <stdio.h>\n\
              int main(void) { char b[48]; return fputs(\"x\", (FILE *)b); }",
-            "is not a standard stream",
+            "is not an open stream",
         );
     }
 
@@ -4724,7 +4727,8 @@ mod tests {
             .chain(string::NAMES)
             .chain(printf::NAMES)
             .chain(scan::NAMES)
-            .chain(locale::NAMES);
+            .chain(locale::NAMES)
+            .chain(stream::NAMES);
         for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =

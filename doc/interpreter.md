@@ -108,14 +108,22 @@ converts the number and leaves the rest read. The interpreter's only
 locale is "C": `setlocale` answers it for `""`, `"C"` and `"POSIX"` and
 fails for any other name, and `localeconv` describes it.
 
+`fopen` opens a host file in any C99 mode, through which the output
+functions write and `fgetc`, `getc`, `getchar`, `ungetc`, `fgets`,
+`fread`, `fscanf`, `getline` and `getdelim` read; `feof`, `ferror`,
+`clearerr`, `fseek`, `ftell`, `rewind` and `fclose` work on it as on the
+standard streams. Output is unbuffered. A failed `fopen` sets `errno`
+from the host's error. A true `feof` or `ferror` is 1, or msvcrt's flag bit
+on Windows.
+
 Any other library call stops the program when it is reached:
 
 ```console
-error: runtime: vm_ssa: library call `fopen` is not implemented under --interp
+error: runtime: vm_ssa: library call `qsort` is not implemented under --interp
 ```
 
-Among the calls not implemented are `fopen` and `fgets`, `strerror`,
-`qsort`, `time`, `setjmp`, `signal` and `pthread_create`.
+Among the calls not implemented are `strerror`, `qsort`, `time`,
+`remove`, `rename`, `tmpfile`, `setjmp`, `signal` and `pthread_create`.
 
 ### Other limits
 

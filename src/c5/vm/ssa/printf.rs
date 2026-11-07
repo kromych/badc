@@ -67,7 +67,7 @@ fn run<H: Host>(name: &str, args: &[i64], mem: &mut Memory, host: &mut H) -> Res
             host.write(1, &out);
         }
         "fprintf" | "vfprintf" => {
-            let fd = super::stdio_fd(name, args, 0, mem)?;
+            let fd = super::stream_fd(name, args, 0, mem)?;
             host.write(fd, &out);
         }
         "dprintf" | "vdprintf" => {

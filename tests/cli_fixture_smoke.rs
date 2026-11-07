@@ -5337,6 +5337,16 @@ fn interp_fixture_prints(name: &str, expected: &[(&str, &str)]) {
 
 /// [`interp_fixture_prints`] with `input` on the standard input.
 fn interp_fixture_reads(name: &str, input: &str, expected: &[(&str, &str)]) {
+    interp_fixture_runs(name, input, &[], expected);
+}
+
+/// [`interp_fixture_reads`] passing the program `args`.
+fn interp_fixture_runs(
+    name: &str,
+    input: &str,
+    args: &[&std::ffi::OsStr],
+    expected: &[(&str, &str)],
+) {
     use std::io::Write;
     let badc = env!("CARGO_BIN_EXE_badc");
     let src = fixtures_dir().join(name);
@@ -5344,6 +5354,7 @@ fn interp_fixture_reads(name: &str, input: &str, expected: &[(&str, &str)]) {
         let mut child = Command::new(badc)
             .args(["-q", &format!("--target={target}"), "--interp"])
             .arg(&src)
+            .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -5500,4 +5511,34 @@ fn interp_scans_the_standard_input() {
             ("windows-arm64", want),
         ],
     );
+}
+
+/// Under `--interp` fopen opens a file of the host, the output functions
+/// write to it and the input functions read it back; feof's true value is
+/// msvcrt's `_IOEOF` bit on Windows. The macOS text is the native build's.
+#[test]
+fn interp_streams_write_and_read_back_a_file() {
+    let dir = TempDir::new("badc-interp-streams");
+    let text = |eof: &str| {
+        format!(
+            "[42 first\n][second][ line\n]xYy[z\n]2 3.5 7 30\n1 [\n] 0 4 [tail] {eof} -1\n\
+             3 [42 fir] t 32\n0 0\n1 1\n"
+        )
+    };
+    let (posix, msvcrt) = (text("1"), text("16"));
+    for (target, want) in [
+        ("linux-x64", &posix),
+        ("linux-aarch64", &posix),
+        ("macos-aarch64", &posix),
+        ("windows-x64", &msvcrt),
+        ("windows-arm64", &msvcrt),
+    ] {
+        let file = dir.join(format!("{target}.txt"));
+        interp_fixture_runs(
+            "streams_write_and_read_back_a_file.c",
+            "",
+            &[file.as_os_str()],
+            &[(target, want)],
+        );
+    }
 }

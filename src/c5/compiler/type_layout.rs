@@ -1269,21 +1269,29 @@ fn scalar_kind(ty: i64, target: Target) -> ScalarKind {
     }
 }
 
-/// The AAPCS64 homogeneous aggregate (5.9.5) `struct_id` forms on
+/// The AAPCS64 homogeneous aggregate (5.9.5) the struct type `ty` forms on
 /// `target`, decided from the members as gcc and clang do: a struct has
 /// the sum of its members' elements, a union the most any member has, an
-/// array its element's times its length, and no padding.
+/// array its element's times its length, and no padding. On macOS an
+/// `_Atomic` aggregate or member is none, as clang classifies it; gcc
+/// takes `_Atomic` as a qualifier.
 pub(crate) fn homogeneous_aggregate(
     structs: &[StructDef],
     target: Target,
-    struct_id: usize,
+    ty: i64,
 ) -> Option<HomogeneousAggregate> {
-    if !target.is_aarch64() {
+    if !target.is_aarch64() || atomic_opaque(target, ty) {
         return None;
     }
-    let (base, count) = homogeneous_elements(structs, target, struct_id)?;
+    let (base, count) = homogeneous_elements(structs, target, struct_id_of(ty))?;
     let (kind, width) = base?;
     HomogeneousAggregate::new(kind, width, count)
+}
+
+/// Whether `ty` is an `_Atomic` type clang's AArch64 classification takes
+/// as no homogeneous base, on the target whose system compiler it is.
+fn atomic_opaque(target: Target, ty: i64) -> bool {
+    target == Target::MacOSAarch64 && super::types::is_atomic_object_ty(ty)
 }
 
 /// The base type as its leaf kind and width, `None` before the first
@@ -1334,7 +1342,7 @@ fn homogeneous_elements(
         {
             continue;
         }
-        if f.bit_width > 0 || f.array_size < 0 {
+        if f.bit_width > 0 || f.array_size < 0 || atomic_opaque(target, f.ty) {
             return None;
         }
         let (kind, n) = if is_struct_value_ty(f.ty) {
@@ -1462,7 +1470,7 @@ pub(crate) fn host_abi_agg_desc_conv(
     // FP argument bank, up to four registers -- a four-`double` HFA is 32
     // bytes, past the by-reference threshold. Admit it on AArch64 ahead of
     // the size / FP-class gates.
-    let homogeneous = homogeneous_aggregate(structs, target, id);
+    let homogeneous = homogeneous_aggregate(structs, target, ty);
     if homogeneous.is_none() {
         if matches!(row, Target::WindowsX64) {
             // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
@@ -1517,7 +1525,7 @@ pub(crate) fn passes_by_reference(
     }
     let id = struct_id_of(ty);
     let size = structs[id].size;
-    let homogeneous = || homogeneous_aggregate(structs, target, id).is_some();
+    let homogeneous = || homogeneous_aggregate(structs, target, ty).is_some();
     match target.abi_row(conv) {
         Target::LinuxAarch64 | Target::MacOSAarch64 => size > 16 && !homogeneous(),
         Target::WindowsAarch64 => size > 16 && (variadic || !homogeneous()),
@@ -1589,7 +1597,7 @@ pub(crate) fn struct_return_abi_conv(
     // AAPCS64 6.9: a homogeneous floating-point aggregate returns in up to
     // four consecutive FP registers (v0..v3), independent of the 16-byte
     // integer-register threshold -- a four-`double` HFA is 32 bytes.
-    let homogeneous = homogeneous_aggregate(structs, target, id);
+    let homogeneous = homogeneous_aggregate(structs, target, ty);
     let desc = AggDesc {
         size,
         align,

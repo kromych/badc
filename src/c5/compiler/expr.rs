@@ -2281,11 +2281,7 @@ impl Compiler {
             && !is_vector_ty(&self.structs, arg_ty)
             && self.target.abi().aarch64_host_variadic()
         {
-            super::type_layout::homogeneous_aggregate(
-                &self.structs,
-                self.target,
-                struct_id_of(arg_ty),
-            )
+            super::type_layout::homogeneous_aggregate(&self.structs, self.target, arg_ty)
         } else {
             None
         };

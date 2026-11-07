@@ -5681,6 +5681,44 @@ fn a_by_reference_argument_is_the_address_of_a_copy() {
     }
 }
 
+/// An `_Atomic` aggregate, or one with an `_Atomic` member, is no
+/// homogeneous aggregate on macOS, as clang classifies it, and passes in
+/// the general registers; gcc takes `_Atomic` as a qualifier, so on Linux
+/// the floating-point members still form one.
+#[test]
+fn an_atomic_member_ends_a_homogeneous_aggregate_on_macos() {
+    use crate::Target;
+    use crate::c5::ir::Inst;
+    let src = "struct pf { float x, y; };\n\
+        struct hf { _Atomic float a; float b; };\n\
+        struct hd { double a; _Atomic double b; };\n\
+        struct q { _Atomic struct pf p; float a, b; };\n\
+        int t0(struct pf v); int t1(struct hf v); int t2(struct hd v);\n\
+        int t3(struct q v); int t4(_Atomic struct pf v);\n\
+        int f(struct pf a, struct hf b, struct hd c, struct q d, _Atomic struct pf e) {\n\
+            return t0(a) + t1(b) + t2(c) + t3(d) + t4(e);\n\
+        }\n\
+        int main(void) { return 0; }\n";
+    for (target, atomic_hfa) in [(Target::LinuxAarch64, true), (Target::MacOSAarch64, false)] {
+        let program = crate::Compiler::with_target(src.into(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        let hfa: alloc::vec::Vec<bool> = (f.insts.iter())
+            .filter_map(|i| match i {
+                Inst::Call { arg_aggs, .. } => arg_aggs[0],
+                _ => None,
+            })
+            .map(|a| f.agg_descs[a as usize].homogeneous.is_some())
+            .collect();
+        let want = [true, atomic_hfa, atomic_hfa, atomic_hfa, atomic_hfa];
+        assert_eq!(hfa, want, "{target:?}");
+    }
+}
+
 /// The Microsoft x64 convention passes an aggregate of 1, 2, 4 or 8 bytes by
 /// value as an integer whatever its members, so a floating-point member
 /// leaves the argument and the parameter with their layout and an integer

@@ -5828,6 +5828,108 @@ fn an_import_library_outranks_a_header_binding() {
     }
 }
 
+/// A machine-neutral COFF object whose one weak external of the alias kind
+/// (`IMAGE_WEAK_EXTERN_SEARCH_ALIAS`) makes `alias` stand for `target`, as
+/// each member of MSVC's oldnames.lib is.
+fn coff_alias_object(alias: &str, target: &str) -> Vec<u8> {
+    let mut strings = vec![0u8; 4];
+    let mut record = |name: &str, class: u8, aux: u8| {
+        let mut r = [0u8; 4].to_vec();
+        r.extend((strings.len() as u32).to_le_bytes());
+        strings.extend([name.as_bytes(), b"\0"].concat());
+        r.extend([0u8; 4]);
+        r.extend([0u8; 2]);
+        r.extend([0u8; 2]);
+        r.extend([class, aux]);
+        r
+    };
+    let mut symbols = record(target, 2, 0);
+    symbols.extend(record(alias, 105, 1));
+    // The auxiliary record: the default's index, then the search kind.
+    symbols.extend(0u32.to_le_bytes());
+    symbols.extend(3u32.to_le_bytes());
+    symbols.extend([0u8; 10]);
+    let len = strings.len() as u32;
+    strings[..4].copy_from_slice(&len.to_le_bytes());
+    let mut out = [0u8; 4].to_vec();
+    out.extend(0u32.to_le_bytes());
+    out.extend(20u32.to_le_bytes());
+    out.extend(3u32.to_le_bytes());
+    out.extend([0u8; 4]);
+    out.extend(symbols);
+    out.extend(strings);
+    out
+}
+
+/// A reference to a name only a COFF alias weak external in an archive
+/// member supplies pulls the member and binds to the alias's target, here a
+/// function an import library exports, as link.exe resolves the POSIX names
+/// MSVC's oldnames.lib maps onto the C runtime's: the call and an
+/// import-address slot, `__imp_fileno` standing for `__imp__fileno`. The C
+/// library the bundled headers name does not take the alias's name.
+#[test]
+fn a_coff_alias_weak_external_binds_to_its_import() {
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let dir = tempdir(&format!("pe-alias-weak-external-{target}"));
+        write_source(
+            &dir,
+            "main.c",
+            "int fileno(void *);\n__declspec(dllimport) int isatty(int);\n\
+             int main(void) { return fileno(0) + isatty(1); }\n",
+        );
+        let member = |name: &str, body: &[u8]| {
+            let header = format!(
+                "{:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+                name,
+                0,
+                0,
+                0,
+                644,
+                body.len()
+            );
+            let mut m = header.into_bytes();
+            m.extend(body);
+            if body.len() % 2 == 1 {
+                m.push(b'\n');
+            }
+            m
+        };
+        let mut aliases = b"!<arch>\n".to_vec();
+        aliases.extend(member(
+            "fileno.obj/",
+            &coff_alias_object("fileno", "_fileno"),
+        ));
+        aliases.extend(member(
+            "isatty.obi/",
+            &coff_alias_object("__imp_isatty", "__imp__isatty"),
+        ));
+        std::fs::write(dir.join("aliases.lib"), aliases).unwrap();
+        let crt = short_import_library(
+            "crt.dll",
+            &[(machine, "_fileno", None), (machine, "_isatty", None)],
+        );
+        std::fs::write(dir.join("crt.lib"), crt).unwrap();
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["main.c", "aliases.lib", "crt.lib", "-o", "main.exe"])
+                .current_dir(&dir),
+            "link through the aliases",
+        );
+        let imports = pe_imports(&std::fs::read(dir.join("main.exe")).expect("read image"));
+        for name in ["_fileno", "_isatty"] {
+            assert!(
+                imports.contains(&("crt.dll".into(), name.into())),
+                "{target}: {imports:?}"
+            );
+        }
+        let elsewhere = |(dll, n): &(String, String)| {
+            dll != "crt.dll" && (n.ends_with("fileno") || n.ends_with("isatty"))
+        };
+        assert!(!imports.iter().any(elsewhere), "{target}: {imports:?}");
+    }
+}
+
 /// Objects cl compiled with `__except` and `__finally` (seh_cl.c beside
 /// them) link with badc and handle exceptions at run time, raised in the
 /// cl function itself and in badc functions it calls, so the unwinder

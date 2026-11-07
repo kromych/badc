@@ -1178,6 +1178,10 @@ pub struct NativeObject {
     /// `(name, alternate)`: an undefined `name` resolves to `alternate`, from
     /// a COFF weak external or a `/alternatename:` directive.
     pub alternate_names: Vec<(String, String)>,
+    /// The names of the alternates that are COFF weak externals of the
+    /// alias kind (`IMAGE_WEAK_EXTERN_SEARCH_ALIAS`): link.exe pulls an
+    /// archive member carrying one for its name, as it does a definition.
+    pub weak_aliases: Vec<String>,
     /// COFF COMDAT groups; one group per key keeps its definitions.
     pub comdats: Vec<Comdat>,
     /// A COFF object's `/DEFAULTLIB:` libraries, searched after the inputs.
@@ -1436,6 +1440,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         unique,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
+        weak_aliases: Vec::new(),
         comdats,
         default_libs,
         mismatch_keys: Vec::new(),

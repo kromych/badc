@@ -66,6 +66,7 @@ const IMAGE_SYM_CLASS_SECTION: u8 = 104;
 const IMAGE_SYM_CLASS_WEAK_EXTERNAL: u8 = 105;
 const IMAGE_COMDAT_SELECT_ASSOCIATIVE: u8 = 5;
 const IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY: u32 = 1;
+const IMAGE_WEAK_EXTERN_SEARCH_ALIAS: u32 = 3;
 
 const IMAGE_REL_AMD64_ABSOLUTE: u16 = 0x0;
 const IMAGE_REL_AMD64_ADDR64: u16 = 0x1;
@@ -854,6 +855,7 @@ fn decode_symbols(
     sects: &[Sect],
     directives: &Directives,
     alternates: &mut Vec<(String, String)>,
+    aliases: &mut Vec<String>,
 ) -> Result<Vec<NativeSymbol>, C5Error> {
     let mut out = Vec::with_capacity(raw.len() + 1);
     out.push(null_symbol());
@@ -973,6 +975,9 @@ fn decode_symbols(
                     STB_GLOBAL
                 };
                 alternates.push((r.name.clone(), default.name.clone()));
+                if search == IMAGE_WEAK_EXTERN_SEARCH_ALIAS {
+                    aliases.push(r.name.clone());
+                }
             }
             _ => {
                 *weak = NativeSymbol {
@@ -1726,7 +1731,14 @@ pub fn parse_native_coff(
     let blobs = concat_families(bytes, &mut sects)?;
     let comdats = comdat_groups(&comdat, &sects);
     let mut alternate_names = directives.alternate_names.clone();
-    let mut symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
+    let mut weak_aliases = Vec::new();
+    let mut symbols = decode_symbols(
+        &raw,
+        &sects,
+        &directives,
+        &mut alternate_names,
+        &mut weak_aliases,
+    )?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
@@ -1784,6 +1796,7 @@ pub fn parse_native_coff(
         unwind: Vec::new(),
         extern_data_names: Vec::new(),
         alternate_names,
+        weak_aliases,
         comdats,
         default_libs: directives.default_libs.clone(),
         mismatch_keys: directives.mismatch_keys.clone(),

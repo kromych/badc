@@ -891,8 +891,9 @@ impl Selection {
 
     /// Pull the members of the archives at `span` that define a name
     /// still undefined, until a pass over all of them pulls none. A
-    /// member is pulled on its strong section-resident definitions, and
-    /// read first when the archive's index lists a name still undefined.
+    /// member is pulled on its strong section-resident definitions and its
+    /// COFF alias weak externals, and read first when the archive's index
+    /// lists a name still undefined.
     fn pull(&mut self, slots: &mut [Slot], span: &[usize]) {
         loop {
             let mut progress = false;
@@ -903,7 +904,7 @@ impl Selection {
                 for member in members.iter_mut() {
                     member.read_if(self.target, |n| self.undefined.contains_key(n));
                     let wanted = member.object().and_then(|o| {
-                        o.symbols.iter().find_map(|s| {
+                        let defined = o.symbols.iter().find_map(|s| {
                             (s.binding == 1
                                 && !matches!(
                                     s.section,
@@ -911,7 +912,13 @@ impl Selection {
                                 )
                                 && self.undefined.contains_key(&s.name))
                             .then(|| s.name.clone())
-                        })
+                        });
+                        let aliased = || {
+                            (o.weak_aliases.iter())
+                                .find(|n| self.undefined.contains_key(*n))
+                                .cloned()
+                        };
+                        defined.or_else(aliased)
                     });
                     if let Some(symbol) = wanted {
                         let Member::Read(o) = core::mem::replace(member, Member::Pulled) else {
@@ -1045,6 +1052,7 @@ fn select_archive_members(
         }
     }
     yield_pool_definitions(&mut native_objs, pool);
+    bind_alternates(&mut native_objs, &sel, shared_libs);
     // Whatever the selection left undefined is what the target's C
     // library has to cover for the link to resolve it as an import.
     // Weak references count: a system linker binds one the implicit
@@ -1091,6 +1099,51 @@ fn select_archive_members(
         }
     }
     (native_objs, sel.inclusions)
+}
+
+/// A reference to a name nothing defines or exports binds to its COFF
+/// alternate (a weak external's default or a `/alternatename:`), followed
+/// transitively, when the alternate is defined or a shared library exports
+/// it, as link.exe resolves one; `__imp_X` stands for an export `X`.
+fn bind_alternates(
+    objs: &mut [badc::NativeObject],
+    sel: &Selection,
+    shared_libs: &[badc::SharedLibrary],
+) {
+    if sel.alternates.is_empty() {
+        return;
+    }
+    let exported = |n: &str| shared_libs.iter().any(|l| l.exports.contains(n));
+    let resolved = |n: &str| {
+        sel.defined.contains(n) || exported(n) || n.strip_prefix("__imp_").is_some_and(exported)
+    };
+    let mut bound: hashbrown::HashMap<&str, &str> = hashbrown::HashMap::new();
+    for name in sel.alternates.keys().filter(|n| !resolved(n)) {
+        let mut alt = name.as_str();
+        for _ in 0..sel.alternates.len() {
+            match sel.alternates.get(alt) {
+                Some(next) if !resolved(alt) => alt = next,
+                _ => break,
+            }
+        }
+        if resolved(alt) {
+            bound.insert(name, alt);
+        }
+    }
+    for o in objs.iter_mut() {
+        for s in &mut o.symbols {
+            if s.section == badc::NativeSymSection::Undef
+                && let Some(alt) = bound.get(s.name.as_str())
+            {
+                s.name = alt.to_string();
+            }
+        }
+        for n in &mut o.extern_data_names {
+            if let Some(alt) = bound.get(n.as_str()) {
+                *n = alt.to_string();
+            }
+        }
+    }
 }
 
 /// A pulled on-demand source's definition of a name the program defines is

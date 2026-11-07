@@ -1,7 +1,8 @@
 /* MSVC compiler intrinsics (<intrin.h>). The byte-swap family binds its
 ** UCRT export; the compiler lowers every other call declared here at the
-** call site, whatever declares it, as MSVC does. On x86-64 the header
-** also carries the vector intrinsics, as MSVC's includes <immintrin.h>.
+** call site, whatever declares it, as MSVC does. The header also carries
+** the vector intrinsics, as MSVC's includes <immintrin.h> on x86-64 and
+** its NEON header on arm64.
 ** TODO: the 256-bit vector types and their intrinsics. */
 #pragma once
 
@@ -9,6 +10,8 @@
 
 #if defined(__x86_64__)
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 /* The byte-swap trio lives in the UCRT, not legacy msvcrt.dll

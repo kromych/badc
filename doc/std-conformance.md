@@ -690,10 +690,13 @@ An intrinsic whose last operand is an `imm8` is a macro, as gcc's are without
 instruction appears at the call site; without `-O` they stay calls.
 
 On the AArch64 targets `<arm_neon.h>` provides a subset of the ACLE NEON
-intrinsics. For the integer vectors: `vld1` and `vst1`, bitwise operations,
+intrinsics, and `<intrin.h>` includes it on windows-arm64 as MSVC's includes
+its own NEON header. For the integer vectors: `vld1` and `vst1`, bitwise operations,
 immediate shifts, `vdup`, the polynomial byte multiply, table lookups, byte
 equality, halfword reversal, the across-lanes minimum and 64-bit lane
-composition. The FEAT_AES rounds and the 64-bit carry-less multiply. For
+composition; the halfword broadcast and equality, the narrowing shift right,
+the doubleword load, the integer lane reads and the reinterpretations between
+lane widths. The FEAT_AES rounds and the 64-bit carry-less multiply. For
 `float32x2_t`, `float32x4_t`, `float64x1_t` and `float64x2_t`: loads and
 stores, arithmetic, square root, fused multiply-add, compares, `vbsl`,
 conversions, lane access, `vget_low`, `vget_high`, `vcombine` and the

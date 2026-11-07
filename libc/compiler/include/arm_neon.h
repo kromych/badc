@@ -534,6 +534,59 @@ __BADC_NEON_CAST(vreinterpretq_s64_f64, int64x2_t, float64x2_t)
 __BADC_NEON_CAST(vreinterpretq_f64_f32, float64x2_t, float32x4_t)
 __BADC_NEON_CAST(vreinterpretq_f32_f64, float32x4_t, float64x2_t)
 
+/* 16-bit lanes and the 64-bit integer vectors: the doubleword load, the
+ * lane broadcast and equality, the exclusive or, the narrowing shift right,
+ * the integer lane reads and the reinterpretations among the 8-, 16-, 32-
+ * and 64-bit lanes of one width. */
+static inline uint8x8_t vld1_u8(const uint8_t *__p) {
+    uint8x8_t __r;
+    __asm__("ldr %d0, [%1]" : "=w"(__r) : "r"(__p) : "memory");
+    return __r;
+}
+
+static inline uint16x8_t vdupq_n_u16(uint16_t __a) {
+    uint16x8_t __r;
+    __asm__("dup %0.8h, %w1" : "=w"(__r) : "r"(__a));
+    return __r;
+}
+
+static inline uint16x8_t vceqq_u16(uint16x8_t __a, uint16x8_t __b) {
+    uint16x8_t __r;
+    __asm__("cmeq %0.8h, %1.8h, %2.8h" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+static inline uint16x4_t veor_u16(uint16x4_t __a, uint16x4_t __b) {
+    uint16x4_t __r;
+    __asm__("eor %0.8b, %1.8b, %2.8b" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+/* Each halfword lane shifted right by __n, its low byte kept. */
+#define vshrn_n_u16(__a, __n) __extension__({                             \
+    uint16x8_t __sa = (__a);                                              \
+    uint8x8_t __sr;                                                       \
+    __asm__("shrn %0.8b, %1.8h, #" #__n : "=w"(__sr) : "w"(__sa));        \
+    __sr;                                                                 \
+})
+
+/* The 64-bit lane __n of a doubleword vector, copied into both lanes. */
+#define vdupq_lane_u64(__a, __n) __extension__({                          \
+    uint64x1_t __la = (__a);                                              \
+    __BADC_NEON_LANE(__n, 1);                                             \
+    (uint64x2_t){__la[__n], __la[__n]};                                   \
+})
+
+#define vget_lane_u32(__v, __n) __BADC_NEON_GET(uint32x2_t, __v, __n, 2)
+#define vget_lane_u64(__v, __n) __BADC_NEON_GET(uint64x1_t, __v, __n, 1)
+
+__BADC_NEON_CAST(vreinterpret_u16_u8, uint16x4_t, uint8x8_t)
+__BADC_NEON_CAST(vreinterpret_u32_u8, uint32x2_t, uint8x8_t)
+__BADC_NEON_CAST(vreinterpret_u64_u8, uint64x1_t, uint8x8_t)
+__BADC_NEON_CAST(vreinterpret_u64_u16, uint64x1_t, uint16x4_t)
+__BADC_NEON_CAST(vreinterpretq_u16_u8, uint16x8_t, uint8x16_t)
+__BADC_NEON_CAST(vreinterpretq_u16_u64, uint16x8_t, uint64x2_t)
+
 #undef __BADC_NEON_LOAD
 #undef __BADC_NEON_STORE
 #undef __BADC_NEON_1

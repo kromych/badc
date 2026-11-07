@@ -159,7 +159,10 @@ fn parse_archive_members(blob: &[u8]) -> Result<Walk<'_>, C5Error> {
         // body lives in an external file (the header records its size
         // but no bytes follow). `is_meta` singles out the two inline
         // metadata members so a thin archive still skips their bodies.
-        let is_meta = raw_name == "/" || raw_name == "/SYM64/" || raw_name == "//";
+        // lib.exe names its own tables `/<NAME>/`: `/<ECSYMBOLS>/` (the
+        // ARM64EC index), `/<HYBRIDMAP>/` and `/<XFGHASHMAP>/`.
+        let ms_table = raw_name.len() > 4 && raw_name.starts_with("/<") && raw_name.ends_with(">/");
+        let is_meta = raw_name == "/" || raw_name == "/SYM64/" || raw_name == "//" || ms_table;
         let inline = !thin || is_meta;
         let mut body: &[u8] = if inline {
             if cursor + size > blob.len() {
@@ -184,9 +187,9 @@ fn parse_archive_members(blob: &[u8]) -> Result<Walk<'_>, C5Error> {
         //   "#1/<digits>"  -- BSD name inline at the head of the body.
         //   "name/"        -- SysV short name (trailing `/` is the terminator).
         //   "name"         -- BSD short name.
-        // MSVC repeats `/` (a little-endian index) and adds ARM64EC's `/<ECSYMBOLS>/`.
-        if raw_name == "/" || raw_name == "/SYM64/" || raw_name == "/<ECSYMBOLS>/" {
-            if raw_name != "/<ECSYMBOLS>/" && index.is_none() {
+        // MSVC repeats `/` (a little-endian index) and adds its own tables.
+        if raw_name == "/" || raw_name == "/SYM64/" || ms_table {
+            if !ms_table && index.is_none() {
                 let wide = raw_name == "/SYM64/";
                 index = Some((IndexForm::SysV { wide }, body));
             }
@@ -1058,6 +1061,37 @@ mod tests {
         assert_eq!(members[0].bytes, b"LONG-BODY");
         assert_eq!(members[1].name, "short.o");
         assert_eq!(members[1].bytes, b"SHORT");
+    }
+
+    /// lib.exe's tables `/<ECSYMBOLS>/`, `/<HYBRIDMAP>/` and
+    /// `/<XFGHASHMAP>/` (the Windows SDK's import libraries carry the last)
+    /// are not members.
+    #[test]
+    fn msvc_tables_are_not_members() {
+        let mut blob: Vec<u8> = b"!<arch>\n".to_vec();
+        for (name, body) in [
+            ("/<XFGHASHMAP>/", &b"hash"[..]),
+            ("/<HYBRIDMAP>/", b"map!"),
+            ("/<ECSYMBOLS>/", b"\0\0\0\0"),
+            ("kept.obj/", b"BODY"),
+        ] {
+            let header = alloc::format!(
+                "{name:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+                0,
+                0,
+                0,
+                644,
+                body.len()
+            );
+            blob.extend_from_slice(header.as_bytes());
+            blob.extend_from_slice(body);
+        }
+        let members = read_archive(&blob).expect("read msvc tables");
+        assert_eq!(members.len(), 1);
+        assert_eq!(
+            (members[0].name.as_str(), &members[0].bytes[..]),
+            ("kept.obj", &b"BODY"[..])
+        );
     }
 
     /// A BSD short name fits the 16-byte field with no `#1/` prefix and

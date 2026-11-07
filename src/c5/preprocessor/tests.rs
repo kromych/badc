@@ -4898,6 +4898,35 @@ fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
 }
 
 #[test]
+fn a_projects_intrin_h_in_a_user_directory_is_used() {
+    // A project ships an `<intrin.h>` of its own over badc's builtins (the
+    // MSVC intrinsics badc's leaves out); in a `-I` directory it stands,
+    // where another intrinsic header there binds badc's.
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("badc-user-intrin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["intrin.h", "emmintrin.h"] {
+        std::fs::File::create(dir.join(name))
+            .unwrap()
+            .write_all(b"int project_header_marker;\n")
+            .unwrap();
+    }
+    for (name, project) in [("intrin.h", true), ("emmintrin.h", false)] {
+        let mut pp = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+        pp.add_search_path(dir.to_str().unwrap());
+        let out = pp
+            .process(&format!("#include <{name}>\n"))
+            .expect("the header resolves");
+        assert_eq!(
+            out.contains("project_header_marker"),
+            project,
+            "{name}: {out}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn msvc_intrin_h_on_a_system_path_binds_the_embedded_copy() {
     // MSVC's include directory carries an `<intrin.h>` written against cl's
     // builtins; on a Windows target the name binds badc's, as clang's

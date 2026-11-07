@@ -173,6 +173,14 @@ pub(super) fn intrinsic_header(name: &str) -> bool {
     INTRINSIC_HEADERS.contains(&name)
 }
 
+/// Whether badc's copy of `name` takes the place of one a search directory
+/// carries: an intrinsic header's, except an `<intrin.h>` in a `-I`
+/// directory, which a project ships of its own over badc's builtins; MSVC's
+/// sits in its toolset's directory, a system one.
+pub(super) fn replaces_found_copy(name: &str, user_dir: bool) -> bool {
+    intrinsic_header(name) && !(user_dir && name == "intrin.h")
+}
+
 /// Whether `name` is one of the compiler's own headers rather than the C
 /// library's: `-nostdinc` drops them with the library, `-nostdlibinc`
 /// keeps them, and the directory `-print-file-name=include` names serves

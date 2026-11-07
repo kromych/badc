@@ -585,7 +585,8 @@ impl Preprocessor {
                 };
                 // Another compiler's intrinsic header is written against its
                 // builtins and can never compile here; the name binds badc's.
-                if crate::c5::headers::intrinsic_header(name)
+                let user_dir = matches!(step, SearchStep::Path(_));
+                if crate::c5::headers::replaces_found_copy(name, user_dir)
                     && let Some(own) = self.own_header(name, false)
                 {
                     return Some(own);

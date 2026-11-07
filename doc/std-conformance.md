@@ -738,8 +738,9 @@ structure loads, float16 and bfloat16 are not provided.
   `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`
   and `/FAILIFMISMATCH:`. Elsewhere it warns and is ignored, as in clang.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
-  intrinsic headers: MSVC's include directory on the search path does not
-  supply it, as clang's copy shadows MSVC's.
+  intrinsic headers: MSVC's include directory, a system directory, does not
+  supply it, as clang's copy shadows MSVC's. A project's own `<intrin.h>` in
+  a `-I` directory is used.
 - MSVC's inline linkage on the PE targets, in place of C99 6.7.4p6-p7, as MSVC
   and clang's `*-windows-msvc` targets apply it to C. An inline function of
   external linkage without `gnu_inline` is emitted, as an

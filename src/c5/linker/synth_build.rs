@@ -509,6 +509,7 @@ fn synth_program(
         default_libs: Vec::new(),
         auto_includes: Vec::new(),
         freestanding: false,
+        strlen_folds: false,
         subsystem,
         finished_functions: Vec::new(),
         symbols: Vec::new(),

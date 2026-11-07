@@ -39,6 +39,7 @@ mod redeclaration;
 mod run_compile;
 mod seh;
 mod sizeof_expr;
+pub(crate) use sizeof_expr::object_size_fallback;
 mod stmt;
 mod type_layout;
 mod value_builtin;
@@ -3894,6 +3895,7 @@ impl Compiler {
         // `.set name, target` aliases from file-scope asm. The binding follows
         // the unit's `.globl` / `.weak` directives, in either order and from
         // either statement, so the object writer settles it.
+        let strlen_folds = !self.library_name_is_opaque("strlen");
         let mut function_aliases = self.function_aliases;
         for (name, target, addend) in self.asm_sym_sets {
             function_aliases.push(crate::c5::program::FunctionAlias {
@@ -3967,6 +3969,7 @@ impl Compiler {
             default_libs: core::mem::take(&mut self.pp_default_libs),
             auto_includes: Vec::new(),
             freestanding: self.freestanding,
+            strlen_folds,
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit
             // `optimize()` step flips this on.

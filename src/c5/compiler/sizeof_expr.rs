@@ -224,6 +224,7 @@ impl Compiler {
         self.pending.object_size_operands -= 1;
         let designated = self.pending.object_ref.take();
         parsed?;
+        let operand = self.ast_acc.take();
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -254,13 +255,38 @@ impl Compiler {
         let extent = designated
             .filter(|r| r.addr)
             .and_then(|r| if kind & 1 == 1 { r.sub } else { r.whole });
+        self.ty = self.size_t_ty();
+        // A pointer value designating no object here may reach one once
+        // inlining substitutes the caller's argument, as gcc answers it.
+        if extent.is_none()
+            && let Some(id) = operand.filter(|&id| self.constant_p_operand_defers(id))
+        {
+            let pos = self.ast_src_pos();
+            let ty = self.ty;
+            let type_lit = self.ast.push_expr(
+                super::super::ast::Expr::IntLit {
+                    val: kind,
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            );
+            let node = self.ast.push_expr(
+                super::super::ast::Expr::Intrinsic {
+                    kind: crate::c5::op::Intrinsic::ObjectSize as i64,
+                    args: alloc::vec![id, type_lit],
+                    ty,
+                },
+                pos,
+            );
+            self.ast_acc = Some(node);
+            self.mark_emit_other();
+            return Ok(());
+        }
         let v = match extent {
             Some(e) => e.remaining(),
-            None if kind & 2 == 0 => -1,
-            None => 0,
+            None => object_size_fallback(kind),
         };
         self.emit_imm(v);
-        self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
         self.folded_builtin_lits.extend(self.ast_acc);
         Ok(())
@@ -603,12 +629,15 @@ impl Compiler {
     /// the SSA folds. Deferring lowers the operand so the inliner's
     /// argument substitution can reach it, which is sound only when that
     /// lowering neither has side effects nor traps: scalar locals and
-    /// parameters qualify; calls, pointer loads, volatile and
+    /// parameters qualify, and a load through such a pointer, which lowers
+    /// to its address without the read; calls, volatile and
     /// address-space-qualified accesses, and division do not.
     fn constant_p_operand_defers(&self, id: super::super::ast::ExprId) -> bool {
         use super::super::ast::{Expr, UnOp};
         use super::super::ir::BinOp;
         use super::types::{is_struct_value_ty, is_volatile_ty, segment_of_ty};
+        let plain_load =
+            |ty| !is_volatile_ty(ty) && segment_of_ty(ty).is_none() && !is_struct_value_ty(ty);
         match self.ast.expr(id) {
             Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
             Expr::Ident {
@@ -635,6 +664,16 @@ impl Compiler {
                 child,
                 ..
             } => self.constant_p_operand_defers(*child),
+            Expr::Unary {
+                op: UnOp::Deref,
+                child,
+                ty,
+            } => plain_load(*ty) && self.constant_p_operand_defers(*child),
+            Expr::Index { array, idx, ty } => {
+                plain_load(*ty)
+                    && self.constant_p_operand_defers(*array)
+                    && self.constant_p_operand_defers(*idx)
+            }
             Expr::Binary { op, lhs, rhs, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
                     && self.constant_p_operand_defers(*lhs)
@@ -875,4 +914,10 @@ impl Compiler {
         self.mark_unevaluated_use(idx);
         Ok(Some(align))
     }
+}
+
+/// `__builtin_object_size`'s answer where the size is not known: the
+/// maximum forms (types 0 and 1) `(size_t)-1`, the minimum forms 0.
+pub(crate) fn object_size_fallback(kind: i64) -> i64 {
+    if kind & 2 == 0 { -1 } else { 0 }
 }

@@ -845,6 +845,7 @@ pub(crate) mod test_support {
             default_libs: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
+            strlen_folds: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,

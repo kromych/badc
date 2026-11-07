@@ -90,9 +90,14 @@ pub(crate) enum ConstValue {
 /// address each receives, and the data image itself.
 pub(crate) struct ConstData<'a> {
     intervals: Vec<(i64, i64)>,
+    /// Every object this unit defines in the data image, `[start, end)`
+    /// ascending: the objects `__builtin_object_size` measures.
+    objects: Vec<(i64, i64)>,
     /// Ascending by offset. `None` marks a slot whose value has no IR
     /// form: a `&&label`, an unresolvable symbol.
     relocs: Vec<(i64, Option<AddrConst>)>,
+    /// The C library `strlen`: its binding and its extern entry.
+    strlen: (Option<i64>, Option<usize>),
     data: &'a [u8],
 }
 
@@ -189,11 +194,64 @@ impl<'a> ConstData<'a> {
                 .map(|(off, _)| (off as i64, None)),
         );
         relocs.sort_unstable_by_key(|&(off, _)| off);
+        let mut objects: Vec<(i64, i64)> = (program.symbols.iter())
+            .filter(|s| {
+                s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_weak
+                    && !s.is_thread_local
+                    && s.data_byte_size > 0
+            })
+            .map(|s| (s.val, s.val + s.data_byte_size))
+            .chain(program.const_data_ranges.iter().copied())
+            .collect();
+        objects.sort_unstable();
+        let strlen = match program.strlen_folds {
+            false => (None, None),
+            true => (
+                (program.symbols.iter())
+                    .find(|s| s.name == "strlen" && s.class == Token::Sys as i64)
+                    .map(|s| s.val),
+                (program.extern_function_imports.iter())
+                    .find(|(_, name)| name == "strlen")
+                    .map(|&(pc, _)| pc),
+            ),
+        };
         ConstData {
             intervals,
+            objects,
             relocs,
+            strlen,
             data: &program.data,
         }
+    }
+
+    /// The bytes from data offset `off` to the end of the object holding
+    /// it, `None` outside every object this unit defines.
+    fn remaining(&self, off: i64) -> Option<i64> {
+        let i = self.objects.partition_point(|&(start, _)| start <= off);
+        let (start, end) = *self.objects.get(i.checked_sub(1)?)?;
+        (start..=end).contains(&off).then_some(end - off)
+    }
+
+    /// The length of the string at data offset `off` when it and its NUL
+    /// lie in one const interval and overlap no relocation slot.
+    fn string_len(&self, off: i64) -> Option<i64> {
+        let &(_, hi) = (self.intervals.iter()).find(|&&(lo, hi)| lo <= off && off < hi)?;
+        let image = self.data.len() as i64;
+        let len = match self.data.get(off as usize..hi.min(image) as usize) {
+            _ if off >= image => 0,
+            Some(bytes) => match bytes.iter().position(|&b| b == 0) {
+                Some(n) => n as i64,
+                None if hi > image => image - off,
+                None => return None,
+            },
+            None => return None,
+        };
+        let i = self.relocs.partition_point(|&(r, _)| r + 8 <= off);
+        (self.relocs.get(i))
+            .is_none_or(|&(r, _)| r > off + len)
+            .then_some(len)
     }
 
     /// The value of `[off, off + width)` when the whole read sits inside
@@ -358,6 +416,75 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
         }
     }
     None
+}
+
+/// The data offset `v` addresses: an `ImmData` plus constants.
+fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::ImmData(off) => Some(*off),
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } if depth > 0 => data_offset(func, *value, depth - 1),
+        Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
+            let base = data_offset(func, *lhs, depth - 1)?;
+            match op {
+                BinOp::Add => base.checked_add(*rhs_imm),
+                BinOp::Sub => base.checked_sub(*rhs_imm),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Fold each deferred `__builtin_object_size` whose pointer is a defined
+/// object's address plus a constant: the bytes that remain past it. Only
+/// the whole object is known here: an upper bound for the closest
+/// subobject, so type 3, the subobject's minimum, keeps its fallback.
+/// A library `strlen` of a constant string folds to its length, and a
+/// deferred `__builtin_constant_p` of a load to 1 when the read is
+/// const data.
+pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let (size, constant_p) = (I::ObjectSize as i64, I::ConstantP as i64);
+    let mut changed = false;
+    for i in 0..func.insts.len() {
+        let folded = match &func.insts[i] {
+            Inst::Intrinsic { kind, args } if *kind == constant_p && args.len() == 2 => {
+                let width = match func.insts[args[1] as usize] {
+                    Inst::Imm(w) => w,
+                    _ => continue,
+                };
+                data_offset(func, args[0], 8)
+                    .and_then(|o| cd.read(o, width))
+                    .and_then(|v| matches!(v, ConstValue::Bytes(_)).then_some(1))
+            }
+            Inst::Intrinsic { kind, args } if *kind == size => {
+                let ty = args.get(1).map(|&t| &func.insts[t as usize]);
+                (args.first())
+                    .filter(|_| matches!(ty, Some(Inst::Imm(0..=2))))
+                    .and_then(|&p| data_offset(func, p, 8))
+                    .and_then(|o| cd.remaining(o))
+            }
+            Inst::CallExt {
+                binding_idx, args, ..
+            } if Some(*binding_idx) == cd.strlen.0 && args.len() == 1 => {
+                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+            }
+            Inst::Call {
+                target_pc, args, ..
+            } if Some(*target_pc) == cd.strlen.1 && args.len() == 1 => {
+                data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
+            }
+            _ => None,
+        };
+        if let Some(n) = folded {
+            func.insts[i] = Inst::Imm(n);
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Fold non-volatile integer loads from const, initialized data into the

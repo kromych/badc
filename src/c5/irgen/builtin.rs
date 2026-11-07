@@ -2,7 +2,9 @@
 //! arithmetic, the constant-size memory transfers, and the bit-count
 //! forms built on `Inst::BitCount`.
 
-use super::access::{load_kind_for_width, store_kind_for, store_kind_for_width, store_place};
+use super::access::{
+    load_kind_for, load_kind_for_width, store_kind_for, store_kind_for_width, store_place,
+};
 use super::types::type_size_bytes;
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -374,8 +376,40 @@ impl<'a> Walker<'a> {
             if !self.optimize {
                 return Ok(b.imm(0));
             }
+            // A load lowers to its address and width, without the read.
+            if let Expr::Unary {
+                op: UnOp::Deref,
+                ty,
+                ..
+            }
+            | Expr::Index { ty, .. } = *self.ast.expr(args[0])
+            {
+                let width = match load_kind_for(ty, self.target) {
+                    LoadKind::I8 | LoadKind::U8 => 1,
+                    LoadKind::I16 | LoadKind::U16 => 2,
+                    LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+                    LoadKind::I64 | LoadKind::F64 => 8,
+                    _ => return Ok(b.imm(0)),
+                };
+                let addr = self.walk_expr_lvalue(b, args[0])?;
+                let w = b.imm(width);
+                return Ok(b.intrinsic(kind, alloc::vec![addr, w]));
+            }
             let v = self.walk_expr_rvalue(b, args[0])?;
             return Ok(b.intrinsic(kind, alloc::vec![v]));
+        }
+        // Deferred `__builtin_object_size`, alike: the type is a literal.
+        if kind == Intrinsic::ObjectSize as i64 {
+            let ty = match self.ast.expr(args[1]) {
+                crate::c5::ast::Expr::IntLit { val, .. } => *val,
+                _ => 0,
+            };
+            if !self.optimize {
+                return Ok(b.imm(crate::c5::compiler::object_size_fallback(ty)));
+            }
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            let t = b.imm(ty);
+            return Ok(b.intrinsic(kind, alloc::vec![v, t]));
         }
         // The va_* intrinsics receive the address of the va_list
         // storage. Where `ap` is a va_list reached through a pointer,

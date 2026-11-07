@@ -498,6 +498,8 @@ pub struct Program {
     /// `-ffreestanding`: an `_Atomic` object takes the freestanding layout
     /// ([`crate::c5::compiler::types::atomic_layout`]).
     pub(crate) freestanding: bool,
+    /// `-fno-builtin` leaves a call to the C library `strlen` foldable.
+    pub(crate) strlen_folds: bool,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
@@ -823,6 +825,7 @@ impl DataOffsets for Program {
             default_libs: _,
             auto_includes: _,
             freestanding: _,
+            strlen_folds: _,
             subsystem: _,
             finished_functions,
             symbols,
@@ -967,6 +970,7 @@ mod data_offset_tests {
             default_libs: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
+            strlen_folds: false,
             data_align: 8,
             image_align_error: None,
             subsystem: None,

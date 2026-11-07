@@ -13967,6 +13967,96 @@ fn literal_index_guarded_assert_call_folds_away() {
     }
 }
 
+/// A fortified inline's compile-time overflow check reaches its error
+/// function once inlining makes the object and the length constant:
+/// `__builtin_object_size` of a parameter answers the bytes left in the
+/// object, a library `strlen` of const data folds, and
+/// `__builtin_constant_p` of a load through a parameter folds on const
+/// data. A check that holds drops its call. Type 3 keeps its fallback
+/// 0, and under `-fno-builtin` a call to `strlen` stays a call.
+#[test]
+fn fortified_inline_overflow_checks_fold() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        typedef __SIZE_TYPE__ size_t;\n\
+        #define FI static inline __attribute__((__always_inline__))\n\
+        #define FAIL(n) extern void over_##n(void) __attribute__((__error__(\"over\")))\n\
+        FAIL(1); FAIL(2); FAIL(3); FAIL(4); FAIL(5); FAIL(6); FAIL(7);\n\
+        FI size_t known_len(const char *p) {\n\
+            size_t n = __builtin_object_size(p, 1);\n\
+            if (n != (size_t)-1 && __builtin_constant_p(*p) &&\n\
+                __builtin_constant_p(p[n - 1]) && p[n - 1] == 0)\n\
+                return __builtin_strlen(p);\n\
+            return (size_t)-1;\n\
+        }\n\
+        FI int copy_overflows(char *p, const char *q) {\n\
+            size_t room = __builtin_object_size(p, 1), need = known_len(q) + 1;\n\
+            return __builtin_constant_p(room < need) && room < need;\n\
+        }\n\
+        FI int read_overflows(const void *p, size_t n) {\n\
+            return __builtin_constant_p(n) && __builtin_object_size(p, 0) < n;\n\
+        }\n\
+        FI size_t len(const char *q) { return strlen(q); }\n\
+        const char large[32] = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";\n\
+        const char fits[16] = \"AAAAAAAAAAAAAAA\";\n\
+        char small[16];\n\
+        void f1(void) { if (copy_overflows(small, large)) over_1(); }\n\
+        void f2(void) { if (copy_overflows(small, \"AAAAAAAAAAAAAAAAAAAAAAAA\")) over_2(); }\n\
+        void f3(void) { if (copy_overflows(small, fits)) over_3(); }\n\
+        void f4(void) { if (read_overflows(small, 17)) over_4(); }\n\
+        void f5(void) { if (read_overflows(small + 8, 8)) over_5(); }\n\
+        void f6(void) { if (__builtin_object_size(small + 0, 3) == 16) return; over_6(); }\n\
+        void f7(void) { if (len(\"abc\") != 3) over_7(); }\n";
+    let cases: [(&str, bool, &[&str]); 3] = [
+        (
+            "#include <string.h>\n",
+            false,
+            &["over_1", "over_2", "over_4"],
+        ),
+        (
+            "size_t strlen(const char *);\n",
+            false,
+            &["over_1", "over_2", "over_4"],
+        ),
+        (
+            "size_t strlen(const char *);\n",
+            true,
+            &["over_4", "over_7"],
+        ),
+    ];
+    for (decl, no_builtin, kept) in cases {
+        for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+            let prog = crate::Compiler::with_options(
+                alloc::format!("typedef __SIZE_TYPE__ size_t;\n{decl}{SRC}"),
+                target,
+                CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_no_builtin(no_builtin),
+            )
+            .compile()
+            .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+            let obj = emit_native_with_options(
+                &prog,
+                target,
+                NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    ..NativeOptions::new().with_optimize()
+                },
+            )
+            .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+            let syms = elf_symbol_shndx(&obj);
+            for n in 1..=7 {
+                let name = alloc::format!("over_{n}");
+                assert_eq!(
+                    syms.iter().any(|(s, _)| *s == name),
+                    kept.contains(&name.as_str()),
+                    "{target:?} {decl:?} -fno-builtin={no_builtin}: {name}"
+                );
+            }
+        }
+    }
+}
+
 /// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
 /// defines, so it must not fold to one: folding makes
 /// `__builtin_constant_p` over the result true and decides the guard of

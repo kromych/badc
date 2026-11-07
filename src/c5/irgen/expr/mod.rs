@@ -358,6 +358,16 @@ impl<'a> Walker<'a> {
             {
                 Some(0)
             }
+            Expr::Intrinsic { kind, args, .. }
+                if *kind == Intrinsic::ObjectSize as i64 && !self.optimize =>
+            {
+                match self.ast.expr(args[1]) {
+                    Expr::IntLit { val, .. } => {
+                        Some(crate::c5::compiler::object_size_fallback(*val))
+                    }
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }

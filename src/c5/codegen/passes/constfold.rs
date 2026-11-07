@@ -564,17 +564,24 @@ pub(crate) fn fold_addr_compares(func: &mut FunctionSsa, facts: &AddrFacts) -> b
     changed
 }
 
-/// Resolve every remaining deferred `__builtin_constant_p` to 0. Called
-/// once the branch-fold fixed point stalls: no later pass discovers new
-/// constants, so an operand still not an immediate never becomes one.
+/// Resolve every remaining deferred `__builtin_constant_p` to 0 and
+/// `__builtin_object_size` to its type's fallback. Called once the
+/// branch-fold fixed point stalls: no later pass discovers new constants or
+/// objects, so an operand not resolved by now never is.
 pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
-    let kind_id = crate::c5::op::Intrinsic::ConstantP as i64;
+    use crate::c5::op::Intrinsic;
     let mut changed = false;
-    for inst in &mut func.insts {
-        if matches!(inst, Inst::Intrinsic { kind, .. } if *kind == kind_id) {
-            *inst = Inst::Imm(0);
-            changed = true;
-        }
+    for i in 0..func.insts.len() {
+        let answer = match &func.insts[i] {
+            Inst::Intrinsic { kind, .. } if *kind == Intrinsic::ConstantP as i64 => 0,
+            Inst::Intrinsic { kind, args } if *kind == Intrinsic::ObjectSize as i64 => {
+                let ty = args.get(1).and_then(|&t| imm_of(func, t)).unwrap_or(0);
+                crate::c5::compiler::object_size_fallback(ty)
+            }
+            _ => continue,
+        };
+        func.insts[i] = Inst::Imm(answer);
+        changed = true;
     }
     changed
 }
@@ -1060,8 +1067,9 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
             // Deferred `__builtin_constant_p`: the operand folded to an
             // integer immediate, so the answer is 1. `imm_of` refuses
             // address-bearing immediates, which are not constants here.
+            // The address-and-width form of a load folds on const data.
             Inst::Intrinsic { kind, args }
-                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 =>
+                if *kind == crate::c5::op::Intrinsic::ConstantP as i64 && args.len() == 1 =>
             {
                 args.first()
                     .and_then(|&a| imm_of(func, a))

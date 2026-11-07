@@ -179,6 +179,9 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let forwarded = opts
             .const_data
             .is_some_and(|cd| super::const_global_fold::fold_template_loads(func, cd));
+        let sized = opts
+            .const_data
+            .is_some_and(|cd| super::const_global_fold::fold_data_queries(func, cd));
         let ranged = opts.implied_ranges && super::value_range::run_one(func, opts.param_ranges);
         let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
         let folded = super::constfold_branch::run_one(func)
@@ -190,6 +193,7 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
             && !pruned
             && !loaded
             && !forwarded
+            && !sized
             && !selected
             && !nulled
             && !ranged

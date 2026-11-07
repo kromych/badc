@@ -14,7 +14,8 @@
  * object holding it; a `[0]` member is a complete zero-length array and
  * answers 0. Through a pointer a trailing member may extend past its
  * bound (-fstrict-flex-arrays), and so may a member whose type ends in
- * a flexible array member. Every expected value is gcc 16's at -O2. */
+ * a flexible array member. Every expected value is gcc 16's at -O2
+ * where its optimizer does not see the object a pointer holds. */
 typedef unsigned long long usize;
 
 static char buf[16];
@@ -263,14 +264,19 @@ int main(void) {
     if (__builtin_object_size(buf, 2) != 16)
         return 3;
 
+    /* Through a pointer the object is known once the pointer's value is:
+     * the fallbacks at -O0, the object's size where the optimizer tracks
+     * it (gcc -O2 answers 16 for each type, clang 0 for type 3). */
     char *p = buf;
-    if (__builtin_object_size(p, 0) != (usize)-1)
+    usize p0 = __builtin_object_size(p, 0), p1 = __builtin_object_size(p, 1);
+    usize p2 = __builtin_object_size(p, 2), p3 = __builtin_object_size(p, 3);
+    if (p0 != (usize)-1 && p0 != 16)
         return 4;
-    if (__builtin_object_size(p, 1) != (usize)-1)
+    if (p1 != (usize)-1 && p1 != 16)
         return 5;
-    if (__builtin_object_size(p, 2) != 0)
+    if (p2 != 0 && p2 != 16)
         return 6;
-    if (__builtin_object_size(p, 3) != 0)
+    if (p3 != 0 && p3 != 16)
         return 7;
 
     /* Unevaluated operand: no side effect from the call. */

@@ -287,6 +287,13 @@ pub enum Intrinsic {
     /// x86_64, the sp at entry on AArch64 -- which `setjmp` stores as the
     /// frame an unwinding `longjmp` stops at. No arguments.
     EstablisherFrame = 85,
+    /// Deferred `__builtin_object_size(p, type)` whose pointer did not
+    /// designate an object at parse time. `args` are the pointer and the
+    /// type as an immediate. Folded to the bytes remaining once the pointer
+    /// reaches a defined object at a constant offset; the branch-fold fixed
+    /// point answers the type's fallback for every survivor. Produced only
+    /// under `-O`, so no emitter or the interpreter ever sees one.
+    ObjectSize = 86,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -439,6 +446,7 @@ impl Intrinsic {
             83 => Some(Intrinsic::PlatformRegister),
             84 => Some(Intrinsic::FuncletFrame),
             85 => Some(Intrinsic::EstablisherFrame),
+            86 => Some(Intrinsic::ObjectSize),
             _ => None,
         }
     }

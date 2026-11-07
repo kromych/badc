@@ -324,23 +324,42 @@ impl Compiler {
 
     /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
     /// cursor is at it, consume the whole specifier and return the atomic
-    /// version of the type-name's type, any abstract pointer declarator
-    /// inside the parentheses included. Returns `None` without consuming
-    /// otherwise (e.g. at the `_Atomic` qualifier). Shared by every
-    /// base-type parser (decl base, file-scope declaration, struct field).
+    /// version of the type-name's type, seeding the carriers a declarator
+    /// through it reads as `typeof(type-name)` does. Returns `None` without
+    /// consuming otherwise (e.g. at the `_Atomic` qualifier). Shared by
+    /// every base-type parser (decl base, file-scope declaration, struct
+    /// field).
     pub(super) fn try_parse_atomic_type_specifier(&mut self) -> Result<Option<i64>, C5Error> {
         if !self.lex_is_atomic_specifier() {
             return Ok(None);
         }
         self.next()?; // _Atomic
         self.next()?; // (
-        let inner = self.parse_type_name_base()?;
-        let inner = self.consume_abstract_pointer(inner)?.ty;
+        let name = self.parse_type_name()?;
         if self.lex.tk != ')' {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
         }
         self.next()?; // )
-        let atomic = apply_qual_bits(inner, super::types::ATOMIC_BIT);
+        // C11 6.7.2.4p3.
+        let refused = if !name.dims.is_empty() {
+            Some("an array type")
+        } else if name.names_function() {
+            Some("a function type")
+        } else if super::types::is_atomic_object_ty(name.ty) {
+            Some("an atomic type")
+        } else if super::types::unqualified_version_ty(name.ty) != name.ty {
+            Some("a qualified type")
+        } else {
+            None
+        };
+        if let Some(what) = refused {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                format!("`_Atomic(type-name)` names {what}"),
+            ));
+        }
+        self.seed_type_name_carriers(&name)?;
+        let atomic = apply_qual_bits(name.ty, super::types::ATOMIC_BIT);
         self.check_atomic_type(atomic)?;
         Ok(Some(atomic))
     }
@@ -360,16 +379,23 @@ impl Compiler {
         Ok(())
     }
 
-    /// C11 6.7.3p3: `_Atomic` does not qualify an array type, which a base
-    /// type through an array typedef is. TODO: a function type.
+    /// C11 6.7.3p3: `_Atomic` does not qualify an array type or a function
+    /// type, which a base type through such a typedef is.
     pub(super) fn check_atomic_base(&self, qual_bits: i64) -> Result<(), C5Error> {
-        if qual_bits & types::ATOMIC_BIT != 0 && self.pending.typedef_base_array_size != 0 {
-            return Err(self.compile_err(
-                Code::INVALID_DECLARATION,
-                "`_Atomic` qualifies an array type",
-            ));
+        if qual_bits & types::ATOMIC_BIT == 0 {
+            return Ok(());
         }
-        Ok(())
+        let what = if self.pending.typedef_base_array_size != 0 {
+            "an array type"
+        } else if self.pending.base_is_function_type {
+            "a function type"
+        } else {
+            return Ok(());
+        };
+        Err(self.compile_err(
+            Code::INVALID_DECLARATION,
+            format!("`_Atomic` qualifies {what}"),
+        ))
     }
 
     /// Seed the base-type carriers a declarator through `typeof(type-name)`

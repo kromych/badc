@@ -5459,11 +5459,8 @@ fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
 fn a_qualifier_may_follow_the_pointer_in_a_type_name() {
     // C99 6.7.6: the pointer part of an abstract declarator takes the same
     // qualifiers as a named declarator's, in every context that reads a type
-    // name. One parser consumes that pointer run for all of them.
-    assert_eq!(
-        run_main("int g = 4;\nint main(void) { _Atomic(int *const) p = &g; return *p; }"),
-        4
-    );
+    // name. One parser consumes that pointer run for all of them; the atomic
+    // type specifier refuses the qualified type it then names (C11 6.7.2.4p3).
     assert_eq!(
         run_main("int g = 4;\nint main(void) { typeof(int *const) p = &g; return *p; }"),
         4
@@ -7059,4 +7056,64 @@ fn pre_c99_editions_declare_implicitly_and_take_implicit_int() {
         assert!(err(compile(Some(std), false, call)).contains("unknown function `h`"));
         assert!(err(compile(Some(std), false, implicit_int)).contains("defaults to `int`"));
     }
+}
+
+/// C11 6.7.2.4p3 and 6.7.3p3: `_Atomic` names no array, function, atomic or
+/// qualified type, through a type name or a typedef; an atomic pointer to a
+/// function is an atomic type.
+#[test]
+fn atomic_names_no_array_function_atomic_or_qualified_type() {
+    use crate::{CompileOptions, Target};
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::host(), opts).compile()
+    };
+    let refused = [
+        (
+            "_Atomic(int[3]) a;\n",
+            "`_Atomic(type-name)` names an array type",
+        ),
+        (
+            "_Atomic(int (void)) *p;\n",
+            "`_Atomic(type-name)` names a function type",
+        ),
+        (
+            "typedef int F(void);\n_Atomic(F) *p;\n",
+            "`_Atomic(type-name)` names a function type",
+        ),
+        (
+            "_Atomic(const int) a;\n",
+            "`_Atomic(type-name)` names a qualified type",
+        ),
+        (
+            "int g;\n_Atomic(int *const) p = &g;\n",
+            "`_Atomic(type-name)` names a qualified type",
+        ),
+        (
+            "_Atomic(_Atomic int) a;\n",
+            "`_Atomic(type-name)` names an atomic type",
+        ),
+        (
+            "typedef int F(void);\n_Atomic F *p;\n",
+            "`_Atomic` qualifies a function type",
+        ),
+        (
+            "typedef int F(void);\nF _Atomic *p;\n",
+            "`_Atomic` qualifies a function type",
+        ),
+        (
+            "typedef int A[3];\n_Atomic A x;\n",
+            "`_Atomic` qualifies an array type",
+        ),
+    ];
+    for (src, want) in refused {
+        let err = compile(src)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(err.contains(want), "{src}: {err}");
+    }
+    let accepted = "_Atomic(int (*)(void)) p;\ntypedef int F(void);\n_Atomic(F *) q;\n\
+                    _Atomic(int *) r;\nint s(void) { return q == p; }\n";
+    assert!(compile(accepted).is_ok(), "{:?}", compile(accepted).err());
 }

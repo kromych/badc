@@ -133,6 +133,35 @@ pub fn write_native_image_from_merged_ex(
     write_native_image(&program, &build, target)
 }
 
+/// As [`write_native_image_from_merged_ex`]; a PE image whose
+/// `pdb_path` is given names that program database in its debug
+/// directory and comes with it.
+#[allow(clippy::too_many_arguments)]
+pub fn write_native_image_and_pdb(
+    merged: &MergedNative,
+    plt: &[PltTrampoline],
+    entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
+    target: Target,
+    shared_lib_name: Option<&str>,
+    opts: &ImageOptions,
+    pdb_path: Option<&str>,
+) -> Result<crate::c5::object::NativeImage, C5Error> {
+    let (program, mut build) = synth_program_and_build(
+        merged,
+        plt,
+        entry_name,
+        subsystem,
+        output_kind,
+        target,
+        shared_lib_name,
+        opts,
+    )?;
+    build.pdb_path = pdb_path.map(alloc::string::String::from);
+    crate::c5::object::write_native_image_and_pdb(&program, &build, target)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn synth_program_and_build(
     merged: &MergedNative,
@@ -413,6 +442,7 @@ fn synth_program_and_build(
         // dumping zero-length placeholders.
         debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
+        pdb_path: None,
         plt_trampoline_offsets,
     };
 

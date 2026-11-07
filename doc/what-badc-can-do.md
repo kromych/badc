@@ -58,7 +58,8 @@ and against MSVC on Windows for every pull request and every push to
 
 `-g` writes DWARF version 4 for lldb, gdb, rr and profilers, so breakpoints,
 watchpoints and structure layouts work. On Windows targets the DWARF is in
-the PE image; badc writes no PDB. The `-g<level>`, `-ggdb`, `-gdwarf` and
+the PE image, and a `-g` link writes the PDB beside it, named by the image's
+debug directory. The `-g<level>`, `-ggdb`, `-gdwarf` and
 `-gdwarf-<n>` spellings are accepted. A request badc cannot meet, such as
 DWARF 5 or `-gdwarf64`, reports B7011 `dwarf-output`, and the compile
 continues with DWARF 4.

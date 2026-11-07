@@ -19,15 +19,12 @@ pub const DWARF_FORMAT_BITS: u8 = 32;
 #[cfg(feature = "native-emit")]
 pub(crate) mod arm64_unwind;
 #[cfg(feature = "native-emit")]
-#[allow(dead_code)]
 pub(crate) mod codeview;
 #[cfg(feature = "native-emit")]
-#[allow(dead_code)]
 pub(crate) mod debug_model;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
-#[allow(dead_code)]
 pub(crate) mod dwarf_read;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
@@ -46,6 +43,8 @@ pub(crate) mod image;
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod nt_crt;
+#[cfg(feature = "native-emit")]
+pub(crate) mod pdb;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
 #[cfg(feature = "native-emit")]
@@ -176,6 +175,13 @@ fn reloc_slot_in_data(
 pub struct NativeEmit {
     pub image: Vec<u8>,
     pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
+}
+
+/// A linked image and the program database its debug directory names.
+#[cfg(feature = "native-emit")]
+pub struct NativeImage {
+    pub image: Vec<u8>,
+    pub pdb: Option<Vec<u8>>,
 }
 
 #[cfg(feature = "native-emit")]
@@ -707,8 +713,28 @@ pub(crate) fn write_native_image(
     write_for(program, build, target)
 }
 
+/// [`write_native_image`] with the PDB a PE build's `pdb_path` asks for.
+#[cfg(all(feature = "full", feature = "std"))]
+pub(crate) fn write_native_image_and_pdb(
+    program: &Program,
+    build: &Build,
+    target: Target,
+) -> Result<NativeImage, C5Error> {
+    write_image_for(program, build, target)
+}
+
 #[cfg(feature = "native-emit")]
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
+    write_image_for(program, build, target).map(|w| w.image)
+}
+
+#[cfg(feature = "native-emit")]
+fn write_image_for(
+    program: &Program,
+    build: &Build,
+    target: Target,
+) -> Result<NativeImage, C5Error> {
+    let image = |image: Vec<u8>| NativeImage { image, pdb: None };
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {
         let machine = match target {
@@ -720,7 +746,8 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
         return crate::c5::codegen::ssa::emit_common::time_pass(
             "object::write_relocatable",
             || elf_reloc::write_relocatable(program, build, machine, target),
-        );
+        )
+        .map(image);
     }
     // The no-std build can't reach the relocatable writer; the `-c` path
     // lives in the CLI, which itself is std-only. If a no-std caller ever
@@ -738,12 +765,16 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             "an absolute address field reached an image writer",
         ));
     }
+    let pe = |machine| {
+        let (image, pdb) = pe::write_with_pdb(program, build, machine, target)?;
+        Ok(NativeImage { image, pdb })
+    };
     match target {
-        Target::MacOSAarch64 => mach_o::write(program, build),
-        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
-        Target::LinuxX64 => elf::write(program, build, Machine::X86_64),
-        Target::WindowsX64 => pe::write(program, build, Machine::X86_64, target),
-        Target::WindowsAarch64 => pe::write(program, build, Machine::Aarch64, target),
+        Target::MacOSAarch64 => mach_o::write(program, build).map(image),
+        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64).map(image),
+        Target::LinuxX64 => elf::write(program, build, Machine::X86_64).map(image),
+        Target::WindowsX64 => pe(Machine::X86_64),
+        Target::WindowsAarch64 => pe(Machine::Aarch64),
     }
 }
 
@@ -920,6 +951,7 @@ pub(crate) mod test_support {
             macho_tlv_descriptors: Vec::new(),
             debug_info: false,
             merged_dwarf: None,
+            pdb_path: None,
             plt_trampoline_offsets: Vec::new(),
         }
     }

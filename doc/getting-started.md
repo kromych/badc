@@ -193,8 +193,12 @@ Process 52314 stopped
 (int) a = 123
 ```
 
-On the Windows targets the DWARF sections are in the PE image; badc writes no
-PDB.
+On the Windows targets the DWARF sections are in the PE image, and a `-g` link
+also writes the program database beside it (`hello.exe` gets `hello.pdb`),
+which the image's debug directory names by its absolute path. The PDB holds
+the CodeView types, the procedures with their frame-pointer-relative locals,
+the line tables, and the global and public symbols of every unit the image
+carries DWARF for. `-S` drops both.
 
 Two options help when badc itself is the suspect:
 

@@ -2485,6 +2485,9 @@ pub(crate) struct Build {
     /// knows the final vmaddr layout.
     #[allow(dead_code)]
     pub merged_dwarf: Option<MergedDwarf>,
+    /// The path a PE image's debug directory names for its program
+    /// database; the PE writer then also writes the PDB.
+    pub pdb_path: Option<String>,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the

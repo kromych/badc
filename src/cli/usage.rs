@@ -188,7 +188,8 @@ Compile knobs:
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size. `-g1`
                            .. `-g3` and `-ggdb[0-3]` select the same
-                           single level of detail.
+                           single level of detail. A PE link also
+                           writes `<image stem>.pdb` beside the image.
   -g0, --no-debug          Skip DWARF emission (the default).
   -gdwarf[-<n>]            Emit DWARF debug info, of version <n>
                            (2 .. 5) when one is named. `-gdwarf32` /

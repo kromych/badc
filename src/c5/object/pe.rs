@@ -168,8 +168,19 @@ const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
+const DATA_DIRECTORY_DEBUG: usize = 6;
 const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
+
+/// `IMAGE_DEBUG_DIRECTORY`, and the `RSDS` record's signature, GUID and
+/// age ahead of the PDB path.
+const IMAGE_DEBUG_DIRECTORY_SIZE: usize = 28;
+const IMAGE_DEBUG_TYPE_CODEVIEW: u32 = 2;
+const CV_RSDS_HEADER_SIZE: usize = 24;
+
+/// The `st_info` binding and type of an image symbol (ELF gABI 4.19).
+const STB_LOCAL: u8 = 0;
+const STT_FUNC: u8 = 2;
 
 const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
@@ -222,6 +233,10 @@ struct PeLayout<'a> {
     xdata_base_in_rdata: u32,
     provenance: Vec<u8>,
     marker_base_in_rdata: u32,
+    /// The debug directory and its CodeView record, past the marker, when
+    /// the build names a PDB; filled once the PDB is written.
+    debug_dir: Vec<u8>,
+    debug_dir_base_in_rdata: u32,
     rdata_size: u32,
     rdata_present: bool,
     data_present: bool,
@@ -311,12 +326,23 @@ struct PeWriter<'a> {
     out: Vec<u8>,
 }
 
+#[cfg(test)]
 pub(super) fn write(
     program: &Program,
     build: &Build,
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
+    write_with_pdb(program, build, machine, target).map(|w| w.0)
+}
+
+/// The image, and the PDB `build.pdb_path` names.
+pub(super) fn write_with_pdb(
+    program: &Program,
+    build: &Build,
+    machine: Machine,
+    target: super::Target,
+) -> Result<(Vec<u8>, Option<Vec<u8>>), C5Error> {
     let mut w = PeWriter::new(program, build, machine, target)?;
     w.layout_code_sections()?;
     w.layout_data_sections()?;
@@ -324,12 +350,13 @@ pub(super) fn write(
     w.layout_dwarf_and_coff();
     w.build_text()?;
     w.emit_headers()?;
+    let pdb = w.build_pdb()?;
     let native = w.subsystem == IMAGE_SUBSYSTEM_NATIVE;
     let mut image = w.emit_sections()?;
     if native {
         store_checksum(&mut image);
     }
-    Ok(image)
+    Ok((image, pdb))
 }
 
 /// Offset of `OptionalHeader.CheckSum`: past the PE signature, the COFF
@@ -586,6 +613,12 @@ impl<'a> PeWriter<'a> {
         l.provenance = super::provenance_comment();
         l.marker_base_in_rdata = round_up(l.xdata_base_in_rdata + l.xdata.len() as u32, 8);
         l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
+        if let Some(path) = &build.pdb_path {
+            l.debug_dir_base_in_rdata = round_up(l.rdata_size, 4);
+            l.debug_dir =
+                vec![0; IMAGE_DEBUG_DIRECTORY_SIZE + CV_RSDS_HEADER_SIZE + path.len() + 1];
+            l.rdata_size = l.debug_dir_base_in_rdata + l.debug_dir.len() as u32;
+        }
         l.rdata_present = l.rdata_size > 0;
         l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
             || !build.tls_data.is_empty();
@@ -1323,6 +1356,91 @@ impl<'a> PeWriter<'a> {
         }
     }
 
+    /// The PDB of the image's DWARF and section table, when the build
+    /// names one, and the debug directory's `RSDS` record naming it.
+    fn build_pdb(&mut self) -> Result<Option<Vec<u8>>, C5Error> {
+        let Some(path) = self.build.pdb_path.as_deref() else {
+            return Ok(None);
+        };
+        let mut raw = Vec::new();
+        write_section_headers(&mut raw, &self.section_headers()?);
+        let blob = |name: &str| {
+            (self.layout.dwarf_blobs.iter())
+                .find(|(n, _)| n == name)
+                .map_or(&[][..], |(_, b)| b.as_slice())
+        };
+        let dwarf = super::dwarf_read::Sections {
+            info: blob(".debug_info"),
+            abbrev: blob(".debug_abbrev"),
+            str: blob(".debug_str"),
+            line: blob(".debug_line"),
+            line_str: blob(".debug_line_str"),
+        };
+        let info = super::dwarf_read::read(&dwarf, self.machine);
+        let image = super::pdb::Image {
+            machine: self.machine,
+            image_base: IMAGE_BASE,
+            sections: raw.as_chunks::<SECTION_HEADER_SIZE>().0.to_vec(),
+            publics: self.publics(&info),
+        };
+        let pdb = super::pdb::write(&info, &image);
+        let l = &mut self.layout;
+        let record_at = l.debug_dir_base_in_rdata + IMAGE_DEBUG_DIRECTORY_SIZE as u32;
+        let mut d = Vec::with_capacity(l.debug_dir.len());
+        for field in [0, 0, 0, IMAGE_DEBUG_TYPE_CODEVIEW] {
+            d.extend_from_slice(&u32::to_le_bytes(field));
+        }
+        d.extend_from_slice(&((CV_RSDS_HEADER_SIZE + path.len() + 1) as u32).to_le_bytes());
+        d.extend_from_slice(&(l.rdata_rva + record_at).to_le_bytes());
+        d.extend_from_slice(&(l.rdata_file_off + record_at).to_le_bytes());
+        d.extend_from_slice(b"RSDS");
+        d.extend_from_slice(&pdb.guid);
+        d.extend_from_slice(&pdb.age.to_le_bytes());
+        d.extend_from_slice(path.as_bytes());
+        d.push(0);
+        l.debug_dir = d;
+        Ok(Some(pdb.bytes))
+    }
+
+    /// The image's global symbols at their addresses; an image the link
+    /// gave no symbol table takes the external definitions `info` names.
+    fn publics(&self, info: &super::debug_model::DebugInfo) -> Vec<super::pdb::Public> {
+        use super::pdb::Public;
+        use crate::c5::codegen::SymbolPlace;
+        let build = self.build;
+        if build.image_symbols.is_empty() {
+            let units = info.units.iter();
+            let functions = (units.clone().flat_map(|u| &u.functions)).filter(|f| f.external);
+            let globals = units.flat_map(|u| &u.globals).filter(|g| g.external);
+            return (functions.map(|f| (&f.name, f.low, true)))
+                .chain(globals.map(|g| (&g.name, g.address, false)))
+                .map(|(name, va, function)| Public {
+                    name: name.clone(),
+                    va,
+                    function,
+                })
+                .collect();
+        }
+        let text = IMAGE_BASE + u64::from(self.text_body_rva());
+        let data = |off: u64| IMAGE_BASE + u64::from(self.data_off_to_rva(off as u32));
+        (build.image_symbols.iter())
+            .filter(|s| s.info >> 4 != STB_LOCAL && !s.name.is_empty())
+            .filter_map(|s| {
+                let va = match s.place {
+                    SymbolPlace::Text(o) => text + o,
+                    SymbolPlace::Data(o) => data(o),
+                    SymbolPlace::Bss(o) => data(build.data.len() as u64 + o),
+                    SymbolPlace::Tls(_) | SymbolPlace::Abs(_) => return None,
+                };
+                Some(Public {
+                    name: s.name.clone(),
+                    va,
+                    function: s.info & 0xf == STT_FUNC,
+                })
+            })
+            .collect()
+    }
+
     /// The DOS header and stub, the PE signature, the COFF and optional
     /// headers, and the section table, whose length is checked against the
     /// plan the header size and the COFF count were computed from.
@@ -1351,6 +1469,12 @@ impl<'a> PeWriter<'a> {
         } else {
             (0, 0)
         };
+        let debug_dir = if l.debug_dir.is_empty() {
+            (0, 0)
+        } else {
+            let rva = l.rdata_rva + l.debug_dir_base_in_rdata;
+            (rva, IMAGE_DEBUG_DIRECTORY_SIZE as u32)
+        };
         let reloc_size = l.reloc_bytes.len() as u32;
         write_optional_header(
             &mut out,
@@ -1377,6 +1501,8 @@ impl<'a> PeWriter<'a> {
                 tls_table_size,
                 export_table_rva: l.edata_rva,
                 export_table_size: l.edata_bytes.len() as u32,
+                debug_rva: debug_dir.0,
+                debug_size: debug_dir.1,
                 subsystem: self.subsystem,
             },
         );
@@ -1586,6 +1712,11 @@ impl<'a> PeWriter<'a> {
                 (l.rdata_file_off + l.marker_base_in_rdata) as usize,
             )?;
             out.extend_from_slice(&l.provenance);
+            if !l.debug_dir.is_empty() {
+                let at = l.rdata_file_off + l.debug_dir_base_in_rdata;
+                pad_to(&mut out, at as usize)?;
+                out.extend_from_slice(&l.debug_dir);
+            }
             pad_to(&mut out, (l.rdata_file_off + l.rdata_raw_size) as usize)?;
         }
         if l.data_present {
@@ -2099,6 +2230,8 @@ struct OptionalHeaderInputs {
     tls_table_size: u32,
     export_table_rva: u32,
     export_table_size: u32,
+    debug_rva: u32,
+    debug_size: u32,
     subsystem: u16,
 }
 
@@ -2132,6 +2265,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_TLS] = DataDirectoryEntry {
         rva: inp.tls_table_rva,
         size: inp.tls_table_size,
+    };
+    data_directory[DATA_DIRECTORY_DEBUG] = DataDirectoryEntry {
+        rva: inp.debug_rva,
+        size: inp.debug_size,
     };
     data_directory[DATA_DIRECTORY_IAT] = DataDirectoryEntry {
         rva: inp.iat_rva,

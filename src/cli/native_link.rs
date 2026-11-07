@@ -1313,25 +1313,6 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     } else {
         None
     };
-    let write_result = badc::write_native_image_from_merged_ex(
-        &merged,
-        &plt,
-        entry_name,
-        image.subsystem,
-        native_output_kind,
-        cli.target,
-        shared_lib_name,
-        &cli.image_options(exec_stack),
-    );
-
-    let bytes = match write_result {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(format!("badc: {e}"));
-            std::process::exit(1);
-        }
-    };
-    stats.mark("image");
     let default_path;
     let out: &std::path::Path = match cli.output_path.as_deref() {
         Some(o) => o,
@@ -1340,7 +1321,41 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             &default_path
         }
     };
+    let image_options = cli.image_options(exec_stack);
+    // A PE image linked with -g names the program database beside it by
+    // its absolute path, as its debug directory records it.
+    let pdb_path = (cli.target.binary_format() == badc::BinaryFormat::Pe
+        && cli.codegen.emit_debug_info
+        && !image_options.strip_debug)
+        .then(|| out.with_extension("pdb"));
+    let pdb_name = (pdb_path.as_deref())
+        .map(|p| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf()))
+        .map(|p| p.to_string_lossy().into_owned());
+    let write_result = badc::write_native_image_and_pdb(
+        &merged,
+        &plt,
+        entry_name,
+        image.subsystem,
+        native_output_kind,
+        cli.target,
+        shared_lib_name,
+        &image_options,
+        pdb_name.as_deref(),
+    );
+
+    let linked = match write_result {
+        Ok(b) => b,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: {e}"));
+            std::process::exit(1);
+        }
+    };
+    let bytes = linked.image;
+    stats.mark("image");
     write_output(out, &bytes, cli.target, cli.quiet, true);
+    if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
+        write_output(path, pdb, cli.target, cli.quiet, false);
+    }
     post_write_native(out, cli.target);
     if cli.link.map_path.is_some() || cli.link.print_map {
         let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");

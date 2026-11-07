@@ -25,26 +25,6 @@ Disassembly of section .text:
                	int3
                	int3
 
-<__c5_lazy_stream>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	cmpq	$0x0, <rip> # <addr>
-               	je	<addr>
-               	movq	<rip>, %rax # <addr>
-               	popq	%rbp
-               	retq
-               	xorl	%edi, %edi
-               	leaq	<rip>, %rsi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	testq	%rax, %rax
-               	je	<addr>
-               	movq	(%rax), %rax
-               	movq	%rax, <rip> # <addr>
-               	movq	<rip>, %rax # <addr>
-               	popq	%rbp
-               	retq
-
 <format>:
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -125,9 +105,9 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	$0x1, %edi
-               	callq	<addr>
-               	movq	%rax, %rdi
+               	cmpq	$0x0, <rip> # <addr>
+               	je	<addr>
+               	movq	<rip>, %rdi # <addr>
                	movq	-0xe0(%rbp), %rsi
                	leaq	-0x18(%rbp), %rdx
                	xorl	%eax, %eax
@@ -136,6 +116,16 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rax
                	leave
                	retq
+               	xorl	%edi, %edi
+               	leaq	<rip>, %rsi
+               	xorl	%eax, %eax
+               	callq	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	movq	(%rax), %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	<rip>, %rdi # <addr>
+               	jmp	<addr>
 
 <main>:
                	pushq	%rbp

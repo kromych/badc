@@ -646,7 +646,7 @@ impl Compiler {
     /// the library function `name`, with the arguments already parsed. An
     /// undeclared library name reports the same "unknown function" the
     /// ordinary call path does, so the auto-include retry brings its header
-    /// in (C99 7.1.4p2).
+    /// in.
     pub(super) fn emit_builtin_libcall(
         &mut self,
         name: &str,

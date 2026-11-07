@@ -10605,8 +10605,8 @@ fn builtins_are_visible_to_a_forced_include_body() {
 #[test]
 #[cfg(feature = "full")]
 fn auto_include_retry_emits_what_the_force_include_would() {
-    // C99 7.1.4p2: a standard library function may be used without a
-    // visible declaration. The driver recovers by re-running the compile
+    // A call to a library function with no declaration in scope is
+    // invalid (C17 6.5.1p2). The driver recovers by re-running the compile
     // with the declaring header force-included, so the retry's object
     // must equal the one a caller gets by naming that header up front.
     use crate::{
@@ -11056,7 +11056,7 @@ fn a_freestanding_unit_takes_the_isdigit_builtin_it_probes() {
 #[test]
 fn nostdinc_declines_the_auto_include_retry() {
     // A unit built with `-nostdinc` asked for no library headers, so the
-    // C99 7.1.4p2 recovery must not splice one in: the undeclared-function
+    // auto-include recovery must not splice one in: the undeclared-function
     // error stands. Without the flag the same source compiles.
     use crate::{CompileOptions, Compiler, Target};
     let src = "unsigned long probe(const char *s) { return strlen(s); }\n";
@@ -11084,7 +11084,7 @@ fn nostdinc_declines_the_auto_include_retry() {
 #[test]
 fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
     // `-fno-builtin-<name>` makes a call spelled with that library
-    // function's name an ordinary call, so the C99 7.1.4p2 recovery is
+    // function's name an ordinary call, so the auto-include recovery is
     // withdrawn for it alone: the undeclared-function error stands, and
     // every other library name keeps the recovery. The `__builtin_`
     // spelling stays callable, its fallback call binding the name itself

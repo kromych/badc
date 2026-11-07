@@ -48,6 +48,10 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-bindings          Print the library bindings the bundled
                            headers state for --target, one
                            `<soname> <symbol>` per line, and exit.
+  --dump-native-link <obj>...
+                           Merge the relocatable objects and print the
+                           sections and the symbols the merge defines,
+                           then exit.
   --install [<dir>]        Write every embedded header and the runtime
                            source under <dir> (default $BADC_HOME, else
                            ~/.badc), recreating the include/ + lib/
@@ -72,6 +76,7 @@ Output mode -- pick at most one (defaults to a native binary):
                            `-`.
   -dM                      With -E, print a #define line per macro the
                            unit ends with, predefined ones included.
+  -P                       With -E, write no line markers.
   -fsyntax-only            Check each unit through the front end (an
                            assembler unit through the assembler) and
                            write nothing; -E takes precedence.
@@ -102,6 +107,22 @@ Multi-TU knobs:
                            Searched in the -L directories, then in the
                            standard directories under --sysroot; no
                            other directory is read.
+  --whole-archive, --no-whole-archive
+                           Load every member of the archives named
+                           after --whole-archive, up to
+                           --no-whole-archive, whether or not a
+                           reference asks for it.
+  --start-group, --end-group
+                           Search the archives between the two again
+                           until a pass resolves no new reference.
+  -T <script>, --script=<script>
+                           Lay out the image as the GNU ld script
+                           directs. Inputs are objects and archives
+                           (compile sources with -c first); the image
+                           is ELF whatever --target names.
+  --ld <args>              As the first argument: run the GNU ld
+                           surface on the rest, as badc does when named
+                           `ld` / `*-ld`.
   --sysroot=<dir>          The root holding the target's headers and
                            libraries. Its standard include directories
                            are probed after the bundled headers, its
@@ -185,6 +206,16 @@ Compile knobs:
                            `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
                            forms all select this single level; `-O0`
                            disables it.
+  --inline-cap=N           The largest leaf body, in SSA instructions,
+                           that -O inlines at its call sites (default
+                           64). An `inline` body is measured against a
+                           multiple of it and an always_inline one
+                           against none; 0 leaves only always_inline.
+  --dump-ssa               Print each function's SSA and register
+                           allocation to stderr before lowering.
+  --verify-ssa             Check the SSA rules after each pass and stop
+                           at the first pass that breaks them; a debug
+                           build of badc always checks.
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size. `-g1`
                            .. `-g3` and `-ggdb[0-3]` select the same
@@ -241,10 +272,9 @@ Compile knobs:
                            of the unused-binding warnings. Repeatable.
   -fno-builtin[-<name>]    Treat a call spelled with a library
                            function's own name as an ordinary call the
-                           compiler may not fold, and drop the C99
-                           7.1.4p2 recovery that declares an undeclared
-                           library function by auto-including its
-                           header. The `__builtin_` spellings keep
+                           compiler may not fold, and drop the
+                           recovery that declares an undeclared library
+                           function by auto-including its header. The `__builtin_` spellings keep
                            folding. -fbuiltin restores the default.
   -ffreestanding           Compile for a freestanding implementation:
                            -fno-builtin, and `__STDC_HOSTED__` is 0.
@@ -339,6 +369,11 @@ Compile knobs:
                            in the source select the encoding. badc
                            generates no i386 machine code, so a `.c`
                            source under either is refused unless -E.
+  -mcmodel=<model>         Code model: small (the default); kernel,
+                           linux-x64 `-c` and `--ar` only, addressing
+                           externals as sign-extended 32-bit absolutes
+                           for an image linked in the top 2 GiB; tiny,
+                           linux-aarch64 only, lowered as small.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
                            The rule keeps the source-derived name; -o
@@ -463,6 +498,35 @@ Compile knobs:
                            frame pointers, the AArch64 link register and
                            the code generator's own scratch registers
                            (x16, x17, x19; r10, r11) are refused.
+  -mno-sse, -mgeneral-regs-only
+                           Keep the code badc adds -- variadic register
+                           saves, zero fills, population counts -- off
+                           the floating-point and SIMD registers, and
+                           drop the __SSE*__ macros. Floating-point
+                           arithmetic the source writes still uses
+                           them.
+  -mstrict-align, -mno-strict-align
+                           Keep every compiler-generated memory access
+                           naturally aligned for its width, as memory
+                           that faults on an unaligned access needs.
+  -mindirect-branch=keep|thunk-extern|thunk-inline
+                           x86-64: route each indirect call and jump
+                           through __x86_indirect_thunk_<reg>, or
+                           through the retpoline sequence at the site.
+  -mfunction-return=keep|thunk-extern
+                           x86-64: return through __x86_return_thunk.
+  -mharden-sls=none|return|indirect-jmp|all
+                           x86-64: put a trap after each `ret` and/or
+                           indirect `jmp`; the kinds are comma-joined.
+  -fcf-protection=none|branch
+                           x86-64: open every function and every
+                           indirect-branch target with endbr64. The
+                           shadow stack (return, full) is refused.
+  -mbranch-protection=none|bti|pac-ret[+leaf]|standard
+                           AArch64, `+`-joined: BTI landing pads, and
+                           pac-ret return-address signing, in leaf
+                           functions too with +leaf; standard is
+                           bti+pac-ret.
   -fstack-protector        Give a stack canary to every function holding
                            a character array of at least --param
                            ssp-buffer-size= bytes (default 8), or calling

@@ -1343,8 +1343,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // the runtime path (block-scope locals with a non-constant
     // entry) both walk the chain in one pass.
     ("nested_designator_init.c", 0),
-    // C99 7.1.4p2: a TU may call `printf` without including
-    // `<stdio.h>`. The compiler hits the first-pass "unknown
+    // A TU calls `printf` with no declaration in scope (C17
+    // 6.5.1p2 requires one). The compiler hits the first-pass "unknown
     // function `printf`" error, looks the name up in the
     // build-time `BINDING_TO_HEADER` index, force-includes
     // `<stdio.h>` and re-runs the compile in one transparent

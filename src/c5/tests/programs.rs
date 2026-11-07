@@ -5177,9 +5177,8 @@ fn bitfield_brace_init_packs_into_storage_unit() {
 
 #[test]
 fn vsnprintf_underscore_alias_resolves_to_libc() {
-    // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf`
-    // (the standard MSVC-compatibility rewrite per C99 7.1.4 and CRT
-    // convention) resolves through the canonical `vsnprintf` to the
+    // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf` (the
+    // MSVC CRT's spelling) resolves through the canonical `vsnprintf` to the
     // platform C library. The fixture self-checks the formatted bytes,
     // so the JIT run also confirms libc walks the forwarded c5 va_list
     // correctly.

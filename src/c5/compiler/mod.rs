@@ -575,7 +575,7 @@ pub struct CompileOptions {
     pub no_builtin_fns: Vec<String>,
     /// `-ffreestanding` -- a freestanding implementation (C99 4p6):
     /// `__STDC_HOSTED__` is 0 (C99 6.10.8) and the auto-include retry,
-    /// whose permission (C99 7.1.4p2) is a hosted one, is off.
+    /// whose headers are hosted ones (C17 4p6), is off.
     pub freestanding: bool,
     /// `-include FILE` -- headers force-included before the source.
     pub force_includes: Vec<String>,
@@ -887,11 +887,10 @@ impl CompileOptions {
         self
     }
 
-    /// Whether the auto-include retry may not declare `name`. C99
-    /// 7.1.4p2's permission to use a library function without a
-    /// declaration is a hosted one, so `-ffreestanding` withdraws it;
-    /// `-fno-builtin` withdraws it for every library name and
-    /// `-fno-builtin-<name>` for that name; under `-nostdinc` and
+    /// Whether the auto-include retry may not declare `name`. The headers
+    /// it splices in are hosted ones (C17 4p6), so `-ffreestanding`
+    /// withdraws it; `-fno-builtin` withdraws it for every library name
+    /// and `-fno-builtin-<name>` for that name; under `-nostdinc` and
     /// `-nostdlibinc` the header the retry would splice in is off the
     /// search, and a preprocessed unit includes nothing. The
     /// undeclared-function error stands instead.
@@ -2723,11 +2722,10 @@ pub struct Compiler {
     /// re-used: the header that declares `name` (looked up in
     /// `headers::header_declaring`) is appended to
     /// `opts.force_includes` and a fresh `Compiler` runs the source
-    /// from scratch. C99 7.1.4p2 lets standard library functions be
-    /// referenced without a prior declaration; this turns that
-    /// permission into an actually-working build for fixtures that
-    /// rely on it. `None` after the first retry attempt, so the
-    /// recursion bottoms out at one level.
+    /// from scratch. A call needs a prior declaration (C17 6.5.1p2, the
+    /// implicit declaration C90 6.3.2.2 allowed is gone); the retry
+    /// supplies the one a library function's header carries. `None`
+    /// after the first retry attempt, so the recursion stops at one level.
     retry_state: Option<(String, CompileOptions)>,
 
     /// The first pass's recorded preprocessor state, letting a retry
@@ -3521,10 +3519,8 @@ impl Compiler {
     /// the embedded standard headers (per `headers::header_declaring`
     /// + the build-time index in `BINDING_TO_HEADER`), this method
     /// transparently re-runs the compile with the matching header
-    /// force-included. C99 7.1.4p2 lets standard library functions
-    /// be used without a prior declaration; this turns that
-    /// permission into a successful build instead of a friendly
-    /// error. The retry runs only once -- a second-pass failure
+    /// force-included, supplying the declaration a call needs (C17
+    /// 6.5.1p2). The retry runs only once -- a second-pass failure
     /// propagates the original error.
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();

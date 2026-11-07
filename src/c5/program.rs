@@ -183,7 +183,7 @@ pub struct CodeReloc {
 }
 
 /// An undeclared library function the auto-include retry declared by
-/// force-including the standard header that declares it (C99 7.1.4p2).
+/// force-including the standard header that declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AutoInclude {
     pub name: String,

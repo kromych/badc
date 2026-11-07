@@ -4709,4 +4709,30 @@ mod tests {
             "{message}"
         );
     }
+
+    #[test]
+    fn help_lists_the_code_generation_link_and_debug_options() {
+        for opt in [
+            "-mcmodel=",
+            "-mno-sse",
+            "-mgeneral-regs-only",
+            "-mstrict-align",
+            "-mindirect-branch=",
+            "-mfunction-return=",
+            "-mharden-sls=",
+            "-fcf-protection=",
+            "-mbranch-protection=",
+            "-T <script>",
+            "--whole-archive",
+            "--start-group",
+            "--ld <args>",
+            "--dump-ssa",
+            "--verify-ssa",
+            "--inline-cap=",
+            "--dump-native-link",
+            "\n  -P ",
+        ] {
+            assert!(USAGE.contains(opt), "--help omits `{}`", opt.trim());
+        }
+    }
 }

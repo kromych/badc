@@ -1411,6 +1411,10 @@ impl Preprocessor {
         // arrays too (C17 6.10.8.3), as measured on cl 19.44 and 19.52.
         set("__STDC_NO_ATOMICS__", "1");
         set("__STDC_NO_VLA__", "1");
+        // cl takes `_alloca` for its intrinsic whatever the unit declares:
+        // an undeclared call compiles to the stack allocation (cl 19.52).
+        let alloca = crate::c5::op::Intrinsic::Alloca as i64;
+        self.intrinsics.insert("_alloca".to_string(), alloca);
         if target.is_x86_64() {
             set("_M_X64", "100");
             set("_M_AMD64", "100");

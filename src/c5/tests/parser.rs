@@ -4198,6 +4198,27 @@ fn msvc_gives_a_parameter_list_tag_the_enclosing_scope() {
 }
 
 #[test]
+fn msvc_takes_an_undeclared_alloca_for_the_intrinsic() {
+    // cl lowers `_alloca` as its intrinsic with no declaration in scope;
+    // under `--msvc` the call is the stack allocation, as declared, and on
+    // `-nostdlibinc` no bundled header is reached for it.
+    let src = "int f(int n) { char *p = (char *)_alloca(n); p[0] = 7; return p[0]; }\n";
+    let compile = |msvc: bool| {
+        let opts = crate::c5::compiler::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_msvc(msvc)
+            .with_nostdlibinc(true);
+        Compiler::with_options(src.to_string(), crate::Target::WindowsX64, opts).compile()
+    };
+    let program = compile(true).expect("cl's intrinsic compiles");
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+    let err = compile(false)
+        .expect_err("an undeclared function")
+        .to_string();
+    assert!(err.contains("unknown function `_alloca`"), "{err}");
+}
+
+#[test]
 fn a_named_section_holds_one_kind_of_definition() {
     // GNU `section`: the first definition in a section sets its kind --
     // code, writable data or read-only data -- and a definition of another

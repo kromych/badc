@@ -751,10 +751,17 @@ impl CStd {
         self.0.is_some_and(|v| v >= 202311)
     }
 
+    /// C90 6.3.2.2: a call to an undeclared identifier declares it
+    /// `extern int identifier();`. C99 removed the rule, as it did implicit
+    /// `int` (C90 6.5.2).
+    pub fn pre_c99(self) -> bool {
+        self.0.is_none_or(|v| v < 199901)
+    }
+
     /// gcc's default inline model: GNU89's before C99, which introduced
     /// 6.7.4's, unless `-f[no-]gnu89-inline` says otherwise.
     pub fn gnu89_inline(self) -> bool {
-        self.0.is_none_or(|v| v < 199901)
+        self.pre_c99()
     }
 }
 
@@ -957,6 +964,13 @@ impl CompileOptions {
     pub fn with_std(mut self, std: CStd) -> Self {
         self.std = std;
         self
+    }
+
+    /// The `-W` configuration under the edition's rules.
+    fn diag_config(&self) -> crate::c5::diag::Config {
+        let mut config = self.diag.clone();
+        config.pre_c99(self.std.pre_c99());
+        config
     }
     /// Replace trigraphs in translation phase 1.
     pub fn with_trigraphs(mut self, trigraphs: bool) -> Self {
@@ -2907,7 +2921,7 @@ impl Compiler {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         // The `-W` family governs this pass's diagnostics too; the
         // pragmas it records then refine them per position.
-        pp.sink.set_config(opts.diag.clone());
+        pp.sink.set_config(opts.diag_config());
         // `-m16` / `-m32` reach the front end as an ELFCLASS32 object;
         // gcc preprocesses those units with the i386 predefine set.
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
@@ -3129,7 +3143,7 @@ impl Compiler {
         let warn_dead_store = opts.diag.level(crate::c5::diag::Code::DEAD_STORE)
             != crate::c5::diag::Level::Ignore
             || pp_control.may_report(crate::c5::diag::Code::DEAD_STORE);
-        let mut sink = crate::c5::diag::Sink::new(opts.diag.clone(), pp_control);
+        let mut sink = crate::c5::diag::Sink::new(opts.diag_config(), pp_control);
         for d in pp_diagnostics {
             sink.record(d);
         }

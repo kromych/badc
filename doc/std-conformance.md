@@ -370,7 +370,10 @@ only under `--gnu` ([GCC](#gcc)): a `gnu*` name leaves it undefined, and a
 for the GNU features badc lacks. The editions before C99 (`c89`, `c90`,
 `gnu89`, `gnu90`, `iso9899:1990`, `iso9899:199409`) select the GNU89 inline
 model, as gcc's do; `-fgnu89-inline` and `-fno-gnu89-inline` override the
-edition.
+edition. In them a declaration without a type specifier takes `int` (C90
+6.5.2) and a call to an undeclared function declares it as
+`extern int f();` (C90 6.3.2.2), unless the auto-include retry finds a
+bundled header that declares it; `-Wall` reports both, as in gcc.
 
 ## Extensions implemented
 

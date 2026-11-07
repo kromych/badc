@@ -1660,8 +1660,43 @@ impl Compiler {
                 let name = self.symbols[id_idx].name.clone();
                 self.parse_ms_intrinsic(&name)
             }
-            None => self.parse_direct_call(id_idx, spelled),
+            None => {
+                if self.symbols[id_idx].class == 0
+                    && self.std.pre_c99()
+                    && self.auto_include_unavailable(&spelled)
+                {
+                    self.declare_implicitly(id_idx)?;
+                }
+                self.parse_direct_call(id_idx, spelled)
+            }
         }
+    }
+
+    /// C90 6.3.2.2: a call to an undeclared identifier declares it as if
+    /// `extern int identifier();` preceded it. A library function the
+    /// auto-include retry can declare keeps the error that starts it.
+    fn declare_implicitly(&mut self, idx: usize) -> Result<(), C5Error> {
+        use super::redeclaration::{DeclaredType, LinkClaim, Params, Spelled};
+        let name = self.symbols[idx].name.clone();
+        let line = self.lex.line;
+        let text = format!("implicit declaration of function `{name}`");
+        self.warn_at(Code::IMPLICIT_FUNCTION_DECLARATION, line, text);
+        let int = Spelled::plain(Ty::Int as i64);
+        let declared = DeclaredType::Function(int, Params::Unspecified, None, None);
+        self.declare_linked(idx, declared, line, false, LinkClaim::Prior)?;
+        let in_user_source = self.in_user_source();
+        let sym = &mut self.symbols[idx];
+        sym.class = Token::Fun as i64;
+        sym.type_ = Ty::Int as i64;
+        sym.set_fn_params(super::super::symbol::FnParams::default());
+        sym.linkage = super::super::symbol::Linkage::External;
+        sym.defined_here = false;
+        sym.is_extern_decl = true;
+        sym.saw_extern_decl = true;
+        sym.saw_noninline_decl = true;
+        sym.binding.decl_line = line;
+        sym.binding.decl_in_user_source = in_user_source;
+        Ok(())
     }
 
     /// The symbol a call binds to: a `__builtin_*` alias of a library

@@ -7005,3 +7005,58 @@ fn c23_empty_parameter_list_declares_no_parameters() {
         .is_ok()
     );
 }
+
+/// Before C99 a call to an undeclared function declares it as
+/// `extern int f();` (C90 6.3.2.2) and a declaration without a type
+/// specifier takes `int` (C90 6.5.2); `-Wall` reports both. C99 removed
+/// both rules, and a later declaration conflicting with the implicit one
+/// is an error in every edition.
+#[test]
+fn pre_c99_editions_declare_implicitly_and_take_implicit_int() {
+    use crate::{CStd, CompileOptions, Target, diag};
+    let compile = |std: Option<u32>, wall: bool, src: &str| {
+        let mut config = diag::Config::new();
+        if wall {
+            config.enable_group(diag::Groups::ALL);
+        }
+        let opts = CompileOptions::default()
+            .with_std(CStd(std))
+            .with_diag(config)
+            .with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::host(), opts).compile()
+    };
+    let err = |r: Result<crate::Program, crate::C5Error>| {
+        r.err().map(|e| e.to_string()).unwrap_or_default()
+    };
+    let warnings =
+        |r: &crate::Program| -> Vec<String> { r.warnings.iter().map(|w| w.to_string()).collect() };
+    let call = "int g(void) { return h(1); }\nint h(int x) { return x; }\n";
+    let implicit_int = "f(void) { return 0; }\n";
+    for std in [None, Some(199409)] {
+        let quiet = compile(std, false, call).expect("C90 call");
+        assert!(warnings(&quiet).is_empty(), "{:?}", warnings(&quiet));
+        let wall = compile(std, true, call).expect("C90 call under -Wall");
+        assert!(
+            warnings(&wall)
+                .iter()
+                .any(|w| w.contains("implicit declaration of function `h`")),
+            "{:?}",
+            warnings(&wall)
+        );
+        assert!(compile(std, false, implicit_int).is_ok());
+        let wall = compile(std, true, implicit_int).expect("C90 implicit int under -Wall");
+        assert!(
+            warnings(&wall)
+                .iter()
+                .any(|w| w.contains("defaults to `int`")),
+            "{:?}",
+            warnings(&wall)
+        );
+        let conflict = "int g(void) { return (int)h(1); }\ndouble h(int x) { return x; }\n";
+        assert!(err(compile(std, false, conflict)).contains("conflicting types for `h`"));
+    }
+    for std in [199901, 201710] {
+        assert!(err(compile(Some(std), false, call)).contains("unknown function `h`"));
+        assert!(err(compile(Some(std), false, implicit_int)).contains("defaults to `int`"));
+    }
+}

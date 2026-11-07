@@ -110,7 +110,7 @@ output of `badc --list-diagnostics`.
 | B2002 | `unused-parameter` | ignore | controllable | extra | a parameter never used in the function body |
 | B2003 | `unused-but-set-variable` | ignore | controllable | all | a variable that is only ever assigned to |
 | B2004 | `unused-function` | ignore | controllable | all | a function with internal linkage that is defined and never referenced |
-| B2005 | `implicit-function-declaration (retired)` | warning | controllable | default | a function used before a prototype declares it, so its return type is `int` |
+| B2005 | `implicit-function-declaration` | ignore | controllable | all | a call to an undeclared function, which an edition before C99 declares as `extern int f();` (C90 6.3.2.2) |
 | B2006 | `undefined-function` | warning | controllable | default | an initializer names a `static` function this unit declares and never defines |
 | B2007 | `redeclaration-mismatch` | warning | controllable | default | a function redeclaration incompatible under C99 that GNU C accepts: an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion |
 | B2008 | `attributes` | warning | controllable | default | an attribute the declaration cannot carry, so it is ignored |

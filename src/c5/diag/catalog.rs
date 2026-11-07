@@ -113,9 +113,9 @@ catalog! {
     2004, "unused-function", ["C4505", "unused"], Ignore, Controllable,
         [ALL], Live,
         "a function with internal linkage that is defined and never referenced";
-    2005, "implicit-function-declaration", ["C4013"], Warning, Controllable,
-        [DEFAULT], Retired,
-        "a function used before a prototype declares it, so its return type is `int`";
+    2005, "implicit-function-declaration", ["C4013"], Ignore, Controllable,
+        [ALL], Live,
+        "a call to an undeclared function, which an edition before C99 declares as `extern int f();` (C90 6.3.2.2)";
     2006, "undefined-function", [], Warning, Controllable,
         [DEFAULT], Live,
         "an initializer names a `static` function this unit declares and never defines";

@@ -745,6 +745,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_vector_w.c", 42),
     ("arm_neon_intrinsics.c", 42),
     ("arm_neon_halfword_lanes.c", 42),
+    ("arm_neon_word_lanes_and_structure_loads.c", 0),
     ("arm_neon_aegis_round.c", 42),
     ("arm_neon_aes_pmull.c", 42),
     ("arm_neon_lane_ext_pmull_high.c", 42),
@@ -2301,6 +2302,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_vector_w.c", 42),
     ("arm_neon_intrinsics.c", 42),
     ("arm_neon_halfword_lanes.c", 42),
+    ("arm_neon_word_lanes_and_structure_loads.c", 0),
     ("arm_neon_aegis_round.c", 42),
     ("arm_neon_aes_pmull.c", 42),
     ("arm_neon_lane_ext_pmull_high.c", 42),
@@ -4722,6 +4724,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("mm_malloc_name_macros.c", 42),
     ("arm_neon_halfword_lanes.c", 42),
+    ("arm_neon_word_lanes_and_structure_loads.c", 0),
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),
     ("spawn_nowait_handle_is_pointer_sized.c", 0),

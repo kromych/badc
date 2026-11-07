@@ -696,13 +696,17 @@ its own NEON header. For the integer vectors: `vld1` and `vst1`, bitwise operati
 immediate shifts, `vdup`, the polynomial byte multiply, table lookups, byte
 equality, halfword reversal, the across-lanes minimum and 64-bit lane
 composition; the halfword broadcast and equality, the narrowing shift right,
-the doubleword load, the integer lane reads and the reinterpretations between
-lane widths. The FEAT_AES rounds and the 64-bit carry-less multiply. For
+the doubleword load and store, the integer lane reads and the
+reinterpretations between lane widths; on 32- and 64-bit lanes the broadcasts,
+add, multiply, the widening multiply-accumulate `vmlal` and `vmlal_high`, the
+narrowing `vmovn` and `vshrn_n`, `vshrq_n_u64`, the shift-and-insert `vsli_n`
+and `vsriq_n`, `vuzpq_u32`, `vget_low` and `vget_high`; and `vld2q_u16` and
+`vld4q_u8`, which deinterleave lane by lane. The FEAT_AES rounds and the 64-bit carry-less multiply. For
 `float32x2_t`, `float32x4_t`, `float64x1_t` and `float64x2_t`: loads and
 stores, arithmetic, square root, fused multiply-add, compares, `vbsl`,
 conversions, lane access, `vget_low`, `vget_high`, `vcombine` and the
-reinterpretations. Lane-indexed multiplies, rounding, estimates, structure
-loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
+reinterpretations. Lane-indexed multiplies, rounding, estimates, the other
+structure loads, float16 and bfloat16 are not provided.
 
 ### MSVC
 

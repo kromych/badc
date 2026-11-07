@@ -21,7 +21,8 @@
  * vget_low/vget_high/vcombine and the reinterpretations with the integer
  * vectors of their width. Not provided: the lane-indexed and by-scalar
  * multiplies, the non-fused vmla/vmls, rounding (vrnd*), estimates (vrecpe,
- * vrsqrte), pairwise and across-lane forms, structure loads (vld2-4), the
+ * vrsqrte), pairwise and across-lane forms, the structure loads other than
+ * vld2q_u16 and vld4q_u8, the
  * fixed-point and rounding-mode conversions, and float16 / bfloat16.
  *
  * The element typedefs match <stdint.h>; they are repeated here (rather than
@@ -591,6 +592,131 @@ __BADC_NEON_CAST(vreinterpret_u64_u8, uint64x1_t, uint8x8_t)
 __BADC_NEON_CAST(vreinterpret_u64_u16, uint64x1_t, uint16x4_t)
 __BADC_NEON_CAST(vreinterpretq_u16_u8, uint16x8_t, uint8x16_t)
 __BADC_NEON_CAST(vreinterpretq_u16_u64, uint16x8_t, uint64x2_t)
+
+/* 32- and 64-bit integer lanes and the structure loads: the doubleword
+ * store, the broadcasts, the lane-wise add and multiply, the widening
+ * multiply-accumulate of the low and high halves, the narrowing move and
+ * shift, the shift-and-insert pair, the unzip, and vld2q / vld4q, which
+ * deinterleave lane by lane into the gcc-layout structure types. */
+typedef struct {
+    uint16x8_t val[2];
+} uint16x8x2_t;
+typedef struct {
+    uint32x4_t val[2];
+} uint32x4x2_t;
+typedef struct {
+    uint8x16_t val[4];
+} uint8x16x4_t;
+
+static inline void vst1_u8(uint8_t *__p, uint8x8_t __v) {
+    __asm__("str %d1, [%0]" : : "r"(__p), "w"(__v) : "memory");
+}
+
+static inline uint32x2_t vdup_n_u32(uint32_t __a) {
+    uint32x2_t __r;
+    __asm__("dup %0.2s, %w1" : "=w"(__r) : "r"(__a));
+    return __r;
+}
+
+static inline uint64x2_t vdupq_n_u64(uint64_t __a) {
+    uint64x2_t __r;
+    __asm__("dup %0.2d, %x1" : "=w"(__r) : "r"(__a));
+    return __r;
+}
+
+static inline uint64x2_t vaddq_u64(uint64x2_t __a, uint64x2_t __b) {
+    uint64x2_t __r;
+    __asm__("add %0.2d, %1.2d, %2.2d" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+static inline uint32x4_t vmulq_u32(uint32x4_t __a, uint32x4_t __b) {
+    uint32x4_t __r;
+    __asm__("mul %0.4s, %1.4s, %2.4s" : "=w"(__r) : "w"(__a), "w"(__b));
+    return __r;
+}
+
+static inline uint32x2_t vget_low_u32(uint32x4_t __a) {
+    return (uint32x2_t){__a[0], __a[1]};
+}
+
+static inline uint32x2_t vget_high_u32(uint32x4_t __a) {
+    return (uint32x2_t){__a[2], __a[3]};
+}
+
+/* Each product of 32-bit lanes added to the 64-bit lane of __a. */
+static inline uint64x2_t vmlal_u32(uint64x2_t __a, uint32x2_t __b, uint32x2_t __c) {
+    __asm__("umlal %0.2d, %1.2s, %2.2s" : "+w"(__a) : "w"(__b), "w"(__c));
+    return __a;
+}
+
+static inline uint64x2_t vmlal_high_u32(uint64x2_t __a, uint32x4_t __b, uint32x4_t __c) {
+    __asm__("umlal2 %0.2d, %1.4s, %2.4s" : "+w"(__a) : "w"(__b), "w"(__c));
+    return __a;
+}
+
+/* The low half of each 64-bit lane. */
+static inline uint32x2_t vmovn_u64(uint64x2_t __a) {
+    uint32x2_t __r;
+    __asm__("xtn %0.2s, %1.2d" : "=w"(__r) : "w"(__a));
+    return __r;
+}
+
+#define vshrn_n_u64(__a, __n) __extension__({                             \
+    uint64x2_t __sa = (__a);                                              \
+    uint32x2_t __sr;                                                      \
+    __asm__("shrn %0.2s, %1.2d, #" #__n : "=w"(__sr) : "w"(__sa));        \
+    __sr;                                                                 \
+})
+
+#define vshrq_n_u64(__a, __n) __extension__({                             \
+    uint64x2_t __sa = (__a), __sr;                                        \
+    __asm__("ushr %0.2d, %1.2d, #" #__n : "=w"(__sr) : "w"(__sa));        \
+    __sr;                                                                 \
+})
+
+/* __b shifted left by __n into __a, the low __n bits of each lane kept. */
+#define vsli_n_u8(__a, __b, __n) __extension__({                          \
+    uint8x8_t __sa = (__a), __sb = (__b);                                 \
+    __asm__("sli %0.8b, %1.8b, #" #__n : "+w"(__sa) : "w"(__sb));         \
+    __sa;                                                                 \
+})
+
+/* __b shifted right by __n into __a, the high __n bits of each lane kept. */
+#define vsriq_n_u8(__a, __b, __n) __extension__({                         \
+    uint8x16_t __sa = (__a), __sb = (__b);                                \
+    __asm__("sri %0.16b, %1.16b, #" #__n : "+w"(__sa) : "w"(__sb));       \
+    __sa;                                                                 \
+})
+
+/* The even lanes of __a then __b, and the odd ones. */
+static inline uint32x4x2_t vuzpq_u32(uint32x4_t __a, uint32x4_t __b) {
+    uint32x4_t __e, __o;
+    __asm__("uzp1 %0.4s, %1.4s, %2.4s" : "=w"(__e) : "w"(__a), "w"(__b));
+    __asm__("uzp2 %0.4s, %1.4s, %2.4s" : "=w"(__o) : "w"(__a), "w"(__b));
+    return (uint32x4x2_t){{__e, __o}};
+}
+
+static inline uint16x8x2_t vld2q_u16(const uint16_t *__p) {
+    uint16x8x2_t __r;
+    for (int __i = 0; __i < 8; __i++) {
+        __r.val[0][__i] = __p[2 * __i];
+        __r.val[1][__i] = __p[2 * __i + 1];
+    }
+    return __r;
+}
+
+static inline uint8x16x4_t vld4q_u8(const uint8_t *__p) {
+    uint8x16x4_t __r;
+    for (int __i = 0; __i < 16; __i++)
+        for (int __k = 0; __k < 4; __k++)
+            __r.val[__k][__i] = __p[4 * __i + __k];
+    return __r;
+}
+
+__BADC_NEON_CAST(vreinterpretq_u32_u64, uint32x4_t, uint64x2_t)
+__BADC_NEON_CAST(vreinterpretq_u64_u32, uint64x2_t, uint32x4_t)
+__BADC_NEON_CAST(vreinterpretq_u8_u16, uint8x16_t, uint16x8_t)
 
 #undef __BADC_NEON_LOAD
 #undef __BADC_NEON_STORE

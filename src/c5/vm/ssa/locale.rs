@@ -9,13 +9,11 @@ use super::Memory;
 
 pub(super) const NAMES: &[&str] = &["setlocale", "localeconv"];
 
-/// Bytes of `struct lconv`'s pointers to its strings, and of its `char`
-/// members after them (C99 7.11.2.1), in the bundled `<locale.h>`.
+/// `struct lconv`'s string pointers and `char` members (C99 7.11.2.1).
 const POINTERS: usize = 10 * 8;
 const CHARS: usize = 14;
 
-/// The block holding the strings `"C"`, `"."` and `""`, the wide `L"."`
-/// and `L""` msvcrt's structure adds, and the structure, at these offsets.
+/// Offsets of `"C"`, `"."`, `""`, `L"."`, `L""` and the structure.
 const NAME: usize = 0;
 const POINT: usize = 2;
 const EMPTY: usize = 4;
@@ -23,9 +21,8 @@ const WIDE_POINT: usize = 8;
 const WIDE_EMPTY: usize = 12;
 const LCONV: usize = 16;
 
-/// The "C" locale's `struct lconv` in the target's layout: `decimal_point`
-/// ".", the other strings empty, the `char` members `CHAR_MAX`. msvcrt's
-/// structure puts its eight wide strings after the first eight `char`s.
+/// The "C" locale's `struct lconv`: `decimal_point` ".", the other strings
+/// empty, the `char`s `CHAR_MAX`, msvcrt's wide strings after its eighth.
 fn block(mem: &mut Memory) -> Result<usize, C5Error> {
     if mem.locale != 0 {
         return Ok(mem.locale);
@@ -74,8 +71,6 @@ pub(super) fn call(name: &str, args: &[i64], mem: &mut Memory) -> Option<Result<
         if name == "localeconv" {
             return Ok((base + LCONV) as i64);
         }
-        // A query, "" (the native environment), "C" and "POSIX" name the
-        // "C" locale; any other name is one the interpreter cannot select.
         let locale = args.get(1).copied().unwrap_or(0);
         if locale == 0 {
             return Ok((base + NAME) as i64);

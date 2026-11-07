@@ -28,6 +28,7 @@ mod sort;
 mod stream;
 mod string;
 mod strtox;
+mod system;
 
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
@@ -144,6 +145,10 @@ struct Memory {
     streams: alloc::collections::BTreeMap<usize, stream::Stream>,
     /// The "C" locale's strings and `struct lconv`, 0 before first use.
     locale: usize,
+    /// The generator `rand` draws from.
+    rand: system::Rand,
+    /// The `strerror` messages installed so far, by error number.
+    messages: alloc::collections::BTreeMap<i32, usize>,
 }
 
 /// Metadata for one heap allocation. The SSA-VM never reuses
@@ -205,6 +210,8 @@ impl Memory {
             strtok_next: 0,
             streams: alloc::collections::BTreeMap::new(),
             locale: 0,
+            rand: system::Rand::new(Libc::of(target)),
+            messages: alloc::collections::BTreeMap::new(),
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
@@ -1808,6 +1815,7 @@ pub(super) fn interp_supplies(name: &str) -> bool {
         || locale::NAMES.contains(&name)
         || stream::NAMES.contains(&name)
         || sort::NAMES.contains(&name)
+        || system::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -1963,6 +1971,9 @@ fn dispatch_callext<H: Host>(
         return r;
     }
     if let Some(r) = scan::call(name, args, mem, host) {
+        return r;
+    }
+    if let Some(r) = system::call(name, args, mem, host) {
         return r;
     }
     if let Some(r) = stream::call(name, args, mem, host) {
@@ -4760,7 +4771,8 @@ mod tests {
             .chain(printf::NAMES)
             .chain(scan::NAMES)
             .chain(locale::NAMES)
-            .chain(stream::NAMES);
+            .chain(stream::NAMES)
+            .chain(system::NAMES);
         for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =

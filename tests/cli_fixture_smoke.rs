@@ -5577,3 +5577,26 @@ fn interp_sorts_and_searches_through_the_comparison_function() {
         ],
     );
 }
+
+/// Under `--interp` rand draws the target's C library's sequence, time and
+/// clock read the host's clocks, and strerror gives the library's message.
+/// The macOS text is the native build's.
+#[test]
+fn interp_draws_rand_and_reports_errors_as_the_target_library_does() {
+    let glibc = "1 1 1804289383 846930886|71876166\n1 1 1 6\n\
+                 No such file or directory|Numerical result out of range|Success\n";
+    let apple = "1 1 16807 282475249|705894\n1 1 1 6\n\
+                 No such file or directory|Result too large|Undefined error: 0\n";
+    let msvcrt = "1 1 41 18467|175\n1 1 1 6\n\
+                  No such file or directory|Result too large|No error\n";
+    interp_fixture_prints(
+        "rand_time_and_strerror_follow_the_target_library.c",
+        &[
+            ("linux-x64", glibc),
+            ("linux-aarch64", glibc),
+            ("macos-aarch64", apple),
+            ("windows-x64", msvcrt),
+            ("windows-arm64", msvcrt),
+        ],
+    );
+}

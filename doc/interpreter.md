@@ -122,14 +122,22 @@ Windows, which keeps equal elements in order, and Apple's quicksort on
 macOS. `bsearch` probes in the order of the target's C library, which
 decides which of several equal elements it finds.
 
+`rand` draws the target's C library's sequence: glibc's additive
+generator, Apple's minimal standard generator, msvcrt's 15-bit linear
+congruential one, each from seed 1 until `srand`. `time` reads the host's
+calendar time, and `clock` the time since the run began in the bundled
+`<time.h>`'s `CLOCKS_PER_SEC` of 1000000. `strerror` and `perror` give the
+library's messages.
+
 Any other library call stops the program when it is reached:
 
 ```console
-error: runtime: vm_ssa: library call `time` is not implemented under --interp
+error: runtime: vm_ssa: library call `remove` is not implemented under --interp
 ```
 
-Among the calls not implemented are `strerror`, `time`, `remove`,
-`rename`, `tmpfile`, `setjmp`, `signal` and `pthread_create`.
+Among the calls not implemented are `remove`, `rename`, `tmpfile`,
+`mktime`, `localtime`, `strftime`, `setjmp`, `signal` and
+`pthread_create`.
 
 ### Other limits
 

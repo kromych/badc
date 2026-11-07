@@ -100,6 +100,17 @@ pub trait Host {
     fn seek(&mut self, _fd: i64, _offset: i64, _whence: i32) -> i64 {
         -1
     }
+
+    /// The calendar time in seconds since 1970-01-01 UTC, or -1 where the
+    /// host has no clock (C99 7.23.2.4).
+    fn time(&mut self) -> i64 {
+        -1
+    }
+
+    /// Microseconds since the host was made, or -1 where it cannot tell.
+    fn elapsed_micros(&mut self) -> i64 {
+        -1
+    }
 }
 
 /// The `errno` values [`Host::open_mode`] reports, the same on every target.
@@ -120,6 +131,7 @@ mod std_host {
     pub struct StdHost {
         fd_table: HashMap<i64, File>,
         next_fd: i64,
+        started: std::time::Instant,
     }
 
     impl Default for StdHost {
@@ -129,6 +141,7 @@ mod std_host {
             Self {
                 fd_table: HashMap::new(),
                 next_fd: 3,
+                started: std::time::Instant::now(),
             }
         }
     }
@@ -181,6 +194,15 @@ mod std_host {
                 Ok(file) => self.install(file),
                 Err(e) => -errno_of(&e),
             }
+        }
+
+        fn time(&mut self) -> i64 {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+            now.map_or(-1, |d| d.as_secs() as i64)
+        }
+
+        fn elapsed_micros(&mut self) -> i64 {
+            self.started.elapsed().as_micros() as i64
         }
 
         fn seek(&mut self, fd: i64, offset: i64, whence: i32) -> i64 {

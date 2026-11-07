@@ -1821,9 +1821,12 @@ const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPO
 /// Build the `.edata` section bytes for an image with exports.
 fn build_export_directory(
     edata_rva: u32,
-    exports: Vec<(String, u32)>,
+    mut exports: Vec<(String, u32)>,
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    // link.exe assigns the ordinals a definition file does not in name
+    // order, so AddressOfFunctions takes the exports sorted by name too.
+    exports.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     let n = exports.len() as u32;
     let header_size = IMAGE_EXPORT_DIRECTORY_SIZE as u32;
     let funcs_off = header_size;
@@ -3304,7 +3307,8 @@ mod tests {
 
     /// The export name pointer table is binary-searched by GetProcAddress,
     /// so `build_export_directory` orders the entries lexically with the
-    /// ordinal table pointing back at each name's AddressOfFunctions slot.
+    /// ordinal table pointing back at each name's AddressOfFunctions slot;
+    /// the slots follow the names, as link.exe assigns ordinals.
     #[test]
     fn export_directory_sorts_names_lexically() {
         let bytes = build_export_directory(
@@ -3323,11 +3327,11 @@ mod tests {
                 .expect("name present")
         };
         assert!(name_pos(b"alpha\0") < name_pos(b"zeta\0"));
-        // AddressOfFunctions stays in declaration order.
+        // AddressOfFunctions follows the names: `alpha` is ordinal 1.
         let funcs_off = IMAGE_EXPORT_DIRECTORY_SIZE;
         let rva0 = u32::from_le_bytes(bytes[funcs_off..funcs_off + 4].try_into().unwrap());
         let rva1 = u32::from_le_bytes(bytes[funcs_off + 4..funcs_off + 8].try_into().unwrap());
-        assert_eq!((rva0, rva1), (0x1000, 0x2000));
+        assert_eq!((rva0, rva1), (0x2000, 0x1000));
         let ordinals_off = funcs_off + 4 * 2 + 4 * 2;
         let ord0 = u16::from_le_bytes(bytes[ordinals_off..ordinals_off + 2].try_into().unwrap());
         let ord1 = u16::from_le_bytes(
@@ -3335,7 +3339,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         );
-        assert_eq!((ord0, ord1), (1, 0));
+        assert_eq!((ord0, ord1), (0, 1));
     }
 
     /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength` in 11

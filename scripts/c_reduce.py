@@ -2,8 +2,8 @@
 """Shrink a C source while a command keeps failing the same way.
 
 `cvise` and `creduce` do this better and should be used where they are
-installed; Homebrew carries neither under those names, and a filed csmith case
-is several hundred lines that nobody reads unreduced. This is the small version
+installed (Homebrew carries `creduce` and `csmith`); a filed csmith case is
+several hundred lines that nobody reads unreduced. This is the small version
 of the same idea: delete a brace-balanced region, keep the deletion when the
 command still fails the way it did at the start, repeat until nothing more can
 go. On the case that opened this harness it took 3939 lines to 46 in four

@@ -8,10 +8,10 @@
 //! `Compiler::new(source).compile()` returns a [`Program`].
 //! [`emit_native`] / [`emit_native_with_options`] lower it to bytes
 //! you can write to disk; [`jit_run`] / [`jit_run_with_options`]
-//! load and execute it in-process; [`Vm::new(program).run`]
+//! load and execute it in-process; `Vm::new(program).run()` ([`Vm`])
 //! interprets the pre-lifted SSA functions under a
-//! pointer-tracking runtime. [`optimize`] sits between compile
-//! and any of those when you want it.
+//! pointer-tracking runtime. [`NativeOptions::with_optimize`]
+//! runs the SSA optimizer under the native and JIT paths.
 //!
 //! ## no_std
 //!

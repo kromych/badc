@@ -221,28 +221,28 @@ jobs:
         #
         # Each runner exercises the native-codegen path that targets
         # its own host:
-        #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
-        #    `/usr/bin/codesign`) + src/c4/tests/jit.rs (in-process
+        #  * macos-latest        -> src/c5/tests/native.rs (Mach-O,
+        #    `/usr/bin/codesign`) + src/c5/tests/jit.rs (in-process
         #    JIT via MAP_JIT + pthread_jit_write_protect_np). The
-        #    PE-via-WINE tests in src/c4/tests/native_pe_x64.rs
+        #    PE-via-WINE tests in src/c5/tests/native_pe_x64.rs
         #    compile here too but skip at runtime when WINE isn't
         #    installed (it isn't on the macos-latest image).
-        #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs
+        #  * ubuntu-24.04-arm    -> src/c5/tests/native_elf.rs
         #    (Linux/aarch64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (mprotect-based JIT) +
-        #    src/c4/tests/native_pe_arm64.rs through wine 10's
+        #    src/c5/tests/jit.rs (mprotect-based JIT) +
+        #    src/c5/tests/native_pe_arm64.rs through wine 10's
         #    aarch64-windows DLL set (installed in the step above).
-        #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
+        #  * ubuntu-latest       -> src/c5/tests/native_elf_x64.rs
         #    (Linux/x86_64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (mprotect-based JIT) +
-        #    src/c4/tests/native_pe_x64.rs through wine's
+        #    src/c5/tests/jit.rs (mprotect-based JIT) +
+        #    src/c5/tests/native_pe_x64.rs through wine's
         #    x86_64-windows DLL set (installed in the step above)
         #    as a cross-check against the windows-latest runner.
-        #  * windows-latest      -> src/c4/tests/native_pe_x64.rs
+        #  * windows-latest      -> src/c5/tests/native_pe_x64.rs
         #    (Windows/x86_64 PE, host kernel exec). Runs the
-        #    produced .exe directly; no JIT lane on Windows because
-        #    the in-process JIT loader hasn't been ported.
-        #  * windows-11-arm      -> src/c4/tests/native_pe_arm64.rs
+        #    produced .exe directly. TODO: src/c5/tests/jit.rs is
+        #    compiled out on Windows, though jit_run supports it.
+        #  * windows-11-arm      -> src/c5/tests/native_pe_arm64.rs
         #    (Windows/AArch64 PE, host kernel exec). Same shape as
         #    the windows-latest lane but for the AArch64 backend.
         # The backend test modules are cfg-gated to their
@@ -2009,15 +2009,15 @@ jobs:
     # tree's `LD`, so the kernel's own link-vmlinux.sh drives badc for the
     # kallsyms passes, the `-r` merges and the final vmlinux, and that image
     # boots under the emulator the qemu lane linked with badc's own linker.
-    # badc-built end to end: the compiler (this repo, built by the build job for this runner), the kernel
-    # image and the link that produced it, and the emulator it runs on. Not
-    # badc-built: the reference compiler still assembles the .S units and
-    # builds kbuild's host tools, and GNU ld still takes the links ldshim.py
-    # routes to it -- x86's 16/32-bit boot and vDSO links, which need the i386
-    # target. The 64-bit vDSOs are badc's, dynamic metadata and symbol
-    # versions included, and so is kbuild's scriptless linker probe.
-    # `verify.py` names what was left to GNU ld one by one and fails on
-    # a link leaving badc for any other reason. The boot uses the emulator's
+    # badc-built end to end: the compiler (this repo, built by the build job
+    # for this runner), the kernel image, every link that produced it -- the
+    # -r merges, the vmlinux passes, the vDSOs with their dynamic metadata and
+    # symbol versions, x86's 16/32-bit boot links and kbuild's scriptless
+    # linker probe (ldshim.py) -- and the emulator it runs on. Not badc-built:
+    # kbuild's host tools, which the reference compiler builds, and the .S
+    # units badc's assembler does not take yet, which buildcc.py gives gas.
+    # `verify.py` reports the assembly split and fails on a link left to GNU
+    # ld. The boot uses the emulator's
     # -kernel loader rather than badc-built firmware; booting through
     # OVMF/AAVMF is the qemu lane's dimension.
     #

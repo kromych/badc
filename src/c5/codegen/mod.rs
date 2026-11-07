@@ -94,7 +94,7 @@ pub use jit::{jit_run, jit_run_with_options};
 pub use crate::c5::object::elf_class::ElfClass;
 
 /// Which native binary to produce. Adding a target is a structural
-/// change (new variant, new match arm in [`emit_native`]) rather than
+/// change (new variant, new match arm in [`crate::emit_native`]) rather than
 /// a silent string parse, and gives `--target=...` somewhere to grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -426,7 +426,7 @@ impl Target {
     }
 
     /// Default target -- used when callers (mostly tests) construct a
-    /// [`Compiler`] without an explicit `--target` choice. Picks the
+    /// [`crate::Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running
     /// `badc foo.c` without naming a target gets a binary that runs
     /// on this machine. Cross-compilation always goes through
@@ -4349,13 +4349,11 @@ pub(crate) const STACK_CHK_FAIL_SYMBOL: &str = "__stack_chk_fail";
 /// every region below keeps its alignment.
 pub(crate) const CANARY_REGION_BYTES: u32 = 16;
 
-/// User-controllable knobs for the native lowering pass. Distinct
-/// from [`TargetOptions`] (which encodes platform ABI -- not user
-/// choosable). Threaded through [`emit_native_with_options`],
-/// [`dump_native_listing_with_options`], and
-/// [`jit_run_with_options`]; the zero-arg public functions
-/// (`emit_native`, ...) construct `NativeOptions::default()` and
-/// delegate.
+/// User-controllable knobs for the native lowering pass; the platform
+/// ABI comes from the [`Target`]. Threaded through
+/// [`crate::emit_native_with_options`] and [`crate::jit_run_with_options`];
+/// the zero-arg public functions (`emit_native`, ...) construct
+/// `NativeOptions::default()` and delegate.
 #[derive(Debug, Clone)]
 pub struct NativeOptions {
     /// Run the SSA optimization passes before register allocation:

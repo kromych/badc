@@ -644,7 +644,7 @@ pub struct CompileOptions {
     pub optimize: bool,
     /// `-Wvla-larger-than=N`, in bytes; see [`vla_bound`].
     pub vla_larger_than: Option<u64>,
-    /// `-fgnu89-inline` -- make [`InlineModel::Gnu89`] the unit's
+    /// `-fgnu89-inline` -- make [`crate::c5::symbol::InlineModel::Gnu89`] the unit's
     /// default inline linkage model instead of C99's, and predefine
     /// `__GNUC_GNU_INLINE__` in place of `__GNUC_STDC_INLINE__`.
     pub gnu89_inline: bool,

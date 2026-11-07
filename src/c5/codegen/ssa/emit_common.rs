@@ -2379,8 +2379,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // control layer stays empty.
     let mut sink = Sink::new(native.diag.clone(), Default::default());
 
-    // Lift the program into SSA once and run the linear-scan allocator per
-    // function. A per-function emit bail is a hard error so any IR + emit
+    // Lift the program into SSA once and run the graph-coloring allocator
+    // per function. A per-function emit bail is a hard error so any IR + emit
     // coverage gap surfaces immediately. A recompaction retry supplies the
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.

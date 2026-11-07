@@ -66,9 +66,6 @@ impl C5Error {
         )
     }
 
-    /// Put the diagnostics the failed phase reported before this error
-    /// ahead of it, so none is lost when the error unwinds past the
-    /// sink holding them.
     /// The error with `f` applied to each of its diagnostics.
     pub(crate) fn map_diagnostics(self, f: impl FnMut(&mut Diagnostic)) -> Self {
         match self {
@@ -80,6 +77,9 @@ impl C5Error {
         }
     }
 
+    /// Put the diagnostics the failed phase reported before this error
+    /// ahead of it, so none is lost when the error unwinds past the
+    /// sink holding them.
     pub(crate) fn after(self, mut earlier: Vec<Diagnostic>) -> Self {
         match self {
             C5Error::Compile(mine) => {

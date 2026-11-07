@@ -2212,6 +2212,10 @@ impl Compiler {
             }
             let stores_back = is_output && !is_bound;
             let is_rw = is_rw && !is_bound;
+            if stores_back {
+                // The asm writes the operand (C17 6.5.16p2).
+                self.require_modifiable(self.ty, "inline asm output")?;
+            }
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
                 && !is_bound
             {

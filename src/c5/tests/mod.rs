@@ -35,6 +35,7 @@ mod compound_assign;
 #[cfg(feature = "full")]
 mod computed_goto;
 mod deferred;
+mod diag_cases;
 mod divmod;
 #[cfg(feature = "full")]
 mod dwarf;

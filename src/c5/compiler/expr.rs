@@ -804,6 +804,31 @@ impl Compiler {
         let val1 = args.get(1).copied();
         let val2 = args.get(2).copied();
         let pos = self.ast_src_pos();
+        // The atomic object every form but a load writes is a modifiable
+        // lvalue (C17 6.5.16p2); the generic load's result and the expected
+        // value a compare-exchange writes back are `T *` parameters, so a
+        // pointer to const discards its qualifier (6.5.16.1p1).
+        if !matches!(name, "__atomic_load_n" | "__atomic_load") {
+            self.require_modifiable(elem_ty, &format!("`{name}` write"))?;
+        }
+        let out_arg = match name {
+            "__atomic_load" => Some(1),
+            "__atomic_compare_exchange_n" | "__atomic_compare_exchange" => Some(1),
+            _ => None,
+        };
+        let out_ty = out_arg
+            .and_then(|i| args.get(i))
+            .and_then(|a| super::super::ast::expr_ty(self.ast.expr(*a)));
+        if let (Some(i), Some(ty)) = (out_arg, out_ty)
+            && is_pointer_ty(ty)
+            && super::types::is_const_object_ty(pointee_ty(ty))
+        {
+            let text = format!(
+                "discards `const` qualifier from pointer target type in argument {} of `{name}`",
+                i + 1
+            );
+            self.warn_at(Code::DISCARDED_QUALIFIERS, self.lex.line, text);
+        }
 
         let seq = MemOrder::SeqCst;
         let rmw_order = |this: &Self| {
@@ -1903,7 +1928,15 @@ impl Compiler {
             }
             // The `va_list`, then the rightmost fixed parameter (`va_start`, C99
             // 7.15.1.4) or the source `va_list` (`va_copy`), both as addresses.
+            // Both macros write the first (C17 6.5.16p2).
             self.expr(Token::Assign as i64)?;
+            // An array `va_list` (System V x86-64) decays to its element's address.
+            let va_ty = if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) > 0 {
+                pointee_ty(self.ty)
+            } else {
+                self.ty
+            };
+            self.require_modifiable(va_ty, &format!("`{fn_name}` operand"))?;
             self.va_list_operand_address();
             if let Some(a) = self.ast_acc {
                 ast_intrinsic_args.push(a);
@@ -2569,10 +2602,10 @@ impl Compiler {
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
         let tu_member = Self::transparent_union_member(&self.structs, want, self.ty, zero);
-        // A `Token::Sys` prototype spells no `const` of the library's, and
-        // `char *` for `void *`, so its pointer parameters are not compared.
+        // A `Token::Sys` prototype may spell `char *` for `void *` or another
+        // pointee signedness, so only its qualifiers are compared (C17
+        // 6.5.16.1p1).
         let sys_exempt = [
-            Code::DISCARDED_QUALIFIERS,
             Code::INCOMPATIBLE_POINTER_TYPES,
             Code::NESTED_QUALIFIERS,
             Code::POINTER_SIGN,

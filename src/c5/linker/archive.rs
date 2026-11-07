@@ -396,9 +396,10 @@ pub fn write_archive(
         if m.name.len() <= 15 {
             name_form.push(format!("{}/", m.name));
         } else {
+            // GNU ar's form, which llvm-ar and the nm tools read: `name/\n`.
             name_form.push(format!("/{}", long_table.len()));
             long_table.extend_from_slice(m.name.as_bytes());
-            long_table.push(b'\n');
+            long_table.extend_from_slice(b"/\n");
         }
     }
     let names: Vec<(usize, &str)> = (symbols_by_member.iter())
@@ -874,6 +875,28 @@ mod tests {
     }
 
     /// A regular `!<arch>` round-trips: write members, read them back.
+    #[test]
+    fn long_member_names_take_gnu_ars_terminator() {
+        let long = "a_member_name_longer_than_fifteen.o";
+        let members = alloc::vec![
+            ArchiveMember {
+                name: long.into(),
+                bytes: alloc::vec![1, 2]
+            },
+            ArchiveMember {
+                name: alloc::format!("{long}.2"),
+                bytes: alloc::vec![3]
+            },
+        ];
+        let blob = write_archive(&members, &[(0, alloc::vec!["s".into()])]);
+        let table = alloc::format!("{long}/\n{long}.2/\n");
+        let at = (blob.windows(table.len())).position(|w| w == table.as_bytes());
+        assert!(at.is_some(), "the long-name table spells `name/\\n`");
+        let back = read_archive(&blob).expect("read");
+        assert_eq!(back[0].name, long);
+        assert_eq!(back[1].name, alloc::format!("{long}.2"));
+    }
+
     #[test]
     fn regular_archive_round_trips() {
         let members = alloc::vec![

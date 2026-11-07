@@ -3371,9 +3371,9 @@ impl Compiler {
         };
         // Without `#pragma entrypoint(<name>)`, accept any of
         // `main` / `wmain` / `WinMain` / `wWinMain` in that
-        // priority order.
+        // priority order; the last three are the Windows C runtime's.
         let resolved_idx = lookup_fun(default_name).or_else(|| {
-            if pragma_name.is_some() {
+            if pragma_name.is_some() || !self.target.is_windows() {
                 None
             } else {
                 ["wmain", "WinMain", "wWinMain"]

@@ -617,6 +617,19 @@ mod jit_impl {
         sources: Sources<'_>,
         report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
+        // The run calls its entry as `main(argc, argv)`; the Windows C
+        // runtime's other entries take other arguments.
+        if let Some(name) = (program.entry_name.as_deref())
+            .filter(|n| matches!(*n, "wmain" | "WinMain" | "wWinMain"))
+        {
+            return Err(C5Error::hard(
+                crate::c5::diag::Code::UNSUPPORTED,
+                alloc::format!(
+                    "JIT: the run calls its entry as `main(argc, argv)`, and `{name}` takes \
+                     other arguments; build an image to run it"
+                ),
+            ));
+        }
         // Reset the per-thread atexit chain so this invocation's
         // drain only processes its own entries. Any pre-existing
         // entries (from a nested `jit_run` further up the stack on

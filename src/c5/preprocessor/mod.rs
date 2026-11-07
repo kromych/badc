@@ -294,6 +294,8 @@ pub(crate) struct Preprocessor {
     asm_source: bool,
     /// The edition `-std=` selects; see [`Self::set_std`].
     std: crate::c5::CStd,
+    /// Whether translation phase 1 replaces trigraphs ([`Self::set_trigraphs`]).
+    trigraphs: bool,
     /// `#pragma entrypoint(<id>)`: a non-`main` entry such as `WinMain`
     /// or a custom `_start`. `None` keeps `main`. Read by the compile
     /// pass for `entry_pc` and by the PE writer for
@@ -1305,6 +1307,7 @@ impl Preprocessor {
             preprocessed: false,
             asm_source: false,
             std: crate::c5::CStd::default(),
+            trigraphs: false,
             entrypoint: None,
             subsystem: None,
             default_libs: Vec::new(),
@@ -1499,6 +1502,11 @@ impl Preprocessor {
             Some(v) => self.define("__STDC_VERSION__", &format!("{v}L")),
             None => self.undef("__STDC_VERSION__"),
         }
+    }
+
+    /// Replace trigraphs in every file of the unit (C17 5.2.1.1).
+    pub fn set_trigraphs(&mut self, on: bool) {
+        self.trigraphs = on;
     }
 
     pub(super) fn c23_keywords(&self) -> bool {
@@ -1999,6 +2007,11 @@ impl Preprocessor {
         // A UTF-8 byte-order mark opening the file is accepted and
         // skipped, following gcc and clang.
         let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+        let source = if self.trigraphs {
+            replace_trigraphs(source)
+        } else {
+            alloc::borrow::Cow::Borrowed(source)
+        };
         // C99 5.1.1.2 phases 2 and 3, fused into one scan: every `\\\n`
         // joins lines so the line-by-line preprocessor never sees a
         // continuation, and comments are removed before substitution so
@@ -2006,7 +2019,7 @@ impl Preprocessor {
         // a surrounding comment. A blank line per consumed continuation
         // preserves the one-for-one line count that `__LINE__` and every
         // diagnostic depend on.
-        let stripped = unfold_and_strip(source);
+        let stripped = unfold_and_strip(&source);
         out.reserve(stripped.len());
         let mut pass = LinePass::new(self, out, filename, &stripped);
         pass.run()?;
@@ -2927,4 +2940,4 @@ use pragma::{
     PragmaDirective, parse_pragma_directive, pragma_is_fp_contract, pragma_is_pack,
     pragma_is_visibility,
 };
-use text::unfold_and_strip;
+use text::{replace_trigraphs, unfold_and_strip};

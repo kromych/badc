@@ -690,6 +690,8 @@ pub struct CompileOptions {
     pub fp_contract: FpContract,
     /// `-std=`; see [`CStd`].
     pub std: CStd,
+    /// Translation phase 1 replaces trigraphs (C17 5.2.1.1).
+    pub trigraphs: bool,
 }
 
 /// The edition of the C standard a unit is compiled to (`-std=`), held as
@@ -932,6 +934,11 @@ impl CompileOptions {
     /// Select the edition of the C standard (`-std=`).
     pub fn with_std(mut self, std: CStd) -> Self {
         self.std = std;
+        self
+    }
+    /// Replace trigraphs in translation phase 1.
+    pub fn with_trigraphs(mut self, trigraphs: bool) -> Self {
+        self.trigraphs = trigraphs;
         self
     }
     /// Replace the `-D` predefine list.
@@ -2888,6 +2895,7 @@ impl Compiler {
         }
         pp.set_source_label(&opts.source_label);
         pp.set_std(opts.std);
+        pp.set_trigraphs(opts.trigraphs);
         pp.set_track_includes(opts.track_includes);
         pp.set_keep_pragmas(opts.keep_pragmas);
         pp.set_preprocessed(opts.preprocessed);

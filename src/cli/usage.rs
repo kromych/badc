@@ -372,9 +372,11 @@ Compile knobs:
                            c23 on, the bool/true/false keywords. The GNU
                            extensions are available in every dialect.
                            Under --gnu, `gnu*` clears __STRICT_ANSI__ and
-                           `c*` / `iso*` set it; without the flag
-                           --gnu reports strict
-                           conformance.
+                           `c*` / `iso*` set it; without the flag --gnu
+                           reports strict conformance. `c*` / `iso*` before
+                           c23 replace trigraphs.
+  -trigraphs, -ftrigraphs  Replace trigraphs (C17 5.2.1.1) whatever the
+  -fno-trigraphs           dialect, or keep them as written.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99

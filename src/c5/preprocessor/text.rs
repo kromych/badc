@@ -231,6 +231,46 @@ impl<'a> Fuse<'a> {
     }
 }
 
+/// C17 5.2.1.1, translation phase 1: each trigraph `??x` replaced by the
+/// character it stands for. Borrows `source` when it holds none.
+pub(super) fn replace_trigraphs(source: &str) -> alloc::borrow::Cow<'_, str> {
+    let of = |c: u8| match c {
+        b'=' => Some('#'),
+        b'(' => Some('['),
+        b'/' => Some('\\'),
+        b')' => Some(']'),
+        b'\'' => Some('^'),
+        b'<' => Some('{'),
+        b'!' => Some('|'),
+        b'>' => Some('}'),
+        b'-' => Some('~'),
+        _ => None,
+    };
+    let bytes = source.as_bytes();
+    let mut out: Option<String> = None;
+    let (mut copied, mut i) = (0, 0);
+    while let Some(k) = source[i..].find("??") {
+        let at = i + k;
+        match bytes.get(at + 2).copied().and_then(of) {
+            Some(c) => {
+                let o = out.get_or_insert_with(|| String::with_capacity(source.len()));
+                o.push_str(&source[copied..at]);
+                o.push(c);
+                copied = at + 3;
+                i = at + 3;
+            }
+            None => i = at + 1,
+        }
+    }
+    match out {
+        Some(mut o) => {
+            o.push_str(&source[copied..]);
+            alloc::borrow::Cow::Owned(o)
+        }
+        None => alloc::borrow::Cow::Borrowed(source),
+    }
+}
+
 /// Fused phase-2 / phase-3 pass; see [`Fuse`]. Byte-identical to
 /// `strip_c_comments(&unfold_line_continuations(source))`, which the
 /// differential tests verify over the header corpus and fuzzed input.

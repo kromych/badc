@@ -95,6 +95,10 @@ pub(crate) struct FrontEnd {
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
     pub(crate) std: badc::CStd,
+    /// `-std=` named an ISO dialect (`c*`, `iso9899:*`).
+    pub(crate) iso_dialect: bool,
+    /// `-trigraphs`, `-ftrigraphs` or `-fno-trigraphs`, the last one given.
+    pub(crate) trigraphs: Option<bool>,
     pub(crate) gnu89_inline: bool,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
@@ -1333,6 +1337,10 @@ impl Parser {
             // feature badc lacks on `__GNUC__` keeps compiling unless
             // this is requested.
             "--gnu" => front.gnu = true,
+            // Trigraph replacement (C17 5.2.1.1); otherwise an ISO dialect
+            // before C23, which removed them, turns it on.
+            "-trigraphs" | "-ftrigraphs" => front.trigraphs = Some(true),
+            "-fno-trigraphs" => front.trigraphs = Some(false),
             // The MSVC identity: `_MSC_VER` and the rest, `__STDC__` left
             // undefined as cl leaves it.
             "--msvc" => front.msvc = true,
@@ -1476,6 +1484,7 @@ impl Parser {
                 };
                 front.std = std;
                 front.gnu_dialect = dialect.starts_with("gnu");
+                front.iso_dialect = !front.gnu_dialect;
             }
             _ => return Ok(false),
         }
@@ -2735,6 +2744,10 @@ impl FrontEnd {
             .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
             .with_std(self.std)
+            .with_trigraphs(
+                self.trigraphs
+                    .unwrap_or(self.iso_dialect && !self.std.c23_keywords()),
+            )
             .with_optimize(self.optimize)
             .with_vla_larger_than(self.vla_larger_than)
             .with_defines(tu_defines(self.source_kind(label), &self.defines))
@@ -4458,6 +4471,13 @@ mod tests {
         assert!(!parse(&["-std=c99", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
+        // Trigraphs follow an ISO dialect before C23 unless a flag says.
+        let trigraphs = |args: &[&str]| parse(args).front.compile_options("a.c").trigraphs;
+        assert!(trigraphs(&["-std=c17", "a.c"]) && trigraphs(&["-std=iso9899:1999", "a.c"]));
+        assert!(!trigraphs(&["a.c"]) && !trigraphs(&["-std=gnu17", "a.c"]));
+        assert!(!trigraphs(&["-std=c23", "a.c"]));
+        assert!(trigraphs(&["-std=gnu11", "-trigraphs", "a.c"]));
+        assert!(!trigraphs(&["-std=c99", "-fno-trigraphs", "a.c"]));
         assert!(parse(&["--target=windows-x64", "--msvc", "a.c"]).front.msvc);
         let (message, _) = reject(&[X64, "--msvc", "-c", "a.c"]);
         assert!(

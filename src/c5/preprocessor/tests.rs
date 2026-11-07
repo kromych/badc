@@ -230,6 +230,22 @@ fn sizeof_int128_is_predefined() {
 }
 
 #[test]
+fn trigraphs_are_replaced_in_phase_one_when_enabled() {
+    // C17 5.2.1.1: the nine trigraphs, `???=` keeping its first `?`, and
+    // `??/` before a newline splicing the lines; any other `??x` stays.
+    let src = "??=define X 1 ??/\n+ 1\nint a??(2??) = ??< X ??>; \"??!??'??-???=??z\"\n";
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_trigraphs(true);
+    let out = pp.process(src).expect("preprocessor failed");
+    assert!(out.contains("int a[2] = { 1 + 1 }; \"|^~?#??z\""), "{out}");
+    let out = process(src);
+    assert!(
+        out.contains("??=define X 1"),
+        "replaced without -trigraphs: {out}"
+    );
+}
+
+#[test]
 fn gnu_identity_macros_are_opt_in() {
     // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
     let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\

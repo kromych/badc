@@ -2492,6 +2492,8 @@ pub(crate) struct Build {
     pub pdb_path: Option<String>,
     /// The compiled resource files (`.res`) a PE image carries in `.rsrc`.
     pub resources: Vec<Vec<u8>>,
+    /// A PE image's `--stack` reserve and commit; `None` keeps the default.
+    pub stack_size: Option<(u64, u64)>,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the

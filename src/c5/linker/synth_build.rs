@@ -105,6 +105,8 @@ pub struct ImageOptions {
     pub strip_debug: bool,
     /// `-X`: no assembler temporary (`.L*`) among the local symbols.
     pub discard_temporaries: bool,
+    /// `--stack reserve[,commit]`: a PE image's initial thread stack.
+    pub pe_stack: Option<(u64, u64)>,
     pub elf: ElfImageOptions,
 }
 
@@ -450,6 +452,7 @@ fn synth_program_and_build(
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         pdb_path: None,
         resources: Vec::new(),
+        stack_size: opts.pe_stack,
         plt_trampoline_offsets,
     };
 

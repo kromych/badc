@@ -141,6 +141,9 @@ Multi-TU knobs:
   --out-implib=<file>, --out-implib <file>
                            Write a PE DLL's import library to <file>,
                            as link.exe writes one beside the DLL.
+  --stack=<reserve>[,<commit>], --stack <reserve>[,<commit>]
+                           Size a PE image's initial thread stack, as
+                           link.exe's /STACK does (default 8 MiB).
   --entry=<sym>            Enter the image at <sym>; overrides
                            `#pragma entrypoint` and `main`.
   -Wl,<arg>[,<arg>...], -Xlinker <arg>

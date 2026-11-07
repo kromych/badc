@@ -967,6 +967,7 @@ pub(crate) mod test_support {
             merged_dwarf: None,
             pdb_path: None,
             resources: Vec::new(),
+            stack_size: None,
             plt_trampoline_offsets: Vec::new(),
         }
     }

@@ -175,6 +175,12 @@ const DATA_DIRECTORY_DEBUG: usize = 6;
 const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
 
+/// `SizeOfStackReserve` and `SizeOfStackCommit` without `--stack`: the
+/// initial thread's reserved range, which pages in on demand. link.exe
+/// reserves 1 MiB; 8 MiB matches the glibc and Apple main-thread stacks, so
+/// recursion tuned for Linux or macOS does not reach the guard page first.
+const DEFAULT_STACK: (u64, u64) = (0x80_0000, 0x1000);
+
 /// `IMAGE_DEBUG_DIRECTORY`, and the `RSDS` record's signature, GUID and
 /// age ahead of the PDB path.
 const IMAGE_DEBUG_DIRECTORY_SIZE: usize = 28;
@@ -1537,6 +1543,7 @@ impl<'a> PeWriter<'a> {
                 export_table_size: l.edata_bytes.len() as u32,
                 resource_table_rva: l.rsrc_rva,
                 resource_table_size: l.rsrc_bytes.len() as u32,
+                stack: build.stack_size.unwrap_or(DEFAULT_STACK),
                 debug_rva: debug_dir.0,
                 debug_size: debug_dir.1,
                 subsystem: self.subsystem,
@@ -2305,6 +2312,8 @@ struct OptionalHeaderInputs {
     export_table_size: u32,
     resource_table_rva: u32,
     resource_table_size: u32,
+    /// `SizeOfStackReserve` and `SizeOfStackCommit`.
+    stack: (u64, u64),
     debug_rva: u32,
     debug_size: u32,
     subsystem: u16,
@@ -2387,18 +2396,8 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             checksum: 0,
             subsystem: inp.subsystem,
             dll_characteristics: dll_chars,
-            // PE/COFF specifies `SizeOfStackReserve` as the
-            // committed-on-demand virtual range reserved for the initial
-            // thread's stack (cleared by the loader; no physical backing
-            // until each page faults in). MSVC's link.exe defaults to 1
-            // MiB; mingw's ld defaults to 8 MiB, matching glibc / Apple
-            // libc thread defaults. c5 uses the mingw default so portable
-            // programs that exercise recursion to a depth tuned for the
-            // Linux / macOS C stack budget don't fault the guard page on
-            // Windows before whatever in-program counter would otherwise
-            // enforce the recursion limit.
-            size_of_stack_reserve: 0x80_0000, // 8 MiB
-            size_of_stack_commit: 0x1000,
+            size_of_stack_reserve: inp.stack.0,
+            size_of_stack_commit: inp.stack.1,
             size_of_heap_reserve: 0x10_0000,
             size_of_heap_commit: 0x1000,
             loader_flags: 0,

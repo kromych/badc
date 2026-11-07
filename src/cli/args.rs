@@ -240,6 +240,8 @@ pub(crate) struct Link {
     pub(crate) markers: Vec<(usize, LinkMarker)>,
     /// `--out-implib`: where a PE DLL link writes its import library.
     pub(crate) out_implib: Option<PathBuf>,
+    /// `--stack reserve[,commit]`, link.exe's `/STACK`.
+    pub(crate) stack: Option<(u64, u64)>,
     pub(crate) library_paths: Vec<String>,
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
@@ -347,6 +349,7 @@ impl Default for Link {
         Self {
             markers: Vec::new(),
             out_implib: None,
+            stack: None,
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
@@ -455,6 +458,7 @@ impl Cli {
             exec_form: self.exec_form(),
             strip_debug: link.strip_debug,
             discard_temporaries: link.discard_locals,
+            pe_stack: link.stack,
             elf: badc::ElfImageOptions {
                 build_id: link.build_id,
                 max_page_size: link.z.max_page_size(),
@@ -2118,6 +2122,14 @@ impl Parser {
             s if s.starts_with("--out-implib=") => {
                 link.out_implib = Some(PathBuf::from(&s["--out-implib=".len()..]));
             }
+            // GNU ld's PE `--stack reserve[,commit]`, link.exe's `/STACK`.
+            "--stack" => {
+                let value = operand(iter, "badc: error: --stack requires a size")?;
+                link.stack = Some(parse_stack(&value)?);
+            }
+            s if s.starts_with("--stack=") => {
+                link.stack = Some(parse_stack(&s["--stack=".len()..])?)
+            }
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,
@@ -2905,6 +2917,25 @@ impl Codegen {
         }
         opts.output_kind = badc::OutputKind::Relocatable;
         opts
+    }
+}
+
+/// `reserve[,commit]` in bytes, decimal or `0x` hexadecimal; the commit
+/// defaults to one page and may not exceed the reserve.
+fn parse_stack(value: &str) -> Result<(u64, u64), ParseError> {
+    let number = |s: &str| match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        Some(hex) => u64::from_str_radix(hex, 16).ok(),
+        None => s.parse::<u64>().ok(),
+    };
+    let (reserve, commit) = match value.split_once(',') {
+        Some((r, c)) => (number(r), number(c)),
+        None => (number(value), Some(0x1000)),
+    };
+    match (reserve, commit) {
+        (Some(r), Some(c)) if r > 0 && c <= r => Ok((r, c)),
+        _ => Err(ParseError::diag(format!(
+            "badc: error: --stack takes reserve[,commit] in bytes, got `{value}`"
+        ))),
     }
 }
 

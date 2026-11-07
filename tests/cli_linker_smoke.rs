@@ -6758,6 +6758,46 @@ fn pragma_comment_linker_is_ignored_outside_pe() {
     );
 }
 
+/// `--stack reserve[,commit]` sizes a PE image's initial thread stack in
+/// the optional header, as link.exe's `/STACK` does; without it the image
+/// reserves 8 MiB, and a commit past the reserve is refused.
+#[test]
+fn a_pe_link_takes_the_stack_size() {
+    let dir = tempdir("pe-stack-size");
+    write_source(&dir, "s.c", "int main(void) { return 0; }\n");
+    for target in ["windows-x64", "windows-arm64"] {
+        for (option, want) in [
+            (None, (0x80_0000u64, 0x1000u64)),
+            (Some("-Wl,--stack,2000000"), (2_000_000, 0x1000)),
+            (Some("-Wl,--stack=0x400000"), (0x40_0000, 0x1000)),
+        ] {
+            let mut cmd = Command::new(badc());
+            cmd.arg(format!("--target={target}")).current_dir(&dir);
+            cmd.args(option).args(["s.c", "-o", "s.exe"]);
+            run(&mut cmd, &format!("{target}: {option:?}"));
+            let pe = std::fs::read(dir.join("s.exe")).expect("read image");
+            let opt = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize + 24;
+            let u64_at = |off: usize| u64::from_le_bytes(pe[off..off + 8].try_into().unwrap());
+            assert_eq!(
+                (u64_at(opt + 72), u64_at(opt + 80)),
+                want,
+                "{target}: {option:?}"
+            );
+        }
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["--stack=4096,8192", "s.c", "-o", "s.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("--stack takes reserve[,commit]"),
+            "{target}: {err}"
+        );
+    }
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

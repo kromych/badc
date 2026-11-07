@@ -116,6 +116,8 @@ GOT, so the object links into a PIE the system toolchain builds.
 The linker also reads ELF objects from other compilers, Mach-O `MH_OBJECT`
 files, PE/COFF objects and import libraries, ar archives, and shared libraries
 (`.so`, `.dylib`, `.tbd`, `.dll`). Archives are ar(5) with a SysV symbol index.
+A PE link sizes the initial thread's stack under `--stack <reserve>[,<commit>]`,
+link.exe's `/STACK` (default 8 MiB reserved, one page committed).
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.

@@ -741,6 +741,12 @@ impl CStd {
     pub fn c23_keywords(self) -> bool {
         self.0.is_some_and(|v| v >= 202311)
     }
+
+    /// gcc's default inline model: GNU89's before C99, which introduced
+    /// 6.7.4's, unless `-f[no-]gnu89-inline` says otherwise.
+    pub fn gnu89_inline(self) -> bool {
+        self.0.is_none_or(|v| v < 199901)
+    }
 }
 
 /// `-ffp-contract=`: where a floating product may be contracted with the

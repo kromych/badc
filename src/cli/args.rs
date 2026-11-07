@@ -99,7 +99,8 @@ pub(crate) struct FrontEnd {
     pub(crate) iso_dialect: bool,
     /// `-trigraphs`, `-ftrigraphs` or `-fno-trigraphs`, the last one given.
     pub(crate) trigraphs: Option<bool>,
-    pub(crate) gnu89_inline: bool,
+    /// `-fgnu89-inline` or `-fno-gnu89-inline`, the last one given.
+    pub(crate) gnu89_inline: Option<bool>,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
     pub(crate) char_signed: Option<bool>,
@@ -1381,8 +1382,8 @@ impl Parser {
             "--msvc" => front.msvc = true,
             // gcc / clang `-fgnu89-inline`: make the GNU89 inline linkage
             // model the unit default in place of C99's.
-            "-fgnu89-inline" => front.gnu89_inline = true,
-            "-fno-gnu89-inline" => front.gnu89_inline = false,
+            "-fgnu89-inline" => front.gnu89_inline = Some(true),
+            "-fno-gnu89-inline" => front.gnu89_inline = Some(false),
             // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
             // `__builtin_object_size` treats as unbounded. The bare form
             // is level 3, as in gcc.
@@ -2770,7 +2771,7 @@ impl FrontEnd {
         badc::CompileOptions::default()
             .with_gnu(self.gnu)
             .with_msvc(self.msvc)
-            .with_gnu89_inline(self.gnu89_inline)
+            .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
             .with_char_signed(self.char_signed)
@@ -2942,6 +2943,22 @@ mod tests {
             reject(&["-U"]),
             ("badc: error: -U requires a NAME".to_string(), 1)
         );
+    }
+
+    /// gcc's inline model follows the edition: GNU89's before C99, 6.7.4's
+    /// from C99 on, unless `-fgnu89-inline` or `-fno-gnu89-inline` names one.
+    #[test]
+    fn the_edition_picks_the_inline_model() {
+        let gnu89 = |args: &[&str]| parse(args).front.compile_options("a.c").gnu89_inline;
+        for std in ["-std=gnu89", "-std=c90", "-std=iso9899:199409"] {
+            assert!(gnu89(&[std, "a.c"]), "{std}");
+            assert!(!gnu89(&[std, "-fno-gnu89-inline", "a.c"]), "{std}");
+        }
+        for std in ["-std=gnu99", "-std=c17", "-std=c23"] {
+            assert!(!gnu89(&[std, "a.c"]), "{std}");
+            assert!(gnu89(&[std, "-fgnu89-inline", "a.c"]), "{std}");
+        }
+        assert!(!gnu89(&["a.c"]));
     }
 
     /// A `--jit` / `--interp` program takes everything after its input, as
@@ -3796,7 +3813,7 @@ mod tests {
         assert!(cli.front.short_wchar);
         assert_eq!(cli.front.strict_flex_arrays, 2);
         assert_eq!(cli.front.auto_var_init, badc::AutoVarInit::Zero);
-        assert!(cli.front.gnu89_inline);
+        assert_eq!(cli.front.gnu89_inline, Some(true));
         assert_eq!(cli.front.no_builtin_fns, vec!["memcpy".to_string()]);
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);

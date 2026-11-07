@@ -384,7 +384,8 @@ Compile knobs:
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
                            plain `inline` does. The default is C99
-                           6.7.4p6, which is the inverse. Per function,
+                           6.7.4p6, the inverse, from -std=c99 on, and
+                           GNU89 before it. Per function,
                            __attribute__((gnu_inline)) selects GNU89
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /

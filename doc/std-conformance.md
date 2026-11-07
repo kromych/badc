@@ -364,8 +364,10 @@ GNU extensions are available in every dialect. `__STRICT_ANSI__` is defined
 only under `--gnu` ([GCC](#gcc)): a `gnu*` name leaves it undefined, and a
 `c*` or `iso9899:*` name defines it. With `--gnu` and no
 `-std=`, `__STRICT_ANSI__` is defined, so a header takes its standard-C path
-for the GNU features badc lacks. The dialect does not select the GNU89 inline
-model; only `-fgnu89-inline` does.
+for the GNU features badc lacks. The editions before C99 (`c89`, `c90`,
+`gnu89`, `gnu90`, `iso9899:1990`, `iso9899:199409`) select the GNU89 inline
+model, as gcc's do; `-fgnu89-inline` and `-fno-gnu89-inline` override the
+edition.
 
 ## Extensions implemented
 
@@ -494,7 +496,7 @@ declared.
   `push` and `pop`; `#pragma weak name` and `#pragma weak alias = target`;
   `#pragma push_macro` and `pop_macro`; `#pragma once`.
 - The GNU89 inline model, per function with `__attribute__((gnu_inline))` and
-  per unit with `-fgnu89-inline`: an `extern inline` definition provides no
+  per unit with `-fgnu89-inline` or an edition before C99: an `extern inline` definition provides no
   external definition and a plain `inline` one does, the reverse of C99
   6.7.4p7. With `--gnu`, `__GNUC_STDC_INLINE__` or `__GNUC_GNU_INLINE__` names
   the model in force.

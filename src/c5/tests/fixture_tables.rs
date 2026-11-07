@@ -3791,6 +3791,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("winmain_command_line.c", 0),
+    ("wwinmain_command_line.c", 0),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("undeclared_library_calls_keep_the_header_types.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
@@ -4675,6 +4677,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("winmain_command_line.c", 0),
+    ("wwinmain_command_line.c", 0),
     ("arm_neon_float_vectors.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),

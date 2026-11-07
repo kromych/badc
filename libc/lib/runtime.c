@@ -195,8 +195,19 @@ extern unsigned short *GetCommandLineW(void);
 extern int __BADC_ENTRY__(void *instance, void *prev_instance,
                           unsigned short *cmd_line, int show_cmd);
 
+// `lpCmdLine` is the command line past the program name, as cl's CRT
+// passes it: the first token, quoted spans included, then its blanks.
 unsigned short *__c5_getcommandlinew(void) {
-    return GetCommandLineW();
+    unsigned short *p = GetCommandLineW();
+    int quoted = 0;
+    while (*p > ' ' || (*p && quoted)) {
+        if (*p == '"')
+            quoted = !quoted;
+        ++p;
+    }
+    while (*p && *p <= ' ')
+        ++p;
+    return p;
 }
 
 void __c5_entry(void *sp, long image_off) {
@@ -211,8 +222,19 @@ extern char *GetCommandLineA(void);
 extern int __BADC_ENTRY__(void *instance, void *prev_instance,
                           char *cmd_line, int show_cmd);
 
+// `lpCmdLine` is the command line past the program name, as cl's CRT
+// passes it: the first token, quoted spans included, then its blanks.
 char *__c5_getcommandline(void) {
-    return GetCommandLineA();
+    unsigned char *p = (unsigned char *)GetCommandLineA();
+    int quoted = 0;
+    while (*p > ' ' || (*p && quoted)) {
+        if (*p == '"')
+            quoted = !quoted;
+        ++p;
+    }
+    while (*p && *p <= ' ')
+        ++p;
+    return (char *)p;
 }
 
 void __c5_entry(void *sp, long image_off) {

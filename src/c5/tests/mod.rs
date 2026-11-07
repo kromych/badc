@@ -854,7 +854,11 @@ int f(void) { return 7; }
 static int g(void) { return 9; }
 __attribute__((weak)) int w(void) { return 5; }
 __attribute__((aligned(16))) int vec4[4] = {1, 2, 3, 4};
+#ifdef _WIN32
+#pragma binding(data msvcrt::dup_env, "_environ")
+#else
 #pragma binding(data libc::dup_env, "environ")
+#endif
 char **dup_env = 0;
 #if defined(__x86_64__)
 #define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
@@ -1085,7 +1089,8 @@ int main(void) {
 }
 
 /// Inline asm naming objects at the edges of `.rodata`, relro, `.data` and
-/// `.bss` with offsets before and past them, aliases of a function and an
+/// `.bss` with offsets before and past them (8-byte elements on every data
+/// model, for the asm's `q` forms), aliases of a function and an
 /// object, and on x86-64 fields an immediate trails; `WITH_TLS` adds a
 /// thread-local between `.data` and `.bss`, `WITH_WORDS` `.long sym - .`
 /// words in `.text`. Exits with the count of wrong addresses and values.
@@ -1094,15 +1099,15 @@ pub fn asm_region_edges_source() -> &'static str {
     r#"
 #include <stdio.h>
 #include <stdint.h>
-const long ro_first[2] = {0x1111, 0x2222};
+const long long ro_first[2] = {0x1111, 0x2222};
 const char *const relro_first[2] = {"p", "q"};
-long data_first[2] = {0x3333, 0x4444};
-long bss_first[2];
-static const long ro_static[2] = {5, 6};
-static long data_static[2] = {7, 8};
-static long bss_static[2];
+long long data_first[2] = {0x3333, 0x4444};
+long long bss_first[2];
+static const long long ro_static[2] = {5, 6};
+static long long data_static[2] = {7, 8};
+static long long bss_static[2];
 #ifdef WITH_TLS
-_Thread_local long tls_obj = 9;
+_Thread_local long long tls_obj = 9;
 #endif
 #ifdef WITH_WORDS
 extern const int edge_words[2];
@@ -1112,7 +1117,7 @@ __asm__(".text\n.globl edge_words\n.p2align 2\nedge_words:\n"
 int f(void) { return 7; }
 int wfa(void) __attribute__((weak, alias("f")));
 int sfa(void) __attribute__((alias("f")));
-long wda[2] __attribute__((weak, alias("data_first")));
+long long wda[2] __attribute__((weak, alias("data_first")));
 #if defined(__x86_64__)
 #define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
 #else

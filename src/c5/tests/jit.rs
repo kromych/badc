@@ -1183,15 +1183,15 @@ fn register_asm_variable_pinned_to_staging_scratch_neighbor() {
     // Run under a 2-register cap so the operands spill and the staging
     // exercises the scratch path.
     let src = r#"
-        static long rt(long a, long b) {
+        static long long rt(long long a, long long b) {
         #if defined(__aarch64__)
-            register long v asm("r0") = a;
+            register long long v asm("r0") = a;
             __asm__ volatile("add %0, %0, %1" : "+r"(v) : "r"(b));
         #elif defined(__x86_64__)
-            register long v asm("r11") = a;
+            register long long v asm("r11") = a;
             __asm__ volatile("addq %1, %0" : "+r"(v) : "r"(b) : "cc");
         #else
-            long v = a + b;
+            long long v = a + b;
         #endif
             return v;
         }
@@ -2382,7 +2382,7 @@ fn atexit_handlers_run_on_libc_exit() {
              if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
          }}\n\
          int main(void) {{ atexit(h); exit(42); }}\n",
-        marker.display()
+        marker.display().to_string().replace('\\', "/")
     );
     let program = Compiler::new(src).compile().expect("compile");
     assert_eq!(
@@ -2401,18 +2401,19 @@ fn atexit_handlers_run_on_libc_exit() {
 /// array decay yields.
 #[test]
 fn addr_constant_cast_to_integer_slot() {
-    let src = "static int obj;\n\
+    let src = "typedef __UINTPTR_TYPE__ uptr;\n\
+               static int obj;\n\
                static int arr[4];\n\
                static int callee(void) { return 7; }\n\
-               unsigned long p_obj = (unsigned long)&obj;\n\
-               unsigned long p_arr = (unsigned long)arr;\n\
-               unsigned long p_elt = (unsigned long)&arr[2];\n\
-               unsigned long p_fn = (unsigned long)callee;\n\
+               uptr p_obj = (uptr)&obj;\n\
+               uptr p_arr = (uptr)arr;\n\
+               uptr p_elt = (uptr)&arr[2];\n\
+               uptr p_fn = (uptr)callee;\n\
                int main(void) {\n\
-                   if (p_obj != (unsigned long)&obj) return 1;\n\
-                   if (p_arr != (unsigned long)arr) return 2;\n\
-                   if (p_elt != (unsigned long)&arr[2]) return 3;\n\
-                   if (p_fn != (unsigned long)callee) return 4;\n\
+                   if (p_obj != (uptr)&obj) return 1;\n\
+                   if (p_arr != (uptr)arr) return 2;\n\
+                   if (p_elt != (uptr)&arr[2]) return 3;\n\
+                   if (p_fn != (uptr)callee) return 4;\n\
                    return 0;\n\
                }\n";
     assert_eq!(jit_exit(src, &["jit-addr-const"]), 0);
@@ -2425,7 +2426,7 @@ fn addr_constant_cast_to_integer_slot() {
 /// array element, and cast to a pointer-width integer.
 #[test]
 fn addr_of_string_literal_static_init() {
-    let src = "typedef unsigned long uptr;\n\
+    let src = "typedef __UINTPTR_TYPE__ uptr;\n\
                struct e { int a; uptr d; };\n\
                static struct e t = { 5, (0 ? 0 : (uptr)&\"example\") };\n\
                static const char *arr[] = { &\"abc\"[1], \"xy\" };\n\

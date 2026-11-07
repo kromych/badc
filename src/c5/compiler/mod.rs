@@ -2321,6 +2321,8 @@ pub struct Compiler {
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
     /// `#pragma comment(lib, ...)` names drained from the preprocessor.
     pp_default_libs: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings drained from the preprocessor.
+    pp_linker_directives: Vec<String>,
 
     /// `#pragma intrinsic("name")` map drained from the
     /// preprocessor. Used at declaration time to stamp
@@ -3137,6 +3139,7 @@ impl Compiler {
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
         let pp_default_libs = pp.default_libs;
+        let pp_linker_directives = pp.linker_directives;
         let pp_intrinsics = pp.intrinsics;
 
         let mut symbols = Vec::new();
@@ -3284,6 +3287,7 @@ impl Compiler {
             pp_entrypoint,
             pp_subsystem,
             pp_default_libs,
+            pp_linker_directives,
             pp_intrinsics,
             tls_data: Vec::new(),
             tls_init_size: 0,
@@ -3984,6 +3988,7 @@ impl Compiler {
             entry_name: resolved_entry_name,
             entry_pragma: self.pp_entrypoint.clone(),
             default_libs: core::mem::take(&mut self.pp_default_libs),
+            linker_directives: core::mem::take(&mut self.pp_linker_directives),
             auto_includes: Vec::new(),
             freestanding: self.freestanding,
             strlen_folds,

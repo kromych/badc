@@ -6599,6 +6599,165 @@ fn a_compiled_resource_file_becomes_the_images_rsrc() {
     }
 }
 
+/// `#pragma comment(linker, ...)` carries link.exe options from a unit to
+/// the link, as cl writes them to `.drectve`: `/EXPORT:name=dll.export`
+/// forwards an export, `,DATA` makes its import library entry a data
+/// import, `/EXPORT:name=target` exports a definition under another name,
+/// and `/alternatename:` gives an undefined name its stand-in. On a Windows
+/// host a program importing the forwarder reaches the function it names.
+#[test]
+fn pragma_comment_linker_forwards_aliases_and_alternates() {
+    let dir = tempdir("pe-pragma-comment-linker");
+    write_source(
+        &dir,
+        "fwd.c",
+        "#define FORWARD(name, how) \\\n\
+         __pragma(comment(linker, \"/EXPORT:\" #name \"=kernel32.\" #name how))\n\
+         FORWARD(GetTickCount, \"\")\n\
+         FORWARD(SomeData, \",DATA\")\n\
+         #pragma comment(linker, \"/EXPORT:twice=add_two\")\n\
+         #pragma comment(linker, \"/alternatename:enabled=enabled_default\")\n\
+         extern int enabled;\n\
+         int enabled_default = 7;\n\
+         int add_two(int x) { return x + 2 + enabled - 7; }\n",
+    );
+    write_source(
+        &dir,
+        "user.c",
+        "#pragma comment(lib, \"fwd.lib\")\n\
+         __declspec(dllimport) unsigned long __stdcall GetTickCount(void);\n\
+         __declspec(dllimport) int twice(int);\n\
+         int main(void) { return GetTickCount() != 0 && twice(3) == 5 ? 0 : 1; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let badc_for = || {
+            let mut c = Command::new(badc());
+            c.arg(format!("--target={target}")).current_dir(&dir);
+            c
+        };
+        run(
+            badc_for().args([
+                "--shared",
+                "fwd.c",
+                "-Wl,--out-implib,fwd.lib",
+                "-o",
+                "fwd.dll",
+            ]),
+            &format!("{target}: DLL"),
+        );
+        let pe = std::fs::read(dir.join("fwd.dll")).expect("read DLL");
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        let opt = u32_at(0x3c) as usize + 24;
+        let (dir_rva, dir_size) = (u32_at(opt + 112), u32_at(opt + 116));
+        let exports = pe_rva_offset(&pe, dir_rva).expect("export directory");
+        let cstr = |at: usize| {
+            let end = pe[at..].iter().position(|&b| b == 0).unwrap();
+            String::from_utf8_lossy(&pe[at..at + end]).into_owned()
+        };
+        let (count, functions, names, ordinals) = (
+            u32_at(exports + 24) as usize,
+            u32_at(exports + 28),
+            u32_at(exports + 32),
+            u32_at(exports + 36),
+        );
+        let listed: Vec<(String, String)> = (0..count)
+            .map(|i| {
+                let name = cstr(
+                    pe_rva_offset(&pe, u32_at(pe_rva_offset(&pe, names).unwrap() + 4 * i)).unwrap(),
+                );
+                let at = pe_rva_offset(&pe, ordinals).unwrap() + 2 * i;
+                let ordinal = u16::from_le_bytes([pe[at], pe[at + 1]]) as usize;
+                let rva = u32_at(pe_rva_offset(&pe, functions).unwrap() + 4 * ordinal);
+                let forward = if rva >= dir_rva && rva < dir_rva + dir_size {
+                    cstr(pe_rva_offset(&pe, rva).unwrap())
+                } else {
+                    String::new()
+                };
+                (name, forward)
+            })
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                ("GetTickCount".into(), "kernel32.GetTickCount".into()),
+                ("SomeData".into(), "kernel32.SomeData".into()),
+                ("twice".into(), String::new()),
+            ],
+            "{target}"
+        );
+        let lib = std::fs::read(dir.join("fwd.lib")).expect("import library written");
+        let data: Vec<(String, bool)> = (lib.windows(4))
+            .enumerate()
+            .filter(|(_, w)| *w == [0, 0, 0xff, 0xff])
+            .map(|(at, _)| {
+                let kind = u16::from_le_bytes([lib[at + 18], lib[at + 19]]);
+                let names = &lib[at + 20..];
+                let end = names.iter().position(|&b| b == 0).unwrap();
+                (
+                    String::from_utf8_lossy(&names[..end]).into_owned(),
+                    kind & 3 == 1,
+                )
+            })
+            .collect();
+        assert_eq!(
+            data,
+            [
+                ("GetTickCount".into(), false),
+                ("SomeData".into(), true),
+                ("twice".into(), false)
+            ],
+            "{target}"
+        );
+    }
+    if cfg!(windows) {
+        run(
+            Command::new(badc())
+                .args([
+                    "--shared",
+                    "fwd.c",
+                    "-Wl,--out-implib,fwd.lib",
+                    "-o",
+                    "fwd.dll",
+                ])
+                .current_dir(&dir),
+            "host DLL",
+        );
+        run(
+            Command::new(badc())
+                .args(["user.c", "-L.", "-o", "user.exe"])
+                .current_dir(&dir),
+            "host program",
+        );
+        let status = Command::new(dir.join("user.exe"))
+            .current_dir(&dir)
+            .status()
+            .expect("run the program");
+        assert_eq!(status.code(), Some(0));
+    }
+}
+
+/// Outside a PE link `#pragma comment(linker, ...)` has no effect, which
+/// the compile reports, as clang does on ELF and Mach-O.
+#[test]
+fn pragma_comment_linker_is_ignored_outside_pe() {
+    let dir = tempdir("pragma-comment-linker-elf");
+    write_source(
+        &dir,
+        "u.c",
+        "#pragma comment(linker, \"/EXPORT:f\")\nint f(void) { return 0; }\n",
+    );
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "-c", "u.c", "-o", "u.o"])
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && err.contains("takes effect in a PE link only"),
+        "{err}"
+    );
+}
+
 /// A DLL link resolves a function only against what the link supplies --
 /// an import library, or the C library the bundled headers bind a
 /// self-declared `puts` to -- and reports any other reference undefined,

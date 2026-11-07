@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use super::link_err;
 use super::object::{
-    Comdat, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
+    Comdat, ExportAlias, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
     NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE, STT_OBJECT,
     SectionFamily, SymRef, grouped_by_name,
 };
@@ -627,19 +627,39 @@ fn read_symbols<'a>(bytes: &'a [u8], h: &Header) -> Result<Vec<Option<RawSym<'a>
     Ok(out)
 }
 
-/// What `.drectve` asks of the link.
+/// What `.drectve`, or a badc unit's `#pragma comment(linker, ...)`, asks
+/// of the link.
 #[derive(Default)]
-struct Directives {
-    alternate_names: Vec<(String, String)>,
+pub(crate) struct Directives {
+    pub(crate) alternate_names: Vec<(String, String)>,
     /// `-aligncomm:name,log2`: a common symbol's alignment.
     align_common: BTreeMap<String, u64>,
     /// `/EXPORT:` / `-export:`: a definition the image exports.
-    exports: Vec<String>,
+    pub(crate) exports: Vec<String>,
+    /// `/EXPORT:name=target`: an export under another name or forwarded.
+    pub(crate) export_aliases: Vec<ExportAlias>,
     /// `/INCLUDE:`: a name the link resolves as if referenced.
     includes: Vec<String>,
-    default_libs: Vec<String>,
+    pub(crate) default_libs: Vec<String>,
     /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
-    mismatch_keys: Vec<(String, String)>,
+    pub(crate) mismatch_keys: Vec<(String, String)>,
+}
+
+impl Directives {
+    /// The undefined references `/INCLUDE:` forces, as `ld -u` does, and
+    /// the definitions an export under another name takes.
+    pub(crate) fn include_symbols(&self) -> impl Iterator<Item = NativeSymbol> + '_ {
+        let targets = (self.export_aliases.iter())
+            .filter(|a| !a.target.contains('.'))
+            .map(|a| &a.target);
+        (self.includes.iter())
+            .chain(targets)
+            .map(|name| NativeSymbol {
+                name: name.clone(),
+                binding: STB_GLOBAL,
+                ..null_symbol()
+            })
+    }
 }
 
 /// The directive string's options, split as link.exe splits them: on
@@ -670,59 +690,86 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
         let body = s.content(bytes)?;
         let text = core::str::from_utf8(body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(body))
             .map_err(|_| bad("`.drectve` is not UTF-8"))?;
-        for tok in directive_tokens(text.trim_end_matches('\0')) {
-            let Some(opt) = tok.strip_prefix('/').or_else(|| tok.strip_prefix('-')) else {
-                return Err(bad(&format!(
-                    "`.drectve` holds `{tok}`, which is no option"
-                )));
-            };
-            let (key, arg) = opt.split_once(':').unwrap_or((opt, ""));
-            match key.to_ascii_lowercase().as_str() {
-                "defaultlib" => d.default_libs.push(arg.to_string()),
-                "include" => d.includes.push(arg.to_string()),
-                // `DATA` and `PRIVATE` (no import library entry) change nothing
-                // here; an ordinal and an alias are refused.
-                "export" => {
-                    let mut parts = arg.split(',');
-                    let name = parts.next().unwrap_or("");
-                    let plain =
-                        |f: &str| matches!(f.to_ascii_lowercase().as_str(), "data" | "private");
-                    if name.is_empty() || name.contains('=') || !parts.all(plain) {
-                        return Err(unsupported(&format!(
-                            "`.drectve` option `{tok}` exports by ordinal or under another \
-                             name, which the linker does not carry out"
-                        )));
+        parse_directives(text.trim_end_matches('\0'), &mut d)?;
+    }
+    Ok(d)
+}
+
+/// Adds the options of one directive string to `d`.
+pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5Error> {
+    for tok in directive_tokens(text) {
+        let Some(opt) = tok.strip_prefix('/').or_else(|| tok.strip_prefix('-')) else {
+            return Err(bad(&format!(
+                "`.drectve` holds `{tok}`, which is no option"
+            )));
+        };
+        let (key, arg) = opt.split_once(':').unwrap_or((opt, ""));
+        match key.to_ascii_lowercase().as_str() {
+            "defaultlib" => d.default_libs.push(arg.to_string()),
+            "include" => d.includes.push(arg.to_string()),
+            // `PRIVATE` (no import library entry) changes nothing here;
+            // `DATA` makes the import library's entry a data import. An
+            // ordinal is refused.
+            "export" => {
+                let mut parts = arg.split(',');
+                let entry = parts.next().unwrap_or("");
+                let mut data = false;
+                for flag in parts {
+                    match flag.to_ascii_lowercase().as_str() {
+                        "data" => data = true,
+                        "private" => {}
+                        _ => {
+                            return Err(unsupported(&format!(
+                                "`.drectve` option `{tok}` exports by ordinal, which the \
+                                 linker does not carry out"
+                            )));
+                        }
                     }
-                    d.exports.push(name.to_string());
                 }
-                "alternatename" => {
-                    let (from, to) = arg.split_once('=').ok_or_else(|| {
-                        bad(&format!("`.drectve` option `{tok}` names no alternate"))
-                    })?;
-                    d.alternate_names.push((from.to_string(), to.to_string()));
+                match entry.split_once('=') {
+                    _ if entry.is_empty() => {
+                        return Err(bad(&format!("`.drectve` option `{tok}` names no export")));
+                    }
+                    Some((name, target)) if !name.is_empty() && !target.is_empty() => {
+                        d.export_aliases.push(ExportAlias {
+                            name: name.to_string(),
+                            target: target.to_string(),
+                            data,
+                        });
+                    }
+                    Some(_) => {
+                        return Err(bad(&format!("`.drectve` option `{tok}` is malformed")));
+                    }
+                    None => d.exports.push(entry.to_string()),
                 }
-                "failifmismatch" => {
-                    let (key, value) = arg
-                        .split_once('=')
-                        .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no value")))?;
-                    d.mismatch_keys.push((key.to_string(), value.to_string()));
-                }
-                "aligncomm" => {
-                    let (name, log2) = arg
-                        .split_once(',')
-                        .and_then(|(n, l)| Some((n, l.parse::<u32>().ok().filter(|&l| l < 32)?)))
-                        .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
-                    d.align_common.insert(name.to_string(), 1 << log2);
-                }
-                _ => {
-                    return Err(unsupported(&format!(
-                        "`.drectve` option `{tok}` is not one the linker carries out"
-                    )));
-                }
+            }
+            "alternatename" => {
+                let (from, to) = arg
+                    .split_once('=')
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no alternate")))?;
+                d.alternate_names.push((from.to_string(), to.to_string()));
+            }
+            "failifmismatch" => {
+                let (key, value) = arg
+                    .split_once('=')
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no value")))?;
+                d.mismatch_keys.push((key.to_string(), value.to_string()));
+            }
+            "aligncomm" => {
+                let (name, log2) = arg
+                    .split_once(',')
+                    .and_then(|(n, l)| Some((n, l.parse::<u32>().ok().filter(|&l| l < 32)?)))
+                    .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` is malformed")))?;
+                d.align_common.insert(name.to_string(), 1 << log2);
+            }
+            _ => {
+                return Err(unsupported(&format!(
+                    "`.drectve` option `{tok}` is not one the linker carries out"
+                )));
             }
         }
     }
-    Ok(d)
+    Ok(())
 }
 
 /// A COMDAT section's selection, checksum, leader and associative parent.
@@ -1742,13 +1789,7 @@ pub fn parse_native_coff(
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
-    for name in &directives.includes {
-        symbols.push(NativeSymbol {
-            name: name.clone(),
-            binding: STB_GLOBAL,
-            ..null_symbol()
-        });
-    }
+    symbols.extend(directives.include_symbols());
     let tls_symbols = symbols
         .iter()
         .filter(|s| s.section == NativeSymSection::Tls && s.binding != STB_LOCAL)
@@ -1783,6 +1824,7 @@ pub fn parse_native_coff(
         dylibs: Vec::new(),
         import_dylib_map: Vec::new(),
         exports: directives.exports.clone(),
+        export_aliases: directives.export_aliases.clone(),
         tls_index_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
         macho_tlv_fixups: Vec::new(),
@@ -2105,23 +2147,30 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
-        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@1,NONAME", "/EXPORT:f=g"] {
+        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@1,NONAME", "/EXPORT:=g"] {
             let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
             assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");
         }
     }
 
     /// `/EXPORT:`, `-export:` (gcc quotes the name), `/INCLUDE:` and `/DEFAULTLIB:`
-    /// reach the link, whatever the section's flags.
+    /// reach the link, whatever the section's flags; `/EXPORT:name=target`
+    /// exports a definition under another name or forwards it to a DLL.
     #[test]
     fn directives_export_include_and_name_libraries() {
         // GNU as gives `.drectve` the flags of writable data.
         let gnu_as = DATA;
         let text = b" /INCLUDE:forced /DEFAULTLIB:\"user32\" /EXPORT:f /EXPORT:d,DATA \
-                     -export:\"g\",data /defaultlib:extra.lib";
+                     -export:\"g\",data /defaultlib:extra.lib /EXPORT:h=k.h,DATA";
         let o = parse(&[sec(".drectve", gnu_as, text)], &[]).unwrap();
         assert!(o.data.is_empty() && o.discarded.len() == 1);
         assert_eq!(o.exports, ["f", "d", "g"]);
+        let forward = ExportAlias {
+            name: "h".into(),
+            target: "k.h".into(),
+            data: true,
+        };
+        assert_eq!(o.export_aliases, [forward]);
         assert_eq!(o.default_libs, ["user32", "extra.lib"]);
         let forced = o.symbols.last().unwrap();
         assert_eq!(

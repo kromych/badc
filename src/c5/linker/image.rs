@@ -1373,6 +1373,7 @@ mod tests {
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            export_aliases: alloc::vec![],
             shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],

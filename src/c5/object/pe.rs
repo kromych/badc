@@ -657,7 +657,9 @@ impl<'a> PeWriter<'a> {
             || !build.label_relocs.is_empty()
             || !build.text_abs_relocs.is_empty()
             || !build.image_base_slots.is_empty();
-        l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
+        l.edata_present = !build.exports.is_empty()
+            || !build.dynamic_exports.is_empty()
+            || !build.forwarded_exports.is_empty();
         l.dwarf_present = build.debug_info;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
@@ -1009,7 +1011,12 @@ impl<'a> PeWriter<'a> {
                 };
                 entries.push((d.name.clone(), rva));
             }
-            build_export_directory(edata_rva, entries, build.shared_lib_name.as_deref())?
+            build_export_directory(
+                edata_rva,
+                entries,
+                &build.forwarded_exports,
+                build.shared_lib_name.as_deref(),
+            )?
         } else {
             Vec::new()
         };
@@ -1861,12 +1868,19 @@ struct ImageExportDirectory {
 const IMAGE_EXPORT_DIRECTORY_SIZE: usize = 40;
 const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPORT_DIRECTORY_SIZE);
 
-/// Build the `.edata` section bytes for an image with exports.
+/// Build the `.edata` section bytes for an image with exports. A
+/// forwarder's slot holds the RVA of its `dll.export` string, which the
+/// directory carries after the names.
 fn build_export_directory(
     edata_rva: u32,
-    mut exports: Vec<(String, u32)>,
+    exports: Vec<(String, u32)>,
+    forwards: &[(String, String)],
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
+    let mut exports: Vec<(String, Option<u32>)> = (exports.into_iter())
+        .map(|(name, rva)| (name, Some(rva)))
+        .chain(forwards.iter().map(|(name, _)| (name.clone(), None)))
+        .collect();
     // link.exe assigns the ordinals a definition file does not in name
     // order, so AddressOfFunctions takes the exports sorted by name too.
     exports.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
@@ -1903,7 +1917,19 @@ fn build_export_directory(
         },
     );
 
-    for (_, rva) in &exports {
+    let names_len: u32 = exports.iter().map(|(name, _)| name.len() as u32 + 1).sum();
+    let mut forward_rva = strings_rva + dll_name.len() as u32 + 1 + names_len;
+    let mut forward_strings = Vec::new();
+    for (name, rva) in &exports {
+        let rva = rva.unwrap_or_else(|| {
+            let (_, to) = (forwards.iter())
+                .find(|(n, _)| n == name)
+                .expect("forwarded export");
+            forward_strings.extend(to.bytes().chain([0]));
+            let at = forward_rva;
+            forward_rva += to.len() as u32 + 1;
+            at
+        });
         out.extend_from_slice(&rva.to_le_bytes());
     }
 
@@ -1928,6 +1954,7 @@ fn build_export_directory(
         out.extend_from_slice(exports[i].0.as_bytes());
         out.push(0);
     }
+    out.extend(forward_strings);
 
     Ok(out)
 }
@@ -3366,6 +3393,7 @@ mod tests {
                 ("zeta".to_string(), 0x1000u32),
                 ("alpha".to_string(), 0x2000u32),
             ],
+            &[],
             Some("t.dll"),
         )
         .expect("build export directory");

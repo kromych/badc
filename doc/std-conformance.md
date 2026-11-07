@@ -727,6 +727,11 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
 - `#pragma section("name", ...)` and `__declspec(allocate("name"))` on the
   PE targets: the object goes to the named section, as with GNU `section`, and
   the image keeps it under the name's first eight bytes.
+- `#pragma comment(lib, "name")`, a default library, and on the PE targets
+  `#pragma comment(linker, "options")`, link.exe options the object carries as
+  cl's `.drectve` does: `/EXPORT:` (under another name, or forwarded as
+  `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`
+  and `/FAILIFMISMATCH:`. Elsewhere it warns and is ignored, as in clang.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory on the search path does not
   supply it, as clang's copy shadows MSVC's.

@@ -2411,6 +2411,8 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// A PE image's forwarded exports: `(name, "dll.export")`.
+    pub forwarded_exports: Vec<(String, String)>,
     /// The exports of protected visibility, which an ELF image states as
     /// `STV_PROTECTED` in `.dynsym`.
     pub protected_exports: alloc::collections::BTreeSet<String>,

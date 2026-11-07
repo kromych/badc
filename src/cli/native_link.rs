@@ -1341,16 +1341,17 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
 }
 
 /// `--out-implib`: the import library of the DLL just written, read back
-/// from its export directory.
-fn write_import_library(path: &std::path::Path, dll: &[u8], cli: &Cli) {
+/// from its export directory; `data` names the exports it imports as data.
+fn write_import_library(path: &std::path::Path, dll: &[u8], data: &[&str], cli: &Cli) {
     if cli.mode != Mode::SharedLibrary || !badc::is_pe_dll(dll) {
         eprint_diagnostic("badc: error: --out-implib applies to a PE shared library");
         std::process::exit(1);
     }
-    let lib = badc::parse_pe_dll(dll).unwrap_or_else(|e| {
+    let mut lib = badc::parse_pe_dll(dll).unwrap_or_else(|e| {
         eprint_diagnostic(format!("badc: {e}"));
         std::process::exit(1);
     });
+    lib.data_exports.extend(data.iter().map(|n| n.to_string()));
     write_output(
         path,
         &badc::write_import_library(&lib),
@@ -1494,7 +1495,12 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     stats.mark("image");
     write_output(out, &bytes, cli.target, cli.quiet, true);
     if let Some(path) = &cli.link.out_implib {
-        write_import_library(path, &bytes, cli);
+        // A forwarder's slot does not say what it forwards; `,DATA` does.
+        let data: Vec<&str> = (merged.export_aliases.iter())
+            .filter(|a| a.data)
+            .map(|a| a.name.as_str())
+            .collect();
+        write_import_library(path, &bytes, &data, cli);
     }
     if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
         write_output(path, pdb, cli.target, cli.quiet, false);

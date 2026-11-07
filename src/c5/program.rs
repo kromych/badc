@@ -491,6 +491,8 @@ pub struct Program {
     pub entry_pragma: Option<String>,
     /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
     pub default_libs: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings, carried in the badc note.
+    pub linker_directives: Vec<String>,
     /// What the auto-include retry of [`crate::c5::Compiler::compile`]
     /// declared, in the order it force-included the headers. A re-compile
     /// of the unit force-includes the same headers.
@@ -823,6 +825,7 @@ impl DataOffsets for Program {
             entry_name: _,
             entry_pragma: _,
             default_libs: _,
+            linker_directives: _,
             auto_includes: _,
             freestanding: _,
             strlen_folds: _,
@@ -968,6 +971,7 @@ mod data_offset_tests {
             entry_name: None,
             entry_pragma: None,
             default_libs: Vec::new(),
+            linker_directives: Vec::new(),
             auto_includes: Vec::new(),
             freestanding: false,
             strlen_folds: false,

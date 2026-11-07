@@ -1015,6 +1015,16 @@ pub struct InputSection {
     pub align: u64,
 }
 
+/// link.exe's `/EXPORT:name=target`: `name` exports `target`, a definition
+/// of the image or, when it holds a dot, the forwarder `dll.export`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportAlias {
+    pub name: String,
+    pub target: String,
+    /// `,DATA`: the import library takes `name` as a data import.
+    pub data: bool,
+}
+
 /// Result of parsing one native ELF ET_REL object.
 #[derive(Debug, Clone)]
 pub struct NativeObject {
@@ -1116,6 +1126,8 @@ pub struct NativeObject {
     /// table when emitting a shared library; the linker takes the
     /// union across units.
     pub exports: Vec<String>,
+    /// `/EXPORT:name=target` from `.drectve` or `#pragma comment(linker)`.
+    pub export_aliases: Vec<ExportAlias>,
     /// Win64 `_tls_index` fixup offsets (`NT_BADC_TLS_INDEX`), each a
     /// byte offset into this object's `.text`. The PE writer patches
     /// each with the `_tls_index` slot address. Empty on non-Windows
@@ -1397,6 +1409,12 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         &sections,
         &record_of,
     )?;
+    let mut directives = super::coff_object::Directives::default();
+    for text in &note.linker_directives {
+        super::coff_object::parse_directives(text, &mut directives)?;
+    }
+    let mut symbols = symbols;
+    symbols.extend(directives.include_symbols());
 
     Ok(NativeObject {
         source: String::new(),
@@ -1425,7 +1443,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         init_funcs,
         dylibs: note.dylibs,
         import_dylib_map: note.import_dylib_map,
-        exports: note.exports,
+        exports: note.exports.into_iter().chain(directives.exports).collect(),
+        export_aliases: directives.export_aliases,
         tls_index_fixups: note.tls_index_fixups,
         macho_tlv_descriptors: note.macho_tlv_descriptors,
         tls_symbols: note.tls_symbols,
@@ -1439,11 +1458,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         unwind: note.unwind,
         unique,
         extern_data_names: note.extern_data_names,
-        alternate_names: Vec::new(),
+        alternate_names: directives.alternate_names,
         weak_aliases: Vec::new(),
         comdats,
-        default_libs,
-        mismatch_keys: Vec::new(),
+        default_libs: default_libs
+            .into_iter()
+            .chain(directives.default_libs)
+            .collect(),
+        mismatch_keys: directives.mismatch_keys,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,
@@ -2296,6 +2318,8 @@ struct BadcNote {
     seh_rows: Vec<SehRowAt<u64>>,
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     extern_data_names: Vec<String>,
+    /// `#pragma comment(linker, ...)` strings, link.exe's `.drectve` options.
+    linker_directives: Vec<String>,
 }
 
 /// A `__try` scope-table row: the function's, the range's begin and end
@@ -2486,6 +2510,7 @@ impl BadcNote {
                     c += size;
                 }
             }
+            17 => self.linker_directives.extend(nul_separated(desc)),
             16 => {
                 let mut c = cur;
                 while c + 8 <= desc_end {

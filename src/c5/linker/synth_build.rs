@@ -311,6 +311,10 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
+        forwarded_exports: (merged.export_aliases.iter())
+            .filter(|a| a.target.contains('.'))
+            .map(|a| (a.name.clone(), a.target.clone()))
+            .collect(),
         protected_exports: (merged.defined.iter())
             .filter(|(_, sym)| sym.visibility == super::object::STV_PROTECTED)
             .map(|(name, _)| name.clone())
@@ -510,6 +514,7 @@ fn synth_program(
         entry_name: Some(entry_name.to_string()),
         entry_pragma: None,
         default_libs: Vec::new(),
+        linker_directives: Vec::new(),
         auto_includes: Vec::new(),
         freestanding: false,
         strlen_folds: false,
@@ -766,24 +771,33 @@ fn synth_dynamic_exports(
     if !export_funcs
         && !export_data_globals
         && named.is_empty()
+        && merged.export_aliases.is_empty()
         && (!elf_exec || merged.shared_names.is_empty())
     {
         return Vec::new();
     }
-    merged
+    // `/EXPORT:name=target` exports the object `target` as `name`.
+    let aliases = (merged.export_aliases.iter()).filter_map(|a| {
+        let sym = merged.defined.get(&a.target)?;
+        (sym.section != NativeSymSection::Text).then_some((&a.name, sym))
+    });
+    let named_or_all = merged
         .defined
         .iter()
         .chain(&merged.tls_defined)
-        .filter_map(|(name, sym)| {
+        .filter(|(name, sym)| {
             let named_object =
                 sym.section != NativeSymSection::Text && named.contains(name.as_str());
-            let exported = exports_definition(sym, named_object, export_funcs, export_data_globals)
-                || linked(name) && exports_definition(sym, true, false, true);
+            exports_definition(sym, named_object, export_funcs, export_data_globals)
+                || linked(name) && exports_definition(sym, true, false, true)
+        });
+    named_or_all
+        .chain(aliases)
+        .filter_map(|(name, sym)| {
             // An ELF symbol of a thread-local is its offset in the TLS
             // template; the other formats publish none.
             let tls_format = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
-            if name.is_empty() || !exported || (sym.section == NativeSymSection::Tls && !tls_format)
-            {
+            if name.is_empty() || (sym.section == NativeSymSection::Tls && !tls_format) {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
@@ -1814,6 +1828,18 @@ fn synth_exports(
             });
         }
     }
+    // `/EXPORT:name=target` exports the function `target` as `name`.
+    for a in &merged.export_aliases {
+        if let Some(sym) = merged.defined.get(&a.target)
+            && sym.section == NativeSymSection::Text
+            && seen.insert(a.name.clone())
+        {
+            exports.push(ExportedFunction {
+                name: a.name.clone(),
+                ent_pc: sym.value as usize,
+            });
+        }
+    }
     // `--export-all` on a shared library exports every global text
     // function, including those linked from pre-built objects (which carry
     // no per-symbol `#pragma export` flag). Executables ignore this list.
@@ -1905,6 +1931,7 @@ mod tests {
             flat_imports: alloc::collections::BTreeSet::new(),
             weak_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            export_aliases: alloc::vec![],
             shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],

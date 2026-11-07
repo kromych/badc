@@ -3437,6 +3437,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_image_base_slots: alloc::vec::Vec::new(),
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
+        forwarded_exports: alloc::vec::Vec::new(),
         protected_exports: Default::default(),
         unique_symbols: Default::default(),
         image_symbols: alloc::vec::Vec::new(),

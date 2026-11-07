@@ -112,6 +112,8 @@ const NT_BADC_SEH_SCOPE: u32 = 15;
 /// `(u64 entry, record)` per function: its prologue's unwind steps
 /// (`UnwindSteps::encode`).
 const NT_BADC_UNWIND: u32 = 16;
+/// `#pragma comment(linker, ...)` strings, NUL-separated.
+const NT_BADC_LINKER_DIRECTIVES: u32 = 17;
 /// The target of a `__finally` row, the handler of a row whose filter is
 /// the constant `EXCEPTION_EXECUTE_HANDLER`.
 pub(crate) const SEH_NONE: u64 = u64::MAX;
@@ -4317,6 +4319,7 @@ impl<'a> RelocWriter<'a> {
             &self.syms.seh_rows,
             &self.syms.unwind,
             &noted_names,
+            &self.program.linker_directives,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
         let mut shndx = ShndxMap {
@@ -5121,6 +5124,7 @@ fn build_badc_note(
     seh_rows: &[[u64; 5]],
     unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
     extern_data_names: &[&str],
+    linker_directives: &[String],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
 
@@ -5291,6 +5295,12 @@ fn build_badc_note(
             desc.push(0);
         }
         push_note_record(&mut out, NT_BADC_EXTERN_DATA, &desc);
+    }
+    if !linker_directives.is_empty() {
+        let desc: Vec<u8> = (linker_directives.iter())
+            .flat_map(|d| d.bytes().chain([0]))
+            .collect();
+        push_note_record(&mut out, NT_BADC_LINKER_DIRECTIVES, &desc);
     }
     out
 }

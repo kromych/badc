@@ -223,14 +223,18 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), site);
         }
-        if let Some(lib) = args
+        if let Some((kind, operand)) = args
             .strip_prefix("comment(")
             .and_then(|s| s.strip_suffix(')'))
             .and_then(|s| s.split_once(','))
-            .filter(|(kind, _)| kind.trim() == "lib")
-            .map(|(_, operand)| operand.trim())
+            .map(|(kind, operand)| (kind.trim(), operand.trim()))
+            .filter(|(kind, _)| matches!(*kind, "lib" | "linker"))
         {
-            self.parse_pragma_comment_lib(lib, site);
+            if kind == "lib" {
+                self.parse_pragma_comment_lib(operand, site);
+            } else {
+                self.parse_pragma_comment_linker(operand, site);
+            }
             return Ok(());
         }
         // MSVC's `#pragma section("name", attributes)` declares a section a
@@ -931,28 +935,59 @@ impl Preprocessor {
     /// `#pragma comment(lib, "name")`, MSVC's default library (clang's
     /// `/DEFAULTLIB:` on COFF, `.deplibs` on ELF); adjacent literals concatenate.
     fn parse_pragma_comment_lib(&mut self, operand: &str, site: Site<'_>) {
-        let mut name = String::new();
+        let Some(name) = self.pragma_comment_string(operand, "lib", "a library name", site) else {
+            return;
+        };
+        if !self.default_libs.contains(&name) {
+            self.default_libs.push(name);
+        }
+    }
+
+    /// `#pragma comment(linker, "options")`: link.exe options the object
+    /// carries, as cl writes them to `.drectve`. clang takes them on COFF
+    /// alone and ignores them elsewhere with a warning, as does this.
+    fn parse_pragma_comment_linker(&mut self, operand: &str, site: Site<'_>) {
+        let Some(options) = self.pragma_comment_string(operand, "linker", "options", site) else {
+            return;
+        };
+        if self.target.binary_format() != crate::c5::codegen::BinaryFormat::Pe {
+            self.warn(
+                UNKNOWN_PRAGMA,
+                site,
+                "`#pragma comment(linker, ...)` takes effect in a PE link only -- ignored".into(),
+            );
+            return;
+        }
+        self.linker_directives.push(options);
+    }
+
+    /// The concatenated string literals of a `#pragma comment(kind, ...)`
+    /// operand; a warning and `None` when it is not one.
+    fn pragma_comment_string(
+        &mut self,
+        operand: &str,
+        kind: &str,
+        what: &str,
+        site: Site<'_>,
+    ) -> Option<String> {
+        let mut text = String::new();
         let mut rest = operand;
         while let Some(body) = rest.strip_prefix('"') {
             let Some(end) = body.find('"') else {
                 break;
             };
-            name.push_str(&body[..end]);
+            text.push_str(&body[..end]);
             rest = body[end + 1..].trim_start();
         }
-        if !rest.is_empty() || name.is_empty() {
+        if !rest.is_empty() || text.is_empty() {
             self.warn(
                 PRAGMA_SYNTAX,
                 site,
-                format!(
-                    "`#pragma comment(lib, ...)` expects a library name in quotes, got `{operand}`"
-                ),
+                format!("`#pragma comment({kind}, ...)` expects {what} in quotes, got `{operand}`"),
             );
-            return;
+            return None;
         }
-        if !self.default_libs.contains(&name) {
-            self.default_libs.push(name);
-        }
+        Some(text)
     }
 
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib

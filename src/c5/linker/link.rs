@@ -254,6 +254,8 @@ pub struct MergedNative {
     /// writer promotes each to the export table when emitting a
     /// shared library (resolving the name through [`Self::defined`]).
     pub exports: Vec<String>,
+    /// `/EXPORT:name=target` directives across units, first-seen by name.
+    pub export_aliases: Vec<super::object::ExportAlias>,
     /// The names a linked shared library defines or references, which an
     /// ELF executable defining one exports so the library binds to it.
     pub shared_names: BTreeSet<String>,
@@ -5139,6 +5141,12 @@ impl<'a> Link<'a> {
     fn finish(mut self) -> Result<MergedNative, C5Error> {
         let merged_dylibs = self.merge_dylibs()?;
         let exports = self.merge_exports();
+        let mut export_aliases: Vec<super::object::ExportAlias> = Vec::new();
+        for a in self.objs.iter().flat_map(|o| &o.export_aliases) {
+            if !export_aliases.iter().any(|b| b.name == a.name) {
+                export_aliases.push(a.clone());
+            }
+        }
         let copy_relocs = self.merge_copy_relocs();
         let tls_index_fixups = self.rebase_tls_index_fixups();
         let tlv = self.merge_tlv_descriptors()?;
@@ -5227,6 +5235,7 @@ impl<'a> Link<'a> {
             flat_imports,
             weak_imports,
             exports,
+            export_aliases,
             shared_names: (self.shared_libs.iter())
                 .flat_map(|l| l.exports.iter().chain(&l.references))
                 .cloned()
@@ -6504,6 +6513,7 @@ mod tests {
             extern_data_names: Vec::new(),
             alternate_names: Vec::new(),
             weak_aliases: Vec::new(),
+            export_aliases: Vec::new(),
             comdats: Vec::new(),
             default_libs: Vec::new(),
             mismatch_keys: Vec::new(),
@@ -7912,6 +7922,7 @@ mod tests {
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
                 weak_aliases: alloc::vec::Vec::new(),
+                export_aliases: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
                 mismatch_keys: Vec::new(),

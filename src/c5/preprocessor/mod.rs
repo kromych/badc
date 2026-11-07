@@ -312,6 +312,8 @@ pub(crate) struct Preprocessor {
     pub subsystem: Option<Subsystem>,
     /// `#pragma comment(lib, "<name>")`: the unit's default libraries.
     pub default_libs: Vec<String>,
+    /// `#pragma comment(linker, "<options>")` on a PE target.
+    pub linker_directives: Vec<String>,
     /// The `__COUNTER__` predefine's per-unit counter: each expansion
     /// yields the current value and post-increments. A `Cell` because
     /// the substitution path takes `&self`.
@@ -1336,6 +1338,7 @@ impl Preprocessor {
             entrypoint: None,
             subsystem: None,
             default_libs: Vec::new(),
+            linker_directives: Vec::new(),
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
             pending_warnings: RefCell::new(Vec::new()),

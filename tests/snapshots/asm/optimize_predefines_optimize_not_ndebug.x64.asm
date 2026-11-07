@@ -1,5 +1,5 @@
 
-ndebug_undef_reenables_assert.x64:	file format elf64-x86-64
+optimize_predefines_optimize_not_ndebug.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -26,5 +26,5 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%eax, %eax
+               	movl	$0x1, %eax
                	retq

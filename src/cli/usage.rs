@@ -179,9 +179,9 @@ Multi-TU knobs:
 Compile knobs:
   -O, --optimize           Run the SSA optimization passes (mem2reg,
                            inlining, rotate and branch const-fold,
-                           immediate dedup) and predefine `NDEBUG=1`
-                           and `__OPTIMIZE__=1` (override with `-D` /
-                           `-U`). Off by default. The
+                           immediate dedup) and predefine
+                           `__OPTIMIZE__=1` (override with `-D` / `-U`);
+                           `NDEBUG` is left to `-D`. Off by default. The
                            `-O1`/`-O2`/`-O3`/`-Os`/`-Oz`/`-Ofast`/`-Og`
                            forms all select this single level; `-O0`
                            disables it.

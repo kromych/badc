@@ -432,8 +432,9 @@ scalar replacement of aggregates, inlining, constant folding and propagation,
 branch simplification, loop rotation, unrolling of constant-trip loops,
 common-subexpression elimination, store-to-load forwarding, division by
 constants, tail-call and tail-recursion elimination, and block layout. It
-predefines `NDEBUG=1` and `__OPTIMIZE__=1`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`,
-`-Ofast` and `-Og` select the same single level; `-O0` turns it off.
+predefines `__OPTIMIZE__=1` and leaves `NDEBUG`, which removes `assert`, to
+`-D`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` select the same
+single level; `-O0` turns it off.
 
 Under `-O`, `a*b+c` becomes one fused multiply-add on both architectures, an
 instruction of the [baseline](#instruction-set-baseline). `-ffp-contract=`

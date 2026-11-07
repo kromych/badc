@@ -23,7 +23,6 @@ says nothing, badc follows C17. It records:
 - [Divergences](#divergences)
   - [Features not implemented](#features-not-implemented)
   - [An inline definition serves the calls of its unit](#an-inline-definition-serves-the-calls-of-its-unit)
-  - [`-O` defines `NDEBUG`](#-o-defines-ndebug)
   - [gcc options badc does not implement are refused](#gcc-options-badc-does-not-implement-are-refused)
   - [ELF imports take their versions from a pinned manifest](#elf-imports-take-their-versions-from-a-pinned-manifest)
   - [Argument passing the ABI documents leave open](#argument-passing-the-abi-documents-leave-open)
@@ -235,13 +234,6 @@ body internal linkage and binds the unit's calls to it, which 6.7.4p7 permits.
 Taking the address, with `&f` or by passing `f`, still references the external
 symbol, so the link fails when no unit defines it. The
 PE targets use MSVC's inline linkage instead ([MSVC](#msvc)).
-
-### `-O` defines `NDEBUG`
-
-`-O` and each of `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` define
-`NDEBUG` and `__OPTIMIZE__` as `1`. gcc and clang define only `__OPTIMIZE__`.
-Under badc's `-O`, `assert` (C99 7.2) expands to nothing unless the command
-line also has `-UNDEBUG`.
 
 ### gcc options badc does not implement are refused
 

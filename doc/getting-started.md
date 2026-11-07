@@ -113,7 +113,7 @@ that run the program.
 | option | effect |
 |---|---|
 | `--target=<target>` | `macos-aarch64`, `linux-aarch64`, `linux-x64`, `windows-x64` or `windows-arm64`; the default is the host |
-| `-O` | run the SSA optimizer and define `NDEBUG` and `__OPTIMIZE__`; `-O1` to `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` mean the same, `-O0` turns it off |
+| `-O` | run the SSA optimizer and define `__OPTIMIZE__`, not `NDEBUG`; `-O1` to `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` mean the same, `-O0` turns it off |
 | `-g` | write DWARF debug information |
 | `-o <path>` | the output file |
 | `-D NAME[=VALUE]`, `-U NAME` | define or undefine a macro |

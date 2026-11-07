@@ -482,8 +482,8 @@ def build(target: str, do_link: bool, log) -> Path | None:
     (out / ("python.exe" if win else "python")).unlink(missing_ok=True)
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
     # configure's BASECFLAGS carry -fno-strict-overflow unless
-    # --with-strict-overflow.
-    opt = ["-O", "-fno-strict-overflow"]
+    # --with-strict-overflow, and its OPT -DNDEBUG unless --with-pydebug.
+    opt = ["-O", "-fno-strict-overflow", "-DNDEBUG"]
 
     entries = _entries(target)
     jobs = [(badc, target, src, defs, incs, dbg, opt, str(out), str(SRC)) for src, defs, incs in entries]

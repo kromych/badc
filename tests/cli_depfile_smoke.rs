@@ -491,9 +491,9 @@ fn an_unsupported_wp_payload_is_rejected_rather_than_dropped() {
     );
 }
 
-/// `-O` predefines `NDEBUG` and `__OPTIMIZE__` for the compile, so the
-/// rule is computed under them too: conditional inclusion that tests
-/// them names the header the compile reads.
+/// `-O` predefines `__OPTIMIZE__` for the compile, so the rule is computed
+/// under it too: conditional inclusion that tests it names the header the
+/// compile reads.
 #[test]
 fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
     let dir = fixture("dash-o");
@@ -503,7 +503,7 @@ fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
     write(
         &dir,
         "dep.c",
-        "#ifdef NDEBUG\n#include \"opt_only.h\"\n#else\n#include \"dbg_only.h\"\n#endif\n\
+        "#ifdef __OPTIMIZE__\n#include \"opt_only.h\"\n#else\n#include \"dbg_only.h\"\n#endif\n\
          int main(void){return 0;}\n",
     );
     let has = |v: &[String], n: &str| v.iter().any(|p| p == n);

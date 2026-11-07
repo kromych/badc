@@ -1572,13 +1572,12 @@ fn code_model_values_follow_the_target() {
     );
 }
 
-// `-O` predefines `NDEBUG=1` and `__OPTIMIZE__=1` (release semantics).
-// The predefines land before the CLI `-D` / `-U` lists, so an explicit
-// `-D NDEBUG=<v>` keeps the user's value and `-U NDEBUG` removes the
-// implied one, re-enabling `assert`.
+// `-O` predefines `__OPTIMIZE__=1` and not `NDEBUG`, as gcc and clang do,
+// so `assert` stays (C99 7.2p1). The predefine lands before the CLI `-D` /
+// `-U` lists, which override it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn optimize_flag_predefines_ndebug() {
+fn optimize_flag_predefines_optimize_and_keeps_asserts() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let manifest = env!("CARGO_MANIFEST_DIR");
     let fixtures = PathBuf::from(manifest)
@@ -1602,28 +1601,32 @@ fn optimize_flag_predefines_ndebug() {
         Command::new(&exe).output().expect("run prog").status
     };
 
-    // Exit codes: both predefines -> NDEBUG's value, exactly one -> 101,
-    // neither -> 100 (see the fixture).
-    let probe = fixtures.join("ndebug_optimize_predefine.c");
+    // Exit codes: NDEBUG -> 101, else `__OPTIMIZE__`'s value, neither -> 100
+    // (see the fixture).
+    let probe = fixtures.join("optimize_predefines_optimize_not_ndebug.c");
     assert_eq!(run("plain", &[], &probe).code(), Some(100));
     assert_eq!(run("opt", &["-O"], &probe).code(), Some(1));
     assert_eq!(
-        run("opt-dval", &["-O", "-DNDEBUG=7"], &probe).code(),
+        run("opt-ndebug", &["-O", "-DNDEBUG"], &probe).code(),
+        Some(101)
+    );
+    assert_eq!(
+        run("opt-dval", &["-O", "-D__OPTIMIZE__=7"], &probe).code(),
         Some(7)
     );
     assert_eq!(
-        run("opt-undef", &["-O", "-UNDEBUG"], &probe).code(),
-        Some(101)
+        run("opt-undef", &["-O", "-U__OPTIMIZE__"], &probe).code(),
+        Some(100)
     );
 
-    // Under `-O` the assert(0) is compiled out; `-U NDEBUG` re-enables
-    // it and the program traps instead of exiting 0.
-    let trap = fixtures.join("ndebug_undef_reenables_assert.c");
-    assert_eq!(run("assert-off", &["-O"], &trap).code(), Some(0));
-    let fired = run("assert-on", &["-O", "-UNDEBUG"], &trap);
-    assert!(
-        !fired.success(),
-        "-U NDEBUG under -O must re-enable assert (got {fired:?})"
+    // Under `-O` the assert(0) fires and the program traps; `-DNDEBUG`
+    // compiles it out.
+    let trap = fixtures.join("optimize_keeps_assert.c");
+    let fired = run("assert-on", &["-O"], &trap);
+    assert!(!fired.success(), "-O must keep assert (got {fired:?})");
+    assert_eq!(
+        run("assert-off", &["-O", "-DNDEBUG"], &trap).code(),
+        Some(0)
     );
 }
 

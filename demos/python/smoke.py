@@ -265,8 +265,8 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         src, flags = compiles[obj]
         dst = out / (obj.replace("/", "_"))
         dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-        # Each TU builds with the optimizer (badc -O also implies NDEBUG).
-        # The host build trace's own -O flags are dropped by
+        # Each TU builds with the optimizer; NDEBUG comes from the trace's
+        # configure flags. The host build trace's own -O flags are dropped by
         # parse_commands, so this is the only optimization control.
         do_opt = opt_only is None or os.path.basename(src) in opt_only
         opt = ["-O"] if do_opt else []

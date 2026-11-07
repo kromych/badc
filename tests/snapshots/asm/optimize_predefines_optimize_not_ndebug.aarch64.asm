@@ -1,5 +1,5 @@
 
-ndebug_undef_reenables_assert.aarch64:	file format elf64-littleaarch64
+optimize_predefines_optimize_not_ndebug.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
@@ -14,5 +14,5 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	mov	x0, #0x0                // =0
+               	mov	x0, #0x1                // =1
                	ret

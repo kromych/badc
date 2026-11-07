@@ -7167,11 +7167,14 @@ fn darwin_enotsup_is_distinct_from_eopnotsupp() {
 }
 
 #[test]
-fn ndebug_optimize_predefine() {
+fn optimize_predefines_optimize_not_ndebug() {
     // The library harness never sets the driver's `-O`, so neither
     // NDEBUG nor __OPTIMIZE__ is predefined here; the CLI-level
     // `-O` semantics are locked by `tests/cli_fixture_smoke.rs`.
-    assert_eq!(run_fixture("ndebug_optimize_predefine.c"), 100);
+    assert_eq!(
+        run_fixture("optimize_predefines_optimize_not_ndebug.c"),
+        100
+    );
 }
 
 #[test]

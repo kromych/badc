@@ -2940,10 +2940,9 @@ impl Compiler {
         for name in &opts.force_includes {
             pp.add_force_include(name);
         }
-        // `-O` predefines, installed before the CLI lists so an explicit
-        // `-D NDEBUG=<v>` overrides the value and `-U NDEBUG` removes it.
+        // `-O` predefines `__OPTIMIZE__`, as gcc and clang do, before the
+        // CLI lists so `-D` and `-U` override it. `NDEBUG` is the user's.
         if opts.optimize {
-            pp.define("NDEBUG", "1");
             pp.define("__OPTIMIZE__", "1");
         }
         for (name, body) in &opts.defines {

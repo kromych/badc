@@ -209,10 +209,17 @@ pub(crate) fn write(info: &DebugInfo, image: &Image) -> Pdb {
             let off = push_record(&mut records, &codeview::symbol_record(kind, &r.0));
             globals.push((name.clone(), off));
         }
+        // One record per name and type, as a linker keeps them; a typedef
+        // of a tag the unit leaves incomplete names the tag's definition.
         for rec in &syms.globals {
+            let mut rec = rec.clone();
+            if u16::from_le_bytes([rec[2], rec[3]]) == codeview::S_UDT {
+                let ti = u32::from_le_bytes(rec[4..8].try_into().unwrap());
+                rec[4..8].copy_from_slice(&types.definition_of(ti).to_le_bytes());
+            }
             if seen.insert(rec.clone()) {
-                let off = push_record(&mut records, rec);
-                globals.push((record_name(rec), off));
+                let off = push_record(&mut records, &rec);
+                globals.push((record_name(&rec), off));
             }
         }
     }

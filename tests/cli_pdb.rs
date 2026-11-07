@@ -19,6 +19,9 @@ const S_REGREL32: u16 = 0x1111;
 const S_LOCAL: u16 = 0x113e;
 const S_END: u16 = 0x0006;
 const LF_STRUCTURE: u16 = 0x1505;
+const LF_POINTER: u16 = 0x1002;
+const LF_PROCEDURE: u16 = 0x1008;
+const S_UDT: u16 = 0x1108;
 const DEBUG_S_LINES: u32 = 0xf2;
 
 const SOURCE: &str = "struct pair { int first; long second; struct pair *link; };\n\
@@ -47,13 +50,26 @@ fn link(dir: &Path, target: &str, extra: &[&str]) -> std::process::Output {
 }
 
 fn link_source(dir: &Path, target: &str, extra: &[&str], source: &str) -> std::process::Output {
-    let src = dir.join("a.c");
-    std::fs::write(&src, source).expect("write source");
+    link_sources(dir, target, extra, &[("a.c", source)])
+}
+
+/// Link the units `sources` names into `dir/a.exe`.
+fn link_sources(
+    dir: &Path,
+    target: &str,
+    extra: &[&str],
+    sources: &[(&str, &str)],
+) -> std::process::Output {
+    let mut srcs = Vec::new();
+    for (name, text) in sources {
+        srcs.push(dir.join(name));
+        std::fs::write(dir.join(name), text).expect("write source");
+    }
     let out = Command::new(badc())
         .arg("-q")
         .arg(format!("--target={target}"))
         .args(extra)
-        .arg(&src)
+        .args(&srcs)
         .arg("-o")
         .arg(dir.join("a.exe"))
         .current_dir(dir)
@@ -339,6 +355,107 @@ fn the_pdb_is_the_same_on_a_rebuild() {
         );
         assert_eq!(first.0.unwrap(), second.0.unwrap(), "{target}: image");
         assert_eq!(first.1.unwrap(), second.1.unwrap(), "{target}: PDB");
+    }
+}
+
+/// The type records of a TPI stream, by index from 0x1000.
+fn type_records(tpi: &[u8]) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let mut at = u32le(tpi, 4) as usize;
+    while at < tpi.len() {
+        let len = u16le(tpi, at) as usize;
+        out.push(&tpi[at..at + 2 + len]);
+        at += 2 + len;
+    }
+    out
+}
+
+/// The `S_UDT` records of the symbol-record stream the DBI names: each
+/// name and type index.
+fn udts(s: &[Vec<u8>]) -> Vec<(String, u32)> {
+    let records = &s[u16le(&s[3], 20) as usize];
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < records.len() {
+        let len = u16le(records, at) as usize;
+        if u16le(records, at + 2) == S_UDT {
+            out.push((cstr(records, at + 8), u32le(records, at + 4)));
+        }
+        at += 2 + len;
+    }
+    out
+}
+
+const OBJECT_HEADER: &str = "typedef struct _object PyObject;\n\
+typedef struct _typeobject PyTypeObject;\n\
+struct _object { long ob_refcnt; PyTypeObject *ob_type; };\n\
+typedef PyObject *(*newfunc)(PyTypeObject *);\n\
+PyObject *make(PyTypeObject *t);\n";
+
+/// Two units sharing a self-referential struct pair, typedefs of them, and
+/// function pointers whose return type is spelled with a typedef; one
+/// unit completes `struct _typeobject`, the other leaves it incomplete. The
+/// PDB holds one definition of each struct, and one `S_UDT` per typedef
+/// naming the type the typedef stands for.
+#[test]
+fn units_sharing_a_typedef_of_a_struct_share_one_definition() {
+    let a = String::from(OBJECT_HEADER)
+        + "struct _typeobject {\n\
+               PyObject ob_base;\n\
+               const char *tp_name;\n\
+               newfunc tp_new;\n\
+               PyObject *(*tp_repr)(PyObject *);\n\
+           };\n\
+           static PyObject *repr(PyObject *o) { return o; }\n\
+           PyTypeObject type_a = { { 1, 0 }, \"a\", 0, repr };\n\
+           int main(void) { PyObject *o = make(&type_a); return o->ob_type == &type_a ? 0 : 1; }\n";
+    let b = String::from(OBJECT_HEADER)
+        + "static PyObject storage;\n\
+           static PyObject *(*hook)(PyObject *);\n\
+           PyObject *make(PyTypeObject *t) {\n\
+               storage.ob_type = t;\n\
+               return hook ? hook(&storage) : &storage;\n\
+           }\n";
+    for (target, ..) in TARGETS {
+        let dir = TempDir::new(&format!("badc-pdb-merge-{target}"));
+        link_sources(&dir, target, &["-g"], &[("a.c", &a), ("b.c", &b)]);
+        let s = streams(&std::fs::read(dir.join("a.pdb")).expect("a.pdb"));
+        let (_, mods) = modules(&s[3]);
+        assert!(
+            mods.iter().any(|m| m.name.ends_with("a.c"))
+                && mods.iter().any(|m| m.name.ends_with("b.c"))
+        );
+        let types = type_records(&s[2]);
+        let record = |ti: u32| types[(ti - 0x1000) as usize];
+        let kind = |ti: u32| u16le(record(ti), 2);
+        let definitions = |name: &str| {
+            (types.iter())
+                .filter(|r| {
+                    u16le(r, 2) == LF_STRUCTURE && u16le(r, 6) & 0x80 == 0 && cstr(r, 22) == name
+                })
+                .count()
+        };
+        assert_eq!(definitions("_object"), 1, "{target}");
+        assert_eq!(definitions("_typeobject"), 1, "{target}");
+        let udts = udts(&s);
+        let udt = |name: &str| {
+            let found: Vec<u32> = udts.iter().filter(|u| u.0 == name).map(|u| u.1).collect();
+            assert_eq!(found.len(), 1, "{target}: S_UDT {name}: {found:x?}");
+            found[0]
+        };
+        for (name, tag) in [("PyObject", "_object"), ("PyTypeObject", "_typeobject")] {
+            let ti = udt(name);
+            assert_eq!(kind(ti), LF_STRUCTURE, "{target}: {name}");
+            assert_eq!(
+                u16le(record(ti), 6) & 0x80,
+                0,
+                "{target}: {name} names the definition"
+            );
+            assert_eq!(cstr(record(ti), 22), tag, "{target}");
+        }
+        let newfunc = udt("newfunc");
+        assert_eq!(kind(newfunc), LF_POINTER, "{target}");
+        assert_eq!(kind(u32le(record(newfunc), 4)), LF_PROCEDURE, "{target}");
     }
 }
 

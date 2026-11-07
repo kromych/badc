@@ -240,6 +240,10 @@ pub(crate) struct Types<'m> {
     forward: BTreeMap<TypeId, u32>,
     active: BTreeSet<TypeId>,
     pointer_size: u32,
+    /// The leaf and tag of each forward reference, and the definitions
+    /// of each leaf and tag.
+    forward_tags: BTreeMap<u32, (u16, String)>,
+    definitions: BTreeMap<(u16, String), BTreeSet<u32>>,
 }
 
 impl<'m> Types<'m> {
@@ -252,7 +256,29 @@ impl<'m> Types<'m> {
             forward: BTreeMap::new(),
             active: BTreeSet::new(),
             pointer_size,
+            forward_tags: BTreeMap::new(),
+            definitions: BTreeMap::new(),
         }
+    }
+
+    /// `ti`, or the one definition of the tag `ti` forward-declares: an
+    /// `S_UDT` then names the type every unit's typedef stands for.
+    pub(crate) fn definition_of(&self, ti: u32) -> u32 {
+        let defined = (self.forward_tags.get(&ti)).and_then(|tag| self.definitions.get(tag));
+        match defined {
+            Some(d) if d.len() == 1 => *d.first().unwrap(),
+            _ => ti,
+        }
+    }
+
+    fn define(&mut self, leaf: u16, name: &Option<String>, ti: u32) -> u32 {
+        if let Some(n) = name {
+            self.definitions
+                .entry((leaf, n.clone()))
+                .or_default()
+                .insert(ti);
+        }
+        ti
     }
 
     /// The type index of `ty`.
@@ -302,7 +328,8 @@ impl<'m> Types<'m> {
                 r.u16(enumerators.len() as u16).u16(0);
                 r.u32(enum_underlying(*size)).u32(list);
                 r.name(name.as_deref().unwrap_or("<unnamed-enum>"));
-                self.tpi.insert(LF_ENUM, &r.0)
+                let ti = self.tpi.insert(LF_ENUM, &r.0);
+                self.define(LF_ENUM, name, ti)
             }
             Type::Array { element, dims } => {
                 let mut ti = self.index(*element);
@@ -345,14 +372,37 @@ impl<'m> Types<'m> {
         }
     }
 
-    /// The index of a reference to `pointee` through a pointer: an
-    /// aggregate's forward declaration when it has a name to resolve by.
+    /// The index of a reference to `pointee` through a pointer: a named
+    /// aggregate's forward declaration, under the qualifiers and through
+    /// the typedefs it is reached by. So a pointer's record is the same in
+    /// every unit, whether the unit completes the aggregate or not.
     fn pointee_index(&mut self, pointee: TypeRef) -> u32 {
         let model = self.model;
-        if let Some(id) = pointee
-            && let Type::Aggregate { name: Some(_), .. } = &model.types[id]
-        {
-            return self.forward_index(id);
+        let mut modifiers = 0u16;
+        let mut cur = pointee;
+        for _ in 0..=model.types.len() {
+            let Some(id) = cur else { break };
+            match &model.types[id] {
+                Type::Typedef { inner, .. } => cur = *inner,
+                Type::Qualified { qualifier, inner } => {
+                    modifiers |= match qualifier {
+                        Qualifier::Const => 1,
+                        Qualifier::Volatile => 2,
+                        Qualifier::Restrict => 0,
+                    };
+                    cur = *inner;
+                }
+                Type::Aggregate { name: Some(_), .. } => {
+                    let fwd = self.forward_index(id);
+                    if modifiers == 0 {
+                        return fwd;
+                    }
+                    let mut r = Rec::default();
+                    r.u32(fwd).u16(modifiers);
+                    return self.tpi.insert(LF_MODIFIER, &r.0);
+                }
+                _ => break,
+            }
         }
         self.index(pointee)
     }
@@ -434,11 +484,11 @@ impl<'m> Types<'m> {
             _ => return T_NOTYPE,
         };
         let mut r = Rec::default();
-        let ti = match kind {
+        let leaf = match kind {
             TagKind::Enum => {
                 r.u16(0).u16(PROP_FWDREF).u32(T_INT4).u32(0);
                 r.name(name.unwrap_or("<unnamed-enum>"));
-                self.tpi.insert(LF_ENUM, &r.0)
+                LF_ENUM
             }
             TagKind::Struct | TagKind::Union => {
                 r.u16(0).u16(PROP_FWDREF).u32(0);
@@ -446,9 +496,13 @@ impl<'m> Types<'m> {
                     r.u32(0).u32(0);
                 }
                 r.numeric(0).name(name.unwrap_or("<unnamed-tag>"));
-                self.tpi.insert(aggregate_leaf(kind), &r.0)
+                aggregate_leaf(kind)
             }
         };
+        let ti = self.tpi.insert(leaf, &r.0);
+        if let Some(n) = name {
+            self.forward_tags.insert(ti, (leaf, String::from(n)));
+        }
         self.forward.insert(id, ti);
         ti
     }
@@ -501,7 +555,8 @@ impl<'m> Types<'m> {
         }
         r.numeric(i128::from(*size))
             .name(name.as_deref().unwrap_or("<unnamed-tag>"));
-        self.tpi.insert(aggregate_leaf(*kind), &r.0)
+        let ti = self.tpi.insert(aggregate_leaf(*kind), &r.0);
+        self.define(aggregate_leaf(*kind), name, ti)
     }
 
     /// A field list of `members`, each padded to 4 bytes. A list past a
@@ -1074,6 +1129,65 @@ mod tests {
         // The pointer names the forward declaration, 0x1000.
         assert_eq!(&t.tpi.records[1][4..8], &0x1000u32.to_le_bytes());
         assert_eq!(&t.tpi.records[0][6..8], &PROP_FWDREF.to_le_bytes());
+    }
+
+    #[test]
+    fn a_pointer_through_a_typedef_names_the_forward_declaration() {
+        // typedef struct s { int v; } S; S *p; const S *q;
+        let m = model(alloc::vec![
+            int(),
+            Type::Aggregate {
+                kind: TagKind::Struct,
+                name: Some(String::from("s")),
+                size: 4,
+                members: alloc::vec![Member {
+                    name: Some(String::from("v")),
+                    ty: Some(0),
+                    offset: 0,
+                    bits: None
+                }],
+            },
+            Type::Typedef {
+                name: String::from("S"),
+                inner: Some(1)
+            },
+            Type::Pointer {
+                pointee: Some(2),
+                size: 8
+            },
+            Type::Qualified {
+                qualifier: Qualifier::Const,
+                inner: Some(2)
+            },
+            Type::Pointer {
+                pointee: Some(4),
+                size: 8
+            },
+        ]);
+        let mut t = Types::new(&m, 8);
+        let p = t.index(Some(3));
+        let fwd: u32 = 0x1000;
+        assert_eq!(&t.tpi.records[0][6..8], &PROP_FWDREF.to_le_bytes());
+        assert_eq!(
+            &t.tpi.records[(p - 0x1000) as usize][4..8],
+            &fwd.to_le_bytes()
+        );
+        // `const S *` points at a const modifier of the same declaration.
+        let q = t.index(Some(5));
+        let modifier = u32::from_le_bytes(
+            t.tpi.records[(q - 0x1000) as usize][4..8]
+                .try_into()
+                .unwrap(),
+        );
+        let rec = &t.tpi.records[(modifier - 0x1000) as usize];
+        assert_eq!(
+            (&rec[2..4], &rec[4..8]),
+            (&LF_MODIFIER.to_le_bytes()[..], &fwd.to_le_bytes()[..])
+        );
+        // The typedef names the definition once there is one.
+        assert_eq!(t.definition_of(fwd), fwd);
+        let full = t.index(Some(2));
+        assert_eq!(t.definition_of(fwd), full);
     }
 
     #[test]

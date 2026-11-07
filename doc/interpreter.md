@@ -90,9 +90,13 @@ double`: x87 extended on linux-x64, binary128 on linux-aarch64, `double`
 elsewhere. Out of range, `errno` is `ERANGE`; for a base outside 0 and 2
 to 36 it is `EINVAL`, and on macOS also when the string holds no number.
 
-`printf` reads a `long double` in the target's format and writes `%a` and
-`%La` as the target's C library does: `0xcp-3` for 1.5L on linux-x64,
-`0x1.8p+0` on the AArch64 targets, `0x1.8000000000000p+0` on Windows.
+The formatted output functions share one engine: `printf`, `fprintf`,
+`dprintf`, `sprintf`, `snprintf`, `asprintf` and their `va_list` forms,
+and msvcrt's `_snprintf`, `_vsnprintf` and `_vscprintf`. It reads a `long
+double` in the target's format and writes `%a` and `%La` as the target's C
+library does: `0xcp-3` for 1.5L on linux-x64, `0x1.8p+0` on the AArch64
+targets, `0x1.8000000000000p+0` on Windows. `%p` writes a null pointer as
+`(nil)` on Linux, `0x0` on macOS and `0000000000000000` on Windows.
 
 Any other library call stops the program when it is reached:
 
@@ -100,9 +104,9 @@ Any other library call stops the program when it is reached:
 error: runtime: vm_ssa: library call `sscanf` is not implemented under --interp
 ```
 
-Among the calls not implemented are the `scanf` family, `sprintf`,
-`snprintf` and `vsnprintf`, `fopen` and `fgets`, `strerror`, `qsort`,
-`time`, `setjmp`, `signal` and `pthread_create`.
+Among the calls not implemented are the `scanf` family, `fopen` and
+`fgets`, `strerror`, `qsort`, `time`, `setjmp`, `signal` and
+`pthread_create`.
 
 ### Other limits
 

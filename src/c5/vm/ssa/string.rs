@@ -78,7 +78,7 @@ fn ptr(name: &str, args: &[i64], i: usize) -> Result<usize, C5Error> {
 impl Memory {
     /// The length of the string at `addr`, its bytes and terminator
     /// checked as a read.
-    fn c_strlen(&self, addr: usize) -> Result<usize, C5Error> {
+    pub(super) fn c_strlen(&self, addr: usize) -> Result<usize, C5Error> {
         let tail = self.bytes.get(addr..).unwrap_or_default();
         let n = tail.iter().position(|&b| b == 0).ok_or_else(|| {
             C5Error::Runtime(format!(
@@ -91,7 +91,7 @@ impl Memory {
 
     /// The length of the string at `addr`, reading no more than `max`
     /// bytes.
-    fn c_strnlen(&self, addr: usize, max: usize) -> Result<usize, C5Error> {
+    pub(super) fn c_strnlen(&self, addr: usize, max: usize) -> Result<usize, C5Error> {
         let tail = self.bytes.get(addr..).unwrap_or_default();
         let n = match tail.iter().take(max).position(|&b| b == 0) {
             Some(n) => n,
@@ -107,18 +107,18 @@ impl Memory {
     }
 
     /// `n` bytes at `addr`, checked as a read.
-    fn read_checked(&self, addr: usize, n: usize) -> Result<Vec<u8>, C5Error> {
+    pub(super) fn read_checked(&self, addr: usize, n: usize) -> Result<Vec<u8>, C5Error> {
         self.check_data_access(addr, n, AccessKind::Read)?;
         Ok(self.read_bytes(addr, n)?.to_vec())
     }
 
     /// The string at `addr` without its terminator.
-    fn c_string(&self, addr: usize) -> Result<Vec<u8>, C5Error> {
+    pub(super) fn c_string(&self, addr: usize) -> Result<Vec<u8>, C5Error> {
         let n = self.c_strlen(addr)?;
         self.read_checked(addr, n)
     }
 
-    fn write_checked(&mut self, addr: usize, src: &[u8]) -> Result<(), C5Error> {
+    pub(super) fn write_checked(&mut self, addr: usize, src: &[u8]) -> Result<(), C5Error> {
         self.check_data_access(addr, src.len(), AccessKind::Write)?;
         self.write_bytes(addr, src)
     }

@@ -21,6 +21,7 @@ use super::eval::{self, round_if_f32};
 use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
+mod printf;
 mod string;
 mod strtox;
 
@@ -1761,6 +1762,7 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
 pub(super) fn interp_supplies(name: &str) -> bool {
     strtox::NAMES.contains(&name)
         || string::NAMES.contains(&name)
+        || printf::NAMES.contains(&name)
         || matches!(
             name,
             "exit"
@@ -1775,10 +1777,8 @@ pub(super) fn interp_supplies(name: &str) -> bool {
                 | "calloc"
                 | "realloc"
                 | "free"
-                | "printf"
                 | "__iob_func"
                 | "errno_location"
-                | "fprintf"
                 | "fputs"
                 | "puts"
                 | "fputc"
@@ -1915,6 +1915,9 @@ fn dispatch_callext<H: Host>(
         return r;
     }
     if let Some(r) = string::call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = printf::call(name, args, mem, host) {
         return r;
     }
     match name {
@@ -2106,27 +2109,10 @@ fn dispatch_callext<H: Host>(
             }
             Ok(0)
         }
-        // `int printf(const char *fmt, ...)` -- formats the
-        // variadic tail in `args[1..]` per C99 7.19.6.1 and
-        // writes the bytes to stdout via the host. Returns the
-        // number of bytes transmitted (7.19.6.3p3).
-        "printf" => {
-            let fmt = cstring_arg(name, args, 0, mem)?;
-            let out = format_printf(&fmt, &args[1..], mem)?;
-            let _ = host.write(1, &out);
-            Ok(out.len() as i64)
-        }
         // The bundled headers reach a stream through its data symbol (`dlsym`
         // below) or `__iob_func()`, and `errno` through `errno_location()`.
         "__iob_func" => Ok(mem.stdio() as i64),
         "errno_location" => Ok((mem.stdio() + STDIO_ERRNO) as i64),
-        "fprintf" => {
-            let fd = stdio_fd(name, args, 0, mem)?;
-            let fmt = cstring_arg(name, args, 1, mem)?;
-            let out = format_printf(&fmt, args.get(2..).unwrap_or_default(), mem)?;
-            let _ = host.write(fd, &out);
-            Ok(out.len() as i64)
-        }
         "fputs" => {
             let fd = stdio_fd(name, args, 1, mem)?;
             let _ = host.write(fd, &cstring_arg(name, args, 0, mem)?);
@@ -2363,6 +2349,68 @@ struct PrintfSpec {
     conv: u8,
 }
 
+/// The variable arguments of a formatting function: the call's own values,
+/// or the eightbyte slots a `va_list` cursor points at, where a `long
+/// double` wider than `double` occupies two holding its image.
+enum Varargs<'a> {
+    Values(&'a [i64], usize),
+    List(usize),
+}
+
+impl<'a> Varargs<'a> {
+    fn values(args: &'a [i64]) -> Self {
+        Varargs::Values(args, 0)
+    }
+
+    /// The arguments a `va_list` argument `ap` holds: on the Linux targets
+    /// `va_list` is an array, passed as its address, whose first eightbyte
+    /// the interpreter keeps the cursor in; elsewhere it is the cursor.
+    fn list(mem: &Memory, ap: i64) -> Result<Self, C5Error> {
+        let cursor =
+            if mem.target.is_windows() || mem.target == crate::c5::codegen::Target::MacOSAarch64 {
+                ap
+            } else {
+                load_from_memory(mem, ap as usize, LoadKind::I64)?
+            };
+        Ok(Varargs::List(cursor as usize))
+    }
+
+    fn next(&mut self, mem: &Memory) -> Result<i64, C5Error> {
+        match self {
+            Varargs::Values(args, i) => {
+                let v = args.get(*i).copied().ok_or_else(|| {
+                    C5Error::Runtime(format!(
+                        "vm_ssa: the format wants argument #{} but only {} were passed",
+                        *i + 1,
+                        args.len(),
+                    ))
+                })?;
+                *i += 1;
+                Ok(v)
+            }
+            Varargs::List(at) => {
+                let v = load_from_memory(mem, *at, LoadKind::I64)?;
+                *at += 8;
+                Ok(v)
+            }
+        }
+    }
+
+    /// A floating argument: binary64 bits, or under `L` where `long double`
+    /// is wider, the address of its image.
+    fn next_float(&mut self, mem: &Memory, long_double: bool) -> Result<i64, C5Error> {
+        let wide =
+            long_double && mem.target.long_double() != crate::c5::codegen::LongDoubleKind::F64;
+        match self {
+            Varargs::List(at) if wide => {
+                *at += 16;
+                Ok(*at as i64 - 16)
+            }
+            _ => self.next(mem),
+        }
+    }
+}
+
 /// printf formatter (C99 7.19.6.1). Parses the full spec grammar
 /// -- flags, width (incl. `*`), precision (incl. `.*`), length
 /// modifiers -- and pulls arguments from `args` as each
@@ -2370,19 +2418,8 @@ struct PrintfSpec {
 /// caller to hand to `host.write`. An unrecognised conversion
 /// emits its spec text verbatim without consuming an argument
 /// (undefined per 7.19.6.1p9).
-fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
+fn format_printf(fmt: &[u8], mut args: Varargs<'_>, mem: &mut Memory) -> Result<Vec<u8>, C5Error> {
     let mut out: Vec<u8> = Vec::new();
-    let mut arg_idx = 0usize;
-    let next_arg = |arg_idx: &mut usize| -> Result<i64, C5Error> {
-        let val = args.get(*arg_idx).copied().ok_or_else(|| {
-            C5Error::Runtime(format!(
-                "vm_ssa: printf: format wants arg #{arg_idx} but only {} supplied",
-                args.len(),
-            ))
-        })?;
-        *arg_idx += 1;
-        Ok(val)
-    };
     let mut i = 0usize;
     while i < fmt.len() {
         let c = fmt[i];
@@ -2419,7 +2456,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             i += 1;
             // A negative `*` width means `-` flag plus the
             // absolute value (7.19.6.1p5).
-            let w = next_arg(&mut arg_idx)? as i32;
+            let w = args.next(mem)? as i32;
             s.width = Some(w.unsigned_abs() as usize);
             s.minus |= w < 0;
         } else {
@@ -2433,7 +2470,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             if fmt.get(i) == Some(&b'*') {
                 i += 1;
                 // A negative `*` precision reads as omitted (p5).
-                let p = next_arg(&mut arg_idx)? as i32;
+                let p = args.next(mem)? as i32;
                 s.precision = (p >= 0).then_some(p as usize);
             } else {
                 s.precision = Some(0);
@@ -2483,7 +2520,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
         match conv {
             b'%' => out.push(b'%'),
             b'd' | b'i' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next(mem)?;
                 let v = match s.len {
                     ArgLen::Char => raw as i8 as i64,
                     ArgLen::Short => raw as i16 as i64,
@@ -2503,7 +2540,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_int(&mut out, &s, sign, &digits, v == 0);
             }
             b'u' | b'o' | b'x' | b'X' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next(mem)?;
                 let v = match s.len {
                     ArgLen::Char => raw as u8 as u64,
                     ArgLen::Short => raw as u16 as u64,
@@ -2527,11 +2564,11 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_int(&mut out, &s, prefix, &digits, v == 0);
             }
             b'c' => {
-                let v = next_arg(&mut arg_idx)?;
+                let v = args.next(mem)?;
                 push_padded(&mut out, &s, &[v as u8]);
             }
             b's' => {
-                let val = next_arg(&mut arg_idx)?;
+                let val = args.next(mem)?;
                 if val < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %s: bad ptr 0x{val:x}",
@@ -2544,11 +2581,19 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                 push_padded(&mut out, &s, &bytes);
             }
             b'p' => {
-                let v = next_arg(&mut arg_idx)? as u64;
-                push_padded(&mut out, &s, format!("0x{v:x}").as_bytes());
+                // The text is implementation-defined (7.19.6.1p8): glibc
+                // writes a null pointer as `(nil)`, the UCRT every pointer
+                // as 16 upper-case digits.
+                let v = args.next(mem)? as u64;
+                let text = match Libc::of(mem.target) {
+                    Libc::Glibc if v == 0 => "(nil)".into(),
+                    Libc::Ucrt => format!("{v:016X}"),
+                    _ => format!("0x{v:x}"),
+                };
+                push_padded(&mut out, &s, text.as_bytes());
             }
             b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
-                let raw = next_arg(&mut arg_idx)?;
+                let raw = args.next_float(mem, s.long_double)?;
                 let (v, hex) = float_arg(mem, raw, s.long_double)?;
                 let libc = Libc::of(mem.target);
                 let sign = if v.is_nan() {
@@ -2579,7 +2624,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             }
             b'n' => {
                 // Store the byte count written so far (7.19.6.1p8).
-                let addr = next_arg(&mut arg_idx)?;
+                let addr = args.next(mem)?;
                 if addr < 0 {
                     return Err(C5Error::Runtime(format!(
                         "vm_ssa: printf %n: bad ptr 0x{addr:x}",
@@ -4313,20 +4358,20 @@ mod tests {
         // those two raw bytes, not the 4-byte Latin-1 -> UTF-8 re-encoding
         // the old path produced.
         let mut mem = Memory::new(b"\xC3\xA9\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"%s", &[0], &mut mem).expect("format");
+        let out = format_printf(b"%s", Varargs::values(&[0]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0xC3u8, 0xA9]);
     }
 
     #[test]
     fn printf_char_preserves_high_byte() {
         let mut mem = Memory::new(b"\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"%c", &[0x80], &mut mem).expect("format");
+        let out = format_printf(b"%c", Varargs::values(&[0x80]), &mut mem).expect("format");
         assert_eq!(out, alloc::vec![0x80u8]);
     }
 
     fn fmt1(fmt: &[u8], args: &[i64]) -> alloc::string::String {
         let mut mem = Memory::new(b"abcdef\x00", crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(fmt, args, &mut mem).expect("format");
+        let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         alloc::string::String::from_utf8(out).expect("utf8")
     }
 
@@ -4388,7 +4433,7 @@ mod tests {
 
     fn fmt_on(target: crate::c5::codegen::Target, data: &[u8], fmt: &[u8], args: &[i64]) -> String {
         let mut mem = Memory::new(data, target);
-        let out = format_printf(fmt, args, &mut mem).expect("format");
+        let out = format_printf(fmt, Varargs::values(args), &mut mem).expect("format");
         String::from_utf8(out).expect("utf8")
     }
 
@@ -4471,7 +4516,7 @@ mod tests {
     fn printf_percent_n_stores_count() {
         // C99 7.19.6.1p8: %n stores the bytes written so far.
         let mut mem = Memory::new(&[0u8; 16], crate::c5::codegen::Target::LinuxX64);
-        let out = format_printf(b"abc%nd", &[8], &mut mem).expect("format");
+        let out = format_printf(b"abc%nd", Varargs::values(&[8]), &mut mem).expect("format");
         assert_eq!(out, b"abcd".to_vec());
         assert_eq!(load_from_memory(&mem, 8, LoadKind::I32).unwrap(), 3);
     }
@@ -4656,7 +4701,9 @@ mod tests {
             "dlclose",
             "dlerror",
         ];
-        let libraries = strtox::NAMES.iter().chain(string::NAMES);
+        let libraries = (strtox::NAMES.iter())
+            .chain(string::NAMES)
+            .chain(printf::NAMES);
         for name in names.into_iter().chain(libraries.copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =
@@ -4665,7 +4712,7 @@ mod tests {
                 assert!(!m.contains("is not implemented"), "{name}: {m}");
             }
         }
-        assert!(!interp_supplies("snprintf"));
+        assert!(!interp_supplies("system"));
     }
 
     #[test]

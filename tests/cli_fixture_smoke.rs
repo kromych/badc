@@ -5417,3 +5417,29 @@ fn interp_runs_the_string_functions_as_the_target_library_does() {
         ],
     );
 }
+
+/// Under `--interp` sprintf, snprintf and the `va_list` forms format as
+/// printf does, a `long double` read from a `va_list` included; `%p` of a
+/// null pointer and msvcrt's _snprintf follow the target's C library. The
+/// macOS text is the native build's.
+#[test]
+fn interp_formats_to_buffers_and_from_va_lists() {
+    let text = |null: &str| {
+        format!(
+            "12 [   42|ab  |z]\n6 [1234] #\n7\n26 [1 two 3.500000 4.5 z -5 44]\n\
+             v=7;v=7;\n{null}\n"
+        )
+    };
+    let (glibc, apple) = (text("(nil)"), text("0x0"));
+    let msvcrt = text("0000000000000000") + "3 123#\n-1\n";
+    interp_fixture_prints(
+        "formatted_output_to_buffers_and_va_lists.c",
+        &[
+            ("linux-x64", &glibc),
+            ("linux-aarch64", &glibc),
+            ("macos-aarch64", &apple),
+            ("windows-x64", &msvcrt),
+            ("windows-arm64", &msvcrt),
+        ],
+    );
+}

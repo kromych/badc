@@ -46,7 +46,7 @@ source under either flag is refused unless the command is `-E`.
 
 Executables are position-independent: an ELF executable is `ET_DYN` (PIE), and
 Mach-O and PE images always are. On Linux, `-no-pie` links the executable at
-its link address (`ET_EXEC`), as gcc's `-no-pie` does:
+its link address (`ET_EXEC`):
 
 - The startup runtime and the dynamic tables stay.
 - Data pointers are final at link time, with no `R_*_RELATIVE` entries.
@@ -86,8 +86,7 @@ refuses `-march=` and `-mtune=`.
 
 Feature macros:
 
-- x86-64 predefines the x86-64 base set that gcc and clang predefine for every
-  x86-64 target: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
+- x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
   `__SSE2_MATH__` and `__FXSR__`. None of the x86-64-v3 macros (`__AVX2__`,
   `__FMA__`, ...) is predefined. `-mno-sse` and `-mgeneral-regs-only` leave the
   set unchanged.
@@ -164,8 +163,8 @@ an existing build, including [the Linux kernel's](linux-kernel.md). Its
 As in GNU ld, an input whose `.note.GNU-stack` is executable makes the stack
 executable, with a warning (`-Wexecstack`), unless `-z noexecstack` is given.
 
-Inputs enter the link in command-line order, after the startup runtime, where
-gcc puts `crt1.o`. Constructors of one priority run in that order, and the
+Inputs enter the link in command-line order, after the startup runtime.
+Constructors of one priority run in that order, and the
 first of two weak definitions wins. An ELF link takes archives as GNU ld does:
 
 - an archive resolves the references made before it, rescanning itself until
@@ -192,7 +191,7 @@ at load time, in an executable or a dylib. `warning` also reports each one
 (`-Wundefined-lookup`). An ELF or PE link refuses `-undefined`. A Mach-O import
 that only weak references reach binds as a weak import: its address is 0 when
 the loaded dylib lacks the name. `__attribute__((weak_import))` is `weak` on
-Mach-O and ignored elsewhere, as gcc ignores it.
+Mach-O and ignored elsewhere.
 
 ### Unwind tables
 
@@ -325,9 +324,9 @@ a bare `badc <file>`:
 `--entry=<sym>` overrides it.
 
 Unknown pragmas and unknown directives warn and are ignored. An `#include`
-that neither the search path nor the bundled headers resolve is an error, as in
-gcc and clang. `-H` (`--show-includes`) prints each resolved include on stderr
-in gcc's `-H` format.
+that neither the search path nor the bundled headers resolve is an error. `-H`
+(`--show-includes`) prints each resolved include on stderr, one leading dot per
+nesting level.
 
 ### Windows subsystems and default libraries
 
@@ -346,7 +345,7 @@ any case and with `-` for `_`:
 | `efi_runtime_driver`      | 12 | EFI runtime driver |
 | `efi_rom`                 | 13 | EFI ROM image |
 
-`-mwindows` and `-mconsole` are gcc's spellings of `windows` and `console`.
+`-mwindows` and `-mconsole` select `windows` and `console`.
 A non-PE target ignores the pragma, so the same source builds for every OS.
 
 A `console` or `windows` image links `kernel32.dll` by default, as link.exe
@@ -496,7 +495,7 @@ architectural spelling names the register (`x9` / `w9`, `q16` / `v16` / `d16`
 | `-fstack-protector-all` | every function |
 | `-fno-stack-protector` | none; the default |
 
-The rule is gcc's, read off the declared automatic objects. The canary takes
+The rule reads the declared automatic objects. The canary takes
 the frame's topmost slot, between the locals and the saved return address. The
 prologue stores the guard there. Every return path, a tail call's included,
 reloads it, compares, and calls `__stack_chk_fail` on a mismatch.
@@ -507,10 +506,9 @@ with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
 
 - The default is `%fs:0x28` on Linux/x86-64 and the C library's
   `__stack_chk_guard` object elsewhere.
-- Under `-mcmodel=kernel` the segment defaults to `%gs`, as in gcc and clang,
-  for the default and for a `tls` guard that names no register.
-- `tls` (x86-64) reads the guard at a segment-relative offset or symbol. As in
-  gcc, naming a register, an offset or a symbol without the form selects it.
+- Under `-mcmodel=kernel` the segment defaults to `%gs` for the default and for a `tls` guard that names no register.
+- `tls` (x86-64) reads the guard at a segment-relative offset or symbol. Naming
+  a register, an offset or a symbol without the form selects it.
 - `sysreg` (AArch64) reads it at an offset above a system register, such as
   `-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`.
 
@@ -526,13 +524,13 @@ and variable-length arrays. The front end supplies the value as an ordinary
 initializer where the storage is established, so every output mode carries it
 and `-O` treats it as any other store.
 
-- `pattern` stores the byte `0xFE`, as gcc does.
+- `pattern` stores the byte `0xFE`.
 - A scalar that fits a register takes the value as a constant of its type.
   Anything wider is filled byte-wise, unrolled within the inline bound and as
   a loop past it. A variable-length array's loop follows its allocation.
 - `__attribute__((uninitialized))` opts an object out, as does binding it to a
   register with `asm`.
-- A declaration that a `goto` or `switch` jumps past is not covered, as in gcc.
+- A declaration that a `goto` or `switch` jumps past is not covered.
 
 `-fzero-init-padding-bits=standard|unions|all` takes every value and changes
 nothing. An automatic aggregate initializer already zero-fills the whole
@@ -547,8 +545,8 @@ saved registers and frame record included; `alloca` and variable-length arrays
 are not counted. The report breaks the size down: locals, spill slots, saved
 registers, inline-asm scratch, an over-aligned region, the canary and the
 frame record. The diagnostic is `frame-larger-than`, so `-Werror=` makes it
-fatal and `-Wno-` silences it. `n` takes gcc's size suffixes (`kB`, `KiB`,
-`MB`, `MiB`, ...). Without the option no bound applies, as in gcc and clang.
+fatal and `-Wno-` silences it. `n` takes the size suffixes `kB`, `KiB`, `MB`,
+`MiB`, ... Without the option no bound applies.
 
 ### AArch64 branch protection
 

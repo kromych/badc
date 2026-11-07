@@ -171,7 +171,7 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 | `__STDC__`                              | `1`                                                                       |
 | `__STDC_HOSTED__`                       | `1`; `0` under `-ffreestanding` or `-fno-hosted`, and `-fhosted` restores `1` |
 | `__STDC_VERSION__`                      | `201710L`; `-std=` selects another ([Command-line compatibility](#command-line-compatibility)) |
-| `__DATE__`, `__TIME__`                  | the time of translation in UTC; `SOURCE_DATE_EPOCH` fixes it, as in gcc and clang |
+| `__DATE__`, `__TIME__`                  | the time of translation in UTC; `SOURCE_DATE_EPOCH` fixes it |
 | `__STDC_NO_COMPLEX__`, `__STDC_NO_THREADS__` | `1`                                                                  |
 | `__STDC_UTF_16__`, `__STDC_UTF_32__`    | `1`                                                                       |
 | `__STDC_IEC_559__`, `__STDC_NO_ATOMICS__`, `__STDC_NO_VLA__` | not defined                                         |
@@ -221,7 +221,7 @@ emits none. gcc and clang without optimization leave a call to such a function
 undefined, for another unit's external definition to satisfy. badc gives the
 body internal linkage and binds the unit's calls to it, which 6.7.4p7 permits.
 Taking the address, with `&f` or by passing `f`, still references the external
-symbol, so the link fails when no unit defines it, as under gcc and clang. The
+symbol, so the link fails when no unit defines it. The
 PE targets use MSVC's inline linkage instead ([MSVC](#msvc)).
 
 ### `-O` defines `NDEBUG`
@@ -358,7 +358,7 @@ From `c23` on, `bool`, `true` and `false` are keywords, `1` and `0` in `#if`
 as well, and `<stdbool.h>` defines only `__bool_true_false_are_defined`. The
 GNU extensions are available in every dialect. `__STRICT_ANSI__` is defined
 only under `--gnu` ([GCC](#gcc)): a `gnu*` name leaves it undefined, and a
-`c*` or `iso9899:*` name defines it, as in gcc and clang. With `--gnu` and no
+`c*` or `iso9899:*` name defines it. With `--gnu` and no
 `-std=`, `__STRICT_ANSI__` is defined, so a header takes its standard-C path
 for the GNU features badc lacks. The dialect does not select the GNU89 inline
 model; only `-fgnu89-inline` does.
@@ -592,7 +592,7 @@ attributes are parsed. These take effect:
 | `used` | Keeps a definition nothing references. |
 | `naked` | The function has no prologue or epilogue. |
 | `always_inline`, `noinline`, `gnu_inline` | Inlining control. `always_inline` applies without `-O` too. |
-| `ms_abi`, `sysv_abi` | The x86-64 calling convention of a function or of a function pointer's pointee. Ignored on AArch64, as in gcc. |
+| `ms_abi`, `sysv_abi` | The x86-64 calling convention of a function or of a function pointer's pointee. Ignored on AArch64. |
 | `cleanup(fn)` | Calls `fn` on every exit from the scope, `goto` and `asm goto` included. A jump into the scope past the declaration is rejected, as clang does; gcc accepts it. |
 | `constructor`, `destructor` | Runs the function before or after `main`, with an optional priority. |
 | `noreturn` | As `_Noreturn`. |
@@ -613,7 +613,7 @@ Other attributes, such as `format`, `pure`, `const`, `deprecated` and
 `__has_attribute` answers 1 for a fixed list of gcc attribute names wider than
 the set above. It answers 0 for `vector_size`, `mode`, `ms_abi`, `sysv_abi`,
 `selectany` and `weak_import`, although badc honours them, and for `dllexport`
-and `dllimport` outside the PE targets, as gcc does. The `[[...]]` form honours
+and `dllimport` outside the PE targets. The `[[...]]` form honours
 the attributes without arguments plus `aligned`, `constructor` and
 `destructor`. It drops any other attribute with arguments, so
 `[[gnu::section("x")]]` has no effect while `__attribute__((section("x")))`
@@ -698,7 +698,7 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   across a DLL boundary with cl's code in either module. cl for ARM64 rejects
   an `__except` inside a `__finally` block (C2702); badc accepts it there too.
   `--interp` and `--jit` refuse a `__try` region.
-- `__COUNTER__`, which gcc also has, and `__BASE_FILE__`.
+- `__COUNTER__` and `__BASE_FILE__`.
 - MSVC's inline linkage on the PE targets, in place of C99 6.7.4p6-p7, as MSVC
   and clang's `*-windows-msvc` targets apply it to C. An inline function of
   external linkage without `gnu_inline` is emitted, as an
@@ -752,12 +752,12 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   `--jit` lowers it in-process and calls `main`, and `--dump-ssa` prints the
   SSA. The interpreter implements a subset of the library; a call it has no
   implementation for is reported when the call is reached.
-- `-H` and `--show-includes` print gcc's `-H` include trace on stderr: one line
-  per include, with leading dots for depth. The line has the path the include
-  resolved to, as gcc and clang print it. A header from the compiler's own
-  in-binary set has no path and prints its name, and a repeated include that
-  the guard or `#pragma once` dropped is marked `(cached)`.
-- gcc's `-M` dependency options: `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`,
+- `-H` and `--show-includes` print the include trace on stderr: one line per
+  include, with leading dots for depth and the path the include resolved to.
+  A header from the compiler's own in-binary set has no path and prints its
+  name, and a repeated include that the guard or `#pragma once` dropped is
+  marked `(cached)`.
+- The `-M` dependency options: `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`,
   `-MQ`, `-MP`, and the `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` spellings.
   `-MM` and `-MMD` leave out system headers: the compiler's own headers, the
   `-isystem` directories and the system fallback directories. A header from
@@ -768,7 +768,7 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   `__has_attribute` operators. `__has_feature` is not implemented.
 - An unknown preprocessor directive is a warning (`unknown-directive`, B1001),
   so older sources keep compiling; gcc and clang reject it. A missing
-  `#include` file is an error, as in gcc and clang. An unknown `#pragma` warns
+  `#include` file is an error. An unknown `#pragma` warns
   too (`unknown-pragmas`, B1004), except that pragmas headed `pack`, `once`,
   `STDC`, `GCC`, `clang`, `region` or `endregion` are accepted silently.
 - The predefines `__BADC_VERSION__` and `__BADC_TARGET__`, both string

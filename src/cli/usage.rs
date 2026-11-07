@@ -11,8 +11,8 @@ inputs (or any `-l` / `-L` / `-c` flag) run through the cross-TU
 linker. `.i` is C that is preprocessed already: its line markers
 and pragmas apply and nothing in it is expanded again. `.S` (and
 `.sx`) run through the preprocessor with `__ASSEMBLER__`
-predefined before being assembled; `.s` is assembled verbatim, as
-in gcc's suffix table. `-x <language>` names the language of the
+predefined before being assembled; `.s` is assembled verbatim.
+`-x <language>` names the language of the
 inputs after it instead -- `c`, `cpp-output`, `assembler` or
 `assembler-with-cpp` -- until the next `-x`; `-x none` returns to
 the suffix.
@@ -69,7 +69,7 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-pp, -E            Run the preprocessor on the input and
                            write the expanded source to `-o`'s path,
                            or to stdout when `-o` is absent or names
-                           `-`. Mirrors gcc / clang `-E`.
+                           `-`.
   -dM                      With -E, print a #define line per macro the
                            unit ends with, predefined ones included.
   -fsyntax-only            Check each unit through the front end (an
@@ -167,7 +167,7 @@ Multi-TU knobs:
                            `#pragma subsystem`. Without one a
                            WinMain / wWinMain program is a windows
                            one, as link.exe infers.
-  -mwindows, -mconsole     gcc's --subsystem=windows / console.
+  -mwindows, -mconsole     --subsystem=windows / console.
   --jobs N, -jN            Compile independent `.c` sources
                            concurrently in up to 2*N worker threads
                            (capped at the source count). Output is
@@ -248,8 +248,8 @@ Compile knobs:
   -nostdinc                Drop the bundled headers and the system
                            directories from the #include search, leaving
                            only -I, -isystem, -iquote and the including
-                           file's own directory, as gcc and clang do. A
-                           name none of those carries is an error, and
+                           file's own directory. A name none of those
+                           carries is an error, and
                            the auto-include retry is off.
                            `-isystem $(badc -print-file-name=include)`
                            restores the compiler's own headers.
@@ -270,9 +270,9 @@ Compile knobs:
   -arch <name>             The Darwin driver's architecture; arm64 for
                            the macOS target, refused elsewhere.
   -H, --show-includes      Print every #include's resolved path to
-                           stderr (gcc -H shape; leading dots mark
-                           nesting depth; missing headers print as
-                           `! <name> (missing)`).
+                           stderr; leading dots mark nesting depth and
+                           a missing header prints as
+                           `! <name> (missing)`.
   -M                       Write a make dependency rule naming the
                            source and every header it opened, and
                            compile nothing. Goes to stdout unless
@@ -295,23 +295,23 @@ Compile knobs:
   -MP                      Add an empty rule for each prerequisite
                            so a deleted header does not stop make.
   -w                       Report no warning at all.
-  -Wall / -Wextra          Enable a group of diagnostics, following
-  -Wpedantic               gcc's split. --list-diagnostics prints the
-                           group each row belongs to. -pedantic is
+  -Wall / -Wextra          Enable a group of diagnostics.
+  -Wpedantic               --list-diagnostics prints the group each
+                           row belongs to. -pedantic is
                            -Wpedantic, -pedantic-errors -Werror=pedantic.
   -W<sel> / -Wno-<sel>     Report or ignore one diagnostic. A selector
                            is its name, an alias, its `B` code, or a
-                           group name. A gcc or clang warning badc does
-                           not implement is taken: turned on, it reports
-                           B7012; any other unknown name is refused,
-                           except in -Wno-<sel>, as in gcc.
+                           group name. A warning name of another
+                           compiler that badc does not implement is
+                           taken: turned on, it reports B7012; any other
+                           unknown name is refused, except in -Wno-<sel>.
   -Werror / -Wno-error     Report every warning as an error, or undo
                            that. The unit still parses whole and fails
-                           at the end of the phase, as gcc does.
+                           at the end of the phase.
   -Werror=<sel>            Report one diagnostic as an error, or put it
   -Wno-error=<sel>         back to a warning.
-  -fpermissive             Report as warnings the diagnostics gcc 14
-                           makes errors by default: int-conversion,
+  -fpermissive             Report as warnings the diagnostics that are
+                           errors by default: int-conversion,
                            incompatible-pointer-types, implicit-int
                            and return-mismatch.
   -Wframe-larger-than=<n>  Report a function whose stack frame exceeds
@@ -330,15 +330,15 @@ Compile knobs:
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
-                           put its object out as ELFCLASS32 / EM_386, as
-                           gcc's `as --32` does; `.code16` / `.code32`
+                           put its object out as ELFCLASS32 / EM_386;
+                           `.code16` / `.code32`
                            in the source select the encoding. badc
                            generates no i386 machine code, so a `.c`
                            source under either is refused unless -E.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
-                           As in gcc, the rule keeps the
-                           source-derived name; -o does not name it.
+                           The rule keeps the source-derived name; -o
+                           does not name it.
   -q, --quiet              Suppress `info:` chatter on stderr (the
                            per-source `info: compiling <path>`
                            progress line in multi-TU mode and the
@@ -357,19 +357,19 @@ Compile knobs:
                            another module resolves it, the data half
                            of the toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
-  --gnu                    Define the GCC identity macros (__GNUC__,
+  --gnu                    Define the GNU C identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
                            default: badc implements most but not all of
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
-  -std=<dialect>           Language dialect, by gcc's names: sets
+  -std=<dialect>           Language dialect (c99, gnu11, ...): sets
                            __STDC_VERSION__ (C17 by default) and, from
                            c23 on, the bool/true/false keywords. The GNU
                            extensions are available in every dialect.
                            Under --gnu, `gnu*` clears __STRICT_ANSI__ and
-                           `c*` / `iso*` set it, as gcc and clang do;
-                           without the flag --gnu reports strict
+                           `c*` / `iso*` set it; without the flag
+                           --gnu reports strict
                            conformance.
   -fgnu89-inline           Use the GNU89 inline linkage model: `extern
                            inline` provides no external definition and a
@@ -382,7 +382,7 @@ Compile knobs:
   -fstrict-flex-arrays[=N] Which trailing array members
                            __builtin_object_size treats as unbounded
                            when reached through a pointer: at level 0
-                           (the default, as in gcc) every one, at 1
+                           (the default) every one, at 1
                            those declared [], [0] or [1], at 2 those
                            declared [] or [0], at 3 only []. The bare
                            form selects level 3. A [] member is
@@ -404,7 +404,7 @@ Compile knobs:
                            executable, they bind directly and thread-locals
                            take the executable TLS models. The last one
                            given wins and sets __pic__ / __PIC__ (and
-                           __pie__ / __PIE__) to 1 or 2, as gcc does.
+                           __pie__ / __PIE__) to 1 or 2.
                            An executable's own form is -pie / -no-pie.
   -fno-pic, -fno-pie       Compile the `-c` object for a link that
                            resolves its relocations statically, keeping
@@ -474,8 +474,8 @@ Compile knobs:
                            model badc does not differentiate, and an
                            unknown one is refused.
                            `+crypto` / `+aes` / `+sha2` (and their `no`
-                           forms) set the __ARM_FEATURE_* macros the way
-                           gcc does, with the crypto encodings always
+                           forms) set the __ARM_FEATURE_* macros, with
+                           the crypto encodings always
                            available to inline asm. Another extension is
                            refused by name.
   -mstack-protector-guard=global|tls|sysreg
@@ -510,8 +510,8 @@ Compile knobs:
                            default) leaves it as the frame held it.
                            __attribute__((uninitialized)) on an object
                            opts it out. A declaration a `goto` or
-                           `switch` jumps past is not covered, as in
-                           gcc. Diagnostics and the -O promotion of the
+                           `switch` jumps past is not covered.
+                           Diagnostics and the -O promotion of the
                            object are unchanged.
   -fzero-init-padding-bits=standard|unions|all
                            Which automatic initializers zero their

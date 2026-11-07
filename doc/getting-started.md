@@ -117,11 +117,11 @@ that run the program.
 | `-g` | write DWARF debug information |
 | `-o <path>` | the output file |
 | `-D NAME[=VALUE]`, `-U NAME` | define or undefine a macro |
-| `-I <dir>`, `-iquote <dir>`, `-isystem <dir>`, `-include <file>` | header search and forced includes, as in gcc |
+| `-I <dir>`, `-iquote <dir>`, `-isystem <dir>`, `-include <file>` | header search and forced includes |
 | `-L <dir>`, `-l <name>` | library search path and library |
-| `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules, as in gcc; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
+| `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
 | `-H`, `--show-includes` | print the path of every included header to stderr |
-| `--gnu` | define the GCC identity macros (`__GNUC__` and the rest); off by default |
+| `--gnu` | define the GNU C identity macros (`__GNUC__` and the rest); off by default |
 | `-ffreestanding` | compile for a freestanding implementation: `__STDC_HOSTED__` is 0 and `-fno-builtin` applies |
 | `--freestanding` | link without badc's startup runtime; the program supplies its entry point |
 | `--list-symbols` | print the built-in keywords, library calls and constants |
@@ -154,7 +154,7 @@ unit.c:8: error: bad expression: got `;` (in f) [B2020] [syntax]
 
 `-W<name>`, `-Wno-<name>`, `-Werror=<name>` and `-Wno-error=<name>` select a
 diagnostic by its name or its code. `-Wall`, `-Wextra`, `-Wpedantic`,
-`-Werror` and `-w` work as in gcc. `#pragma GCC diagnostic`,
+`-Werror` and `-w` select groups and severities. `#pragma GCC diagnostic`,
 `#pragma clang diagnostic` and MSVC's `#pragma warning(...)` apply from their
 position in the source. `badc --explain <name>` describes one diagnostic, and
 `badc --list-diagnostics` prints the catalogue that

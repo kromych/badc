@@ -30,9 +30,8 @@ pub(crate) enum Mode {
     /// prefers those on-disk copies over the embedded ones.
     Install,
     /// `--dump-pp` -- run the preprocessor on the input and
-    /// print the expanded source to stdout. Mirrors gcc / clang
-    /// `-E` for inspecting macro expansion and include
-    /// resolution.
+    /// print the expanded source to stdout, for inspecting macro
+    /// expansion and include resolution.
     DumpPp,
     /// `--ar` -- bundle every input (compiled `.c` plus any
     /// `.o`) into a single `.a` archive named by `-o`. No

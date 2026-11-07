@@ -107,7 +107,8 @@ typedef _Atomic(intmax_t) atomic_intmax_t;
 typedef _Atomic(uintmax_t) atomic_uintmax_t;
 
 // 7.17.7 operations. The `_explicit` forms pass their order operand(s) to
-// the `__atomic_*` builtins; a weak compare-exchange is the strong one.
+// the `__atomic_*` builtins; a weak compare-exchange is the strong one. An
+// atomic pointer's fetch_add / fetch_sub operand counts pointees.
 #define atomic_load_explicit(obj, order) __atomic_load_n((obj), (order))
 #define atomic_store_explicit(obj, desired, order) __atomic_store_n((obj), (desired), (order))
 #define atomic_exchange_explicit(obj, desired, order) \
@@ -116,8 +117,8 @@ typedef _Atomic(uintmax_t) atomic_uintmax_t;
     __atomic_compare_exchange_n((obj), (expected), (desired), 0, (succ), (fail))
 #define atomic_compare_exchange_weak_explicit(obj, expected, desired, succ, fail) \
     __atomic_compare_exchange_n((obj), (expected), (desired), 1, (succ), (fail))
-#define atomic_fetch_add_explicit(obj, arg, order) __atomic_fetch_add((obj), (arg), (order))
-#define atomic_fetch_sub_explicit(obj, arg, order) __atomic_fetch_sub((obj), (arg), (order))
+#define atomic_fetch_add_explicit(obj, arg, order) __c11_atomic_fetch_add((obj), (arg), (order))
+#define atomic_fetch_sub_explicit(obj, arg, order) __c11_atomic_fetch_sub((obj), (arg), (order))
 #define atomic_fetch_or_explicit(obj, arg, order) __atomic_fetch_or((obj), (arg), (order))
 #define atomic_fetch_and_explicit(obj, arg, order) __atomic_fetch_and((obj), (arg), (order))
 #define atomic_fetch_xor_explicit(obj, arg, order) __atomic_fetch_xor((obj), (arg), (order))

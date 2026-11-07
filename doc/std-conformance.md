@@ -409,7 +409,10 @@ model; only `-fgnu89-inline` does.
   Each operation carries the order it names
   (7.17.1). `consume` is treated as acquire. An order the operation may not
   take (7.17.7.1p2, 7.17.7.2p2), or one that is not a constant, is treated as
-  seq_cst. `atomic_compare_exchange_weak` is the strong form. `atomic_flag` is
+  seq_cst. `atomic_fetch_add` and `atomic_fetch_sub` on an atomic pointer move
+  it by whole pointees, as `+` and `-` do; the GNU `__atomic_fetch_add` and
+  `__atomic_fetch_sub` keep their byte operand.
+  `atomic_compare_exchange_weak` is the strong form. `atomic_flag` is
   a byte, and `atomic_init` is a plain store that clears the object's lock
   word without taking it (7.17.2.2). The optimizer does
   not forward, merge, hoist or remove an atomic access.

@@ -197,6 +197,10 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__atomic_signal_fence"),
     direct("__atomic_is_lock_free"),
     direct("__atomic_always_lock_free"),
+    // clang's C11 forms `<stdatomic.h>` uses where they differ from GCC's.
+    direct("__c11_atomic_init"),
+    direct("__c11_atomic_fetch_add"),
+    direct("__c11_atomic_fetch_sub"),
     direct("__sync_fetch_and_add"),
     direct("__sync_fetch_and_sub"),
     direct("__sync_fetch_and_and"),

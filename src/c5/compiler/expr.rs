@@ -219,6 +219,37 @@ impl Compiler {
         Ok(self.convert_operand(a, elem_ty))
     }
 
+    /// The operand of `__c11_atomic_fetch_add` / `_sub`: for an atomic
+    /// pointer, a count of pointees scaled to bytes as `+` and `-` scale it
+    /// (C17 7.17.7.5p3 with 6.5.6p8); otherwise as [`Self::gcc_atomic_value`].
+    fn c11_atomic_operand(
+        &mut self,
+        a: Option<super::super::ast::ExprId>,
+        name: &str,
+        elem_ty: i64,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        use super::super::ast::Expr;
+        if !is_pointer_ty(elem_ty) {
+            return self.gcc_atomic_value(a, name, elem_ty);
+        }
+        let a = self.require_gcc_arg(a, name)?;
+        let diff_ty = self.ptrdiff_t_ty();
+        let count = self.convert_operand(a, diff_ty);
+        let pos = self.ast_src_pos();
+        let val = self.pointee_size(elem_ty).max(1);
+        let size = self.ast.push_expr(Expr::IntLit { val, ty: diff_ty }, pos);
+        let bytes = self.ast.push_expr(
+            Expr::Binary {
+                op: super::super::ir::BinOp::Mul,
+                lhs: count,
+                rhs: size,
+                ty: diff_ty,
+            },
+            pos,
+        );
+        Ok(self.convert_operand(bytes, elem_ty))
+    }
+
     /// Fetch a required GCC-builtin operand or report an arity error.
     fn require_gcc_arg(
         &self,
@@ -858,6 +889,15 @@ impl Compiler {
                     elem_ty,
                     rmw_order(self),
                 )
+            }
+            "__c11_atomic_fetch_add" | "__c11_atomic_fetch_sub" => {
+                let v = self.c11_atomic_operand(val1, name, elem_ty)?;
+                let kind = if name.ends_with("add") {
+                    AtomicKind::FetchAdd
+                } else {
+                    AtomicKind::FetchSub
+                };
+                (kind, alloc::vec![ptr, v], elem_ty, rmw_order(self))
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
                 let v = self.gcc_atomic_value(val1, name, elem_ty)?;
@@ -1659,7 +1699,10 @@ impl Compiler {
             }
             if name.starts_with("__atomic_")
                 || name.starts_with("__sync_")
-                || name == "__c11_atomic_init"
+                || matches!(
+                    name,
+                    "__c11_atomic_init" | "__c11_atomic_fetch_add" | "__c11_atomic_fetch_sub"
+                )
             {
                 return Some(BuiltinCall::GccAtomic);
             }

@@ -66,10 +66,10 @@ typedef struct { unsigned char __opaque[128]; } posix_spawn_file_actions_t;
 #pragma binding(libc::posix_spawn_file_actions_addclosefrom_np, "posix_spawn_file_actions_addclosefrom_np")
 #endif
 
-int posix_spawn(int *pid, char *path, const posix_spawn_file_actions_t *fa,
-                const posix_spawnattr_t *attr, char **argv, char **envp);
-int posix_spawnp(int *pid, char *file, const posix_spawn_file_actions_t *fa,
-                 const posix_spawnattr_t *attr, char **argv, char **envp);
+int posix_spawn(int *pid, const char *path, const posix_spawn_file_actions_t *fa,
+                const posix_spawnattr_t *attr, char *const *argv, char *const *envp);
+int posix_spawnp(int *pid, const char *file, const posix_spawn_file_actions_t *fa,
+                 const posix_spawnattr_t *attr, char *const *argv, char *const *envp);
 
 int posix_spawnattr_init(posix_spawnattr_t *attr);
 int posix_spawnattr_destroy(posix_spawnattr_t *attr);
@@ -79,14 +79,14 @@ int posix_spawnattr_setsigmask(posix_spawnattr_t *attr, const sigset_t *mask);
 int posix_spawnattr_setsigdefault(posix_spawnattr_t *attr, const sigset_t *def);
 #ifdef __linux__
 // `struct sched_param` is opaque to c5; pass its address.
-int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, char *param);
+int posix_spawnattr_setschedparam(posix_spawnattr_t *attr, const char *param);
 int posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int policy);
 #endif
 
 int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa);
 int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fa, int fd,
-                                     char *path, int oflag, int mode);
+                                     const char *path, int oflag, int mode);
 int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd);
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd,
                                      int newfd);

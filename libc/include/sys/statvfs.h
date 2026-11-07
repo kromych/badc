@@ -22,6 +22,6 @@
 #pragma binding(libc::fstatvfs, "fstatvfs")
 #endif
 
-int statvfs(char *path, char *buf);
+int statvfs(const char *path, char *buf);
 int fstatvfs(int fd, char *buf);
 #endif

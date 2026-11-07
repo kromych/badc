@@ -92,7 +92,7 @@ struct dirent {
 #pragma binding(libc::seekdir,  "seekdir")
 #endif
 
-DIR *opendir(char *path);
+DIR *opendir(const char *path);
 // POSIX: open a directory stream on an already-open descriptor.
 DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dir);

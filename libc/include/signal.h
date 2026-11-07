@@ -250,7 +250,7 @@ struct sigaction {
 #endif
 };
 
-int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
+int sigaction(int sig, const struct sigaction *act, struct sigaction *oact);
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
 int sigaddset(sigset_t *set, int signo);

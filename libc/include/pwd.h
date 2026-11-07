@@ -73,13 +73,13 @@ struct passwd {
 
 #ifndef _WIN32
 struct passwd *getpwuid(uid_t uid);
-struct passwd *getpwnam(char *name);
+struct passwd *getpwnam(const char *name);
 // POSIX reentrant lookups: fill the caller's `struct passwd` + scratch
 // buffer, set `*result` to it (or NULL when not found), and return 0 on
 // success or an errno on failure.
 int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
-int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
+int getpwnam_r(const char *name, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
 struct passwd *getpwent(void);
 void setpwent(void);

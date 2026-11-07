@@ -121,7 +121,7 @@ int memfd_create(const char *name, unsigned int flags);
 void *mmap(void *addr, unsigned long len, int prot, int flags, int fd, long offset);
 int munmap(void *addr, unsigned long len);
 // Report which pages of a mapping are resident; `vec` gets one byte per page.
-int mincore(void *addr, unsigned long len, unsigned char *vec);
+int mincore(const void *addr, unsigned long len, unsigned char *vec);
 #ifdef __linux__
 void *mremap(void *old, unsigned long old_size, unsigned long new_size, int flags);
 #endif

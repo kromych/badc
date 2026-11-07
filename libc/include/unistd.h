@@ -543,7 +543,7 @@ char *getcwd(char *buf, size_t n);
 #endif
 int chdir(const char *path);
 #ifndef _WIN32
-int chroot(char *path);
+int chroot(const char *path);
 uid_t getuid(void);
 uid_t geteuid(void);
 gid_t getgid(void);
@@ -696,7 +696,7 @@ int fdatasync(int fd);
 #endif
 #ifndef _WIN32
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
-long pathconf(char *path, int name);
+long pathconf(const char *path, int name);
 long sysconf(int name);
 // Legacy BSD/POSIX page-size query; returns the system page size.
 int getpagesize(void);
@@ -705,7 +705,7 @@ int getdtablesize(void);
 // XSI password hashing. Bound to libSystem on Darwin; on Linux it is
 // libcrypt's, so the declaration is left unbound and the caller's -lcrypt
 // resolves it.
-char *crypt(char *key, char *salt);
+char *crypt(const char *key, const char *salt);
 int flock(int fd, int operation);
 #endif
 char *getenv(const char *name);

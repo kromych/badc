@@ -4268,20 +4268,25 @@ impl Compiler {
             // mirrors the inner aggregate's field list one-to-one, so the
             // brace initializes an object of that type at the member's
             // offset -- which handles union alternatives, designators and
-            // any nesting depth through the ordinary struct path. Skipped
-            // for a field reached by an explicit `.name` designator: the
-            // brace then belongs to that member's own type.
-            if !designated
-                && self.lex.tk == '{'
-                && let Some(m) = self.anon_member_starting_at(struct_id, field_idx)
-            {
-                let base = (var_offset as usize) + m.offset;
-                self.collect_struct_initializer_t(m.inner, target.rebased(base as i64))?;
+            // any nesting depth through the ordinary struct path. Without
+            // the brace the object takes its members from this list (p20),
+            // and in a union it is the one member initialized (p17).
+            // Skipped for a field reached by an explicit `.name`
+            // designator: the brace then belongs to that member's own type.
+            if !designated && let Some(m) = self.anon_member_starting_at(struct_id, field_idx) {
+                let inner = target.rebased((var_offset as usize + m.offset) as i64);
+                let elided = self.lex.tk != '{';
+                if elided {
+                    self.fill_struct_fields_t(m.inner, inner, false)?;
+                } else {
+                    self.collect_struct_initializer_t(m.inner, inner)?;
+                }
                 pos = m.first as usize + m.count as usize;
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
-                if !self.initializer_separator(!braced, pos >= n_fields)? {
+                let complete = (elided && self.structs[struct_id].is_union) || pos >= n_fields;
+                if !self.initializer_separator(!braced, complete)? {
                     break;
                 }
                 continue;
@@ -4694,6 +4699,16 @@ impl Compiler {
                     base: field_base,
                 },
             )?;
+            return Ok(false);
+        }
+        // C99 6.7.8p20: a value that is not of the member's own type (p13),
+        // nor of the enclosing one at an elided first member, fills the
+        // member's fields from the surrounding list.
+        if self.is_traversable_aggregate_ty(field.ty)
+            && !self.next_is_struct_value(struct_id_of(field.ty))?
+            && !(first_elided && self.next_is_struct_value(struct_id)?)
+        {
+            self.emit_struct_runtime_at(local_val, field_base, struct_id_of(field.ty), false)?;
             return Ok(false);
         }
         // Scalar / pointer leaf, or a whole-object struct copy.

@@ -64,6 +64,10 @@ A warning name of another compiler that badc does not implement is accepted.
 Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.
 
+A warning at a line of a system header -- one found through `-isystem` or a
+system directory, and the compiler's own headers -- is not reported, as gcc
+and clang do not report it; a `#warning` there is, and an error always is.
+
 ## Pragmas
 
 These pragmas take effect from their position in the source:

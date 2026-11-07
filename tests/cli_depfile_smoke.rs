@@ -181,6 +181,53 @@ fn unused_binding_warnings_cover_the_projects_headers_only() {
     );
 }
 
+/// A system header's warnings are suppressed, as gcc and clang suppress
+/// them, the preprocessor's and the compiler's alike, but `#warning`; the
+/// same lines in a project header warn.
+#[test]
+fn a_system_headers_warnings_are_suppressed_but_warning_directives() {
+    let dir = TempDir::new("badc-dep-test-system-warnings");
+    std::fs::create_dir_all(dir.join("inc")).expect("create inc dir");
+    std::fs::create_dir_all(dir.join("sys")).expect("create sys dir");
+    let body = "#pragma deprecated(old_name)\n\
+                #pragma intrinsic(no_such_builtin)\n\
+                typedef __declspec(dllimport) int (*hook)(void);\n\
+                #warning from the header\n";
+    write(&dir, "sys/sysnoisy.h", body);
+    write(&dir, "inc/projnoisy.h", body);
+    write(
+        &dir,
+        "main.c",
+        "#include <sysnoisy.h>\n#include \"projnoisy.h\"\nint main(void) { return 0; }\n",
+    );
+    let args = [
+        "--target=windows-x64",
+        "-Iinc",
+        "-isystem",
+        "sys",
+        "-c",
+        "main.c",
+        "-o",
+        "main.o",
+    ];
+    let err = run_stderr(&dir, &args);
+    let warnings: Vec<&str> = (err.lines())
+        .filter(|l| l.contains(": warning: "))
+        .map(|l| l.split(": warning: ").next().unwrap())
+        .collect();
+    assert_eq!(
+        warnings,
+        [
+            "sys/sysnoisy.h:4",
+            "inc/projnoisy.h:1",
+            "inc/projnoisy.h:2",
+            "inc/projnoisy.h:4",
+            "inc/projnoisy.h:3"
+        ],
+        "{err}"
+    );
+}
+
 #[test]
 fn dash_m_lists_system_headers_that_dash_mm_drops() {
     let dir = fixture("m-vs-mm");

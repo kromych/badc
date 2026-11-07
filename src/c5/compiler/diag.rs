@@ -532,7 +532,7 @@ impl Compiler {
     /// the driver fails the unit at the phase boundary. A row nothing
     /// raises above `Ignore` returns without locating its site.
     pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
-        if !self.sink.may_emit(code) {
+        if !self.sink.may_emit(code) || self.suppressed_in(code, &self.lex.file) {
             return;
         }
         let (loc, source) = self.locate(&self.lex.file, line);
@@ -548,11 +548,17 @@ impl Compiler {
         line: usize,
         message: alloc::string::String,
     ) {
-        if !self.sink.may_emit(code) {
+        if !self.sink.may_emit(code) || self.suppressed_in(code, file) {
             return;
         }
         let (loc, source) = self.locate(file, line);
         self.sink.emit_with_source(code, Some(loc), message, source);
+    }
+
+    /// A warning at a system header's line, which gcc and clang suppress.
+    fn suppressed_in(&self, code: Code, file: &str) -> bool {
+        code.default_level() == crate::c5::diag::Level::Warning
+            && self.system_headers.contains(file)
     }
 
     /// Report a constraint violation the parser recovers from: an

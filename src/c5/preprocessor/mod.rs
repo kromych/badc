@@ -2047,6 +2047,13 @@ impl Preprocessor {
     /// unit in output order, so every pragma that can cover `site` is
     /// already recorded when this runs.
     pub(crate) fn warn(&mut self, code: Code, site: Site<'_>, text: String) {
+        // gcc's rule: a system header's warnings are suppressed, but `#warning`.
+        if self.in_system_header()
+            && code != WARNING_DIRECTIVE
+            && code.default_level() == crate::c5::diag::Level::Warning
+        {
+            return;
+        }
         self.sink.emit(code, Some(site.loc()), text);
     }
 

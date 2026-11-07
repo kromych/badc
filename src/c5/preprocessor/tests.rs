@@ -5842,6 +5842,40 @@ fn preprocessor_codes_are_live_catalogue_rows() {
     }
 }
 
+/// A system header's warnings are suppressed, as gcc suppresses them, all
+/// but `#warning`; `#error` stays an error. The same lines in a user header
+/// warn.
+#[test]
+fn a_system_headers_warnings_are_suppressed_but_warning_directives() {
+    let body = "#pragma deprecated(old_name)\n#pragma intrinsic(no_such_builtin)\n\
+                #pragma frobnicate\n#warning from the header\n";
+    let (_, dir) = pp_with_headers("system-header-warnings", &[("noisy.h", body)]);
+    let mut system = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    system.add_isystem_path(dir.to_str().unwrap());
+    let _ = system
+        .process("#include <noisy.h>\n")
+        .expect("system header");
+    assert_eq!(codes(&system), vec![WARNING_DIRECTIVE]);
+    let mut user = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    user.add_search_path(dir.to_str().unwrap());
+    let _ = user.process("#include \"noisy.h\"\n").expect("user header");
+    assert_eq!(
+        codes(&user),
+        vec![
+            UNKNOWN_PRAGMA,
+            IGNORED_PRAGMA_INTRINSIC,
+            UNKNOWN_PRAGMA,
+            WARNING_DIRECTIVE
+        ]
+    );
+    std::fs::write(dir.join("fatal.h"), "#error from the header\n").unwrap();
+    let mut fatal = Preprocessor::new("windows-x64", Target::WindowsX64, "0.1.0");
+    fatal.add_isystem_path(dir.to_str().unwrap());
+    let _ = fatal.process("#include <fatal.h>\n");
+    assert_eq!(codes(&fatal), vec![Code::ERROR_DIRECTIVE]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn preprocessor_diagnostics_carry_their_code() {
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");

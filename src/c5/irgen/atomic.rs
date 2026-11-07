@@ -55,6 +55,23 @@ impl<'a> Walker<'a> {
         if self.is_int128_value_ty(elem_ty) && segment_of_object_ty(elem_ty).is_none() {
             return self.walk_atomic16(b, kind, args, order);
         }
+        // The generic forms on any other size call the runtime's generic
+        // functions with the size, as gcc and clang do.
+        if matches!(kind, AtomicKind::LoadInto | AtomicKind::StoreFrom)
+            && !matches!(width, 1 | 2 | 4 | 8)
+            && !self.target.is_windows()
+        {
+            let obj = self.walk_expr_rvalue(b, args[0])?;
+            let other = self.walk_expr_rvalue(b, args[1])?;
+            let name = match kind {
+                AtomicKind::LoadInto => "__atomic_load",
+                _ => "__atomic_store",
+            };
+            let size = self.value_size_align(elem_ty).0 as i64;
+            let args = alloc::vec![b.imm(size), obj, other, b.imm(order.to_c11())];
+            self.atomic_libcall(b, name, args)?;
+            return Ok(b.imm(0));
+        }
         if !matches!(width, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: args[0],

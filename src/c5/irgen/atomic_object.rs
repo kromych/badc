@@ -19,7 +19,7 @@ pub(super) enum RmwOperand {
 }
 
 impl<'a> Walker<'a> {
-    fn value_size_align(&self, ty: i64) -> (usize, usize) {
+    pub(super) fn value_size_align(&self, ty: i64) -> (usize, usize) {
         if is_struct_value_ty(ty) {
             (
                 self.struct_size(ty) as usize,
@@ -148,7 +148,7 @@ impl<'a> Walker<'a> {
         b.local_addr(slot)
     }
 
-    fn atomic_libcall(
+    pub(super) fn atomic_libcall(
         &self,
         b: &mut SsaBuilder,
         name: &str,

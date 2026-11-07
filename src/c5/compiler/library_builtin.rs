@@ -56,7 +56,7 @@ impl Compiler {
         let library = formed.iter().any(|&ty| {
             complete(ty) && self.atomic_layout_of(ty).access == super::types::AtomicAccess::Library
         });
-        if !library {
+        if !library && !self.atomic_generic_libcalls {
             return;
         }
         for &(name, slot_name, proto) in ATOMIC_LIBCALLS {

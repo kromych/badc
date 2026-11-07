@@ -1487,6 +1487,17 @@ impl MemOrder {
         }
     }
 
+    /// The `memory_order` constant naming the order.
+    pub(crate) fn to_c11(self) -> i64 {
+        match self {
+            MemOrder::Relaxed => 0,
+            MemOrder::Acquire => 2,
+            MemOrder::Release => 3,
+            MemOrder::AcqRel => 4,
+            MemOrder::SeqCst => 5,
+        }
+    }
+
     /// The order a `memory_order` / `__ATOMIC_*` constant names.
     pub(crate) fn from_c11(v: i64) -> Option<Self> {
         Some(match v {

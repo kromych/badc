@@ -138,10 +138,10 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
     );
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
-        Target::LinuxAarch64,
+        Target::WindowsAarch64,
         NativeOptions::default(),
     )
-    .expect_err("a 3-byte atomic object has no lowering");
+    .expect_err("a 3-byte atomic object has no lowering on Windows");
     let msg = format!("{err}");
     assert!(
         !msg.contains("internal compiler error"),

@@ -5246,6 +5246,49 @@ fn general_regs_only_copies_floating_values_and_refuses_arithmetic() {
 /// the same program built for each target -- glibc's sign bit, Apple's
 /// unsigned `nan`, the UCRT's `-nan(ind)` for the x86 default NaN -- and
 /// the default NaN `0.0 / 0.0` yields is the target's own.
+/// gcc's generic `__atomic_load` and `__atomic_store` move an object of a
+/// size no instruction covers through the runtime's generic functions.
+#[test]
+fn generic_atomics_move_an_odd_size_object() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-atomic-odd");
+    let src = dir.join("odd.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         struct s3 { char c[3]; };\n\
+         struct s12 { int a[3]; };\n\
+         int main(void) {\n\
+             struct s3 x = {{1, 2, 3}}, y, z = {{7, 8, 9}};\n\
+             __atomic_load(&x, &y, __ATOMIC_ACQUIRE);\n\
+             __atomic_store(&x, &z, __ATOMIC_RELEASE);\n\
+             struct s12 p = {{10, 20, 30}}, q;\n\
+             __atomic_load(&p, &q, __ATOMIC_SEQ_CST);\n\
+             printf(\"%d %d %d\\n\", y.c[0] + y.c[1] + y.c[2], x.c[0] + x.c[2], q.a[2]);\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    let mut runs: Vec<Vec<&str>> = ["linux-x64", "linux-aarch64", "macos-aarch64"]
+        .iter()
+        .map(|t| vec!["--interp", t])
+        .collect();
+    if !cfg!(windows) {
+        runs.push(vec!["--jit"]);
+    }
+    for run in runs {
+        let mut cmd = Command::new(badc);
+        cmd.arg("-q");
+        match run.as_slice() {
+            ["--interp", t] => cmd.arg(format!("--target={t}")).arg("--interp"),
+            _ => cmd.arg("--jit"),
+        };
+        let out = cmd.arg(&src).output().expect("run badc");
+        assert!(out.status.success(), "{run:?}: {out:?}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "6 16 30\n", "{run:?}");
+    }
+}
+
 /// `--jit` and `--interp` define `__BADC_JIT__` / `__BADC_INTERP__` for the
 /// unit they run; `-U` removes it.
 #[test]

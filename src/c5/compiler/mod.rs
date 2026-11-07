@@ -2566,6 +2566,9 @@ pub struct Compiler {
     /// The `_Atomic` object types the unit forms, for
     /// [`Self::declare_atomic_libcalls`].
     atomic_types_formed: Vec<i64>,
+    /// A generic `__atomic_load` / `__atomic_store` named an object of a
+    /// size no instruction covers.
+    atomic_generic_libcalls: bool,
     /// Mirror of [`CompileOptions::preprocessed`], read where `nostdinc` is.
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
@@ -3315,6 +3318,7 @@ impl Compiler {
             nostdinc: opts.library_headers_withdrawn(),
             freestanding: opts.freestanding,
             atomic_types_formed: Vec::new(),
+            atomic_generic_libcalls: false,
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,

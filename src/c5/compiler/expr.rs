@@ -800,6 +800,14 @@ impl Compiler {
             ));
         }
         let elem_ty = pointee_ty(first_ty);
+        // The generic forms on an object no instruction covers call the
+        // runtime's generic functions, which Windows has none of.
+        if matches!(name, "__atomic_load" | "__atomic_store")
+            && !matches!(self.size_of_type(elem_ty), 1 | 2 | 4 | 8)
+            && !self.target.is_windows()
+        {
+            self.atomic_generic_libcalls = true;
+        }
         let ptr = args[0];
         let val1 = args.get(1).copied();
         let val2 = args.get(2).copied();

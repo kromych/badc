@@ -1379,7 +1379,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
         write_output(path, pdb, cli.target, cli.quiet, false);
     }
-    post_write_native(out, cli.target);
+    post_write_native(out, cli.target, &cli.front.diag, cli.quiet);
     if cli.link.map_path.is_some() || cli.link.print_map {
         let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");
         let map = match badc::render_link_map(&merged, &bytes, image.inclusions, out_name) {

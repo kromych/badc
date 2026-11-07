@@ -241,7 +241,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
     text = proc.stderr.decode("utf-8", errors="replace")
     text = "\n".join(
         line for line in text.splitlines()
-        if not line.startswith("info: produced a Linux/")
+        if "[B7009]" not in line
     )
     text = text.replace(str(src.relative_to(root)), src.name).replace(str(src), src.name)
     if text and not text.endswith("\n"):

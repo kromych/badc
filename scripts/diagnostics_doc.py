@@ -87,7 +87,7 @@ The `default` column gives the level with no option or pragma: `error`,
 |---|---|
 | controllable | options and pragmas set the level |
 | hard | always an error, because compilation cannot continue past it; an option that names it is accepted and has no effect |
-| note | advisory; its level does not change |
+| note | advisory; `-w` and `-Wno-<name>` turn it off, and nothing raises it |
 
 A row marked `(retired)` is no longer reported. Its code stays reserved, and
 an option or pragma that names it is accepted and has no effect.

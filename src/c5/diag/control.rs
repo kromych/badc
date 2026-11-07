@@ -84,7 +84,8 @@ impl Config {
     /// `-W<sel>` / `-Wno-<sel>`. A selector naming an uncontrollable or
     /// a retired row changes nothing.
     pub fn set_level(&mut self, code: Code, level: Level) {
-        if is_settable(code) {
+        let note_off = code.class() == Class::Note && level == Level::Ignore;
+        if is_settable(code) || note_off {
             self.levels.insert(code.value(), level);
         }
     }
@@ -123,6 +124,14 @@ impl Config {
 
     /// The level before any pragma applies.
     pub fn level(&self, code: Code) -> Level {
+        if code.class() == Class::Note && code.status() == Status::Live {
+            let off = self.inhibit || self.levels.get(&code.value()) == Some(&Level::Ignore);
+            return if off {
+                Level::Ignore
+            } else {
+                code.default_level()
+            };
+        }
         if !is_settable(code) {
             return match code.status() {
                 Status::Retired => Level::Ignore,

@@ -516,6 +516,7 @@ impl Code {
     pub const ENUM_CONVERSION: Code = Code::new(3017);
     pub const BUILTIN_ARGUMENT_RANGE: Code = Code::new(3014);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
+    pub const CROSS_TARGET_OUTPUT: Code = Code::new(7009);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);
     pub const UNIMPLEMENTED_WARNING_OPTION: Code = Code::new(7012);

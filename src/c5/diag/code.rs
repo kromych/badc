@@ -57,7 +57,8 @@ pub enum Class {
     /// Always an error: no resynchronisation point, a broken internal
     /// invariant, or a failed link.
     Hard,
-    /// Advisory. Prints `note:`, and no option changes it.
+    /// Advisory. Prints `note:`; `-w` and `-Wno-<name>` turn it off, and
+    /// nothing raises it, `-Werror` included, as clang treats a remark.
     Note,
 }
 

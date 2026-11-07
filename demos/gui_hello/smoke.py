@@ -141,10 +141,8 @@ def main() -> int:
         if target.startswith("windows"):
             cmd.extend(["-include", "msvc_compat.h"])
         proc = subprocess.run(cmd, capture_output=True, text=True)
-        # The driver prints a warning about cross-host execution
-        # ("badc: produced a Foo binary on a non-Foo host"); a
-        # successful build still exits 0. Anything non-zero is a
-        # real failure.
+        # The driver notes a cross-host image (B7009); a successful
+        # build still exits 0. Anything non-zero is a real failure.
         if proc.returncode != 0:
             failures.append(
                 f"[{target}] {source}: exit {proc.returncode}\n"

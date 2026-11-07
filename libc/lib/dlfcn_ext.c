@@ -1,7 +1,9 @@
 // <dlfcn.h> on the Windows targets, over kernel32. POSIX reports a failed
 // dlopen, dlsym or dlclose through dlerror -- text for the most recent
 // failure, then NULL until the next one -- and dlclose returns 0 on success
-// where FreeLibrary returns nonzero. A failure's code is kept when it
+// where FreeLibrary returns nonzero. A null path opens the global scope, the
+// executable's handle; dlsym on it or on RTLD_DEFAULT searches every module
+// of the process in load order, the executable first. A failure's code is kept when it
 // happens, because any later Win32 call may overwrite GetLastError. The
 // file compiles to nothing elsewhere; the native-link driver offers it like
 // an archive member.
@@ -9,6 +11,7 @@
 #ifdef _WIN32
 
 #include <dlfcn.h>
+#include <psapi.h>
 #include <windows.h>
 
 // The most recent failure dlerror has not yet reported, per thread, and the
@@ -24,11 +27,59 @@ static void *dl_kept(void *result) {
 }
 
 void *dlopen(const char *path, int flags) {
+    HMODULE self = NULL;
     (void)flags;
-    return dl_kept(LoadLibraryA(path));
+    if (path) {
+        return dl_kept(LoadLibraryA(path));
+    }
+    // Counted, so dlclose's FreeLibrary balances it.
+    if (!GetModuleHandleExW(0, NULL, &self)) {
+        dl_failure = GetLastError();
+    }
+    return self;
+}
+
+static void *dl_global(const char *name) {
+    HMODULE inline_list[64];
+    HMODULE *modules = inline_list;
+    HANDLE heap = GetProcessHeap();
+    DWORD have = sizeof inline_list;
+    DWORD need = 0;
+    void *found = NULL;
+    BOOL listed;
+    // A module loaded between two calls grows the list; ask again.
+    while ((listed = EnumProcessModules(GetCurrentProcess(), modules, have, &need)) &&
+           need > have) {
+        if (modules != inline_list) {
+            HeapFree(heap, 0, modules);
+        }
+        have = need;
+        modules = HeapAlloc(heap, 0, have);
+        if (!modules) {
+            dl_failure = ERROR_NOT_ENOUGH_MEMORY;
+            return NULL;
+        }
+    }
+    if (!listed) {
+        dl_failure = GetLastError();
+        need = 0;
+    }
+    for (DWORD i = 0; i < need / sizeof *modules && !found; i++) {
+        found = (void *)GetProcAddress(modules[i], name);
+    }
+    if (!found && listed) {
+        dl_failure = ERROR_PROC_NOT_FOUND;
+    }
+    if (modules != inline_list) {
+        HeapFree(heap, 0, modules);
+    }
+    return found;
 }
 
 void *dlsym(void *restrict handle, const char *restrict name) {
+    if (handle == RTLD_DEFAULT || handle == GetModuleHandleW(NULL)) {
+        return dl_global(name);
+    }
     return dl_kept((void *)GetProcAddress(handle, name));
 }
 

@@ -1095,6 +1095,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // exits with atoi("123") = 123.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     // Multi-arg dlsym call path: spawns a thread via pthread_create
     // (4 pointer-ish args), joins it, returns the thread's exit
     // status. macOS pthread is in libSystem so dlopen(NULL) finds it.
@@ -1998,6 +1999,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // libc atoi and the indirect call passes "123" in x0.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     // Multi-arg dlsym call path. glibc 2.34+ folded pthread into
     // libc and keeps libpthread.so.0 as a stub the loader pulls in
     // anyway, so dlopen(NULL) finds pthread_create in our scope.
@@ -3215,6 +3217,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("setenv_overwrite.c", 0),
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     // Multi-arg dlsym call path. glibc 2.34+ folded pthread into
     // libc and keeps libpthread.so.0 as a stub the loader pulls in
     // anyway, so dlopen(NULL) finds pthread_create in our scope.
@@ -3794,6 +3797,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),
     ("spawn_nowait_handle_is_pointer_sized.c", 0),
+    ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     ("builtin_library_functions_need_no_declaration.c", 0),
     ("undeclared_library_calls_keep_the_header_types.c", 0),
     ("c99_comparison_macros_raise_no_invalid.c", 0),
@@ -4681,6 +4686,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("winmain_command_line.c", 0),
     ("wwinmain_command_line.c", 0),
     ("spawn_nowait_handle_is_pointer_sized.c", 0),
+    ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     ("arm_neon_float_vectors.c", 0),
     ("inline_asm_a64_vector_w_d_view.c", 0),
     ("inline_asm_a64_w_operand_widths.c", 0),
@@ -5953,6 +5960,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    ("dlopen_null_searches_the_global_scope.c", 0),
     // Multi-arg dlsym call path: pthread_create + pthread_join.
     // POSIX-only fixture; the JIT is gated to POSIX hosts already.
     ("pthread_create.c", 11),

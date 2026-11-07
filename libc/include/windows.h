@@ -2481,6 +2481,7 @@ LSTATUS RegSetValueExA(HKEY hKey, LPCSTR lpValueName, DWORD Reserved, DWORD dwTy
 #pragma binding(kernel32::FlushViewOfFile,         "FlushViewOfFile")
 #pragma binding(kernel32::GetModuleHandleA,        "GetModuleHandleA")
 #pragma binding(kernel32::GetModuleHandleW,        "GetModuleHandleW")
+#pragma binding(kernel32::GetModuleHandleExW,      "GetModuleHandleExW")
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
 #pragma binding(kernel32::GetProcAddressA,         "GetProcAddress")
@@ -2683,6 +2684,10 @@ HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset,
 BOOL FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
 HMODULE GetModuleHandleA(LPCSTR lpModuleName);
 HMODULE GetModuleHandleW(LPCWSTR lpModuleName);
+#define GET_MODULE_HANDLE_EX_FLAG_PIN                0x1
+#define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 0x2
+#define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       0x4
+BOOL GetModuleHandleExW(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule);
 VOID GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(VOID);
 FARPROC GetProcAddressA(HMODULE hModule, LPCSTR lpProcName);

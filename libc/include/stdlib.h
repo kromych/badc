@@ -384,6 +384,19 @@ extern unsigned short **_wenviron;
 extern char **_environ;
 extern char **environ;
 #endif
+// The UCRT's <stdlib.h> defines `errno` itself, as <errno.h> does.
+#pragma binding(msvcrt::errno_location, "_errno")
+int *errno_location(void);
+#define errno (*errno_location())
+// The UCRT's comparison types and the context-taking sort and search.
+typedef int (*_CoreCrtSecureSearchSortCompareFunction)(void *, const void *, const void *);
+typedef int (*_CoreCrtNonSecureSearchSortCompareFunction)(const void *, const void *);
+#pragma binding(msvcrt::qsort_s,   "qsort_s")
+#pragma binding(msvcrt::bsearch_s, "bsearch_s")
+void qsort_s(void *base, rsize_t num, rsize_t size,
+             _CoreCrtSecureSearchSortCompareFunction compare, void *context);
+void *bsearch_s(const void *key, const void *base, rsize_t num, rsize_t size,
+                _CoreCrtSecureSearchSortCompareFunction compare, void *context);
 // `_doserrno` is an SDK macro over the exported accessor `__doserrno`,
 // which returns a pointer to the thread's OS error code.
 #pragma binding(msvcrt::__doserrno, "__doserrno")

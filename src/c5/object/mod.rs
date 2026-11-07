@@ -867,6 +867,7 @@ pub(crate) mod test_support {
             elf: Default::default(),
             diagnostics: Vec::new(),
             seh_rows: Vec::new(),
+            seh_handler: None,
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),

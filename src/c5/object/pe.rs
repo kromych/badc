@@ -602,14 +602,16 @@ impl<'a> PeWriter<'a> {
         };
         l.text_rva = l.section_align;
         l.text_size = self.text_prologue_len + build.text.len() as u32;
-        // A scope table names `__C_specific_handler` by its stub in the image.
+        // A scope table names `__C_specific_handler` by its stub in the image,
+        // or an input's definition.
         let handler = (build
             .imports
             .imports
             .iter()
             .zip(&build.plt_trampoline_offsets))
         .find(|(i, _)| i.local_name == "__C_specific_handler")
-        .and_then(|(_, off)| *off);
+        .and_then(|(_, off)| *off)
+        .or(build.seh_handler);
         let seh = match handler {
             Some(stub) => Seh {
                 rows: &build.seh_rows,

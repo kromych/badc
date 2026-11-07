@@ -2659,8 +2659,9 @@ impl<'a> Link<'a> {
                 (self.seh_rows).push((row.map(at), target.map(at), handler.map(at)));
             }
         }
-        // A scope table names its language handler, which the image imports.
-        if !self.seh_rows.is_empty() {
+        // A scope table names its language handler: an input's definition,
+        // else the one the image imports.
+        if !self.seh_rows.is_empty() && !self.defined.contains_key(LANGUAGE_HANDLER) {
             self.record_import(LANGUAGE_HANDLER);
         }
     }
@@ -5812,8 +5813,12 @@ fn emit_plt(
             image_relative: true,
         });
     }
-    // A `__try` scope table names the language handler by its stub's RVA.
-    if !merged.seh_rows.is_empty() && slots == DataImportSlots::Thunk {
+    // A `__try` scope table names an imported language handler by its
+    // stub's RVA.
+    if !merged.seh_rows.is_empty()
+        && slots == DataImportSlots::Thunk
+        && !merged.defined.contains_key(LANGUAGE_HANDLER)
+    {
         let handler =
             (0..merged.imports.len()).find(|&i| import_name(merged, i) == LANGUAGE_HANDLER);
         let Some(handler) = handler else {

@@ -75,6 +75,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         cli,
         reloc_opts,
         pool_slot: None,
+        efi: false,
     };
     // `#pragma entrypoint(<name>)` names the entry function (C99 5.1.2.2.1), the
     // first unit's winning; without one `program_entry` chooses.
@@ -194,6 +195,15 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     {
         subsystem_override = Some(badc::Subsystem::Windows);
     }
+    embedded.efi = matches!(
+        subsystem_override,
+        Some(
+            badc::Subsystem::EfiApplication
+                | badc::Subsystem::EfiBootServiceDriver
+                | badc::Subsystem::EfiRuntimeDriver
+                | badc::Subsystem::EfiRom
+        )
+    );
     if let Some(lib) = target_libc.as_mut()
         && !loads_user_mode_crt(cli, subsystem_override)
     {
@@ -311,6 +321,8 @@ struct EmbeddedSources<'a> {
     reloc_opts: badc::NativeOptions,
     /// The slot the pool joined; it is compiled at most once per link.
     pool_slot: Option<usize>,
+    /// The image is a UEFI one: the pool compiles with `__BADC_EFI__`.
+    efi: bool,
 }
 
 impl EmbeddedSources<'_> {
@@ -454,11 +466,16 @@ impl EmbeddedSources<'_> {
             .collect();
         // Each source compiles alone; the objects join in source order.
         let this = &*self;
+        let extra: &[(&str, &str)] = if self.efi {
+            &[("__BADC_EFI__", "1")]
+        } else {
+            &[]
+        };
         let compiled: Vec<_> = std::thread::scope(|scope| {
             let jobs: Vec<_> = (sources.iter())
                 .map(|(label, body)| {
                     scope.spawn(move || {
-                        this.compile(label, body.to_string(), &[], false)
+                        this.compile(label, body.to_string(), extra, false)
                             .map(|(bytes, _)| bytes)
                     })
                 })
@@ -899,6 +916,11 @@ impl Selection {
         for (name, _) in &o.import_dylib_map {
             self.shared.insert(name.clone());
         }
+        // A `__try` scope table names the language handler.
+        const HANDLER: &str = "__C_specific_handler";
+        if !o.seh_rows.is_empty() && !self.defined.contains(HANDLER) {
+            (self.undefined.entry(HANDLER.to_string())).or_insert_with(|| o.source.clone());
+        }
         for (name, alt) in &o.alternate_names {
             self.alternates.insert(name.clone(), alt.clone());
         }
@@ -1063,12 +1085,14 @@ fn select_archive_members(
     // them -- matching a system linker, where the implicit C library
     // sits after the archives on the line.
     // An import-address slot asks for its name, which the check covers.
+    // A UEFI image's language handler is its own (`__BADC_EFI__`).
+    let own = |n: &str| embedded.efi && n == "__C_specific_handler";
     if embedded.pool_slot.is_none()
         && !sel.undefined.keys().all(|n| {
             n.starts_with("__imp_")
                 || badc::link_resolves_symbol(n)
                 || shared_libs.iter().any(|l| l.exports.contains(n))
-                || target_libc.as_mut().is_some_and(|l| l.admit(n))
+                || (!own(n) && target_libc.as_mut().is_some_and(|l| l.admit(n)))
         })
     {
         embedded.push_pool(&mut slots, stats);

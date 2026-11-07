@@ -2098,6 +2098,54 @@ fn a_dynamic_lookup_dylib_takes_its_function_from_the_program() {
     }
 }
 
+/// A `__try` scope table names a language handler. A UEFI image, which a
+/// loader resolving no imports runs, takes one of its own and imports
+/// nothing; a console image imports the C runtime's.
+#[test]
+fn an_efi_image_with_a_try_scope_imports_nothing() {
+    let dir = tempdir("efi-seh");
+    write_source(
+        &dir,
+        "seh.c",
+        "#pragma entrypoint(efi_main)\n\
+         static volatile int hits;\n\
+         unsigned long long efi_main(void *image, void *table)\n\
+         { __try { hits = 1; } __finally { hits += 2; }\n\
+           return hits == 3 ? 0 : 1; }\n",
+    );
+    let import_dir = |image: &[u8]| {
+        let pe = u32::from_le_bytes(image[0x3C..0x40].try_into().unwrap()) as usize;
+        let entry = pe + 24 + 112 + 8;
+        u64::from_le_bytes(image[entry..entry + 8].try_into().unwrap())
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        let t = format!("--target={target}");
+        run(
+            Command::new(badc())
+                .args([&t, "--subsystem=efi_application", "-ffreestanding"])
+                .args(["seh.c", "-o", "seh.efi"])
+                .current_dir(&dir),
+            "efi link",
+        );
+        let image = std::fs::read(dir.join("seh.efi")).expect("read the image");
+        assert_eq!(import_dir(&image), 0, "{target}: the EFI image imports");
+        run(
+            Command::new(badc())
+                .args([&t, "--entry=efi_main", "seh.c", "-o", "seh.exe"])
+                .current_dir(&dir),
+            "console link",
+        );
+        let image = std::fs::read(dir.join("seh.exe")).expect("read the image");
+        assert_ne!(
+            import_dir(&image),
+            0,
+            "{target}: the console image imports nothing"
+        );
+        let text = String::from_utf8_lossy(&image);
+        assert!(text.contains("__C_specific_handler"), "{target}");
+    }
+}
+
 /// ld64's `-bundle` writes an `MH_BUNDLE` image that names itself by no
 /// install name and enters nowhere; `-flat_namespace` clears `MH_TWOLEVEL`
 /// and gives every import a flat lookup. A host `dlopen`s either form and

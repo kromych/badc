@@ -2256,6 +2256,9 @@ pub(crate) struct Build {
     pub early_returns: Vec<EarlyReturn>,
     /// The `__try` scope tables, in emission order.
     pub seh_rows: Vec<SehRow>,
+    /// The text offset of the language handler an input defines, which the
+    /// scope tables name instead of an imported one.
+    pub seh_handler: Option<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch
     /// emit loop. Empty entries surface for archive-reloaded

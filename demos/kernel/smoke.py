@@ -85,6 +85,17 @@ KERNELS = [
         },
     ),
     (
+        # A `__try` scope: the image takes the language handler of its own,
+        # so it still imports nothing, and its `__finally` blocks run.
+        "kernel-seh",
+        "kernel.c",
+        ["-DKERNEL_SEH"],
+        {
+            arch: ["badc kernel: hello", "seh: finally ok", "BADC-KERNEL-OK"]
+            for arch in ("x64", "aarch64")
+        },
+    ),
+    (
         "preempt",
         "preempt.c",
         [],
@@ -222,6 +233,15 @@ def plan(only: str | None = None) -> list[Case]:
     return cases
 
 
+def import_directory(path: Path) -> tuple[int, int]:
+    """A PE32+ image's import directory entry, (RVA, size)."""
+    b = path.read_bytes()
+    pe = int.from_bytes(b[0x3C:0x40], "little")
+    entry = pe + 24 + 112 + 8  # optional header, its data directories, entry 1
+    return (int.from_bytes(b[entry:entry + 4], "little"),
+            int.from_bytes(b[entry + 4:entry + 8], "little"))
+
+
 def main() -> int:
     badc = resolve_badc()
     log(f"badc={badc}")
@@ -243,6 +263,12 @@ def main() -> int:
                 failures += 1
                 continue
             log(f"[{tag}] compiled {efi.name} ({efi.stat().st_size} bytes)")
+            # A UEFI loader resolves no imports.
+            imports = import_directory(efi)
+            if imports != (0, 0):
+                log(f"[{tag}] FAIL: the image has an import directory {imports}")
+                failures += 1
+                continue
             if not case.boots:
                 continue
 

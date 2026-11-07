@@ -3393,6 +3393,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         mcount_sites: st.mcount_sites,
         early_returns: st.early_returns,
         seh_rows: st.seh_rows,
+        seh_handler: None,
         func_names: st.func_names,
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,

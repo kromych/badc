@@ -126,6 +126,7 @@ void *_InterlockedCompareExchangePointer(void *volatile *dest, void *exchange,
 void __cpuid(int info[4], int leaf);
 #endif
 void __cpuidex(int info[4], int leaf, int subleaf);
+void __faststorefence(void);
 void __halt(void);
 unsigned short __lzcnt16(unsigned short value);
 unsigned int __lzcnt(unsigned int value);

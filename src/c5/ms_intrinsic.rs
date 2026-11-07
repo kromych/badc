@@ -330,6 +330,8 @@ const FIXED: &[Row] = &[
     ("_mm_lfence", X64, Op::Insn("lfence"), None, &[]),
     ("_mm_mfence", X64, Op::Insn("mfence"), None, &[]),
     ("_mm_sfence", X64, Op::Insn("sfence"), None, &[]),
+    // A full barrier, the `lock or` cl emits for it.
+    ("__faststorefence", X64, Op::Insn("lock orl $0, (%rsp)"), None, &[]),
     ("__lzcnt16", X64, bits(LZ, 2), Some(UShort), &[V(UShort)]),
     ("__lzcnt", X64, bits(LZ, 4), Some(UInt), &[V(UInt)]),
     ("__lzcnt64", X64, bits(LZ, 8), Some(ULLong), &[V(ULLong)]),

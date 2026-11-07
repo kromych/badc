@@ -1790,11 +1790,13 @@ fn msvc_instruction_intrinsics_encode_their_instructions() {
         object(traps, Target::WindowsX64),
     ]
     .concat();
-    // cpuid, rdtsc, pause, a gs-relative 8-byte load, int3, int $0x29.
-    let x64_seqs: [&[u8]; 6] = [
+    // cpuid, rdtsc, pause, lock or [rsp], 0, a gs-relative 8-byte load,
+    // int3, int $0x29.
+    let x64_seqs: [&[u8]; 7] = [
         &[0x0f, 0xa2],
         &[0x0f, 0x31],
         &[0xf3, 0x90],
+        &[0xf0, 0x83, 0x0c, 0x24, 0x00],
         &[0x65, 0x48, 0x8b],
         &[0xcc],
         &[0xcd, 0x29],

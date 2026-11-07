@@ -650,6 +650,8 @@ struct Parser {
     mcount_modifiers: Vec<String>,
     /// The last `-mbranch-protection=`, an AArch64 option.
     branch_protection_flag: Option<String>,
+    /// The x86-64 mitigation flags seen, checked against the target.
+    x86_mitigation_flags: Vec<String>,
     ssp_guard_kind: Option<&'static str>,
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
@@ -1741,6 +1743,15 @@ impl Parser {
     /// rather than ignored: a hardening flag that compiles but does
     /// nothing leaves the caller believing the output is mitigated.
     fn hardening_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
+        const X86: [&str; 4] = [
+            "-mindirect-branch=",
+            "-mfunction-return=",
+            "-mharden-sls=",
+            "-fcf-protection=",
+        ];
+        if X86.iter().any(|p| arg.starts_with(p)) {
+            self.x86_mitigation_flags.push(arg.to_string());
+        }
         let code = &mut self.codegen;
         match arg {
             // Speculative-execution mitigations, in gcc's spellings. An
@@ -2483,6 +2494,22 @@ impl Parser {
         {
             return Err(ParseError::diag(format!(
                 "badc: error: `{flag}` is an AArch64 option; {} has no branch protection",
+                target.id_str()
+            )));
+        }
+        let h = &self.codegen.hardening;
+        let x86_on = h.indirect_branch != badc::IndirectBranch::Keep
+            || h.function_return_thunk
+            || h.sls_return
+            || h.sls_indirect_jmp
+            || h.cf_protection_branch;
+        if x86_on
+            && target.is_aarch64()
+            && let Some(flag) = (self.x86_mitigation_flags.iter())
+                .find(|f| !f.ends_with("=keep") && !f.ends_with("=none"))
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{flag}` is an x86-64 mitigation; {} does not implement it",
                 target.id_str()
             )));
         }
@@ -3966,6 +3993,34 @@ mod tests {
             "badc: error: unsupported feature `gcs` in `-mbranch-protection=` \
              (supported: none, bti, pac-ret, pac-ret+leaf, standard)"
         );
+        // An AArch64 target refuses an x86-64 mitigation it would not emit;
+        // `keep` and `none` request nothing.
+        for flag in [
+            "-mindirect-branch=thunk-extern",
+            "-mindirect-branch=thunk-inline",
+            "-mfunction-return=thunk-extern",
+            "-mharden-sls=all",
+            "-fcf-protection=branch",
+        ] {
+            for target in ["linux-aarch64", "macos-aarch64", "windows-arm64"] {
+                let spec = format!("--target={target}");
+                assert_eq!(
+                    reject(&[spec.as_str(), flag, "-c", "a.c"]).0,
+                    format!(
+                        "badc: error: `{flag}` is an x86-64 mitigation; \
+                         {target} does not implement it"
+                    )
+                );
+            }
+        }
+        parse(&[A64, "-mharden-sls=all", "-mharden-sls=none", "-c", "a.c"]);
+        parse(&[
+            A64,
+            "-fcf-protection=none",
+            "-mindirect-branch=keep",
+            "-c",
+            "a.c",
+        ]);
     }
 
     /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar

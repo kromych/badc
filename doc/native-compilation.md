@@ -225,6 +225,7 @@ Target macros:
 | `_WIN32`, `_WIN64`, `__BADC_WINDOWS__`     | Windows targets                   |
 | `__APPLE__`                                | macOS                             |
 | `__linux__`, `__ELF__`                     | Linux                             |
+| `__BADC_JIT__`, `__BADC_INTERP__`          | 1 for every unit `--jit` / `--interp` runs |
 
 The C17 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,
 `__SIZEOF_*__`, `__BYTE_ORDER__`, the `__ATOMIC_*` orders), and under `--gnu`

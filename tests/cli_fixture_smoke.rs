@@ -5246,6 +5246,46 @@ fn general_regs_only_copies_floating_values_and_refuses_arithmetic() {
 /// the same program built for each target -- glibc's sign bit, Apple's
 /// unsigned `nan`, the UCRT's `-nan(ind)` for the x86 default NaN -- and
 /// the default NaN `0.0 / 0.0` yields is the target's own.
+/// `--jit` and `--interp` define `__BADC_JIT__` / `__BADC_INTERP__` for the
+/// unit they run; `-U` removes it.
+#[test]
+fn run_modes_define_their_macro() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-run-macro");
+    let src = dir.join("mode.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n\
+         int main(void) {\n\
+         #if defined(__BADC_JIT__) && !defined(__BADC_INTERP__)\n\
+             puts(\"jit\");\n\
+         #elif defined(__BADC_INTERP__) && !defined(__BADC_JIT__)\n\
+             puts(\"interp\");\n\
+         #else\n\
+             puts(\"neither\");\n\
+         #endif\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for (args, want) in [
+        (&["--jit"][..], "jit\n"),
+        (&["--interp"][..], "interp\n"),
+        (&["--jit", "-U__BADC_JIT__"][..], "neither\n"),
+    ] {
+        let out = Command::new(badc)
+            .arg("-q")
+            .args(args)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(out.status.success(), "{args:?}: {out:?}");
+        // `--jit` writes through the host C library, a text stream on Windows.
+        let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
+        assert_eq!(stdout, want, "{args:?}");
+    }
+}
+
 #[test]
 fn interp_printf_writes_a_nan_as_the_target_library_does() {
     let badc = env!("CARGO_BIN_EXE_badc");

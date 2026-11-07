@@ -1051,99 +1051,65 @@ impl Compiler {
     /// ignored. The caller passes a fresh set per attribute: the three
     /// flags that take an operand must be read back before the next name.
     fn note_attribute_name(&self, f: &mut AttrFlags) {
+        use crate::c5::attr::{Attr, attribute};
         // The bare `noreturn` spelling lexes as the <stdnoreturn.h>
         // keyword token, not an identifier; both name this attribute.
         if self.lex.tk == Token::Noreturn {
             f.noreturn = true;
             return;
         }
-        if self.lex.tk == Token::Id {
-            let n = self.symbols[self.lex.curr_id_idx].name.as_str();
-            if n == "packed" || n == "__packed__" {
-                f.packed = true;
-            } else if n == "unused" || n == "maybe_unused" || n == "__unused__" {
-                f.maybe_unused = true;
-            } else if n == "thread" {
-                // MSVC `__declspec(thread)`: thread-local storage. `thread` is
-                // not a GNU attribute, so it can only mean this.
-                f.thread_local = true;
-            } else if n == "noreturn" || n == "__noreturn__" {
-                // `__declspec(noreturn)` / `__attribute__((noreturn))`.
-                f.noreturn = true;
-            } else if n == "dllexport" {
-                // MSVC `__declspec(dllexport)`: export the symbol, the
-                // equivalent of `#pragma export(name)`.
-                f.dllexport = true;
-            } else if n == "dllimport" || n == "__dllimport__" {
-                f.dllimport = true;
-            } else if n == "aligned" || n == "__aligned__" || n == "align" {
-                // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
-                f.aligned = true;
-            } else if n == "constructor" || n == "__constructor__" {
-                // GNU `constructor` / `constructor(N)`: run before `main`.
-                f.constructor = true;
-            } else if n == "destructor" || n == "__destructor__" {
-                // GNU `destructor` / `destructor(N)`: run after `main` returns.
-                f.destructor = true;
-            } else if n == "always_inline" || n == "__always_inline__" {
-                // GNU `always_inline`: a mandatory inline request. Recorded so
-                // the inliner can warn when it cannot honor it.
-                f.always_inline = true;
-            } else if n == "noinline" || n == "__noinline__" {
-                // GNU `noinline`: suppress every inline request for this body.
-                f.noinline = true;
-            } else if n == "gnu_inline" || n == "__gnu_inline__" {
-                // GNU `gnu_inline`: the function follows the GNU89 inline
-                // linkage model whatever the unit's default model is.
-                f.gnu_inline = true;
-            } else if n == "naked" || n == "__naked__" {
-                // GNU `naked`: emit no prologue/epilogue; the body is the
-                // function's entire machine code (inline asm). Used for
-                // interrupt service routines that return via `iretq`/`eret`.
-                f.naked = true;
-            } else if n == "weak" || n == "__weak__" {
-                // GNU `weak`: the defined (or declared) symbol binds
-                // STB_WEAK in the object's symbol table.
-                f.weak = true;
-            } else if (n == "weak_import" || n == "__weak_import__")
-                && self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
-            {
-                // Darwin's `weak_import`, which gcc and clang take as a weak
-                // reference there; gcc ignores it on an ELF target.
-                f.weak = true;
-            } else if n == "selectany" || n == "__selectany__" {
-                // MSVC and GCC: the link keeps any one unit's definition.
-                f.selectany = true;
-            } else if n == "used" || n == "__used__" {
-                // GNU `used`: keep the definition in the object even when
-                // nothing in the unit references it.
-                f.used = true;
-            } else if n == "no_instrument_function" || n == "__no_instrument_function__" {
-                f.no_instrument_function = true;
-            } else if n == "no_stack_protector" || n == "__no_stack_protector__" {
-                // GNU `no_stack_protector`: no canary whatever
-                // `-fstack-protector*` selects.
-                f.no_stack_protector = true;
-            } else if n == "uninitialized" || n == "__uninitialized__" {
-                // GNU `uninitialized`: the automatic object opts out of
-                // `-ftrivial-auto-var-init`.
-                f.uninitialized = true;
-            } else if n == "designated_init" || n == "__designated_init__" {
-                f.designated_init = true;
-            } else if n == "transparent_union" || n == "__transparent_union__" {
-                // GNU `transparent_union`: parameters of the union type
-                // accept arguments of any member type.
-                f.transparent_union = true;
-            } else if n == "ms_abi" || n == "__ms_abi__" {
-                // GNU `ms_abi`: the function follows the Microsoft x64
-                // calling convention. x86-only; ignored elsewhere, which
-                // is what the Linux `__efiapi` spelling relies on.
-                f.ms_abi = true;
-            } else if n == "sysv_abi" || n == "__sysv_abi__" {
-                // GNU `sysv_abi`: the function follows the System V AMD64
-                // calling convention. x86-only, as `ms_abi`.
-                f.sysv_abi = true;
+        if self.lex.tk != Token::Id {
+            return;
+        }
+        let Some(a) = attribute(&self.symbols[self.lex.curr_id_idx].name) else {
+            return;
+        };
+        match a {
+            Attr::Packed => f.packed = true,
+            Attr::Unused => f.maybe_unused = true,
+            Attr::Noreturn => f.noreturn = true,
+            Attr::ThreadLocal => f.thread_local = true,
+            Attr::Dllexport => f.dllexport = true,
+            Attr::Dllimport => f.dllimport = true,
+            Attr::Aligned => f.aligned = true,
+            // `constructor(N)` / `destructor(N)` run before `main` / after it
+            // returns.
+            Attr::Constructor => f.constructor = true,
+            Attr::Destructor => f.destructor = true,
+            // Recorded so the inliner can warn when it cannot honor it.
+            Attr::AlwaysInline => f.always_inline = true,
+            Attr::Noinline => f.noinline = true,
+            // GNU89 inline linkage for this function whatever the unit's model.
+            Attr::GnuInline => f.gnu_inline = true,
+            // No prologue or epilogue: the body is the function's machine code.
+            Attr::Naked => f.naked = true,
+            Attr::Weak => f.weak = true,
+            // A weak reference on Darwin, as gcc and clang take it; gcc ignores
+            // it on an ELF target.
+            Attr::WeakImport => {
+                f.weak |= self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
             }
+            Attr::Selectany => f.selectany = true,
+            Attr::Used => f.used = true,
+            Attr::NoInstrumentFunction => f.no_instrument_function = true,
+            Attr::NoStackProtector => f.no_stack_protector = true,
+            // The automatic object opts out of `-ftrivial-auto-var-init`.
+            Attr::Uninitialized => f.uninitialized = true,
+            Attr::DesignatedInit => f.designated_init = true,
+            Attr::TransparentUnion => f.transparent_union = true,
+            // The x86-64 calling conventions, ignored on other targets, which
+            // the Linux `__efiapi` spelling relies on.
+            Attr::MsAbi => f.ms_abi = true,
+            Attr::SysvAbi => f.sysv_abi = true,
+            // Read with their operands by the caller.
+            Attr::VectorSize
+            | Attr::Mode
+            | Attr::Cleanup
+            | Attr::Section
+            | Attr::Alias
+            | Attr::Visibility
+            | Attr::PatchableFunctionEntry
+            | Attr::Accepted => {}
         }
     }
 
@@ -1265,43 +1231,21 @@ impl Compiler {
                             }
                             listed = true;
                         }
-                        // Capture whether this is `vector_size` before the
-                        // `&mut self` calls below release the symbol borrow.
-                        let is_vector_size = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "vector_size" | "__vector_size__"
-                            );
-                        let is_mode = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "mode" | "__mode__"
-                            );
-                        let is_cleanup = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "cleanup" | "__cleanup__"
-                            );
-                        let is_section = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "section" | "__section__"
-                            );
-                        let is_alias = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "alias" | "__alias__"
-                            );
-                        let is_visibility = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "visibility" | "__visibility__"
-                            );
-                        let is_patchable_entry = self.lex.tk == Token::Id
-                            && matches!(
-                                self.symbols[self.lex.curr_id_idx].name.as_str(),
-                                "patchable_function_entry" | "__patchable_function_entry__"
-                            );
+                        // Read the name before the `&mut self` calls below
+                        // release the symbol borrow.
+                        let named = (self.lex.tk == Token::Id)
+                            .then(|| {
+                                crate::c5::attr::attribute(&self.symbols[self.lex.curr_id_idx].name)
+                            })
+                            .flatten();
+                        use crate::c5::attr::Attr;
+                        let is_vector_size = named == Some(Attr::VectorSize);
+                        let is_mode = named == Some(Attr::Mode);
+                        let is_cleanup = named == Some(Attr::Cleanup);
+                        let is_section = named == Some(Attr::Section);
+                        let is_alias = named == Some(Attr::Alias);
+                        let is_visibility = named == Some(Attr::Visibility);
+                        let is_patchable_entry = named == Some(Attr::PatchableFunctionEntry);
                         let mut seen = AttrFlags::default();
                         self.note_attribute_name(&mut seen);
                         attrs.merge_names(&seen);

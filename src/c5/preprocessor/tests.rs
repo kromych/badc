@@ -6763,3 +6763,55 @@ fn include_operand_expanding_to_no_header_name_is_an_error() {
         .to_string();
     assert!(err.contains("not a `<header>`"), "{err}");
 }
+
+/// `__has_attribute` reports the GNU attributes the parser applies, from
+/// the parser's own table, as clang does: `dllimport` on the Windows targets
+/// only, and neither the C23 `maybe_unused` nor the `__declspec`-only
+/// `thread` and `align`.
+#[test]
+fn has_attribute_reports_what_the_parser_applies() {
+    let names = [
+        "vector_size",
+        "mode",
+        "ms_abi",
+        "sysv_abi",
+        "selectany",
+        "weak_import",
+        "__packed__",
+        "dllimport",
+        "maybe_unused",
+        "thread",
+        "align",
+        "no_such_attribute",
+    ];
+    let probe: String = names
+        .iter()
+        .map(|n| {
+            format!(
+                "#if __has_attribute({n})\nhas_{}\n#endif\n",
+                n.trim_matches('_')
+            )
+        })
+        .collect();
+    for target in Target::ALL {
+        let out = Preprocessor::new(target.id_str(), target, "0")
+            .process(&probe)
+            .unwrap();
+        let has = |n: &str| out.lines().any(|l| l.trim() == format!("has_{n}"));
+        for n in [
+            "vector_size",
+            "mode",
+            "ms_abi",
+            "sysv_abi",
+            "selectany",
+            "weak_import",
+            "packed",
+        ] {
+            assert!(has(n), "{target:?}: {n}");
+        }
+        assert_eq!(has("dllimport"), target.is_windows(), "{target:?}");
+        for n in ["maybe_unused", "thread", "align", "no_such_attribute"] {
+            assert!(!has(n), "{target:?}: {n}");
+        }
+    }
+}

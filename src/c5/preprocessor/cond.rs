@@ -1295,72 +1295,11 @@ fn resolve_has_operator(
 /// `__has_attribute(NAME)` on `target`: `dllimport` / `dllexport` are known
 /// on the PE targets only, as under gcc.
 pub(super) fn has_attribute(name: &str, target: Target) -> bool {
-    is_known_attribute(name)
-        || target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
-            && matches!(name.trim_matches('_'), "dllimport" | "dllexport")
-}
-
-/// True when badc recognizes the GCC/Clang attribute NAME, so
-/// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
-/// wrapped in `__` (`cleanup` / `__cleanup__`). badc parses every
-/// `__attribute__((...))` and acts on a subset (`packed`, `aligned`,
-/// `unused`, `noreturn`, `cleanup`, `alias`, `naked`); the rest are
-/// accepted and ignored, so reporting 1 lets feature-testing headers
-/// take their attribute path.
-fn is_known_attribute(name: &str) -> bool {
-    let core = name.trim_matches('_');
-    matches!(
-        core,
-        "cleanup"
-            | "uninitialized"
-            | "alias"
-            | "naked"
-            | "packed"
-            | "aligned"
-            | "unused"
-            | "maybe_unused"
-            | "used"
-            | "noreturn"
-            | "deprecated"
-            | "const"
-            | "pure"
-            | "malloc"
-            | "always_inline"
-            | "noinline"
-            | "gnu_inline"
-            | "flatten"
-            | "format"
-            | "format_arg"
-            | "sentinel"
-            | "nonnull"
-            | "returns_nonnull"
-            | "warn_unused_result"
-            | "alloc_size"
-            | "alloc_align"
-            | "assume_aligned"
-            | "cold"
-            | "hot"
-            | "weak"
-            | "visibility"
-            | "section"
-            | "constructor"
-            | "destructor"
-            | "may_alias"
-            | "transparent_union"
-            | "designated_init"
-            | "fallthrough"
-            | "nothrow"
-            | "no_instrument_function"
-            | "no_stack_protector"
-            | "patchable_function_entry"
-            | "returns_twice"
-            | "noclone"
-            | "error"
-            | "warning"
-            | "unavailable"
-            // Accepted and validated for its feature names; badc emits
-            // every instruction its intrinsic surface carries on x86-64,
-            // so the attribute selects nothing further.
-            | "target"
-    )
+    use crate::c5::attr::{Attr, gnu_attribute};
+    match gnu_attribute(name) {
+        Some(Attr::Dllimport | Attr::Dllexport) => {
+            target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
+        }
+        found => found.is_some(),
+    }
 }

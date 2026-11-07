@@ -1,5 +1,6 @@
 mod asm;
 mod ast;
+mod attr;
 mod codegen;
 mod compiler;
 mod depfile;

@@ -95,6 +95,13 @@ typedef struct _WSANETWORKEVENTS {
     int  iErrorCode[FD_MAX_EVENTS];
 } WSANETWORKEVENTS, *LPWSANETWORKEVENTS;
 
+// The IPv4 string conversions predating inet_ntop / inet_pton, which the
+// SDK declares here.
+#pragma binding(ws2_32::inet_ntoa, "inet_ntoa")
+#pragma binding(ws2_32::inet_addr, "inet_addr")
+char *inet_ntoa(struct in_addr in);
+unsigned long inet_addr(const char *cp);
+
 #pragma binding(ws2_32::WSACreateEvent,  "WSACreateEvent")
 #pragma binding(ws2_32::WSACloseEvent,   "WSACloseEvent")
 #pragma binding(ws2_32::WSASetEvent,     "WSASetEvent")

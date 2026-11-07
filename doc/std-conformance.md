@@ -721,6 +721,9 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   an `__except` inside a `__finally` block (C2702); badc accepts it there too.
   `--interp` and `--jit` refuse a `__try` region.
 - `__COUNTER__` and `__BASE_FILE__`.
+- `<intrin.h>` on the Windows targets is the compiler's own, like the
+  intrinsic headers: MSVC's include directory on the search path does not
+  supply it, as clang's copy shadows MSVC's.
 - MSVC's inline linkage on the PE targets, in place of C99 6.7.4p6-p7, as MSVC
   and clang's `*-windows-msvc` targets apply it to C. An inline function of
   external linkage without `gnu_inline` is emitted, as an

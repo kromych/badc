@@ -4897,6 +4897,37 @@ fn a_foreign_intrinsic_header_on_a_search_path_binds_the_embedded_copy() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+#[test]
+fn msvc_intrin_h_on_a_system_path_binds_the_embedded_copy() {
+    // MSVC's include directory carries an `<intrin.h>` written against cl's
+    // builtins; on a Windows target the name binds badc's, as clang's
+    // shadows MSVC's. Off Windows, where badc serves none, the file stands.
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("badc-msvc-intrin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::File::create(dir.join("intrin.h"))
+        .unwrap()
+        .write_all(b"int foreign_intrin_marker;\n")
+        .unwrap();
+    for (target, foreign) in [
+        (Target::WindowsX64, false),
+        (Target::WindowsAarch64, false),
+        (Target::LinuxX64, true),
+    ] {
+        let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");
+        pp.add_isystem_path(dir.to_str().unwrap());
+        let out = pp
+            .process("#include <intrin.h>\n")
+            .expect("intrin.h resolves");
+        assert_eq!(
+            out.contains("foreign_intrin_marker"),
+            foreign,
+            "{target:?}: {out}"
+        );
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// Scratch directory holding the given (name, body) headers, on the
 /// search path of a fresh preprocessor. The caller removes it.
 fn pp_with_headers(tag: &str, files: &[(&str, &str)]) -> (Preprocessor, std::path::PathBuf) {

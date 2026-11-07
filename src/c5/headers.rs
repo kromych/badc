@@ -129,11 +129,13 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
 /// encoders. Another compiler's copy is written against that compiler's
 /// builtins and can never compile here, so where a search directory
 /// carries one (a foreign toolchain's `-print-file-name=include` on the
-/// command line) the name binds badc's copy at that position. Each is
-/// served on the architecture whose instructions it wraps, as gcc installs
-/// it.
+/// command line, or MSVC's include directory for `<intrin.h>`) the name
+/// binds badc's copy at that position, as clang's `<intrin.h>` shadows
+/// MSVC's. Each is served on the architecture whose instructions it
+/// wraps, as gcc installs it.
 pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "arm_neon.h",
+    "intrin.h",
     "x86intrin.h",
     "immintrin.h",
     "mmintrin.h",
@@ -148,8 +150,7 @@ pub(super) const INTRINSIC_HEADERS: &[&str] = &[
 /// The rest of the headers gcc and clang both install in the compiler's
 /// own include directory rather than with the C library: C99 4p6's
 /// freestanding set, C11's `<stdalign.h>`, `<stdnoreturn.h>` and
-/// `<stdatomic.h>`, `<mm_malloc.h>`, `<cpuid.h>`, and `<intrin.h>`, which
-/// MSVC and clang keep with the compiler. clang also keeps `<tgmath.h>` and
+/// `<stdatomic.h>`, `<mm_malloc.h>` and `<cpuid.h>`. clang also keeps `<tgmath.h>` and
 /// `<inttypes.h>` there and gcc leaves them to glibc; badc's are built on
 /// its `<math.h>` and `<stdlib.h>` and stay with the library.
 const COMPILER_HEADERS: &[&str] = &[
@@ -165,7 +166,6 @@ const COMPILER_HEADERS: &[&str] = &[
     "stdnoreturn.h",
     "mm_malloc.h",
     "cpuid.h",
-    "intrin.h",
 ];
 
 /// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).

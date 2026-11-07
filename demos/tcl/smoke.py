@@ -270,7 +270,6 @@ def self_test() -> int:
 def run_suite(tclsh: Path, tests_set: str, log) -> None:
     tests = SRC / "tests"
     library = SRC / "library"
-    env = dict(os.environ, TCL_LIBRARY=str(library))
     # tcltest puts its scratch files in the working directory under fixed
     # names (tf1, tf2, ...) and deletes them between files, so two runs
     # sharing one delete each other's and report failures belonging to
@@ -283,6 +282,13 @@ def run_suite(tclsh: Path, tests_set: str, log) -> None:
     runs = TCL_DIR / ".cache" / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=runs))
+    # The suite's temporary files go in the run's own directory, which a
+    # passing run removes: tcltests.tcl's tempdir_alternate creates a
+    # `file tempfile` to find the temporary directory and never deletes it,
+    # with a gcc-built tclsh as with badc's. fCmd.test's `xdev` reads /tmp
+    # itself, not TMPDIR.
+    (work / "tmp").mkdir()
+    env = dict(os.environ, TCL_LIBRARY=str(library), TMPDIR=str(work / "tmp"))
     cmd = [str(tclsh), str(tests / "all.tcl")]
     skip = SKIP + (DARWIN_SKIP if sys.platform == "darwin" else ())
     timed = [t for names in TIMED.values() for t in names]

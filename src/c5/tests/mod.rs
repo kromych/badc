@@ -1430,14 +1430,30 @@ pub fn link_executable_with_runtime_as(
     // with argc/argv -- independent of the PE subsystem.
     let mut rt_defines: Vec<(String, String)> =
         vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    // A unit compiled without entry synthesis names no entry; a PE link then
+    // takes the first of `main`, `wmain`, `WinMain`, `wWinMain` it defines,
+    // as link.exe and the driver choose it.
+    let defined = |name: &str| {
+        objs[0]
+            .symbols
+            .iter()
+            .any(|s| s.name == name && s.binding != 0 && s.section == crate::NativeSymSection::Text)
+    };
+    let entry = program.entry_name.clone().or_else(|| {
+        (target.binary_format() == crate::BinaryFormat::Pe)
+            .then(|| {
+                ["main", "wmain", "WinMain", "wWinMain"]
+                    .into_iter()
+                    .find(|n| defined(n))
+            })
+            .flatten()
+            .map(str::to_string)
+    });
     rt_defines.push((
         "__BADC_ENTRY__".to_string(),
-        program
-            .entry_name
-            .clone()
-            .unwrap_or_else(|| "main".to_string()),
+        entry.clone().unwrap_or_else(|| "main".to_string()),
     ));
-    match program.entry_name.as_deref() {
+    match entry.as_deref() {
         Some("WinMain") => rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string())),
         Some("wWinMain") => {
             rt_defines.push(("__BADC_WIN_WINMAIN__".to_string(), "1".to_string()));
@@ -1458,7 +1474,7 @@ pub fn link_executable_with_runtime_as(
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
     let plt =
         crate::emit_plt_for(&mut merged, target, form.placed()).map_err(|e| format!("plt: {e}"))?;
-    let entry_name = program.entry_name.as_deref().unwrap_or("main");
+    let entry_name = entry.as_deref().unwrap_or("main");
     write_native_image_from_merged_ex(
         &merged,
         &plt,

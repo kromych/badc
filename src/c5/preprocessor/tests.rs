@@ -6829,3 +6829,50 @@ fn has_attribute_reports_what_the_parser_applies() {
         }
     }
 }
+
+/// A `<...>` header name is one token: its `//` and `/*` are characters of
+/// the name in `#include`, `#include_next`, `#embed` and the `__has_include`
+/// / `__has_embed` operands, as gcc and clang lex it. Elsewhere `<` stays an
+/// operator, and every scanner agrees with the reference composition.
+#[test]
+fn a_header_name_keeps_its_comment_delimiters() {
+    let reference = |s: &str| strip_c_comments(&unfold_line_continuations(s));
+    let kept = [
+        "#include <.//b.h>\n",
+        "  #  include_next <a/*b.h> // c\nint x;\n",
+        "#embed <d//x.bin>\n",
+        "#if __has_include(<a//b.h>) && __has_embed (<d/*x>)\n#endif\n",
+        "#include \\\n<a//b.h>\n",
+    ];
+    for src in kept {
+        let fused = unfold_and_strip(src);
+        assert_eq!(fused, reference(src), "{src:?}");
+        assert!(
+            fused.contains("//") || fused.contains("/*"),
+            "{src:?}: {fused:?}"
+        );
+        assert_eq!(strip_c_comments(src), strip_c_comments_ref(src), "{src:?}");
+    }
+    assert_eq!(
+        unfold_and_strip("#include <a/*b.h> // c\n"),
+        "#include <a/*b.h>  \n"
+    );
+    let plain = [
+        "int f(int a){return a <b//c\n;}\n",
+        "#define LT(a) a < b /* c */\n",
+    ];
+    for src in plain {
+        assert_eq!(unfold_and_strip(src), reference(src), "{src:?}");
+        assert!(!unfold_and_strip(src).contains("//"), "{src:?}");
+    }
+    let dir = EmbedDir::new("header_name", &[("b.h", b"int from_b;\n"), ("x.bin", b"Z")]);
+    let mut pp = embed_pp();
+    pp.add_search_path(dir.0.to_str().unwrap());
+    pp.add_embed_path(dir.0.to_str().unwrap());
+    let out = pp
+        .process("#include <.//b.h>\n#if __has_include(<.//b.h>)\nyes\n#endif\n#embed <.//x.bin>\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("int from_b;"), "{out}");
+    assert!(out.lines().any(|l| l.trim() == "yes"), "{out}");
+    assert!(out.lines().any(|l| l.trim() == "90"), "{out}");
+}

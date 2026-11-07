@@ -11,7 +11,8 @@ use super::super::program::Program;
 use super::super::token::Ty;
 use super::Build;
 use super::dwarf::{
-    LineState, base_key_for_leaf, dwarf_file_numbers, push_file_entry, write_line_rows,
+    LineState, base_key_for_leaf, dwarf_file_numbers, frame_offset, push_file_entry,
+    write_fbreg_location, write_line_rows,
 };
 use super::elf_class::ElfClass;
 use crate::c5::codegen::ssa::cfi::{write_sleb128, write_uleb128};
@@ -1139,16 +1140,8 @@ impl RelocInfoUnit<'_> {
             }
             write_uleb128(&mut self.body, 1);
             self.body.push(self.frame_base_op);
-            let local_shift = build.local_shift_bytes.get(&ent_pc).copied().unwrap_or(0) as i64;
             for &(v, type_id) in &vars {
                 let type_off = self.type_offsets[type_id];
-                let eff = build
-                    .coalesced_slot_remap
-                    .get(&ent_pc)
-                    .and_then(|m| m.get(&v.fp_slot))
-                    .copied()
-                    .unwrap_or(v.fp_slot);
-                let fp_byte_offset = fp_byte_offset_for_slot(eff, local_shift);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
                 } else {
@@ -1156,19 +1149,7 @@ impl RelocInfoUnit<'_> {
                 };
                 write_uleb128(&mut self.body, abbrev);
                 self.strp(&v.name);
-                let promoted = build
-                    .promoted_local_slots
-                    .get(&ent_pc)
-                    .is_some_and(|slots| slots.contains(&v.fp_slot));
-                if promoted {
-                    write_uleb128(&mut self.body, 0);
-                } else {
-                    let mut expr: Vec<u8> = Vec::with_capacity(8);
-                    expr.push(DW_OP_FBREG);
-                    write_sleb128(&mut expr, fp_byte_offset);
-                    write_uleb128(&mut self.body, expr.len() as u64);
-                    self.body.extend_from_slice(&expr);
-                }
+                write_fbreg_location(&mut self.body, frame_offset(build, ent_pc, v.fp_slot));
                 self.body.extend_from_slice(&type_off.to_le_bytes());
                 write_uleb128(&mut self.body, v.decl_file as u64 + 1);
                 write_uleb128(&mut self.body, v.decl_line as u64);
@@ -2048,15 +2029,6 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
         TypeNode::Unspecified => write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_TYPE),
     }
     die
-}
-
-/// c5's frame-slot index to native byte offset from the frame pointer.
-fn fp_byte_offset_for_slot(slot: i64, local_shift: i64) -> i64 {
-    if slot >= 2 {
-        (slot - 1) * 16
-    } else {
-        slot * 8 - local_shift
-    }
 }
 
 /// A type-catalog key: either a scalar leaf with pointer depth, or a

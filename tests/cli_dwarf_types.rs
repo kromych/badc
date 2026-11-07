@@ -73,6 +73,11 @@ fn compile_unit(name: &str, body: &str) -> Unit {
 
 /// `compile_unit` for one `--target` spelling.
 fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
+    compile_object_for(name, target, body).0
+}
+
+/// The parsed compile unit and the object's bytes.
+fn compile_object_for(name: &str, target: &str, body: &str) -> (Unit, Vec<u8>) {
     let dir = tempdir(name);
     let src = dir.join("a.c");
     std::fs::write(&src, body).expect("write source");
@@ -93,7 +98,10 @@ fn compile_unit_for(name: &str, target: &str, body: &str) -> Unit {
         "compile failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    parse_object(&obj)
+    (
+        parse_object(&obj),
+        std::fs::read(&obj).expect("read object"),
+    )
 }
 
 // ---- ELF + DWARF reading ----
@@ -1699,4 +1707,31 @@ fn cast_only_type_keeps_its_die_in_a_linked_image() {
     let d = u.named(DW_TAG_STRUCTURE_TYPE, "only_mentioned");
     let names: Vec<_> = u.members(d).iter().map(|m| m.name().unwrap()).collect();
     assert_eq!(names, ["a", "b"]);
+}
+
+/// A parameter's `DW_OP_fbreg` names the frame-pointer-relative home its
+/// prologue stores the argument register to (`mov %reg, disp8(%rbp)`), on
+/// both x86-64 calling conventions.
+#[test]
+fn parameter_locations_name_the_home_the_prologue_stores() {
+    let body = "int pick(int a, int b) { int s = a + b; return s; }\n";
+    // The ModR/M register field of each ABI's first two integer arguments.
+    for (target, regs) in [("linux-x64", [7u8, 6]), ("windows-x64", [1, 2])] {
+        let (u, elf) = compile_object_for("param-homes", target, body);
+        let text = section(&elf, ".text");
+        for (name, reg) in ["a", "b"].into_iter().zip(regs) {
+            let loc = u.named(DW_TAG_FORMAL_PARAMETER, name).at(DW_AT_LOCATION);
+            let Some(Val::Block(expr)) = loc else {
+                panic!("{target}: `{name}` has no exprloc: {loc:?}");
+            };
+            assert_eq!(expr[0], 0x91, "{target}: `{name}` is not DW_OP_fbreg");
+            let disp = Reader::new(&expr[1..]).sleb();
+            let disp8 = i8::try_from(disp).expect("an 8-bit displacement") as u8;
+            let store = [0x89, 0x45 | (reg << 3), disp8];
+            assert!(
+                text.windows(3).any(|w| w == store),
+                "{target}: no store of `{name}`'s register to {disp}(%rbp)"
+            );
+        }
+    }
 }

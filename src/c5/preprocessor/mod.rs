@@ -1358,6 +1358,27 @@ impl Preprocessor {
     /// key their inline declarations on. `__STRICT_ANSI__` accompanies
     /// `__GNUC__` as under `gcc -std=c11`, so portable code takes the
     /// standard path for the GNU-only features badc lacks.
+    /// The identity cl 19.28 (the first with `/std:c17`) gives a C17 unit:
+    /// `_MSC_VER` and its companions and the `_M_*` architecture macro, with
+    /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`.
+    pub fn enable_msvc(&mut self, target: Target) {
+        self.macros.remove("__STDC__");
+        let mut set = |name: &str, value: &str| {
+            self.macros.insert(name.to_string(), value.to_string());
+        };
+        set("_MSC_VER", "1928");
+        set("_MSC_FULL_VER", "192829333");
+        set("_MSC_BUILD", "0");
+        set("_MSC_EXTENSIONS", "1");
+        set("_INTEGRAL_MAX_BITS", "64");
+        if target.is_x86_64() {
+            set("_M_X64", "100");
+            set("_M_AMD64", "100");
+        } else {
+            set("_M_ARM64", "1");
+        }
+    }
+
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
         // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
         // which is backed. What 4.4 adds and real code selects on the

@@ -363,6 +363,10 @@ Compile knobs:
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
                            compiling unless this is requested.
+  --msvc                   Windows targets: define the MSVC identity
+                           macros (_MSC_VER, _MSC_FULL_VER, _M_X64 /
+                           _M_ARM64, ...) and leave __STDC__ undefined,
+                           as cl does. Off by default.
   -std=<dialect>           Language dialect (c99, gnu11, ...): sets
                            __STDC_VERSION__ (C17 by default) and, from
                            c23 on, the bool/true/false keywords. The GNU

@@ -264,6 +264,49 @@ fn gnu_identity_macros_are_opt_in() {
 }
 
 #[test]
+fn msvc_identity_set_is_locked() {
+    // `--msvc` adds cl 19.28's identity and removes `__STDC__`, as cl
+    // leaves it undefined; the `_M_*` macro follows the architecture.
+    for (target, arch) in [
+        (
+            Target::WindowsX64,
+            &[("_M_AMD64", "100"), ("_M_X64", "100")][..],
+        ),
+        (Target::WindowsAarch64, &[("_M_ARM64", "1")][..]),
+    ] {
+        let base = Preprocessor::new(target.id_str(), target, "0.1.0");
+        let mut msvc = Preprocessor::new(target.id_str(), target, "0.1.0");
+        msvc.enable_msvc(target);
+        let mut added: Vec<(String, String)> = msvc
+            .macros
+            .iter()
+            .filter(|(k, _)| !base.macros.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        added.sort();
+        let mut want: Vec<(String, String)> = [
+            ("_INTEGRAL_MAX_BITS", "64"),
+            ("_MSC_BUILD", "0"),
+            ("_MSC_EXTENSIONS", "1"),
+            ("_MSC_FULL_VER", "192829333"),
+            ("_MSC_VER", "1928"),
+        ]
+        .iter()
+        .chain(arch)
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect();
+        want.sort();
+        assert_eq!(added, want, "{target:?}");
+        let removed: Vec<&String> = base
+            .macros
+            .keys()
+            .filter(|k| !msvc.macros.contains_key(*k))
+            .collect();
+        assert_eq!(removed, ["__STDC__"], "{target:?}");
+    }
+}
+
+#[test]
 fn gnu_predefine_set_is_locked() {
     // Every macro `--gnu` adds over the default set, with its value. A
     // capability macro here is a promise about what badc backs, so the

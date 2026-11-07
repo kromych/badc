@@ -239,9 +239,11 @@ expands either writes the same bytes on every run.
 constant expression in `#if`, and badc admits a string in no other operand
 position.
 
-The MSVC and MinGW compatibility macros and keywords (`_MSC_VER`,
-`__MINGW32__`, `__int64`, `__declspec`, ...) are in
-`libc/include/msvc_compat.h`. A unit opts in with `-include msvc_compat.h`.
+On the Windows targets `--msvc` defines the MSVC identity macros (`_MSC_VER`
+and the rest) and leaves `__STDC__` undefined, as cl does. The MinGW
+compatibility macros and keywords (`__MINGW32__`, `__int64`, `__declspec`, ...)
+are in `libc/include/msvc_compat.h`. A unit opts in with
+`-include msvc_compat.h`.
 
 ## Headers and bindings
 

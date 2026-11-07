@@ -168,7 +168,7 @@ accessed atomically (C17 6.5.2.3p5); badc refuses the access, as clang does.
 
 | macro                                   | value                                                                     |
 |-----------------------------------------|---------------------------------------------------------------------------|
-| `__STDC__`                              | `1`                                                                       |
+| `__STDC__`                              | `1`; undefined under `--msvc`                                             |
 | `__STDC_HOSTED__`                       | `1`; `0` under `-ffreestanding` or `-fno-hosted`, and `-fhosted` restores `1` |
 | `__STDC_VERSION__`                      | `201710L`; `-std=` selects another ([Command-line compatibility](#command-line-compatibility)) |
 | `__DATE__`, `__TIME__`                  | the time of translation in UTC; `SOURCE_DATE_EPOCH` fixes it |
@@ -720,9 +720,15 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   names onto them. The `_InterlockedMax`, `_InterlockedMin`,
   `_InterlockedUMax`, `_InterlockedUMin` and `_InterlockedNand` families are
   not provided.
-- `__int8`, `__int16`, `__int32` and `__int64` on the Windows targets. The
-  wider MSVC and MinGW identity (`_MSC_VER`, `__MINGW32__`, ...) is opt-in per
-  translation unit with `-include msvc_compat.h`.
+- `__int8`, `__int16`, `__int32` and `__int64` on the Windows targets.
+- `--msvc`, off by default and taken by the Windows targets only, gives the
+  identity of cl 19.28, the first with `/std:c17`: `_MSC_VER` 1928,
+  `_MSC_FULL_VER`, `_MSC_BUILD`, `_MSC_EXTENSIONS`, `_INTEGRAL_MAX_BITS` and
+  `_M_X64` / `_M_AMD64` or `_M_ARM64`. `__STDC__` is then undefined, as cl
+  leaves it without `/Zc:__STDC__`, so the SDK headers that test it take their
+  Microsoft layouts; `__STDC_VERSION__` stays. The Microsoft extensions above
+  apply with or without it. `-include msvc_compat.h` adds the MinGW identity
+  and the calling-convention and SAL no-ops.
 
 ### badc-specific
 

@@ -30,7 +30,9 @@
 // a check such as `_MSC_VER >= 1300`. badc's runtime hits
 // msvcrt.dll anyway so this matches what the code is going to
 // call.
+#ifndef _MSC_VER
 #define _MSC_VER 1900
+#endif
 
 // MSVC defines `_MSC_EXTENSIONS` under its default /Ze, and clang does for a
 // windows-msvc triple with -fms-extensions; badc's Windows targets always

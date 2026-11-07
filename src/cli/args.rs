@@ -91,6 +91,7 @@ pub(crate) struct FrontEnd {
     /// language; any other input's comes from its file name.
     pub(crate) languages: std::collections::BTreeMap<String, SourceKind>,
     pub(crate) gnu: bool,
+    pub(crate) msvc: bool,
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
     pub(crate) std: badc::CStd,
@@ -1332,6 +1333,9 @@ impl Parser {
             // feature badc lacks on `__GNUC__` keeps compiling unless
             // this is requested.
             "--gnu" => front.gnu = true,
+            // The MSVC identity: `_MSC_VER` and the rest, `__STDC__` left
+            // undefined as cl leaves it.
+            "--msvc" => front.msvc = true,
             // gcc / clang `-fgnu89-inline`: make the GNU89 inline linkage
             // model the unit default in place of C99's.
             "-fgnu89-inline" => front.gnu89_inline = true,
@@ -2235,6 +2239,12 @@ impl Parser {
             }
         }
         self.check_arch(target)?;
+        if self.front.msvc && !target.is_windows() {
+            return Err(ParseError::diag(format!(
+                "badc: error: `--msvc` applies to the Windows targets, not `{}`",
+                target.id_str()
+            )));
+        }
         self.check_jit_target(mode, target)?;
         self.check_profiling_and_protection(mode, target)?;
         self.resolve_stack_guard(target)?;
@@ -2708,6 +2718,7 @@ impl FrontEnd {
     pub(crate) fn compile_options(&self, label: &str) -> badc::CompileOptions {
         badc::CompileOptions::default()
             .with_gnu(self.gnu)
+            .with_msvc(self.msvc)
             .with_gnu89_inline(self.gnu89_inline)
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
@@ -4447,6 +4458,12 @@ mod tests {
         assert!(!parse(&["-std=c99", "a.c"]).front.gnu_dialect);
         assert!(!parse(&["-std=iso9899:1999", "a.c"]).front.gnu_dialect);
         assert!(parse(&["--gnu", "a.c"]).front.gnu);
+        assert!(parse(&["--target=windows-x64", "--msvc", "a.c"]).front.msvc);
+        let (message, _) = reject(&[X64, "--msvc", "-c", "a.c"]);
+        assert!(
+            message.contains("`--msvc` applies to the Windows targets"),
+            "{message}"
+        );
         assert!(parse(&["-nostdinc", "a.c"]).front.nostdinc);
         let lib = parse(&["-nostdlibinc", "a.c"]).front;
         assert!(lib.nostdlibinc && !lib.nostdinc);

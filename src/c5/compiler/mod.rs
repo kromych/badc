@@ -628,6 +628,9 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// `--msvc`: the MSVC identity predefines in place of `__STDC__`
+    /// ([`Preprocessor::enable_msvc`]); the Windows targets only.
+    pub msvc: bool,
     /// Library functions another input of the link defines. A `#pragma
     /// binding` of one is dropped, so the header declares an ordinary
     /// external function and a call resolves to that definition.
@@ -793,6 +796,11 @@ impl CompileOptions {
     /// Enable the `--gnu` GCC identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// Enable the `--msvc` MSVC identity predefines.
+    pub fn with_msvc(mut self, msvc: bool) -> Self {
+        self.msvc = msvc;
         self
     }
     /// ELF class of the object being produced; the assembler's
@@ -2874,6 +2882,9 @@ impl Compiler {
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
+        }
+        if opts.msvc && target.is_windows() {
+            pp.enable_msvc(target);
         }
         pp.set_source_label(&opts.source_label);
         pp.set_std(opts.std);

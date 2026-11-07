@@ -2529,6 +2529,9 @@ pub struct Compiler {
     /// parser's per-store bookkeeping is only worth its cost when it
     /// does.
     warn_dead_store: bool,
+    /// `--msvc` on a Windows target: the unit takes cl's rules where they
+    /// depart from C17's.
+    msvc: bool,
     /// Mirror of [`CompileOptions::no_entry_point`]. Drops the
     /// "must define main / wmain / WinMain / wWinMain" check
     /// in `resolve_entry_and_dllmain_pcs`; `compile()` then
@@ -3314,6 +3317,7 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            msvc: opts.msvc && target.is_windows(),
             data_align: 8,
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,

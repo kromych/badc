@@ -281,6 +281,14 @@ impl Compiler {
         let enumerators = self.close_param_list_scope();
         let tags = self.tag_scopes.pop();
         for (name, id) in &tags {
+            // cl gives a tag a parameter list declares the enclosing scope
+            // (its warning C4115) instead of the list's own (C17 6.2.1p4).
+            if self.msvc {
+                if self.tag_scopes.find_in_current(name).is_none() {
+                    self.tag_scopes.bind(name, *id);
+                }
+                continue;
+            }
             if !self.structs[*id].is_anonymous {
                 let keyword = self.structs[*id].keyword();
                 let text = alloc::format!(

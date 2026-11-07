@@ -4177,6 +4177,27 @@ fn dllexport_exports_from_the_unit_that_defines_the_entity() {
 }
 
 #[test]
+fn msvc_gives_a_parameter_list_tag_the_enclosing_scope() {
+    // C17 6.2.1p4 scopes a tag a parameter list declares to the list, so the
+    // later definition's `struct tv` is another type; cl gives the tag the
+    // enclosing scope (its warning C4115), and `--msvc` follows cl.
+    let src = "int f(struct tv *p);\nstruct tv { long s; };\n\
+               int f(struct tv *p) { return (int)p->s; }\n";
+    let compile = |msvc: bool| {
+        let opts = crate::c5::compiler::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_msvc(msvc);
+        Compiler::with_options(src.to_string(), crate::Target::WindowsX64, opts).compile()
+    };
+    let program = compile(true).expect("cl's scope compiles");
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+    let err = compile(false)
+        .expect_err("C17's scope conflicts")
+        .to_string();
+    assert!(err.contains("conflicting types for `f`"), "{err}");
+}
+
+#[test]
 fn a_named_section_holds_one_kind_of_definition() {
     // GNU `section`: the first definition in a section sets its kind --
     // code, writable data or read-only data -- and a definition of another

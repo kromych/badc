@@ -749,7 +749,9 @@ loads (`vld2` to `vld4`), float16 and bfloat16 are not provided.
   `_M_X64` / `_M_AMD64` or `_M_ARM64`. `__STDC__` is then undefined, as cl
   leaves it without `/Zc:__STDC__`, so the SDK headers that test it take their
   Microsoft layouts; `__STDC_VERSION__` stays, and `__STDC_NO_ATOMICS__` and
-  `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. The Microsoft extensions above
+  `__STDC_NO_VLA__` are `1`, as under cl's `/std:c17`. A tag a parameter
+  list declares takes the enclosing scope, as cl gives it (warning C4115),
+  where C17 6.2.1p4 limits it to the list. The Microsoft extensions above
   apply with or without it. `-include msvc_compat.h` adds the MinGW identity
   and the calling-convention and SAL no-ops.
 

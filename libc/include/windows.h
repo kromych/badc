@@ -331,6 +331,8 @@ typedef enum {
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
+#pragma binding(kernel32::GetCommandLineA,         "GetCommandLineA")
+#pragma binding(kernel32::GetCommandLineW,         "GetCommandLineW")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
@@ -2907,6 +2909,8 @@ DWORD ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 DWORD SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                   DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
 DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize);
+LPSTR GetCommandLineA(VOID);
+LPWSTR GetCommandLineW(VOID);
 DWORD SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                   DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart);
 BOOL CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,

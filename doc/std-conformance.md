@@ -677,7 +677,7 @@ one fails at the undeclared name.
 | `<tmmintrin.h>` | SSSE3: `_mm_shuffle_epi8` and the `__m64` forms. |
 | `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
-| `<immintrin.h>` | The above, `_rdrand16_step`, `_rdrand32_step`, `_rdrand64_step`, `_xgetbv`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
+| `<immintrin.h>` | The above, `_rdrand16_step`, `_rdrand32_step`, `_rdrand64_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
 Not provided: packed-single arithmetic, packed-double operations other than

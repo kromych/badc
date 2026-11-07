@@ -24,6 +24,8 @@ static int scans_counts_rotates(void) {
 #if defined(__x86_64__)
     if (__lzcnt(1) != 31 || __lzcnt(0) != 32 || __lzcnt16(1) != 15 || __lzcnt64(0) != 64) r |= 16;
     if (_mm_popcnt_u32(0xF0u) != 4 || _mm_popcnt_u64(~0ULL) != 64) r |= 16;
+    if (_tzcnt_u32(0) != 32 || _tzcnt_u32(8) != 3 || _tzcnt_u64(0) != 64) r |= 16;
+    if (_tzcnt_u64(1ULL << 40) != 40) r |= 16;
 #else
     if (_CountLeadingZeros(1) != 31 || _CountLeadingZeros64(0) != 64) r |= 16;
     if (_CountTrailingZeros(0x80) != 7 || _CountTrailingZeros64(0) != 64) r |= 16;

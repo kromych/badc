@@ -27,6 +27,18 @@ static inline long long _xgetbv(unsigned int __A) {
     return __builtin_ia32_xgetbv(__A);
 }
 
+/* BMI1's TZCNT, which gcc's <immintrin.h> carries through <bmiintrin.h>:
+** the operand width for a zero operand. */
+static inline unsigned int _tzcnt_u32(unsigned int __X) {
+    return __X ? (unsigned int)__builtin_ctz(__X) : 32;
+}
+
+#ifdef __x86_64__
+static inline unsigned long long _tzcnt_u64(unsigned long long __X) {
+    return __X ? (unsigned long long)__builtin_ctzll(__X) : 64;
+}
+#endif
+
 /* POPCNT, which gcc's <immintrin.h> carries through <popcntintrin.h>. */
 static inline int _mm_popcnt_u32(unsigned int __X) {
     return __builtin_popcount(__X);

@@ -242,6 +242,10 @@ FORWARD_PREFIX = (
     # against. Withheld, the kernel's guard against a frame that threatens
     # its stack never fires; a frame that did reached real hardware.
     "-Wframe-larger-than=",
+    # The ELF visibility of each external definition no attribute or pragma
+    # states; a hidden one does not bind outside its own link. badc
+    # validates the value.
+    "-fvisibility=",
     *HARDENING_PREFIX,
 )
 
@@ -263,12 +267,9 @@ UNSUPPORTED_PREFIX = (
     # asks for -- array bounds and shift-exponent among them -- are absent
     # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
     "-fsanitize=", "-fsanitize-trap=",
-    # Both have an observable effect badc does not reproduce, so neither
-    # can be ignored: the first moves a zero-initialized definition out of
-    # .bss into .data, and the second lowers a definition's ELF visibility
-    # so it does not bind outside its own link.
+    # Moves a zero-initialized definition out of .bss into .data, an
+    # observable effect badc does not reproduce, so it cannot be ignored.
     "-fno-zero-initialized-in-bss",
-    "-fvisibility=",
     # Clears the call-clobbered registers a function used before it returns
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
     # TODO: implement the register-clearing epilogue and forward the flag.

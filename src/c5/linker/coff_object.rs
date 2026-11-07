@@ -637,6 +637,8 @@ struct Directives {
     /// `/INCLUDE:`: a name the link resolves as if referenced.
     includes: Vec<String>,
     default_libs: Vec<String>,
+    /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
+    mismatch_keys: Vec<(String, String)>,
 }
 
 /// The directive string's options, split as link.exe splits them: on
@@ -697,6 +699,12 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
                         bad(&format!("`.drectve` option `{tok}` names no alternate"))
                     })?;
                     d.alternate_names.push((from.to_string(), to.to_string()));
+                }
+                "failifmismatch" => {
+                    let (key, value) = arg
+                        .split_once('=')
+                        .ok_or_else(|| bad(&format!("`.drectve` option `{tok}` names no value")))?;
+                    d.mismatch_keys.push((key.to_string(), value.to_string()));
                 }
                 "aligncomm" => {
                     let (name, log2) = arg
@@ -1778,6 +1786,7 @@ pub fn parse_native_coff(
         alternate_names,
         comdats,
         default_libs: directives.default_libs.clone(),
+        mismatch_keys: directives.mismatch_keys.clone(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -2106,6 +2115,11 @@ mod tests {
             (forced.name.as_str(), forced.section, forced.binding),
             ("forced", NativeSymSection::Undef, STB_GLOBAL)
         );
+        // `#pragma detect_mismatch` and every cl C++ object write these.
+        let text = b"/FAILIFMISMATCH:\"_MSC_VER=1900\" /FAILIFMISMATCH:\"probe=1\"";
+        let m = parse(&[sec(".drectve", gnu_as, text)], &[]).unwrap();
+        let pairs = [("_MSC_VER", "1900"), ("probe", "1")].map(|(k, v)| (k.into(), v.into()));
+        assert_eq!(m.mismatch_keys, pairs);
     }
 
     #[test]

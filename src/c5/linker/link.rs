@@ -1076,6 +1076,7 @@ pub fn link_native_objects_with<'a>(
     shared_libs: &'a [SharedLibrary],
     opts: &LinkOptions,
 ) -> Result<MergedNative, C5Error> {
+    check_mismatch_keys(objs)?;
     let slot_reads = super::import_slots::bind_slot_reads(objs)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
     let mut link = Link::new(objs, opts, shared_libs)?;
@@ -1106,6 +1107,28 @@ pub fn link_native_objects_with<'a>(
         return Err(err);
     }
     link.finish()
+}
+
+/// `/FAILIFMISMATCH`: a key two inputs give different values stops the link,
+/// naming both, as link.exe's LNK2038 does.
+fn check_mismatch_keys(objs: &[NativeObject]) -> Result<(), C5Error> {
+    let mut seen: BTreeMap<&str, (&str, &str)> = BTreeMap::new();
+    for o in objs {
+        for (key, value) in &o.mismatch_keys {
+            let (first, from) = *seen.entry(key).or_insert((value, &o.source));
+            if first != value {
+                return Err(link_err(
+                    Code::LINK,
+                    MODULE,
+                    &format!(
+                        "`/FAILIFMISMATCH` key `{key}` is `{first}` in {from} and `{value}` in {}",
+                        o.source
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Shared-library data objects an object reads directly: through a
@@ -6482,6 +6505,7 @@ mod tests {
             alternate_names: Vec::new(),
             comdats: Vec::new(),
             default_libs: Vec::new(),
+            mismatch_keys: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
             debug_line: Vec::new(),
@@ -7888,6 +7912,7 @@ mod tests {
                 alternate_names: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
+                mismatch_keys: Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),
@@ -9374,6 +9399,37 @@ mod tests {
                 .iter()
                 .any(|r| matches!(r.target, MergedTarget::Data(at) if at as u64 == merged.data.len() as u64 + copy.value)),
             "the slot holds the copy's address"
+        );
+    }
+
+    /// `/FAILIFMISMATCH`: inputs that agree on a key link; two values for
+    /// one key stop the link, naming both inputs.
+    #[test]
+    fn a_mismatch_key_takes_one_value_across_the_link() {
+        let with = |source: &str, pairs: &[(&str, &str)]| NativeObject {
+            source: source.to_string(),
+            mismatch_keys: (pairs.iter())
+                .map(|&(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            ..blank_object(NativeMachine::X86_64)
+        };
+        let a = with(
+            "a.obj",
+            &[
+                ("_MSC_VER", "1900"),
+                ("RuntimeLibrary", "MD_DynamicRelease"),
+            ],
+        );
+        let b = with("b.obj", &[("_MSC_VER", "1900")]);
+        let c = with("c.obj", &[("RuntimeLibrary", "MT_StaticRelease")]);
+        assert!(check_mismatch_keys(&[a.clone(), b]).is_ok());
+        let err = check_mismatch_keys(&[a, c]).unwrap_err().to_string();
+        assert!(
+            err.contains(
+                "`/FAILIFMISMATCH` key `RuntimeLibrary` is `MD_DynamicRelease` in a.obj \
+                 and `MT_StaticRelease` in c.obj"
+            ),
+            "{err}"
         );
     }
 }

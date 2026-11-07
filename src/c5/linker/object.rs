@@ -1182,6 +1182,9 @@ pub struct NativeObject {
     pub comdats: Vec<Comdat>,
     /// A COFF object's `/DEFAULTLIB:` libraries, searched after the inputs.
     pub default_libs: Vec<String>,
+    /// A COFF object's `/FAILIFMISMATCH:key=value` pairs: every input of a
+    /// link that names a key gives it one value.
+    pub mismatch_keys: Vec<(String, String)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1435,6 +1438,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         alternate_names: Vec::new(),
         comdats,
         default_libs,
+        mismatch_keys: Vec::new(),
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

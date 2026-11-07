@@ -125,8 +125,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movl	<rip>, %ecx # <addr>
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
                	movsbq	<rip>, %rcx # <addr>
                	cmpl	$0x5, %ecx
@@ -159,8 +158,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax # <addr>
                	movl	<rip>, %ecx # <addr>
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %ecx
                	jne	<addr>
                	movsbq	<rip>, %rcx # <addr>
                	cmpl	$0x4, %ecx

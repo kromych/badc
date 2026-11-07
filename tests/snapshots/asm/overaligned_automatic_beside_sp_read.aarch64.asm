@@ -64,8 +64,7 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	cset	x1, ne
                	ldrb	w3, [sp, #0x3f]
-               	eor	x3, x3, #0x3
-               	cmp	w3, #0x0
+               	cmp	w3, #0x3
                	cset	x3, ne
                	orr	x3, x1, x3, lsl #1
                	cmp	x0, x2
@@ -128,8 +127,7 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	cset	x1, ne
                	ldrb	w2, [sp, #0x3f]
-               	eor	x2, x2, #0x3
-               	cmp	w2, #0x0
+               	cmp	w2, #0x3
                	cset	x2, ne
                	orr	x2, x1, x2, lsl #1
                	cmp	x0, x20

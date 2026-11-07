@@ -104,8 +104,8 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x40
                	ret
                	ldr	w1, [x0, #0x4]
-               	eor	x1, x1, #0x7
-               	cbz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	b	<addr>
                	ldr	w0, [x0, #0x8]
@@ -131,8 +131,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	ldr	w1, [x0, #0x4]
-               	eor	x1, x1, #0x2
-               	cbz	w1, <addr>
+               	cmp	w1, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
                	ldr	w0, [x0, #0x8]

@@ -82,8 +82,7 @@ Disassembly of section .text:
                	movb	$-0x2, -0x5(%rbp)
                	xorl	%esi, %esi
                	callq	<addr>
-               	movl	$0xfebf1000, %r11d      # imm = 0xFEBF1000
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>
                	movl	$0x1, %eax
                	leave

@@ -71,9 +71,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x18]
                	and	x1, x1, #0x1ff
                	and	x1, x1, #0xff
-               	mov	x17, #0xc8              // =200
-               	eor	x1, x1, x17
-               	cmp	w1, #0x0
+               	cmp	w1, #0xc8
                	cset	x1, eq
                	lsl	x1, x1, #1
                	add	x1, x1, #0x1

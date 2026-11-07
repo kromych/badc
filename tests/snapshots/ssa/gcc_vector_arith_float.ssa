@@ -2327,10 +2327,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v2495 Imm(15)                                          -> x0
     v2496 BinopI { op=add, lhs=v2492, rhs_imm=15 }         -> x0
     v2497 LoadLocal { off=-311, disp=15, kind=U8 }         -> x0
-    v2498 BinopI { op=xor, lhs=v2497, rhs_imm=128 }        -> x0
+    v2498 BinopI { op=ne, lhs=v2497, rhs_imm=128 }         -> x0
     v2499 BinopI { op=and, lhs=v2498, rhs_imm=4294967295 } -> x1
-    v2500 BinopI { op=ne, lhs=v2498, rhs_imm=0 }           -> x1
-    terminator Bz { cond=v2498, target=b78, fall=b77 }   (low word)   (exit_acc=v2500)
+    v2500 BinopI { op=ne, lhs=v2497, rhs_imm=128 }         -> x1
+    terminator Bz { cond=v2498, target=b78, fall=b77 }   (exit_acc=v2500)
   block 77  start_pc=0
     v137 Imm(20)                                          -> x0
     v138 LifetimeEnd(-311)                                -> -

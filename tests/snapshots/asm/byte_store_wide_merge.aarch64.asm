@@ -141,13 +141,11 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.lo	<addr>
                	ldurb	w0, [x29, #-0x10]
-               	mov	x17, #0x11              // =17
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x11
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x7]
-               	mov	x17, #0xaa              // =170
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0xaa
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

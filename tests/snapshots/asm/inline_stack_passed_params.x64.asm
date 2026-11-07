@@ -182,8 +182,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xf0000003, %r11d      # imm = 0xF0000003
-               	cmpl	%r11d, %eax
+               	cmpl	$0xf0000003, %eax       # imm = 0xF0000003
                	je	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
@@ -218,8 +217,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0x9abcdef0, %r11d      # imm = 0x9ABCDEF0
-               	cmpl	%r11d, %eax
+               	cmpl	$0x9abcdef0, %eax       # imm = 0x9ABCDEF0
                	je	<addr>
                	movl	$0xb, %eax
                	jmp	<addr>

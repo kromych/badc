@@ -657,10 +657,7 @@ Disassembly of section .text:
                	movzbq	(%r10,%r11), %r10
                	movq	%r10, 0x50(%rsp)
                	movq	0x50(%rsp), %r10
-               	xorq	$0x3, %r10
-               	movq	%r10, 0x50(%rsp)
-               	movq	0x50(%rsp), %r10
-               	testl	%r10d, %r10d
+               	cmpl	$0x3, %r10d
                	jne	<addr>
                	addq	$0x3e8, %rax            # imm = 0x3E8
                	xorq	%rax, %r15

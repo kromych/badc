@@ -247,13 +247,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v177, target=b38, fall=b37 }   (low word)   (exit_acc=v178)
   block 37  start_pc=0
     v180 BinopI { op=and, lhs=v159, rhs_imm=255 }         -> x9
-    v181 BinopI { op=xor, lhs=v159, rhs_imm=146 }         -> x2
+    v181 BinopI { op=ne, lhs=v159, rhs_imm=146 }          -> x2
     v182 BinopI { op=and, lhs=v181, rhs_imm=4294967295 }  -> x9
-    v183 BinopI { op=ne, lhs=v181, rhs_imm=0 }            -> x9
+    v183 BinopI { op=ne, lhs=v159, rhs_imm=146 }          -> x9
     v184 Imm(0)                                           -> x9
     v185 Imm(0)                                           -> x9
     v186 Imm(0)                                           -> x9
-    terminator Bz { cond=v181, target=b39, fall=b38 }   (low word)   (exit_acc=v183)
+    terminator Bz { cond=v181, target=b39, fall=b38 }   (exit_acc=v183)
   block 38  start_pc=0
     v187 Imm(30)                                          -> x0
     terminator Return(v187)   (exit_acc=v187)

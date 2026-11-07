@@ -108,9 +108,7 @@ Disassembly of section .text:
                	cmpl	%esi, %eax
                	ja	<addr>
                	andq	$0xf, %rdx
-               	movq	%rdx, %rdi
-               	xorq	$0x9, %rdi
-               	testl	%edi, %edi
+               	cmpl	$0x9, %edx
                	je	<addr>
                	movl	%edx, %eax
                	movzwq	(%rcx,%rax,2), %rdx
@@ -275,14 +273,12 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	callq	<addr>
                	andq	$0xff, %rax
-               	xorq	$0xc8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc8, %eax
                	jne	<addr>
                	xorl	%edi, %edi
                	callq	<addr>
                	andq	$0xff, %rax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx
@@ -304,8 +300,7 @@ Disassembly of section .text:
                	movl	$0x1e, %esi
                	movl	$0x1, %edx
                	callq	<addr>
-               	xorq	$0xb, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xb, %eax
                	jne	<addr>
                	movl	$0x14, %edi
                	movl	$0x5, %esi

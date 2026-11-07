@@ -59,13 +59,13 @@ Disassembly of section .text:
                	ldr	w4, [x1, #0x18]
                	mov	x3, #0xffffffff         // =4294967295
                	udiv	w4, w3, w4
-               	eor	x4, x4, #0x1
-               	cbnz	w4, <addr>
+               	cmp	w4, #0x1
+               	b.ne	<addr>
                	ldr	w4, [x2, #0x20]
                	udiv	w17, w3, w4
                	msub	w3, w17, w4, w3
-               	eor	x3, x3, #0x3
-               	cbz	w3, <addr>
+               	cmp	w3, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

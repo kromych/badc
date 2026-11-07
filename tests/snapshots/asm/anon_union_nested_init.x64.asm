@@ -80,12 +80,10 @@ Disassembly of section .text:
                	leaq	-0x28(%rbp), %rdi
                	callq	<addr>
                	movzbq	(%rax), %rcx
-               	xorq	$0x9, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x9, %ecx
                	jne	<addr>
                	movzbq	0x3(%rax), %rcx
-               	xorq	$0x6, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x6, %ecx
                	jne	<addr>
                	movl	0x4(%rax), %eax
                	cmpl	%ebx, %eax

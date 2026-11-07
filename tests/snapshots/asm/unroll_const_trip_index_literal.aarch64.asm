@@ -105,8 +105,8 @@ Disassembly of section .text:
                	mul	x2, x0, x3
                	add	x1, x20, x2
                	ldr	w5, [x1]
-               	eor	x5, x5, #0x1
-               	cbnz	w5, <addr>
+               	cmp	w5, #0x1
+               	b.ne	<addr>
                	ldr	x5, [x1, #0x20]
                	cmp	x5, x21
                	b.ne	<addr>
@@ -132,8 +132,8 @@ Disassembly of section .text:
                	mul	x4, x0, x5
                	add	x1, x3, x4
                	ldr	w9, [x1]
-               	eor	x9, x9, #0x2
-               	cbnz	w9, <addr>
+               	cmp	w9, #0x2
+               	b.ne	<addr>
                	ldr	x9, [x1, #0x20]
                	cmp	x9, x8
                	b.ne	<addr>

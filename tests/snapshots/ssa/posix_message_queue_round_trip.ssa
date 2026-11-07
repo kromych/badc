@@ -214,15 +214,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=31
     terminator Bnz { cond=v161, target=b25, fall=b23 }   (exit_acc=v161)
   block 23  start_pc=0
     v164 LoadLocal { off=-31, kind=U32 }                  -> x0
-    v165 BinopI { op=xor, lhs=v164, rhs_imm=7 }           -> x0
+    v165 BinopI { op=ne, lhs=v164, rhs_imm=7 }            -> x0
     v166 BinopI { op=and, lhs=v165, rhs_imm=4294967295 }  -> x1
-    v167 BinopI { op=ne, lhs=v165, rhs_imm=0 }            -> x1
+    v167 BinopI { op=ne, lhs=v164, rhs_imm=7 }            -> x1
     v168 BinopI { op=ne, lhs=v167, rhs_imm=0 }            -> x1
     v169 Imm(0)                                           -> x1
     v170 Imm(0)                                           -> x1
     v171 Imm(0)                                           -> x1
     v172 Imm(0)                                           -> x1
-    terminator Bnz { cond=v165, target=b25, fall=b24 }   (low word)   (exit_acc=v167)
+    terminator Bnz { cond=v165, target=b25, fall=b24 }   (exit_acc=v167)
   block 24  start_pc=0
     v173 LocalAddr(-24)                                   -> x7
     v174 ImmData(32)                                      -> x6
@@ -261,15 +261,15 @@ fn ent_pc=5 n_params=0 variadic=false locals=31
     terminator Bnz { cond=v200, target=b29, fall=b27 }   (exit_acc=v200)
   block 27  start_pc=0
     v203 LoadLocal { off=-31, kind=U32 }                  -> x0
-    v204 BinopI { op=xor, lhs=v203, rhs_imm=1 }           -> x0
+    v204 BinopI { op=ne, lhs=v203, rhs_imm=1 }            -> x0
     v205 BinopI { op=and, lhs=v204, rhs_imm=4294967295 }  -> x1
-    v206 BinopI { op=ne, lhs=v204, rhs_imm=0 }            -> x1
+    v206 BinopI { op=ne, lhs=v203, rhs_imm=1 }            -> x1
     v207 BinopI { op=ne, lhs=v206, rhs_imm=0 }            -> x1
     v208 Imm(0)                                           -> x1
     v209 Imm(0)                                           -> x1
     v210 Imm(0)                                           -> x1
     v211 Imm(0)                                           -> x1
-    terminator Bnz { cond=v204, target=b29, fall=b28 }   (low word)   (exit_acc=v206)
+    terminator Bnz { cond=v204, target=b29, fall=b28 }   (exit_acc=v206)
   block 28  start_pc=0
     v212 LocalAddr(-24)                                   -> x7
     v213 ImmData(37)                                      -> x6

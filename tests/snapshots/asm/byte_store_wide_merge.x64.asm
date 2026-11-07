@@ -139,12 +139,10 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	jb	<addr>
                	movzbq	-0x10(%rbp), %rax
-               	xorq	$0x11, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x11, %eax
                	jne	<addr>
                	movzbq	-0x7(%rbp), %rax
-               	xorq	$0xaa, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xaa, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	leave

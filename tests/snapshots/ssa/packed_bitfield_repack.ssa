@@ -217,13 +217,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v237 BinopI { op=and, lhs=v230, rhs_imm=4294967295 }  -> x0
     v238 BinopI { op=shr, lhs=v237, rhs_imm=8 }           -> x0
     v239 BinopI { op=and, lhs=v238, rhs_imm=16777215 }    -> x1
-    v240 BinopI { op=xor, lhs=v238, rhs_imm=11259375 }    -> x0
+    v240 BinopI { op=ne, lhs=v238, rhs_imm=11259375 }     -> x0
     v241 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
-    v242 BinopI { op=ne, lhs=v240, rhs_imm=0 }            -> x1
+    v242 BinopI { op=ne, lhs=v238, rhs_imm=11259375 }     -> x1
     v243 Imm(0)                                           -> x1
     v244 Imm(0)                                           -> x1
     v245 Imm(0)                                           -> x1
-    terminator Bz { cond=v240, target=b10, fall=b9 }   (low word)   (exit_acc=v242)
+    terminator Bz { cond=v240, target=b10, fall=b9 }   (exit_acc=v242)
   block 9  start_pc=0
     v246 Imm(12)                                          -> x0
     v247 LifetimeEnd(-1)                                  -> -

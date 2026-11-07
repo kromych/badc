@@ -362,6 +362,98 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
     changed
 }
 
+/// A branch on the low word of `x ^ y` that it alone reads tests whether
+/// `x` and `y` differ in that word: the exclusive-or becomes the 32-bit
+/// `x != y` it computes, which the emit fuses with the branch (`cmp w0,
+/// #imm` / `cmpl $imm`) as it does a compare the source spelled. A
+/// mixed-signedness `==` at 32 bits reaches the branch in this shape.
+/// Taken where the fused form is no longer: the instructions between the
+/// exclusive-or and the branch keep the flags, and on AArch64 an
+/// immediate `cmp` encodes or `eor` cannot encode either.
+///
+/// A comparison of such an exclusive-or with zero, at either width, is
+/// the same comparison of its operands.
+///
+/// Runs after [`strip_zero_test_conds`], which leaves the low-word test.
+pub(crate) fn low_word_xor_to_compare(func: &mut FunctionSsa, is_x86: bool) -> bool {
+    use crate::c5::codegen::ssa::reg_alloc::{compute_use_counts, flags_survive};
+    use crate::c5::ir::BinOp;
+    let uses = compute_use_counts(func);
+    let mut changed = false;
+    for v in 0..func.insts.len() {
+        let (op, x) = match func.insts[v] {
+            Inst::BinopI {
+                op: op @ (BinOp::Eq | BinOp::Ne),
+                lhs,
+                rhs_imm: 0,
+            } => (op, lhs),
+            _ => continue,
+        };
+        if uses.get(x as usize) != Some(&1) {
+            continue;
+        }
+        func.insts[v] = match func.insts[x as usize] {
+            Inst::Binop {
+                op: BinOp::Xor,
+                lhs,
+                rhs,
+            } => Inst::Binop { op, lhs, rhs },
+            Inst::BinopI {
+                op: BinOp::Xor,
+                lhs,
+                rhs_imm,
+            } => Inst::BinopI { op, lhs, rhs_imm },
+            _ => continue,
+        };
+        changed = true;
+    }
+    for bidx in 0..func.blocks.len() {
+        let block = &func.blocks[bidx];
+        let (Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. }) = block.terminator else {
+            continue;
+        };
+        if func.low_word_tests.get(bidx) != Some(&true)
+            || uses.get(cond as usize) != Some(&1)
+            || !block.inst_range.contains(&cond)
+        {
+            continue;
+        }
+        let shorter = match func.insts[cond as usize] {
+            Inst::Binop { op: BinOp::Xor, .. } => true,
+            Inst::BinopI {
+                op: BinOp::Xor,
+                rhs_imm,
+                ..
+            } => {
+                is_x86
+                    || crate::c5::codegen::aarch64::emit::cmp_imm12(rhs_imm).is_some()
+                    || crate::c5::codegen::aarch64::encode::encode_logical_imm(rhs_imm as u64, true)
+                        .is_none()
+            }
+            _ => false,
+        };
+        let window = ((cond + 1)..block.inst_range.end).all(|p| {
+            let inst = &func.insts[p as usize];
+            inst.is_lifetime_marker()
+                || (inst.is_pure() && uses[p as usize] == 0)
+                || flags_survive(inst, is_x86)
+        });
+        if !shorter || !window {
+            continue;
+        }
+        if let Inst::Binop { op, .. } | Inst::BinopI { op, .. } = &mut func.insts[cond as usize] {
+            *op = BinOp::Ne;
+        }
+        if func.cmp32.len() <= cond as usize {
+            func.cmp32.resize(func.insts.len(), false);
+        }
+        func.cmp32[cond as usize] = true;
+        func.low_word_tests[bidx] = false;
+        changed = true;
+    }
+    changed
+}
+
 /// Resolve `v` to a constant: an `Inst::Imm`, or one reached through
 /// phis -- a single-incoming phi always takes that value, and a merge
 /// whose predecessors all supply the same constant is that constant.

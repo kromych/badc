@@ -30,12 +30,12 @@ Disassembly of section .text:
                	cmp	w0, #0x1
                	b.ne	<addr>
                	mov	x2, x1
-               	eor	x2, x4, x2
-               	cbz	w2, <addr>
+               	cmp	w4, w2
+               	b.eq	<addr>
                	b	<addr>
                	mov	x2, #0x1                // =1
-               	eor	x2, x4, x2
-               	cbnz	w2, <addr>
+               	cmp	w4, w2
+               	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x5
                	b.lt	<addr>

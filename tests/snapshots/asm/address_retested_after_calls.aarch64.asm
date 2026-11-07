@@ -31,8 +31,8 @@ Disassembly of section .text:
                	ret
 
 <report>:
-               	eor	x0, x0, #0x40
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x40
+               	b.ne	<addr>
                	cbz	x1, <addr>
                	ldr	x0, [x1]
                	cbnz	x0, <addr>

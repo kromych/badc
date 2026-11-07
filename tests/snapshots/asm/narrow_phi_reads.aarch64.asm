@@ -24,9 +24,7 @@ Disassembly of section .text:
                	cmp	w0, #0x80
                	b.hs	<addr>
                	and	x1, x0, #0xff
-               	mov	x17, #0x2a              // =42
-               	eor	x0, x1, x17
-               	cmp	w0, #0x0
+               	cmp	w1, #0x2a
                	cset	x0, ne
                	ret
 

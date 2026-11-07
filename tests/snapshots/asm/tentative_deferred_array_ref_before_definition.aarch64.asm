@@ -29,9 +29,8 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldr	x1, [x0, #0x48]
                	ldrb	w1, [x1]
-               	mov	x17, #0x6d              // =109
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x6d
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x1, <page>

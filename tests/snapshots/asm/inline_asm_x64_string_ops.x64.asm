@@ -35,23 +35,19 @@ Disassembly of section .text:
                	movl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	rep		stosl	%eax, %es:(%rdi)
                	movl	-0x10(%rbp), %eax
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movl	-0xc(%rbp), %eax
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	jne	<addr>
                	movl	-0x8(%rbp), %eax
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	jne	<addr>
                	movl	-0x4(%rbp), %eax
-               	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
-               	cmpl	%r11d, %eax
+               	cmpl	$0xa5a5a5a5, %eax       # imm = 0xA5A5A5A5
                	jne	<addr>
                	movb	$0x61, -0x28(%rbp)
                	movb	$0x0, -0x20(%rbp)
@@ -110,12 +106,10 @@ Disassembly of section .text:
                	movl	$0xbeef, %eax           # imm = 0xBEEF
                	stosw	%ax, %es:(%rdi)
                	movzwq	-0x18(%rbp), %rax
-               	xorq	$0xbeef, %rax           # imm = 0xBEEF
-               	testl	%eax, %eax
+               	cmpl	$0xbeef, %eax           # imm = 0xBEEF
                	jne	<addr>
                	movzwq	-0x16(%rbp), %rax
-               	xorq	$0x1234, %rax           # imm = 0x1234
-               	testl	%eax, %eax
+               	cmpl	$0x1234, %eax           # imm = 0x1234
                	je	<addr>
                	movl	$0x4, %eax
                	leave

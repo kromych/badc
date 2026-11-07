@@ -27,9 +27,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	strb	w0, [x20, #0x4]
                	ldrb	w1, [x20]
-               	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x41
+               	b.ne	<addr>
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

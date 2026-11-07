@@ -28,19 +28,16 @@ Disassembly of section .text:
 <check>:
                	xorl	%ecx, %ecx
                	movzwq	(%rdi), %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movzwq	0x2(%rdi), %rax
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movzwq	0xa(%rdi), %rax
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -179,8 +176,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	jne	<addr>
                	movzwq	<rip>, %rax # <addr>
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x8, %eax
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>

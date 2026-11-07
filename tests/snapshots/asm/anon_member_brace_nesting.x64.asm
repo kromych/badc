@@ -109,12 +109,10 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	retq

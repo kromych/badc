@@ -420,9 +420,8 @@ Disassembly of section .text:
                	mov	x0, #0xffffffff         // =4294967295
                	mov	x1, #0xa                // =10
                	bl	<addr>
-               	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x5
+               	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]

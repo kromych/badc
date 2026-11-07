@@ -133,11 +133,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	ldurh	w0, [x29, #-0x78]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	ldurh	w0, [x29, #-0x76]
-               	eor	x0, x0, #0x8
-               	cbz	w0, <addr>
+               	cmp	w0, #0x8
+               	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x20, x21, [sp], #0xa0
@@ -175,8 +175,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x44]
                	and	x0, x0, #0x1ff
-               	eor	x0, x0, #0x180
-               	cbz	w0, <addr>
+               	cmp	w0, #0x180
+               	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	ldp	x29, x30, [sp, #0x90]
                	ldp	x20, x21, [sp], #0xa0
@@ -266,8 +266,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x64]
                	and	x0, x0, #0x1ff
-               	eor	x0, x0, #0x180
-               	cbz	w0, <addr>
+               	cmp	w0, #0x180
+               	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	ldp	x29, x30, [sp, #0xa0]
                	ldp	x20, x21, [sp], #0xb0

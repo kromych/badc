@@ -171,8 +171,7 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	jne	<addr>
                	movl	-0xf8(%rbp), %eax
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	leaq	-0xc0(%rbp), %rdi
                	leaq	<rip>, %rsi
@@ -205,8 +204,7 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	jne	<addr>
                	movl	-0xf8(%rbp), %eax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	leaq	-0xc0(%rbp), %rdi
                	leaq	<rip>, %rsi

@@ -116,8 +116,8 @@ Disassembly of section .text:
                	cmp	x2, #0xd
                	b.ne	<addr>
                	ldrb	w1, [x1]
-               	eor	x1, x1, #0xe
-               	cbnz	w1, <addr>
+               	cmp	w1, #0xe
+               	b.ne	<addr>
                	ldr	x1, [x4]
                	cmp	x1, #0xf
                	b.eq	<addr>
@@ -127,19 +127,16 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	ldrb	w1, [x1, #0x28]
-               	mov	x17, #0x61              // =97
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x61
+               	b.ne	<addr>
                	adrp	x1, <page>
                	ldrb	w1, [x1, #0x40]
-               	mov	x17, #0x63              // =99
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x63
+               	b.ne	<addr>
                	adrp	x1, <page>
                	ldrb	w1, [x1, #0x68]
-               	mov	x17, #0x65              // =101
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x65
+               	b.eq	<addr>
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

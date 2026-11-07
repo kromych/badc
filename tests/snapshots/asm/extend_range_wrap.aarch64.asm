@@ -40,13 +40,13 @@ Disassembly of section .text:
 
 <uwrap>:
                	mov	x1, #0x0                // =0
-               	eor	x2, x0, #0x2
-               	cbz	w2, <addr>
+               	cmp	w0, #0x2
+               	b.eq	<addr>
                	mov	w2, w0
                	add	x1, x1, x2
                	add	x0, x0, #0x1
-               	eor	x2, x0, #0x2
-               	cbnz	w2, <addr>
+               	cmp	w0, #0x2
+               	b.ne	<addr>
                	mov	x0, x1
                	ret
 
@@ -247,8 +247,8 @@ Disassembly of section .text:
                	mov	x1, #0x8                // =8
                	mov	x2, #0x5                // =5
                	bl	<addr>
-               	eor	x0, x0, #0x2
-               	cbz	w0, <addr>
+               	cmp	w0, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

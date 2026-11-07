@@ -25,14 +25,14 @@ Disassembly of section .text:
                	ldur	q0, [x29, #-0x10]
                	stur	q0, [x29, #-0x10]
                	ldurb	w0, [x29, #-0x10]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x9]
-               	eor	x0, x0, #0x8
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x8
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x1]
-               	eor	x0, x0, #0x10
-               	cbz	w0, <addr>
+               	cmp	w0, #0x10
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

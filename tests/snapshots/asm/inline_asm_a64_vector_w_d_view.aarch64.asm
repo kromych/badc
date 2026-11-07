@@ -88,20 +88,17 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	stur	x1, [x29, #-0x18]
                	ldurb	w1, [x29, #-0x18]
-               	eor	x1, x1, #0xfe
-               	cbnz	w1, <addr>
+               	cmp	w1, #0xfe
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0x16]
-               	mov	x17, #0xf3              // =243
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0xf3
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0x15]
-               	mov	x17, #0xb               // =11
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0xb
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0x11]
-               	mov	x17, #0x88              // =136
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x88
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
@@ -174,14 +171,14 @@ Disassembly of section .text:
                	eor	v0.16b, v0.16b, v1.16b
                	stur	q0, [x29, #-0x50]
                	ldurb	w0, [x29, #-0x50]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x42]
-               	eor	x0, x0, #0xf
-               	cbnz	w0, <addr>
+               	cmp	w0, #0xf
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x41]
-               	eor	x0, x0, #0xe0
-               	cbz	w0, <addr>
+               	cmp	w0, #0xe0
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

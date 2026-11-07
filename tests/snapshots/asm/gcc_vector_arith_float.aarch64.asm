@@ -779,8 +779,8 @@ Disassembly of section .text:
                	cmp	w0, #0x10
                	b.lt	<addr>
                	ldurb	w0, [x29, #-0x31]
-               	eor	x0, x0, #0x80
-               	cbz	w0, <addr>
+               	cmp	w0, #0x80
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10

@@ -5467,7 +5467,7 @@ fn ent_pc=200 n_params=0 variadic=false locals=4
     v838 BinopI { op=and, lhs=v836, rhs_imm=64 }          -> x0
     v839 BinopI { op=xor, lhs=v838, rhs_imm=64 }          -> x2
     v840 BinopI { op=and, lhs=v839, rhs_imm=4294967295 }  -> x0
-    v841 BinopI { op=eq, lhs=v839, rhs_imm=0 }            -> x0
+    v841 BinopI { op=eq, lhs=v838, rhs_imm=64 }           -> x0
     v842 Imm(0)                                           -> x0
     v843 BinopI { op=and, lhs=v821, rhs_imm=4294967295 }  -> x0
     v844 StoreLocal { off=-1, value=v821, kind=I32 }      -> -

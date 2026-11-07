@@ -122,8 +122,8 @@ Disassembly of section .text:
                	ret
                	cmp	x3, x6
                	cset	x7, lt
-               	eor	x7, x7, #0x1
-               	cbz	w7, <addr>
+               	cmp	w7, #0x1
+               	b.eq	<addr>
                	cmp	x3, #0x0
                	b.ls	<addr>
                	cmp	x6, #0x0

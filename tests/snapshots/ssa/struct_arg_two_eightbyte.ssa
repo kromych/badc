@@ -70,13 +70,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 3  start_pc=0
     v59  ImmData(32)                                      -> x2
     v60  Load { addr=v32, disp=0, kind=U32 pc_rel }       -> x2
-    v61  BinopI { op=xor, lhs=v60, rhs_imm=4 }            -> x2
+    v61  BinopI { op=ne, lhs=v60, rhs_imm=4 }             -> x2
     v62  BinopI { op=and, lhs=v61, rhs_imm=4294967295 }   -> x6
-    v63  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> x6
+    v63  BinopI { op=ne, lhs=v60, rhs_imm=4 }             -> x6
     v64  Imm(0)                                           -> x6
     v65  Imm(0)                                           -> x6
     v66  Imm(0)                                           -> x6
-    terminator Bz { cond=v61, target=b5, fall=b4 }   (low word)   (exit_acc=v63)
+    terminator Bz { cond=v61, target=b5, fall=b4 }   (exit_acc=v63)
   block 4  start_pc=0
     v67  Imm(2)                                           -> x0
     v68  LifetimeEnd(0)                                   -> -
@@ -92,13 +92,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v75  ImmData(40)                                      -> x2
     v76  Load { addr=v75, disp=0, kind=U32 pc_rel }       -> x2
-    v77  BinopI { op=xor, lhs=v76, rhs_imm=6 }            -> x2
+    v77  BinopI { op=ne, lhs=v76, rhs_imm=6 }             -> x2
     v78  BinopI { op=and, lhs=v77, rhs_imm=4294967295 }   -> x6
-    v79  BinopI { op=ne, lhs=v77, rhs_imm=0 }             -> x6
+    v79  BinopI { op=ne, lhs=v76, rhs_imm=6 }             -> x6
     v80  Imm(0)                                           -> x6
     v81  Imm(0)                                           -> x6
     v82  Imm(0)                                           -> x6
-    terminator Bz { cond=v77, target=b8, fall=b7 }   (low word)   (exit_acc=v79)
+    terminator Bz { cond=v77, target=b8, fall=b7 }   (exit_acc=v79)
   block 7  start_pc=0
     v83  Imm(3)                                           -> x0
     v84  LifetimeEnd(0)                                   -> -
@@ -140,13 +140,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 9  start_pc=0
     v117 ImmData(72)                                      -> x1
     v118 Load { addr=v97, disp=0, kind=U32 pc_rel }       -> x1
-    v119 BinopI { op=xor, lhs=v118, rhs_imm=4 }           -> x1
+    v119 BinopI { op=ne, lhs=v118, rhs_imm=4 }            -> x1
     v120 BinopI { op=and, lhs=v119, rhs_imm=4294967295 }  -> x2
-    v121 BinopI { op=ne, lhs=v119, rhs_imm=0 }            -> x2
+    v121 BinopI { op=ne, lhs=v118, rhs_imm=4 }            -> x2
     v122 Imm(0)                                           -> x2
     v123 Imm(0)                                           -> x2
     v124 Imm(0)                                           -> x2
-    terminator Bz { cond=v119, target=b11, fall=b10 }   (low word)   (exit_acc=v121)
+    terminator Bz { cond=v119, target=b11, fall=b10 }   (exit_acc=v121)
   block 10  start_pc=0
     v125 Imm(4)                                           -> x1
     v126 LifetimeEnd(0)                                   -> -
@@ -162,13 +162,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 12  start_pc=0
     v133 ImmData(80)                                      -> x0
     v134 Load { addr=v106, disp=0, kind=U32 pc_rel }      -> x0
-    v135 BinopI { op=xor, lhs=v134, rhs_imm=6 }           -> x0
+    v135 BinopI { op=ne, lhs=v134, rhs_imm=6 }            -> x0
     v136 BinopI { op=and, lhs=v135, rhs_imm=4294967295 }  -> x1
-    v137 BinopI { op=ne, lhs=v135, rhs_imm=0 }            -> x1
+    v137 BinopI { op=ne, lhs=v134, rhs_imm=6 }            -> x1
     v138 Imm(0)                                           -> x1
     v139 Imm(0)                                           -> x1
     v140 Imm(0)                                           -> x1
-    terminator Bz { cond=v135, target=b14, fall=b13 }   (low word)   (exit_acc=v137)
+    terminator Bz { cond=v135, target=b14, fall=b13 }   (exit_acc=v137)
   block 13  start_pc=0
     v141 Imm(5)                                           -> x0
     v142 LifetimeEnd(0)                                   -> -

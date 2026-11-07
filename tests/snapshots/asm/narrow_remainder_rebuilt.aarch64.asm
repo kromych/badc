@@ -84,8 +84,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, x20
                	bl	<addr>
-               	eor	x0, x20, #0x3
-               	cmp	w0, #0x0
+               	cmp	w20, #0x3
                	cset	x0, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20

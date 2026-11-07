@@ -43,15 +43,13 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	movzbq	-0x30(%rbp), %rax
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movzbq	-0x20(%rbp), %rax
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
@@ -69,8 +67,7 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x12(%rbp)
                	jne	<addr>
                	movzbq	-0x11(%rbp), %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -88,15 +85,13 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x22(%rbp)
                	jne	<addr>
                	movzbq	-0x21(%rbp), %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
                	movzbq	-0x30(%rbp), %rax
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	jne	<addr>
                	movzbq	-0x2f(%rbp), %rax
                	andq	$0xf, %rax

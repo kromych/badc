@@ -66,9 +66,7 @@ Disassembly of section .text:
                	jl	<addr>
                	movl	$0x8, %eax
                	retq
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	movq	%rax, %rdx
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	ja	<addr>
                	movl	$0x9, %eax
                	retq
@@ -76,8 +74,7 @@ Disassembly of section .text:
                	jbe	<addr>
                	movl	$0xb, %eax
                	retq
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000001, %eax       # imm = 0x80000001
                	je	<addr>
                	movl	$0xd, %eax
                	retq
@@ -132,8 +129,7 @@ Disassembly of section .text:
                	retq
                	testl	%edx, %edx
                	jle	<addr>
-               	xorq	$0x92, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x92, %edx
                	je	<addr>
                	movl	$0x1e, %eax
                	retq

@@ -91,22 +91,19 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	-0x80(%rbp), %rax
-               	xorq	$0x81, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x81, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	leave
                	retq
                	movzbq	-0x7f(%rbp), %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	leave
                	retq
                	movzbq	-0x74(%rbp), %rax
-               	xorq	$0x10, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	leave

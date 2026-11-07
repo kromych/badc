@@ -13,20 +13,20 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v7   InlineAsm { template="lock \n\t cmpxchgl %2, %1 \n\t", ops=4, args=[-, v3, v5, v1] } -> x0
     v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x1
     v9   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x1
-    v10  BinopI { op=xor, lhs=v7, rhs_imm=10 }            -> x0
+    v10  BinopI { op=ne, lhs=v7, rhs_imm=10 }             -> x0
     v11  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x1
-    v12  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x1
+    v12  BinopI { op=ne, lhs=v7, rhs_imm=10 }             -> x1
     v13  Imm(0)                                           -> x1
-    terminator Bnz { cond=v10, target=b2, fall=b1 }   (low word)   (exit_acc=v12)
+    terminator Bnz { cond=v10, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v14  LoadLocal { off=-3, kind=U32 }                   -> x0
-    v15  BinopI { op=xor, lhs=v14, rhs_imm=20 }           -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=20 }            -> x0
     v16  BinopI { op=and, lhs=v15, rhs_imm=4294967295 }   -> x1
-    v17  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x1
+    v17  BinopI { op=ne, lhs=v14, rhs_imm=20 }            -> x1
     v18  Imm(0)                                           -> x1
     v19  Imm(0)                                           -> x1
     v20  Imm(0)                                           -> x1
-    terminator Bz { cond=v15, target=b3, fall=b2 }   (low word)   (exit_acc=v17)
+    terminator Bz { cond=v15, target=b3, fall=b2 }   (exit_acc=v17)
   block 2  start_pc=0
     v21  Imm(1)                                           -> x0
     v22  LifetimeEnd(-1)                                  -> -
@@ -42,20 +42,20 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v30  InlineAsm { template="lock \n\t cmpxchgl %2, %1 \n\t", ops=4, args=[-, v25, v28, v29] } -> x0
     v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x1
     v32  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x1
-    v33  BinopI { op=xor, lhs=v30, rhs_imm=20 }           -> x0
+    v33  BinopI { op=ne, lhs=v30, rhs_imm=20 }            -> x0
     v34  BinopI { op=and, lhs=v33, rhs_imm=4294967295 }   -> x1
-    v35  BinopI { op=ne, lhs=v33, rhs_imm=0 }             -> x1
+    v35  BinopI { op=ne, lhs=v30, rhs_imm=20 }            -> x1
     v36  Imm(0)                                           -> x1
-    terminator Bnz { cond=v33, target=b5, fall=b4 }   (low word)   (exit_acc=v35)
+    terminator Bnz { cond=v33, target=b5, fall=b4 }   (exit_acc=v35)
   block 4  start_pc=0
     v37  LoadLocal { off=-3, kind=U32 }                   -> x0
-    v38  BinopI { op=xor, lhs=v37, rhs_imm=20 }           -> x0
+    v38  BinopI { op=ne, lhs=v37, rhs_imm=20 }            -> x0
     v39  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x1
-    v40  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x1
+    v40  BinopI { op=ne, lhs=v37, rhs_imm=20 }            -> x1
     v41  Imm(0)                                           -> x1
     v42  Imm(0)                                           -> x1
     v43  Imm(0)                                           -> x1
-    terminator Bz { cond=v38, target=b6, fall=b5 }   (low word)   (exit_acc=v40)
+    terminator Bz { cond=v38, target=b6, fall=b5 }   (exit_acc=v40)
   block 5  start_pc=0
     v44  Imm(2)                                           -> x0
     v45  LifetimeEnd(-1)                                  -> -
@@ -73,20 +73,20 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v55  InlineAsm { template="lock \n\t xadd %0, %1 \n\t", ops=2, args=[v54, v50] } -> x0
     v56  BinopI { op=and, lhs=v55, rhs_imm=4294967295 }   -> x1
     v57  BinopI { op=and, lhs=v55, rhs_imm=4294967295 }   -> x1
-    v58  BinopI { op=xor, lhs=v55, rhs_imm=5 }            -> x0
+    v58  BinopI { op=ne, lhs=v55, rhs_imm=5 }             -> x0
     v59  BinopI { op=and, lhs=v58, rhs_imm=4294967295 }   -> x1
-    v60  BinopI { op=ne, lhs=v58, rhs_imm=0 }             -> x1
+    v60  BinopI { op=ne, lhs=v55, rhs_imm=5 }             -> x1
     v61  Imm(0)                                           -> x1
-    terminator Bnz { cond=v58, target=b8, fall=b7 }   (low word)   (exit_acc=v60)
+    terminator Bnz { cond=v58, target=b8, fall=b7 }   (exit_acc=v60)
   block 7  start_pc=0
     v62  LoadLocal { off=-2, kind=U32 }                   -> x0
-    v63  BinopI { op=xor, lhs=v62, rhs_imm=8 }            -> x0
+    v63  BinopI { op=ne, lhs=v62, rhs_imm=8 }             -> x0
     v64  BinopI { op=and, lhs=v63, rhs_imm=4294967295 }   -> x1
-    v65  BinopI { op=ne, lhs=v63, rhs_imm=0 }             -> x1
+    v65  BinopI { op=ne, lhs=v62, rhs_imm=8 }             -> x1
     v66  Imm(0)                                           -> x1
     v67  Imm(0)                                           -> x1
     v68  Imm(0)                                           -> x1
-    terminator Bz { cond=v63, target=b9, fall=b8 }   (low word)   (exit_acc=v65)
+    terminator Bz { cond=v63, target=b9, fall=b8 }   (exit_acc=v65)
   block 8  start_pc=0
     v69  Imm(3)                                           -> x0
     v70  LifetimeEnd(-1)                                  -> -

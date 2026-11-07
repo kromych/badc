@@ -29,8 +29,7 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
                	movl	<rip>, %edx # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	cmpl	$0x2, %ecx
                	jne	<addr>

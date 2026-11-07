@@ -121,8 +121,8 @@ Disassembly of section .text:
                	lsl	x1, x0, #4
                	add	x2, x23, x1
                	ldr	w2, [x2]
-               	eor	x2, x2, #0x1
-               	cbnz	w2, <addr>
+               	cmp	w2, #0x1
+               	b.ne	<addr>
                	sub	x2, x29, #0x20
                	add	x1, x2, x1
                	ldr	x2, [x1, #0x8]

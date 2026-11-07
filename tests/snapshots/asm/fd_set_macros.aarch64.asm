@@ -80,23 +80,22 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x80]
-               	mov	x17, #0x81              // =129
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x81
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x7f]
-               	eor	x0, x0, #0x1
-               	cbz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0x74]
-               	eor	x0, x0, #0x10
-               	cbz	w0, <addr>
+               	cmp	w0, #0x10
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

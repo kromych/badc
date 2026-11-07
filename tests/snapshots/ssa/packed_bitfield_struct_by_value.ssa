@@ -167,13 +167,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v148 LocalAddr(-2)                                    -> x0
     v149 BinopI { op=add, lhs=v103, rhs_imm=11 }          -> x0
     v150 LoadLocal { off=-2, disp=11, kind=U8 }           -> x0
-    v151 BinopI { op=xor, lhs=v150, rhs_imm=10 }          -> x0
+    v151 BinopI { op=ne, lhs=v150, rhs_imm=10 }           -> x0
     v152 BinopI { op=and, lhs=v151, rhs_imm=4294967295 }  -> x1
-    v153 BinopI { op=ne, lhs=v151, rhs_imm=0 }            -> x1
+    v153 BinopI { op=ne, lhs=v150, rhs_imm=10 }           -> x1
     v154 Imm(0)                                           -> x1
     v155 Imm(0)                                           -> x1
     v156 Imm(0)                                           -> x1
-    terminator Bz { cond=v151, target=b10, fall=b9 }   (low word)   (exit_acc=v153)
+    terminator Bz { cond=v151, target=b10, fall=b9 }   (exit_acc=v153)
   block 9  start_pc=0
     v157 Imm(5)                                           -> x0
     v158 LifetimeEnd(-2)                                  -> -

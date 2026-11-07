@@ -171,11 +171,9 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	xorq	$0x9, %r8
-               	testl	%r8d, %r8d
+               	cmpl	$0x9, %r8d
                	jne	<addr>
-               	xorq	$0x9, %r9
-               	testl	%r9d, %r9d
+               	cmpl	$0x9, %r9d
                	jne	<addr>
                	testq	%rbx, %rbx
                	je	<addr>
@@ -191,8 +189,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbx

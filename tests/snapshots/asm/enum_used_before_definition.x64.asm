@@ -142,8 +142,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	<rip>, %rax # <addr>
                	movzbq	(%rax), %rax
-               	xorq	$0xc8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0xf, %eax
                	jmp	<addr>

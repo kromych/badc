@@ -28,8 +28,8 @@ Disassembly of section .text:
                	ldursh	x1, [x29, #-0x18]
                	ldursw	x2, [x29, #-0x10]
                	ldur	w1, [x29, #-0x8]
-               	eor	x3, x1, x0
-               	cbz	w3, <addr>
+               	cmp	w1, w0
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

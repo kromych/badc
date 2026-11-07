@@ -78,16 +78,15 @@ Disassembly of section .text:
                	cset	x1, ne
                	orr	x2, x22, x1
                	ldrb	w1, [x20, #0x51]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldr	x1, [x20, #0x18]
                	cmp	x1, #0x8
                	cset	x1, ne
                	cbnz	x1, <addr>
                	sub	x0, x24, #0x1
                	ldrb	w0, [x23, w0, sxtw]
-               	eor	x0, x0, x21
-               	cmp	w0, #0x0
+               	cmp	w0, w21
                	cset	x0, ne
                	b	<addr>
                	mov	x1, x0
@@ -166,8 +165,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbnz	x1, <addr>
                	ldrb	w0, [x23, w24, sxtw]
-               	eor	x0, x0, x21
-               	cmp	w0, #0x0
+               	cmp	w0, w21
                	cset	x0, ne
                	b	<addr>
                	mov	x1, x0

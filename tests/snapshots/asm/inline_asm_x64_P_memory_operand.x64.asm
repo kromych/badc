@@ -33,12 +33,10 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leaq	-0x70(%rbp), %rcx
                	xchgl	%eax, (%rcx)
-               	xorq	$0x5, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x5, %eax
                	jne	<addr>
                	movl	-0x70(%rbp), %eax
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave

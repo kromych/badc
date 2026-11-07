@@ -167,15 +167,15 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	eor	x2, x2, #0xff
-               	cbnz	w2, <addr>
+               	cmp	w2, #0xff
+               	b.ne	<addr>
                	cbnz	w1, <addr>
                	mov	x0, #0x1                // =1
                	b	<addr>
                	mov	x1, #0x3                // =3
                	b	<addr>
-               	eor	x2, x2, #0xff
-               	cbnz	w2, <addr>
+               	cmp	w2, #0xff
+               	b.ne	<addr>
                	cbnz	w1, <addr>
                	mov	x1, #0x1                // =1
                	b	<addr>

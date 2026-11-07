@@ -40,20 +40,18 @@ Disassembly of section .text:
                	sub	x20, x29, #0x40
                	mov	x0, x20
                	bl	<addr>
-               	mov	x2, #0xa                // =10
-               	mov	x3, #0xd                // =13
                	cbz	x0, <addr>
                	sub	x1, x0, #0x1
-               	ldrb	w4, [x20, x1]
-               	eor	x4, x4, x2
-               	cbz	w4, <addr>
-               	ldrb	w4, [x20, x1]
-               	eor	x4, x4, x3
-               	cbz	w4, <addr>
-               	sub	x4, x29, #0x40
-               	ldrb	w1, [x4, x1]
-               	eor	x1, x1, #0x20
-               	cbnz	w1, <addr>
+               	ldrb	w2, [x20, x1]
+               	cmp	w2, #0xa
+               	b.eq	<addr>
+               	ldrb	w2, [x20, x1]
+               	cmp	w2, #0xd
+               	b.eq	<addr>
+               	sub	x2, x29, #0x40
+               	ldrb	w1, [x2, x1]
+               	cmp	w1, #0x20
+               	b.ne	<addr>
                	sub	x0, x0, #0x1
                	strb	wzr, [x20, x0]
                	cbnz	x0, <addr>

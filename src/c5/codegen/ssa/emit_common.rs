@@ -2933,6 +2933,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     let extern_abs = abs32 && native.code_model == super::super::CodeModel::Kernel;
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
+        super::super::passes::constfold_branch::low_word_xor_to_compare(f, target.is_x86_64());
         crate::c5::asm::mark_static_operands(f);
         if abs32 {
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);

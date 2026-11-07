@@ -41,13 +41,11 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movq	%rcx, %rdx
-               	xorq	%rdi, %rdx
-               	testl	%edx, %edx
+               	cmpl	%edx, %edi
                	je	<addr>
                	jmp	<addr>
                	movl	$0x1, %edx
-               	xorq	%rdi, %rdx
-               	testl	%edx, %edx
+               	cmpl	%edx, %edi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x5, %eax

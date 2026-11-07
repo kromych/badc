@@ -104,16 +104,13 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	jne	<addr>
                	movl	-0x40(%rbp), %ecx
-               	xorq	$0x756e6547, %rcx       # imm = 0x756E6547
-               	testl	%ecx, %ecx
+               	cmpl	$0x756e6547, %ecx       # imm = 0x756E6547
                	jne	<addr>
                	movl	-0x38(%rbp), %ecx
-               	xorq	$0x6c65746e, %rcx       # imm = 0x6C65746E
-               	testl	%ecx, %ecx
+               	cmpl	$0x6c65746e, %ecx       # imm = 0x6C65746E
                	jne	<addr>
                	movl	-0x30(%rbp), %ecx
-               	xorq	$0x49656e69, %rcx       # imm = 0x49656E69
-               	testl	%ecx, %ecx
+               	cmpl	$0x49656e69, %ecx       # imm = 0x49656E69
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -123,16 +120,13 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	-0x40(%rbp), %eax
-               	xorq	$0x68747541, %rax       # imm = 0x68747541
-               	testl	%eax, %eax
+               	cmpl	$0x68747541, %eax       # imm = 0x68747541
                	jne	<addr>
                	movl	-0x38(%rbp), %eax
-               	xorq	$0x444d4163, %rax       # imm = 0x444D4163
-               	testl	%eax, %eax
+               	cmpl	$0x444d4163, %eax       # imm = 0x444D4163
                	jne	<addr>
                	movl	-0x30(%rbp), %eax
-               	xorq	$0x69746e65, %rax       # imm = 0x69746E65
-               	testl	%eax, %eax
+               	cmpl	$0x69746e65, %eax       # imm = 0x69746E65
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
@@ -146,9 +140,7 @@ Disassembly of section .text:
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	cpuid
                	movq	%rax, %rsi
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	movq	%rsi, %rax
-               	cmpl	%r11d, %esi
+               	cmpl	$0x80000001, %esi       # imm = 0x80000001
                	jb	<addr>
                	cmpl	%edi, %esi
                	je	<addr>
@@ -189,8 +181,7 @@ Disassembly of section .text:
                	cpuid
                	testl	%eax, %eax
                	je	<addr>
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000001, %eax       # imm = 0x80000001
                	jae	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

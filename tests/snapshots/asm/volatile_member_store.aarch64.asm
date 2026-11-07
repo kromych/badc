@@ -76,9 +76,8 @@ Disassembly of section .text:
                	str	w2, [x1, #0x20]
                	ldr	w1, [x1, #0x20]
                	and	x1, x1, #0x1f
-               	mov	x17, #0xa               // =10
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0xa
+               	b.eq	<addr>
                	ret
                	mov	x0, #0x0                // =0
                	ret

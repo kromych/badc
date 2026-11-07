@@ -89,7 +89,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v75  BinopI { op=xor, lhs=v57, rhs_imm=-1 }           -> x0
     v76  Imm(0)                                           -> x1
     v77  BinopI { op=or, lhs=v75, rhs_imm=0 }             -> x1
-    v78  BinopI { op=ne, lhs=v75, rhs_imm=0 }             -> x1
+    v78  BinopI { op=ne, lhs=v57, rhs_imm=-1 }            -> x1
     terminator Bz { cond=v75, target=b6, fall=b5 }   (exit_acc=v78)
   block 5  start_pc=0
     v79  Imm(4)                                           -> x0

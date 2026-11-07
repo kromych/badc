@@ -479,9 +479,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrb	w0, [x0, #0x2]
-               	mov	x17, #0x2c              // =44
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x2c
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x22, [sp, #0x10]

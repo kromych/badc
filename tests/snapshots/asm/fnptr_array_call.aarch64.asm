@@ -64,9 +64,8 @@ Disassembly of section .text:
                	blr	x0
                	stur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
-               	mov	x17, #0x9               // =9
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x9
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -76,8 +75,8 @@ Disassembly of section .text:
                	blr	x0
                	stur	x0, [x29, #-0x8]
                	ldr	w0, [x0]
-               	eor	x0, x0, #0x7
-               	cbz	w0, <addr>
+               	cmp	w0, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

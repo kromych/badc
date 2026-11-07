@@ -198,8 +198,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rcx
                	setl	%dil
                	movzbq	%dil, %rdi
-               	xorq	$0x1, %rdi
-               	testl	%edi, %edi
+               	cmpl	$0x1, %edi
                	je	<addr>
                	testq	%rcx, %rcx
                	jbe	<addr>

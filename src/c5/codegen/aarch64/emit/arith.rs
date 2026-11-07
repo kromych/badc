@@ -715,7 +715,7 @@ pub(super) fn compare_cond(op: BinOp) -> Option<Cond> {
 }
 
 /// Unsigned 12-bit immediate field of `cmp Xn, #imm`, when `imm` fits.
-pub(super) fn cmp_imm12(imm: i64) -> Option<u32> {
+pub(crate) fn cmp_imm12(imm: i64) -> Option<u32> {
     u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
 }
 

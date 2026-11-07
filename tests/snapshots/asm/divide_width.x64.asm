@@ -203,8 +203,7 @@ Disassembly of section .text:
                	retq
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	callq	<addr>
-               	xorq	$0x5, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%rbx

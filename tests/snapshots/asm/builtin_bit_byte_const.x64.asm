@@ -56,8 +56,7 @@ Disassembly of section .text:
                	movzwq	-0x10(%rbp), %rax
                	movzwl	%ax, %eax
                	rolw	$0x8, %ax
-               	xorq	$0x3412, %rax           # imm = 0x3412
-               	testl	%eax, %eax
+               	cmpl	$0x3412, %eax           # imm = 0x3412
                	je	<addr>
                	movl	$0x9, %eax
                	leave

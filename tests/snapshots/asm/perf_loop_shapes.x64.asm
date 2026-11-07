@@ -539,13 +539,11 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %edi
                	callq	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	jne	<addr>
                	movl	$0x80000000, %edi       # imm = 0x80000000
                	callq	<addr>
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x12, %eax
                	popq	%rbx

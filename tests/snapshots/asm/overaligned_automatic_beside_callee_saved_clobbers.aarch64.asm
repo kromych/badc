@@ -77,14 +77,12 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, ne
                	ldrb	w1, [x20, #0x3f]
-               	eor	x1, x1, #0x3
-               	cmp	w1, #0x0
+               	cmp	w1, #0x3
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #1
                	ldur	x16, [x29, #-0x18]
                	ldrb	w1, [x16, #0x9]
-               	eor	x1, x1, #0x4
-               	cmp	w1, #0x0
+               	cmp	w1, #0x4
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #2
                	sub	sp, x29, #0x80
@@ -191,8 +189,7 @@ Disassembly of section .text:
                	orr	x0, x1, x0, lsl #3
                	ldur	x16, [x29, #-0x18]
                	ldrb	w1, [x16, #0x9]
-               	eor	x1, x1, #0x6
-               	cmp	w1, #0x0
+               	cmp	w1, #0x6
                	cset	x1, ne
                	orr	x0, x0, x1, lsl #4
                	sub	sp, x29, #0x80

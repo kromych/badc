@@ -20,26 +20,26 @@ Disassembly of section .text:
                	ldrb	w6, [x0, #0x1]
                	ldrb	w7, [x0, #0x2]
                	ldrb	w8, [x0, #0x3]
-               	eor	x0, x1, x2
-               	cbz	w0, <addr>
+               	cmp	w1, w2
+               	b.eq	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x40]
-               	eor	x0, x6, x3
-               	cbz	w0, <addr>
+               	cmp	w6, w3
+               	b.eq	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x40]
-               	eor	x0, x7, x4
-               	cbz	w0, <addr>
+               	cmp	w7, w4
+               	b.eq	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0x40]
-               	eor	x0, x8, x5
-               	cbz	w0, <addr>
+               	cmp	w8, w5
+               	b.eq	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
@@ -59,13 +59,13 @@ Disassembly of section .text:
                	ldrb	w2, [x0, #0x1]
                	ldrb	w3, [x0, #0x2]
                	ldrb	w0, [x0, #0x3]
-               	eor	x1, x1, #0x4
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x4
+               	b.ne	<addr>
                	cbnz	w2, <addr>
-               	eor	x1, x3, #0x1
-               	cbnz	w1, <addr>
-               	eor	x0, x0, #0x8
-               	cbz	w0, <addr>
+               	cmp	w3, #0x1
+               	b.ne	<addr>
+               	cmp	w0, #0x8
+               	b.eq	<addr>
                	adrp	x0, <page>
                	ldrsw	x1, [x0, #0x40]
                	add	x1, x1, #0x1
@@ -78,10 +78,10 @@ Disassembly of section .text:
                	add	x2, x1, x2, lsl #2
                	ldrb	w3, [x2]
                	ldrb	w2, [x2, #0x2]
-               	eor	x3, x3, #0x3c
-               	cbnz	w3, <addr>
-               	eor	x2, x2, #0x1
-               	cbz	w2, <addr>
+               	cmp	w3, #0x3c
+               	b.ne	<addr>
+               	cmp	w2, #0x1
+               	b.eq	<addr>
                	adrp	x2, <page>
                	ldrsw	x3, [x2, #0x40]
                	add	x3, x3, #0x1

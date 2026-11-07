@@ -21,13 +21,12 @@ Disassembly of section .text:
                	and	x1, x1, #0xffffffffffffe0ff
                	orr	x1, x1, x4, lsl #8
                	and	x4, x1, #0xf
-               	eor	x4, x4, x0
+               	cmp	w4, w0
                	mov	x0, #0x0                // =0
-               	cbnz	w4, <addr>
+               	b.ne	<addr>
                	mov	w4, w1
                	ubfx	x4, x4, #4, #4
-               	eor	x3, x4, x3
-               	cmp	w3, #0x0
+               	cmp	w4, w3
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
@@ -69,14 +68,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	w3, w1
                	ubfx	x3, x3, #16, #3
-               	eor	x3, x3, x5
-               	cmp	w3, #0x0
+               	cmp	w3, w5
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
                	ubfx	x1, x1, #19, #10
-               	eor	x1, x1, x2
-               	cmp	w1, #0x0
+               	cmp	w1, w2
                	cset	x1, eq
                	cbz	x1, <addr>
                	mov	x1, #0x1                // =1

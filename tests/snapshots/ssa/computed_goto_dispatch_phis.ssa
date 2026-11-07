@@ -1161,10 +1161,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v81  Extend { value=v80, kind=I32, nsw }              -> [spill 4]
     v82  Binop { op=add, lhs=v1, rhs=v80 }                -> [spill 4]
     v83  LoadIndexed { base=v1, index=v80, scale=1, kind=U8 } -> [spill 1]
-    v84  BinopI { op=xor, lhs=v83, rhs_imm=3 }            -> [spill 1]
+    v84  BinopI { op=ne, lhs=v83, rhs_imm=3 }             -> [spill 1]
     v85  BinopI { op=and, lhs=v84, rhs_imm=4294967295 }   -> [spill 4]
-    v86  BinopI { op=eq, lhs=v84, rhs_imm=0 }             -> [spill 4]
-    terminator Bnz { cond=v84, target=b8, fall=b5 }   (low word)   (exit_acc=v86)
+    v86  BinopI { op=eq, lhs=v83, rhs_imm=3 }             -> [spill 4]
+    terminator Bnz { cond=v84, target=b8, fall=b5 }   (exit_acc=v86)
   block 5  start_pc=0
     v186 Imm(0)                                           -> [spill 1]
     v187 BinopI { op=add, lhs=v43, rhs_imm=1000 }         -> x0

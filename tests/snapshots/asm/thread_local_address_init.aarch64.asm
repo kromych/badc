@@ -35,14 +35,12 @@ Disassembly of section .text:
                	add	x0, x0, #0x18
                	ldr	x1, [x0]
                	ldrb	w1, [x1]
-               	mov	x17, #0x68              // =104
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x68
+               	b.ne	<addr>
                	ldr	x1, [x0]
                	ldrb	w1, [x1, #0x1]
-               	mov	x17, #0x69              // =105
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x69
+               	b.ne	<addr>
                	ldr	x0, [x0]
                	ldrb	w0, [x0, #0x2]
                	cbz	w0, <addr>

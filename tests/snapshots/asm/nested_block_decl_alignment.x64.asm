@@ -50,8 +50,7 @@ Disassembly of section .text:
                	testb	$0x3f, %cl
                	jne	<addr>
                	movl	(%rsp), %eax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x9, %eax
                	sete	%al
                	movzbq	%al, %rax
                	leave
@@ -68,8 +67,7 @@ Disassembly of section .text:
                	testb	$0x3f, %cl
                	jne	<addr>
                	movl	<rip>, %ecx # <addr>
-               	xorq	$0x3, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x3, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	leaq	<rip>, %rdx # <addr>

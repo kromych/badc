@@ -280,8 +280,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x70
                	ret
                	ldrb	w0, [x20, #0x6]
-               	eor	x0, x0, #0xc
-               	cbz	w0, <addr>
+               	cmp	w0, #0xc
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x24, x25, [sp, #0x20]

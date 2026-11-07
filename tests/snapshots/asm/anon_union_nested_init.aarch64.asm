@@ -68,12 +68,11 @@ Disassembly of section .text:
                	stur	w20, [x29, #-0x24]
                	bl	<addr>
                	ldrb	w1, [x0]
-               	mov	x17, #0x9               // =9
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x9
+               	b.ne	<addr>
                	ldrb	w1, [x0, #0x3]
-               	eor	x1, x1, #0x6
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x6
+               	b.ne	<addr>
                	ldrsw	x0, [x0, #0x4]
                	cmp	w0, w20
                	b.eq	<addr>

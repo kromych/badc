@@ -114,10 +114,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v76  InlineAsm { template="movl %%gs:%c1, %0", ops=2, args=[-, v75] } -> x0
     v77  Imm(0)                                           -> x1
     v78  BinopI { op=and, lhs=v76, rhs_imm=4294967295 }   -> x1
-    v79  BinopI { op=xor, lhs=v76, rhs_imm=4369 }         -> x0
+    v79  BinopI { op=ne, lhs=v76, rhs_imm=4369 }          -> x0
     v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x1
-    v81  BinopI { op=ne, lhs=v79, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v79, target=b18, fall=b17 }   (low word)   (exit_acc=v81)
+    v81  BinopI { op=ne, lhs=v76, rhs_imm=4369 }          -> x1
+    terminator Bz { cond=v79, target=b18, fall=b17 }   (exit_acc=v81)
   block 17  start_pc=0
     v82  Imm(9)                                           -> x0
     terminator Return(v82)   (exit_acc=v82)

@@ -93,14 +93,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x60]
                	ldr	w1, [x1]
-               	mov	x17, #0x7d              // =125
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x7d
+               	b.ne	<addr>
                	ldr	x0, [x0, #0x60]
                	ldr	w0, [x0, #0xc]
-               	mov	x17, #0xfa0             // =4000
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0xfa0
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

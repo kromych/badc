@@ -145,8 +145,7 @@ Disassembly of section .text:
                	imulq	$0xc, %rax, %rcx
                	addq	%rcx, %rdx
                	movl	(%rdx), %esi
-               	xorq	$0x1, %rsi
-               	testl	%esi, %esi
+               	cmpl	$0x1, %esi
                	jne	<addr>
                	movq	0x4(%rdx), %rdx
                	cmpq	%r12, %rdx

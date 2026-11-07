@@ -44,8 +44,7 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x7(%rbp)
                	jne	<addr>
                	movzbq	-0x6(%rbp), %rax
-               	xorq	$0x4, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x4, %eax
                	jne	<addr>
                	cmpb	$0x0, -0x5(%rbp)
                	je	<addr>
@@ -66,8 +65,7 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x7(%rbp)
                	jne	<addr>
                	movzbq	-0x6(%rbp), %rax
-               	xorq	$0xf8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xf8, %eax
                	jne	<addr>
                	cmpb	$0x0, -0x5(%rbp)
                	je	<addr>
@@ -90,8 +88,7 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x6(%rbp)
                	jne	<addr>
                	movzbq	-0x5(%rbp), %rax
-               	xorq	$0x7f, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7f, %eax
                	je	<addr>
                	movl	$0x13, %eax
                	leave
@@ -141,8 +138,7 @@ Disassembly of section .text:
                	cmpb	$0x0, -0x6(%rbp)
                	jne	<addr>
                	movzbq	-0x5(%rbp), %rax
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	leave
@@ -157,19 +153,16 @@ Disassembly of section .text:
                	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
                	movl	$0x55667788, -0x4(%rbp) # imm = 0x55667788
                	movl	(%rax), %ecx
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x16, %eax
                	leave
                	retq
                	movl	-0x8(%rbp), %ecx
-               	xorq	$0x11223344, %rcx       # imm = 0x11223344
-               	testl	%ecx, %ecx
+               	cmpl	$0x11223344, %ecx       # imm = 0x11223344
                	jne	<addr>
                	movl	-0x4(%rbp), %ecx
-               	xorq	$0x55667788, %rcx       # imm = 0x55667788
-               	testl	%ecx, %ecx
+               	cmpl	$0x55667788, %ecx       # imm = 0x55667788
                	je	<addr>
                	movl	$0x17, %eax
                	leave

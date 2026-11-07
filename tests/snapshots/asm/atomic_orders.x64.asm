@@ -240,9 +240,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edx, (%rsi)
-               	movl	$0xfffeee90, %r11d      # imm = 0xFFFEEE90
-               	movq	%rax, %rsi
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfffeee90, %eax       # imm = 0xFFFEEE90
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi
@@ -263,9 +261,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edx, (%rsi)
-               	movl	$0xfffeee91, %r11d      # imm = 0xFFFEEE91
-               	movq	%rax, %rdx
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfffeee91, %eax       # imm = 0xFFFEEE91
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -287,9 +283,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edi, (%rsi)
-               	movl	$0xfffeee91, %r11d      # imm = 0xFFFEEE91
-               	movq	%rax, %rdi
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfffeee91, %eax       # imm = 0xFFFEEE91
                	sete	%dil
                	movzbq	%dil, %rdi
                	testq	%rdi, %rdi
@@ -312,9 +306,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edx, (%rsi)
-               	movl	$0xfffeee90, %r11d      # imm = 0xFFFEEE90
-               	movq	%rax, %rsi
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfffeee90, %eax       # imm = 0xFFFEEE90
                	sete	%sil
                	movzbq	%sil, %rsi
                	testq	%rsi, %rsi
@@ -336,9 +328,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edx, (%rsi)
-               	movl	$0xfffeee91, %r11d      # imm = 0xFFFEEE91
-               	movq	%rax, %rdx
-               	cmpl	%r11d, %eax
+               	cmpl	$0xfffeee91, %eax       # imm = 0xFFFEEE91
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
@@ -4702,12 +4692,10 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	lock
                	xaddl	%esi, (%rax)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %esi
+               	cmpl	$0xee6b2800, %esi       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %esi # <addr>
-               	movl	$0xee6b2803, %r11d      # imm = 0xEE6B2803
-               	cmpl	%r11d, %esi
+               	cmpl	$0xee6b2803, %esi       # imm = 0xEE6B2803
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4717,13 +4705,10 @@ Disassembly of section .text:
                	negq	%rcx
                	lock
                	xaddl	%ecx, (%rax)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	movq	%rcx, %rax
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xee6b2800, %ecx       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b27fd, %r11d      # imm = 0xEE6B27FD
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b27fd, %eax       # imm = 0xEE6B27FD
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4737,8 +4722,7 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
@@ -4752,12 +4736,10 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4771,12 +4753,10 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4784,8 +4764,7 @@ Disassembly of section .text:
                                                 # <addr>
                	movl	$0x9, %eax
                	xchgl	%eax, (%rcx)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
@@ -4800,12 +4779,10 @@ Disassembly of section .text:
                	lock
                	xaddl	%esi, (%rax)
                	addq	$0x3, %rsi
-               	movl	$0xee6b2803, %r11d      # imm = 0xEE6B2803
-               	cmpl	%r11d, %esi
+               	cmpl	$0xee6b2803, %esi       # imm = 0xEE6B2803
                	jne	<addr>
                	movl	<rip>, %esi # <addr>
-               	movl	$0xee6b2803, %r11d      # imm = 0xEE6B2803
-               	cmpl	%r11d, %esi
+               	cmpl	$0xee6b2803, %esi       # imm = 0xEE6B2803
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4816,12 +4793,10 @@ Disassembly of section .text:
                	lock
                	xaddl	%ecx, (%rax)
                	leaq	-0x3(%rcx), %rax
-               	movl	$0xee6b27fd, %r11d      # imm = 0xEE6B27FD
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b27fd, %eax       # imm = 0xEE6B27FD
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b27fd, %r11d      # imm = 0xEE6B27FD
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b27fd, %eax       # imm = 0xEE6B27FD
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4851,12 +4826,10 @@ Disassembly of section .text:
                	cmpxchgl	%r10d, (%rdx)
                	jne	<addr>
                	orq	%rcx, %rax
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4871,12 +4844,10 @@ Disassembly of section .text:
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
                	xorq	%rsi, %rax
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4892,8 +4863,7 @@ Disassembly of section .text:
                	lock
                	xaddl	%r10d, (%rcx)
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2802, %r11d      # imm = 0xEE6B2802
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2802, %eax       # imm = 0xEE6B2802
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4940,8 +4910,7 @@ Disassembly of section .text:
                	movl	<rip>, %esi # <addr>
                	cmpl	$0x9, %esi
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4960,11 +4929,9 @@ Disassembly of section .text:
                	testl	%edx, %edx
                	jne	<addr>
                	movl	<rip>, %edx # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %edx
+               	cmpl	$0xee6b2800, %edx       # imm = 0xEE6B2800
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -4983,12 +4950,9 @@ Disassembly of section .text:
                	testl	%edi, %edi
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	movq	%rcx, %rax
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xee6b2800, %ecx       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5012,8 +4976,7 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5032,12 +4995,10 @@ Disassembly of section .text:
                	testl	%edx, %edx
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5045,21 +5006,18 @@ Disassembly of section .text:
                	movl	%edx, (%rsi)
                	leaq	<rip>, %rax # <addr>
                	movl	(%rax), %esi
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %esi
+               	cmpl	$0xee6b2800, %esi       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
                	movl	%ecx, (%rax)
                	movl	(%rax), %ecx
-               	movl	$0xee6b2801, %r11d      # imm = 0xEE6B2801
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xee6b2801, %ecx       # imm = 0xEE6B2801
                	je	<addr>
                	movl	$0x94, %eax
                	retq
                	movl	(%rax), %ecx
-               	movl	$0xee6b2801, %r11d      # imm = 0xEE6B2801
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xee6b2801, %ecx       # imm = 0xEE6B2801
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5067,8 +5025,7 @@ Disassembly of section .text:
                	xchgl	%r10d, (%rax)
                	leaq	<rip>, %rcx # <addr>
                	movl	(%rcx), %eax
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5076,12 +5033,10 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	lock
                	xaddl	%edx, (%rcx)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %edx
+               	cmpl	$0xee6b2800, %edx       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %edx # <addr>
-               	movl	$0xee6b2803, %r11d      # imm = 0xEE6B2803
-               	cmpl	%r11d, %edx
+               	cmpl	$0xee6b2803, %edx       # imm = 0xEE6B2803
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5089,12 +5044,10 @@ Disassembly of section .text:
                	lock
                	xaddl	%eax, (%rcx)
                	subq	$0x3, %rax
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5105,12 +5058,10 @@ Disassembly of section .text:
                	lock
                	cmpxchgl	%r10d, (%rcx)
                	jne	<addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2806, %r11d      # imm = 0xEE6B2806
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2806, %eax       # imm = 0xEE6B2806
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5121,8 +5072,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%esi, (%rdx)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x9, %eax
@@ -5148,8 +5098,7 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
@@ -5160,15 +5109,13 @@ Disassembly of section .text:
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	<rip>, %eax # <addr>
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x94, %eax
                	retq
                	movl	$0x7, %eax
                	xchgl	%eax, (%rcx)
-               	movl	$0xee6b2800, %r11d      # imm = 0xEE6B2800
-               	cmpl	%r11d, %eax
+               	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x7, %eax
@@ -5792,9 +5739,7 @@ Disassembly of section .text:
                	movl	%ecx, %eax
                	lock
                	cmpxchgl	%edi, (%rdx)
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rdi
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	sete	%dil
                	movzbq	%dil, %rdi
                	testq	%rdi, %rdi

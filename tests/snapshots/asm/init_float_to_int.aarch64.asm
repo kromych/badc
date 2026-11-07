@@ -41,8 +41,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x38]
-               	eor	x0, x0, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>

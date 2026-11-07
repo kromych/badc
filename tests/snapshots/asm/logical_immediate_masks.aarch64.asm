@@ -549,8 +549,8 @@ Disassembly of section .text:
                	ubfx	x3, x1, #8, #8
                	add	x2, x2, x3
                	add	x1, x2, x1, asr #16
-               	eor	x0, x0, x1
-               	cbz	w0, <addr>
+               	cmp	w0, w1
+               	b.eq	<addr>
                	mov	x0, #0x1b               // =27
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]

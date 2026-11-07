@@ -20,10 +20,10 @@ Disassembly of section .text:
                	ret
 
 <collect>:
-               	eor	x2, x1, #0x1
-               	cbz	w2, <addr>
-               	eor	x1, x1, #0x3
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.eq	<addr>
+               	cmp	w1, #0x3
+               	b.ne	<addr>
                	adrp	x1, <page>
                	ldrsw	x2, [x1, #0x60]
                	cmp	w2, #0x8

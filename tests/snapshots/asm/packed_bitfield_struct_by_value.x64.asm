@@ -121,8 +121,7 @@ Disassembly of section .text:
                	cmpl	$0xabcde, %ecx          # imm = 0xABCDE
                	jne	<addr>
                	movzbq	-0x5(%rbp), %rax
-               	xorq	$0xa, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	leave

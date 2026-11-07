@@ -57,13 +57,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v24  ImmData(24)                                      -> x0
     v25  Load { addr=v24, disp=0, kind=U32 pc_rel }       -> x0
-    v26  BinopI { op=xor, lhs=v25, rhs_imm=1 }            -> x0
+    v26  BinopI { op=ne, lhs=v25, rhs_imm=1 }             -> x0
     v27  BinopI { op=and, lhs=v26, rhs_imm=4294967295 }   -> x1
-    v28  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x1
+    v28  BinopI { op=ne, lhs=v25, rhs_imm=1 }             -> x1
     v29  Imm(0)                                           -> x1
     v30  Imm(0)                                           -> x1
     v31  Imm(0)                                           -> x1
-    terminator Bz { cond=v26, target=b6, fall=b5 }   (low word)   (exit_acc=v28)
+    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v28)
   block 5  start_pc=0
     v32  Imm(2)                                           -> x0
     terminator Return(v32)   (exit_acc=v32)

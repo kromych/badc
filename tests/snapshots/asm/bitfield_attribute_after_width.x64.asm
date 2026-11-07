@@ -45,8 +45,7 @@ Disassembly of section .text:
                	orq	$0x50, %rax
                	movl	%eax, -0x30(%rbp)
                	movzbq	-0x30(%rbp), %rax
-               	xorq	$0x5d, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x5d, %eax
                	je	<addr>
                	movl	$0x14, %eax
                	leave
@@ -173,8 +172,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	-0x60(%rbp), %rax
-               	xorq	$0x77, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x77, %eax
                	je	<addr>
                	movl	$0x1a, %eax
                	leave

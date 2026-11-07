@@ -35,9 +35,8 @@ Disassembly of section .text:
                	b.hs	<addr>
                	and	x2, x20, #0xff
                	mov	x1, #0x1                // =1
-               	mov	x17, #0x2a              // =42
-               	eor	x0, x2, x17
-               	cbz	w0, <addr>
+               	cmp	w2, #0x2a
+               	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>

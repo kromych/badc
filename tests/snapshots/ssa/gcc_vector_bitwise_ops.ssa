@@ -701,38 +701,38 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v396 Imm(0)                                           -> x0
     v397 LoadLocal { off=-7, kind=U8 }                    -> x0
     v398 Imm(254)                                         -> x1
-    v399 BinopI { op=xor, lhs=v397, rhs_imm=254 }         -> x0
+    v399 BinopI { op=ne, lhs=v397, rhs_imm=254 }          -> x0
     v400 BinopI { op=and, lhs=v399, rhs_imm=4294967295 }  -> x1
-    v401 BinopI { op=ne, lhs=v399, rhs_imm=0 }            -> x1
+    v401 BinopI { op=ne, lhs=v397, rhs_imm=254 }          -> x1
     v402 Imm(1)                                           -> x1
     v403 Imm(0)                                           -> x1
-    terminator Bnz { cond=v399, target=b22, fall=b20 }   (low word)   (exit_acc=v401)
+    terminator Bnz { cond=v399, target=b22, fall=b20 }   (exit_acc=v401)
   block 20  start_pc=0
     v404 Imm(0)                                           -> x0
     v405 Imm(1)                                           -> x0
     v406 BinopI { op=add, lhs=v377, rhs_imm=1 }           -> x0
     v407 LoadLocal { off=-7, disp=1, kind=U8 }            -> x0
-    v408 BinopI { op=xor, lhs=v407, rhs_imm=2 }           -> x0
+    v408 BinopI { op=ne, lhs=v407, rhs_imm=2 }            -> x0
     v409 BinopI { op=and, lhs=v408, rhs_imm=4294967295 }  -> x1
-    v410 BinopI { op=ne, lhs=v408, rhs_imm=0 }            -> x1
+    v410 BinopI { op=ne, lhs=v407, rhs_imm=2 }            -> x1
     v411 BinopI { op=ne, lhs=v410, rhs_imm=0 }            -> x1
     v412 Imm(0)                                           -> x1
     v413 Imm(0)                                           -> x1
     v414 Imm(0)                                           -> x1
     v415 Imm(0)                                           -> x1
-    terminator Bnz { cond=v408, target=b22, fall=b21 }   (low word)   (exit_acc=v410)
+    terminator Bnz { cond=v408, target=b22, fall=b21 }   (exit_acc=v410)
   block 21  start_pc=0
     v416 Imm(0)                                           -> x0
     v417 Imm(7)                                           -> x0
     v418 BinopI { op=add, lhs=v377, rhs_imm=7 }           -> x0
     v419 LoadLocal { off=-7, disp=7, kind=U8 }            -> x0
-    v420 BinopI { op=xor, lhs=v419, rhs_imm=8 }           -> x0
+    v420 BinopI { op=ne, lhs=v419, rhs_imm=8 }            -> x0
     v421 BinopI { op=and, lhs=v420, rhs_imm=4294967295 }  -> x1
-    v422 BinopI { op=ne, lhs=v420, rhs_imm=0 }            -> x1
+    v422 BinopI { op=ne, lhs=v419, rhs_imm=8 }            -> x1
     v423 Imm(0)                                           -> x1
     v424 Imm(0)                                           -> x1
     v425 Imm(0)                                           -> x1
-    terminator Bz { cond=v420, target=b23, fall=b22 }   (low word)   (exit_acc=v422)
+    terminator Bz { cond=v420, target=b23, fall=b22 }   (exit_acc=v422)
   block 22  start_pc=0
     v426 Imm(9)                                           -> x0
     v427 LifetimeEnd(-68)                                 -> -

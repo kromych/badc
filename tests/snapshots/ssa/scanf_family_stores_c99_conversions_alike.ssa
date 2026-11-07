@@ -208,12 +208,12 @@ fn ent_pc=14 n_params=1 variadic=false locals=36
     v173 Extend { value=v155, kind=I32 }                  -> x6
     v174 Binop { op=add, lhs=v172, rhs=v173 }             -> x2
     v175 LoadIndexed { base=v172, index=v173, scale=1, kind=U8 } -> x1
-    v176 BinopI { op=xor, lhs=v175, rhs_imm=170 }         -> x2
+    v176 BinopI { op=ne, lhs=v175, rhs_imm=170 }          -> x2
     v177 BinopI { op=and, lhs=v176, rhs_imm=4294967295 }  -> x1
-    v178 BinopI { op=eq, lhs=v176, rhs_imm=0 }            -> x1
+    v178 BinopI { op=eq, lhs=v175, rhs_imm=170 }          -> x1
     v179 Imm(1)                                           -> x1
     v180 Imm(0)                                           -> x7
-    terminator Bz { cond=v176, target=b34, fall=b21 }   (low word)   (exit_acc=v178)
+    terminator Bz { cond=v176, target=b34, fall=b21 }   (exit_acc=v178)
   block 21  start_pc=0
     v195 Extend { value=v16, kind=I32 }                   -> x1
     v196 BinopI { op=ge, lhs=v16, rhs_imm=4 }             -> x2

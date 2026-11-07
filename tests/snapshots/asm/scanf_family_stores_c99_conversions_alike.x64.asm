@@ -229,10 +229,8 @@ Disassembly of section .text:
                	leaq	-0x110(%rbp), %rcx
                	movslq	%r13d, %rsi
                	movzbq	(%rcx,%rsi), %rcx
-               	movq	%rcx, %rdx
-               	xorq	$0xaa, %rdx
+               	cmpl	$0xaa, %ecx
                	movl	$0x1, %ecx
-               	testl	%edx, %edx
                	je	<addr>
                	cmpl	$0x4, %ebx
                	setge	%dl

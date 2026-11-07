@@ -72,16 +72,14 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	ldurb	w0, [x29, #-0xf9]
-               	eor	x0, x0, #0x30
-               	cbz	w0, <addr>
+               	cmp	w0, #0x30
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x200
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [sp, #0x9c]
-               	mov	x17, #0x35              // =53
-               	eor	x0, x0, x17
-               	cmp	w0, #0x0
+               	cmp	w0, #0x35
                	cset	x0, ne
                	add	sp, sp, #0x200
                	ldp	x29, x30, [sp], #0x10

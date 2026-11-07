@@ -221,9 +221,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x10]
                	ldrb	w0, [x0]
-               	mov	x17, #0x7a              // =122
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x7a
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ldr	d8, [sp, #0x40]
                	add	sp, sp, #0x70

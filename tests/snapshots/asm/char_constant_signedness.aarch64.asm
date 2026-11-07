@@ -40,8 +40,8 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x8]
                	and	x1, x1, #0xff
-               	eor	x1, x1, #0x80
-               	cbz	w1, <addr>
+               	cmp	w1, #0x80
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -50,8 +50,8 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x8]
                	and	x1, x1, #0xff
-               	eor	x1, x1, #0xff
-               	cbz	w1, <addr>
+               	cmp	w1, #0xff
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

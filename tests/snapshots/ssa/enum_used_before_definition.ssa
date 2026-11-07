@@ -259,10 +259,10 @@ fn ent_pc=7 n_params=0 variadic=false locals=26
     v156 ImmData(24)                                      -> x0
     v157 Load { addr=v156, disp=0, kind=I64 pc_rel }      -> x0
     v158 Load { addr=v157, disp=0, kind=U8 }              -> x0
-    v159 BinopI { op=xor, lhs=v158, rhs_imm=200 }         -> x0
+    v159 BinopI { op=ne, lhs=v158, rhs_imm=200 }          -> x0
     v160 BinopI { op=and, lhs=v159, rhs_imm=4294967295 }  -> x1
-    v161 BinopI { op=ne, lhs=v159, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v159, target=b25, fall=b24 }   (low word)   (exit_acc=v161)
+    v161 BinopI { op=ne, lhs=v158, rhs_imm=200 }          -> x1
+    terminator Bz { cond=v159, target=b25, fall=b24 }   (exit_acc=v161)
   block 24  start_pc=0
     v162 Imm(15)                                          -> x0
     v163 LifetimeEnd(-8)                                  -> -

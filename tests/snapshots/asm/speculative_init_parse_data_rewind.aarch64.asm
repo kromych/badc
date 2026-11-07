@@ -28,14 +28,12 @@ Disassembly of section .text:
                	ret
                	ldr	x2, [x0, #0x8]
                	ldr	w2, [x2]
-               	mov	x17, #0xa               // =10
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
+               	cmp	w2, #0xa
+               	b.ne	<addr>
                	ldr	x2, [x0, #0x8]
                	ldr	w2, [x2, #0x4]
-               	mov	x17, #0x14              // =20
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
+               	cmp	w2, #0x14
+               	b.ne	<addr>
                	ldr	x0, [x0, #0x8]
                	ldr	w0, [x0, #0x8]
                	cbz	w0, <addr>
@@ -43,8 +41,8 @@ Disassembly of section .text:
                	ret
                	ldr	x0, [x1, #0x8]
                	ldr	w0, [x0]
-               	eor	x0, x0, #0x1e
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1e
+               	b.ne	<addr>
                	ldr	x0, [x1, #0x8]
                	ldr	w0, [x0, #0x4]
                	cbz	w0, <addr>

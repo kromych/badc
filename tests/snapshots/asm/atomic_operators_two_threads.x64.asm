@@ -179,8 +179,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rax, %rcx
                	movsbq	%cl, %rax
-               	xorq	$0x1, %rax
-               	testq	%rax, %rax
+               	cmpq	$0x1, %rax
                	setne	%sil
                	movzbq	%sil, %rsi
                	movzbq	%cl, %rax

@@ -30,23 +30,21 @@ Disassembly of section .text:
                	movk	x2, #0x1122, lsl #16
                	stur	w2, [x1, #0x1]
                	ldrb	w1, [x1]
-               	eor	x1, x1, #0x7
-               	cbz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w1, [x29, #-0x1b]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0x1a]
-               	mov	x17, #0x44              // =68
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x44
+               	b.ne	<addr>
                	ldurb	w1, [x29, #-0x17]
-               	mov	x17, #0x11              // =17
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x11
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -54,8 +52,8 @@ Disassembly of section .text:
                	mov	x1, #-0x5               // =-5
                	stur	w1, [x0, #0x1]
                	ldurb	w1, [x29, #-0x20]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x7
+               	b.ne	<addr>
                	ldursw	x0, [x0, #0x6]
                	mov	x17, #0x3344            // =13124
                	movk	x17, #0x1122, lsl #16
@@ -80,8 +78,8 @@ Disassembly of section .text:
                	mov	x1, #0x9                // =9
                	sturb	w1, [x29, #-0x7]
                	ldurb	w1, [x29, #-0x10]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldursw	x1, [x0, #0x1]
                	mov	x17, #0x304             // =772
                	movk	x17, #0x102, lsl #16
@@ -92,9 +90,8 @@ Disassembly of section .text:
                	cmp	w0, w17
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x7]
-               	mov	x17, #0x9               // =9
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x9
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -115,8 +112,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	stur	w1, [x0, #0x1]
                	ldurb	w1, [x29, #-0x38]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldur	w1, [x0, #0x1]
                	sbfx	x1, x1, #0, #30
                	mov	x17, #-0xcd15           // =-52501
@@ -124,8 +121,8 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x33]
-               	eor	x1, x1, #0x2
-               	cbz	w1, <addr>
+               	cmp	w1, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -135,16 +132,16 @@ Disassembly of section .text:
                	orr	x1, x1, #0x1fffffff
                	stur	w1, [x0, #0x1]
                	ldurb	w1, [x29, #-0x38]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ldur	w0, [x0, #0x1]
                	sbfx	x0, x0, #0, #30
                	mov	x17, #0x1fffffff        // =536870911
                	cmp	w0, w17
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x33]
-               	eor	x0, x0, #0x2
-               	cbz	w0, <addr>
+               	cmp	w0, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -169,8 +166,8 @@ Disassembly of section .text:
                	mov	x1, #0x4                // =4
                	sturb	w1, [x29, #-0x2a]
                	ldurb	w1, [x29, #-0x30]
-               	eor	x1, x1, #0x3
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x3
+               	b.ne	<addr>
                	ldur	w1, [x29, #-0x30]
                	sbfx	x1, x1, #8, #20
                	mov	x17, #-0x7ffff          // =-524287
@@ -182,8 +179,8 @@ Disassembly of section .text:
                	cmp	w1, w17
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x2a]
-               	eor	x1, x1, #0x4
-               	cbz	w1, <addr>
+               	cmp	w1, #0x4
+               	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -203,8 +200,8 @@ Disassembly of section .text:
                	cmp	w0, w17
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x2a]
-               	eor	x0, x0, #0x4
-               	cbz	w0, <addr>
+               	cmp	w0, #0x4
+               	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -227,9 +224,8 @@ Disassembly of section .text:
                	lsr	x1, x1, #32
                	sturb	w1, [x29, #-0x23]
                	ldurb	w1, [x29, #-0x28]
-               	mov	x17, #0x5               // =5
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x5
+               	b.ne	<addr>
                	ldur	w1, [x0, #0x1]
                	ldurb	w2, [x29, #-0x23]
                	orr	x1, x1, x2, lsl #32
@@ -238,8 +234,8 @@ Disassembly of section .text:
                	cmp	x1, x17
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x22]
-               	eor	x1, x1, #0x6
-               	cbz	w1, <addr>
+               	cmp	w1, #0x6
+               	b.eq	<addr>
                	mov	x0, #0x18               // =24
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -256,9 +252,8 @@ Disassembly of section .text:
                	lsr	x1, x1, #32
                	sturb	w1, [x29, #-0x23]
                	ldurb	w1, [x29, #-0x28]
-               	mov	x17, #0x5               // =5
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x5
+               	b.ne	<addr>
                	ldur	w0, [x0, #0x1]
                	ldurb	w1, [x29, #-0x23]
                	orr	x0, x0, x1, lsl #32
@@ -269,8 +264,8 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x22]
-               	eor	x0, x0, #0x6
-               	cbz	w0, <addr>
+               	cmp	w0, #0x6
+               	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

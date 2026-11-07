@@ -122,9 +122,8 @@ Disassembly of section .text:
                	ret
                	cmp	w3, #0x0
                	b.le	<addr>
-               	mov	x17, #0x92              // =146
-               	eor	x3, x3, x17
-               	cbz	w3, <addr>
+               	cmp	w3, #0x92
+               	b.eq	<addr>
                	mov	x0, #0x1e               // =30
                	ret
                	cmp	w2, w0

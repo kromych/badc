@@ -124,8 +124,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	-0x5c(%rbp), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
-               	xorq	$0x180, %rax            # imm = 0x180
-               	testl	%eax, %eax
+               	cmpl	$0x180, %eax            # imm = 0x180
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbx

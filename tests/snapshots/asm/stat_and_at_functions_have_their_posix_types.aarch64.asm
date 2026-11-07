@@ -252,9 +252,8 @@ Disassembly of section .text:
                	mov	x0, #0x12               // =18
                	bl	<addr>
                	bl	<addr>
-               	mov	x17, #0x12              // =18
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x12
+               	b.ne	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x200              // =512

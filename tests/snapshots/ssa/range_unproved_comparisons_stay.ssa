@@ -40,10 +40,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v34  ImmData(24)                                      -> x1
     v35  Load { addr=v4, disp=0, kind=I64, volatile pc_rel } -> x1
-    v36  BinopI { op=xor, lhs=v35, rhs_imm=2 }            -> x2
+    v36  BinopI { op=ne, lhs=v35, rhs_imm=2 }             -> x2
     v37  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x6
-    v38  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> x6
-    terminator Bz { cond=v36, target=b30, fall=b7 }   (low word)   (exit_acc=v38)
+    v38  BinopI { op=ne, lhs=v35, rhs_imm=2 }             -> x6
+    terminator Bz { cond=v36, target=b30, fall=b7 }   (exit_acc=v38)
   block 7  start_pc=0
     v39  BinopI { op=ule, lhs=v35, rhs_imm=2 }            -> x1
     terminator Bz { cond=v39, target=b30, fall=b8 }   (exit_acc=v39)

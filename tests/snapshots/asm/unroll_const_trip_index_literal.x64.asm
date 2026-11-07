@@ -99,8 +99,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rax, %rdx
                	addq	%rdx, %rcx
                	movl	(%rcx), %esi
-               	xorq	$0x1, %rsi
-               	testl	%esi, %esi
+               	cmpl	$0x1, %esi
                	jne	<addr>
                	movq	0x20(%rcx), %rsi
                	leaq	<rip>, %rdi # <addr>
@@ -123,8 +122,7 @@ Disassembly of section .text:
                	imulq	$0x30, %rax, %rdx
                	addq	%rdx, %rsi
                	movl	(%rsi), %edi
-               	xorq	$0x2, %rdi
-               	testl	%edi, %edi
+               	cmpl	$0x2, %edi
                	jne	<addr>
                	movq	0x20(%rsi), %rsi
                	leaq	<rip>, %rdi # <addr>

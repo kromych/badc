@@ -275,14 +275,14 @@ fn ent_pc=3 n_params=0 variadic=false locals=19
     v214 Imm(0)                                           -> x1
     v215 ImmData(184)                                     -> x1
     v216 Load { addr=v206, disp=0, kind=U8 pc_rel }       -> x1
-    v217 BinopI { op=xor, lhs=v216, rhs_imm=2 }           -> x1
+    v217 BinopI { op=ne, lhs=v216, rhs_imm=2 }            -> x1
     v218 BinopI { op=and, lhs=v217, rhs_imm=4294967295 }  -> x2
-    v219 BinopI { op=ne, lhs=v217, rhs_imm=0 }            -> x2
+    v219 BinopI { op=ne, lhs=v216, rhs_imm=2 }            -> x2
     v220 BinopI { op=ne, lhs=v219, rhs_imm=0 }            -> x2
     v221 Imm(0)                                           -> x2
     v222 Imm(0)                                           -> x2
     v223 Imm(0)                                           -> x2
-    terminator Bnz { cond=v217, target=b30, fall=b29 }   (low word)   (exit_acc=v219)
+    terminator Bnz { cond=v217, target=b30, fall=b29 }   (exit_acc=v219)
   block 29  start_pc=0
     v225 ImmData(192)                                     -> x1
     v226 Load { addr=v209, disp=0, kind=I8 pc_rel }       -> x1

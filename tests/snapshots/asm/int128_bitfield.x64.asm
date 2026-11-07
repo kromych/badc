@@ -86,8 +86,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	-0x20(%rbp), %rax
-               	xorq	$0xab, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xab, %eax
                	je	<addr>
                	movl	$0x38, %eax
                	leave

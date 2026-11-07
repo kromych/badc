@@ -40,8 +40,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x7, %rax

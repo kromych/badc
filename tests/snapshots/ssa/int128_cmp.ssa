@@ -190,7 +190,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v190 Imm(0)                                           -> x13
     v191 Binop { op=xor, lhs=v2, rhs=v183 }               -> x12
     v192 BinopI { op=or, lhs=v191, rhs_imm=0 }            -> x13
-    v193 BinopI { op=eq, lhs=v191, rhs_imm=0 }            -> x13
+    v193 Binop { op=eq, lhs=v2, rhs=v183 }                -> x13
     terminator Bnz { cond=v191, target=b3, fall=b2 }   (exit_acc=v193)
   block 2  start_pc=0
     v202 Imm(3)                                           -> x0
@@ -522,11 +522,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v510 Imm(0)                                           -> x8
     v511 Imm(0)                                           -> x8
     v512 BinopI { op=or, lhs=v508, rhs_imm=0 }            -> x8
-    v513 BinopI { op=xor, lhs=v508, rhs_imm=1 }           -> x7
-    v514 BinopI { op=eq, lhs=v513, rhs_imm=0 }            -> x8
+    v513 BinopI { op=ne, lhs=v508, rhs_imm=1 }            -> x7
+    v514 BinopI { op=eq, lhs=v508, rhs_imm=1 }            -> x8
     v515 Imm(1)                                           -> x8
     v516 Imm(0)                                           -> x8
-    terminator Bz { cond=v513, target=b28, fall=b16 }   (low word)   (exit_acc=v514)
+    terminator Bz { cond=v513, target=b28, fall=b16 }   (exit_acc=v514)
   block 16  start_pc=0
     v517 Imm(0)                                           -> x7
     v518 Imm(0)                                           -> x7
@@ -786,7 +786,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v772 Binop { op=xor, lhs=v763, rhs=v771 }             -> x0
     v773 Imm(0)                                           -> x1
     v774 BinopI { op=or, lhs=v772, rhs_imm=0 }            -> x1
-    v775 BinopI { op=ne, lhs=v772, rhs_imm=0 }            -> x1
+    v775 Binop { op=ne, lhs=v763, rhs=v771 }              -> x1
     v776 Imm(0)                                           -> x1
     v777 Imm(0)                                           -> x1
     v778 Imm(0)                                           -> x1

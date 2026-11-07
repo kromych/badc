@@ -35,8 +35,7 @@ Disassembly of section .text:
                	movl	$0x0, -0x8(%rbp)
                	movl	$0xfffffffe, -0x8(%rbp) # imm = 0xFFFFFFFE
                	movl	-0x8(%rbp), %ecx
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x2, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	leave
@@ -84,8 +83,7 @@ Disassembly of section .text:
                	movl	$0x0, -0x8(%rbp)
                	movl	$0xfffffffe, -0x8(%rbp) # imm = 0xFFFFFFFE
                	movl	-0x8(%rbp), %ecx
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpl	%r11d, %ecx
+               	cmpl	$-0x2, %ecx
                	je	<addr>
                	movl	$0x17, %eax
                	leave

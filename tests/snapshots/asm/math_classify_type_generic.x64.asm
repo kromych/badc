@@ -104,8 +104,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	je	<addr>
                	movss	-0x28(%rbp), %xmm0
                	movss	%xmm0, -0x38(%rbp)
@@ -114,8 +113,7 @@ Disassembly of section .text:
                	andq	$0xff, %rcx
                	testl	%ecx, %ecx
                	je	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	je	<addr>
                	movss	-0x30(%rbp), %xmm0
                	movss	%xmm0, -0x38(%rbp)
@@ -402,8 +400,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -433,8 +430,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -444,8 +440,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -455,8 +450,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -466,8 +460,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -477,8 +470,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
@@ -498,23 +490,19 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0xff, %edx
                	jne	<addr>
                	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	jmp	<addr>
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0xff, %ecx
                	jne	<addr>
                	jmp	<addr>
-               	xorq	$0xff, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0xff, %edx
                	jne	<addr>
                	jmp	<addr>
                	cmpl	$0x7ff, %edx            # imm = 0x7FF

@@ -473,8 +473,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movzbq	-0xa1(%rbp), %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

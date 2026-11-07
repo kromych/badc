@@ -49,10 +49,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v35  Imm(0)                                           -> x1
     v36  BinopI { op=add, lhs=v27, rhs_imm=98 }           -> x1
     v37  Load { addr=v27, disp=98, kind=U16 }             -> x1
-    v38  BinopI { op=xor, lhs=v37, rhs_imm=1 }            -> x1
+    v38  BinopI { op=ne, lhs=v37, rhs_imm=1 }             -> x1
     v39  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x2
-    v40  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v38, target=b6, fall=b5 }   (low word)   (exit_acc=v40)
+    v40  BinopI { op=ne, lhs=v37, rhs_imm=1 }             -> x2
+    terminator Bz { cond=v38, target=b6, fall=b5 }   (exit_acc=v40)
   block 5  start_pc=0
     v41  Imm(3)                                           -> x0
     v42  LifetimeEnd(-2)                                  -> -

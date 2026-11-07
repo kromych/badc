@@ -1001,10 +1001,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 16  start_pc=0
     v1109 LocalAddr(-334)                                  -> x0
     v1110 LoadLocal { off=-334, kind=U8 }                  -> x0
-    v1111 BinopI { op=xor, lhs=v1110, rhs_imm=171 }        -> x0
+    v1111 BinopI { op=ne, lhs=v1110, rhs_imm=171 }         -> x0
     v1112 BinopI { op=and, lhs=v1111, rhs_imm=4294967295 } -> x1
-    v1113 BinopI { op=ne, lhs=v1111, rhs_imm=0 }           -> x1
-    terminator Bz { cond=v1111, target=b18, fall=b17 }   (low word)   (exit_acc=v1113)
+    v1113 BinopI { op=ne, lhs=v1110, rhs_imm=171 }         -> x1
+    terminator Bz { cond=v1111, target=b18, fall=b17 }   (exit_acc=v1113)
   block 17  start_pc=0
     v1114 Imm(56)                                          -> x0
     v1115 LifetimeEnd(0)                                   -> -

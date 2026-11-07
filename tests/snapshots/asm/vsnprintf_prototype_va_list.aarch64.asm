@@ -166,8 +166,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	ldurb	w1, [x29, #-0xc]
-               	eor	x1, x1, #0x78
-               	cbz	w1, <addr>
+               	cmp	w1, #0x78
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -185,9 +185,8 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	ldurb	w1, [x29, #-0x10]
-               	mov	x17, #0x34              // =52
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x34
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

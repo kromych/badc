@@ -54,9 +54,7 @@ Disassembly of section .text:
                	jl	<addr>
                	xorq	%rdx, %rcx
                	xorq	%rsi, %rcx
-               	movl	$0xff6fffef, %r11d      # imm = 0xFF6FFFEF
-               	movq	%rcx, %rax
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xff6fffef, %ecx       # imm = 0xFF6FFFEF
                	jne	<addr>
                	xorl	%eax, %eax
                	leave

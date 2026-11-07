@@ -220,10 +220,9 @@ Disassembly of section .text:
                	cset	x1, ne
                	sub	x2, x29, #0x110
                	ldrb	w0, [x2, w22, sxtw]
-               	mov	x17, #0xaa              // =170
-               	eor	x3, x0, x17
+               	cmp	w0, #0xaa
                	mov	x0, #0x1                // =1
-               	cbz	w3, <addr>
+               	b.eq	<addr>
                	cmp	w20, #0x4
                	mov	x0, #0x0                // =0
                	b.lt	<addr>

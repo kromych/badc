@@ -295,16 +295,13 @@ Disassembly of section .text:
                	movabsq	$0x8f806fa04fc02fe, %rax # imm = 0x8F806FA04FC02FE
                	movq	%rax, -0x38(%rbp)
                	movzbq	-0x38(%rbp), %rax
-               	xorq	$0xfe, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xfe, %eax
                	jne	<addr>
                	movzbq	-0x37(%rbp), %rax
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	jne	<addr>
                	movzbq	-0x31(%rbp), %rax
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	leave

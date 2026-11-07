@@ -58,14 +58,12 @@ Disassembly of section .text:
                	movl	$0x61, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	$0x61, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x61, %eax
                	jne	<addr>
                	movl	$0x61, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	xorq	$0x41, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x41, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp

@@ -188,15 +188,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 15  start_pc=0
     v121 ImmData(136)                                     -> x0
     v122 Load { addr=v121, disp=0, kind=U32 pc_rel }      -> x0
-    v123 BinopI { op=xor, lhs=v122, rhs_imm=2 }           -> x0
+    v123 BinopI { op=ne, lhs=v122, rhs_imm=2 }            -> x0
     v124 BinopI { op=and, lhs=v123, rhs_imm=4294967295 }  -> x1
-    v125 BinopI { op=ne, lhs=v123, rhs_imm=0 }            -> x1
+    v125 BinopI { op=ne, lhs=v122, rhs_imm=2 }            -> x1
     v126 BinopI { op=ne, lhs=v125, rhs_imm=0 }            -> x1
     v127 Imm(0)                                           -> x1
     v128 Imm(0)                                           -> x1
     v129 Imm(0)                                           -> x1
     v130 Imm(0)                                           -> x1
-    terminator Bnz { cond=v123, target=b17, fall=b16 }   (low word)   (exit_acc=v125)
+    terminator Bnz { cond=v123, target=b17, fall=b16 }   (exit_acc=v125)
   block 16  start_pc=0
     v131 ImmData(176)                                     -> x0
     v132 Load { addr=v131, disp=0, kind=I32 pc_rel }      -> x0

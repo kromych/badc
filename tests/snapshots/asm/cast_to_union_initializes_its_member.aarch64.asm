@@ -23,8 +23,8 @@ Disassembly of section .text:
                	fcmp	d0, d0
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x8]
-               	eor	x0, x0, #0x78
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x78
+               	b.ne	<addr>
                	fmov	d0, #1.50000000
                	fcmp	d0, d0
                	b.eq	<addr>
@@ -41,8 +41,8 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x8]
                	cmp	w1, #0x6
                	b.ne	<addr>
-               	eor	x0, x0, #0x78
-               	cbz	w0, <addr>
+               	cmp	w0, #0x78
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

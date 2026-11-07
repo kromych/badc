@@ -37,14 +37,12 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldr	x1, [x0, #0x20]
                	ldrb	w1, [x1]
-               	mov	x17, #0x79              // =121
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x79
+               	b.ne	<addr>
                	ldr	x0, [x0, #0x20]
                	ldrb	w0, [x0, #0x2]
-               	mov	x17, #0x73              // =115
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x73
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
@@ -52,9 +50,8 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldr	x0, [x0, #0x28]
                	ldrb	w0, [x0]
-               	mov	x17, #0x79              // =121
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x79
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	adrp	x0, <page>
@@ -69,9 +66,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldrb	w0, [x0, #0x30]
-               	mov	x17, #0x69              // =105
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x69
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
@@ -92,14 +88,12 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x48]
                	ldrb	w1, [x1]
-               	mov	x17, #0x61              // =97
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x61
+               	b.ne	<addr>
                	ldr	x0, [x0, #0x48]
                	ldrb	w0, [x0, #0x2]
-               	mov	x17, #0x63              // =99
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x63
+               	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	ret
                	adrp	x0, <page>

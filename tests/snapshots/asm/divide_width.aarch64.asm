@@ -171,9 +171,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0xffffffff         // =4294967295
                	bl	<addr>
-               	mov	x17, #0x5               // =5
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x5
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20

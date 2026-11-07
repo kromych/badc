@@ -127,16 +127,13 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movzbq	-0x9(%rbp), %rax
-               	xorq	$0x80, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x80, %eax
                	jne	<addr>
                	movzbq	-0x8(%rbp), %rax
-               	xorq	$0xff, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xff, %eax
                	jne	<addr>
                	movzbq	-0x7(%rbp), %rax
-               	xorq	$0x3f, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x3f, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx

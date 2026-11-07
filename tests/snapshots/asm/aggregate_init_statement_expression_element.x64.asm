@@ -54,8 +54,7 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
-               	movl	$0xa1b2c3d4, %r11d      # imm = 0xA1B2C3D4
-               	cmpl	%r11d, %ecx
+               	cmpl	$0xa1b2c3d4, %ecx       # imm = 0xA1B2C3D4
                	je	<addr>
                	movl	$0x1, %eax
                	testl	%eax, %eax
@@ -109,8 +108,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	0x4(%rax), %ecx
-               	xorq	$0x7, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x8, %eax
                	jmp	<addr>
@@ -136,8 +134,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	jmp	<addr>
                	movl	0x4(%rax), %ecx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	jmp	<addr>

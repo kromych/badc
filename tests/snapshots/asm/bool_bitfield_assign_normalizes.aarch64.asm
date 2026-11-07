@@ -58,8 +58,8 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	ubfx	x3, x3, #2, #3
-               	eor	x3, x3, #0x2
-               	cbz	w3, <addr>
+               	cmp	w3, #0x2
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -89,8 +89,8 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	ubfx	x3, x3, #2, #3
-               	eor	x3, x3, #0x1
-               	cbz	w3, <addr>
+               	cmp	w3, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -127,8 +127,8 @@ Disassembly of section .text:
                	ret
                	ldr	w3, [x1, #0x18]
                	ubfx	x3, x3, #2, #3
-               	eor	x3, x3, #0x1
-               	cbz	w3, <addr>
+               	cmp	w3, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -37,9 +37,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	jmp	<addr>
                	movl	$0x1, %eax
-               	movq	%rax, %rdx
-               	xorq	$0x2, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x2, %eax
                	jne	<addr>
                	cmpq	$0x2, %rcx
                	je	<addr>

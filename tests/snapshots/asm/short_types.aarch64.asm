@@ -226,8 +226,8 @@ Disassembly of section .text:
                	ret
                	and	x0, x0, #0xffff
                	mov	x17, #0xc0de            // =49374
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, w17
+               	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20

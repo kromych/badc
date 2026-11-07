@@ -176,9 +176,8 @@ Disassembly of section .text:
                	str	q1, [x16]
                	sub	x3, x29, #0x10
                	ldurb	w0, [x29, #-0x10]
-               	mov	x17, #0x23              // =35
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x23
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

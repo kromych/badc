@@ -67,8 +67,7 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rax, -0x8(%rbp)
                	movl	(%rax), %eax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rax, -0x8(%rbp)
                	movl	(%rax), %eax
-               	xorq	$0x7, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	leave

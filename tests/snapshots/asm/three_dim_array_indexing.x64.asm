@@ -68,22 +68,19 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0xc, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	movzbq	<rip>, %rax # <addr>
-               	xorq	$0x18, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x18, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp

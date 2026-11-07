@@ -76,9 +76,8 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x1]
                	strb	w0, [x1, #0x2]
                	ldrb	w2, [x1, #0x1]
-               	mov	x17, #0x69              // =105
-               	eor	x2, x2, x17
-               	cbz	w2, <addr>
+               	cmp	w2, #0x69
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

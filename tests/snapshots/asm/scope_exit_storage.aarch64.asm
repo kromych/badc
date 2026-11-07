@@ -373,8 +373,8 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x38]
-               	eor	x0, x0, #0x2
-               	cbz	w0, <addr>
+               	cmp	w0, #0x2
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp]

@@ -110,10 +110,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v60  InlineAsm { template="testb $0x01, %1\n\tsete %0", ops=2, args=[-, v59] } -> x0
     v61  Imm(0)                                           -> x1
     v62  BinopI { op=and, lhs=v60, rhs_imm=255 }          -> x0
-    v63  BinopI { op=xor, lhs=v62, rhs_imm=1 }            -> x0
+    v63  BinopI { op=ne, lhs=v62, rhs_imm=1 }             -> x0
     v64  BinopI { op=and, lhs=v63, rhs_imm=4294967295 }   -> x1
-    v65  BinopI { op=ne, lhs=v63, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v63, target=b24, fall=b23 }   (low word)   (exit_acc=v65)
+    v65  BinopI { op=ne, lhs=v62, rhs_imm=1 }             -> x1
+    terminator Bz { cond=v63, target=b24, fall=b23 }   (exit_acc=v65)
   block 23  start_pc=0
     v66  Imm(12)                                          -> x0
     terminator Return(v66)   (exit_acc=v66)
@@ -123,10 +123,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v69  InlineAsm { template="cmpb $0x2a, %1\n\tsete %0", ops=2, args=[-, v68] } -> x0
     v70  Imm(0)                                           -> x1
     v71  BinopI { op=and, lhs=v69, rhs_imm=255 }          -> x0
-    v72  BinopI { op=xor, lhs=v71, rhs_imm=1 }            -> x0
+    v72  BinopI { op=ne, lhs=v71, rhs_imm=1 }             -> x0
     v73  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x1
-    v74  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v72, target=b26, fall=b25 }   (low word)   (exit_acc=v74)
+    v74  BinopI { op=ne, lhs=v71, rhs_imm=1 }             -> x1
+    terminator Bz { cond=v72, target=b26, fall=b25 }   (exit_acc=v74)
   block 25  start_pc=0
     v75  Imm(13)                                          -> x0
     terminator Return(v75)   (exit_acc=v75)

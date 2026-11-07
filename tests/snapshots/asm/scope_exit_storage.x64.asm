@@ -399,8 +399,7 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

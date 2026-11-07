@@ -202,8 +202,7 @@ Disassembly of section .text:
                	vmulss	%xmm15, %xmm14, %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	je	<addr>
                	movl	$0x4, %eax
                	leave
@@ -253,8 +252,7 @@ Disassembly of section .text:
                	mulss	%xmm15, %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	movl	$0xbe800000, %r11d      # imm = 0xBE800000
-               	cmpl	%r11d, %eax
+               	cmpl	$0xbe800000, %eax       # imm = 0xBE800000
                	je	<addr>
                	movl	$0x7, %eax
                	leave

@@ -61,16 +61,16 @@ Disassembly of section .text:
                	str	wzr, [x1, #0x8]
                	sub	x0, x29, #0x8
                	bl	<addr>
-               	eor	x0, x0, #0x1e
-               	cbz	w0, <addr>
+               	cmp	w0, #0x1e
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurh	w0, [x29, #-0x8]
                	mov	x17, #0x3333            // =13107
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, w17
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

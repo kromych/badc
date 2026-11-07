@@ -94,8 +94,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	%eax, %eax
                	sarq	$0x8, %rax
-               	xorq	$0xabcdef, %rax         # imm = 0xABCDEF
-               	testl	%eax, %eax
+               	cmpl	$0xabcdef, %eax         # imm = 0xABCDEF
                	je	<addr>
                	movl	$0xc, %eax
                	leave

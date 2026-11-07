@@ -87,8 +87,8 @@ Disassembly of section .text:
                	mul	x4, x2, x3
                	add	x0, x0, x4
                	add	x1, x1, #0x1
-               	eor	x4, x1, #0x1
-               	cbnz	w4, <addr>
+               	cmp	w1, #0x1
+               	b.ne	<addr>
                	ret
 
 <after_skip>:
@@ -461,8 +461,8 @@ Disassembly of section .text:
                	lsr	x0, x0, #1
                	add	x1, x1, #0x1
                	cbnz	w0, <addr>
-               	eor	x0, x1, #0x8
-               	cbz	w0, <addr>
+               	cmp	w1, #0x8
+               	b.eq	<addr>
                	mov	x0, #0x2d               // =45
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -521,12 +521,12 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	eor	x0, x0, #0x10
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x10
+               	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	eor	x0, x0, #0x30
-               	cbz	w0, <addr>
+               	cmp	w0, #0x30
+               	b.eq	<addr>
                	mov	x0, #0x33               // =51
                	ldp	x29, x30, [sp], #0x10
                	ret

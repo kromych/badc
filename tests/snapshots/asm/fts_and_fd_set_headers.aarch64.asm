@@ -42,8 +42,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x40
                	ret
                	ldrh	w1, [x0, #0x5e]
-               	eor	x1, x1, #0x1
-               	cbz	w1, <addr>
+               	cmp	w1, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
@@ -52,9 +52,8 @@ Disassembly of section .text:
                	cbz	x1, <addr>
                	ldr	x1, [x0, #0x30]
                	ldrb	w1, [x1]
-               	mov	x17, #0x2e              // =46
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	cmp	w1, #0x2e
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40

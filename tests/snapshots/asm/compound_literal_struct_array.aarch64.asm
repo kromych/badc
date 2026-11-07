@@ -243,8 +243,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x1, [x0, #0x50]
                	ldrb	w1, [x1, #0x8]
-               	eor	x1, x1, #0x78
-               	cbz	w1, <addr>
+               	cmp	w1, #0x78
+               	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -259,9 +259,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x0, #0x50]
                	ldrb	w0, [x0, #0x14]
-               	mov	x17, #0x79              // =121
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x79
+               	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10

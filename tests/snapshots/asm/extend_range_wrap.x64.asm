@@ -51,16 +51,12 @@ Disassembly of section .text:
 
 <uwrap>:
                	xorl	%eax, %eax
-               	movq	%rdi, %rcx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %edi
                	je	<addr>
                	movl	%edi, %ecx
                	addq	%rcx, %rax
                	incq	%rdi
-               	movq	%rdi, %rcx
-               	xorq	$0x2, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x2, %edi
                	jne	<addr>
                	retq
 
@@ -250,8 +246,7 @@ Disassembly of section .text:
                	movl	$0x8, %esi
                	movl	$0x5, %edx
                	callq	<addr>
-               	xorq	$0x2, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	leave

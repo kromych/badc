@@ -100,8 +100,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x5c]
                	and	x0, x0, #0x1ff
-               	eor	x0, x0, #0x180
-               	cbz	w0, <addr>
+               	cmp	w0, #0x180
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x22, [sp, #0x10]

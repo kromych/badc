@@ -37,8 +37,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x40]
-               	eor	x0, x0, #0x1
-               	cbz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret

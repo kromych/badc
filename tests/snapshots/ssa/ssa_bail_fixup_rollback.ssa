@@ -544,10 +544,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v24  LocalAddr(-8)                                    -> x0
     v25  Imm(0)                                           -> x0
     v26  LoadLocal { off=-8, kind=U8 }                    -> x0
-    v27  BinopI { op=xor, lhs=v26, rhs_imm=77 }           -> x0
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=77 }            -> x0
     v28  BinopI { op=and, lhs=v27, rhs_imm=4294967295 }   -> x1
-    v29  BinopI { op=eq, lhs=v27, rhs_imm=0 }             -> x1
-    terminator Bnz { cond=v27, target=b6, fall=b4 }   (low word)   (exit_acc=v29)
+    v29  BinopI { op=eq, lhs=v26, rhs_imm=77 }            -> x1
+    terminator Bnz { cond=v27, target=b6, fall=b4 }   (exit_acc=v29)
   block 4  start_pc=0
     v30  Imm(0)                                           -> x0
     v31  Imm(0)                                           -> x1

@@ -62,11 +62,11 @@ Disassembly of section .text:
                	movk	x0, #0x807, lsl #48
                	str	x0, [x4]
                	ldurb	w0, [x29, #-0x80]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0x79]
-               	eor	x0, x0, #0x8
-               	cbz	w0, <addr>
+               	cmp	w0, #0x8
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10

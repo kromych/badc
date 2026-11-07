@@ -917,10 +917,10 @@ fn ent_pc=30 n_params=0 variadic=false locals=6
     v291 BinopI { op=and, lhs=v290, rhs_imm=65535 }       -> x6
     v292 Binop { op=add, lhs=v286, rhs=v290 }             -> x1
     v293 Extend { value=v292, kind=I32, nsw }             -> x2
-    v294 Binop { op=xor, lhs=v229, rhs=v292 }             -> x0
+    v294 Binop { op=ne, lhs=v229, rhs=v292 }              -> x0
     v295 BinopI { op=and, lhs=v294, rhs_imm=4294967295 }  -> x1
-    v296 BinopI { op=ne, lhs=v294, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v294, target=b55, fall=b54 }   (low word)   (exit_acc=v296)
+    v296 Binop { op=ne, lhs=v229, rhs=v292 }              -> x1
+    terminator Bz { cond=v294, target=b55, fall=b54 }   (exit_acc=v296)
   block 54  start_pc=0
     v297 Imm(27)                                          -> x0
     v298 LifetimeEnd(-6)                                  -> -

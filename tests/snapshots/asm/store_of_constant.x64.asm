@@ -121,16 +121,13 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rdi)
                	callq	<addr>
                	movzbq	-0x77(%rbp), %rax
-               	xorq	$0x7f, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7f, %eax
                	jne	<addr>
                	movzwq	-0x76(%rbp), %rax
-               	xorq	$0x2345, %rax           # imm = 0x2345
-               	testl	%eax, %eax
+               	cmpl	$0x2345, %eax           # imm = 0x2345
                	jne	<addr>
                	movl	-0x74(%rbp), %eax
-               	movl	$0x80000001, %r11d      # imm = 0x80000001
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000001, %eax       # imm = 0x80000001
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -174,8 +171,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0xd8(%rbp), %rcx
                	movzbq	-0xd5(%rbp), %rax
-               	xorq	$0xc3, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc3, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	movzbq	(%rcx,%rax), %rdx
@@ -257,8 +253,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rdi)
                	callq	<addr>
                	movl	-0x60(%rbp), %eax
-               	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
-               	cmpl	%r11d, %eax
+               	cmpl	$0xdeadbeef, %eax       # imm = 0xDEADBEEF
                	jne	<addr>
                	cmpl	$0x0, -0x50(%rbp)
                	jne	<addr>
@@ -302,8 +297,7 @@ Disassembly of section .text:
                	movss	-0x84(%rbp), %xmm0
                	movss	%xmm0, -0xc0(%rbp)
                	movl	-0xc0(%rbp), %eax
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpl	%r11d, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
                	jne	<addr>
                	movss	-0x80(%rbp), %xmm0
                	movl	$0x41100000, %eax       # imm = 0x41100000

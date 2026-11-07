@@ -100,10 +100,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v78  Load { addr=v1, disp=32, kind=U32, volatile pc_rel } -> x1
     v79  BinopI { op=and, lhs=v78, rhs_imm=31 }           -> x1
     v80  BinopI { op=and, lhs=v79, rhs_imm=4294967295 }   -> x2
-    v81  BinopI { op=xor, lhs=v79, rhs_imm=10 }           -> x1
+    v81  BinopI { op=ne, lhs=v79, rhs_imm=10 }            -> x1
     v82  BinopI { op=and, lhs=v81, rhs_imm=4294967295 }   -> x2
-    v83  BinopI { op=ne, lhs=v81, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v81, target=b10, fall=b9 }   (low word)   (exit_acc=v83)
+    v83  BinopI { op=ne, lhs=v79, rhs_imm=10 }            -> x2
+    terminator Bz { cond=v81, target=b10, fall=b9 }   (exit_acc=v83)
   block 9  start_pc=0
     v84  Imm(5)                                           -> x1
     terminator Return(v41)   (exit_acc=v41)

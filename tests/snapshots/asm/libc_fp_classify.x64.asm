@@ -208,8 +208,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %eax
                	jmp	<addr>
-               	xorq	$0xff, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0xff, %edx
                	jne	<addr>
                	testl	%ecx, %ecx
                	jne	<addr>
@@ -217,8 +216,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x3, %ecx
                	jmp	<addr>
-               	xorq	$0xff, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0xff, %edx
                	jne	<addr>
                	testl	%ecx, %ecx
                	jne	<addr>

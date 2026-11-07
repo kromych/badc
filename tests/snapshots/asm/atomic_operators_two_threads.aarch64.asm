@@ -263,8 +263,7 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, x1
                	sxtb	x1, w0
-               	eor	x1, x1, #0x1
-               	cmp	x1, #0x0
+               	cmp	x1, #0x1
                	cset	x3, ne
                	mov	x1, x0
                	casalb	w1, w3, [x2]

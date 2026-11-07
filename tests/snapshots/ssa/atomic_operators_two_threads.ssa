@@ -169,8 +169,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=8
     v142 Imm(0)                                           -> x0
     v143 BinopI { op=shl, lhs=v141, rhs_imm=56 }          -> x0
     v144 Extend { value=v141, kind=I8 }                   -> x0
-    v145 BinopI { op=xor, lhs=v144, rhs_imm=1 }           -> x0
-    v146 BinopI { op=ne, lhs=v145, rhs_imm=0 }            -> x6
+    v145 BinopI { op=xor, lhs=v144, rhs_imm=1 }           -> x6
+    v146 BinopI { op=ne, lhs=v144, rhs_imm=1 }            -> x6
     v147 AtomicCas { addr=v137, expected=v141, desired=v146, width=1, order=SeqCst } -> x0
     v148 Imm(0)                                           -> x6
     v149 BinopI { op=and, lhs=v141, rhs_imm=255 }         -> x6

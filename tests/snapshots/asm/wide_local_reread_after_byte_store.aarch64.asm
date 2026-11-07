@@ -746,12 +746,11 @@ Disassembly of section .text:
                	sub	x16, x29, #0x10
                	str	q0, [x16]
                	ldurb	w0, [x29, #-0x7]
-               	mov	x17, #0x62              // =98
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x62
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0xd]
-               	eor	x0, x0, #0x3
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x3
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

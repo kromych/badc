@@ -39,13 +39,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0xe]
-               	mov	x17, #0x41              // =65
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x41
+               	b.ne	<addr>
                	ldurb	w0, [x29, #-0xd]
-               	mov	x17, #0x42              // =66
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x42
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -58,8 +56,8 @@ Disassembly of section .text:
                	ret
                	ldurh	w0, [x29, #-0x1f]
                	mov	x17, #0x4342            // =17218
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, w17
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

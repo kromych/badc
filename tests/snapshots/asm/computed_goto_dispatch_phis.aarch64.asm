@@ -472,8 +472,8 @@ Disassembly of section .text:
                	add	x20, x20, x20, lsr #63
                	msub	x15, x20, x14, x15
                	ldrb	w15, [x0, x15]
-               	eor	x15, x15, #0x3
-               	cbnz	w15, <addr>
+               	cmp	w15, #0x3
+               	b.ne	<addr>
                	add	x1, x1, #0x3e8
                	eor	x11, x11, x1
                	add	x9, x9, x10

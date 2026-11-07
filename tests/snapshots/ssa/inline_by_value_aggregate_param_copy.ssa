@@ -39,10 +39,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v33  LifetimeEnd(0)                                   -> -
     v34  Imm(0)                                           -> x2
     v35  BinopI { op=and, lhs=v10, rhs_imm=255 }          -> x2
-    v36  BinopI { op=xor, lhs=v10, rhs_imm=17 }           -> x1
+    v36  BinopI { op=ne, lhs=v10, rhs_imm=17 }            -> x1
     v37  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x2
-    v38  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v36, target=b2, fall=b1 }   (low word)   (exit_acc=v38)
+    v38  BinopI { op=ne, lhs=v10, rhs_imm=17 }            -> x2
+    terminator Bz { cond=v36, target=b2, fall=b1 }   (exit_acc=v38)
   block 1  start_pc=0
     v39  Imm(1)                                           -> x0
     v40  LifetimeEnd(-1)                                  -> -
@@ -50,10 +50,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v41  LocalAddr(-1)                                    -> x1
     v42  LoadLocal { off=-1, kind=U8 }                    -> x1
-    v43  BinopI { op=xor, lhs=v42, rhs_imm=140 }          -> x1
+    v43  BinopI { op=ne, lhs=v42, rhs_imm=140 }           -> x1
     v44  BinopI { op=and, lhs=v43, rhs_imm=4294967295 }   -> x2
-    v45  BinopI { op=ne, lhs=v43, rhs_imm=0 }             -> x2
-    terminator Bz { cond=v43, target=b4, fall=b3 }   (low word)   (exit_acc=v45)
+    v45  BinopI { op=ne, lhs=v42, rhs_imm=140 }           -> x2
+    terminator Bz { cond=v43, target=b4, fall=b3 }   (exit_acc=v45)
   block 3  start_pc=0
     v46  Imm(2)                                           -> x0
     v47  LifetimeEnd(-1)                                  -> -
@@ -87,10 +87,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v70  LocalAddr(-1)                                    -> x0
     v71  LoadLocal { off=-1, kind=U8 }                    -> x0
-    v72  BinopI { op=xor, lhs=v71, rhs_imm=99 }           -> x0
+    v72  BinopI { op=ne, lhs=v71, rhs_imm=99 }            -> x0
     v73  BinopI { op=and, lhs=v72, rhs_imm=4294967295 }   -> x1
-    v74  BinopI { op=ne, lhs=v72, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v72, target=b8, fall=b7 }   (low word)   (exit_acc=v74)
+    v74  BinopI { op=ne, lhs=v71, rhs_imm=99 }            -> x1
+    terminator Bz { cond=v72, target=b8, fall=b7 }   (exit_acc=v74)
   block 7  start_pc=0
     v75  Imm(4)                                           -> x0
     v76  LifetimeEnd(-1)                                  -> -
@@ -114,10 +114,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v92  Imm(0)                                           -> x1
     v93  LocalAddr(-1)                                    -> x1
     v94  LoadLocal { off=-1, kind=U8 }                    -> x1
-    v95  BinopI { op=xor, lhs=v82, rhs_imm=8 }            -> x0
+    v95  BinopI { op=ne, lhs=v82, rhs_imm=8 }             -> x0
     v96  BinopI { op=and, lhs=v95, rhs_imm=4294967295 }   -> x1
-    v97  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v95, target=b10, fall=b9 }   (low word)   (exit_acc=v97)
+    v97  BinopI { op=ne, lhs=v82, rhs_imm=8 }             -> x1
+    terminator Bz { cond=v95, target=b10, fall=b9 }   (exit_acc=v97)
   block 9  start_pc=0
     v100 Imm(6)                                           -> x0
     v101 LifetimeEnd(-1)                                  -> -
@@ -158,10 +158,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   block 12  start_pc=0
     v131 LocalAddr(-1)                                    -> x0
     v132 LoadLocal { off=-1, kind=U8 }                    -> x0
-    v133 BinopI { op=xor, lhs=v132, rhs_imm=55 }          -> x0
+    v133 BinopI { op=ne, lhs=v132, rhs_imm=55 }           -> x0
     v134 BinopI { op=and, lhs=v133, rhs_imm=4294967295 }  -> x1
-    v135 BinopI { op=ne, lhs=v133, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v133, target=b14, fall=b13 }   (low word)   (exit_acc=v135)
+    v135 BinopI { op=ne, lhs=v132, rhs_imm=55 }           -> x1
+    terminator Bz { cond=v133, target=b14, fall=b13 }   (exit_acc=v135)
   block 13  start_pc=0
     v136 Imm(8)                                           -> x0
     v137 LifetimeEnd(-1)                                  -> -
@@ -184,10 +184,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v152 Imm(0)                                           -> x0
     v153 ImmData(24)                                      -> x0
     v154 Load { addr=v138, disp=0, kind=U8 pc_rel }       -> x0
-    v155 BinopI { op=xor, lhs=v154, rhs_imm=77 }          -> x0
+    v155 BinopI { op=ne, lhs=v154, rhs_imm=77 }           -> x0
     v156 BinopI { op=and, lhs=v155, rhs_imm=4294967295 }  -> x1
-    v157 BinopI { op=ne, lhs=v155, rhs_imm=0 }            -> x1
-    terminator Bz { cond=v155, target=b16, fall=b15 }   (low word)   (exit_acc=v157)
+    v157 BinopI { op=ne, lhs=v154, rhs_imm=77 }           -> x1
+    terminator Bz { cond=v155, target=b16, fall=b15 }   (exit_acc=v157)
   block 15  start_pc=0
     v160 Imm(10)                                          -> x0
     v161 LifetimeEnd(-1)                                  -> -

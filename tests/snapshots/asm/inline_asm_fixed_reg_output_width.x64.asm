@@ -86,20 +86,17 @@ Disassembly of section .text:
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	movw	%ax, (%rdx)
                	movzwq	-0x8(%rbp), %rax
-               	xorq	$0xbeef, %rax           # imm = 0xBEEF
-               	testl	%eax, %eax
+               	cmpl	$0xbeef, %eax           # imm = 0xBEEF
                	jne	<addr>
                	movzwq	-0x6(%rbp), %rax
-               	xorq	$0x3344, %rax           # imm = 0x3344
-               	testl	%eax, %eax
+               	cmpl	$0x3344, %eax           # imm = 0x3344
                	sete	%cl
                	movzbq	%cl, %rcx
                	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
                	movzwq	-0x4(%rbp), %rax
-               	xorq	$0xfeed, %rax           # imm = 0xFEED
-               	testl	%eax, %eax
+               	cmpl	$0xfeed, %eax           # imm = 0xFEED
                	sete	%al
                	movzbq	%al, %rax
                	leave

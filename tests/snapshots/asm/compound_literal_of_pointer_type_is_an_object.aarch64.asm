@@ -50,14 +50,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x28]
                	ldrb	w0, [x0]
-               	mov	x17, #0x69              // =105
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x69
+               	b.ne	<addr>
                	ldur	x0, [x29, #-0x20]
                	ldrb	w0, [x0]
-               	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x6c
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
@@ -82,9 +80,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x2
                	stur	x0, [x29, #-0x30]
                	ldrb	w0, [x0]
-               	mov	x17, #0x74              // =116
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x74
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x18]

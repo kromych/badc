@@ -36,8 +36,7 @@ Disassembly of section .text:
                	jae	<addr>
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	xorq	$0x2a, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x2a, %eax
                	setne	%al
                	movzbq	%al, %rax
                	retq

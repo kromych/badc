@@ -48,10 +48,10 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x10]
                	ldurb	w1, [x29, #-0xe]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
-               	eor	x0, x1, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
+               	cmp	w1, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40

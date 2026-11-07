@@ -96,9 +96,8 @@ Disassembly of section .text:
                	sub	x4, x29, #0x60
                	bl	<addr>
                	ldurb	w0, [x29, #-0x40]
-               	mov	x17, #0x4d              // =77
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x4d
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

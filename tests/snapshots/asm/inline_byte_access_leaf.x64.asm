@@ -62,12 +62,10 @@ Disassembly of section .text:
                	movabsq	$0x807060504030201, %rdx # imm = 0x807060504030201
                	movq	%rdx, (%rcx)
                	movzbq	-0x80(%rbp), %rdx
-               	xorq	$0x1, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x1, %edx
                	jne	<addr>
                	movzbq	-0x79(%rbp), %rdx
-               	xorq	$0x8, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x8, %edx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

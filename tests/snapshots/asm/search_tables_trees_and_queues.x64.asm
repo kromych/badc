@@ -32,12 +32,9 @@ Disassembly of section .text:
                	retq
 
 <collect>:
-               	movq	%rsi, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %esi
                	je	<addr>
-               	xorq	$0x3, %rsi
-               	testl	%esi, %esi
+               	cmpl	$0x3, %esi
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x8, %eax

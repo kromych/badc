@@ -46,16 +46,13 @@ Disassembly of section .text:
                	leave
                	retq
                	movzbq	-0x1b(%rbp), %rcx
-               	xorq	$0x7, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x7, %ecx
                	jne	<addr>
                	movzbq	-0x1a(%rbp), %rcx
-               	xorq	$0x44, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x44, %ecx
                	jne	<addr>
                	movzbq	-0x17(%rbp), %rcx
-               	xorq	$0x11, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x11, %ecx
                	je	<addr>
                	movl	$0xb, %eax
                	leave

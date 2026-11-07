@@ -143,8 +143,8 @@ Disassembly of section .text:
                	strb	w16, [x0, #0x4]
                	sub	x0, x29, #0x10
                	ldurb	w1, [x29, #-0x10]
-               	eor	x1, x1, #0x6
-               	cbnz	w1, <addr>
+               	cmp	w1, #0x6
+               	b.ne	<addr>
                	ldursw	x0, [x0, #0x1]
                	cmp	w0, #0x4d
                	b.eq	<addr>
@@ -180,10 +180,10 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldurb	w0, [x29, #-0x8]
                	ldurb	w1, [x29, #-0x5]
-               	eor	x0, x0, #0x8
-               	cbnz	w0, <addr>
-               	eor	x0, x1, #0x3
-               	cbz	w0, <addr>
+               	cmp	w0, #0x8
+               	b.ne	<addr>
+               	cmp	w1, #0x3
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

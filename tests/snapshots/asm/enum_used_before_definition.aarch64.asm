@@ -146,9 +146,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldrb	w0, [x0]
-               	mov	x17, #0xc8              // =200
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0xc8
+               	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	b	<addr>
                	mov	x0, #0x0                // =0

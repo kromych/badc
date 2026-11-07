@@ -302,22 +302,22 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v230 Imm(97)                                          -> x7
     v231 Imm(0)                                           -> x0
     v232 CallExt { binding_idx=219, args=[v230, v1], fp_arg_mask=0x0 } -> x0
-    v233 BinopI { op=xor, lhs=v232, rhs_imm=65 }          -> x0
+    v233 BinopI { op=ne, lhs=v232, rhs_imm=65 }           -> x0
     v234 BinopI { op=and, lhs=v233, rhs_imm=4294967295 }  -> x1
-    v235 BinopI { op=ne, lhs=v233, rhs_imm=0 }            -> x1
+    v235 BinopI { op=ne, lhs=v232, rhs_imm=65 }           -> x1
     v236 Imm(0)                                           -> x1
-    terminator Bnz { cond=v233, target=b35, fall=b34 }   (low word)   (exit_acc=v235)
+    terminator Bnz { cond=v233, target=b35, fall=b34 }   (exit_acc=v235)
   block 34  start_pc=0
     v237 Imm(65)                                          -> x7
     v238 Imm(0)                                           -> x0
     v239 CallExt { binding_idx=218, args=[v237, v1], fp_arg_mask=0x0 } -> x0
-    v240 BinopI { op=xor, lhs=v239, rhs_imm=97 }          -> x0
+    v240 BinopI { op=ne, lhs=v239, rhs_imm=97 }           -> x0
     v241 BinopI { op=and, lhs=v240, rhs_imm=4294967295 }  -> x1
-    v242 BinopI { op=ne, lhs=v240, rhs_imm=0 }            -> x1
+    v242 BinopI { op=ne, lhs=v239, rhs_imm=97 }           -> x1
     v243 Imm(0)                                           -> x1
     v244 Imm(0)                                           -> x1
     v245 Imm(0)                                           -> x1
-    terminator Bz { cond=v240, target=b36, fall=b35 }   (low word)   (exit_acc=v242)
+    terminator Bz { cond=v240, target=b36, fall=b35 }   (exit_acc=v242)
   block 35  start_pc=0
     v246 Imm(16)                                          -> x0
     terminator Return(v246)   (exit_acc=v246)
@@ -364,13 +364,13 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v280 Imm(0)                                           -> x0
     v281 Imm(0)                                           -> x0
     v282 CallExt { binding_idx=217, args=[v279, v253, v1], fp_arg_mask=0x0 } -> x0
-    v283 BinopI { op=xor, lhs=v282, rhs_imm=65 }          -> x0
+    v283 BinopI { op=ne, lhs=v282, rhs_imm=65 }           -> x0
     v284 BinopI { op=and, lhs=v283, rhs_imm=4294967295 }  -> x1
-    v285 BinopI { op=ne, lhs=v283, rhs_imm=0 }            -> x1
+    v285 BinopI { op=ne, lhs=v282, rhs_imm=65 }           -> x1
     v286 Imm(0)                                           -> x1
     v287 Imm(0)                                           -> x1
     v288 Imm(0)                                           -> x1
-    terminator Bz { cond=v283, target=b41, fall=b40 }   (low word)   (exit_acc=v285)
+    terminator Bz { cond=v283, target=b41, fall=b40 }   (exit_acc=v285)
   block 40  start_pc=0
     v289 Imm(17)                                          -> x0
     terminator Return(v289)   (exit_acc=v289)

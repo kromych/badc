@@ -88,13 +88,11 @@ Disassembly of section .text:
                	retq
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %eax
-               	xorq	$0x7d, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x7d, %eax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	movl	0xc(%rax), %eax
-               	xorq	$0xfa0, %rax            # imm = 0xFA0
-               	testl	%eax, %eax
+               	cmpl	$0xfa0, %eax            # imm = 0xFA0
                	je	<addr>
                	movl	$0x14, %eax
                	leave

@@ -42,8 +42,7 @@ Disassembly of section .text:
                	retq
 
 <report>:
-               	xorq	$0x40, %rdi
-               	testl	%edi, %edi
+               	cmpl	$0x40, %edi
                	jne	<addr>
                	testq	%rsi, %rsi
                	je	<addr>

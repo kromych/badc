@@ -285,6 +285,81 @@ impl Allocation {
     }
 }
 
+/// Whether `inst`'s lowering leaves the host flags intact. On x86_64
+/// every integer ALU op writes them, a zero immediate materialises as
+/// `xor r, r`, and the unsigned FP converts test the sign bit with
+/// flag-setting arithmetic; scalar SSE and the mov / lea / movzx
+/// families do not. On aarch64 only the comparisons reach a
+/// flag-setting form (`subs` / `fcmp`).
+pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
+    match inst {
+        Inst::Imm(k) => !(is_x86 && *k == 0),
+        Inst::Undef
+        | Inst::ExceptionCode
+        | Inst::ParentLocalAddr { .. }
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
+        | Inst::BlockAddr(_)
+        | Inst::LocalAddr(_)
+        | Inst::ParamRef { .. }
+        | Inst::Phi { .. }
+        | Inst::Load { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::Store { .. }
+        | Inst::StoreLocal { .. }
+        | Inst::StoreIndexed { .. }
+        | Inst::Extend { .. }
+        | Inst::Copy { .. }
+        | Inst::Fneg(_)
+        | Inst::Fma { .. } => true,
+        Inst::FpCast { kind, .. } => {
+            !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
+        }
+        // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
+        // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
+        // shifted-register ADD, SUB, AND, ORR or EOR.
+        Inst::Neg(_)
+        | Inst::BitCount { .. }
+        | Inst::MulAdd { .. }
+        | Inst::ShiftOp { .. }
+        | Inst::BitField { .. } => !is_x86,
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
+            if is_x86 {
+                crate::c5::ir::is_fp_arith_op(*op)
+            } else {
+                !crate::c5::ir::is_comparison_op(*op)
+            }
+        }
+        Inst::TlsAddr(_)
+        | Inst::SegLoad { .. }
+        | Inst::SegStore { .. }
+        | Inst::Udiv128 { .. }
+        | Inst::Bswap { .. }
+        | Inst::Call { .. }
+        | Inst::CallIndirect { .. }
+        | Inst::CallExt { .. }
+        | Inst::TailExt(_)
+        | Inst::Mzero { .. }
+        | Inst::Mcpy { .. }
+        | Inst::AtomicRmw { .. }
+        | Inst::AtomicCas { .. }
+        | Inst::AtomicCas16 { .. }
+        | Inst::AtomicLoad { .. }
+        | Inst::AtomicStore { .. }
+        | Inst::Intrinsic { .. }
+        | Inst::X86Simd { .. }
+        | Inst::InlineAsm { .. }
+        | Inst::AllocaInit(_)
+        | Inst::LifetimeEnd(_)
+        | Inst::ParamPart { .. }
+        | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
+        | Inst::AggParts { .. } => false,
+    }
+}
+
 /// An integer load whose zero test is a compare of its memory operand:
 /// one access of the load's own width, which a volatile load, one split
 /// under a proven alignment, a segment load and a widening index rule out.
@@ -1737,80 +1812,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // spill load / store / movz / fmov) except the case guarded below.
     let is_compare_op = crate::c5::ir::is_comparison_op;
     let is_x86 = target.is_x86_64();
-    // Whether the inst's lowering writes the host flags. On x86_64
-    // every integer ALU op does, a zero immediate materialises as
-    // `xor r, r`, and the unsigned FP converts test the sign bit with
-    // flag-setting arithmetic; scalar SSE and the mov / lea / movzx
-    // families do not. On aarch64 only the comparisons reach a
-    // flag-setting form (`subs` / `fcmp`).
-    let flags_survive = |inst: &Inst| -> bool {
-        match inst {
-            Inst::Imm(k) => !(is_x86 && *k == 0),
-            Inst::Undef
-            | Inst::ExceptionCode
-            | Inst::ParentLocalAddr { .. }
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::ImmExtCode(_)
-            | Inst::BlockAddr(_)
-            | Inst::LocalAddr(_)
-            | Inst::ParamRef { .. }
-            | Inst::Phi { .. }
-            | Inst::Load { .. }
-            | Inst::LoadLocal { .. }
-            | Inst::LoadIndexed { .. }
-            | Inst::Store { .. }
-            | Inst::StoreLocal { .. }
-            | Inst::StoreIndexed { .. }
-            | Inst::Extend { .. }
-            | Inst::Copy { .. }
-            | Inst::Fneg(_)
-            | Inst::Fma { .. } => true,
-            Inst::FpCast { kind, .. } => {
-                !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
-            }
-            // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
-            // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
-            // shifted-register ADD, SUB, AND, ORR or EOR.
-            Inst::Neg(_)
-            | Inst::BitCount { .. }
-            | Inst::MulAdd { .. }
-            | Inst::ShiftOp { .. }
-            | Inst::BitField { .. } => !is_x86,
-            Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
-                if is_x86 {
-                    crate::c5::ir::is_fp_arith_op(*op)
-                } else {
-                    !is_compare_op(*op)
-                }
-            }
-            Inst::TlsAddr(_)
-            | Inst::SegLoad { .. }
-            | Inst::SegStore { .. }
-            | Inst::Udiv128 { .. }
-            | Inst::Bswap { .. }
-            | Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::TailExt(_)
-            | Inst::Mzero { .. }
-            | Inst::Mcpy { .. }
-            | Inst::AtomicRmw { .. }
-            | Inst::AtomicCas { .. }
-            | Inst::AtomicCas16 { .. }
-            | Inst::AtomicLoad { .. }
-            | Inst::AtomicStore { .. }
-            | Inst::Intrinsic { .. }
-            | Inst::X86Simd { .. }
-            | Inst::InlineAsm { .. }
-            | Inst::AllocaInit(_)
-            | Inst::LifetimeEnd(_)
-            | Inst::ParamPart { .. }
-            | Inst::RetPart { .. }
-            | Inst::AsmOut { .. }
-            | Inst::AggParts { .. } => false,
-        }
-    };
+    let flags_survive = |inst: &Inst| flags_survive(inst, is_x86);
     // Whether the edge `pred -> succ` carries an FP-classed phi income
     // that is the integer constant zero: its predecessor-exit move
     // re-materialises the bits through the integer scratch, which on

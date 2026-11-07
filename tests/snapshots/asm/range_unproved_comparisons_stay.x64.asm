@@ -47,9 +47,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	<rip>, %rcx # <addr>
-               	movq	%rcx, %rdx
-               	xorq	$0x2, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x2, %ecx
                	je	<addr>
                	cmpq	$0x2, %rcx
                	ja	<addr>

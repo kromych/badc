@@ -958,9 +958,8 @@ Disassembly of section .text:
                	bl	<addr>
                	ldr	x0, [x0]
                	ldrb	w0, [x0]
-               	mov	x17, #0x2c              // =44
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x2c
+               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0xa0               // =160

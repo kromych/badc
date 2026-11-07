@@ -85,8 +85,7 @@ Disassembly of section .text:
                	movl	<rip>, %eax # <addr>
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	andq	$0xff, %rax
-               	xorq	$0xc8, %rax
-               	testl	%eax, %eax
+               	cmpl	$0xc8, %eax
                	sete	%al
                	movzbq	%al, %rax
                	shlq	%rax
@@ -116,8 +115,7 @@ Disassembly of section .text:
                	cmpl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
                	seta	%cl
                	movzbq	%cl, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpl	%r11d, %eax
+               	cmpl	$-0x1, %eax
                	sete	%al
                	movzbq	%al, %rax
                	shlq	%rax

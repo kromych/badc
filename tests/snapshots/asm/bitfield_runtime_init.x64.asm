@@ -46,8 +46,7 @@ Disassembly of section .text:
                	movl	%ecx, %esi
                	sarq	$0x4, %rsi
                	andq	$0xf, %rsi
-               	xorq	%rsi, %rax
-               	testl	%eax, %eax
+               	cmpl	%eax, %esi
                	sete	%sil
                	movzbq	%sil, %rsi
                	xorl	%eax, %eax
@@ -106,8 +105,7 @@ Disassembly of section .text:
                	movl	%eax, %edx
                	sarq	$0x10, %rdx
                	andq	$0x7, %rdx
-               	xorq	%rsi, %rdx
-               	testl	%edx, %edx
+               	cmpl	%esi, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	xorl	%esi, %esi
@@ -116,16 +114,14 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	sarq	$0x13, %rax
                	andq	$0x3ff, %rax            # imm = 0x3FF
-               	xorq	%r9, %rax
-               	testl	%eax, %eax
+               	cmpl	%r9d, %eax
                	sete	%sil
                	movzbq	%sil, %rsi
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
                	andq	$0x7ffff, %rcx          # imm = 0x7FFFF
-               	xorq	%r8, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	%ecx, %r8d
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx

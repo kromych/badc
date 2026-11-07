@@ -107,8 +107,7 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %r8
                	callq	<addr>
                	movzbq	-0x40(%rbp), %rax
-               	xorq	$0x4d, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x4d, %eax
                	jne	<addr>
                	xorl	%eax, %eax
                	leave

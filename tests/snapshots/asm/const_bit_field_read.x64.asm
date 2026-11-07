@@ -30,8 +30,7 @@ Disassembly of section .text:
                	cmpl	$-0x3, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x64, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x64, %eax
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movl	<rip>, %eax # <addr>
-               	xorq	$0xabc, %rax            # imm = 0xABC
-               	testl	%eax, %eax
+               	cmpl	$0xabc, %eax            # imm = 0xABC
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$-0x2, %eax

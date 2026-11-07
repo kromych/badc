@@ -866,8 +866,8 @@ Disassembly of section .text:
                	ldr	w0, [sp, #0x20]
                	cbnz	w0, <addr>
                	ldr	w0, [sp, #0x24]
-               	eor	x0, x0, #0x2
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x2
+               	b.ne	<addr>
                	ldr	w0, [sp, #0x28]
                	mov	x17, #0x5e00            // =24064
                	movk	x17, #0xb2d0, lsl #16

@@ -204,9 +204,8 @@ Disassembly of section .text:
                	cmp	x0, #0x1
                	b.ne	<addr>
                	ldurb	w0, [x29, #-0x88]
-               	mov	x17, #0x6b              // =107
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x6b
+               	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0xc0]
                	ldr	x24, [sp, #0x20]

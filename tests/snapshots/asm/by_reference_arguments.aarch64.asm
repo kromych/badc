@@ -289,8 +289,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldurb	w0, [x29, #-0xb0]
-               	eor	x0, x0, #0x1
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x1
+               	b.ne	<addr>
                	ldursw	x0, [x29, #-0xa0]
                	cmp	w0, #0x4
                	b.ne	<addr>

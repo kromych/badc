@@ -21,9 +21,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x20]
-               	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0x64
+               	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]
                	cmp	w0, #0x1
@@ -39,9 +38,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x38]
-               	mov	x17, #0xabc             // =2748
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0xabc
+               	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x40]
                	mov	x17, #-0x2              // =-2

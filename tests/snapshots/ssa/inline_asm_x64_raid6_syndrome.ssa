@@ -2649,10 +2649,10 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v1738 InlineAsm { template="xgetbv", ops=3, args=[-, -, v1737] } -> x6
     v1739 BinopI { op=and, lhs=v1738, rhs_imm=4294967295 } -> x0
     v1740 BinopI { op=and, lhs=v1738, rhs_imm=6 }          -> x0
-    v1741 BinopI { op=xor, lhs=v1740, rhs_imm=6 }          -> x0
+    v1741 BinopI { op=ne, lhs=v1740, rhs_imm=6 }           -> x0
     v1742 BinopI { op=and, lhs=v1741, rhs_imm=4294967295 } -> x1
-    v1743 BinopI { op=ne, lhs=v1741, rhs_imm=0 }           -> x1
-    terminator Bz { cond=v1741, target=b350, fall=b349 }   (low word)   (exit_acc=v1743)
+    v1743 BinopI { op=ne, lhs=v1740, rhs_imm=6 }           -> x1
+    terminator Bz { cond=v1741, target=b350, fall=b349 }   (exit_acc=v1743)
   block 349  start_pc=0
     v1744 Imm(0)                                           -> x3
     v1745 LifetimeEnd(0)                                   -> -
@@ -2700,11 +2700,11 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
   block 354  start_pc=0
     v1778 BinopI { op=and, lhs=v1738, rhs_imm=4294967295 } -> x0
     v1779 BinopI { op=and, lhs=v1738, rhs_imm=224 }        -> x6
-    v1780 BinopI { op=xor, lhs=v1779, rhs_imm=224 }        -> x6
-    v1781 BinopI { op=and, lhs=v1780, rhs_imm=4294967295 } -> x0
-    v1782 BinopI { op=eq, lhs=v1780, rhs_imm=0 }           -> x0
-    v1783 Imm(0)                                           -> x0
-    terminator Bnz { cond=v1780, target=b356, fall=b355 }   (low word)   (exit_acc=v1782)
+    v1780 BinopI { op=ne, lhs=v1779, rhs_imm=224 }         -> x0
+    v1781 BinopI { op=and, lhs=v1780, rhs_imm=4294967295 } -> x1
+    v1782 BinopI { op=eq, lhs=v1779, rhs_imm=224 }         -> x1
+    v1783 Imm(0)                                           -> x1
+    terminator Bnz { cond=v1780, target=b356, fall=b355 }   (exit_acc=v1782)
   block 355  start_pc=0
     v1784 Imm(2)                                           -> x3
     v1785 LifetimeEnd(0)                                   -> -

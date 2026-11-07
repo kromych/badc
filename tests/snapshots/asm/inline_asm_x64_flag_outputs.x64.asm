@@ -63,8 +63,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	sete	%al
                	movzbq	%al, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	$0x9, %ecx
                	testq	%rcx, %rcx
@@ -79,8 +78,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	sets	%al
                	movzbq	%al, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	$0x1, %ecx
                	testq	%rcx, %rcx
@@ -96,8 +94,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	seto	%cl
                	movzbq	%cl, %rcx
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
                	movl	$0x1, %edx

@@ -1166,8 +1166,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	movq	%rsi, %rax
                	andq	$0x6, %rax
-               	xorq	$0x6, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	xorl	%ebx, %ebx
                	jmp	<addr>
@@ -1183,8 +1182,7 @@ Disassembly of section .text:
                	testl	$0x40000000, %ebx       # imm = 0x40000000
                	je	<addr>
                	andq	$0xe0, %rsi
-               	xorq	$0xe0, %rsi
-               	testl	%esi, %esi
+               	cmpl	$0xe0, %esi
                	jne	<addr>
                	movl	$0x2, %ebx
                	jmp	<addr>

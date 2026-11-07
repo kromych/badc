@@ -100,9 +100,7 @@ Disassembly of section .text:
                	imulq	$0x7, %rdi, %rdx
                	addq	%rdx, %rax
                	incq	%rcx
-               	movq	%rcx, %rdx
-               	xorq	$0x1, %rdx
-               	testl	%edx, %edx
+               	cmpl	$0x1, %ecx
                	jne	<addr>
                	retq
 
@@ -477,8 +475,7 @@ Disassembly of section .text:
                	incq	%rcx
                	testl	%eax, %eax
                	jne	<addr>
-               	xorq	$0x8, %rcx
-               	testl	%ecx, %ecx
+               	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x2d, %eax
                	popq	%rbp
@@ -536,13 +533,11 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	xorq	$0x10, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x10, %eax
                	jne	<addr>
                	movl	$0x3, %edi
                	callq	<addr>
-               	xorq	$0x30, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x30, %eax
                	je	<addr>
                	movl	$0x33, %eax
                	popq	%rbp

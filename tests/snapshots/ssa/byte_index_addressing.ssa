@@ -1211,13 +1211,13 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v662 Imm(2)                                           -> x0
     v663 BinopI { op=add, lhs=v661, rhs_imm=2 }           -> x0
     v664 Load { addr=v661, disp=2, kind=U8 pc_rel }       -> x0
-    v665 BinopI { op=xor, lhs=v664, rhs_imm=44 }          -> x0
+    v665 BinopI { op=ne, lhs=v664, rhs_imm=44 }           -> x0
     v666 BinopI { op=and, lhs=v665, rhs_imm=4294967295 }  -> x1
-    v667 BinopI { op=ne, lhs=v665, rhs_imm=0 }            -> x1
+    v667 BinopI { op=ne, lhs=v664, rhs_imm=44 }           -> x1
     v668 Imm(0)                                           -> x1
     v669 Imm(0)                                           -> x1
     v670 Imm(0)                                           -> x1
-    terminator Bz { cond=v665, target=b32, fall=b31 }   (low word)   (exit_acc=v667)
+    terminator Bz { cond=v665, target=b32, fall=b31 }   (exit_acc=v667)
   block 31  start_pc=0
     v671 Imm(10)                                          -> x0
     v672 LifetimeEnd(-1)                                  -> -

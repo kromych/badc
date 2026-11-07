@@ -45,8 +45,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	<rip>, %eax # <addr>
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

@@ -39,15 +39,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	eor	x0, x0, #0x7
-               	cbz	w0, <addr>
+               	cmp	w0, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	mov	x17, #0x32              // =50
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x32
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret

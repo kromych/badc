@@ -73,10 +73,9 @@ Disassembly of section .text:
                	ret
 
 <probe>:
-               	mov	x3, #0x9                // =9
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldrh	w2, [x4, w2, uxtw #1]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	ldrh	w2, [x3, w2, uxtw #1]
                	cbz	w2, <addr>
                	mov	x0, #0x14               // =20
                	sub	x0, x0, x2
@@ -84,9 +83,9 @@ Disassembly of section .text:
                	cmp	w0, w1
                	b.hi	<addr>
                	and	x2, x2, #0xf
-               	eor	x5, x2, x3
-               	cbz	w5, <addr>
-               	ldrh	w2, [x4, w2, uxtw #1]
+               	cmp	w2, #0x9
+               	b.eq	<addr>
+               	ldrh	w2, [x3, w2, uxtw #1]
                	cbnz	w2, <addr>
                	mov	x0, #0x0                // =0
                	ret
@@ -227,15 +226,13 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	and	x0, x0, #0xff
-               	mov	x17, #0xc8              // =200
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0xc8
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	and	x0, x0, #0xff
-               	mov	x17, #0x9               // =9
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
+               	cmp	w0, #0x9
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -252,9 +249,8 @@ Disassembly of section .text:
                	mov	x1, #0x1e               // =30
                	mov	x2, #0x1                // =1
                	bl	<addr>
-               	mov	x17, #0xb               // =11
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
+               	cmp	w0, #0xb
+               	b.ne	<addr>
                	mov	x0, #0x14               // =20
                	mov	x1, #0x5                // =5
                	mov	x2, #0x1                // =1

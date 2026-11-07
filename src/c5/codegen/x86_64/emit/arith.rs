@@ -1593,9 +1593,10 @@ pub(super) fn emit_binop_imm(
         return Ok(());
     }
     // A compare against an i32: `cmp rn, imm32`, or against 0 the shorter
-    // `test rn, rn`, whose ZF / SF / CF / OF match.
+    // `test rn, rn`, whose ZF / SF / CF / OF match. A 32-bit compare reads
+    // the immediate's low word alone.
     if let Some(cc) = int_cmp_cc(op)
-        && imm_fits_i32
+        && (imm_fits_i32 || cmp_width(alloc, v) == 4)
     {
         let w = cmp_width(alloc, v);
         if rhs_imm == 0 {

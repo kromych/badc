@@ -21,6 +21,7 @@ use super::eval::{self, round_if_f32};
 use super::fenv::{BINARY32, BINARY64, Format, FpEnv, Round};
 
 mod asm_a64;
+mod strtox;
 
 /// `Inst::ImmCode` results are tagged with this bit set so
 /// `Inst::CallIndirect` can distinguish a function pointer from
@@ -192,7 +193,7 @@ impl Memory {
         };
         // Allocated up front, inside the reserved heap, so `errno` stays
         // reachable after the heap is exhausted.
-        let base = mem.heap_alloc((STDIO_ERRNO + 8) as u64);
+        let base = mem.heap_alloc(STDIO_BYTES as u64);
         for i in 0..3 {
             let file = (base + i * STDIO_FILE_BYTES) as u64;
             let slot = base + STDIO_SLOTS + i * 8;
@@ -209,8 +210,12 @@ impl Memory {
 
     /// Store `ENOMEM` in `errno`, as a failed allocation function does.
     fn set_enomem(&mut self) {
+        self.set_errno(ENOMEM);
+    }
+
+    fn set_errno(&mut self, value: i32) {
         let at = self.stdio + STDIO_ERRNO;
-        self.bytes[at..at + 4].copy_from_slice(&ENOMEM.to_le_bytes());
+        self.bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
     }
 
     fn with_track_pointers(mut self, on: bool) -> Self {
@@ -1075,6 +1080,23 @@ fn finish_agg_return(
     Ok(dst as i64)
 }
 
+/// A call of the interpreter's C library function `name` with the values
+/// of `args`. A result the caller takes as an object (`ret_agg`), a `long
+/// double` wider than `double`, is returned as the object's address.
+fn call_library<H: Host>(
+    mem: &mut Memory,
+    host: &mut H,
+    frame: &Frame<'_>,
+    name: &str,
+    args: &[ValueId],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+) -> Result<i64, C5Error> {
+    let arg_vals: Vec<i64> = args.iter().map(|&a| frame.regs[a as usize]).collect();
+    let ret = dispatch_callext(name, &arg_vals, mem, host)?;
+    finish_agg_return(frame, mem, ret_agg, ret_slot_local, ret)
+}
+
 /// Build the callee's flat argument list. A variadic by-value
 /// aggregate (`arg_aggs[i]` set, `i` past the fixed parameters) is
 /// expanded into its eightbytes so the callee's `va_arg`, which
@@ -1564,14 +1586,9 @@ fn run_inst<H: Host>(
             // binding index under `IMPORT_ADDR_TAG`; dispatch it the
             // same way `Inst::CallExt` resolves a libc binding.
             if raw & IMPORT_ADDR_TAG != 0 {
-                let binding_idx = raw & !IMPORT_ADDR_TAG;
-                let name = prog.binding_name(binding_idx)?;
-                let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-                for &a in args {
-                    arg_vals.push(frame.regs[a as usize]);
-                }
-                let ret = dispatch_callext(name, &arg_vals, mem, host)?;
-                frame.regs[v as usize] = ret;
+                let name = prog.binding_name(raw & !IMPORT_ADDR_TAG)?;
+                let (agg, slot) = (*ret_agg, *ret_slot_local);
+                frame.regs[v as usize] = call_library(mem, host, frame, name, args, agg, slot)?;
                 return Ok(());
             }
             // Code pointers may be tagged two ways: SSA-VM bit 62
@@ -1607,15 +1624,15 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::CallExt {
-            binding_idx, args, ..
+            binding_idx,
+            args,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => {
             let name = prog.binding_name(*binding_idx)?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
-            let ret = dispatch_callext(name, &arg_vals, mem, host)?;
-            frame.regs[v as usize] = ret;
+            let (agg, slot) = (*ret_agg, *ret_slot_local);
+            frame.regs[v as usize] = call_library(mem, host, frame, name, args, agg, slot)?;
             return Ok(());
         }
         Inst::TailExt(_) => "TailExt",
@@ -1694,10 +1711,13 @@ fn run_inst<H: Host>(
 
 /// The stdio block: a record per standard stream, as far apart as the bundled
 /// `<stdio.h>` steps from `__iob_func()` on Windows, then the `FILE *` object
-/// each stream's data symbol names, then the `errno` cell.
+/// each stream's data symbol names, then the `errno` cell, then the object a
+/// library function returning a `long double` wider than `double` fills.
 const STDIO_FILE_BYTES: usize = 48;
 const STDIO_SLOTS: usize = 3 * STDIO_FILE_BYTES;
 const STDIO_ERRNO: usize = STDIO_SLOTS + 3 * 8;
+const STDIO_RETURN: usize = STDIO_ERRNO + 8;
+const STDIO_BYTES: usize = STDIO_RETURN + 16;
 /// `ENOMEM` as the bundled `<errno.h>` numbers it on every target.
 const ENOMEM: i32 = 12;
 
@@ -1735,43 +1755,44 @@ fn cstring_arg(name: &str, args: &[i64], idx: usize, mem: &Memory) -> Result<Vec
 /// unit declares but neither defines nor binds runs that definition, as a
 /// native link takes the one its C library offers.
 pub(super) fn interp_supplies(name: &str) -> bool {
-    matches!(
-        name,
-        "exit"
-            | "memcpy"
-            | "memmove"
-            | "memset"
-            | "memcmp"
-            | "write"
-            | "read"
-            | "close"
-            | "malloc"
-            | "calloc"
-            | "realloc"
-            | "free"
-            | "printf"
-            | "__iob_func"
-            | "errno_location"
-            | "fprintf"
-            | "fputs"
-            | "puts"
-            | "fputc"
-            | "putc"
-            | "fwrite"
-            | "fflush"
-            | "fileno"
-            | "putchar"
-            | "open"
-            | "getenv"
-            | "setenv"
-            | "_putenv_s"
-            | "dlopen"
-            | "dlsym"
-            | "dlclose"
-            | "dlerror"
-            | "feraiseexcept"
-            | "feupdateenv"
-    )
+    strtox::NAMES.contains(&name)
+        || matches!(
+            name,
+            "exit"
+                | "memcpy"
+                | "memmove"
+                | "memset"
+                | "memcmp"
+                | "write"
+                | "read"
+                | "close"
+                | "malloc"
+                | "calloc"
+                | "realloc"
+                | "free"
+                | "printf"
+                | "__iob_func"
+                | "errno_location"
+                | "fprintf"
+                | "fputs"
+                | "puts"
+                | "fputc"
+                | "putc"
+                | "fwrite"
+                | "fflush"
+                | "fileno"
+                | "putchar"
+                | "open"
+                | "getenv"
+                | "setenv"
+                | "_putenv_s"
+                | "dlopen"
+                | "dlsym"
+                | "dlclose"
+                | "dlerror"
+                | "feraiseexcept"
+                | "feupdateenv"
+        )
 }
 
 /// The `<fenv.h>` functions and the `<math.h>` functions that round in
@@ -1883,6 +1904,9 @@ fn dispatch_callext<H: Host>(
     host: &mut H,
 ) -> Result<i64, C5Error> {
     if let Some(r) = fenv_call(name, args, mem) {
+        return r;
+    }
+    if let Some(r) = strtox::call(name, args, mem) {
         return r;
     }
     match name {
@@ -2518,7 +2542,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
             b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
                 let raw = next_arg(&mut arg_idx)?;
                 let (v, hex) = float_arg(mem, raw, s.long_double)?;
-                let libc = HexStyle::of(mem.target);
+                let libc = Libc::of(mem.target);
                 let sign = if v.is_nan() {
                     nan_sign(v, &s, libc)
                 } else if v.is_sign_negative() {
@@ -2534,7 +2558,7 @@ fn format_printf(fmt: &[u8], args: &[i64], mem: &mut Memory) -> Result<Vec<u8>, 
                     _ if v.is_nan() => (sign.into(), nan_body(v, conv, libc)),
                     Some(h) if matches!(conv, b'a' | b'A') => {
                         let radix = if conv == b'A' { "0X" } else { "0x" };
-                        let style = HexStyle::of(mem.target);
+                        let style = Libc::of(mem.target);
                         let neg = v.is_sign_negative();
                         let body = format_hex(h, &s, style, mem.fp.round, neg);
                         (format!("{sign}{radix}"), body)
@@ -2626,9 +2650,9 @@ fn push_int(out: &mut Vec<u8>, s: &PrintfSpec, prefix: &str, digits: &str, is_ze
 /// The sign a NaN takes (7.19.6.1p8 "[-]nan") from the target's C library:
 /// glibc and the UCRT write the sign bit and honor `+` and space; Apple's
 /// writes none of the three.
-fn nan_sign(v: f64, s: &PrintfSpec, libc: HexStyle) -> &'static str {
+fn nan_sign(v: f64, s: &PrintfSpec, libc: Libc) -> &'static str {
     match libc {
-        HexStyle::Apple => "",
+        Libc::Apple => "",
         _ if v.is_sign_negative() => "-",
         _ if s.plus => "+",
         _ if s.space => " ",
@@ -2639,11 +2663,11 @@ fn nan_sign(v: f64, s: &PrintfSpec, libc: HexStyle) -> &'static str {
 /// A NaN's text after its sign: `nan`, and in the UCRT's form `nan(ind)` for
 /// the x86 default NaN (sign bit, quiet bit, no payload) and `nan(snan)` for
 /// a signaling one; upper-case under an upper-case conversion.
-fn nan_body(v: f64, conv: u8, libc: HexStyle) -> alloc::string::String {
+fn nan_body(v: f64, conv: u8, libc: Libc) -> alloc::string::String {
     let bits = v.to_bits();
     let text = match libc {
-        HexStyle::Ucrt if bits == 0xFFF8_0000_0000_0000 => "nan(ind)",
-        HexStyle::Ucrt if bits & (1 << 51) == 0 => "nan(snan)",
+        Libc::Ucrt if bits == 0xFFF8_0000_0000_0000 => "nan(ind)",
+        Libc::Ucrt if bits & (1 << 51) == 0 => "nan(snan)",
         _ => "nan",
     };
     if conv.is_ascii_uppercase() {
@@ -2874,9 +2898,10 @@ fn ieee_digits(bits: u128, mant: u32, ebits: u32) -> (u128, i32) {
     }
 }
 
-/// The target libc's choices C99 7.19.6.1p8 leaves open for `%a`.
+/// The target's C library, for the choices C99 leaves open. For `%a`
+/// (7.19.6.1p8), each variant's note.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum HexStyle {
+enum Libc {
     /// Subnormals as `0x0.` at the minimum exponent, trailing zeros
     /// dropped, a halfway tail rounded to even.
     Glibc,
@@ -2888,13 +2913,13 @@ enum HexStyle {
     Ucrt,
 }
 
-impl HexStyle {
+impl Libc {
     fn of(target: crate::c5::codegen::Target) -> Self {
         use crate::c5::codegen::Target;
         match target {
-            Target::LinuxX64 | Target::LinuxAarch64 => HexStyle::Glibc,
-            Target::MacOSAarch64 => HexStyle::Apple,
-            Target::WindowsX64 | Target::WindowsAarch64 => HexStyle::Ucrt,
+            Target::LinuxX64 | Target::LinuxAarch64 => Libc::Glibc,
+            Target::MacOSAarch64 => Libc::Apple,
+            Target::WindowsX64 | Target::WindowsAarch64 => Libc::Ucrt,
         }
     }
 
@@ -2903,7 +2928,7 @@ impl HexStyle {
     /// direction `r`.
     fn rounds_up(self, r: Round, neg: bool, kept: u128, rem: u128, shift: u32) -> bool {
         let d1 = rem >> (shift - 4);
-        let dropped = if self == HexStyle::Apple {
+        let dropped = if self == Libc::Apple {
             d1 != 0
         } else {
             rem != 0
@@ -2912,7 +2937,7 @@ impl HexStyle {
             Round::Up => !neg && dropped,
             Round::Down => neg && dropped,
             Round::Zero => false,
-            Round::Nearest if self == HexStyle::Apple => {
+            Round::Nearest if self == Libc::Apple => {
                 let d2 = if shift >= 8 {
                     (rem >> (shift - 8)) & 0xf
                 } else {
@@ -2933,7 +2958,7 @@ impl HexStyle {
 fn format_hex(
     h: HexForm,
     s: &PrintfSpec,
-    style: HexStyle,
+    style: Libc,
     round: Round,
     neg: bool,
 ) -> alloc::string::String {
@@ -2942,7 +2967,7 @@ fn format_hex(
         width,
         mut exp,
     } = h;
-    if style == HexStyle::Apple && sig != 0 {
+    if style == Libc::Apple && sig != 0 {
         while sig >> (4 * width) == 0 {
             sig <<= 1;
             exp -= 1;
@@ -2950,7 +2975,7 @@ fn format_hex(
     }
     let frac = sig & ((1 << (4 * width)) - 1);
     let p = s.precision.unwrap_or(match style {
-        HexStyle::Ucrt => width as usize,
+        Libc::Ucrt => width as usize,
         _ => (width - frac.trailing_zeros().min(4 * width) / 4) as usize,
     });
     let keep = width.min(p as u32);
@@ -4623,7 +4648,7 @@ mod tests {
             "dlclose",
             "dlerror",
         ];
-        for name in names {
+        for name in names.into_iter().chain(strtox::NAMES.iter().copied()) {
             assert!(interp_supplies(name), "{name}");
             if let Err(C5Error::Runtime(m)) =
                 dispatch_callext(name, &[0; 4], &mut mem, &mut NullHost)

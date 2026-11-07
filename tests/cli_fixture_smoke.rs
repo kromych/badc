@@ -5328,3 +5328,60 @@ fn interp_printf_writes_a_nan_as_the_target_library_does() {
         assert_eq!(String::from_utf8_lossy(&out.stdout), want, "{target}");
     }
 }
+
+/// Run the fixture `name` under `--interp` for each target and compare its
+/// standard output with the text given for that target.
+fn interp_fixture_prints(name: &str, expected: &[(&str, &str)]) {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join(name);
+    for (target, want) in expected {
+        let out = Command::new(badc)
+            .args(["-q", &format!("--target={target}"), "--interp"])
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{target}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), *want, "{target}");
+    }
+}
+
+/// Under `--interp` the C99 7.20.1 conversions follow the target's C
+/// library: `long` is 32 bits on Windows, msvcrt's atoi clamps to `int`,
+/// Apple's libc sets EINVAL when there is no subject, and `%a` writes a
+/// subnormal as the library does. The macOS text is the native build's.
+#[test]
+fn interp_converts_numbers_as_the_target_library_does() {
+    let glibc = "-31 7|0 0 0|63 0|99999999999 0|18446744073709551615 0|\
+                 -9223372036854775808 34|1295 0\n\
+                 42 1|-7 123456789012|0 22\n\
+                 1e-05 0x1.4f8b588e368f1p-17|0x1.8p+1 0x0.0000000000001p-1022|\
+                 0.1000000015 0x1p-149|3.14159 -0.0025\n\
+                 inf 34|0 34|0x0.0000000000001p-1022 0|-inf nan 0.500000|\
+                 0x1.999999999999ap-4|1 1\n";
+    let apple = "-31 7|0 0 22|63 0|99999999999 0|18446744073709551615 0|\
+                 -9223372036854775808 34|1295 0\n\
+                 42 1|-7 123456789012|0 22\n\
+                 1e-05 0x1.4f8b588e368f1p-17|0x1.8p+1 0x1p-1074|\
+                 0.1000000015 0x1p-149|3.14159 -0.0025\n\
+                 inf 34|0 34|0x1p-1074 0|-inf nan 0.500000|0x1.999999999999ap-4|1 1\n";
+    let ucrt = "-31 7|0 0 0|63 0|2147483647 34|4294967295 0|-9223372036854775808 34|1295 0\n\
+                42 2147483647|-7 123456789012|0 22\n\
+                1e-05 0x1.4f8b588e368f1p-17|0x1.8000000000000p+1 0x0.0000000000001p-1022|\
+                0.1000000015 0x1.0000000000000p-149|3.14159 -0.0025\n\
+                inf 34|0 34|0x0.0000000000001p-1022 0|-inf nan 0.500000|\
+                0x1.999999999999ap-4|1 1\n";
+    interp_fixture_prints(
+        "numeric_conversions_follow_the_target_library.c",
+        &[
+            ("linux-x64", glibc),
+            ("linux-aarch64", glibc),
+            ("macos-aarch64", apple),
+            ("windows-x64", ucrt),
+            ("windows-arm64", ucrt),
+        ],
+    );
+}

@@ -46,6 +46,59 @@ pub(super) const BINARY32: Format = Format {
     emin: -126,
     emax: 127,
 };
+/// The x87 extended format, whose 64-bit significand holds its integer bit.
+pub(super) const X87: Format = Format {
+    p: 64,
+    emin: -16382,
+    emax: 16383,
+};
+pub(super) const BINARY128: Format = Format {
+    p: 113,
+    emin: -16382,
+    emax: 16383,
+};
+
+/// A value rounded to a format: `kept * 2^q`, or past the largest finite
+/// value, which becomes infinity or that value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Rounded {
+    Finite(u128, i32),
+    Overflow { infinite: bool },
+}
+
+impl Format {
+    fn exponent_bits(self) -> u32 {
+        32 - ((2 * self.emax + 1) as u32).leading_zeros()
+    }
+
+    fn fraction_bits(self) -> u32 {
+        if self == X87 { 64 } else { self.p - 1 }
+    }
+
+    /// The encoding of `+/-r`: the interchange format's bits, or the x87
+    /// 80-bit image with the significand below the exponent and sign.
+    pub(super) fn encode(self, neg: bool, r: Rounded) -> u128 {
+        let all_ones = (1u128 << self.exponent_bits()) - 1;
+        let integer_bit = if self == X87 { 1u128 << 63 } else { 0 };
+        let (e, m) = match r {
+            Rounded::Overflow { infinite: true } => (all_ones, integer_bit),
+            Rounded::Overflow { infinite: false } => (all_ones - 1, (1u128 << self.p) - 1),
+            Rounded::Finite(kept, _) if kept >> (self.p - 1) == 0 => (0, kept),
+            Rounded::Finite(kept, q) => ((q + self.p as i32 - 1 + self.emax) as u128, kept),
+        };
+        let f = self.fraction_bits();
+        let m = if self == X87 { m } else { m & ((1 << f) - 1) };
+        u128::from(neg) << (f + self.exponent_bits()) | e << f | m
+    }
+
+    /// The quiet NaN of sign `neg` with no payload.
+    pub(super) fn quiet_nan(self, neg: bool) -> u128 {
+        let f = self.fraction_bits();
+        let quiet = if self == X87 { 3 << 62 } else { 1 << (f - 1) };
+        let e = (1u128 << self.exponent_bits()) - 1;
+        u128::from(neg) << (f + self.exponent_bits()) | e << f | quiet
+    }
+}
 
 /// An integer conversion's result for a NaN or an out-of-range value:
 /// x86-64's integer indefinite (the minimum), AArch64's nearest bound (0
@@ -216,8 +269,23 @@ impl FpEnv {
     }
 
     /// Round `+/-sig * 2^exp`, plus a nonzero amount below `2^exp` when
-    /// `sticky`, to `f`; `sig` is nonzero.
+    /// `sticky`, to `f`, binary32 or binary64; `sig` is nonzero.
     pub(super) fn round(&mut self, neg: bool, sig: u128, exp: i32, sticky: bool, f: Format) -> u64 {
+        match self.round_to(neg, sig, exp, sticky, f) {
+            Rounded::Finite(kept, q) => pack(neg, kept, q),
+            Rounded::Overflow { infinite } => self.overflowed(neg, infinite, f),
+        }
+    }
+
+    /// [`Self::round`] to any format.
+    pub(super) fn round_to(
+        &mut self,
+        neg: bool,
+        sig: u128,
+        exp: i32,
+        sticky: bool,
+        f: Format,
+    ) -> Rounded {
         let top = top_bit(&(neg, sig, exp));
         let p = f.p as i32;
         let mut q = (top - (p - 1)).max(f.emin - (p - 1));
@@ -237,9 +305,15 @@ impl FpEnv {
         }
         if kept != 0 && q + 127 - kept.leading_zeros() as i32 > f.emax {
             self.flags |= OVERFLOW | INEXACT;
-            return self.overflowed(neg, f);
+            let infinite = match self.round {
+                Round::Nearest => true,
+                Round::Zero => false,
+                Round::Up => !neg,
+                Round::Down => neg,
+            };
+            return Rounded::Overflow { infinite };
         }
-        pack(neg, kept, q)
+        Rounded::Finite(kept, q)
     }
 
     /// Whether an exact value with top bit `top` is below the smallest
@@ -255,17 +329,11 @@ impl FpEnv {
         (kept + self.round_up(neg, kept, half, rest) as u128) >> f.p == 0
     }
 
-    fn overflowed(&self, neg: bool, f: Format) -> u64 {
+    fn overflowed(&self, neg: bool, infinite: bool, f: Format) -> u64 {
         let max = if f == BINARY64 {
             0x7fef_ffff_ffff_ffff
         } else {
             (f32::MAX as f64).to_bits()
-        };
-        let infinite = match self.round {
-            Round::Nearest => true,
-            Round::Zero => false,
-            Round::Up => !neg,
-            Round::Down => neg,
         };
         signed(neg, if infinite { EXP_MASK } else { max })
     }

@@ -68,6 +68,16 @@ badc compiles to instructions, such as `sqrt`, `fabs`, `floor` and `labs`,
 also work. `strlen` and `strcmp` work only on string literals, which badc
 evaluates at compile time.
 
+The numeric conversions `atoi`, `atol`, `atoll`, `atof`, `strtol`,
+`strtoul`, `strtoll`, `strtoull`, `strtoimax`, `strtoumax`, `strtod`,
+`strtof` and `strtold`, and `abs`, `labs`, `llabs` and `imaxabs`, convert
+as the target's C library does. `long` is 32 bits on Windows, where `atoi`
+clamps to `int`. A decimal or hexadecimal subject rounds correctly to the
+type in the current rounding direction, `strtold` to the target's `long
+double`: x87 extended on linux-x64, binary128 on linux-aarch64, `double`
+elsewhere. Out of range, `errno` is `ERANGE`; for a base outside 0 and 2
+to 36 it is `EINVAL`, and on macOS also when the string holds no number.
+
 `printf` reads a `long double` in the target's format and writes `%a` and
 `%La` as the target's C library does: `0xcp-3` for 1.5L on linux-x64,
 `0x1.8p+0` on the AArch64 targets, `0x1.8000000000000p+0` on Windows.
@@ -78,10 +88,9 @@ Any other library call stops the program when it is reached:
 error: runtime: vm_ssa: library call `sscanf` is not implemented under --interp
 ```
 
-Among the calls not implemented are the `scanf` family, `strtol`, `strtod`
-and `strtold`, `atoi`, `sprintf`, `snprintf` and `vsnprintf`, `fopen` and
-`fgets`, `strcpy`, `strchr`, `qsort`, `time`, `setjmp`, `signal` and
-`pthread_create`.
+Among the calls not implemented are the `scanf` family, `sprintf`,
+`snprintf` and `vsnprintf`, `fopen` and `fgets`, `strcpy`, `strchr`,
+`qsort`, `time`, `setjmp`, `signal` and `pthread_create`.
 
 ### Other limits
 

@@ -1,3 +1,6 @@
+info: auto-including <stdio.h> for undeclared `vsnprintf`
+info: auto-including <string.h> for undeclared `memset`
+info: auto-including <stdlib.h> for undeclared `malloc`
 ; --- SSA dump (ok=true) ent_pc=11 ---
 ; name=format
 fn ent_pc=11 n_params=3 variadic=true locals=3
@@ -323,9 +326,6 @@ fn ent_pc=12 n_params=0 variadic=false locals=11
     v226 Imm(12)                                          -> x0
     v227 Imm(0)                                           -> x1
     terminator Jmp(b32)   (exit_acc=v226)
-info: auto-including <stdio.h> for undeclared `vsnprintf`
-info: auto-including <string.h> for undeclared `memset`
-info: auto-including <stdlib.h> for undeclared `malloc`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

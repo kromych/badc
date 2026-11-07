@@ -5006,6 +5006,14 @@ pub(crate) fn emit_ssa_dump(build: &mut Build) {
     build.ssa_dump.clear();
 }
 
+/// Write out `--dump-ssa` text a caller kept until its build was final.
+pub(crate) fn print_ssa_dump(dump: &str) {
+    #[cfg(feature = "std")]
+    eprint!("{dump}");
+    #[cfg(not(feature = "std"))]
+    let _ = dump;
+}
+
 /// [`lower_for`] with the SSA bodies supplied instead of walked. Used by
 /// the compaction retry, whose bodies are the post-inline ones the
 /// dropped-data report was derived from; the ASTs still describe the

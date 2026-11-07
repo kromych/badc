@@ -100,6 +100,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         compile_native_tu(src, None, &cfg)
     });
     let mut source_objs: Vec<Option<badc::NativeObject>> = Vec::with_capacity(sources.len());
+    let mut ssa_dumps: Vec<String> = Vec::with_capacity(sources.len());
     for (i, mut tu) in tus.into_iter().enumerate() {
         if entry_override.is_none() {
             entry_override = tu.entry;
@@ -108,6 +109,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             subsystem_override = tu.subsystem;
         }
         source_auto_includes.push(tu.auto_includes);
+        ssa_dumps.push(core::mem::take(&mut tu.ssa_dump));
         tu.obj.source = sources[i].clone();
         source_objs.push(Some(tu.obj));
     }
@@ -190,10 +192,11 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         lib.drop_default_dll();
     }
     let mut runtime = Vec::new();
-    embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
+    let runtime_dump =
+        embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
     slots[0] = Slot::Fixed(runtime);
     stats.mark("runtime");
-    rebind_auto_includes(
+    let recompiled = rebind_auto_includes(
         &cfg,
         &mut embedded,
         &mut slots,
@@ -202,6 +205,14 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         &sources,
         &mut stats,
     );
+    for (i, dump) in recompiled {
+        ssa_dumps[i] = dump;
+    }
+    // Each unit's dump is that of the compile the link keeps, then the
+    // runtime's.
+    for dump in ssa_dumps.iter().chain([&runtime_dump]) {
+        eprint!("{dump}");
+    }
     let (native_objs, archive_inclusions) = select_archive_members(
         &mut embedded,
         slots,
@@ -288,14 +299,15 @@ struct EmbeddedSources<'a> {
 impl EmbeddedSources<'_> {
     /// Compile one embedded source to relocatable bytes: the same
     /// compile and emit chain as a file, with no filesystem read.
-    /// `dump` clears `--dump-ssa` for a speculative compile.
+    /// `dump` clears `--dump-ssa` for a speculative compile; the dump text
+    /// comes back with the bytes.
     fn compile(
         &self,
         label: &str,
         src: String,
         extra: &[(&str, &str)],
         dump: bool,
-    ) -> Result<Vec<u8>, badc::C5Error> {
+    ) -> Result<(Vec<u8>, String), badc::C5Error> {
         let cli = self.cli;
         // The embedded runtime gates its sections on macros the
         // driver sets per image: `__BADC_C5_START__`
@@ -309,18 +321,21 @@ impl EmbeddedSources<'_> {
         let program = Compiler::with_options(src, cli.target, copts).compile()?;
         let mut opts = self.reloc_opts.clone().for_embedded_sources();
         opts.dump_ssa &= dump;
-        badc::emit_native_with_options_owned(program, cli.target, opts)
+        badc::emit_native_reporting(program, cli.target, opts, None).map(|e| (e.image, e.ssa_dump))
     }
 
     /// Compile the startup runtime for this image and append its
     /// objects. The runtime source compiles to nothing unless one of
     /// the gate macros below is set.
+    /// The `--dump-ssa` text of the runtime's units comes back, for the
+    /// link to print after its own units'.
     fn push_runtime(
         &self,
         entry_override: Option<&str>,
         subsystem_override: Option<badc::Subsystem>,
         objs: &mut Vec<badc::NativeObject>,
-    ) {
+    ) -> String {
+        let mut dumps = String::new();
         let links_crt = loads_user_mode_crt(self.cli, subsystem_override);
         // The startup section (`__c5_entry`, `__c5_exit`, `environ`)
         // links only when the writer emits an entry stub -- not into
@@ -371,7 +386,7 @@ impl EmbeddedSources<'_> {
                 },
                 _ => body.to_string(),
             };
-            let bytes = self
+            let (bytes, dump) = self
                 .compile(&label, src, &runtime_defines, true)
                 .unwrap_or_else(|e| {
                     eprint_error("", &e);
@@ -383,6 +398,7 @@ impl EmbeddedSources<'_> {
                     }
                     std::process::exit(1);
                 });
+            dumps.push_str(&dump);
             match badc::parse_native_elf(&bytes) {
                 Ok(mut o) => {
                     o.source = label.clone();
@@ -394,6 +410,7 @@ impl EmbeddedSources<'_> {
                 }
             }
         }
+        dumps
     }
 
     /// Compiler-runtime helpers (a libgcc / compiler-rt subset) and the
@@ -418,7 +435,10 @@ impl EmbeddedSources<'_> {
         let compiled: Vec<_> = std::thread::scope(|scope| {
             let jobs: Vec<_> = (sources.iter())
                 .map(|(label, body)| {
-                    scope.spawn(move || this.compile(label, body.to_string(), &[], false))
+                    scope.spawn(move || {
+                        this.compile(label, body.to_string(), &[], false)
+                            .map(|(bytes, _)| bytes)
+                    })
                 })
                 .collect();
             (jobs.into_iter())
@@ -734,13 +754,14 @@ fn rebind_auto_includes(
     source_auto_includes: &[Vec<badc::AutoInclude>],
     sources: &[String],
     stats: &mut LinkStats,
-) {
+) -> Vec<(usize, String)> {
     let bound: Vec<&str> = (source_auto_includes.iter().flatten())
         .filter(|a| a.bound)
         .map(|a| a.name.as_str())
         .collect();
+    let mut recompiled = Vec::new();
     if bound.is_empty() {
-        return;
+        return recompiled;
     }
     // The scan folds unpulled pool members into `defined_fns`, so the
     // on-demand sources join the link here, as its last archive.
@@ -791,6 +812,7 @@ fn rebind_auto_includes(
         match res {
             Ok(mut tu) => {
                 tu.obj.source = sources[i].clone();
+                recompiled.push((i, tu.ssa_dump));
                 slots[source_slots[i]] = Slot::Fixed(vec![tu.obj]);
             }
             Err(()) => {
@@ -799,6 +821,7 @@ fn rebind_auto_includes(
             }
         }
     }
+    recompiled
 }
 
 /// What archive selection knows as it walks the inputs: names defined so
@@ -1051,7 +1074,7 @@ fn select_archive_members(
             let label = "<copies>";
             let object = embedded
                 .compile(label, src, &[], false)
-                .and_then(|bytes| badc::parse_native_elf(&bytes));
+                .and_then(|(bytes, _)| badc::parse_native_elf(&bytes));
             match object {
                 Ok(mut o) => {
                     o.source = label.to_string();

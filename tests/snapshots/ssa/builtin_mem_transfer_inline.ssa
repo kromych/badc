@@ -1,3 +1,4 @@
+info: auto-including <string.h> for undeclared `memmove`
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
 fn ent_pc=6 n_params=0 variadic=false locals=131
@@ -1689,7 +1690,6 @@ fn ent_pc=6 n_params=0 variadic=false locals=131
     v1454 LifetimeEnd(-131)                                -> -
     v1455 LifetimeEnd(0)                                   -> -
     terminator Return(v1450)   (exit_acc=v1450)
-info: auto-including <string.h> for undeclared `memmove`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

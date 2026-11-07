@@ -1,3 +1,7 @@
+tag_scopes_of_blocks_and_parameter_lists.c:9: warning: `struct t` declared inside parameter list will not be visible outside of this definition or declaration [B2013] [-Wvisibility]
+void proto(struct t { int a, b; } *);
+tag_scopes_of_blocks_and_parameter_lists.c:11: warning: `struct u` declared inside parameter list will not be visible outside of this definition or declaration [B2013] [-Wvisibility]
+static int def(struct u { int a, b; } *pu) {
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=0
@@ -102,10 +106,6 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v96  Imm(0)                                           -> x0
     v97  LifetimeEnd(0)                                   -> -
     terminator Return(v96)   (exit_acc=v96)
-tag_scopes_of_blocks_and_parameter_lists.c:9: warning: `struct t` declared inside parameter list will not be visible outside of this definition or declaration [B2013] [-Wvisibility]
-void proto(struct t { int a, b; } *);
-tag_scopes_of_blocks_and_parameter_lists.c:11: warning: `struct u` declared inside parameter list will not be visible outside of this definition or declaration [B2013] [-Wvisibility]
-static int def(struct u { int a, b; } *pu) {
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -1,3 +1,8 @@
+info: auto-including <stdio.h> for undeclared `vsnprintf`
+info: auto-including <string.h> for undeclared `strcmp`
+info: auto-including <math.h> for undeclared `pow`
+info: auto-including <stdlib.h> for undeclared `free`
+info: auto-including <ctype.h> for undeclared `toupper`
 ; --- SSA dump (ok=true) ent_pc=31 ---
 ; name=format
 fn ent_pc=31 n_params=3 variadic=true locals=3
@@ -272,11 +277,6 @@ fn ent_pc=32 n_params=0 variadic=false locals=6
   block 35  start_pc=0
     v170 Imm(0)                                           -> x0
     terminator Jmp(b19)   (exit_acc=v170)
-info: auto-including <stdio.h> for undeclared `vsnprintf`
-info: auto-including <string.h> for undeclared `strcmp`
-info: auto-including <math.h> for undeclared `pow`
-info: auto-including <stdlib.h> for undeclared `free`
-info: auto-including <ctype.h> for undeclared `toupper`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

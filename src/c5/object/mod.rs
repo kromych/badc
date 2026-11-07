@@ -175,6 +175,9 @@ fn reloc_slot_in_data(
 pub struct NativeEmit {
     pub image: Vec<u8>,
     pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
+    /// The `--dump-ssa` text, for the caller to print once it knows the
+    /// object is the one its link keeps.
+    pub ssa_dump: alloc::string::String,
 }
 
 /// A linked image and the program database its debug directory names.
@@ -457,7 +460,10 @@ pub fn emit_native_with_options_named(
     options: NativeOptions,
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
-    emit_native_reporting(program, target, options, shared_lib_name).map(|e| e.image)
+    emit_native_reporting(program, target, options, shared_lib_name).map(|e| {
+        crate::c5::codegen::print_ssa_dump(&e.ssa_dump);
+        e.image
+    })
 }
 
 /// [`emit_native_with_options_named`] handing the lowering's
@@ -475,6 +481,7 @@ pub fn emit_native_reporting(
     let output_kind = options.output_kind;
     let freed_by_exit = options.freed_by_exit;
     let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
+    let ssa_dump = core::mem::take(&mut build.ssa_dump);
     let program = &compacted;
     build.bss_size = bss_size;
     let defs = crate::c5::codegen::unit_definitions(program, &build);
@@ -515,7 +522,11 @@ pub fn emit_native_reporting(
         core::mem::forget(build);
         core::mem::forget(compacted);
     }
-    Ok(NativeEmit { image, diagnostics })
+    Ok(NativeEmit {
+        image,
+        diagnostics,
+        ssa_dump,
+    })
 }
 
 /// A PE loader writes an imported object's address into the import table alone.
@@ -581,14 +592,13 @@ fn compact_and_lower(
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     if program.data.is_empty() {
-        let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+        let build = crate::c5::codegen::lower_for_with_prebuilt(
             &program,
             target,
             options,
             None,
             LowerMode::Full,
         )?;
-        crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((program, 0, build));
     }
     // With no function to probe, or the prune turned off, every object
@@ -597,14 +607,13 @@ fn compact_and_lower(
         let sets = shadow::LiveSets::everything(&program);
         let (laid, bss_size, _map) =
             shadow::apply_data_liveness(program, &sets, &sets.func_pcs, segregate, None);
-        let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+        let build = crate::c5::codegen::lower_for_with_prebuilt(
             &laid,
             target,
             options,
             None,
             LowerMode::Full,
         )?;
-        crate::c5::codegen::emit_ssa_dump(&mut build);
         return Ok((laid, bss_size, build));
     }
     let probe = crate::c5::codegen::lower_for_with_prebuilt(
@@ -647,7 +656,6 @@ fn compact_and_lower(
     )?;
     diagnostics.append(&mut build.diagnostics);
     build.diagnostics = diagnostics;
-    crate::c5::codegen::emit_ssa_dump(&mut build);
     Ok((compacted, bss_size, build))
 }
 
@@ -683,6 +691,7 @@ pub(crate) fn single_tu_image_for_test(
 ) -> Result<(alloc::vec::Vec<u8>, SingleTuRegions), C5Error> {
     use crate::c5::token::Token;
     let (compacted, bss_size, mut build) = compact_and_lower(program.clone(), target, options)?;
+    crate::c5::codegen::emit_ssa_dump(&mut build);
     let program = &compacted;
     build.bss_size = bss_size;
     let pc = build.pc_to_native.len();

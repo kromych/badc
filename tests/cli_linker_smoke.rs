@@ -8491,6 +8491,38 @@ fn the_rebinding_compile_keeps_the_auto_included_declaration() {
     );
 }
 
+/// `--dump-ssa` describes the compile whose code reaches the image: a unit
+/// compiled again to rebind a call to the link's definition dumps once,
+/// from that compile.
+#[test]
+fn dump_ssa_describes_the_rebound_compile_once() {
+    let dir = tempdir("dump-ssa-rebind");
+    write_source(
+        &dir,
+        "caller.c",
+        "int main(void) { return (int)difftime(5, 2); }\n",
+    );
+    write_source(
+        &dir,
+        "impl.c",
+        "#include <time.h>\ndouble difftime(time_t a, time_t b) { return (double)(a - b); }\n",
+    );
+    let exe = dir.join("prog");
+    let out = run(
+        Command::new(badc())
+            .args(["--dump-ssa", "-o"])
+            .arg(&exe)
+            .arg(dir.join("caller.c"))
+            .arg(dir.join("impl.c"))
+            .current_dir(&dir),
+        "link with a user difftime",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("rebinding the call in"), "{stderr}");
+    assert_eq!(stderr.matches("; name=main\n").count(), 1, "{stderr}");
+    assert_eq!(stderr.matches("; name=difftime\n").count(), 1, "{stderr}");
+}
+
 // A program calling the GCC aarch64 outline-atomics helpers, one per op
 // family plus a 1-byte and a matching/non-matching compare-exchange.
 // Used only by the two tests below; gate the const to their combined cfg so

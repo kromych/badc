@@ -99,6 +99,8 @@ pub(crate) struct NativeTu {
     pub(crate) entry: Option<String>,
     pub(crate) subsystem: Option<badc::Subsystem>,
     pub(crate) auto_includes: Vec<badc::AutoInclude>,
+    /// `--dump-ssa` text, printed once the link keeps this compile.
+    pub(crate) ssa_dump: String,
 }
 
 /// Compile `units` and return each payload in unit order. `compile`
@@ -369,6 +371,7 @@ pub(crate) fn compile_native_tu(
                         entry,
                         subsystem,
                         auto_includes,
+                        ssa_dump: emit.ssa_dump,
                     }),
                 ),
                 Err(e) => {
@@ -409,6 +412,7 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
     match badc::emit_native_reporting(program, cfg.target, cfg.reloc_opts.clone(), None) {
         Ok(emit) => {
             log_codegen_diagnostics(&emit, cfg, &mut log);
+            eprint!("{}", emit.ssa_dump);
             (log, Ok(emit.image))
         }
         Err(e) => {

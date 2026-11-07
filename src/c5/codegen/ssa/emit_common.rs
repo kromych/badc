@@ -2941,6 +2941,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::index_fold::mark_pc_rel_accesses(f, native.strict_align);
         }
         f.general_regs_only = native.no_fp_regs;
+        if native.no_fp_regs && super::super::passes::general_regs::run(f).is_err() {
+            return Err(C5Error::hard(
+                Code::GENERAL_REGS_ONLY,
+                alloc::format!(
+                    "function `{}` computes a floating-point value, which needs the \
+                     floating-point registers -mno-sse / -mgeneral-regs-only withhold",
+                    f.name
+                ),
+            ));
+        }
         f.tls_dynamic = native.pic
             && !native.pie
             && matches!(

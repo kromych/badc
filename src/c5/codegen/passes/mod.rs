@@ -15,6 +15,7 @@ pub(crate) mod divmod_pair;
 pub(crate) mod drop_redundant_extend;
 pub(crate) mod factor_gotos;
 pub(crate) mod fma;
+pub(crate) mod general_regs;
 pub(crate) mod index_ext;
 pub(crate) mod index_fold;
 pub(crate) mod inline;

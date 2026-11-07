@@ -5196,3 +5196,47 @@ fn no_sse_drops_the_sse_feature_macros() {
         assert!(text.contains("#define __MMX__ 1\n"), "{flags:?}");
     }
 }
+
+/// Under `-mno-sse` / `-mgeneral-regs-only` a `float` or `double` copied
+/// from memory to memory moves through a general register, and a value
+/// the function computes is refused, as gcc refuses it.
+#[test]
+fn general_regs_only_copies_floating_values_and_refuses_arithmetic() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-general-regs");
+    let copy = dir.join("copy.c");
+    std::fs::write(
+        &copy,
+        "void h(double *p, double *q) { *p = *q; }\n\
+         void k(float *p, const float *q, int i) { p[i] = q[i]; }\n",
+    )
+    .expect("write source");
+    let math = dir.join("math.c");
+    std::fs::write(&math, "double f(double x) { return x * 2; }\n").expect("write source");
+    for (target, flag) in [
+        ("--target=linux-x64", "-mno-sse"),
+        ("--target=linux-aarch64", "-mgeneral-regs-only"),
+    ] {
+        for opt in ["-O0", "-O"] {
+            let run = |src: &std::path::Path| {
+                Command::new(badc)
+                    .args([target, flag, opt, "-c", "-o"])
+                    .arg(dir.join("out.o"))
+                    .arg(src)
+                    .output()
+                    .expect("run badc")
+            };
+            let out = run(&copy);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(out.status.success(), "{target} {opt}: {err}");
+            let out = run(&math);
+            let err = String::from_utf8_lossy(&out.stderr);
+            assert!(!out.status.success(), "{target} {opt}");
+            assert!(
+                err.contains("function `f` computes a floating-point value")
+                    && err.contains("[general-regs-only]"),
+                "{target} {opt}: {err}"
+            );
+        }
+    }
+}

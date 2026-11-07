@@ -284,6 +284,9 @@ catalog! {
     4005, "frame-larger-than", ["frame-larger-than="], Warning, Controllable,
         [DEFAULT], Live,
         "a function whose stack frame exceeds the `-Wframe-larger-than=` bound; saved registers and the frame record count, `alloca` and variable-length arrays do not";
+    4006, "general-regs-only", [], Error, Hard,
+        [], Live,
+        "a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
@@ -551,6 +554,7 @@ impl Code {
     pub const INLINE: Code = Code::new(4003);
     pub const ALWAYS_INLINE: Code = Code::new(4004);
     pub const FRAME_LARGER_THAN: Code = Code::new(4005);
+    pub const GENERAL_REGS_ONLY: Code = Code::new(4006);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
 }

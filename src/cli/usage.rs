@@ -499,12 +499,11 @@ Compile knobs:
                            the code generator's own scratch registers
                            (x16, x17, x19; r10, r11) are refused.
   -mno-sse, -mgeneral-regs-only
-                           Keep the code badc adds -- variadic register
-                           saves, zero fills, population counts -- off
-                           the floating-point and SIMD registers, and
-                           drop the __SSE*__ macros. Floating-point
-                           arithmetic the source writes still uses
-                           them.
+                           Keep the code off the floating-point and SIMD
+                           registers and drop the __SSE*__ macros. A
+                           float or double copied from memory to memory
+                           moves through a general register; one the
+                           source computes is refused.
   -mstrict-align, -mno-strict-align
                            Keep every compiler-generated memory access
                            naturally aligned for its width, as memory

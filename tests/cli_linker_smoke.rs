@@ -8491,6 +8491,42 @@ fn the_rebinding_compile_keeps_the_auto_included_declaration() {
     );
 }
 
+/// A definition in the link takes precedence over the library binding an
+/// included header gives the name, as each platform's linker binds it. On
+/// Mach-O the binding names the host symbol `_strtod`, the symbol the
+/// definition `strtod` is.
+#[test]
+fn a_definition_in_the_link_wins_over_an_included_binding() {
+    let dir = tempdir("definition-over-binding");
+    write_source(
+        &dir,
+        "use.c",
+        "#include <stdlib.h>\n\
+         int main(void) { double d = strtod(\"1.5\", 0); return d == 2.5 ? 0 : 1; }\n",
+    );
+    write_source(
+        &dir,
+        "def.c",
+        "double strtod(const char *s, char **e) { (void)s; (void)e; return 2.5; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-o"])
+            .arg(&exe)
+            .arg(dir.join("use.c"))
+            .arg(dir.join("def.c"))
+            .current_dir(&dir),
+        "link a program defining strtod",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "the call reaches the definition"
+    );
+}
+
 /// `--dump-ssa` describes the compile whose code reaches the image: a unit
 /// compiled again to rebind a call to the link's definition dumps once,
 /// from that compile.

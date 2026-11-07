@@ -1094,6 +1094,7 @@ pub fn link_native_objects_with<'a>(
     link.allocate_copies()?;
     link.define_link_symbols();
     link.collect_import_facts();
+    link.define_mach_o_host_names();
     link.collect_preemptible();
     link.allocate_got_slots();
     link.place_unwind_tables()?;
@@ -1218,6 +1219,8 @@ struct Link<'a> {
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// A Mach-O image: a binding's host symbol carries the C underscore.
+    mach_o: bool,
     /// The image runs `.init` / `.fini` code: an ELF one.
     init_fini: bool,
     /// COFF COMDAT groups' sections, and those selection displaced.
@@ -1310,6 +1313,9 @@ struct Link<'a> {
     extern_data_names: hashbrown::HashSet<&'a str>,
     /// Names with dylib routing from any unit's binding map.
     routed_import_names: hashbrown::HashSet<&'a str>,
+    /// Mach-O host names a definition's C name satisfies; resolution
+    /// reads them, and the image's symbols leave them out.
+    host_aliases: hashbrown::HashSet<&'a str>,
     /// `(name, host symbol)` of each shared-library data object the
     /// link gave a copy in `.bss`.
     copies: Vec<(String, String)>,
@@ -1388,6 +1394,7 @@ impl<'a> Link<'a> {
             export_data: opts.export_data,
             no_copy_relocs: opts.format != BinaryFormat::Elf,
             pe_image: opts.format == BinaryFormat::Pe,
+            mach_o: opts.format == BinaryFormat::MachO,
             init_fini: opts.format == BinaryFormat::Elf,
             comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
@@ -1440,6 +1447,7 @@ impl<'a> Link<'a> {
             data_binding_locals: hashbrown::HashSet::new(),
             extern_data_names: hashbrown::HashSet::new(),
             routed_import_names: hashbrown::HashSet::new(),
+            host_aliases: hashbrown::HashSet::new(),
             copies: Vec::new(),
             got_slot_sites: BTreeMap::new(),
             got_slot_relocs: Vec::new(),
@@ -1597,6 +1605,9 @@ impl<'a> Link<'a> {
             .flat_map(|o| o.unique.iter().map(String::as_str))
             .collect();
         for (name, sym) in &self.defined {
+            if self.host_aliases.contains(name.as_ref()) {
+                continue;
+            }
             let place = match sym.section {
                 NativeSymSection::Text => SymbolPlace::Text(sym.value),
                 NativeSymSection::Data => SymbolPlace::Data(sym.value),
@@ -2906,6 +2917,25 @@ impl<'a> Link<'a> {
             .iter()
             .flat_map(|o| o.import_dylib_map.iter().map(|(n, _)| n.as_str()))
             .collect();
+    }
+
+    /// On Mach-O a binding names its import by the host symbol, `_strtod`,
+    /// whose C name `strtod` is how badc's objects spell a definition: a
+    /// definition in the link satisfies the reference before the import
+    /// does, as ld64 binds it.
+    fn define_mach_o_host_names(&mut self) {
+        if !self.mach_o {
+            return;
+        }
+        let defined = &self.defined;
+        let aliases: Vec<(&'a str, MergedSymbol)> = (self.routed_import_names.iter())
+            .filter(|n| !defined.contains_key(**n))
+            .filter_map(|&n| Some((n, *defined.get(n.strip_prefix('_')?)?)))
+            .collect();
+        for (name, symbol) in aliases {
+            self.defined.insert(Cow::Borrowed(name), symbol);
+            self.host_aliases.insert(name);
+        }
     }
 
     /// The exported definitions [`Preemption`] leaves to the loader.
@@ -5116,9 +5146,11 @@ impl<'a> Link<'a> {
         }
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
+        let host_aliases = self.host_aliases;
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
+            .filter(|(name, _)| !host_aliases.contains(name.as_ref()))
             .map(|(name, sym)| (name.into_owned(), sym))
             .collect();
         // Admission marked every unrouted global flat before the routing

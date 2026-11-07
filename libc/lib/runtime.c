@@ -197,11 +197,28 @@ int __c5_entry(int argc, char **argv) {
 // environment in the entry's character width.
 extern void _set_app_type(int);
 extern int _configure_narrow_argv(int);
+
+// The module's printf and scanf options, which the UCRT headers' inline
+// functions read from the same storage: one definition of each survives
+// the link. The VC startup code sets the legacy wide specifiers (`%s` of a
+// wide format is a wide string) and, for printf, standard rounding, as
+// measured with VC 14.44 and 14.52.
+__declspec(noinline) __inline unsigned long long *__local_stdio_printf_options(void) {
+    static unsigned long long __options;
+    return &__options;
+}
+
+__declspec(noinline) __inline unsigned long long *__local_stdio_scanf_options(void) {
+    static unsigned long long __options;
+    return &__options;
+}
 extern int _configure_wide_argv(int);
 extern int _initialize_narrow_environment(void);
 extern int _initialize_wide_environment(void);
 
 static void __c5_crt_startup(void) {
+    *__local_stdio_printf_options() |= 4 | 32;
+    *__local_stdio_scanf_options() |= 2;
 #ifdef __BADC_WIN_WINMAIN__
     _set_app_type(2);
 #else

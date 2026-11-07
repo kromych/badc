@@ -6376,6 +6376,43 @@ fn a_dll_link_writes_its_import_library() {
     }
 }
 
+/// On a Windows host a program linked against the system's ucrtbase.dll
+/// starts with the stdio options the VC startup code gives a module: a `%s`
+/// in a wide format takes a wide string. The program reads the options as
+/// the UCRT headers' inline function does, from storage it defines too.
+#[cfg(windows)]
+#[test]
+fn a_ucrt_program_starts_with_the_legacy_wide_specifiers() {
+    let dir = tempdir("pe-ucrt-stdio-options");
+    write_source(
+        &dir,
+        "w.c",
+        "#include <stdarg.h>\n\
+         __declspec(noinline) __inline unsigned long long *__local_stdio_printf_options(void) {\n\
+         static unsigned long long options; return &options; }\n\
+         int __stdio_common_vswprintf(unsigned long long, unsigned short *, unsigned long long,\n\
+         const unsigned short *, void *, va_list);\n\
+         static int fmt(unsigned short *b, unsigned long long n, const unsigned short *f, ...) {\n\
+         va_list ap; va_start(ap, f);\n\
+         int r = __stdio_common_vswprintf(*__local_stdio_printf_options(), b, n, f, 0, ap);\n\
+         va_end(ap); return r; }\n\
+         int main(void) { unsigned short b[16];\n\
+         return fmt(b, 16, L\"%s\", L\"wide\") == 4 && b[3] == 'e' ? 0 : 1; }\n",
+    );
+    let system = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+    let ucrtbase = format!(r"{system}\System32\ucrtbase.dll");
+    run(
+        Command::new(badc())
+            .args(["w.c", &ucrtbase, "-o", "w.exe"])
+            .current_dir(&dir),
+        "link against ucrtbase.dll",
+    );
+    let status = Command::new(dir.join("w.exe"))
+        .status()
+        .expect("run the image");
+    assert_eq!(status.code(), Some(0));
+}
+
 /// A DLL whose `DllMain` one of several units defines enters there, as a
 /// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
 /// the export table gives where the test exports it.

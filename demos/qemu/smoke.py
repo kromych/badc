@@ -533,13 +533,18 @@ POWERDOWN_MARKERS = ("reboot: Power down", "Power down", "System halted")
 # tty setup would flush it.
 _SHELL_TOKEN = "BADC_BOOT_OK"
 _SHELL_CMD = b"\necho BADC_BOOT_OK\npoweroff -f\n"
+# A boot's whole budget in multiples of its serial-silence budget.
+BOOT_CAP_FACTOR = 4
 
 
-def _drive_boot(cmd: list[str], deadline: float) -> tuple[int | None, str]:
+def _drive_boot(cmd: list[str], stall: float) -> tuple[int | None, str]:
     """Run the emulator, wait for the guest to reach userspace, settle, then
     send a shell command that prints a token and powers off. Resends the whole
-    command periodically as a fallback until the guest exits. Returns (exit
-    code or None on timeout, merged serial output)."""
+    command periodically as a fallback until the guest exits. The guest is
+    given up on after `stall` seconds without serial output, or after
+    BOOT_CAP_FACTOR times that in all: under TCG a loaded host slows the
+    guest without stopping it. Returns (exit code or None on timeout, merged
+    serial output)."""
     import threading
     settle = float(os.environ.get("BADC_QEMU_BOOT_SETTLE") or 3.0)
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -573,7 +578,18 @@ def _drive_boot(cmd: list[str], deadline: float) -> tuple[int | None, str]:
     t0 = time.time()
     reached_at = 0.0
     sent_at = 0.0
-    while time.time() - t0 < deadline:
+    seen, heard_at = 0, t0
+
+    def alive() -> bool:
+        nonlocal seen, heard_at
+        now = time.time()
+        with lock:
+            n = len(buf)
+        if n != seen:
+            seen, heard_at = n, now
+        return now - heard_at < stall and now - t0 < stall * BOOT_CAP_FACTOR
+
+    while alive():
         if p.poll() is not None:
             break
         now = time.time()
@@ -587,7 +603,7 @@ def _drive_boot(cmd: list[str], deadline: float) -> tuple[int | None, str]:
             sent_at = now
         time.sleep(0.2)
     # Let a powering-off guest finish exiting within the remaining budget.
-    while time.time() - t0 < deadline and p.poll() is None:
+    while alive() and p.poll() is None:
         time.sleep(0.2)
     rc = p.poll()
     if rc is None:
@@ -741,7 +757,8 @@ def maybe_boot(binp: Path, arch: str) -> None:
       * best-effort  -- fetch + boot, but a boot failure is logged, not fatal
                        (for a host too slow under TCG within the timeout).
       * skip         -- do not boot.
-    Timeout is $BADC_QEMU_BOOT_TIMEOUT seconds (default 60)."""
+    Timeout is $BADC_QEMU_BOOT_TIMEOUT seconds (default 60) of serial silence,
+    and BOOT_CAP_FACTOR times that in all."""
     mode = os.environ.get("BADC_QEMU_BOOT", "").strip().lower()
     if mode in ("skip", "0", "off", "no", "none"):
         log("boot: disabled ($BADC_QEMU_BOOT=skip)")
@@ -807,7 +824,8 @@ def maybe_boot(binp: Path, arch: str) -> None:
         cmd += ["-initrd", initrd]
 
     fw = " via OVMF" if arch == "x86_64" else (" via AAVMF" if aavmf else "")
-    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16{fw} (timeout {timeout:.0f}s)")
+    budget = f"{timeout:.0f}s of serial silence or {timeout * BOOT_CAP_FACTOR:.0f}s"
+    log(f"boot: {os.path.basename(kernel)} on -M {machine} -smp 16{fw} (timeout {budget})")
     t0 = time.time()
     try:
         rc, out = _drive_boot(cmd, timeout)
@@ -839,11 +857,11 @@ def maybe_boot(binp: Path, arch: str) -> None:
     elif not booted and rc is not None and rc != 0:
         _boot_result(False, f"emulator exited (rc={rc}) before the kernel started", out, best_effort)
     elif not booted:
-        _boot_result(False, f"kernel did not start within {timeout:.0f}s", out, best_effort)
+        _boot_result(False, f"kernel did not start within {budget}", out, best_effort)
     elif not userspace:
-        _boot_result(False, f"kernel booted but did not reach userspace within {timeout:.0f}s", out, best_effort)
+        _boot_result(False, f"kernel booted but did not reach userspace within {budget}", out, best_effort)
     elif rc is None:
-        _boot_result(False, f"guest did not power off within {timeout:.0f}s", out, best_effort)
+        _boot_result(False, f"guest did not power off within {budget}", out, best_effort)
     elif not powered:
         _boot_result(False, f"guest exited rc={rc} without a clean power-down", out, best_effort)
     else:

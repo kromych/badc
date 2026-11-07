@@ -281,7 +281,10 @@ def main() -> int:
             why = (f"guest exited after {elapsed:.1f}s of a {BOOT_TIMEOUT}s "
                    f"budget" if elapsed < BOOT_TIMEOUT - 5 else
                    f"ran the full {BOOT_TIMEOUT}s")
-            detail = f"{why}; missing {missing}\n--- serial ---\n{text[-2000:]}"
+            # The serial text first, so the verdict is the last line a
+            # truncated tail of this output keeps.
+            log(f"[{tag}] --- serial ---\n{text[-2000:]}")
+            detail = f"{why}; missing {missing}"
             if os.environ.get("BADC_KERNEL_BOOT_OPTIONAL"):
                 # Build is the hard gate; the boot is best-effort until
                 # observed green on a runner, then the flag is dropped.

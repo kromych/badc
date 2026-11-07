@@ -151,7 +151,7 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
             .front
             .compile_options(&label)
             .with_asm_source(cli.front.source_kind(src_path).is_asm())
-            .with_track_includes(dump_deps.is_some())
+            .with_track_includes(dump_deps.is_some() || cli.front.show_includes)
             .with_keep_pragmas(true)
             .with_elf_class(cli.codegen.elf_class)
             .with_code_model(cli.codegen.code_model);
@@ -166,6 +166,13 @@ pub(crate) fn preprocess(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 // one at the error level fails the run once the text is out.
                 let mut log = TuLog::default();
                 failed |= report_diagnostics(&mut log, stderr_is_tty, &unit.diagnostics).is_err();
+                // gcc's `-H` trace, as a compile prints it.
+                if cli.front.show_includes {
+                    let opened = unit.include_records.iter();
+                    for r in opened.filter(|r| r.status != badc::IncludeStatus::Embedded) {
+                        log.raw(r.trace_line());
+                    }
+                }
                 log.flush();
                 let (s, records) = if dump_macros {
                     let lines = unit.macros.iter().map(|l| format!("{l}\n"));

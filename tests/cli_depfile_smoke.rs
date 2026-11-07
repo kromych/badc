@@ -517,6 +517,34 @@ fn the_rule_is_computed_under_the_predefines_dash_o_implies() {
     }
 }
 
+/// `-H` prints the include trace under `-E` too, on stderr, whether the
+/// preprocessed text goes to stdout or to `-o`, as gcc and clang do.
+#[test]
+fn show_includes_prints_the_trace_under_dash_e() {
+    let dir = fixture("h-dash-e");
+    std::fs::create_dir_all(dir.join("inc")).expect("create inc dir");
+    write(&dir, "inc/a.h", "#include \"b.h\"\n");
+    write(&dir, "inc/b.h", "int b;\n");
+    write(
+        &dir,
+        "e.c",
+        "#include \"inc/a.h\"\nint main(void){return 0;}\n",
+    );
+    for out in [&["-o", "e.i"][..], &[]] {
+        let args: Vec<&str> = ["-H", "-E", "e.c"]
+            .iter()
+            .copied()
+            .chain(out.iter().copied())
+            .collect();
+        let err = run_stderr(&dir, &args);
+        let lines: Vec<&str> = err.lines().collect();
+        assert!(
+            lines.contains(&". inc/a.h") && lines.contains(&".. inc/b.h"),
+            "{out:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn show_includes_names_the_resolved_path() {
     // gcc's `-H` names the path each include opened: two spellings of

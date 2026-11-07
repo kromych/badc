@@ -53,8 +53,9 @@ fp();   /* error: runtime: vm_ssa: CallIndirect: target raw=0x000000000000002a i
 The program stops at the first report. Native images and `--jit` make none of
 these checks.
 
-`--trace` is accepted and is meant to print a per-instruction trace to
-stdout; at this commit it prints nothing.
+`--trace` prints each SSA instruction the interpreter executes to stderr, one
+line each: the function, the block, the value number and the instruction
+(`main b0 v1 Imm(0)`). The program's own output stays on stdout.
 
 ### Library
 

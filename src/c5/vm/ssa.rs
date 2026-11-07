@@ -474,6 +474,8 @@ struct Program<'a> {
     tls_base: usize,
     /// The inline asm templates are AArch64's, not x86-64's.
     aarch64: bool,
+    /// `--trace`: each executed instruction is printed to stderr.
+    trace: bool,
 }
 
 impl<'a> Program<'a> {
@@ -489,6 +491,7 @@ impl<'a> Program<'a> {
             binding_names: &[],
             tls_base: 0,
             aarch64: target.is_aarch64(),
+            trace: false,
         }
     }
 
@@ -499,6 +502,11 @@ impl<'a> Program<'a> {
 
     fn with_tls_base(mut self, tls_base: usize) -> Self {
         self.tls_base = tls_base;
+        self
+    }
+
+    fn with_trace(mut self, on: bool) -> Self {
+        self.trace = on;
         self
     }
 
@@ -657,6 +665,7 @@ pub(super) fn run_program_with_args<H: Host>(
         host,
         args,
         false,
+        false,
         &[],
         &[],
         target,
@@ -664,9 +673,9 @@ pub(super) fn run_program_with_args<H: Host>(
 }
 
 /// Same as [`run_program_with_args`] with an explicit
-/// `track_pointers` flag. `super::Vm::with_pointer_tracking`
-/// forwards through here so opted-in tests get the watchful
-/// load / store / Mcpy checks.
+/// `track_pointers` flag, which `super::Vm::with_pointer_tracking`
+/// forwards for the watchful load / store / Mcpy checks, and the
+/// `trace` flag `super::Vm::with_trace` forwards.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args_tracked<H: Host>(
     funcs: &[FunctionSsa],
@@ -677,6 +686,7 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     host: &mut H,
     args: &[alloc::string::String],
     track_pointers: bool,
+    trace: bool,
     init_pcs: &[usize],
     fini_pcs: &[usize],
     target: crate::c5::codegen::Target,
@@ -695,7 +705,8 @@ pub(super) fn run_program_with_args_tracked<H: Host>(
     }
     let prog = Program::new(funcs, target)
         .with_bindings(binding_names)
-        .with_tls_base(tls_base);
+        .with_tls_base(tls_base)
+        .with_trace(trace);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv, target).with_track_pointers(track_pointers);
     // `__attribute__((constructor))` functions run before the entry, in
@@ -934,6 +945,11 @@ fn run_func<H: Host>(
         let block = &frame.func.blocks[frame.block_idx];
         let mut step_err: Option<C5Error> = None;
         for v in block.inst_range.clone() {
+            #[cfg(feature = "std")]
+            if prog.trace {
+                let inst = &frame.func.insts[v as usize];
+                std::eprintln!("{} b{} v{v} {inst:?}", frame.func.name, frame.block_idx);
+            }
             if let Err(e) = run_inst(prog, mem, host, &mut frame, v) {
                 step_err = Some(e);
                 break;

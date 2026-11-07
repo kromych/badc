@@ -1832,6 +1832,46 @@ fn a_run_passes_option_like_arguments_to_the_program() {
     }
 }
 
+// `--interp --trace` prints each executed SSA instruction to stderr, its
+// function and block first, and leaves stdout to the program.
+#[test]
+fn interp_trace_prints_each_instruction_to_stderr() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-trace");
+    let src = dir.join("t.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\nint main(void) { puts(\"out\"); return 3; }\n",
+    )
+    .expect("write source");
+    let run = |trace: bool| {
+        let mut cmd = Command::new(badc);
+        cmd.arg("-q").arg("--interp");
+        if trace {
+            cmd.arg("--trace");
+        }
+        cmd.arg(&src).output().expect("run badc")
+    };
+    let plain = run(false);
+    let traced = run(true);
+    assert_eq!(plain.status.code(), Some(3));
+    assert_eq!(traced.status.code(), Some(3));
+    assert_eq!(traced.stdout, plain.stdout, "the trace leaves stdout alone");
+    assert!(
+        plain.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&plain.stderr)
+    );
+    let err = String::from_utf8_lossy(&traced.stderr);
+    assert!(
+        err.lines()
+            .next()
+            .is_some_and(|l| l.starts_with("main b0 v0 ")),
+        "{err}"
+    );
+    assert!(err.lines().count() > 2, "{err}");
+}
+
 // `--jit` exits with the status a program passes to `exit` from a nested
 // call, after the output the program wrote (C99 7.20.4.3).
 #[test]

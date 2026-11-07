@@ -566,7 +566,8 @@ Compile knobs:
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
-  --trace                  Per-instruction stdout trace (noisy).
+  --trace                  Print each executed SSA instruction to
+                           stderr: function, block and instruction.
 
 Under --interp and --jit, every argument after the input goes to the
 program; `--` ends badc's arguments, and with no input before it the

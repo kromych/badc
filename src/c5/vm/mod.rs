@@ -11,9 +11,9 @@ mod fenv;
 mod link;
 mod ssa;
 
-/// Whether the VM should emit a per-instruction trace to the host's
-/// stdout during `run`. Only honoured under the `std` feature; in
-/// `no_std` the trace branch is cfg'd out.
+/// Whether the VM prints each SSA instruction it executes to stderr --
+/// the function, the block and the instruction -- during `run`. Only
+/// honoured under the `std` feature.
 ///
 /// Replaces what used to be a bare `bool` parameter to `Vm::new` --
 /// `Vm::new(prog, true)` left the reader guessing what the second
@@ -272,6 +272,7 @@ impl<H: Host> Vm<H> {
             &mut self.host,
             &self.args,
             self.track_pointers,
+            self.trace == Trace::On,
             &self.init_pcs,
             &self.fini_pcs,
             self.target,

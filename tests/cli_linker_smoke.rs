@@ -20643,3 +20643,60 @@ fn script_link_refuses_a_non_elf_target() {
         );
     }
 }
+
+/// An archive of the platform compiler's Mach-O objects carries the BSD
+/// index ld64 reads, so the system linker takes it as `ar` and `ranlib`
+/// would have written it.
+#[cfg(target_os = "macos")]
+#[test]
+fn ld64_reads_an_archive_of_mach_o_objects() {
+    let dir = tempdir("ar-mach-o-bsd");
+    let a = write_source(
+        &dir,
+        "forty.c",
+        "int forty(void) { return 40; }\nint data = 2;\n",
+    );
+    let b = write_source(
+        &dir,
+        "a_member_with_a_long_name.c",
+        "int two(void) { return 2; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int forty(void); int two(void); extern int data;\n\
+         int main(void) { return forty() + two() + data - 44; }\n",
+    );
+    for src in [&a, &b] {
+        run(
+            Command::new("cc")
+                .arg("-c")
+                .arg(src)
+                .arg("-o")
+                .arg(src.with_extension("o")),
+            "cc -c",
+        );
+    }
+    let lib = dir.join("libbadc.a");
+    run(
+        Command::new(badc())
+            .args(["-q", "--ar", "-o"])
+            .arg(&lib)
+            .arg(a.with_extension("o"))
+            .arg(b.with_extension("o")),
+        "badc --ar",
+    );
+    let exe = dir.join("m");
+    run(
+        Command::new("cc")
+            .arg(&main)
+            .arg("-L")
+            .arg(&dir)
+            .arg("-lbadc")
+            .arg("-o")
+            .arg(&exe),
+        "cc link",
+    );
+    let status = Command::new(&exe).status().expect("run the program");
+    assert_eq!(status.code(), Some(0));
+}

@@ -96,6 +96,39 @@ pub fn is_mach_o_object(bytes: &[u8]) -> bool {
         && u32le(bytes, 12) == Some(MH_OBJECT)
 }
 
+/// The names `ranlib` indexes for a Mach-O object: each external symbol
+/// a section or `N_ABS` defines, spelled as the object spells it (the
+/// leading underscore kept), in table order. A common symbol is left
+/// out, as `ranlib` without `-c` leaves it.
+pub fn mach_o_archive_symbols(bytes: &[u8]) -> Result<Vec<String>, C5Error> {
+    let (_, _, (symoff, nsyms, stroff, strsize)) = read_load_commands(bytes)?;
+    let strtab = (bytes.get(stroff as usize..(stroff as usize).saturating_add(strsize as usize)))
+        .ok_or_else(|| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            "LC_SYMTAB string table runs past end of file",
+        )
+    })?;
+    let mut names = Vec::new();
+    for i in 0..nsyms as usize {
+        let p = symoff as usize + i * NLIST_64_SIZE;
+        let n_strx = need_u32(bytes, p, "symbol")? as usize;
+        let n_type = *bytes.get(p + 4).ok_or_else(|| {
+            link_err(
+                Code::MALFORMED_INPUT,
+                MODULE,
+                "LC_SYMTAB symbol table runs past end of file",
+            )
+        })?;
+        if n_type & N_STAB == 0 && n_type & N_EXT != 0 && matches!(n_type & N_TYPE, N_SECT | N_ABS)
+        {
+            names.push(cstr(strtab, n_strx)?.to_string());
+        }
+    }
+    Ok(names)
+}
+
 fn u32le(bytes: &[u8], off: usize) -> Option<u32> {
     let b = bytes.get(off..off + 4)?;
     Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))

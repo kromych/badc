@@ -385,11 +385,15 @@ pub fn read_indexed_archive_at(
 /// ones (`/SYM64/`).
 ///
 /// Names longer than 15 bytes spill through a GNU `//` string table,
-/// which is emitted only when one does.
+/// which is emitted only when one does. An archive holding a Mach-O object
+/// takes the BSD form instead ([`write_bsd_archive`]).
 pub fn write_archive(
     members: &[ArchiveMember],
     symbols_by_member: &[(usize, Vec<String>)],
 ) -> Vec<u8> {
+    if (members.iter()).any(|m| super::mach_o_object::is_mach_o_object(&m.bytes)) {
+        return write_bsd_archive(members, symbols_by_member);
+    }
     let mut long_table: Vec<u8> = Vec::new();
     let mut name_form: Vec<String> = Vec::with_capacity(members.len());
     for m in members {
@@ -433,6 +437,103 @@ pub fn write_archive(
         if !m.bytes.len().is_multiple_of(2) {
             out.push(b'\n');
         }
+    }
+    out
+}
+
+/// The BSD archive Apple's `ar` and `ranlib` write and ld64 reads: a
+/// `__.SYMDEF SORTED` index of ranlib records -- little-endian string-table
+/// and member-header offsets, sorted by name, the first definition of a name
+/// kept -- 64-bit (`__.SYMDEF_64 SORTED`) where an offset needs it, and each
+/// name inline at the head of its member (`#1/<len>`), NUL-padded so the
+/// member's data starts on an 8-byte boundary.
+fn write_bsd_archive(
+    members: &[ArchiveMember],
+    symbols_by_member: &[(usize, Vec<String>)],
+) -> Vec<u8> {
+    let mut entries: Vec<(&str, usize)> = (symbols_by_member.iter())
+        .flat_map(|(mi, ns)| ns.iter().map(move |n| (n.as_str(), *mi)))
+        .collect();
+    entries.sort();
+    entries.dedup_by(|a, b| a.0 == b.0);
+    let mut strtab: Vec<u8> = Vec::new();
+    let strx: Vec<u64> = (entries.iter())
+        .map(|(n, _)| {
+            let at = strtab.len() as u64;
+            strtab.extend_from_slice(n.as_bytes());
+            strtab.push(0);
+            at
+        })
+        .collect();
+    strtab.resize(strtab.len().next_multiple_of(8), 0);
+    // The inline name field at header `at`: the name, NUL-padded so the data
+    // that follows the 60-byte header and the field is 8-byte aligned.
+    let name_len = |at: u64, name: &str| {
+        let min = name.len() as u64 + 1;
+        min + (8 - (at + AR_HEADER_SIZE as u64 + min) % 8) % 8
+    };
+    let layout = |wide: bool| {
+        let width = if wide { 8 } else { 4 };
+        let index_name = if wide {
+            "__.SYMDEF_64 SORTED"
+        } else {
+            "__.SYMDEF SORTED"
+        };
+        let index_len = width * (2 + 2 * entries.len() as u64) + strtab.len() as u64;
+        let mut at = 8;
+        let mut step = |name: &str, data: u64| {
+            let header = at;
+            let size = name_len(at, name) + data;
+            at += AR_HEADER_SIZE as u64 + size + (size & 1);
+            header
+        };
+        step(index_name, index_len);
+        let headers: Vec<u64> = (members.iter())
+            .map(|m| step(&m.name, m.bytes.len() as u64))
+            .collect();
+        (index_name, headers)
+    };
+    let (mut index_name, mut headers) = layout(false);
+    let wide = entries.iter().any(|&(_, mi)| headers[mi] > u32::MAX as u64);
+    if wide {
+        (index_name, headers) = layout(true);
+    }
+    let mut index: Vec<u8> = Vec::new();
+    let number = |n: u64, body: &mut Vec<u8>| {
+        if wide {
+            body.extend_from_slice(&n.to_le_bytes());
+        } else {
+            body.extend_from_slice(&(n as u32).to_le_bytes());
+        }
+    };
+    number(entries.len() as u64 * if wide { 16 } else { 8 }, &mut index);
+    for (&(_, mi), &x) in entries.iter().zip(&strx) {
+        number(x, &mut index);
+        number(headers[mi], &mut index);
+    }
+    number(strtab.len() as u64, &mut index);
+    index.extend_from_slice(&strtab);
+
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(b"!<arch>\n");
+    let put = |out: &mut Vec<u8>, name: &str, data: &[u8]| {
+        let field = name_len(out.len() as u64, name) as usize;
+        write_ar_header(out, &format!("#1/{field}"), field + data.len());
+        out.extend_from_slice(name.as_bytes());
+        out.resize(out.len() + field - name.len(), 0);
+        out.extend_from_slice(data);
+        if !(field + data.len()).is_multiple_of(2) {
+            out.push(b'\n');
+        }
+    };
+    put(&mut out, index_name, &index);
+    for (m, &header) in members.iter().zip(&headers) {
+        debug_assert_eq!(
+            out.len() as u64,
+            header,
+            "the index names the member's header"
+        );
+        put(&mut out, &m.name, &m.bytes);
     }
     out
 }
@@ -1092,5 +1193,61 @@ mod tests {
         assert!(read_archive(&blob).is_err(), "thin needs a base dir");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// An archive of Mach-O objects takes the BSD form ld64 reads: the
+    /// `__.SYMDEF SORTED` index first, its names sorted with the first
+    /// definition of each kept, every name inline and every member's data
+    /// 8-byte aligned; badc's reader takes the index back member by member.
+    #[test]
+    fn mach_o_members_take_the_bsd_form() {
+        let mut object = alloc::vec![0u8; 40];
+        object[..4].copy_from_slice(&0xfeed_facf_u32.to_le_bytes());
+        object[12..16].copy_from_slice(&1u32.to_le_bytes());
+        let members = [
+            ArchiveMember {
+                name: "a_member_with_a_long_name.o".into(),
+                bytes: object.clone(),
+            },
+            ArchiveMember {
+                name: "b.o".into(),
+                bytes: object[..39].to_vec(),
+            },
+        ];
+        let names = |ns: &[&str]| ns.iter().map(|n| String::from(*n)).collect::<Vec<_>>();
+        let symbols = [
+            (0, names(&["_zeta", "_alpha"])),
+            (1, names(&["_mid", "_alpha"])),
+        ];
+        let blob = write_archive(&members, &symbols);
+        assert_eq!(&blob[8..13], b"#1/20");
+        assert_eq!(&blob[68..84], b"__.SYMDEF SORTED");
+        let ranlib = u32::from_le_bytes(blob[88..92].try_into().unwrap()) as usize;
+        let strx = |i: usize| u32::from_le_bytes(blob[92 + 8 * i..96 + 8 * i].try_into().unwrap());
+        let strtab = 92 + ranlib + 4;
+        let name_at = |x: u32| {
+            let at = strtab + x as usize;
+            let end = at + blob[at..].iter().position(|&b| b == 0).unwrap();
+            core::str::from_utf8(&blob[at..end]).unwrap()
+        };
+        assert_eq!(
+            (0..ranlib / 8)
+                .map(|i| name_at(strx(i)))
+                .collect::<Vec<_>>(),
+            ["_alpha", "_mid", "_zeta"]
+        );
+        let index = read_indexed_archive_at(&blob, None).expect("read bsd");
+        assert_eq!(index.members.len(), 2);
+        assert_eq!(index.members[1].bytes, object[..39]);
+        let per_member = index.symbols.expect("indexed");
+        assert_eq!(per_member[0], names(&["_alpha", "_zeta"]));
+        assert_eq!(per_member[1], names(&["_mid"]));
+        for m in &index.members {
+            let at = blob
+                .windows(m.bytes.len())
+                .position(|w| w == &m.bytes[..])
+                .unwrap();
+            assert_eq!(at % 8, 0, "{} starts at {at}", m.name);
+        }
     }
 }

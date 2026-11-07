@@ -350,8 +350,9 @@ fn ingest_linker_input(
 
 /// The names a relocatable object's entries in an archive's symbol
 /// index list, each resolving to the member that holds it. An ELF
-/// object of either class lists what GNU ar lists; another format its
-/// `STB_GLOBAL` definitions in a section. `Err` is the parse diagnostic.
+/// object of either class lists what GNU ar lists, a Mach-O object what
+/// `ranlib` lists; another format its `STB_GLOBAL` definitions in a
+/// section. `Err` is the parse diagnostic.
 pub(crate) fn native_defined_globals(
     bytes: &[u8],
     path: &str,
@@ -359,6 +360,9 @@ pub(crate) fn native_defined_globals(
 ) -> Result<Vec<String>, String> {
     if badc::is_elf_object(bytes) {
         return badc::elf_archive_symbols(bytes).map_err(|e| format!("badc: {path}: {e}"));
+    }
+    if badc::is_mach_o_object(bytes) {
+        return badc::mach_o_archive_symbols(bytes).map_err(|e| format!("badc: {path}: {e}"));
     }
     let obj = badc::parse_native_object_for(bytes, target_machine(target))
         .map_err(|e| format!("badc: {path}: {e}"))?;

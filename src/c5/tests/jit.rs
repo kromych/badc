@@ -5,9 +5,10 @@
 //! function pointer, instead of an ELF on disk + exec.
 //!
 //! Gated to the OS / arch combinations where `jit_run` is
-//! implemented: Linux (aarch64 + x86_64) and macOS arm64. The
-//! `host_target()` helper inside `jit.rs` picks the right backend
-//! at runtime, so the test body is platform-agnostic.
+//! implemented: Linux (aarch64 + x86_64), macOS arm64 and Windows
+//! (x86_64 + arm64). The `host_target()` helper inside `jit.rs` picks
+//! the right backend at runtime, so the test body is platform-agnostic;
+//! the parity tests take the host's fixture table ([`PARITY`]).
 //!
 //! Output from the JIT'd program (printf, etc.) goes to the test
 //! process's stdout. Tests assert only on the exit code, so the
@@ -19,10 +20,94 @@
         any(target_arch = "aarch64", target_arch = "x86_64")
     ),
     all(target_os = "macos", target_arch = "aarch64"),
+    all(
+        target_os = "windows",
+        any(target_arch = "aarch64", target_arch = "x86_64")
+    ),
 ))]
 
-use super::fixture_tables::{BADC_FIXTURES, JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+use super::fixture_tables::{BADC_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
+
+/// The fixtures with their exit codes the host runs: the POSIX table, or
+/// on Windows the PE table less [`WINDOWS_GAPS`].
+#[cfg(not(windows))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::JIT_FIXTURES;
+#[cfg(all(windows, target_arch = "x86_64"))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::NATIVE_PE_X64_FIXTURES;
+#[cfg(all(windows, target_arch = "aarch64"))]
+const PARITY: &[(&str, i32)] = super::fixture_tables::NATIVE_PE_ARM64_FIXTURES;
+
+/// The PE fixtures the JIT does not run, with the reason.
+#[cfg(windows)]
+const WINDOWS_GAPS: &[(&str, &str)] = &[
+    ("winmain_command_line.c", WINMAIN),
+    ("wwinmain_command_line.c", WINMAIN),
+    ("dlfcn_errors.c", TLS),
+    ("dlopen_null_searches_the_global_scope.c", TLS),
+    ("dlopen_strlen.c", TLS),
+    ("msvc_decl_decorators.c", TLS),
+    ("thread_local_address_init.c", TLS),
+    ("thread_local_aggregate_initializers.c", TLS),
+    ("thread_local_basic.c", TLS),
+    ("thread_local_block_static_shadow.c", TLS),
+    ("thread_local_fn_pointer_defined_later.c", TLS),
+    ("thread_local_gnu.c", TLS),
+    ("thread_local_image_alignment.c", TLS),
+    ("thread_local_initializer.c", TLS),
+    ("thread_local_library_function_slot.c", TLS),
+    ("thread_local_object_alignment.c", TLS),
+    ("thread_local_reads_a_code_slot.c", TLS),
+    ("thread_local_slot_escapes_a_function.c", TLS),
+    ("thread_local_tentative_array.c", TLS),
+    ("thread_local_tentative_completed_later.c", TLS),
+    ("thread_local_zero_images.c", TLS),
+    ("weak_thread_local_definition_by_symbol.c", TLS),
+    ("seh_except_constant_filter.c", SEH),
+    ("seh_except_filter.c", SEH),
+    ("seh_finally.c", SEH),
+    ("seh_nested_funclets.c", SEH),
+    ("unwind_from_epilogue.c", UNWIND),
+    ("unwind_restores_callee_saved.c", UNWIND),
+    ("inline_asm_section_label.c", ASM_SECTION),
+    ("pthread_lifecycle.c", THREADS),
+    ("pthread_once_keys.c", THREADS),
+    ("seh_context_record.c", PROCESS_WIDE),
+];
+#[cfg(windows)]
+const WINMAIN: &str = "the run calls its entry as `main(argc, argv)`";
+#[cfg(windows)]
+const TLS: &str = "the JIT runs no thread-local storage";
+#[cfg(windows)]
+const SEH: &str = "structured exception handling is not implemented under the JIT";
+#[cfg(windows)]
+const UNWIND: &str = "the JIT registers no function table for its code (RtlAddFunctionTable)";
+#[cfg(windows)]
+const ASM_SECTION: &str = "an asm section's data reference needs a load-time relocation";
+#[cfg(windows)]
+const PROCESS_WIDE: &str = "a vectored handler is the process's, so it sees the exceptions \
+    of the programs that run beside it";
+#[cfg(windows)]
+const THREADS: &str = "the JIT unmaps a program once its main returns, while a detached \
+    thread may still run its code, and runs main on a thread whose exit runs the \
+    destructors main's keys leave set";
+#[cfg(not(windows))]
+const WINDOWS_GAPS: &[(&str, &str)] = &[];
+
+fn parity() -> Vec<(&'static str, i32)> {
+    (PARITY.iter())
+        .filter(|(name, _)| !WINDOWS_GAPS.iter().any(|(gap, _)| gap == name))
+        .copied()
+        .collect()
+}
+
+/// On Windows the programs this module runs take turns. TODO(#1981): two
+/// running at once in one process can crash it.
+fn turn() -> Option<std::sync::MutexGuard<'static, ()>> {
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    cfg!(windows).then(|| TURN.lock().unwrap_or_else(|e| e.into_inner()))
+}
 
 /// Compile `src` and run it through the JIT with `args` as argv.
 /// Panics on compile or JIT-load failure -- the call sites here
@@ -32,6 +117,7 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    let _turn = turn();
     jit_run(&program, &argv).expect("jit_run failed")
 }
 
@@ -44,6 +130,7 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
+    let _turn = turn();
     jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
 }
 
@@ -94,7 +181,9 @@ fn exit_returns_to_the_runner() {
 
 /// A program's end leaves the C library's streams alone: they belong to the
 /// process, which every program it runs shares. One program blocked reading
-/// a stream holds that stream's lock while another one ends.
+/// a stream holds that stream's lock while another one ends. POSIX-only:
+/// the program opens the pipe by its descriptor with `fdopen`.
+#[cfg(unix)]
 #[test]
 fn a_program_ends_while_another_holds_a_stream() {
     use std::io::Write;
@@ -211,8 +300,43 @@ int main(void) {
     );
 }
 
+/// A program's exception handlers end with its run: the vectored handlers it
+/// leaves registered are removed and the top-level filter it replaced is
+/// restored as its code is freed, so an exception the process raises later
+/// reaches none of them.
+#[cfg(windows)]
+#[test]
+fn a_programs_exception_handlers_end_with_its_run() {
+    unsafe extern "system" {
+        fn SetUnhandledExceptionFilter(filter: usize) -> usize;
+    }
+    let filter = || unsafe {
+        let current = SetUnhandledExceptionFilter(0);
+        SetUnhandledExceptionFilter(current);
+        current
+    };
+    let src = "#include <windows.h>\n\
+        #pragma binding(kernel32::AddVectoredContinueHandler, \"AddVectoredContinueHandler\")\n\
+        PVOID AddVectoredContinueHandler(ULONG, PVECTORED_EXCEPTION_HANDLER);\n\
+        static LONG WINAPI pass(EXCEPTION_POINTERS *e) { return EXCEPTION_CONTINUE_SEARCH; }\n\
+        int main(void) {\n\
+            if (!AddVectoredExceptionHandler(1, pass)) return 1;\n\
+            if (!AddVectoredContinueHandler(1, pass)) return 2;\n\
+            SetUnhandledExceptionFilter(pass);\n\
+            return 0;\n\
+        }\n";
+    let before = filter();
+    assert_eq!(jit_exit(src, &["jit-handlers"]), 0);
+    assert_eq!(filter(), before, "the program's filter outlived its run");
+    // A panic raises an exception, which the process's vectored handlers see.
+    let caught = std::panic::catch_unwind(|| panic!("after the run"));
+    assert!(caught.is_err());
+}
+
 /// Inline asm reaches an imported object through its GOT slot, which stands
-/// in for its address alone; a load or store in place is refused.
+/// in for its address alone; a load or store in place is refused. POSIX-only:
+/// the object is `<unistd.h>`'s `optind`.
+#[cfg(unix)]
 #[test]
 fn asm_reaches_an_imported_object_through_its_slot() {
     let src = super::asm_library_object_source(1);
@@ -911,7 +1035,7 @@ fn dead_phi_exit_move_does_not_clobber_return_under_phi_promote() {
         int main() {
             char *r = getline_like(0, "abcdefghij");
             if (r == 0) return 1;
-            if (((long)r) < 4096) return 2;
+            if (((unsigned long long)r) < 4096) return 2;
             if (r[0] != 'a') return 3;
             if (r[9] != 'j') return 4;
             return 0;
@@ -1982,6 +2106,7 @@ fn unsupported_fixtures_are_refused() {
             Ok(p) => p,
             Err(e) => return Some(format!("{name}: compile failed: {e}")),
         };
+        let _turn = turn();
         match jit_run(&program, &[name.to_string()]) {
             Ok(exit) => Some(format!("{name}: expected a refusal, ran and exited {exit}")),
             Err(e) => {
@@ -2002,7 +2127,8 @@ fn unsupported_fixtures_are_refused() {
 
 #[test]
 fn fixture_parity() {
-    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
+    let table = parity();
+    let failures = super::parity_failures(&table, |name, expected| {
         let got = jit_fixture(name);
         (got != *expected).then(|| format!("{name}: expected {expected}, got {got}"))
     });
@@ -2010,7 +2136,7 @@ fn fixture_parity() {
         failures.is_empty(),
         "{} of {} JIT fixtures regressed:\n  {}",
         failures.len(),
-        JIT_FIXTURES.len(),
+        table.len(),
         failures.join("\n  ")
     );
 }
@@ -2027,7 +2153,8 @@ fn fixture_parity_native_optimized() {
     path.push("tests");
     path.push("fixtures");
     path.push("c");
-    let failures = super::parity_failures(JIT_FIXTURES, |name, expected| {
+    let table = parity();
+    let failures = super::parity_failures(&table, |name, expected| {
         let mut p = path.clone();
         p.push(name);
         let src =
@@ -2040,7 +2167,7 @@ fn fixture_parity_native_optimized() {
         failures.is_empty(),
         "{} of {} JIT fixtures regressed under the native optimizer:\n  {}",
         failures.len(),
-        JIT_FIXTURES.len(),
+        table.len(),
         failures.join("\n  ")
     );
 }
@@ -2254,6 +2381,7 @@ fn jit_reads_binding_data_global() {
                    return n > 0 ? 0 : 1;\n\
                }\n";
     let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-environ".to_string()]).expect("jit_run"),
         0
@@ -2274,6 +2402,7 @@ fn a_declared_c_library_function_runs_without_a_binding() {
     )
     .compile()
     .expect("compile");
+    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-unbound-call".to_string()]).expect("run"),
         0
@@ -2385,6 +2514,7 @@ fn atexit_handlers_run_on_libc_exit() {
         marker.display().to_string().replace('\\', "/")
     );
     let program = Compiler::new(src).compile().expect("compile");
+    let _turn = turn();
     assert_eq!(
         jit_run(&program, &["jit-exit".to_string()]).expect("jit_run"),
         42
@@ -2553,6 +2683,7 @@ fn staged_indirect_call_target_reaches_its_callee() {
     for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
         let optimize = opts.optimize;
         let opts = NativeOptions { fixed_regs, ..opts };
+        let _turn = turn();
         let exit = jit_run_with_options(&program, &[], opts, &mut |_| {})
             .expect("jit_run_with_options failed");
         assert_eq!(

@@ -560,6 +560,10 @@ mod jit_impl {
     /// bind_imports time means every JIT'd `atexit` /
     /// `__cxa_atexit` / exit call lands on our thunks instead.
     fn atexit_thunk_addr(name: &str) -> u64 {
+        #[cfg(target_os = "windows")]
+        if let Some(addr) = handlers::thunk(name) {
+            return addr;
+        }
         match name {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
@@ -2733,8 +2737,122 @@ mod jit_impl {
             }
             #[cfg(target_os = "windows")]
             unsafe {
+                handlers::release(self.ptr as usize, self.ptr as usize + self.len);
                 VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
+        }
+    }
+
+    /// The exception handlers a program registers point into its code, which
+    /// its region frees when the run ends; the process keeps them past it.
+    /// The program's registrations bind to these thunks, which record them,
+    /// and freeing the region removes its vectored handlers and restores the
+    /// top-level filter its own replaced.
+    #[cfg(target_os = "windows")]
+    mod handlers {
+        use std::sync::Mutex;
+
+        unsafe extern "system" {
+            fn AddVectoredExceptionHandler(first: u32, handler: usize) -> usize;
+            fn AddVectoredContinueHandler(first: u32, handler: usize) -> usize;
+            fn RemoveVectoredExceptionHandler(handle: usize) -> u32;
+            fn RemoveVectoredContinueHandler(handle: usize) -> u32;
+            fn SetUnhandledExceptionFilter(filter: usize) -> usize;
+        }
+
+        /// Each vectored handler: its handle, its address, and whether it is
+        /// a continue handler.
+        static VECTORED: Mutex<Vec<(usize, usize, bool)>> = Mutex::new(Vec::new());
+        /// Each top-level filter installed, the one it replaced, and the one
+        /// the system holds after: a filter in code allocated at run time
+        /// reads back null (measured on Windows 11 x64).
+        static FILTERS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
+
+        fn add(first: u32, handler: usize, continues: bool) -> usize {
+            let handle = unsafe {
+                match continues {
+                    true => AddVectoredContinueHandler(first, handler),
+                    false => AddVectoredExceptionHandler(first, handler),
+                }
+            };
+            if handle != 0 {
+                let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+                v.push((handle, handler, continues));
+            }
+            handle
+        }
+
+        fn remove(handle: usize, continues: bool) -> u32 {
+            let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+            v.retain(|e| e.0 != handle);
+            unsafe {
+                match continues {
+                    true => RemoveVectoredContinueHandler(handle),
+                    false => RemoveVectoredExceptionHandler(handle),
+                }
+            }
+        }
+
+        extern "system" fn add_exception(first: u32, handler: usize) -> usize {
+            add(first, handler, false)
+        }
+        extern "system" fn add_continue(first: u32, handler: usize) -> usize {
+            add(first, handler, true)
+        }
+        extern "system" fn remove_exception(handle: usize) -> u32 {
+            remove(handle, false)
+        }
+        extern "system" fn remove_continue(handle: usize) -> u32 {
+            remove(handle, true)
+        }
+        extern "system" fn set_filter(filter: usize) -> usize {
+            let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            let prior = unsafe { SetUnhandledExceptionFilter(filter) };
+            let held = unsafe { SetUnhandledExceptionFilter(filter) };
+            f.push((filter, prior, held));
+            prior
+        }
+
+        /// The thunk a program's call to `name` binds to, if any.
+        pub(super) fn thunk(name: &str) -> Option<u64> {
+            let addr = match name {
+                "AddVectoredExceptionHandler" => add_exception as *const () as usize,
+                "AddVectoredContinueHandler" => add_continue as *const () as usize,
+                "RemoveVectoredExceptionHandler" => remove_exception as *const () as usize,
+                "RemoveVectoredContinueHandler" => remove_continue as *const () as usize,
+                "SetUnhandledExceptionFilter" => set_filter as *const () as usize,
+                _ => return None,
+            };
+            Some(addr as u64)
+        }
+
+        /// Undo the registrations whose handler lies in `[lo, hi)`.
+        pub(super) fn release(lo: usize, hi: usize) {
+            let inside = |a: usize| (lo..hi).contains(&a);
+            let mut v = VECTORED.lock().unwrap_or_else(|e| e.into_inner());
+            v.retain(|&(handle, handler, continues)| {
+                if inside(handler) {
+                    unsafe {
+                        match continues {
+                            true => RemoveVectoredContinueHandler(handle),
+                            false => RemoveVectoredExceptionHandler(handle),
+                        };
+                    }
+                }
+                !inside(handler)
+            });
+            // Walk back from the filter in place past each of the region's
+            // to the one the earliest replaced.
+            let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            let current = unsafe { SetUnhandledExceptionFilter(0) };
+            let mut restore = current;
+            for &(filter, prior, held) in f.iter().rev() {
+                if held == restore && inside(filter) {
+                    restore = prior;
+                }
+            }
+            unsafe { SetUnhandledExceptionFilter(restore) };
+            f.retain(|&(filter, ..)| !inside(filter));
         }
     }
 

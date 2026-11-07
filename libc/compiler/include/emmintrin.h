@@ -229,6 +229,41 @@ static inline void _mm_storel_epi64(__m128i *__P, __m128i __B) {
     *(__m64_u *)__P = (__m64)((__v2di)__B)[0];
 }
 
+/* The unaligned 16-, 32- and 64-bit transfers of the low lane; a load
+** zeroes the rest of the vector. */
+static inline __m128i _mm_loadu_si64(void const *__P) {
+    long long __x;
+    __builtin_memcpy(&__x, __P, sizeof __x);
+    return (__m128i)(__v2di){__x, 0};
+}
+
+static inline __m128i _mm_loadu_si32(void const *__P) {
+    int __x;
+    __builtin_memcpy(&__x, __P, sizeof __x);
+    return (__m128i)(__v4si){__x, 0, 0, 0};
+}
+
+static inline __m128i _mm_loadu_si16(void const *__P) {
+    short __x;
+    __builtin_memcpy(&__x, __P, sizeof __x);
+    return (__m128i)(__v8hi){__x, 0, 0, 0, 0, 0, 0, 0};
+}
+
+static inline void _mm_storeu_si64(void *__P, __m128i __B) {
+    long long __x = ((__v2di)__B)[0];
+    __builtin_memcpy(__P, &__x, sizeof __x);
+}
+
+static inline void _mm_storeu_si32(void *__P, __m128i __B) {
+    int __x = ((__v4si)__B)[0];
+    __builtin_memcpy(__P, &__x, sizeof __x);
+}
+
+static inline void _mm_storeu_si16(void *__P, __m128i __B) {
+    short __x = ((__v8hi)__B)[0];
+    __builtin_memcpy(__P, &__x, sizeof __x);
+}
+
 /* Packed integer arithmetic. */
 
 static inline __m128i _mm_add_epi8(__m128i __A, __m128i __B) {

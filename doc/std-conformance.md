@@ -663,9 +663,10 @@ Intel intrinsics, reached through `<x86intrin.h>` or `<immintrin.h>`. Most
 operations lower to the instruction the Intel SDM gives for them, through
 `__builtin_ia32_*` builtins with gcc's names. The composition intrinsics
 (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`), `_mm_loadl_epi64`,
-`_mm_storel_epi64`, the SSE3 floating operations and the `__m64` operations
-are written lane by lane over the vector extension; the `__m64` ones use no
-MMX register. An operation outside the subset is absent, so a unit that needs
+`_mm_storel_epi64`, the 16-, 32- and 64-bit `_mm_loadu_si*` and
+`_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations and the
+256-bit integer subset are written lane by lane over the vector extension; the
+`__m64` ones use no MMX register and the 256-bit ones no VEX instruction. An operation outside the subset is absent, so a unit that needs
 one fails at the undeclared name.
 
 | header | contents |
@@ -677,14 +678,14 @@ one fails at the undeclared name.
 | `<tmmintrin.h>` | SSSE3: `_mm_shuffle_epi8`, `_mm_maddubs_epi16` and the `__m64` forms. |
 | `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
-| `<immintrin.h>` | The above, `_rdrand16_step`, `_rdrand32_step`, `_rdrand64_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
+| `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*` and `_mm256_movemask_epi8`; `_rdrand16_step`, `_rdrand32_step`, `_rdrand64_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
 Not provided: packed-single arithmetic, packed-double operations other than
 `_mm_shuffle_pd` and the SSE3 ones, the 128-bit averaging, minimum and maximum
 integer operations, shifts by a vector count,
 the 128-bit non-temporal stores, and everything past SSE4.1 (AVX, AVX2,
-AVX-512, FMA). `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
+AVX-512, FMA) but the 256-bit integer subset. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand is an `imm8` is a macro, as gcc's are without
 `-O`. The rest are `static inline` functions, which `-O` inlines so the
 instruction appears at the call site; without `-O` they stay calls.

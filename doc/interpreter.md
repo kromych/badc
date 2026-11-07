@@ -125,8 +125,8 @@ decides which of several equal elements it finds.
 `rand` draws the target's C library's sequence: glibc's additive
 generator, Apple's minimal standard generator, msvcrt's 15-bit linear
 congruential one, each from seed 1 until `srand`. `time` reads the host's
-calendar time, and `clock` the time since the run began in the bundled
-`<time.h>`'s `CLOCKS_PER_SEC` of 1000000. `strerror` and `perror` give the
+calendar time, and `clock` the time since the run began in the target's
+`CLOCKS_PER_SEC`: 1000 on Windows, 1000000 elsewhere. `strerror` and `perror` give the
 library's messages.
 
 Any other library call stops the program when it is reached:

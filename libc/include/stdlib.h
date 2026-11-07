@@ -26,7 +26,13 @@
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
+// The largest value the target's `rand` returns: msvcrt's and the UCRT's
+// draw 15 bits.
+#ifdef __BADC_WINDOWS__
+#define RAND_MAX 0x7FFF
+#else
 #define RAND_MAX 0x7FFFFFFF
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

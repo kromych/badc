@@ -11,7 +11,12 @@
 // C99 7.23.1p2: `<time.h>` declares `size_t`.
 #include <stddef.h>
 
+// The units of the target's `clock`: milliseconds in msvcrt and the UCRT.
+#ifdef __BADC_WINDOWS__
+#define CLOCKS_PER_SEC 1000
+#else
 #define CLOCKS_PER_SEC 1000000
+#endif
 
 // Per-target clockid_t values. POSIX leaves the integer assignments
 // implementation-defined and every libc picks its own; the constants
@@ -97,20 +102,17 @@ struct tm {
 #endif
 };
 
-// `time_t` and `clock_t` are 8-byte signed counts everywhere
-// 64-bit (Linux, macOS Darwin, Windows UCRT after Y2038
-// transitioned everything to `long long`). Storing them as
-// `int` means values past 2038 wrap silently; programs that
-// `time(NULL)` and arithmetic on the result lose 4 bytes.
-//
-// On Windows we're LLP64 (`long` = 32 bits), so these have to
-// be `long long` to keep 64-bit width and match the UCRT ABI.
-// On Linux/macOS LP64, `long` is already 64 bits.
+// `time_t` is a 64-bit signed count on every target (the UCRT's
+// `__time64_t`). `clock_t` is the C library's: `long`, 32 bits on
+// Windows, and `unsigned long` on Darwin.
 #ifdef __BADC_WINDOWS__
 typedef long long time_t;
-typedef long long clock_t;
 #else
 typedef long time_t;
+#endif
+#ifdef __APPLE__
+typedef unsigned long clock_t;
+#else
 typedef long clock_t;
 #endif
 
@@ -226,10 +228,10 @@ errno_t _strtime_s(char *_Buf, size_t _SizeInBytes);
 typedef int clockid_t;
 #endif
 
-// C99 7.23.2: time / clock / mktime return time_t / clock_t, which are
-// 64-bit. A return wider than the declared type is narrowed to it, so an
-// `int` declaration truncates: clock() overflows int after ~35 min of CPU
-// time (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
+// C99 7.23.2: time / clock / mktime return time_t / clock_t. A return
+// wider than the declared type is narrowed to it, so an `int` declaration
+// truncates: a 64-bit clock() overflows int after ~35 min of CPU time
+// (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
 // difftime takes two time_t by value; `int` parameters truncate them
 // before the subtraction. The time_t pointer parameters likewise carry a
 // 64-bit object, not an int.

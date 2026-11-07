@@ -325,8 +325,12 @@ pub(super) fn call<H: Host>(
             Ok(now)
         }
         // The processor time's approximation: the host's time since the run
-        // began, in the bundled <time.h>'s CLOCKS_PER_SEC of 1000000.
-        "clock" => Ok(host.elapsed_micros()),
+        // began, in the target's CLOCKS_PER_SEC: msvcrt's 32-bit count of
+        // milliseconds, 1000000 elsewhere.
+        "clock" => Ok(match Libc::of(mem.target) {
+            Libc::Ucrt => (host.elapsed_micros() / 1000) as i32 as i64,
+            _ => host.elapsed_micros(),
+        }),
         "difftime" => {
             let d = arg(name, args, 0)?.wrapping_sub(arg(name, args, 1)?);
             Ok((d as f64).to_bits() as i64)

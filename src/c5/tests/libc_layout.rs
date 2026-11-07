@@ -1427,3 +1427,29 @@ fn msvc_compat_defines_ms_extensions() {
         compile(off, target).unwrap_or_else(|e| panic!("{target:?}: {e}"));
     }
 }
+
+/// `RAND_MAX`, `clock_t` and `CLOCKS_PER_SEC` are the C library's: msvcrt's
+/// 15-bit `rand` and 32-bit millisecond `clock` on Windows, glibc's and
+/// Darwin's 31-bit `rand` and microsecond `clock` elsewhere, Darwin's
+/// `clock_t` unsigned.
+#[test]
+fn rand_and_clock_constants_are_the_c_librarys() {
+    for (target, rand_max, clock_bytes, per_sec, unsigned) in [
+        (Target::LinuxX64, 0x7FFF_FFFF, 8, 1_000_000, 0),
+        (Target::LinuxAarch64, 0x7FFF_FFFF, 8, 1_000_000, 0),
+        (Target::MacOSAarch64, 0x7FFF_FFFF, 8, 1_000_000, 1),
+        (Target::WindowsX64, 0x7FFF, 4, 1000, 0),
+        (Target::WindowsAarch64, 0x7FFF, 4, 1000, 0),
+    ] {
+        let src = alloc::format!(
+            "#include <stdlib.h>\n#include <time.h>\n\
+             _Static_assert(RAND_MAX == {rand_max}, \"RAND_MAX\");\n\
+             _Static_assert(sizeof(clock_t) == {clock_bytes}, \"clock_t\");\n\
+             _Static_assert(CLOCKS_PER_SEC == {per_sec}, \"CLOCKS_PER_SEC\");\n\
+             _Static_assert(((clock_t)-1 > 0) == {unsigned}, \"signedness\");\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}

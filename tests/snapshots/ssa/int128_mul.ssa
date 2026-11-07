@@ -43,36 +43,36 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v37  BinopI { op=ne, lhs=v16, rhs_imm=-1887284925582058224 } -> x2
     terminator Bnz { cond=v37, target=b2, fall=b1 }   (exit_acc=v37)
   block 1  start_pc=0
-    v425 Imm(0)                                           -> x2
-    v426 Imm(0)                                           -> x2
-    v427 Imm(0)                                           -> x2
-    v428 Imm(0)                                           -> x2
-    v429 Imm(0)                                           -> x2
-    v430 Imm(0)                                           -> x2
-    v431 Imm(0)                                           -> x2
-    v432 Imm(0)                                           -> x2
-    v433 Imm(0)                                           -> x2
-    v434 BinopI { op=ne, lhs=v21, rhs_imm=-2468143618787689925 } -> x2
-    v435 Imm(0)                                           -> x3
-    terminator Bz { cond=v434, target=b21, fall=b2 }   (exit_acc=v434)
+    v416 Imm(0)                                           -> x2
+    v417 Imm(0)                                           -> x2
+    v418 Imm(0)                                           -> x2
+    v419 Imm(0)                                           -> x2
+    v420 Imm(0)                                           -> x2
+    v421 Imm(0)                                           -> x2
+    v422 Imm(0)                                           -> x2
+    v423 Imm(0)                                           -> x2
+    v424 Imm(0)                                           -> x2
+    v425 BinopI { op=ne, lhs=v21, rhs_imm=-2468143618787689925 } -> x2
+    v426 Imm(0)                                           -> x3
+    terminator Bz { cond=v425, target=b21, fall=b2 }   (exit_acc=v425)
   block 2  start_pc=0
-    v436 Imm(1)                                           -> x6
-    v437 LifetimeEnd(0)                                   -> -
-    terminator Jmp(b3)   (exit_acc=v436)
+    v427 Imm(1)                                           -> x6
+    v428 LifetimeEnd(0)                                   -> -
+    terminator Jmp(b3)   (exit_acc=v427)
   block 3  start_pc=0
-    v440 Phi { incoming=[b2:v436, b21:v10], kind=I64 }    -> x6
-    v441 Extend { value=v440, kind=I32 }                  -> x2
-    v442 Imm(0)                                           -> x2
-    terminator Bz { cond=v440, target=b5, fall=b4 }   (exit_acc=v440)
+    v431 Phi { incoming=[b2:v427, b21:v10], kind=I64 }    -> x6
+    v432 Extend { value=v431, kind=I32 }                  -> x2
+    v433 Imm(0)                                           -> x2
+    terminator Bz { cond=v431, target=b5, fall=b4 }   (exit_acc=v431)
   block 4  start_pc=0
     v38  Imm(0)                                           -> x0
-    v39  Extend { value=v440, kind=I32 }                  -> x0
+    v39  Extend { value=v431, kind=I32 }                  -> x0
     v40  LifetimeEnd(0)                                   -> -
     v41  LifetimeEnd(0)                                   -> -
     v42  LifetimeEnd(0)                                   -> -
     v43  LifetimeEnd(0)                                   -> -
     v44  LifetimeEnd(0)                                   -> -
-    terminator Return(v440)   (exit_acc=v440)
+    terminator Return(v431)   (exit_acc=v431)
   block 5  start_pc=0
     v45  Imm(0)                                           -> x2
     v46  Imm(0)                                           -> x2
@@ -168,36 +168,36 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v136 BinopI { op=ne, lhs=v115, rhs_imm=7028368087249625344 } -> x2
     terminator Bnz { cond=v136, target=b10, fall=b9 }   (exit_acc=v136)
   block 9  start_pc=0
-    v443 Imm(0)                                           -> x2
+    v434 Imm(0)                                           -> x2
+    v435 Imm(0)                                           -> x2
+    v436 Imm(0)                                           -> x2
+    v437 Imm(0)                                           -> x2
+    v438 Imm(0)                                           -> x2
+    v439 Imm(0)                                           -> x2
+    v440 Imm(0)                                           -> x2
+    v441 Imm(0)                                           -> x2
+    v442 Imm(0)                                           -> x2
+    v443 BinopI { op=ne, lhs=v120, rhs_imm=-7639711670721183208 } -> x0
     v444 Imm(0)                                           -> x2
-    v445 Imm(0)                                           -> x2
-    v446 Imm(0)                                           -> x2
-    v447 Imm(0)                                           -> x2
-    v448 Imm(0)                                           -> x2
-    v449 Imm(0)                                           -> x2
-    v450 Imm(0)                                           -> x2
-    v451 Imm(0)                                           -> x2
-    v452 BinopI { op=ne, lhs=v120, rhs_imm=-7639711670721183208 } -> x0
-    v453 Imm(0)                                           -> x2
-    terminator Bz { cond=v452, target=b20, fall=b10 }   (exit_acc=v452)
+    terminator Bz { cond=v443, target=b20, fall=b10 }   (exit_acc=v443)
   block 10  start_pc=0
-    v454 Imm(4)                                           -> x0
-    v455 LifetimeEnd(0)                                   -> -
-    terminator Jmp(b11)   (exit_acc=v454)
+    v445 Imm(4)                                           -> x0
+    v446 LifetimeEnd(0)                                   -> -
+    terminator Jmp(b11)   (exit_acc=v445)
   block 11  start_pc=0
-    v458 Phi { incoming=[b10:v454, b20:v456], kind=I64 }  -> x0
-    v459 Extend { value=v458, kind=I32 }                  -> x2
-    v460 Imm(0)                                           -> x2
-    terminator Bz { cond=v458, target=b13, fall=b12 }   (exit_acc=v458)
+    v449 Phi { incoming=[b10:v445, b20:v447], kind=I64 }  -> x0
+    v450 Extend { value=v449, kind=I32 }                  -> x2
+    v451 Imm(0)                                           -> x2
+    terminator Bz { cond=v449, target=b13, fall=b12 }   (exit_acc=v449)
   block 12  start_pc=0
     v137 Imm(0)                                           -> x1
-    v138 Extend { value=v458, kind=I32 }                  -> x1
+    v138 Extend { value=v449, kind=I32 }                  -> x1
     v139 LifetimeEnd(0)                                   -> -
     v140 LifetimeEnd(0)                                   -> -
     v141 LifetimeEnd(0)                                   -> -
     v142 LifetimeEnd(0)                                   -> -
     v143 LifetimeEnd(0)                                   -> -
-    terminator Return(v458)   (exit_acc=v458)
+    terminator Return(v449)   (exit_acc=v449)
   block 13  start_pc=0
     v144 Imm(-5)                                          -> x0
     v145 Imm(0)                                           -> x0
@@ -301,30 +301,30 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v243 Imm(0)                                           -> x0
     v244 Imm(0)                                           -> x0
     v245 LifetimeEnd(0)                                   -> -
-    v246 Imm(0)                                           -> x0
+    v246 Imm(1)                                           -> x0
     v247 Imm(0)                                           -> x0
     v248 Imm(0)                                           -> x0
-    v249 Imm(1)                                           -> x0
+    v249 Imm(0)                                           -> x0
     v250 Imm(0)                                           -> x0
     v251 Imm(0)                                           -> x0
     v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0
-    v254 Imm(0)                                           -> x0
-    v255 Imm(0)                                           -> x0
+    v254 Imm(96)                                          -> x0
+    v255 Imm(4294967296)                                  -> x0
     v256 Imm(0)                                           -> x0
-    v257 Imm(96)                                          -> x0
-    v258 Imm(4294967296)                                  -> x0
+    v257 Imm(0)                                           -> x0
+    v258 Imm(0)                                           -> x0
     v259 Imm(0)                                           -> x0
     v260 Imm(0)                                           -> x0
     v261 Imm(0)                                           -> x0
-    v262 Imm(0)                                           -> x0
-    v263 Imm(0)                                           -> x0
+    v262 Imm(5)                                           -> x0
+    v263 Imm(5)                                           -> x0
     v264 Imm(0)                                           -> x0
-    v265 Imm(5)                                           -> x0
-    v266 Imm(5)                                           -> x0
+    v265 Imm(4294967296)                                  -> x0
+    v266 Imm(4294967296)                                  -> x0
     v267 Imm(0)                                           -> x0
-    v268 Imm(4294967296)                                  -> x0
-    v269 Imm(4294967296)                                  -> x0
+    v268 Imm(0)                                           -> x0
+    v269 Imm(0)                                           -> x0
     v270 Imm(0)                                           -> x0
     v271 Imm(0)                                           -> x0
     v272 Imm(0)                                           -> x0
@@ -332,26 +332,26 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v274 Imm(0)                                           -> x0
     v275 Imm(0)                                           -> x0
     v276 Imm(0)                                           -> x0
-    v277 Imm(0)                                           -> x0
-    v278 Imm(0)                                           -> x0
+    v277 Imm(16)                                          -> x0
+    v278 Imm(80)                                          -> x0
     v279 Imm(0)                                           -> x0
-    v280 Imm(16)                                          -> x0
-    v281 Imm(80)                                          -> x0
+    v280 Imm(0)                                           -> x0
+    v281 Imm(68719476736)                                 -> x0
     v282 Imm(0)                                           -> x0
-    v283 Imm(0)                                           -> x0
-    v284 Imm(68719476736)                                 -> x0
+    v283 Imm(68719476736)                                 -> x0
+    v284 Imm(0)                                           -> x0
     v285 Imm(0)                                           -> x0
-    v286 Imm(68719476736)                                 -> x0
+    v286 Imm(0)                                           -> x0
     v287 Imm(0)                                           -> x0
-    v288 Imm(0)                                           -> x0
-    v289 Imm(0)                                           -> x0
-    v290 Imm(0)                                           -> x0
-    v291 Imm(80)                                          -> x0
-    v292 Imm(68719476736)                                 -> x0
+    v288 Imm(80)                                          -> x0
+    v289 Imm(68719476736)                                 -> x0
+    v290 Imm(7)                                           -> x0
+    v291 Imm(0)                                           -> x0
+    v292 Imm(0)                                           -> x0
     v293 Imm(7)                                           -> x0
     v294 Imm(0)                                           -> x0
     v295 Imm(0)                                           -> x0
-    v296 Imm(7)                                           -> x0
+    v296 Imm(0)                                           -> x0
     v297 Imm(0)                                           -> x0
     v298 Imm(0)                                           -> x0
     v299 Imm(0)                                           -> x0
@@ -364,35 +364,35 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v306 Imm(0)                                           -> x0
     v307 Imm(0)                                           -> x0
     v308 Imm(0)                                           -> x0
-    v309 Imm(0)                                           -> x0
-    v310 Imm(0)                                           -> x0
+    v309 LifetimeEnd(0)                                   -> -
+    v310 Imm(16)                                          -> x0
     v311 Imm(0)                                           -> x0
-    v312 LifetimeEnd(0)                                   -> -
+    v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x0
     v314 Imm(0)                                           -> x0
     v315 Imm(0)                                           -> x0
-    v316 Imm(16)                                          -> x0
+    v316 Imm(80)                                          -> x0
     v317 Imm(0)                                           -> x0
-    v318 Imm(0)                                           -> x0
+    v318 Imm(68719476736)                                 -> x0
     v319 Imm(0)                                           -> x0
-    v320 Imm(0)                                           -> x0
-    v321 Imm(0)                                           -> x0
-    v322 Imm(80)                                          -> x0
+    v320 Imm(68719476736)                                 -> x0
+    v321 Imm(68719476736)                                 -> x0
+    v322 Imm(0)                                           -> x0
     v323 Imm(0)                                           -> x0
-    v324 Imm(68719476736)                                 -> x0
+    v324 Imm(0)                                           -> x0
     v325 Imm(0)                                           -> x0
-    v326 Imm(68719476736)                                 -> x0
+    v326 Imm(80)                                          -> x0
     v327 Imm(68719476736)                                 -> x0
-    v328 Imm(0)                                           -> x0
+    v328 Imm(8)                                           -> x0
     v329 Imm(0)                                           -> x0
     v330 Imm(0)                                           -> x0
-    v331 Imm(0)                                           -> x0
-    v332 Imm(80)                                          -> x0
-    v333 Imm(68719476736)                                 -> x0
-    v334 Imm(8)                                           -> x0
+    v331 Imm(8)                                           -> x0
+    v332 Imm(0)                                           -> x0
+    v333 Imm(0)                                           -> x0
+    v334 Imm(0)                                           -> x0
     v335 Imm(0)                                           -> x0
     v336 Imm(0)                                           -> x0
-    v337 Imm(8)                                           -> x0
+    v337 Imm(0)                                           -> x0
     v338 Imm(0)                                           -> x0
     v339 Imm(0)                                           -> x0
     v340 Imm(0)                                           -> x0
@@ -402,44 +402,35 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v344 Imm(0)                                           -> x0
     v345 Imm(0)                                           -> x0
     v346 Imm(0)                                           -> x0
-    v347 Imm(0)                                           -> x0
+    v347 LifetimeEnd(0)                                   -> -
     v348 Imm(0)                                           -> x0
     v349 Imm(0)                                           -> x0
     v350 Imm(0)                                           -> x0
     v351 Imm(0)                                           -> x0
     v352 Imm(0)                                           -> x0
-    v353 LifetimeEnd(0)                                   -> -
+    v353 Imm(0)                                           -> x0
     v354 Imm(0)                                           -> x0
-    v355 Imm(0)                                           -> x0
+    v355 Imm(-7046029254386353131)                        -> x6
     v356 Imm(0)                                           -> x0
-    v357 Imm(0)                                           -> x0
-    v358 Imm(0)                                           -> x0
-    v359 Imm(0)                                           -> x0
-    v360 Imm(0)                                           -> x0
-    v361 Imm(0)                                           -> x0
-    v362 Imm(0)                                           -> x0
-    v363 Imm(0)                                           -> x0
-    v364 Imm(-7046029254386353131)                        -> x6
-    v365 Imm(0)                                           -> x0
-    v366 Binop { op=mul, lhs=v16, rhs=v364 }              -> x8
-    v367 Binop { op=mulhu, lhs=v16, rhs=v364 }            -> x2
-    v368 BinopI { op=mul, lhs=v16, rhs_imm=0 }            -> x0
-    v369 Binop { op=mul, lhs=v21, rhs=v364 }              -> x6
-    v370 Binop { op=add, lhs=v367, rhs=v368 }             -> x0
-    v371 Binop { op=add, lhs=v370, rhs=v369 }             -> x0
+    v357 Binop { op=mul, lhs=v16, rhs=v355 }              -> x8
+    v358 Binop { op=mulhu, lhs=v16, rhs=v355 }            -> x2
+    v359 BinopI { op=mul, lhs=v16, rhs_imm=0 }            -> x0
+    v360 Binop { op=mul, lhs=v21, rhs=v355 }              -> x6
+    v361 Binop { op=add, lhs=v358, rhs=v359 }             -> x0
+    v362 Binop { op=add, lhs=v361, rhs=v360 }             -> x0
+    v363 Imm(0)                                           -> x1
+    v364 Imm(0)                                           -> x1
+    v365 Imm(0)                                           -> x1
+    v366 Imm(-2171562149572091312)                        -> x1
+    v367 Imm(-6105104517921687641)                        -> x1
+    v368 Imm(9)                                           -> x1
+    v369 Imm(0)                                           -> x1
+    v370 Imm(0)                                           -> x1
+    v371 Imm(9)                                           -> x1
     v372 Imm(0)                                           -> x1
     v373 Imm(0)                                           -> x1
-    v374 Imm(0)                                           -> x1
-    v375 Imm(-2171562149572091312)                        -> x1
-    v376 Imm(-6105104517921687641)                        -> x1
-    v377 Imm(9)                                           -> x1
-    v378 Imm(0)                                           -> x1
-    v379 Imm(0)                                           -> x1
-    v380 Imm(9)                                           -> x1
-    v381 Imm(0)                                           -> x1
-    v382 Imm(0)                                           -> x1
-    v383 BinopI { op=ne, lhs=v366, rhs_imm=-2171562149572091312 } -> x1
-    terminator Bnz { cond=v383, target=b15, fall=b14 }   (exit_acc=v383)
+    v374 BinopI { op=ne, lhs=v357, rhs_imm=-2171562149572091312 } -> x1
+    terminator Bnz { cond=v374, target=b15, fall=b14 }   (exit_acc=v374)
   block 14  start_pc=0
     v472 Imm(0)                                           -> x1
     v473 Imm(0)                                           -> x1
@@ -450,7 +441,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v478 Imm(0)                                           -> x1
     v479 Imm(0)                                           -> x1
     v480 Imm(0)                                           -> x1
-    v481 BinopI { op=ne, lhs=v371, rhs_imm=-6105104517921687641 } -> x0
+    v481 BinopI { op=ne, lhs=v362, rhs_imm=-6105104517921687641 } -> x0
     v482 Imm(0)                                           -> x1
     terminator Bz { cond=v481, target=b19, fall=b15 }   (exit_acc=v481)
   block 15  start_pc=0
@@ -463,33 +454,33 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v489 Imm(0)                                           -> x1
     terminator Bz { cond=v487, target=b18, fall=b17 }   (exit_acc=v487)
   block 17  start_pc=0
-    v412 Imm(0)                                           -> x1
-    v413 Extend { value=v487, kind=I32 }                  -> x1
-    v414 LifetimeEnd(0)                                   -> -
-    v415 LifetimeEnd(0)                                   -> -
-    v416 LifetimeEnd(0)                                   -> -
-    v417 LifetimeEnd(0)                                   -> -
-    v418 LifetimeEnd(0)                                   -> -
+    v403 Imm(0)                                           -> x1
+    v404 Extend { value=v487, kind=I32 }                  -> x1
+    v405 LifetimeEnd(0)                                   -> -
+    v406 LifetimeEnd(0)                                   -> -
+    v407 LifetimeEnd(0)                                   -> -
+    v408 LifetimeEnd(0)                                   -> -
+    v409 LifetimeEnd(0)                                   -> -
     terminator Return(v487)   (exit_acc=v487)
   block 18  start_pc=0
-    v419 Imm(0)                                           -> x0
-    v420 LifetimeEnd(0)                                   -> -
-    v421 LifetimeEnd(0)                                   -> -
-    v422 LifetimeEnd(0)                                   -> -
-    v423 LifetimeEnd(0)                                   -> -
-    v424 LifetimeEnd(0)                                   -> -
-    terminator Return(v419)   (exit_acc=v419)
+    v410 Imm(0)                                           -> x0
+    v411 LifetimeEnd(0)                                   -> -
+    v412 LifetimeEnd(0)                                   -> -
+    v413 LifetimeEnd(0)                                   -> -
+    v414 LifetimeEnd(0)                                   -> -
+    v415 LifetimeEnd(0)                                   -> -
+    terminator Return(v410)   (exit_acc=v410)
   block 19  start_pc=0
     v485 Imm(0)                                           -> x0
     v486 LifetimeEnd(0)                                   -> -
     terminator Jmp(b16)   (exit_acc=v485)
   block 20  start_pc=0
-    v456 Imm(0)                                           -> x0
-    v457 LifetimeEnd(0)                                   -> -
-    terminator Jmp(b11)   (exit_acc=v456)
+    v447 Imm(0)                                           -> x0
+    v448 LifetimeEnd(0)                                   -> -
+    terminator Jmp(b11)   (exit_acc=v447)
   block 21  start_pc=0
-    v438 Imm(0)                                           -> x2
-    v439 LifetimeEnd(0)                                   -> -
+    v429 Imm(0)                                           -> x2
+    v430 LifetimeEnd(0)                                   -> -
     terminator Jmp(b3)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

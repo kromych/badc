@@ -234,170 +234,170 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v228 Imm(0)                                           -> x0
     v229 Imm(0)                                           -> x0
     v230 Imm(0)                                           -> x0
-    v231 Imm(0)                                           -> x0
+    v231 Imm(1)                                           -> x0
     v232 Imm(0)                                           -> x0
-    v233 Imm(0)                                           -> x0
+    v233 Imm(2)                                           -> x0
     v234 Imm(0)                                           -> x0
-    v235 Imm(1)                                           -> x0
+    v235 Imm(0)                                           -> x0
     v236 Imm(0)                                           -> x0
-    v237 Imm(2)                                           -> x0
+    v237 Imm(3)                                           -> x0
     v238 Imm(0)                                           -> x0
-    v239 Imm(0)                                           -> x0
+    v239 Imm(4)                                           -> x0
     v240 Imm(0)                                           -> x0
-    v241 Imm(3)                                           -> x0
+    v241 Imm(0)                                           -> x0
     v242 Imm(0)                                           -> x0
-    v243 Imm(4)                                           -> x0
+    v243 Imm(5)                                           -> x0
     v244 Imm(0)                                           -> x0
     v245 Imm(0)                                           -> x0
     v246 Imm(0)                                           -> x0
-    v247 Imm(5)                                           -> x0
+    v247 Imm(6)                                           -> x0
     v248 Imm(0)                                           -> x0
     v249 Imm(0)                                           -> x0
     v250 Imm(0)                                           -> x0
-    v251 Imm(6)                                           -> x0
+    v251 Imm(7)                                           -> x0
     v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0
     v254 Imm(0)                                           -> x0
-    v255 Imm(7)                                           -> x0
+    v255 Imm(8)                                           -> x0
     v256 Imm(0)                                           -> x0
-    v257 Imm(0)                                           -> x0
+    v257 Imm(8)                                           -> x0
     v258 Imm(0)                                           -> x0
-    v259 Imm(8)                                           -> x0
+    v259 Imm(0)                                           -> x0
     v260 Imm(0)                                           -> x0
-    v261 Imm(8)                                           -> x0
+    v261 Imm(9)                                           -> x0
     v262 Imm(0)                                           -> x0
-    v263 Imm(0)                                           -> x0
+    v263 Imm(11)                                          -> x0
     v264 Imm(0)                                           -> x0
-    v265 Imm(9)                                           -> x0
+    v265 Imm(0)                                           -> x0
     v266 Imm(0)                                           -> x0
-    v267 Imm(11)                                          -> x0
+    v267 Imm(12)                                          -> x0
     v268 Imm(0)                                           -> x0
-    v269 Imm(0)                                           -> x0
+    v269 Imm(15)                                          -> x0
     v270 Imm(0)                                           -> x0
-    v271 Imm(12)                                          -> x0
+    v271 Imm(0)                                           -> x0
     v272 Imm(0)                                           -> x0
-    v273 Imm(15)                                          -> x0
+    v273 Imm(17)                                          -> x0
     v274 Imm(0)                                           -> x0
     v275 Imm(0)                                           -> x0
     v276 Imm(0)                                           -> x0
-    v277 Imm(17)                                          -> x0
+    v277 Imm(1)                                           -> x0
     v278 Imm(0)                                           -> x0
-    v279 Imm(0)                                           -> x0
+    v279 Imm(2)                                           -> x0
     v280 Imm(0)                                           -> x0
-    v281 Imm(1)                                           -> x0
+    v281 Imm(18)                                          -> x0
     v282 Imm(0)                                           -> x0
-    v283 Imm(2)                                           -> x0
+    v283 Imm(0)                                           -> x0
     v284 Imm(0)                                           -> x0
-    v285 Imm(18)                                          -> x0
+    v285 Imm(4)                                           -> x0
     v286 Imm(0)                                           -> x0
-    v287 Imm(0)                                           -> x0
+    v287 Imm(19)                                          -> x0
     v288 Imm(0)                                           -> x0
-    v289 Imm(4)                                           -> x0
-    v290 Imm(0)                                           -> x0
-    v291 Imm(19)                                          -> x0
+    v289 Imm(0)                                           -> x0
+    v290 Imm(1)                                           -> x0
+    v291 Imm(0)                                           -> x0
     v292 Imm(0)                                           -> x0
     v293 Imm(0)                                           -> x0
-    v294 Imm(1)                                           -> x0
+    v294 Imm(0)                                           -> x0
     v295 Imm(0)                                           -> x0
-    v296 Imm(0)                                           -> x0
+    v296 Imm(2)                                           -> x0
     v297 Imm(0)                                           -> x0
     v298 Imm(0)                                           -> x0
     v299 Imm(0)                                           -> x0
-    v300 Imm(2)                                           -> x0
+    v300 Imm(0)                                           -> x0
     v301 Imm(0)                                           -> x0
-    v302 Imm(0)                                           -> x0
+    v302 Imm(3)                                           -> x0
     v303 Imm(0)                                           -> x0
     v304 Imm(0)                                           -> x0
     v305 Imm(0)                                           -> x0
-    v306 Imm(3)                                           -> x0
+    v306 Imm(0)                                           -> x0
     v307 Imm(0)                                           -> x0
-    v308 Imm(0)                                           -> x0
+    v308 Imm(4)                                           -> x0
     v309 Imm(0)                                           -> x0
     v310 Imm(0)                                           -> x0
     v311 Imm(0)                                           -> x0
-    v312 Imm(4)                                           -> x0
+    v312 Imm(0)                                           -> x0
     v313 Imm(0)                                           -> x0
     v314 Imm(0)                                           -> x0
-    v315 Imm(0)                                           -> x0
+    v315 Imm(5)                                           -> x0
     v316 Imm(0)                                           -> x0
     v317 Imm(0)                                           -> x0
     v318 Imm(0)                                           -> x0
-    v319 Imm(5)                                           -> x0
-    v320 Imm(0)                                           -> x0
+    v319 Imm(0)                                           -> x0
+    v320 Imm(6)                                           -> x0
     v321 Imm(0)                                           -> x0
     v322 Imm(0)                                           -> x0
-    v323 Imm(0)                                           -> x0
-    v324 Imm(6)                                           -> x0
+    v323 Imm(7)                                           -> x0
+    v324 Imm(0)                                           -> x0
     v325 Imm(0)                                           -> x0
     v326 Imm(0)                                           -> x0
-    v327 Imm(7)                                           -> x0
-    v328 Imm(0)                                           -> x0
+    v327 Imm(0)                                           -> x0
+    v328 Imm(8)                                           -> x0
     v329 Imm(0)                                           -> x0
     v330 Imm(0)                                           -> x0
     v331 Imm(0)                                           -> x0
-    v332 Imm(8)                                           -> x0
+    v332 Imm(0)                                           -> x0
     v333 Imm(0)                                           -> x0
-    v334 Imm(0)                                           -> x0
+    v334 Imm(8)                                           -> x0
     v335 Imm(0)                                           -> x0
     v336 Imm(0)                                           -> x0
     v337 Imm(0)                                           -> x0
-    v338 Imm(8)                                           -> x0
+    v338 Imm(0)                                           -> x0
     v339 Imm(0)                                           -> x0
-    v340 Imm(0)                                           -> x0
+    v340 Imm(9)                                           -> x0
     v341 Imm(0)                                           -> x0
     v342 Imm(0)                                           -> x0
     v343 Imm(0)                                           -> x0
-    v344 Imm(9)                                           -> x0
+    v344 Imm(0)                                           -> x0
     v345 Imm(0)                                           -> x0
-    v346 Imm(0)                                           -> x0
+    v346 Imm(11)                                          -> x0
     v347 Imm(0)                                           -> x0
     v348 Imm(0)                                           -> x0
     v349 Imm(0)                                           -> x0
-    v350 Imm(11)                                          -> x0
+    v350 Imm(0)                                           -> x0
     v351 Imm(0)                                           -> x0
-    v352 Imm(0)                                           -> x0
+    v352 Imm(12)                                          -> x0
     v353 Imm(0)                                           -> x0
     v354 Imm(0)                                           -> x0
     v355 Imm(0)                                           -> x0
-    v356 Imm(12)                                          -> x0
+    v356 Imm(0)                                           -> x0
     v357 Imm(0)                                           -> x0
-    v358 Imm(0)                                           -> x0
+    v358 Imm(15)                                          -> x0
     v359 Imm(0)                                           -> x0
     v360 Imm(0)                                           -> x0
     v361 Imm(0)                                           -> x0
-    v362 Imm(15)                                          -> x0
+    v362 Imm(0)                                           -> x0
     v363 Imm(0)                                           -> x0
-    v364 Imm(0)                                           -> x0
+    v364 Imm(17)                                          -> x0
     v365 Imm(0)                                           -> x0
     v366 Imm(0)                                           -> x0
     v367 Imm(0)                                           -> x0
-    v368 Imm(17)                                          -> x0
-    v369 Imm(0)                                           -> x0
+    v368 Imm(0)                                           -> x0
+    v369 Imm(1)                                           -> x0
     v370 Imm(0)                                           -> x0
     v371 Imm(0)                                           -> x0
     v372 Imm(0)                                           -> x0
-    v373 Imm(1)                                           -> x0
+    v373 Imm(2)                                           -> x0
     v374 Imm(0)                                           -> x0
     v375 Imm(0)                                           -> x0
     v376 Imm(0)                                           -> x0
-    v377 Imm(2)                                           -> x0
-    v378 Imm(0)                                           -> x0
+    v377 Imm(0)                                           -> x0
+    v378 Imm(18)                                          -> x0
     v379 Imm(0)                                           -> x0
     v380 Imm(0)                                           -> x0
     v381 Imm(0)                                           -> x0
-    v382 Imm(18)                                          -> x0
-    v383 Imm(0)                                           -> x0
+    v382 Imm(0)                                           -> x0
+    v383 Imm(4)                                           -> x0
     v384 Imm(0)                                           -> x0
     v385 Imm(0)                                           -> x0
     v386 Imm(0)                                           -> x0
-    v387 Imm(4)                                           -> x0
+    v387 Imm(19)                                          -> x0
     v388 Imm(0)                                           -> x0
     v389 Imm(0)                                           -> x0
     v390 Imm(0)                                           -> x0
-    v391 Imm(19)                                          -> x0
-    v392 Imm(0)                                           -> x0
-    v393 Imm(0)                                           -> x0
-    v394 Imm(0)                                           -> x0
+    v391 LifetimeEnd(0)                                   -> -
+    v392 LifetimeEnd(0)                                   -> -
+    v393 LifetimeEnd(0)                                   -> -
+    v394 LifetimeEnd(0)                                   -> -
     v395 LifetimeEnd(0)                                   -> -
     v396 LifetimeEnd(0)                                   -> -
     v397 LifetimeEnd(0)                                   -> -
@@ -405,14 +405,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v399 LifetimeEnd(0)                                   -> -
     v400 LifetimeEnd(0)                                   -> -
     v401 LifetimeEnd(0)                                   -> -
-    v402 LifetimeEnd(0)                                   -> -
-    v403 LifetimeEnd(0)                                   -> -
-    v404 LifetimeEnd(0)                                   -> -
-    v405 LifetimeEnd(0)                                   -> -
-    v406 Imm(0)                                           -> x0
-    v407 Imm(0)                                           -> x0
-    v408 Imm(0)                                           -> x0
-    terminator Return(v408)   (exit_acc=v408)
+    v402 Imm(0)                                           -> x0
+    v403 Imm(0)                                           -> x0
+    v404 Imm(0)                                           -> x0
+    terminator Return(v404)   (exit_acc=v404)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

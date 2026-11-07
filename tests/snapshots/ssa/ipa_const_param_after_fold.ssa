@@ -20,29 +20,24 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
-    v17  Imm(0)                                           -> x0
+    v17  ImmData(16)                                      -> x0
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(1)                                           -> x0
+    v19  Imm(64)                                          -> x0
+    v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  ImmData(16)                                      -> x0
-    v23  Imm(0)                                           -> x0
-    v24  Imm(64)                                          -> x0
-    v25  Imm(0)                                           -> x0
-    v26  Imm(0)                                           -> x0
-    v27  BinopI { op=add, lhs=v22, rhs_imm=0 }            -> x0
-    v28  Load { addr=v22, disp=0, kind=U32 pc_rel }       -> x0
-    v29  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v30  Binop { op=add, lhs=v28, rhs=v1 }                -> x0
-    v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x0
-    v32  BinopI { op=add, lhs=v31, rhs_imm=0 }            -> x1
+    v22  BinopI { op=add, lhs=v17, rhs_imm=0 }            -> x0
+    v23  Load { addr=v17, disp=0, kind=U32 pc_rel }       -> x0
+    v24  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
+    v25  Binop { op=add, lhs=v23, rhs=v1 }                -> x0
+    v26  BinopI { op=and, lhs=v25, rhs_imm=4294967295 }   -> x0
+    v27  BinopI { op=add, lhs=v26, rhs_imm=0 }            -> x1
+    v28  Imm(0)                                           -> x1
+    v29  Imm(0)                                           -> x1
+    v30  Imm(1)                                           -> x1
+    v31  Imm(0)                                           -> x1
+    v32  Imm(0)                                           -> x1
     v33  Imm(0)                                           -> x1
-    v34  Imm(0)                                           -> x1
-    v35  Imm(1)                                           -> x1
-    v36  Imm(0)                                           -> x1
-    v37  Imm(0)                                           -> x1
-    v38  Imm(0)                                           -> x1
-    terminator Return(v31)   (exit_acc=v31)
+    terminator Return(v26)   (exit_acc=v26)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=fill_first
 fn ent_pc=3 n_params=3 variadic=false locals=0

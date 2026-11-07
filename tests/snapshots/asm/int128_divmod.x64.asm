@@ -450,18 +450,17 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	setb	%sil
                	movzbq	%sil, %rsi
-               	negq	%rax
-               	addq	%rcx, %rax
-               	movq	%r8, %rcx
-               	subq	%rdx, %rcx
-               	subq	%rsi, %rcx
-               	cmpq	$0x1, %rcx
+               	subq	%rax, %rcx
+               	movq	%r8, %rax
+               	subq	%rdx, %rax
+               	subq	%rsi, %rax
+               	cmpq	$0x1, %rax
                	setb	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x1, %rcx
+               	cmpq	$0x1, %rax
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpq	$0x3, %rax
+               	cmpq	$0x3, %rcx
                	setb	%r8b
                	movzbq	%r8b, %r8
                	andq	%r8, %rsi
@@ -471,15 +470,16 @@ Disassembly of section .text:
                	movq	%rdi, %rsi
                	andq	%rdx, %rsi
                	andq	%r9, %rdx
-               	cmpq	%rsi, %rax
+               	cmpq	%rsi, %rcx
                	setb	%dil
                	movzbq	%dil, %rdi
-               	subq	%rsi, %rax
-               	subq	%rdx, %rcx
-               	movq	%rcx, %rdx
+               	subq	%rsi, %rcx
+               	subq	%rdx, %rax
+               	movq	%rax, %rdx
                	subq	%rdi, %rdx
                	movabsq	$-0x4292c96669d3a3d8, %r11 # imm = 0xBD6D3699962C5C28
-               	cmpq	%r11, %rax
+               	movq	%rcx, %rax
+               	cmpq	%r11, %rcx
                	jne	<addr>
                	testq	%rdx, %rdx
                	je	<addr>
@@ -507,9 +507,9 @@ Disassembly of section .text:
                	popq	%rdx
                	movq	%rax, %rsi
                	shrq	%rsi
-               	imulq	%rdi, %rsi
-               	movq	%rcx, %rax
-               	subq	%rsi, %rax
+               	movq	%rsi, %rax
+               	imulq	%rdi, %rax
+               	subq	%rax, %rcx
                	jmp	<addr>
                	movq	%rdx, %r8
                	jmp	<addr>

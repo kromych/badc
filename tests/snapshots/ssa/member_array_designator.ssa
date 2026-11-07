@@ -125,11 +125,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v119 Imm(0)                                           -> x0
     v120 LifetimeEnd(0)                                   -> -
     v121 Imm(0)                                           -> x0
-    v122 Imm(0)                                           -> x0
-    v123 Imm(0)                                           -> x0
-    v124 Imm(0)                                           -> x0
-    v125 Imm(0)                                           -> x0
-    terminator Return(v125)   (exit_acc=v125)
+    terminator Return(v121)   (exit_acc=v121)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

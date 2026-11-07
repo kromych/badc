@@ -716,7 +716,14 @@ impl Compiler {
     /// declaration -- including one that follows the definition -- renames
     /// the symbol the whole unit emits, as gcc does.
     pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
-        let label = self.parse_asm_register_suffix()?;
+        let mut label = self.parse_asm_register_suffix()?;
+        // The label is an assembler name, which on Mach-O loses the leading
+        // underscore badc's names take only when written, as asm text does.
+        if self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
+            && let Some(c_name) = label.strip_prefix('_')
+        {
+            label = c_name.into();
+        }
         self.set_asm_label(id_idx, label)
     }
 

@@ -7450,6 +7450,47 @@ fn seh_directives_in_an_assembly_unit_unwind_its_function() {
     );
 }
 
+/// An `/INCLUDE:` name must be defined, as link.exe requires (LNK2001):
+/// one nothing defines is reported at its directive, and `_tls_used`
+/// names the image's TLS directory.
+#[test]
+fn an_include_nothing_defines_is_undefined() {
+    let dir = tempdir("pe-include-undefined");
+    let bad = write_source(
+        &dir,
+        "bad.c",
+        "#pragma comment(linker, \"/INCLUDE:nothing_defines_this\")\n\
+         int main(void) { return 0; }\n",
+    );
+    let good = write_source(
+        &dir,
+        "good.c",
+        "#pragma comment(linker, \"/INCLUDE:_tls_used\")\n\
+         int main(void) { return 0; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let link = |src: &std::path::Path| {
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(src)
+                .arg("-o")
+                .arg(dir.join("x.exe"))
+                .output()
+                .expect("run badc")
+        };
+        let out = link(&bad);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{target}: {err}");
+        assert!(
+            err.contains("undefined reference to `nothing_defines_this` (an `/INCLUDE` of"),
+            "{target}: {err}"
+        );
+        let out = link(&good);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{target}: {err}");
+    }
+}
+
 /// An export names a definition, as link.exe requires (LNK2001): a DLL
 /// linked from a module-definition file whose exports nothing defines, or
 /// an export under another name whose target is undefined, is refused with

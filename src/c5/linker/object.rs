@@ -1147,6 +1147,8 @@ pub struct NativeObject {
     pub exports: Vec<String>,
     /// `/EXPORT:name=target` from `.drectve` or `#pragma comment(linker)`.
     pub export_aliases: Vec<ExportAlias>,
+    /// `/INCLUDE:` names, which a PE image must define.
+    pub includes: Vec<String>,
     /// Win64 `_tls_index` fixup offsets (`NT_BADC_TLS_INDEX`), each a
     /// byte offset into this object's `.text`. The PE writer patches
     /// each with the `_tls_index` slot address. Empty on non-Windows
@@ -1304,6 +1306,7 @@ impl NativeObject {
             alternate_names: Vec::new(),
             weak_aliases: Vec::new(),
             export_aliases: Vec::new(),
+            includes: Vec::new(),
             comdats: Vec::new(),
             default_libs: Vec::new(),
             mismatch_keys: Vec::new(),
@@ -1553,6 +1556,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         import_dylib_map: note.import_dylib_map,
         exports: note.exports.into_iter().chain(directives.exports).collect(),
         export_aliases: directives.export_aliases,
+        includes: directives.includes,
         tls_index_fixups: note.tls_index_fixups,
         macho_tlv_descriptors: note.macho_tlv_descriptors,
         tls_symbols: note.tls_symbols,

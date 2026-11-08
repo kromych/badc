@@ -744,7 +744,7 @@ pub(crate) struct Directives {
     /// `/EXPORT:name=target`: an export under another name or forwarded.
     pub(crate) export_aliases: Vec<ExportAlias>,
     /// `/INCLUDE:`: a name the link resolves as if referenced.
-    includes: Vec<String>,
+    pub(crate) includes: Vec<String>,
     pub(crate) default_libs: Vec<String>,
     /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
     pub(crate) mismatch_keys: Vec<(String, String)>,
@@ -867,6 +867,7 @@ pub fn module_definition(
     obj.symbols = d.include_symbols().collect();
     obj.exports = d.exports;
     obj.export_aliases = d.export_aliases;
+    obj.includes = d.includes;
     obj.export_forms = d.export_forms;
     Ok((obj, image))
 }
@@ -2038,6 +2039,7 @@ pub fn parse_native_coff(
         import_dylib_map: Vec::new(),
         exports: directives.exports.clone(),
         export_aliases: directives.export_aliases.clone(),
+        includes: directives.includes.clone(),
         tls_index_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
         macho_tlv_fixups: Vec::new(),

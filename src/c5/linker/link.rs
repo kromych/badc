@@ -1180,14 +1180,14 @@ pub fn link_native_objects_with<'a>(
     }
     link.lay_out_init_fini_arrays()?;
     link.collect_definitions()?;
-    if link.pe_image {
-        link.require_pe_exports_defined();
-    }
     link.collect_prologue_anchors();
     link.collect_local_functions();
     link.coalesce_commons();
     link.allocate_copies()?;
     link.define_link_symbols();
+    if link.pe_image {
+        link.require_pe_exports_defined();
+    }
     link.collect_import_facts();
     link.define_mach_o_host_names();
     link.collect_preemptible();
@@ -3632,20 +3632,23 @@ impl<'a> Link<'a> {
         i
     }
 
-    /// A PE image's exports name definitions, as link.exe requires: an
-    /// export, or the target of one under another name, that nothing in the
-    /// link defines or imports is undefined. A forwarder names another DLL.
+    /// A PE image's exports and `/INCLUDE:` names name definitions, as
+    /// link.exe requires: an export, the target of one under another name,
+    /// or an included name that nothing in the link defines or imports is
+    /// undefined. A forwarder names another DLL.
     fn require_pe_exports_defined(&mut self) {
         let objs = self.objs;
         for obj in objs {
             let targets = (obj.export_aliases.iter())
                 .filter(|a| !a.target.contains('.'))
                 .map(|a| &a.target);
-            for name in obj.exports.iter().chain(targets) {
+            let named = (obj.exports.iter().chain(targets).map(|n| (n, "an export")))
+                .chain(obj.includes.iter().map(|n| (n, "an `/INCLUDE`")));
+            for (name, what) in named {
                 if !self.defined.contains_key(name.as_str())
                     && !self.shlib_exports.contains(name.as_str())
                 {
-                    self.note_undefined_at(name, &format!(" (an export of {})", obj.source));
+                    self.note_undefined_at(name, &format!(" ({what} of {})", obj.source));
                 }
             }
         }
@@ -8180,6 +8183,7 @@ mod tests {
                 alternate_names: alloc::vec::Vec::new(),
                 weak_aliases: alloc::vec::Vec::new(),
                 export_aliases: alloc::vec::Vec::new(),
+                includes: alloc::vec::Vec::new(),
                 comdats: alloc::vec::Vec::new(),
                 default_libs: alloc::vec::Vec::new(),
                 mismatch_keys: Vec::new(),

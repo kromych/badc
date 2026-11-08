@@ -2948,6 +2948,9 @@ pub enum SectionFamily {
 /// including the `.rela.*` companions. A non-numeric or out-of-range
 /// suffix is treated as the bare (unprioritized) form.
 fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
+    if let Some(table) = crt_init_table(name) {
+        return Some(table);
+    }
     let (is_dtor, rest) = if let Some(r) = name.strip_prefix(".init_array") {
         (false, r)
     } else {
@@ -2963,6 +2966,21 @@ fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
     match digits.parse::<u32>() {
         Ok(p) if p <= 65535 => Some((is_dtor, Some(p))),
         _ => Some((is_dtor, None)),
+    }
+}
+
+/// The C runtime's tables, `(destructor, priority)`: its C initializers
+/// (`.CRT$XI*`) run before the constructors (`.CRT$XC*`), and its
+/// terminators (`.CRT$XT*`) after the pre-terminators (`.CRT$XP*`), as the
+/// MSVC runtime calls them. The lowest priority runs first among
+/// constructors and last among destructors.
+pub(crate) fn crt_init_table(name: &str) -> Option<(bool, Option<u32>)> {
+    match name.strip_prefix(".CRT$X")?.as_bytes().first()? {
+        b'I' => Some((false, Some(0))),
+        b'C' => Some((false, None)),
+        b'P' => Some((true, None)),
+        b'T' => Some((true, Some(0))),
+        _ => None,
     }
 }
 

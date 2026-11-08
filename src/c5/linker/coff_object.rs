@@ -359,11 +359,7 @@ fn init_table(name: &str) -> Option<(bool, Option<u32>)> {
             };
         }
     }
-    match name.strip_prefix(".CRT$X")?.as_bytes().first()? {
-        b'C' | b'I' => Some((false, None)),
-        b'P' | b'T' => Some((true, None)),
-        _ => None,
-    }
+    super::object::crt_init_table(name)
 }
 
 /// `.pdata`, and gcc's `.pdata.<suffix>` beside `.text.<suffix>`.

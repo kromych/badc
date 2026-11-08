@@ -2122,11 +2122,13 @@ pub(crate) struct Build {
     pub diagnostics: Vec<crate::c5::diag::Diagnostic>,
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
-    /// Named sections a writer can emit in their own right. Only the
-    /// merged link path fills this; the ELF writer consumes it, and
-    /// the Mach-O and PE writers still fold the bytes into the family
-    /// segment they belong to.
+    /// Named data sections a writer can emit in their own right, as
+    /// offsets in the data stream. Only the merged link path fills this.
     pub named_sections: Vec<NamedSection>,
+    /// Named code sections, as offsets in `text`. Only the merged link path
+    /// fills this, and only the PE writer gives each a header; for it each
+    /// one starts on a multiple of the image's section alignment.
+    pub named_code_sections: Vec<NamedSection>,
     /// The linked Mach-O inputs' unwind tables; only the merged link path
     /// fills them.
     pub compact_unwind: Vec<CompactUnwind>,
@@ -5300,7 +5302,12 @@ pub(crate) fn reloc_callee_ctx(
     let mut sec_ids: alloc::collections::BTreeMap<&str, u32> = alloc::collections::BTreeMap::new();
     let mut ctx = empty;
     for f in funcs {
-        let sec = match section_of.get(f.name.as_str()) {
+        // A funclet, which no symbol names, carries its function's section.
+        let sec = match section_of
+            .get(f.name.as_str())
+            .copied()
+            .or(f.section.as_deref())
+        {
             Some(name) => {
                 let next = sec_ids.len() as u32 + 1;
                 *sec_ids.entry(name).or_insert(next)

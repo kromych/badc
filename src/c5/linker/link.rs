@@ -403,6 +403,8 @@ pub struct MergedNative {
     /// variable section list gives each its own output section; the
     /// rest leave the bytes in the family they were grouped into.
     pub named_sections: Vec<crate::c5::codegen::NamedSection>,
+    /// The same for code, as offsets in `text`.
+    pub named_code_sections: Vec<crate::c5::codegen::NamedSection>,
 }
 
 /// One input section's placement within a merged output stream.
@@ -797,6 +799,20 @@ fn bss_alignment(objs: &[NativeObject]) -> usize {
         .unwrap_or(crate::c5::layout::BSS_ALIGN_MIN)
 }
 
+/// The alignment a PE image's named code section, and the code behind them,
+/// start on in the text stream: a multiple of the section alignment the
+/// writer derives from the same inputs, so each section's RVA is one and the
+/// text keeps one offset space.
+fn pe_code_section_align(objs: &[NativeObject]) -> u64 {
+    let widest = (objs.iter())
+        .flat_map(|o| &o.sections)
+        .map(|s| s.align)
+        .chain(objs.iter().map(|o| o.text_align as u64))
+        .chain([bss_alignment(objs) as u64])
+        .fold(crate::c5::object::pe::SECTION_ALIGNMENT as u64, u64::max);
+    widest.next_power_of_two()
+}
+
 /// One grouped name's merged extent. `start` / `end` are offsets in
 /// the merged data stream, or in the zero-fill region when `bss`.
 struct NamedExtent {
@@ -835,20 +851,25 @@ fn named_group_aligns<'o>(
     widest
 }
 
-/// Append the grouped named sections of `fam` to the merged data
-/// stream, recording each one's new offset in its unit's map.
+/// Append the grouped named sections of `fam` to the merged stream `data`,
+/// recording each one's new offset in its unit's map. Each name starts on
+/// a multiple of `open_align` at least.
 fn group_named_bytes(
     data: &mut Vec<u8>,
     objs: &[NativeObject],
     fam: SectionFamily,
     blob: impl Fn(&NativeObject) -> &Vec<u8>,
     maps: &mut [BlobMap],
-    sec: NativeSymSection,
     extents: &mut Vec<NamedExtent>,
+    open_align: u64,
 ) {
+    let sec = match fam {
+        SectionFamily::Text => NativeSymSection::Text,
+        _ => NativeSymSection::Data,
+    };
     let order = named_group_order(objs, fam);
     let any = !order.is_empty();
-    let write = fam != SectionFamily::RoData;
+    let write = matches!(fam, SectionFamily::RelRo | SectionFamily::Data);
     let widest = named_group_aligns(&order);
     let mut prev: Option<&str> = None;
     // The unwind table's previous contribution, `(start, end)` in `data`.
@@ -865,7 +886,7 @@ fn group_named_bytes(
         prev = Some(&s.name);
         let unpadded = data.len();
         let align = if opens {
-            widest[s.name.as_str()]
+            widest[s.name.as_str()].max(open_align)
         } else {
             s.align.max(1)
         };
@@ -1297,6 +1318,7 @@ struct Link<'a> {
     /// One `__start_` / `__stop_` pair per grouped name.
     start_stop_bounds: Vec<(String, NativeSymSection, u64)>,
     named_sections: Vec<crate::c5::codegen::NamedSection>,
+    named_code_sections: Vec<crate::c5::codegen::NamedSection>,
     section_map: SectionMap,
     /// Constructors and destructors as `(priority, merged text
     /// offset)`, in run order.
@@ -1452,6 +1474,7 @@ impl<'a> Link<'a> {
             bss_map: Vec::with_capacity(objs.len()),
             start_stop_bounds: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
             section_map: SectionMap::default(),
             init_entries: Vec::new(),
             fini_entries: Vec::new(),
@@ -2208,20 +2231,41 @@ impl<'a> Link<'a> {
         // name and `.eh_frame` stays one table.
         let mut named_extents: Vec<NamedExtent> = Vec::new();
         for obj in objs {
-            align_up(&mut self.text, obj.text_align.max(16));
-            self.text_align = self.text_align.max(obj.text_align);
+            let named = named_prefix_len(obj, SectionFamily::Text, obj.text.len() as u64);
             let keep = match self.init_fini {
-                true => moved_prefix_len(
+                true => named.min(moved_prefix_len(
                     obj,
                     SectionFamily::Text,
-                    obj.text.len() as u64,
+                    named,
                     super::object::is_init_fini,
-                ),
-                false => obj.text.len() as u64,
+                )),
+                false => named,
             };
-            self.text_map
-                .push(BlobMap::new(self.text.len() as u64, keep));
-            self.text.extend_from_slice(&obj.text[..keep as usize]);
+            self.text_map.push(BlobMap::new(0, keep));
+        }
+        // A PE image opens the text stream with its named code sections, each
+        // on a section boundary, so the code behind them, the import stubs the
+        // link appends and the writer's entry stub share `.text`.
+        if self.pe_image {
+            group_named_bytes(
+                &mut self.text,
+                objs,
+                SectionFamily::Text,
+                |o| &o.text,
+                &mut self.text_map,
+                &mut named_extents,
+                pe_code_section_align(objs),
+            );
+            if !self.text.is_empty() {
+                align_up(&mut self.text, pe_code_section_align(objs) as usize);
+            }
+        }
+        for (i, obj) in objs.iter().enumerate() {
+            align_up(&mut self.text, obj.text_align.max(16));
+            self.text_align = self.text_align.max(obj.text_align);
+            self.text_map[i].base = self.text.len() as u64;
+            let keep = self.text_map[i].prefix_len as usize;
+            self.text.extend_from_slice(&obj.text[..keep]);
             align_up(
                 &mut self.data,
                 crate::c5::layout::data_image_align(obj.rodata_align),
@@ -2237,6 +2281,17 @@ impl<'a> Link<'a> {
             self.init_code = self.group_init_fini(".init");
             self.fini_code = self.group_init_fini(".fini");
         }
+        if !self.pe_image {
+            group_named_bytes(
+                &mut self.text,
+                objs,
+                SectionFamily::Text,
+                |o| &o.text,
+                &mut self.text_map,
+                &mut named_extents,
+                1,
+            );
+        }
         self.keep_end_label_byte(SectionFamily::RoData);
         group_named_bytes(
             &mut self.data,
@@ -2244,8 +2299,8 @@ impl<'a> Link<'a> {
             SectionFamily::RoData,
             |o| &o.rodata,
             &mut self.ro_map,
-            NativeSymSection::Data,
             &mut named_extents,
+            1,
         );
         // One alignment covers the whole data image: the writers place
         // every region from it, and each region starts at a multiple of
@@ -2278,8 +2333,8 @@ impl<'a> Link<'a> {
             SectionFamily::RelRo,
             |o| &o.relro,
             &mut self.relro_map,
-            NativeSymSection::Data,
             &mut named_extents,
+            1,
         );
         align_up(&mut self.data, self.data_align);
         self.data_relro_len = self.data.len();
@@ -2310,8 +2365,8 @@ impl<'a> Link<'a> {
             SectionFamily::Data,
             |o| &o.data,
             &mut self.rw_map,
-            NativeSymSection::Data,
             &mut named_extents,
+            1,
         );
         group_named_zerofill(
             &mut self.bss_size,
@@ -2331,16 +2386,22 @@ impl<'a> Link<'a> {
             .collect();
         // The same extents as output sections, for a writer that gives
         // each its own header rather than folding it into the family.
+        let named = |e: &NamedExtent| crate::c5::codegen::NamedSection {
+            name: e.name.clone(),
+            offset: e.start,
+            size: e.end - e.start,
+            align: e.align,
+            bss: e.bss,
+            write: e.write,
+        };
+        self.named_code_sections = (named_extents.iter())
+            .filter(|e| e.sec == NativeSymSection::Text)
+            .map(named)
+            .collect();
         self.named_sections = named_extents
             .iter()
-            .map(|e| crate::c5::codegen::NamedSection {
-                name: e.name.clone(),
-                offset: e.start,
-                size: e.end - e.start,
-                align: e.align,
-                bss: e.bss,
-                write: e.write,
-            })
+            .filter(|e| e.sec != NativeSymSection::Text)
+            .map(named)
             .collect();
 
         // Per-input-section placement: each record's stream offset is
@@ -2656,7 +2717,9 @@ impl<'a> Link<'a> {
             }
             for &(row, target, handler) in &obj.seh_rows {
                 let at = |at: u64| map.at(at) as u32;
-                (self.seh_rows).push((row.map(at), target.map(at), handler.map(at)));
+                // The range's exclusive end, by its last byte.
+                let row = [at(row[0]), at(row[1]), at(row[2].saturating_sub(1)) + 1];
+                (self.seh_rows).push((row, target.map(at), handler.map(at)));
             }
         }
         // A scope table names its language handler: an input's definition,
@@ -5215,6 +5278,7 @@ impl<'a> Link<'a> {
             data_align: self.data_align,
             bss_size: self.bss_size,
             named_sections: self.named_sections,
+            named_code_sections: self.named_code_sections,
             defined,
             tls_defined: self.tls_defined,
             imports: self.imports,

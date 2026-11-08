@@ -871,6 +871,7 @@ pub(crate) mod test_support {
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             data_import_binds: Vec::new(),

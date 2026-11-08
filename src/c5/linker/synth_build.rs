@@ -298,6 +298,7 @@ fn synth_program_and_build(
             .collect(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
+        named_code_sections: merged.named_code_sections.clone(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
@@ -574,8 +575,16 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
         prologue_native: alloc::collections::BTreeMap::new(),
         pc_to_native,
     };
+    // The `__start_` / `__stop_` bounds the link gives a code section mark
+    // no function.
+    let bound = |name: &str, sym: &super::link::MergedSymbol| {
+        let bare = (name.strip_prefix("__start_")).or_else(|| name.strip_prefix("__stop_"));
+        sym.kind == super::object::STT_NOTYPE
+            && sym.size == 0
+            && bare.is_some_and(|b| merged.named_code_sections.iter().any(|n| n.name == b))
+    };
     for (name, sym) in &merged.defined {
-        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
+        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() || bound(name, sym) {
             continue;
         }
         table.note(merged, name, sym.value as usize);
@@ -611,12 +620,18 @@ fn recorded_unwind<'m>(
     let foreign =
         |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
     let text_len = merged.text.len() as u32;
+    // A function also ends with its named code section, or ahead of the first.
+    let section_ends: Vec<u32> = (merged.named_code_sections.iter())
+        .flat_map(|n| [n.offset as u32, (n.offset + n.size) as u32])
+        .collect();
     let mut out = Vec::new();
     for (i, &begin) in begins.iter().enumerate() {
         if begin >= text_len || foreign(begin) {
             continue;
         }
-        let end = begins.get(i + 1).copied().unwrap_or(text_len);
+        let end = (section_ends.iter().copied().filter(|&e| e > begin))
+            .chain(begins.get(i + 1).copied())
+            .fold(text_len, u32::min);
         let steps = merged.unwind.get(&u64::from(begin));
         if steps.is_none() && required && functions.prologue_native.contains_key(&(begin as usize))
         {
@@ -1913,6 +1928,7 @@ mod tests {
         MergedNative {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
+            named_code_sections: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.
             text: alloc::vec![0x40, 0x05, 0x80, 0x52, 0xc0, 0x03, 0x5f, 0xd6],

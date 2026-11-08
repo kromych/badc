@@ -114,6 +114,10 @@ const NT_BADC_SEH_SCOPE: u32 = 15;
 const NT_BADC_UNWIND: u32 = 16;
 /// `#pragma comment(linker, ...)` strings, NUL-separated.
 const NT_BADC_LINKER_DIRECTIVES: u32 = 17;
+/// `(u64 lo, u64 hi, u64 base, name NUL)` per code range carved into a named
+/// section: the other records' code offsets in `[lo, hi)` lie from `base` in
+/// that section, the rest at the same offset in `.text`.
+const NT_BADC_TEXT_CARVE: u32 = 18;
 /// The target of a `__finally` row, the handler of a row whose filter is
 /// the constant `EXCEPTION_EXECUTE_HANDLER`.
 pub(crate) const SEH_NONE: u64 = u64::MAX;
@@ -1064,14 +1068,16 @@ struct Symtab<'a> {
     first_global: u32,
     func_symidx_by_name: BTreeMap<String, u32>,
     asm_label_symidx: BTreeMap<&'a str, u32>,
+    /// These four hold code offsets ahead of the named-section carve, which
+    /// `NT_BADC_TEXT_CARVE` maps. Each function's entry and post-prologue.
     prologue_end_pairs: Vec<(u64, u64)>,
-    /// `(entry, frame path, early return)` `.text` offsets of each function
-    /// that returns ahead of its frame.
+    /// `(entry, frame path, early return)` of each function that returns
+    /// ahead of its frame.
     early_returns: Vec<(u64, u64, u64)>,
-    /// `(function, begin, end, target, handler)` `.text` offsets of each
-    /// `__try` scope-table row, [`SEH_NONE`] for an absent one.
+    /// `(function, begin, end, target, handler)` of each `__try` scope-table
+    /// row, [`SEH_NONE`] for an absent one.
     seh_rows: Vec<[u64; 5]>,
-    /// Each function's `.text` entry offset and prologue unwind steps.
+    /// Each function's entry and prologue unwind steps.
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
@@ -1329,11 +1335,24 @@ impl<'a> RelocWriter<'a> {
                 .and_then(|&pc| build.pc_to_native.get(pc).copied())
                 .filter(|&off| off != usize::MAX)
         };
-        for i in 0..build.func_ent_pcs.len() {
-            let Some(name) = build.func_names.get(i) else {
-                continue;
-            };
-            let Some(sec) = fn_section.get(name.as_str()) else {
+        let count = build.func_ent_pcs.len();
+        let mut section_of: Vec<Option<&str>> = (0..count)
+            .map(|i| {
+                build
+                    .func_names
+                    .get(i)
+                    .and_then(|n| fn_section.get(n.as_str()).copied())
+            })
+            .collect();
+        // A funclet, a scope-table row's handler, goes with its function.
+        let index_at = |at: u32| (0..count).find(|&i| func_start(i) == Some(at as usize));
+        for r in &build.seh_rows {
+            if let (Some(f), Some(h)) = (index_at(r.func), r.handler.and_then(index_at)) {
+                section_of[h] = section_of[h].or(section_of[f]);
+            }
+        }
+        for (i, sec) in section_of.into_iter().enumerate() {
+            let Some(sec) = sec else {
                 continue;
             };
             let lo = func_start(i).unwrap_or(usize::MAX);
@@ -2586,19 +2605,12 @@ impl<'a> RelocWriter<'a> {
         for k in 0..self.names.prologue_end_entries.len() {
             let (i, post_native) = self.names.prologue_end_entries[k];
             let (lo, _) = self.func_extent(i)?;
-            let (fn_shndx, fn_off) = self.text_place(lo as u64);
-            let (post_shndx, post_off) = self.text_place(post_native as u64);
-            if fn_shndx == SHIDX_TEXT && post_shndx == SHIDX_TEXT {
-                self.syms.prologue_end_pairs.push((fn_off, post_off));
-            }
+            (self.syms.prologue_end_pairs).push((lo as u64, post_native as u64));
         }
         let build = self.build;
         for e in &build.early_returns {
-            let place = |at: u32| self.text_place(u64::from(e.begin + at));
-            let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
-            if [a, b, c] == [SHIDX_TEXT; 3] {
-                self.syms.early_returns.push((entry, frame, exit));
-            }
+            let at = |d: u32| u64::from(e.begin + d);
+            (self.syms.early_returns).push((at(0), at(e.frame), at(e.exit)));
         }
         // The link reads the steps for a PE image's unwind table and for
         // `.debug_frame`.
@@ -2618,23 +2630,10 @@ impl<'a> RelocWriter<'a> {
             };
             (u.begin, steps)
         });
-        for (begin, steps) in x64.chain(a64) {
-            if let (SHIDX_TEXT, entry) = self.text_place(u64::from(begin)) {
-                self.syms.unwind.push((entry, steps));
-            }
-        }
+        (self.syms.unwind).extend(x64.chain(a64).map(|(b, steps)| (u64::from(b), steps)));
         for r in &build.seh_rows {
-            let place = |at: u32| self.text_place(u64::from(at));
-            let (target, handler) = (r.target.map(place), r.handler.map(place));
-            let at = [place(r.func), place(r.begin), place(r.end)];
-            if !(at.iter().chain(&target).chain(&handler)).all(|p| p.0 == SHIDX_TEXT) {
-                return Err(C5Error::hard(
-                    Code::OBJECT_FORMAT,
-                    "a `__try` region in a function placed outside `.text`",
-                ));
-            }
-            let [func, begin, end] = at.map(|p| p.1);
-            let [target, handler] = [target, handler].map(|p| p.map_or(SEH_NONE, |p| p.1));
+            let [target, handler] = [r.target, r.handler].map(|p| p.map_or(SEH_NONE, u64::from));
+            let [func, begin, end] = [r.func, r.begin, r.end].map(u64::from);
             self.syms.seh_rows.push([func, begin, end, target, handler]);
         }
         Ok(())
@@ -4306,6 +4305,17 @@ impl<'a> RelocWriter<'a> {
                 noted_names.push(s);
             }
         }
+        let carve = &self.layout.carve;
+        let text_carve: Vec<(u64, u64, u64, &str)> = (carve.text_ranges.iter())
+            .map(|r| {
+                (
+                    r.old_lo,
+                    r.old_hi,
+                    r.new_base,
+                    carve.table.entries[r.entry].name.as_str(),
+                )
+            })
+            .collect();
         let note = build_badc_note(
             &build.imports,
             &export_names,
@@ -4318,6 +4328,7 @@ impl<'a> RelocWriter<'a> {
             &self.syms.early_returns,
             &self.syms.seh_rows,
             &self.syms.unwind,
+            &text_carve,
             &noted_names,
             &self.program.linker_directives,
         );
@@ -5123,6 +5134,7 @@ fn build_badc_note(
     early_returns: &[(u64, u64, u64)],
     seh_rows: &[[u64; 5]],
     unwind: &[(u64, crate::c5::codegen::UnwindSteps)],
+    text_carve: &[(u64, u64, u64, &str)],
     extern_data_names: &[&str],
     linker_directives: &[String],
 ) -> Vec<u8> {
@@ -5271,6 +5283,22 @@ fn build_badc_note(
             steps.encode(&mut desc);
         }
         push_note_record(&mut out, NT_BADC_UNWIND, &desc);
+    }
+
+    let rows = !(prologue_ends.is_empty()
+        && early_returns.is_empty()
+        && seh_rows.is_empty()
+        && unwind.is_empty());
+    if rows && !text_carve.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for &(lo, hi, base, name) in text_carve {
+            for w in [lo, hi, base] {
+                desc.extend_from_slice(&w.to_le_bytes());
+            }
+            desc.extend_from_slice(name.as_bytes());
+            desc.push(0);
+        }
+        push_note_record(&mut out, NT_BADC_TEXT_CARVE, &desc);
     }
 
     if !imports.data_bindings.is_empty() {

@@ -17,7 +17,7 @@ use crate::c5::layout::{round_up, write_struct};
 use crate::c5::program::Program;
 
 const IMAGE_BASE: u64 = 0x1_4000_0000;
-const SECTION_ALIGNMENT: u32 = 0x1000;
+pub(crate) const SECTION_ALIGNMENT: u32 = 0x1000;
 /// The allocation granularity an image loads at, which an RVA's alignment keeps.
 const MAX_SECTION_ALIGNMENT: u32 = 0x1_0000;
 const FILE_ALIGNMENT: u32 = 0x200;
@@ -86,6 +86,7 @@ struct SectionPlan {
     rsrc: bool,
     dwarf: usize,
     named: usize,
+    named_code: usize,
 }
 
 impl SectionPlan {
@@ -99,6 +100,7 @@ impl SectionPlan {
             + self.rsrc as usize
             + self.dwarf
             + self.named
+            + self.named_code
     }
 }
 
@@ -348,6 +350,8 @@ struct PeWriter<'a> {
     driver: bool,
     passthrough_entry: bool,
     stub: EntryStub,
+    /// The entry stub's offset in `.text`.
+    stub_at: u32,
     /// `(name, DLL, ordinal)` per import; an ordinal replaces the name.
     imports: Vec<(String, String, Option<u16>)>,
     dlls: Vec<DllGroup>,
@@ -460,7 +464,12 @@ impl<'a> PeWriter<'a> {
         let imports = image_imports(build, native, machine == Machine::X86_64)?;
         let dlls = group_imports_by_dll(&imports);
         let text_align = build.text_align.max(16) as u32;
-        let text_prologue_len = round_up(stub.bytes.len() as u32, text_align);
+        // The entry stub opens `.text`, or follows the code where the named
+        // code sections open the text stream.
+        let (text_prologue_len, stub_at) = match build.named_code_sections.is_empty() {
+            true => (round_up(stub.bytes.len() as u32, text_align), 0),
+            false => (0, round_up(build.text.len() as u32, text_align)),
+        };
         Ok(PeWriter {
             program,
             build,
@@ -474,6 +483,7 @@ impl<'a> PeWriter<'a> {
             imports,
             dlls,
             text_prologue_len,
+            stub_at,
             layout: PeLayout::default(),
             text_bytes: Vec::new(),
             jt_bytes: Vec::new(),
@@ -543,9 +553,8 @@ impl<'a> PeWriter<'a> {
     /// `.pdata` and `.idata`.
     fn layout_code_sections(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
-        let section_align = build
-            .named_sections
-            .iter()
+        let section_align = (build.named_sections.iter())
+            .chain(&build.named_code_sections)
             .map(|n| n.align as usize)
             .chain([
                 build.text_align,
@@ -561,6 +570,16 @@ impl<'a> PeWriter<'a> {
                      bytes the loader places an image on"
                 ),
             ));
+        }
+        // A named code section takes a header of its own from a section
+        // boundary, which the link aligned it to.
+        if let Some(n) = (build.named_code_sections.iter())
+            .find(|n| !n.offset.is_multiple_of(section_align as u64))
+        {
+            return Err(Self::internal(format!(
+                "PE: code section `{}` at text offset {:#x} is off the {section_align:#x} section alignment",
+                n.name, n.offset
+            )));
         }
         let l = &mut self.layout;
         l.section_align = section_align as u32;
@@ -601,7 +620,8 @@ impl<'a> PeWriter<'a> {
             round_up(l.rdata_prefix_len, 8)
         };
         l.text_rva = l.section_align;
-        l.text_size = self.text_prologue_len + build.text.len() as u32;
+        l.text_size = (self.text_prologue_len + build.text.len() as u32)
+            .max(self.stub_at + self.stub.bytes.len() as u32);
         // A scope table names `__C_specific_handler` by its stub in the image,
         // or an input's definition.
         let handler = (build
@@ -699,6 +719,9 @@ impl<'a> PeWriter<'a> {
             rsrc: !build.resources.is_empty(),
             dwarf: dwarf_section_count,
             named: build.named_sections.iter().filter(|n| n.size > 0).count(),
+            named_code: (build.named_code_sections.iter())
+                .filter(|n| n.size > 0)
+                .count(),
         };
         l.headers_size = headers_raw_size(&l.plan) as u32;
         l.text_file_off = l.headers_size;
@@ -1191,10 +1214,10 @@ impl<'a> PeWriter<'a> {
         let l = &self.layout;
         let text_rva = l.text_rva;
         let prologue = self.text_prologue_len;
-        let mut text: Vec<u8> = Vec::with_capacity(l.text_size as usize);
-        text.extend_from_slice(&self.stub.bytes);
-        text.resize(prologue as usize, 0xCC);
-        text.extend_from_slice(&build.text);
+        let mut text: Vec<u8> = alloc::vec![0xCC; l.text_size as usize];
+        let (stub_at, body_at) = (self.stub_at as usize, prologue as usize);
+        text[stub_at..stub_at + self.stub.bytes.len()].copy_from_slice(&self.stub.bytes);
+        text[body_at..body_at + build.text.len()].copy_from_slice(&build.text);
         if !build.rodata.abs64.is_empty() {
             return Err(Self::internal(String::from(
                 "PE: absolute table slots reached a final-image build",
@@ -1204,13 +1227,18 @@ impl<'a> PeWriter<'a> {
             patch_direct_call(
                 machine,
                 &mut text,
-                call_off,
+                self.stub_at + call_off,
                 prologue + build.entry_offset as u32,
             )?;
         }
         for &(call_off, name) in &self.stub.direct_call_runtime {
             let target = runtime_symbol_offset(build, name)?;
-            patch_direct_call(machine, &mut text, call_off, prologue + target)?;
+            patch_direct_call(
+                machine,
+                &mut text,
+                self.stub_at + call_off,
+                prologue + target,
+            )?;
         }
         for f in &build.got_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
@@ -1376,7 +1404,7 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
-    /// `AddressOfEntryPoint`: the stub at the start of `.text`, or the
+    /// `AddressOfEntryPoint`: the entry stub, or the
     /// user's body when `--shared` output defines `DllMain` or a
     /// passthrough subsystem invokes the entry directly.
     fn entry_rva(&self) -> Result<u32, C5Error> {
@@ -1394,7 +1422,7 @@ impl<'a> PeWriter<'a> {
         } else if self.passthrough_entry {
             Ok(l.text_rva + self.text_prologue_len + build.entry_offset as u32)
         } else {
-            Ok(l.text_rva)
+            Ok(l.text_rva + self.stub_at)
         }
     }
 
@@ -1573,16 +1601,31 @@ impl<'a> PeWriter<'a> {
         let reloc_size = l.reloc_bytes.len() as u32;
         let mut sections: Vec<SectionHeader> = Vec::with_capacity(l.plan.count());
         let ro = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | self.resident(b".rdata");
+        // The named code sections open the text bytes, each from a section
+        // boundary; `.text` takes the rest from the next one.
+        let code = |name: &[u8]| {
+            IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | self.resident(name)
+        };
+        let named_code = (self.build.named_code_sections.iter()).filter(|n| n.size > 0);
+        for n in named_code.clone() {
+            sections.push(SectionHeader {
+                name: header_name(&n.name),
+                virtual_size: n.size as u32,
+                virtual_address: l.text_rva + n.offset as u32,
+                size_of_raw_data: round_up(n.size as u32, FILE_ALIGNMENT),
+                pointer_to_raw_data: l.text_file_off + n.offset as u32,
+                characteristics: code(n.name.as_bytes()),
+            });
+        }
+        let text_at = (named_code.map(|n| (n.offset + n.size) as u32).max())
+            .map_or(0, |end| round_up(end, l.section_align));
         sections.push(SectionHeader {
             name: *b".text\0\0\0",
-            virtual_size: l.text_size,
-            virtual_address: l.text_rva,
-            size_of_raw_data: l.text_raw_size,
-            pointer_to_raw_data: l.text_file_off,
-            characteristics: IMAGE_SCN_CNT_CODE
-                | IMAGE_SCN_MEM_EXECUTE
-                | IMAGE_SCN_MEM_READ
-                | self.resident(b".text"),
+            virtual_size: l.text_size - text_at,
+            virtual_address: l.text_rva + text_at,
+            size_of_raw_data: l.text_raw_size - text_at,
+            pointer_to_raw_data: l.text_file_off + text_at,
+            characteristics: code(b".text"),
         });
         sections.push(SectionHeader {
             name: *b".pdata\0\0",
@@ -1628,9 +1671,7 @@ impl<'a> PeWriter<'a> {
         // Read-only families keep `.rdata`'s protection, the writable ones
         // `.data`'s.
         for n in l.named_out.iter().filter(|n| n.size > 0) {
-            let mut name = [0u8; 8];
-            let bytes = n.name.as_bytes();
-            name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
+            let (name, bytes) = (header_name(n.name), n.name.as_bytes());
             let writable = matches!(n.family, NamedFamily::Data | NamedFamily::Bss);
             let zerofill = n.family == NamedFamily::Bss;
             sections.push(SectionHeader {
@@ -2417,6 +2458,14 @@ struct SectionHeader {
     size_of_raw_data: u32,
     pointer_to_raw_data: u32,
     characteristics: u32,
+}
+
+/// A section header's name field: the name's first eight bytes.
+fn header_name(name: &str) -> [u8; 8] {
+    let mut out = [0u8; 8];
+    let n = name.len().min(8);
+    out[..n].copy_from_slice(&name.as_bytes()[..n]);
+    out
 }
 
 fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {

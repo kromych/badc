@@ -1392,10 +1392,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles, &record_of)?;
     let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
     let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
-    let note = match roles.badc_note {
+    let mut note = match roles.badc_note {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
     };
+    note.place_code_rows(&sections);
     let mut default_libs = Vec::new();
     for &i in &roles.deplibs {
         default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
@@ -1584,8 +1585,8 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// [`grouped_by_name`] sorts to the end of its family, as an
-/// [`is_init_fini`] one does in the text family, so the blob splits into a
+/// [`grouped_by_name`] sorts to the end of its family, behind the
+/// [`is_init_fini`] ones in the text family, so the blob splits into a
 /// prefix the linker appends whole and a suffix it regroups by name across
 /// units.
 struct SectionRoles {
@@ -1752,8 +1753,8 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     }
     roles.text.sort_by_key(|&i| {
         strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
-            .map(is_init_fini)
-            .unwrap_or(false)
+            .map(|n| (grouped_by_name(n), is_init_fini(n)))
+            .unwrap_or_default()
     });
     Ok(roles)
 }
@@ -2297,6 +2298,10 @@ fn decode_init_arrays(
 ///   type=13 NT_BADC_EARLY_RETURN -- (u64 entry_offset, u64
 ///                                  frame_offset, u64 return_offset)
 ///                                  `.text` triples.
+///   type=18 NT_BADC_TEXT_CARVE   -- (u64 lo, u64 hi, u64 base, NUL
+///                                  name) per code range in a named
+///                                  section; types 11 to 16 give code
+///                                  offsets ahead of that carve.
 ///   type=16 NT_BADC_UNWIND       -- (u64 entry_offset, unwind steps
 ///                                  record) per function.
 /// Records under namesz != "badc\0" are skipped silently so future
@@ -2317,9 +2322,46 @@ struct BadcNote {
     early_returns: Vec<(u64, u64, u64)>,
     seh_rows: Vec<SehRowAt<u64>>,
     unwind: Vec<(u64, crate::c5::codegen::UnwindSteps)>,
+    text_carve: Vec<(u64, u64, u64, String)>,
     extern_data_names: Vec<String>,
     /// `#pragma comment(linker, ...)` strings, link.exe's `.drectve` options.
     linker_directives: Vec<String>,
+}
+
+impl BadcNote {
+    /// Rebase the code offsets of the rows onto the unit's text blob, where
+    /// `sections` placed `.text` and each carved section. An exclusive end
+    /// is placed by its last byte.
+    fn place_code_rows(&mut self, sections: &[InputSection]) {
+        let base = |name: &str| {
+            (sections.iter())
+                .find(|s| s.family == SectionFamily::Text && s.name == name)
+                .map_or(0, |s| s.offset)
+        };
+        let carve: Vec<(u64, u64, u64)> = (self.text_carve.iter())
+            .map(|(lo, hi, at, name)| (*lo, *hi, base(name) + at))
+            .collect();
+        let text = base(".text");
+        let place = |off: u64| match carve.iter().find(|r| (r.0..r.1).contains(&off)) {
+            Some(&(lo, _, at)) => at + (off - lo),
+            None => text + off,
+        };
+        let end = |off: u64| place(off.saturating_sub(1)) + u64::from(off > 0);
+        for (entry, post) in &mut self.prologue_ends {
+            (*entry, *post) = (place(*entry), place(*post));
+        }
+        for row in &mut self.early_returns {
+            *row = (place(row.0), place(row.1), place(row.2));
+        }
+        for (at, target, handler) in &mut self.seh_rows {
+            *at = [place(at[0]), place(at[1]), end(at[2])];
+            *target = target.map(place);
+            *handler = handler.map(place);
+        }
+        for (entry, _) in &mut self.unwind {
+            *entry = place(*entry);
+        }
+    }
 }
 
 /// A `__try` scope-table row: the function's, the range's begin and end
@@ -2511,6 +2553,19 @@ impl BadcNote {
                 }
             }
             17 => self.linker_directives.extend(nul_separated(desc)),
+            18 => {
+                let word = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+                let mut c = cur;
+                while c + 24 < desc_end {
+                    let Some(n) = body[c + 24..desc_end].iter().position(|&b| b == 0) else {
+                        break;
+                    };
+                    let name = String::from_utf8_lossy(&body[c + 24..c + 24 + n]).into_owned();
+                    self.text_carve
+                        .push((word(c), word(c + 8), word(c + 16), name));
+                    c += 24 + n + 1;
+                }
+            }
             16 => {
                 let mut c = cur;
                 while c + 8 <= desc_end {

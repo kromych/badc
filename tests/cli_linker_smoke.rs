@@ -6670,6 +6670,93 @@ fn segment_pragmas_place_definitions_in_their_named_sections() {
     }
 }
 
+/// `code_seg` and `alloc_text` give the functions after them code sections
+/// of their own in the image, ahead of `.text`, which keeps the entry point;
+/// a function with a frame there has its unwind row in `.pdata`.
+#[test]
+fn code_seg_and_alloc_text_place_functions_in_code_sections() {
+    let dir = tempdir("pe-code-seg");
+    write_source(
+        &dir,
+        "code.c",
+        "__declspec(noinline) int leaf(volatile int *p) { return *p; }\n\
+         #pragma code_seg(\"PAGE\")\n\
+         int framed(int x) { volatile int b[16]; b[x & 15] = x; return leaf(&b[3]); }\n\
+         #pragma code_seg()\n\
+         #pragma alloc_text(\"INIT\", early)\n\
+         int early(void) { return 1; }\n\
+         int main(void) { return framed(3) + early(); }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["code.c", "-o", "code.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success() && !err.contains("warning"),
+            "{target}: {err}"
+        );
+        let pe = std::fs::read(dir.join("code.exe")).expect("read image");
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+        let coff = u32_at(0x3c) + 4;
+        let table = coff + 20 + u16_at(coff + 16);
+        // Name, RVA, virtual size, file offset and characteristics per section.
+        let sections: Vec<(String, usize, usize, usize, usize)> = (0..u16_at(coff + 2))
+            .map(|i| table + 40 * i)
+            .map(|h| {
+                let name = String::from_utf8_lossy(&pe[h..h + 8])
+                    .trim_end_matches('\0')
+                    .to_string();
+                (
+                    name,
+                    u32_at(h + 12),
+                    u32_at(h + 8),
+                    u32_at(h + 20),
+                    u32_at(h + 36),
+                )
+            })
+            .collect();
+        let names: Vec<&str> = sections.iter().map(|s| s.0.as_str()).collect();
+        assert_eq!(names[..3], ["INIT", "PAGE", ".text"], "{target}");
+        const CODE: usize = 0x20 | 0x2000_0000 | 0x4000_0000;
+        assert!(
+            sections[..3].iter().all(|s| s.4 & CODE == CODE),
+            "{target}: {sections:?}"
+        );
+        let entry = u32_at(coff + 20 + 16);
+        let text = &sections[2];
+        assert!(
+            (text.1..text.1 + text.2).contains(&entry),
+            "{target}: entry {entry:#x}"
+        );
+        let file = |rva: usize| {
+            let s = sections
+                .iter()
+                .find(|s| (s.1..s.1 + s.2).contains(&rva))
+                .unwrap();
+            s.3 + rva - s.1
+        };
+        let pdata = sections.iter().find(|s| s.0 == ".pdata").expect(".pdata");
+        // RUNTIME_FUNCTION: 12 bytes on x64, 8 on ARM64.
+        let size = if target == "windows-x64" { 12 } else { 8 };
+        let row = (0..pdata.2 / size)
+            .map(|k| pdata.3 + size * k)
+            .find(|&r| u32_at(r) == sections[1].1)
+            .unwrap_or_else(|| panic!("{target}: no unwind row at PAGE"));
+        if target == "windows-x64" {
+            // UNWIND_INFO's CountOfCodes: the frame's pushes and allocation.
+            assert!(
+                pe[file(u32_at(row + 8)) + 2] > 0,
+                "{target}: PAGE row is a leaf's"
+            );
+        }
+    }
+}
+
 /// A DLL whose `DllMain` one of several units defines enters there, as a
 /// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
 /// the export table gives where the test exports it.

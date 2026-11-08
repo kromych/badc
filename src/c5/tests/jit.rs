@@ -68,6 +68,7 @@ const WINDOWS_GAPS: &[(&str, &str)] = &[
     ("seh_except_filter.c", SEH),
     ("seh_finally.c", SEH),
     ("seh_nested_funclets.c", SEH),
+    ("seh_in_named_code_section.c", SEH),
     ("unwind_from_epilogue.c", UNWIND),
     ("unwind_restores_callee_saved.c", UNWIND),
     ("inline_asm_section_label.c", ASM_SECTION),

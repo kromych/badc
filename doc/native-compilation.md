@@ -279,6 +279,7 @@ Target macros:
 | `_WIN32`, `_WIN64`, `__BADC_WINDOWS__`     | Windows targets                   |
 | `__APPLE__`                                | macOS                             |
 | `__linux__`, `__ELF__`                     | Linux                             |
+| `__USER_LABEL_PREFIX__`                    | every target: `_` on macOS, empty elsewhere, a C identifier's assembler prefix |
 | `__BADC_JIT__`, `__BADC_INTERP__`          | 1 for every unit `--jit` / `--interp` runs |
 
 The C17 macros are defined as well (`__STDC__`, `__STDC_VERSION__`,

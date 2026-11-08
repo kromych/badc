@@ -1163,6 +1163,15 @@ type DerivedPredef = (&'static str, fn(&PredefEnv<'_>) -> String);
 static DERIVED_PREDEFINES: &[DerivedPredef] = &[
     ("__BADC_VERSION__", |e| format!("\"{}\"", e.crate_version)),
     ("__BADC_TARGET__", |e| format!("\"{}\"", e.target_spec)),
+    // The prefix a C identifier takes as an assembler symbol, as gcc and
+    // clang define it: Mach-O's leading underscore, none on ELF and on the
+    // 64-bit PE targets.
+    ("__USER_LABEL_PREFIX__", |e| {
+        match e.target.binary_format() {
+            crate::c5::codegen::BinaryFormat::MachO => String::from("_"),
+            _ => String::new(),
+        }
+    }),
     // `long double` takes the target ABI's storage size.
     // `__SIZEOF_FLOAT80__` and `__SIZEOF_FLOAT128__` stay undefined with
     // the types absent.

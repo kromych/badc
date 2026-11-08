@@ -5878,6 +5878,13 @@ fn target_predefines_are_locked() {
             Some(target.long_double().size().to_string().as_str()),
             "{spec} __SIZEOF_LONG_DOUBLE__"
         );
+        // A C identifier's assembler spelling: Mach-O's underscore.
+        let mach_o = target.binary_format() == crate::c5::codegen::BinaryFormat::MachO;
+        assert_eq!(
+            pp.macros.get("__USER_LABEL_PREFIX__").map(String::as_str),
+            Some(if mach_o { "_" } else { "" }),
+            "{spec} __USER_LABEL_PREFIX__"
+        );
     }
 }
 

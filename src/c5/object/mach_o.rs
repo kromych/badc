@@ -58,8 +58,6 @@ const PAGE_SIZE: u64 = crate::c5::layout::MACHO_PAGE_SIZE as u64;
 
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
-const TEXT_VMADDR_BASE: u64 = PAGEZERO_VMSIZE;
-
 const MIN_MACOS: u32 = 11 << 16;
 const SDK_MACOS: u32 = 11 << 16;
 
@@ -126,11 +124,6 @@ struct NamedCounts {
     konst: u8,
     data_const: u8,
     data: u8,
-}
-
-const SEG_INDEX_DATA_CONST: u8 = 2;
-fn seg_index_data(data_const: bool) -> u8 {
-    if data_const { 3 } else { 2 }
 }
 
 const SG_READ_ONLY: u32 = 0x10;
@@ -1464,6 +1457,8 @@ struct Commands {
 /// Where the image's regions land in the file and in memory.
 #[derive(Default)]
 struct Layout {
+    /// An executable's `__PAGEZERO`, which a library does without.
+    pagezero: bool,
     ro_len: u64,
     relro_total: u64,
     relro_size: u64,
@@ -1530,8 +1525,19 @@ struct Layout {
 }
 
 impl Layout {
+    /// `__TEXT`'s address: past `__PAGEZERO` in an executable, 0 in a library.
+    fn text_base(&self) -> u64 {
+        if self.pagezero { PAGEZERO_VMSIZE } else { 0 }
+    }
+
+    /// The segment indices of `__DATA_CONST` and of `__DATA`.
+    fn data_segments(&self) -> (u8, u8) {
+        let data_const = u8::from(self.pagezero) + 1;
+        (data_const, data_const + u8::from(self.data_const_present))
+    }
+
     fn const_vmaddr(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.const_fileoff
+        self.text_base() + self.const_fileoff
     }
 
     /// The unwind tables' sections, shifting every section index past them.
@@ -1540,7 +1546,7 @@ impl Layout {
     }
 
     fn data_const_vmaddr(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.text_filesize
+        self.text_base() + self.text_filesize
     }
 
     fn data_vmaddr(&self) -> u64 {
@@ -1548,7 +1554,7 @@ impl Layout {
     }
 
     fn code_vmaddr_base(&self) -> u64 {
-        TEXT_VMADDR_BASE + self.entry_file_offset
+        self.text_base() + self.entry_file_offset
     }
 
     fn data_section_vmaddr(&self) -> u64 {
@@ -1770,7 +1776,7 @@ impl UnwindTables {
 
     /// `__unwind_info`, its offsets from the Mach header at `__TEXT`'s start.
     fn unwind_info(&self, l: &Layout, text_len: u64) -> Vec<u8> {
-        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let image = |vmaddr: u64| (vmaddr - l.text_base()) as u32;
         let entries: Vec<UnwindEntry> = (self.functions.iter())
             .map(|&(text, f)| {
                 let index = f.personality.and_then(|p| {
@@ -1799,7 +1805,7 @@ impl UnwindTables {
     /// `__eh_frame`, each field holding its distance to its target.
     fn eh_frame_at(&self, l: &Layout, build: &Build) -> Result<Vec<u8>, C5Error> {
         let mut bytes = self.eh_frame.clone();
-        let section = TEXT_VMADDR_BASE + l.eh_frame_fileoff;
+        let section = l.text_base() + l.eh_frame_fileoff;
         for (block, &start) in build.eh_frame.iter().zip(&self.eh_frame_blocks) {
             for f in &block.fields {
                 let at = start as usize + f.offset as usize;
@@ -2014,7 +2020,11 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        c.dylinker = load_dylinker("/usr/lib/dyld");
+        // ld64 gives only an executable `__PAGEZERO` and a dynamic linker.
+        self.layout.pagezero = !self.is_dylib;
+        if !self.is_dylib {
+            c.dylinker = load_dylinker("/usr/lib/dyld");
+        }
         c.dylib_lcs = build
             .imports
             .dylibs
@@ -2039,7 +2049,7 @@ impl<'a> MachOWriter<'a> {
             None if self.is_dylib => 0,
             None => ENTRY_POINT_COMMAND_SIZE as u64,
         };
-        c.sizeofcmds = SEGMENT_COMMAND_64_SIZE as u64
+        c.sizeofcmds = u64::from(self.layout.pagezero) * SEGMENT_COMMAND_64_SIZE as u64
             + c.text_seg_size
             + c.data_const_seg_size
             + c.data_seg_size
@@ -2245,10 +2255,10 @@ impl<'a> MachOWriter<'a> {
     fn build_linkedit_streams(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &self.layout;
-        let seg_data = seg_index_data(l.data_const_present);
+        let (seg_data_const, seg_data) = l.data_segments();
         let data_slot = |off: u64| -> (u8, u64) {
             if off < l.relro_total {
-                (SEG_INDEX_DATA_CONST, off.saturating_sub(l.ro_len))
+                (seg_data_const, off.saturating_sub(l.ro_len))
             } else {
                 (
                     seg_data,
@@ -2364,7 +2374,8 @@ impl<'a> MachOWriter<'a> {
             }
             let n_value = code_vmaddr_base + native_off as u64;
             symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT, false));
-            export_trie_entries.push((export_disk_names[i].clone(), n_value - TEXT_VMADDR_BASE, 0));
+            let image_off = n_value - self.layout.text_base();
+            export_trie_entries.push((export_disk_names[i].clone(), image_off, 0));
         }
         let dyn_export_str_base = n_locals + export_disk_names.len();
         for (i, d) in dyn_exports_emit.iter().enumerate() {
@@ -2387,7 +2398,7 @@ impl<'a> MachOWriter<'a> {
             symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
             export_trie_entries.push((
                 dyn_export_disk_names[i].clone(),
-                n_value - TEXT_VMADDR_BASE,
+                n_value - self.layout.text_base(),
                 if d.weak {
                     EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION
                 } else {
@@ -2495,13 +2506,15 @@ impl<'a> MachOWriter<'a> {
             offset: offset as u32,
         };
         let mut lcs: Vec<Vec<u8>> = Vec::new();
-        lcs.push(segment_no_sections(
-            "__PAGEZERO",
-            place(0, PAGEZERO_VMSIZE, 0, 0),
-            0,
-        ));
+        if l.pagezero {
+            lcs.push(segment_no_sections(
+                "__PAGEZERO",
+                place(0, PAGEZERO_VMSIZE, 0, 0),
+                0,
+            ));
+        }
         let text_segment = segment_text(
-            place(TEXT_VMADDR_BASE, l.text_filesize, 0, l.text_filesize),
+            place(l.text_base(), l.text_filesize, 0, l.text_filesize),
             section(
                 l.code_vmaddr_base(),
                 build.text.len() as u64,
@@ -2512,14 +2525,14 @@ impl<'a> MachOWriter<'a> {
             &named_const_out,
             (l.unwind_size > 0).then(|| {
                 section(
-                    TEXT_VMADDR_BASE + l.unwind_fileoff,
+                    l.text_base() + l.unwind_fileoff,
                     l.unwind_size,
                     l.unwind_fileoff,
                 )
             }),
             (l.eh_frame_size > 0).then(|| {
                 section(
-                    TEXT_VMADDR_BASE + l.eh_frame_fileoff,
+                    l.text_base() + l.eh_frame_fileoff,
                     l.eh_frame_size,
                     l.eh_frame_fileoff,
                 )
@@ -2644,7 +2657,9 @@ impl<'a> MachOWriter<'a> {
             le.n_exports as u32,
             le.n_undef as u32,
         ));
-        lcs.push(c.dylinker.clone());
+        if !c.dylinker.is_empty() {
+            lcs.push(c.dylinker.clone());
+        }
         lcs.extend(c.dylib_lcs.iter().cloned());
         lcs.push(c.build_version.clone());
         lcs.push(c.uuid.clone());
@@ -3014,7 +3029,7 @@ mod tests {
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
         let (data, _, _) = section_header(&bytes, "__DATA", "__data");
-        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let image = |vmaddr: u64| (vmaddr - PAGEZERO_VMSIZE) as u32;
         let section = &bytes[sect_off..];
         let f = unwind_info::lookup(section, code_off as u32 + 4).unwrap();
         assert_eq!(f.encoding & UNWIND_ARM64_MODE_MASK, UNWIND_ARM64_MODE_FRAME);

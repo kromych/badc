@@ -2240,6 +2240,55 @@ fn a_bundle_loads_into_its_host() {
     }
 }
 
+/// ld64 gives only an executable `__PAGEZERO` and `LC_LOAD_DYLINKER`: a
+/// dylib's or a bundle's first segment is `__TEXT`, at address 0.
+#[test]
+fn a_mach_o_library_starts_at_zero_without_pagezero_or_a_dynamic_linker() {
+    const LC_SEGMENT_64: u32 = 0x19;
+    const LC_LOAD_DYLINKER: u32 = 0xE;
+    let dir = tempdir("macho-library-base");
+    write_source(&dir, "lib.c", "int lib_fn(int x) { return x + 1; }\n");
+    write_source(&dir, "main.c", "int main(void) { return 0; }\n");
+    let u32le = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    for (args, library) in [
+        (&["-shared", "lib.c", "-o", "lib.dylib"][..], true),
+        (&["-bundle", "lib.c", "-o", "lib.dylib"], true),
+        (&["main.c", "-o", "lib.dylib"], false),
+    ] {
+        run(
+            Command::new(badc())
+                .arg("--target=macos-aarch64")
+                .args(args)
+                .current_dir(&dir),
+            &format!("{args:?}"),
+        );
+        let image = std::fs::read(dir.join("lib.dylib")).expect("read the image");
+        let (mut off, mut segments, mut dylinker) = (32, Vec::new(), false);
+        for _ in 0..u32le(&image, 16) {
+            match u32le(&image, off) {
+                LC_SEGMENT_64 => {
+                    let name = &image[off + 8..off + 24];
+                    let name = String::from_utf8_lossy(name)
+                        .trim_end_matches('\0')
+                        .to_string();
+                    let vmaddr = u64::from_le_bytes(image[off + 24..off + 32].try_into().unwrap());
+                    segments.push((name, vmaddr));
+                }
+                LC_LOAD_DYLINKER => dylinker = true,
+                _ => {}
+            }
+            off += u32le(&image, off + 4) as usize;
+        }
+        let first = if library {
+            ("__TEXT".to_string(), 0)
+        } else {
+            ("__PAGEZERO".to_string(), 0)
+        };
+        assert_eq!(segments[0], first, "{args:?}: {segments:?}");
+        assert_eq!(dylinker, !library, "{args:?}");
+    }
+}
+
 /// A weak reference no input defines fails a Mach-O link, an executable's
 /// or a dylib's, as ld64 reports it; under `-undefined dynamic_lookup` it
 /// is a flat-namespace weak import, which dyld sets to 0 when no loaded

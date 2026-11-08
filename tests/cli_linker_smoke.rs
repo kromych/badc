@@ -7480,14 +7480,16 @@ fn a_module_definition_file_gives_the_dll_its_exports() {
 }
 
 /// `#pragma detect_mismatch` gives the object cl's `/FAILIFMISMATCH` pair:
-/// two units disagreeing on a key fail the PE link, agreeing ones link.
+/// two units disagreeing on a key fail the PE link, agreeing ones link. Its
+/// operands are macro-expanded, as cl and clang expand them.
 #[test]
 fn detect_mismatch_fails_a_link_whose_units_disagree() {
     let dir = tempdir("pe-detect-mismatch");
     write_source(
         &dir,
         "a.c",
-        "#pragma detect_mismatch(\"probe_ver\", \"1\")\nint a(void) { return 0; }\n",
+        "#define KEY \"probe_\" \"ver\"\n#define S(x) #x\n\
+         #pragma detect_mismatch(KEY, S(1))\nint a(void) { return 0; }\n",
     );
     for (unit, value, links) in [("same.c", "1", true), ("other.c", "2", false)] {
         write_source(

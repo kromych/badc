@@ -751,7 +751,8 @@ structure loads, float16 and bfloat16 are not provided.
   `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`
   and `/FAILIFMISMATCH:`. Elsewhere it warns and is ignored, as in clang.
   `#pragma detect_mismatch("name", "value")` gives the object cl's
-  `/FAILIFMISMATCH:"name=value"`.
+  `/FAILIFMISMATCH:"name=value"`. Macros in the operands expand, as in cl
+  and clang.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory, a system directory, does not
   supply it, as clang's copy shadows MSVC's. A project's own `<intrin.h>` in

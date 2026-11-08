@@ -992,7 +992,8 @@ impl Preprocessor {
     /// `/FAILIFMISMATCH:"name=value"`, which a PE link checks across its
     /// inputs.
     fn parse_pragma_detect_mismatch(&mut self, inner: &str, site: Site<'_>) {
-        let (name, rest) = quoted_strings(inner);
+        let expanded = self.substitute(inner, site.file, site.line);
+        let (name, rest) = quoted_strings(expanded.trim());
         let (value, rest) = match rest.strip_prefix(',') {
             Some(rest) => quoted_strings(rest.trim_start()),
             None => (String::new(), rest),
@@ -1011,7 +1012,8 @@ impl Preprocessor {
     }
 
     /// The concatenated string literals of a `#pragma comment(kind, ...)`
-    /// operand; a warning and `None` when it is not one.
+    /// operand after macro expansion, as cl and clang expand it; a warning
+    /// and `None` when it is not one.
     fn pragma_comment_string(
         &mut self,
         operand: &str,
@@ -1019,7 +1021,8 @@ impl Preprocessor {
         what: &str,
         site: Site<'_>,
     ) -> Option<String> {
-        let (text, rest) = quoted_strings(operand);
+        let expanded = self.substitute(operand, site.file, site.line);
+        let (text, rest) = quoted_strings(expanded.trim());
         if !rest.is_empty() || text.is_empty() {
             self.warn(
                 PRAGMA_SYNTAX,

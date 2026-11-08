@@ -494,9 +494,9 @@ declared.
 
 - Statement expressions (`({ ... })`) and case ranges (`case a ... b:`).
 - Labels as values: `&&label` and `goto *expr`, including `&&label` elements
-  in an automatic or static array initializer. A static table is filled by
-  stores at run time, since a label address is not a link-time constant. A
-  computed goto runs the `cleanup` functions of the scopes it leaves when every
+  in an automatic or static array initializer. A label's address is a
+  link-time constant, so a static table is initialized data, each element
+  relocated against its label. A computed goto runs the `cleanup` functions of the scopes it leaves when every
   label whose address is taken leaves the same ones, and is rejected otherwise.
   gcc runs none of them, and clang rejects the jump.
 - Array range designators (`[a ... b] = value`).

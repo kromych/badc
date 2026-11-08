@@ -1509,7 +1509,8 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("pmullw", 0x66, 0xD5), ("pmuludq", 0x66, 0xF4), ("pmaddwd", 0x66, 0xF5), ("pmulhw", 0x66, 0xE5),
         ("pcmpeqb", 0x66, 0x74), ("pcmpeqw", 0x66, 0x75), ("pcmpeqd", 0x66, 0x76),
         ("pcmpgtb", 0x66, 0x64), ("pcmpgtw", 0x66, 0x65), ("pcmpgtd", 0x66, 0x66),
-        ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE),
+        ("pminub", 0x66, 0xDA), ("pmaxub", 0x66, 0xDE), ("pminsw", 0x66, 0xEA), ("pmaxsw", 0x66, 0xEE),
+        ("pavgb", 0x66, 0xE0), ("pavgw", 0x66, 0xE3), ("pmulhuw", 0x66, 0xE4),
         ("paddsb", 0x66, 0xEC), ("paddsw", 0x66, 0xED), ("paddusb", 0x66, 0xDC),
         ("paddusw", 0x66, 0xDD), ("psubsb", 0x66, 0xE8), ("psubsw", 0x66, 0xE9),
         ("psubusb", 0x66, 0xD8), ("psubusw", 0x66, 0xD9), ("psadbw", 0x66, 0xF6),
@@ -6893,14 +6894,22 @@ mod tests {
             })
         );
         assert_eq!(sse2_op("not_an_sse_op"), None);
-        // Integer pack / multiply-add / high-multiply / high-unpack forms
-        // (byte-verified against clang: `<66> 0F <op> C1` for src=xmm1,dst=xmm0).
+        // Integer pack / multiply-add / high-multiply / average / min-max /
+        // high-unpack forms (byte-verified against clang and GNU as:
+        // `<66> 0F <op> C1` for src=xmm1,dst=xmm0).
         for (name, op) in [
             ("packsswb", 0x63u8),
             ("packssdw", 0x6B),
             ("packuswb", 0x67),
             ("pmaddwd", 0xF5),
             ("pmulhw", 0xE5),
+            ("pmulhuw", 0xE4),
+            ("pavgb", 0xE0),
+            ("pavgw", 0xE3),
+            ("pminsw", 0xEA),
+            ("pmaxsw", 0xEE),
+            ("pminub", 0xDA),
+            ("pmaxub", 0xDE),
             ("punpckhbw", 0x68),
             ("punpckhwd", 0x69),
         ] {

@@ -99,6 +99,11 @@ static inline __m128 _mm_setzero_ps(void) {
     return (__m128){0, 0, 0, 0};
 }
 
+/* The SDM leaves the lanes undefined; this gives zero. */
+static inline __m128 _mm_undefined_ps(void) {
+    return _mm_setzero_ps();
+}
+
 static inline __m128 _mm_set_ps(float __D, float __C, float __B, float __A) {
     return (__m128){__A, __B, __C, __D};
 }
@@ -408,6 +413,9 @@ static inline __m128 _mm_cvtsi64_ss(__m128 __A, long long __B) {
     __A[0] = (float)__B;
     return __A;
 }
+#define _mm_cvtss_si64x _mm_cvtss_si64
+#define _mm_cvttss_si64x _mm_cvttss_si64
+#define _mm_cvtsi64x_ss _mm_cvtsi64_ss
 #endif
 
 static inline __m128 _mm_cvtpi32_ps(__m128 __A, __m64 __B) {

@@ -84,7 +84,14 @@ fn sse2_packed_ops_emit_their_instruction() {
         ("psubq128", 0xfb),
         ("pmullw128", 0xd5),
         ("pmulhw128", 0xe5),
+        ("pmulhuw128", 0xe4),
         ("pmaddwd128", 0xf5),
+        ("pavgb128", 0xe0),
+        ("pavgw128", 0xe3),
+        ("pminsw128", 0xea),
+        ("pmaxsw128", 0xee),
+        ("pminub128", 0xda),
+        ("pmaxub128", 0xde),
         ("pcmpeqb128", 0x74),
         ("pcmpeqw128", 0x75),
         ("pcmpeqd128", 0x76),
@@ -1238,7 +1245,7 @@ fn word_products_split_and_sum() {
     let lo = x86_simd::eval(Sem::MulLo(2), &a, &three, 0, 0);
     // 0x1234 * 3 = 0x369c; 0x1000 * 3 = 0x3000.
     assert_eq!(&lo[..4], &[0x9c, 0x36, 0x00, 0x30]);
-    let hi = x86_simd::eval(Sem::MulHi(2), &a, &three, 0, 0);
+    let hi = x86_simd::eval(Sem::MulHi(2, true), &a, &three, 0, 0);
     // 0x1234 * 3 fits in a word, so the high half is zero; -4096 * 3 =
     // -12288, whose high half is the sign.
     assert_eq!(&hi[..2], &[0, 0]);
@@ -1252,6 +1259,31 @@ fn word_products_split_and_sum() {
     let m = v([0x00, 0x80, 0x00, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let w = x86_simd::eval(Sem::MulAddWords, &m, &m, 0, 0);
     assert_eq!(&w[..4], &[0x00, 0x00, 0x00, 0x80]);
+    // `pmulhuw` reads the lanes unsigned: 0xf000 * 3 = 0x2d000.
+    let hu = x86_simd::eval(Sem::MulHi(2, false), &a, &three, 0, 0);
+    assert_eq!(&hu[4..6], &[0x02, 0x00]);
+    let hu = x86_simd::eval(Sem::MulHi(2, false), &[0xff; 16], &[0xff; 16], 0, 0);
+    assert_eq!(&hu[..2], &[0xfe, 0xff]);
+}
+
+/// PAVG rounds the unsigned mean up; PMIN / PMAX compare as the row says.
+#[test]
+fn averages_and_extremes_read_the_lanes_as_the_instruction_does() {
+    let a = v([0xff, 0, 1, 2, 0xff, 0xff, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let b = v([0xff, 1, 1, 5, 0x01, 0x00, 0, 0x7f, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let avg = x86_simd::eval(Sem::Avg(1), &a, &b, 0, 0);
+    assert_eq!(&avg[..4], &[0xff, 1, 1, 4]);
+    // 0xffff and 0x0001 average to 0x8000.
+    let avg = x86_simd::eval(Sem::Avg(2), &a, &b, 0, 0);
+    assert_eq!(&avg[4..6], &[0x00, 0x80]);
+    // Byte 7: 0x80 is 128 unsigned and -128 signed.
+    assert_eq!(x86_simd::eval(Sem::Min(1, false), &a, &b, 0, 0)[7], 0x7f);
+    assert_eq!(x86_simd::eval(Sem::Max(1, false), &a, &b, 0, 0)[7], 0x80);
+    // Word 2 (bytes 4-5): 0xffff is -1 signed, below 0x0001.
+    let min = x86_simd::eval(Sem::Min(2, true), &a, &b, 0, 0);
+    assert_eq!(&min[4..6], &[0xff, 0xff]);
+    let max = x86_simd::eval(Sem::Max(2, true), &a, &b, 0, 0);
+    assert_eq!(&max[4..6], &[0x01, 0x00]);
 }
 
 /// The arithmetic shift propagates the sign, and a count at or past the
@@ -1502,7 +1534,10 @@ fn floating_rows_compute_in_the_environment() {
         Sem::Add(_)
         | Sem::Sub(_)
         | Sem::MulLo(_)
-        | Sem::MulHi(_)
+        | Sem::MulHi(..)
+        | Sem::Avg(_)
+        | Sem::Min(..)
+        | Sem::Max(..)
         | Sem::MulAddWords
         | Sem::MulAddBytes
         | Sem::MulEvenU

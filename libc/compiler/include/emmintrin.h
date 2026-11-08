@@ -1,12 +1,12 @@
 /* SSE2 intrinsics. Each operation on __m128i or __m128d below lowers to
 ** the instruction the SDM documents for it, except the aligned transfers,
 ** which take the unaligned move: a vector operand here is memory-resident
-** at 8-byte alignment, so no aligned form is emitted. The operations on
-** __m64 are written lane by lane, as <mmintrin.h>'s are. The operations
-** this build does not carry are absent rather than emulated, so a unit
-** that needs one fails at the undeclared name. The forms whose last
-** operand the instruction encodes as an immediate are macros, as gcc's are
-** without -O: a function parameter is not an integer constant expression. */
+** at 8-byte alignment, so no aligned form is emitted. The non-temporal
+** stores are ordinary stores and MASKMOVDQU's is written byte by byte. The
+** operations on __m64 are written lane by lane, as <mmintrin.h>'s are. The
+** forms whose last operand the instruction encodes as an immediate are
+** macros, as gcc's are without -O: a function parameter is not an integer
+** constant expression. */
 #pragma once
 
 #if !defined(__x86_64__) && !defined(__i386__)
@@ -121,6 +121,8 @@ static inline __m128i _mm_cvtsi64_si128(long long __a) {
 static inline long long _mm_cvtsi128_si64(__m128i __A) {
     return ((__v2di)__A)[0];
 }
+#define _mm_cvtsi64x_si128 _mm_cvtsi64_si128
+#define _mm_cvtsi128_si64x _mm_cvtsi128_si64
 #endif
 
 static inline __m128i _mm_castpd_si128(__m128d __A) {
@@ -218,6 +220,45 @@ static inline void _mm_storel_epi64(__m128i *__P, __m128i __B) {
     *(__m64_u *)__P = (__m64)((__v2di)__B)[0];
 }
 
+/* MOVQ: the low quadword, the high one zero. */
+static inline __m128i _mm_move_epi64(__m128i __A) {
+    return (__m128i)(__v2di){((__v2di)__A)[0], 0};
+}
+
+static inline void _mm_stream_si128(__m128i *__P, __m128i __B) {
+    _mm_storeu_si128(__P, __B);
+}
+
+static inline void _mm_stream_si32(int *__P, int __B) {
+    *__P = __B;
+}
+
+#ifdef __x86_64__
+static inline void _mm_stream_si64(long long *__P, long long __B) {
+    *__P = __B;
+}
+#define _mm_stream_si64x _mm_stream_si64
+#endif
+
+/* MASKMOVDQU: the bytes of the first operand whose mask byte has its top
+** bit set, each stored at its offset from the pointer. */
+static inline void _mm_maskmoveu_si128(__m128i __A, __m128i __N, char *__P) {
+    __v16qi __a = (__v16qi)__A, __n = (__v16qi)__N;
+    for (int __i = 0; __i < 16; __i++)
+        if (__n[__i] & 0x80)
+            __P[__i] = __a[__i];
+}
+
+/* CLFLUSH of the line holding the byte the pointer addresses. */
+static inline void _mm_clflush(void const *__P) {
+    __asm__ __volatile__("clflush (%0)" : : "r"(__P));
+}
+
+/* The SDM leaves the lanes undefined; these give zero. */
+static inline __m128i _mm_undefined_si128(void) {
+    return _mm_setzero_si128();
+}
+
 /* The unaligned 16-, 32- and 64-bit transfers of the low lane; a load
 ** zeroes the rest of the vector. */
 static inline __m128i _mm_loadu_si64(void const *__P) {
@@ -295,6 +336,10 @@ static inline __m128i _mm_mulhi_epi16(__m128i __A, __m128i __B) {
     return (__m128i)__builtin_ia32_pmulhw128((__v8hi)__A, (__v8hi)__B);
 }
 
+static inline __m128i _mm_mulhi_epu16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pmulhuw128((__v8hi)__A, (__v8hi)__B);
+}
+
 static inline __m128i _mm_madd_epi16(__m128i __A, __m128i __B) {
     return (__m128i)__builtin_ia32_pmaddwd128((__v8hi)__A, (__v8hi)__B);
 }
@@ -336,6 +381,31 @@ static inline __m128i _mm_subs_epu16(__m128i __A, __m128i __B) {
 
 static inline __m128i _mm_sad_epu8(__m128i __A, __m128i __B) {
     return (__m128i)__builtin_ia32_psadbw128((__v16qi)__A, (__v16qi)__B);
+}
+
+/* PAVGB / PAVGW: the unsigned mean, rounded up. */
+static inline __m128i _mm_avg_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pavgb128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_avg_epu16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pavgw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_min_epi16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pminsw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_max_epi16(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pmaxsw128((__v8hi)__A, (__v8hi)__B);
+}
+
+static inline __m128i _mm_min_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pminub128((__v16qi)__A, (__v16qi)__B);
+}
+
+static inline __m128i _mm_max_epu8(__m128i __A, __m128i __B) {
+    return (__m128i)__builtin_ia32_pmaxub128((__v16qi)__A, (__v16qi)__B);
 }
 
 /* Bitwise logic and lane compares. */
@@ -465,6 +535,48 @@ static inline int _mm_movemask_epi8(__m128i __A) {
     ((__m128i)__builtin_ia32_pslldqi128((__v2di)(__m128i)(A), (int)(N) * 8))
 #define _mm_srli_si128(A, N) \
     ((__m128i)__builtin_ia32_psrldqi128((__v2di)(__m128i)(A), (int)(N) * 8))
+#define _mm_bslli_si128 _mm_slli_si128
+#define _mm_bsrli_si128 _mm_srli_si128
+
+/* The shifts by a vector count read its low quadword unsigned; any count
+** past the lane width acts as the width, so it is clamped to 64 before it
+** reaches the builtin's int operand. */
+static inline int __badc_shift_count(__m128i __C) {
+    unsigned long long __c = (unsigned long long)((__v2di)__C)[0];
+    return __c > 64 ? 64 : (int)__c;
+}
+
+static inline __m128i _mm_sll_epi16(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psllwi128((__v8hi)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_sll_epi32(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_pslldi128((__v4si)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_sll_epi64(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psllqi128((__v2di)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_srl_epi16(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psrlwi128((__v8hi)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_srl_epi32(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psrldi128((__v4si)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_srl_epi64(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psrlqi128((__v2di)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_sra_epi16(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psrawi128((__v8hi)__A, __badc_shift_count(__C));
+}
+
+static inline __m128i _mm_sra_epi32(__m128i __A, __m128i __C) {
+    return (__m128i)__builtin_ia32_psradi128((__v4si)__A, __badc_shift_count(__C));
+}
 #define _mm_shuffle_epi32(A, N) \
     ((__m128i)__builtin_ia32_pshufd((__v4si)(__m128i)(A), (int)(N)))
 #define _mm_shufflehi_epi16(A, N) \
@@ -485,6 +597,10 @@ static inline int _mm_movemask_epi8(__m128i __A) {
 
 static inline __m128d _mm_setzero_pd(void) {
     return (__m128d){0, 0};
+}
+
+static inline __m128d _mm_undefined_pd(void) {
+    return _mm_setzero_pd();
 }
 
 static inline __m128d _mm_set_pd(double __B, double __A) {

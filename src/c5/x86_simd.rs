@@ -77,8 +77,13 @@ pub(crate) enum Sem {
     Sub(u8),
     /// Low half of the lane-wise product.
     MulLo(u8),
-    /// High half of the lane-wise signed product.
-    MulHi(u8),
+    /// High half of the lane-wise product, signed (`true`) or unsigned.
+    MulHi(u8, bool),
+    /// Unsigned lane average, rounded up.
+    Avg(u8),
+    /// Lane-wise minimum and maximum, signed (`true`) or unsigned.
+    Min(u8, bool),
+    Max(u8, bool),
     /// Signed products of adjacent word pairs, summed into doublewords.
     MulAddWords,
     /// Products of the first operand's unsigned bytes and the second's
@@ -240,7 +245,8 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_psubd128", "psubd", Form::Vv, Ret::V4si, Sem::Sub(4), 0),
     op("__builtin_ia32_psubq128", "psubq", Form::Vv, Ret::V2di, Sem::Sub(8), 0),
     op("__builtin_ia32_pmullw128", "pmullw", Form::Vv, Ret::V8hi, Sem::MulLo(2), 0),
-    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Ret::V8hi, Sem::MulHi(2), 0),
+    op("__builtin_ia32_pmulhw128", "pmulhw", Form::Vv, Ret::V8hi, Sem::MulHi(2, true), 0),
+    op("__builtin_ia32_pmulhuw128", "pmulhuw", Form::Vv, Ret::V8hi, Sem::MulHi(2, false), 0),
     op("__builtin_ia32_pmaddwd128", "pmaddwd", Form::Vv, Ret::V4si, Sem::MulAddWords, 0),
     op("__builtin_ia32_pand128", "pand", Form::Vv, Ret::V2di, Sem::And, 0),
     op("__builtin_ia32_pandn128", "pandn", Form::Vv, Ret::V2di, Sem::AndNot, 0),
@@ -262,6 +268,13 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_psubusb128", "psubusb", Form::Vv, Ret::V16qi, Sem::SubSat(1, false), 0),
     op("__builtin_ia32_psubusw128", "psubusw", Form::Vv, Ret::V8hi, Sem::SubSat(2, false), 0),
     op("__builtin_ia32_psadbw128", "psadbw", Form::Vv, Ret::V2di, Sem::SadBytes, 0),
+    // SSE2 averages, minimums and maximums.
+    op("__builtin_ia32_pavgb128", "pavgb", Form::Vv, Ret::V16qi, Sem::Avg(1), 0),
+    op("__builtin_ia32_pavgw128", "pavgw", Form::Vv, Ret::V8hi, Sem::Avg(2), 0),
+    op("__builtin_ia32_pminsw128", "pminsw", Form::Vv, Ret::V8hi, Sem::Min(2, true), 0),
+    op("__builtin_ia32_pmaxsw128", "pmaxsw", Form::Vv, Ret::V8hi, Sem::Max(2, true), 0),
+    op("__builtin_ia32_pminub128", "pminub", Form::Vv, Ret::V16qi, Sem::Min(1, false), 0),
+    op("__builtin_ia32_pmaxub128", "pmaxub", Form::Vv, Ret::V16qi, Sem::Max(1, false), 0),
     // SSE logic on single-precision lanes.
     op("__builtin_ia32_andps", "andps", Form::Vv, Ret::V4sf, Sem::And, 0),
     op("__builtin_ia32_andnps", "andnps", Form::Vv, Ret::V4sf, Sem::AndNot, 0),
@@ -643,10 +656,30 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
                 set_lane(&mut o, w, i, x);
             }
         }
-        Sem::MulHi(w) => {
+        Sem::MulHi(w, signed) => {
             for i in 0..16 / w as usize {
-                let x = (slane(a, w, i) * slane(b, w, i)) >> (8 * w as u32);
-                set_lane(&mut o, w, i, x as u64 & mask(w));
+                let x = if signed {
+                    (slane(a, w, i) * slane(b, w, i)) as u64
+                } else {
+                    lane(a, w, i) * lane(b, w, i)
+                };
+                set_lane(&mut o, w, i, (x >> (8 * w as u32)) & mask(w));
+            }
+        }
+        Sem::Avg(w) => {
+            for i in 0..16 / w as usize {
+                set_lane(&mut o, w, i, (lane(a, w, i) + lane(b, w, i) + 1) >> 1);
+            }
+        }
+        Sem::Min(w, signed) | Sem::Max(w, signed) => {
+            for i in 0..16 / w as usize {
+                let less = if signed {
+                    slane(a, w, i) < slane(b, w, i)
+                } else {
+                    lane(a, w, i) < lane(b, w, i)
+                };
+                let first = less == matches!(sem, Sem::Min(..));
+                set_lane(&mut o, w, i, lane(if first { a } else { b }, w, i));
             }
         }
         Sem::MulAddWords => {

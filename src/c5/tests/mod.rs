@@ -847,6 +847,11 @@ pub fn with_prelude(src: &str) -> String {
 pub fn asm_pcrel_unit_definitions_source() -> &'static str {
     r#"
 #include <stdio.h>
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
 const long ro_first = 5;
 int first_fn(int x) { return x + 1; }
 int data_obj = 42;
@@ -861,11 +866,11 @@ __attribute__((aligned(16))) int vec4[4] = {1, 2, 3, 4};
 #endif
 char **dup_env = 0;
 #if defined(__x86_64__)
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
 #define F_OFF "f+1"
 #define OFF 1
 #else
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
 #define F_OFF "f+4"
 #define OFF 4
 #endif
@@ -873,17 +878,20 @@ char **dup_env = 0;
 int *fs_get(void);
 int (*fs_fn(void))(void);
 #if defined(__x86_64__)
-__asm__(".text\n.globl fs_get\nfs_get:\n\tleaq data_obj(%rip), %rax\n\tret\n"
-        ".globl fs_fn\nfs_fn:\n\tleaq f(%rip), %rax\n\tret\n");
+__asm__(".text\n.globl " CSYM("fs_get") "\n" CSYM("fs_get") ":\n\tleaq " CSYM("data_obj") "(%rip), %rax\n\tret\n"
+        ".globl " CSYM("fs_fn") "\n" CSYM("fs_fn") ":\n\tleaq " CSYM("f") "(%rip), %rax\n\tret\n");
 #else
-__asm__(".text\n.globl fs_get\nfs_get:\n\tadrp x0, data_obj\n\tadd x0, x0, :lo12:data_obj\n\tret\n"
-        ".globl fs_fn\nfs_fn:\n\tadrp x0, f\n\tadd x0, x0, :lo12:f\n\tret\n");
+__asm__(".text\n.globl " CSYM("fs_get") "\n" CSYM("fs_get") ":\n\tadrp x0, " CSYM("data_obj") "\n"
+        "\tadd x0, x0, :lo12:" CSYM("data_obj") "\n\tret\n"
+        ".globl " CSYM("fs_fn") "\n" CSYM("fs_fn") ":\n\tadrp x0, " CSYM("f") "\n"
+        "\tadd x0, x0, :lo12:" CSYM("f") "\n\tret\n");
 #endif
 #endif
 #ifdef ASM_DATA_END
 _Thread_local long tls_pad = 1;
 long bss_obj[2];
-__asm__(".data\n.globl asm_tbl, asm_tbl_end\n.p2align 3\nasm_tbl: .quad 3, 4\nasm_tbl_end:\n.text\n");
+__asm__(".data\n.globl " CSYM("asm_tbl") ", " CSYM("asm_tbl_end") "\n.p2align 3\n"
+        CSYM("asm_tbl") ": .quad 3, 4\n" CSYM("asm_tbl_end") ":\n.text\n");
 extern long asm_tbl[], asm_tbl_end[];
 #endif
 int main(void) {
@@ -910,11 +918,11 @@ int main(void) {
     if (pb != &dup_env || first_fn(1) != 2) return 7;
 #if defined(__x86_64__)
     int out[4], r;
-    __asm__ volatile("pshufd $0x1b, vec4(%%rip), %%xmm1\n\tmovdqu %%xmm1, %0" : "=m"(out) :: "xmm1");
+    __asm__ volatile("pshufd $0x1b, " CSYM("vec4") "(%%rip), %%xmm1\n\tmovdqu %%xmm1, %0" : "=m"(out) :: "xmm1");
     if (out[0] != 4 || out[3] != 1) return 8;
-    __asm__ volatile("movl $0, %0\n\tcmpl $3, vec4+8(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
+    __asm__ volatile("movl $0, %0\n\tcmpl $3, " CSYM("vec4") "+8(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
     if (r != 1) return 9;
-    __asm__ volatile("movl $77, vec4(%%rip)" ::: "memory");
+    __asm__ volatile("movl $77, " CSYM("vec4") "(%%rip)" ::: "memory");
     if (vec4[0] != 77) return 10;
 #endif
 #ifdef FILE_SCOPE_ASM
@@ -939,9 +947,14 @@ int main(void) {
 pub fn init_fini_beside_named_sections_source() -> &'static str {
     r#"
 #include <stdlib.h>
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
 static int ctor_ran;
 __attribute__((section("rgkc"))) long long gv[2] = {1, 2};
-__asm__(".section rgka,\"aw\"\n.globl ga\n.p2align 3\nga: .quad 3, 4\n.text\n");
+__asm__(".section rgka,\"aw\"\n.globl " CSYM("ga") "\n.p2align 3\n" CSYM("ga") ": .quad 3, 4\n.text\n");
 extern long long ga[2];
 __attribute__((constructor)) static void init(void) { ctor_ran = 1; }
 __attribute__((destructor)) static void fini(void) { _Exit(ctor_ran == 1 ? 0 : 3); }
@@ -960,18 +973,23 @@ int main(void) {
 pub fn asm_defined_names_source() -> &'static str {
     r#"
 #include <stdint.h>
-#if defined(__x86_64__)
-__asm__(".text\n.globl fs_seven\n.p2align 4\nfs_seven:\n\tmovl $7, %eax\n\tret\n");
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
 #else
-__asm__(".text\n.globl fs_seven\n.p2align 2\nfs_seven:\n\tmov w0, #7\n\tret\n");
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define CSYM(name) name
 #endif
-__asm__(".data\n.globl fs_word\n.p2align 2\nfs_word:\n\t.long 0x1234\n.text\n");
+#if defined(__x86_64__)
+__asm__(".text\n.globl " CSYM("fs_seven") "\n.p2align 4\n" CSYM("fs_seven") ":\n\tmovl $7, %eax\n\tret\n");
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
+#else
+__asm__(".text\n.globl " CSYM("fs_seven") "\n.p2align 2\n" CSYM("fs_seven") ":\n\tmov w0, #7\n\tret\n");
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
+#endif
+__asm__(".data\n.globl " CSYM("fs_word") "\n.p2align 2\n" CSYM("fs_word") ":\n\t.long 0x1234\n.text\n");
 int fs_seven(void);
 extern int fs_word;
 static int with_label(int x) {
-    __asm__ volatile(".globl body_label\nbody_label:\n");
+    __asm__ volatile(".globl " CSYM("body_label") "\n" CSYM("body_label") ":\n");
     return x + 1;
 }
 int main(void) {
@@ -999,11 +1017,16 @@ pub fn named_slots_source() -> &'static str {
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-__asm__(".data\n.globl ns_words\n.p2align 3\nns_words:\n\t.quad 5, 6\n.text\n");
-#if defined(__x86_64__)
-__asm__(".text\n.globl ns_seven\n.p2align 4\nns_seven:\n\tmovl $7, %eax\n\tret\n");
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
 #else
-__asm__(".text\n.globl ns_seven\n.p2align 2\nns_seven:\n\tmov w0, #7\n\tret\n");
+#define CSYM(name) name
+#endif
+__asm__(".data\n.globl " CSYM("ns_words") "\n.p2align 3\n" CSYM("ns_words") ":\n\t.quad 5, 6\n.text\n");
+#if defined(__x86_64__)
+__asm__(".text\n.globl " CSYM("ns_seven") "\n.p2align 4\n" CSYM("ns_seven") ":\n\tmovl $7, %eax\n\tret\n");
+#else
+__asm__(".text\n.globl " CSYM("ns_seven") "\n.p2align 2\n" CSYM("ns_seven") ":\n\tmov w0, #7\n\tret\n");
 #endif
 extern const long long ns_words[];
 int ns_seven(void);
@@ -1053,32 +1076,37 @@ int main(void) {
 pub fn asm_library_object_source(form: u32) -> String {
     let body = r#"
 #include <unistd.h>
+#if defined(__APPLE__)
+#define OPTIND "_optind"
+#else
+#define OPTIND "optind"
+#endif
 int main(void) {
 #if defined(__x86_64__)
 #if T == 1
     int *p;
-    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    __asm__("lea " OPTIND "(%%rip), %0" : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     int v;
-    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    __asm__("movl " OPTIND "(%%rip), %0" : "=r"(v));
     return v != optind;
 #else
-    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    __asm__ volatile("movl $7, " OPTIND "(%%rip)" ::: "memory");
     return optind != 7;
 #endif
 #else
 #if T == 1
     int *p;
-    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    __asm__("adrp %0, " OPTIND "\n\tadd %0, %0, :lo12:" OPTIND : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     long v;
-    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    __asm__("adrp %0, " OPTIND "\n\tldr %w0, [%0, :lo12:" OPTIND "]" : "=r"(v));
     return (int)v != optind;
 #else
     long t;
-    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+    __asm__ volatile("mov w1, #7\n\tadrp %0, " OPTIND "\n\tstr w1, [%0, :lo12:" OPTIND "]"
                      : "=&r"(t) :: "x1", "memory");
     return optind != 7;
 #endif
@@ -1099,6 +1127,11 @@ pub fn asm_region_edges_source() -> &'static str {
     r#"
 #include <stdio.h>
 #include <stdint.h>
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
 const long long ro_first[2] = {0x1111, 0x2222};
 const char *const relro_first[2] = {"p", "q"};
 long long data_first[2] = {0x3333, 0x4444};
@@ -1111,17 +1144,17 @@ _Thread_local long long tls_obj = 9;
 #endif
 #ifdef WITH_WORDS
 extern const int edge_words[2];
-__asm__(".text\n.globl edge_words\n.p2align 2\nedge_words:\n"
-        ".long ro_first-8-.\n.long bss_first+16-.\n");
+__asm__(".text\n.globl " CSYM("edge_words") "\n.p2align 2\n" CSYM("edge_words") ":\n"
+        ".long " CSYM("ro_first") "-8-.\n.long " CSYM("bss_first") "+16-.\n");
 #endif
 int f(void) { return 7; }
 int wfa(void) __attribute__((weak, alias("f")));
 int sfa(void) __attribute__((alias("f")));
 long long wda[2] __attribute__((weak, alias("data_first")));
 #if defined(__x86_64__)
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
 #else
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
 #endif
 static int bad;
 #define AT(sym, want) do { uintptr_t u_; ADDR(u_, sym); if (u_ != (uintptr_t)(want)) bad++; } while (0)

@@ -32,6 +32,31 @@ fn write_source(dir: &Path, name: &str, body: &str) -> PathBuf {
     p
 }
 
+/// `asm` with each of `names` spelled as the host's assembly spells a C
+/// symbol: Mach-O names one with a leading underscore.
+fn host_c_symbols(asm: &str, names: &[&str]) -> String {
+    if !cfg!(target_vendor = "apple") {
+        return asm.to_string();
+    }
+    let ident = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$');
+    let mut out = String::with_capacity(asm.len());
+    let mut rest = asm;
+    while let Some(start) = rest.find(ident) {
+        out.push_str(&rest[..start]);
+        let len = rest[start..]
+            .find(|c| !ident(c))
+            .unwrap_or(rest.len() - start);
+        let token = &rest[start..start + len];
+        if names.contains(&token) {
+            out.push('_');
+        }
+        out.push_str(token);
+        rest = &rest[start + len..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn run(cmd: &mut Command, what: &str) -> std::process::Output {
     let out = cmd.output().expect(what);
     if !out.status.success() {
@@ -601,41 +626,46 @@ fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {
 /// reaches the library's object.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const ASM_LIBRARY_OBJECT: &str = r#"#include <unistd.h>
+#if defined(__APPLE__)
+#define OPTIND "_optind"
+#else
+#define OPTIND "optind"
+#endif
 int main(void) {
 #if defined(__x86_64__)
 #if T == 1
     int *p;
-    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    __asm__("lea " OPTIND "(%%rip), %0" : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     int v;
-    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    __asm__("movl " OPTIND "(%%rip), %0" : "=r"(v));
     return v != optind;
 #elif T == 3
-    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    __asm__ volatile("movl $7, " OPTIND "(%%rip)" ::: "memory");
     return optind != 7;
 #else
     char *p;
-    __asm__("lea optind+4(%%rip), %0" : "=r"(p));
+    __asm__("lea " OPTIND "+4(%%rip), %0" : "=r"(p));
     return p != (char *)&optind + 4;
 #endif
 #else
 #if T == 1
     int *p;
-    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    __asm__("adrp %0, " OPTIND "\n\tadd %0, %0, :lo12:" OPTIND : "=r"(p));
     return p != &optind || *p != optind;
 #elif T == 2
     long v;
-    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    __asm__("adrp %0, " OPTIND "\n\tldr %w0, [%0, :lo12:" OPTIND "]" : "=r"(v));
     return (int)v != optind;
 #elif T == 3
     long t;
-    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+    __asm__ volatile("mov w1, #7\n\tadrp %0, " OPTIND "\n\tstr w1, [%0, :lo12:" OPTIND "]"
                      : "=&r"(t) :: "x1", "memory");
     return optind != 7;
 #else
     char *p;
-    __asm__("adrp %0, optind+4\n\tadd %0, %0, :lo12:optind+4" : "=r"(p));
+    __asm__("adrp %0, " OPTIND "+4\n\tadd %0, %0, :lo12:" OPTIND "+4" : "=r"(p));
     return p != (char *)&optind + 4;
 #endif
 #endif
@@ -681,13 +711,18 @@ fn an_asm_use_of_a_library_object_in_place_reaches_its_bytes() {
 #[test]
 fn a_weak_alias_spelling_a_renamed_static_reaches_it_from_another_unit() {
     // `alias` names its target by assembler name, so the alias of a static
-    // function renamed by an asm label spells the label. The alias is the
-    // definition's only reference; another unit calls through it.
+    // function renamed by an asm label spells the label, less the C prefix
+    // Mach-O spells. The alias is the definition's only reference; another
+    // unit calls through it.
     let dir = tempdir("alias-renamed-static");
     let a = write_source(
         &dir,
         "a.c",
-        "static int impl(void) __asm__(\"badc_alias_renamed_impl\");\n\
+        "#if defined(__APPLE__)\n\
+         static int impl(void) __asm__(\"_badc_alias_renamed_impl\");\n\
+         #else\n\
+         static int impl(void) __asm__(\"badc_alias_renamed_impl\");\n\
+         #endif\n\
          static int impl(void) { return 9; }\n\
          int pub_name(void) __attribute__((weak, alias(\"badc_alias_renamed_impl\")));\n",
     );
@@ -734,6 +769,158 @@ fn an_asm_template_binds_its_units_renamed_static_over_an_external_namesake() {
     );
     for opt in ["-O0", "-O"] {
         assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(7), "{opt}");
+    }
+}
+
+/// The names in a Mach-O image's symbol table, as the file spells them.
+fn mach_o_symbol_names(image: &[u8]) -> Vec<String> {
+    const LC_SYMTAB: usize = 0x2;
+    let at = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap()) as usize;
+    let mut cmd = 32;
+    for _ in 0..at(16) {
+        if at(cmd) == LC_SYMTAB {
+            let (symoff, nsyms, stroff) = (at(cmd + 8), at(cmd + 12), at(cmd + 16));
+            return (0..nsyms)
+                .map(|i| {
+                    let name = &image[stroff + at(symoff + 16 * i)..];
+                    let end = name.iter().position(|&b| b == 0).unwrap();
+                    String::from_utf8_lossy(&name[..end]).into_owned()
+                })
+                .collect();
+        }
+        cmd += at(cmd + 4);
+    }
+    panic!("no LC_SYMTAB");
+}
+
+/// A unit defining `other_name` in file-scope asm, which branches to the
+/// function C defines under the asm label `raw_f`, and a unit calling
+/// `other_name` through an asm label.
+const RAW_ASM_NAMES: [(&str, &str); 2] = [
+    (
+        "def.c",
+        "__asm__(\".text\\n.globl other_name\\n.p2align 2\\nother_name:\\n    b raw_f\\n\");\n\
+         int f(void) __asm__(\"raw_f\");\n\
+         int f(void) { return 7; }\n",
+    ),
+    (
+        "use.c",
+        "int other(void) __asm__(\"other_name\");\n\
+         int main(void) { return other() == 7 ? 0 : 1; }\n",
+    ),
+];
+
+// An asm label is the symbol as written, as clang spells it: Mach-O names a
+// C identifier with a leading underscore, so `other_name` and `raw_f` are
+// symbols without one. Linked from the sources and from their objects, the
+// image's symbol table spells each as written.
+#[test]
+fn a_mach_o_asm_label_names_the_symbol_as_written() {
+    let dir = tempdir("mach-o-asm-label");
+    for (name, body) in RAW_ASM_NAMES {
+        write_source(&dir, name, body);
+    }
+    let badc_in = |args: &[&str]| {
+        let mut cmd = Command::new(badc());
+        cmd.args(["-q", "--target=macos-aarch64"]).args(args);
+        run(cmd.current_dir(&dir), &format!("badc {args:?}"));
+    };
+    badc_in(&["def.c", "use.c", "-o", "from-sources"]);
+    badc_in(&["-c", "def.c", "use.c"]);
+    badc_in(&["def.o", "use.o", "-o", "from-objects"]);
+    for image in ["from-sources", "from-objects"] {
+        let names = mach_o_symbol_names(&std::fs::read(dir.join(image)).expect("read the image"));
+        let has = |n: &str| names.iter().any(|s| s == n);
+        assert!(
+            has("other_name") && has("raw_f") && has("_main"),
+            "{image}: {names:?}"
+        );
+        assert!(!has("_other_name") && !has("_raw_f"), "{image}: {names:?}");
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            let status = Command::new(dir.join(image))
+                .status()
+                .expect("run the image");
+            assert_eq!(status.code(), Some(0), "{image}");
+        }
+    }
+}
+
+// A library's export without the C underscore binds the asm label that
+// spells it, and the image imports each symbol as the library ships it.
+#[test]
+fn a_mach_o_import_without_the_c_underscore_keeps_its_spelling() {
+    let dir = tempdir("mach-o-raw-import");
+    write_source(
+        &dir,
+        "main.c",
+        "int raw(void) __asm__(\"raw_export\");\nint c_export(void);\n\
+         int main(void) { return raw() + c_export(); }\n",
+    );
+    let stub = "--- !tapi-tbd\ntbd-version:     4\ntargets:         [ arm64-macos ]\n\
+                install-name:    '/usr/lib/libdemo.dylib'\nexports:\n\
+                \x20 - targets:         [ arm64-macos ]\n\
+                \x20   symbols:         [ _c_export, raw_export ]\n...\n";
+    std::fs::write(dir.join("libdemo.tbd"), stub).expect("write the stub");
+    run(
+        Command::new(badc())
+            .args([
+                "-q",
+                "--target=macos-aarch64",
+                "main.c",
+                "libdemo.tbd",
+                "-o",
+                "prog",
+            ])
+            .current_dir(&dir),
+        "link against the stub",
+    );
+    let names = mach_o_symbol_names(&std::fs::read(dir.join("prog")).expect("read the image"));
+    let has = |n: &str| names.iter().any(|s| s == n);
+    assert!(has("raw_export") && has("_c_export"), "{names:?}");
+    assert!(!has("_raw_export") && !has(""), "{names:?}");
+}
+
+// The symbols another compiler's Mach-O object spells without the C
+// underscore meet badc's references to them, from the object and from an
+// archive whose index spells them so.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn a_mach_o_object_from_clang_defines_symbols_without_the_c_underscore() {
+    let Some(cc) = host_cc().filter(|cc| cc_is_clang(cc)) else {
+        return;
+    };
+    let dir = tempdir("mach-o-asm-label-clang");
+    for (name, body) in RAW_ASM_NAMES {
+        write_source(&dir, name, body);
+    }
+    run(
+        Command::new(&cc)
+            .args(["-c", "def.c", "-o", "def.o"])
+            .current_dir(&dir),
+        "clang -c def.c",
+    );
+    run(
+        Command::new("ar")
+            .args(["rcs", "libdef.a", "def.o"])
+            .current_dir(&dir),
+        "ar",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-c", "use.c"])
+            .current_dir(&dir),
+        "badc -c use.c",
+    );
+    for inputs in [&["use.o", "def.o"][..], &["use.o", "-L.", "-ldef"]] {
+        run(
+            Command::new(badc())
+                .args(["-q", "-o", "prog"])
+                .args(inputs)
+                .current_dir(&dir),
+            &format!("link {inputs:?}"),
+        );
+        let status = Command::new(dir.join("prog")).status().expect("run prog");
+        assert_eq!(status.code(), Some(0), "{inputs:?}");
     }
 }
 
@@ -809,7 +996,11 @@ fn a_strong_definition_overrides_every_reference_to_a_weak_one() {
          __attribute__((weak)) long long wobj = 0;\n\
          __attribute__((weak)) struct pair ws = {0, 0};\n\
          __attribute__((weak)) long wf(void) { return 0; }\n\
+         #if defined(__APPLE__)\n\
+         __asm__(\".weak _xobj\");\n\
+         #else\n\
          __asm__(\".weak xobj\");\n\
+         #endif\n\
          long xobj = 0;\n\
          __attribute__((weak)) _Thread_local long tw = 0;\n\
          long rd_t(void) { return tw; }\n\
@@ -892,15 +1083,20 @@ const long long *const ends[] = {ro_tbl_end, rn_tbl_end, relro_tbl_end,
 const long long *const lasts[] = {ro_tbl_end - 1, rn_tbl_end - 1, relro_tbl_end - 1,
                                   rw_tbl_end - 1, wn_tbl_end - 1, bss_tbl_end - 1};
 const long long *const starts[] = {ro_tbl, rn_tbl, relro_tbl, rw_tbl, wn_tbl, bss_tbl};
-#if defined(__x86_64__)
-#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
-#define LOAD(r, sym) __asm__ volatile("movq " sym "(%%rip), %0" : "=r"(r) :: "memory")
-#define SAME(r, sym, v) __asm__ volatile( \
-    "movl $0, %0\n\tcmpq $" #v ", " sym "(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc", "memory")
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
 #else
-#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define CSYM(name) name
+#endif
+#if defined(__x86_64__)
+#define ADDR(r, sym) __asm__("lea " CSYM(sym) "(%%rip), %0" : "=r"(r))
+#define LOAD(r, sym) __asm__ volatile("movq " CSYM(sym) "(%%rip), %0" : "=r"(r) :: "memory")
+#define SAME(r, sym, v) __asm__ volatile( \
+    "movl $0, %0\n\tcmpq $" #v ", " CSYM(sym) "(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc", "memory")
+#else
+#define ADDR(r, sym) __asm__("adrp %0, " CSYM(sym) "\n\tadd %0, %0, :lo12:" CSYM(sym) : "=r"(r))
 #define LOAD(r, sym) \
-    __asm__ volatile("adrp %0, " sym "\n\tldr %0, [%0, :lo12:" sym "]" : "=r"(r) :: "memory")
+    __asm__ volatile("adrp %0, " CSYM(sym) "\n\tldr %0, [%0, :lo12:" CSYM(sym) "]" : "=r"(r) :: "memory")
 #define SAME(r, sym, v) (r = 1)
 #endif
 #define CHECK(t, last) do { \
@@ -929,7 +1125,11 @@ int main(void) {
 #[test]
 fn a_label_at_its_sections_end_names_that_sections_end() {
     let dir = tempdir("end-labels");
-    let tables = write_source(&dir, "tables.s", END_LABEL_TABLES);
+    let names = ["ro", "rn", "relro", "rw", "wn", "bss"]
+        .map(|t| [format!("{t}_tbl"), format!("{t}_tbl_end")]);
+    let names: Vec<&str> = names.iter().flatten().map(String::as_str).collect();
+    let tables = host_c_symbols(END_LABEL_TABLES, &names);
+    let tables = write_source(&dir, "tables.s", &tables);
     let uses = write_source(&dir, "uses.c", END_LABEL_USES);
     let (tables, uses) = (tables.as_path(), uses.as_path());
     for opt in ["-O0", "-O"] {
@@ -958,7 +1158,11 @@ int main(void) {\n\
 #[test]
 fn a_label_in_an_empty_section_names_that_section() {
     let dir = tempdir("empty-section-labels");
-    let labels = write_source(&dir, "labels.s", SECTION_START_LABELS);
+    let labels = host_c_symbols(
+        SECTION_START_LABELS,
+        &["empty_lb", "adj_a", "adj_a_end", "adj_b"],
+    );
+    let labels = write_source(&dir, "labels.s", &labels);
     let uses = write_source(&dir, "uses.c", SECTION_START_USES);
     let (labels, uses) = (labels.as_path(), uses.as_path());
     for (order, units) in [("last", [uses, labels]), ("first", [labels, uses])] {
@@ -21550,7 +21754,8 @@ mod aarch64_link {
                     	if (load_isle() != 0x1122334455667788ULL) return 2;\n\
                     	return 0;\n\
                     }\n";
-        run_host_image("a64-align-run", asm, main);
+        let asm = super::host_c_symbols(asm, &["load_isle", "isle_addr"]);
+        run_host_image("a64-align-run", &asm, main);
     }
 
     /// The MOVW groups on the host: a value assembled from four
@@ -21592,7 +21797,8 @@ mod aarch64_link {
                     	if (get_kneg() != (unsigned long long)-0x800LL) return 3;\n\
                     	return 0;\n\
                     }\n";
-        run_host_image("a64-movw-run", asm, main);
+        let asm = super::host_c_symbols(asm, &["get_kbig", "get_kmid", "get_kneg"]);
+        run_host_image("a64-movw-run", &asm, main);
     }
 
     /// An `R_AARCH64_ABS64` data slot naming an absolute symbol takes

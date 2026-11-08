@@ -2322,7 +2322,7 @@ impl<'a> MachOWriter<'a> {
         let export_disk_names: Vec<String> = build
             .exports
             .iter()
-            .map(|e| format!("_{}", e.name))
+            .map(|e| crate::c5::mach_o_name::spelling(&e.name).into_owned())
             .collect();
         let plt_locals: Vec<(&str, usize)> = build
             .imports
@@ -2341,7 +2341,7 @@ impl<'a> MachOWriter<'a> {
             .collect();
         let dyn_export_disk_names: Vec<String> = dyn_exports_emit
             .iter()
-            .map(|d| format!("_{}", d.name))
+            .map(|d| crate::c5::mach_o_name::spelling(&d.name).into_owned())
             .collect();
         let n_locals = symbol_names.len();
         symbol_names.extend(export_disk_names.iter().map(|s| s.as_str()));

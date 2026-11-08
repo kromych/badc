@@ -153,10 +153,35 @@ impl AsmSectionSink {
     }
 
     /// The accumulated sections and unit-level symbol declarations, for the
-    /// object writers. The indexes serve materialization only and are
-    /// dropped with the sink.
-    pub(crate) fn into_parts(self) -> (alloc::vec::Vec<AsmSection>, alloc::vec::Vec<AsmSymDecl>) {
-        (self.sections.into_vec(), self.sym_decls)
+    /// object writers, under the names [`asm_symbol_name`] gives the symbols
+    /// assembly for `format` wrote. The indexes serve materialization only
+    /// and are dropped with the sink.
+    pub(crate) fn into_parts(
+        self,
+        format: crate::c5::codegen::BinaryFormat,
+    ) -> (alloc::vec::Vec<AsmSection>, alloc::vec::Vec<AsmSymDecl>) {
+        let (mut sections, mut decls) = (self.sections.into_vec(), self.sym_decls);
+        let rename = |n: &mut alloc::string::String| {
+            let name = asm_symbol_name(format, n);
+            if *name != **n {
+                *n = name.into_owned();
+            }
+        };
+        for s in &mut sections {
+            s.labels.iter_mut().for_each(|l| rename(&mut l.name));
+            for r in &mut s.relocs {
+                if let AsmSectionTarget::Symbol(n) = &mut r.target {
+                    rename(n);
+                }
+            }
+        }
+        for d in &mut decls {
+            rename(&mut d.name);
+            if let Some(AsmSymValue::Sym(target, _)) = &mut d.value {
+                rename(target);
+            }
+        }
+        (sections, decls)
     }
 
     #[cfg(test)]

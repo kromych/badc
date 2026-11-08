@@ -115,6 +115,7 @@ fn render_line(
     if let Some(loc) = loc {
         write!(out, "{}:{}: ", loc.file, loc.line)?;
     }
+    let text = crate::c5::mach_o_name::shown(text);
     if color {
         write!(
             out,

@@ -529,6 +529,7 @@ pub(super) fn emit_inst(
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target.binary_format(),
             cx.asm_sections,
             cx.asm_extern_call_sites,
             cx.asm_sym_fixups,

@@ -356,7 +356,12 @@ pub(crate) fn produce_ssa_funcs(
     optimize: bool,
     jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
-    produce_ssa_funcs_on(&ReachGraph::new(program), target, optimize, jump_tables)
+    produce_ssa_funcs_on(
+        &ReachGraph::new(program, target),
+        target,
+        optimize,
+        jump_tables,
+    )
 }
 
 /// [`produce_ssa_funcs`] over the graph a lowering builds once.
@@ -596,6 +601,8 @@ pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
 /// definition is dropped, as by gcc -O); a pass adds each function's own edges.
 pub(crate) struct ReachGraph<'p> {
     pub(crate) program: &'p Program,
+    /// The object format whose spelling asm templates name symbols in.
+    asm_format: crate::c5::codegen::BinaryFormat,
     data_len: i64,
     starts: Vec<i64>,
     /// Assembler names of the defined objects and of every function.
@@ -610,13 +617,14 @@ pub(crate) struct ReachGraph<'p> {
 impl<'p> ReachGraph<'p> {
     /// It holds no body's own edges, so one serves a lowering before and after
     /// the -O pipeline, which adds and renames no function.
-    pub(crate) fn new(program: &'p Program) -> Self {
+    pub(crate) fn new(program: &'p Program, target: Target) -> Self {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         let starts = data_object_starts(program);
         let n = starts.len();
         let mut graph = ReachGraph {
             program,
+            asm_format: target.binary_format(),
             data_len: program.data.len() as i64,
             starts,
             named: alloc::collections::BTreeMap::new(),
@@ -702,7 +710,7 @@ impl<'p> ReachGraph<'p> {
     }
 
     pub(crate) fn asm_names(&self, text: &[u8], work: &mut Vec<Node>) {
-        push_asm_names(text, &self.named, work);
+        push_asm_names(text, &self.named, self.asm_format, work);
     }
 
     /// The roots, and the block-scope statics a symbol keeps by owner: an
@@ -888,6 +896,7 @@ pub(crate) fn compute_live_sets(
 fn push_asm_names(
     text: &[u8],
     named: &alloc::collections::BTreeMap<&str, Node>,
+    format: crate::c5::codegen::BinaryFormat,
     work: &mut alloc::vec::Vec<Node>,
 ) {
     let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$';
@@ -928,7 +937,7 @@ fn push_asm_names(
             continue;
         }
         if let Ok(tok) = core::str::from_utf8(&text[s..i])
-            && let Some(node) = named.get(tok)
+            && let Some(node) = named.get(&*crate::c5::asm::asm_symbol_name(format, tok))
         {
             work.push(*node);
         }
@@ -1126,7 +1135,7 @@ pub(crate) fn compact_program_data(
     // form reaches the same set either way.
     // `[nested]`: inside `object::compact_program_data`, so the pass report
     // lists it without adding it to a phase total twice.
-    let graph = ReachGraph::new(program);
+    let graph = ReachGraph::new(program, target);
     let funcs =
         super::emit_common::time_pass("object::compact_program_data ssa build [nested]", || {
             produce_ssa_funcs_on(&graph, target, optimize, true)

@@ -742,36 +742,32 @@ impl Compiler {
     /// declaration -- including one that follows the definition -- renames
     /// the symbol the whole unit emits, as gcc does.
     pub(super) fn parse_declarator_asm_label(&mut self, id_idx: usize) -> Result<(), C5Error> {
-        let mut label = self.parse_asm_register_suffix()?;
-        // The label is an assembler name, which on Mach-O loses the leading
-        // underscore badc's names take only when written, as asm text does.
-        if self.target.binary_format() == super::super::codegen::BinaryFormat::MachO
-            && let Some(c_name) = label.strip_prefix('_')
-        {
-            label = c_name.into();
-        }
+        let label = self.parse_asm_register_suffix()?;
         self.set_asm_label(id_idx, label)
     }
 
     /// Record an asm label on `id_idx`. Repeating the same label is
     /// accepted; a second, differing label for one identifier is
     /// rejected -- the entity has one assembler name and the two
-    /// declarations disagree about it.
+    /// declarations disagree about it. The label names a symbol as asm text does.
     pub(super) fn set_asm_label(
         &mut self,
         id_idx: usize,
         label: alloc::string::String,
     ) -> Result<(), C5Error> {
+        let format = self.target.binary_format();
+        let name = crate::c5::asm::asm_symbol_name(format, &label).into_owned();
         if let Some(prev) = &self.symbols[id_idx].asm_name
-            && *prev != label
+            && *prev != name
         {
             let msg = format!(
-                "conflicting assembler name `{label}` for `{}`, already declared as `{prev}`",
-                self.symbols[id_idx].name
+                "conflicting assembler name `{label}` for `{}`, already declared as `{}`",
+                self.symbols[id_idx].name,
+                crate::c5::asm::asm_symbol_spelling(format, prev)
             );
             return Err(self.compile_err(Code::INVALID_DECLARATION, msg));
         }
-        self.symbols[id_idx].asm_name = Some(label);
+        self.symbols[id_idx].asm_name = Some(name);
         Ok(())
     }
 

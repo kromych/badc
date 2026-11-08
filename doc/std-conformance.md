@@ -605,9 +605,11 @@ diagnostics use. The label composes with `extern`, `static`, `weak`, `alias`
 and the visibility attributes, and reaches the object writers, the linker and
 inline-asm references to the name. Two declarations of one identifier with
 different labels are rejected. A label on an automatic object is ignored with
-a warning (`ignored-asm-label`). On ELF and PE the symbol is the label as
-written. On Mach-O badc prefixes the label with the `_` it gives every C name,
-where gcc and clang emit the label as written.
+a warning (`ignored-asm-label`). The symbol is the label as written. On
+Mach-O, which spells the C name `f` as `_f`, `asm("_f")` names the symbol of
+the C name `f` and `asm("f")` a symbol without the underscore; asm text names
+symbols the same way. An `alias("target")` names the label without that
+underscore.
 
 **Attributes.** `__attribute__((...))`, `__declspec(...)` and C23 `[[...]]`
 attributes are parsed. These take effect:

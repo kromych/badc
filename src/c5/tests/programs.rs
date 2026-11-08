@@ -1110,7 +1110,7 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .compile()
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
-    let graph = ReachGraph::new(&program);
+    let graph = ReachGraph::new(&program, crate::Target::LinuxX64);
     let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
     let addr = |out: &crate::c5::program::Program, name: &str| {
         out.symbols

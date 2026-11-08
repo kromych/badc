@@ -1212,6 +1212,22 @@ fn asm_reaches_an_imported_object_through_its_slot() {
     }
 }
 
+/// Asm text names a symbol as Mach-O spells it, and only a symbol takes
+/// badc's name: `.pushsection __DATA,__badc_words` keeps its segment and
+/// section names while `_pushed_word` is the C object `pushed_word`.
+#[test]
+fn a_pushed_section_keeps_its_segment_and_section_names() {
+    let src = r#"
+extern const int pushed_word[];
+__asm__(".pushsection __DATA,__badc_words\n.globl _pushed_word\n.p2align 2\n"
+        "_pushed_word: .long 42\n.popsection\n");
+int main(void) { return pushed_word[0] == 42 ? 0 : 1; }
+"#;
+    let outcome =
+        build_and_run_outcome_with_options(src, "pushed-section", NativeOptions::default());
+    assert!(outcome.matches(0), "{outcome:?}");
+}
+
 /// A `#pragma binding(data ...)` object the unit does not define is the C
 /// library's: the image binds every reference to it, asm operands included,
 /// and a definition under the binding's name is the unit's own object.
@@ -1222,7 +1238,7 @@ fn a_data_binding_reaches_the_library_object_or_the_units_definition() {
         extern char **my_env;
         int main(void) {
             char ***p;
-            __asm__("adrp %0, my_env\n\tadd %0, %0, :lo12:my_env" : "=r"(p));
+            __asm__("adrp %0, _my_env\n\tadd %0, %0, :lo12:_my_env" : "=r"(p));
             return !(p == &my_env && *p == environ && environ[0] != 0);
         }
     "#;

@@ -3,6 +3,12 @@
 // null, displaced by its offset, and a function an asm statement defines is
 // its label's address. Returns 0.
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 __attribute__((weak)) int absent_fn(void);
 int asm_fn(void);
 
@@ -12,9 +18,9 @@ int (*p_asm)(void) = asm_fn;
 
 void holder(void) {
 #if defined(__x86_64__)
-    __asm__(".globl asm_fn\nasm_fn:\n\tmovl $5, %eax\n\tret\n");
+    __asm__(".globl " CSYM("asm_fn") "\n" CSYM("asm_fn") ":\n\tmovl $5, %eax\n\tret\n");
 #else
-    __asm__(".globl asm_fn\nasm_fn:\n\tmov w0, #5\n\tret\n");
+    __asm__(".globl " CSYM("asm_fn") "\n" CSYM("asm_fn") ":\n\tmov w0, #5\n\tret\n");
 #endif
 }
 

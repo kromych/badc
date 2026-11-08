@@ -3144,7 +3144,7 @@ impl<'a> Link<'a> {
     }
 
     /// On Mach-O a binding names its import by the host symbol, `_strtod`,
-    /// whose C name `strtod` is how badc's objects spell a definition: a
+    /// whose name `strtod` is how badc's objects spell a definition: a
     /// definition in the link satisfies the reference before the import
     /// does, as ld64 binds it.
     fn define_mach_o_host_names(&mut self) {
@@ -3154,7 +3154,7 @@ impl<'a> Link<'a> {
         let defined = &self.defined;
         let aliases: Vec<(&'a str, MergedSymbol)> = (self.routed_import_names.iter())
             .filter(|n| !defined.contains_key(**n))
-            .filter_map(|&n| Some((n, *defined.get(n.strip_prefix('_')?)?)))
+            .filter_map(|&n| Some((n, *defined.get(&*crate::c5::mach_o_name::name(n))?)))
             .collect();
         for (name, symbol) in aliases {
             self.defined.insert(Cow::Borrowed(name), symbol);
@@ -3610,16 +3610,13 @@ impl<'a> Link<'a> {
     }
 
     /// Whether any unit routes `name` to a dylib. A binding map keys an
-    /// entry by the host symbol, which on Mach-O carries the platform's
-    /// leading underscore that the object readers strip; test both
-    /// spellings so a reference from a foreign object matches. The
-    /// import is still recorded under the reference's own name -- the
-    /// per-format writer re-applies the platform prefix.
+    /// entry by the host symbol, which on Mach-O is the name's Mach-O
+    /// spelling; test both so a reference from a foreign object matches.
+    /// The import is still recorded under the reference's own name -- the
+    /// per-format writer spells it.
     fn is_routed_import(&self, name: &str) -> bool {
         self.routed_import_names.contains(name)
-            || self
-                .routed_import_names
-                .contains(alloc::format!("_{name}").as_str())
+            || (self.routed_import_names).contains(&*crate::c5::mach_o_name::spelling(name))
     }
 
     fn record_import(&mut self, name: &'a str) -> usize {

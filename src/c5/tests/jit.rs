@@ -323,8 +323,15 @@ fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
 #[test]
 fn an_initializer_naming_an_asm_definition_binds_to_it() {
     let src = r#"
-__asm__(".section .rodata\n.globl ro_t, ro_t_end\n.p2align 3\nro_t: .quad 1, 2\nro_t_end:\n"
-        ".data\n.globl rw_t, rw_t_end\n.p2align 3\nrw_t: .quad 3, 4\nrw_t_end:\n.text\n");
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+__asm__(".section .rodata\n.globl " CSYM("ro_t") ", " CSYM("ro_t_end") "\n.p2align 3\n"
+        CSYM("ro_t") ": .quad 1, 2\n" CSYM("ro_t_end") ":\n"
+        ".data\n.globl " CSYM("rw_t") ", " CSYM("rw_t_end") "\n.p2align 3\n"
+        CSYM("rw_t") ": .quad 3, 4\n" CSYM("rw_t_end") ":\n.text\n");
 extern const long long ro_t[], ro_t_end[];
 extern long long rw_t[], rw_t_end[];
 const long long *const ptrs[] = {ro_t, ro_t_end - 1, rw_t, rw_t_end - 1};
@@ -2394,15 +2401,21 @@ fn asm_template_leading_token_is_not_a_reference() {
     // A statement's leading token is a label, mnemonic or directive, so it
     // does not reference a same-named static; a name in operand position
     // does. `8:` covers the mnemonic that leads its statement behind a label.
+    // The operand spells the static as the host's assembly does.
     use crate::Target;
     use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
-    let src = "static int nop(int x){return x+1;}\n\
-               static int target(int x){return x+2;}\n\
-               void user(void){__asm__ __volatile__(\"nop\\n8: nop\\ncall target\\n\");}\n\
-               int main(void){user();return 0;}";
-    let program = Compiler::new(src.to_string())
-        .compile()
-        .expect("compile failed");
+    let callee = if cfg!(target_vendor = "apple") {
+        "_target"
+    } else {
+        "target"
+    };
+    let src = format!(
+        "static int nop(int x){{return x+1;}}\n\
+         static int target(int x){{return x+2;}}\n\
+         void user(void){{__asm__ __volatile__(\"nop\\n8: nop\\ncall {callee}\\n\");}}\n\
+         int main(void){{user();return 0;}}"
+    );
+    let program = Compiler::new(src).compile().expect("compile failed");
     let funcs =
         produce_ssa_funcs(&program, Target::host(), false, true).expect("produce_ssa_funcs");
     let names: Vec<&str> = funcs.iter().map(|f| f.name.as_str()).collect();

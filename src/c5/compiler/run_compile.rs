@@ -263,14 +263,14 @@ impl Compiler {
             crate::c5::asm::AsmComments::X86
         };
         let crate::c5::asm::AsmPrepared {
-            text: mut prepared,
+            text: prepared,
             origin,
             mut errors,
         } = crate::c5::asm::prepare_file_asm_text(text, comments);
-        if self.target.binary_format() == crate::c5::codegen::BinaryFormat::MachO {
-            prepared = crate::c5::asm::mach_o_symbol_names(&prepared);
-        }
         let text = prepared.as_str();
+        // The unit-level names below leave the assembler for the C symbols.
+        let format = self.target.binary_format();
+        let sym = |n: &str| crate::c5::asm::asm_symbol_name(format, n).into_owned();
         // Errors at lines of the prepared text.
         let mut later = Vec::new();
         // The stream outside pushed sections is either linkage directives only
@@ -283,7 +283,7 @@ impl Compiler {
         let mut blocks = match crate::c5::asm::extract_asm_sections(text, aarch64) {
             Ok(Some(ex)) if globl_shortcut && ex.is_linkage_only() => {
                 for name in ex.globl_names() {
-                    self.pending_asm_globl.push(name.into());
+                    self.pending_asm_globl.push(sym(name));
                 }
                 ex.blocks
             }
@@ -309,19 +309,22 @@ impl Compiler {
                     // is an object-level alias emitted at the target's
                     // definition.
                     AsmSectionItem::Weak(name) => {
-                        if !self.asm_weak_names.contains(name) {
-                            self.asm_weak_names.push(name.clone());
+                        let name = sym(name);
+                        if !self.asm_weak_names.contains(&name) {
+                            self.asm_weak_names.push(name);
                         }
                     }
                     AsmSectionItem::Global(name) => {
-                        if !self.asm_global_names.contains(name) {
-                            self.asm_global_names.push(name.clone());
+                        let name = sym(name);
+                        if !self.asm_global_names.contains(&name) {
+                            self.asm_global_names.push(name);
                         }
                     }
                     AsmSectionItem::Visibility { name, vis } => {
-                        match self.asm_visibility.iter_mut().find(|(n, _)| n == name) {
+                        let name = sym(name);
+                        match self.asm_visibility.iter_mut().find(|(n, _)| *n == name) {
                             Some(e) => e.1 = *vis,
-                            None => self.asm_visibility.push((name.clone(), *vis)),
+                            None => self.asm_visibility.push((name, *vis)),
                         }
                     }
                     AsmSectionItem::File(name) => {
@@ -331,7 +334,7 @@ impl Compiler {
                         self.asm_idents.push(s.clone());
                     }
                     AsmSectionItem::SymSet { name, target } => {
-                        Self::set_alias(&mut self.asm_sym_sets, name, target, 0);
+                        Self::set_alias(&mut self.asm_sym_sets, &sym(name), &sym(target), 0);
                     }
                     // `.set name, sym + k` names the same alias at an offset.
                     // A target this unit's layout places defines the name as
@@ -339,7 +342,8 @@ impl Compiler {
                     // writer drops the alias record there.
                     AsmSectionItem::SetExpr { name, expr } => {
                         if let Some((target, addend)) = crate::c5::asm::asm_sym_offset_expr(expr) {
-                            Self::set_alias(&mut self.asm_sym_sets, name, target, addend);
+                            let (name, target) = (sym(name), sym(target));
+                            Self::set_alias(&mut self.asm_sym_sets, &name, &target, addend);
                         }
                     }
                     _ => {}

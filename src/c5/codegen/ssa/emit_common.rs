@@ -2468,7 +2468,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
     let graph_cell = core::cell::OnceCell::new();
-    let graph = || graph_cell.get_or_init(|| super::shadow::ReachGraph::new(program));
+    let graph = || graph_cell.get_or_init(|| super::shadow::ReachGraph::new(program, target));
     let pipeline = Pipeline {
         arch: B::ARCH,
         verify: cfg!(debug_assertions) || native.verify_ssa,
@@ -2639,7 +2639,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // range analysis inside the branch-fold fixed point below.
         param_ranges = pipeline.run("passes::ipa_const_param::run", &mut ssa_funcs, |funcs| {
             let escaping =
-                super::super::passes::ipa_const_param::escaping_functions(funcs, program);
+                super::super::passes::ipa_const_param::escaping_functions(funcs, program, target);
             super::super::passes::ipa_const_param::run(funcs, &escaping)
         });
         // Inline after mem2reg so the candidate filter sees the
@@ -2650,7 +2650,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         let extern_fns = extern_fn_targets(program);
         pipeline.run("passes::inline::run", &mut ssa_funcs, |funcs| {
             let escaping =
-                super::super::passes::ipa_const_param::escaping_functions(funcs, program);
+                super::super::passes::ipa_const_param::escaping_functions(funcs, program, target);
             super::super::passes::inline::run(
                 funcs,
                 native.inline_cap,
@@ -2800,7 +2800,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             |funcs| {
                 use super::super::passes::{ipa_const_param, simplify_branches};
                 loop {
-                    let escaping = ipa_const_param::escaping_functions(funcs, program);
+                    let escaping = ipa_const_param::escaping_functions(funcs, program, target);
                     let before: alloc::vec::Vec<u64> =
                         funcs.iter().map(|f| f.const_params).collect();
                     ipa_const_param::run(funcs, &escaping);
@@ -3387,7 +3387,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .emit_cfi_sections(B::cfi_target(&native))
         .map_err(asm_err)?;
     let asm_unwind = super::cfi::seh_unwind(&st.asm_sections.cfi).map_err(asm_err)?;
-    let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts();
+    let (asm_section_list, asm_sym_decls) = st.asm_sections.into_parts(target.binary_format());
     st.rodata.place_literals();
     // A row names its funclet by text offset.
     for r in &mut st.seh_rows {

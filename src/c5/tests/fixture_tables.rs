@@ -2739,6 +2739,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("utmpx_reads_the_accounting_database.c", 0),
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
+    ("asm_label_names_the_assembler_symbol.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -3894,6 +3895,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("utmpx_reads_the_accounting_database.c", 0),
     ("archive_format_constants.c", 0),
     ("ndbm_store_fetch_round_trip.c", 0),
+    ("asm_label_names_the_assembler_symbol.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on

@@ -714,11 +714,11 @@ fn read_archive_members(
             }
             continue;
         }
-        // ranlib spells a Mach-O name with the leading underscore the reader
-        // drops, badc's archiver as the reader does: an entry stands for both.
+        // An index entry spells a Mach-O symbol as the file does: it stands
+        // for the name the reader gives the symbol, and for itself.
         let names = if badc::is_mach_o_object(&member_bytes) {
-            let both = |n: String| [n.strip_prefix('_').map(str::to_string), Some(n)];
-            names.into_iter().flat_map(both).flatten().collect()
+            let both = |n: String| [badc::mach_o_symbol_name(&n).into_owned(), n];
+            names.into_iter().flat_map(both).collect()
         } else {
             names
         };

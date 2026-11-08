@@ -6,14 +6,20 @@
 
 #include <stdio.h>
 
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 extern const unsigned char rept_run[];
 extern const int rept_run_len[];
 
 asm(".pushsection .text.reptrun,\"ax\"\n"
     ".balign 8\n"
-    ".globl rept_run\n"
-    ".type rept_run STT_OBJECT\n"
-    "rept_run:\n"
+    ".globl " CSYM("rept_run") "\n"
+    ".type " CSYM("rept_run") " STT_OBJECT\n"
+    CSYM("rept_run") ":\n"
     ".macro fill_bytes cnt, val\n"
     ".rept \\cnt\n"
     ".byte \\val\n"
@@ -23,11 +29,11 @@ asm(".pushsection .text.reptrun,\"ax\"\n"
     ".rept 5\n"
     ".byte 7\n"
     ".endr\n"
-    ".set rept_run_size, . - rept_run\n"
-    ".size rept_run, rept_run_size\n"
+    ".set rept_run_size, . - " CSYM("rept_run") "\n"
+    ".size " CSYM("rept_run") ", rept_run_size\n"
     ".balign 8\n"
-    ".globl rept_run_len\n"
-    "rept_run_len:\n"
+    ".globl " CSYM("rept_run_len") "\n"
+    CSYM("rept_run_len") ":\n"
     ".long rept_run_size\n"
     ".popsection\n");
 

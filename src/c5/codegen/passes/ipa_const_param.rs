@@ -124,10 +124,11 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
 /// static or `_Thread_local` initializer holds it, an alias gives it a
 /// second name, an asm template names it, or a scope table names it for
 /// the language handler. Any of those admits a call the pass cannot see
-/// the arguments of.
+/// the arguments of. Assembly names a function as `target` spells it.
 pub(crate) fn escaping_functions(
     funcs: &[FunctionSsa],
     program: &crate::c5::program::Program,
+    target: crate::c5::codegen::Target,
 ) -> BTreeSet<usize> {
     let mut out: BTreeSet<usize> = (program.code_relocs.iter())
         .chain(&program.tls_code_relocs)
@@ -160,8 +161,10 @@ pub(crate) fn escaping_functions(
     // re-scanning every template once per function.
     let runs = identifier_runs(&asm_texts);
     let asm_bytes: usize = asm_texts.iter().map(|t| t.len()).sum();
+    let format = target.binary_format();
     for f in funcs {
-        let name = f.name.as_bytes();
+        let spelled = crate::c5::asm::asm_symbol_spelling(format, &f.name);
+        let name = spelled.as_bytes();
         if name.is_empty() {
             continue;
         }

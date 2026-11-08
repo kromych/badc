@@ -2,15 +2,21 @@
  * a writable section holds the distance to a function, a data object or a
  * label, which the image fixes once it places the sections; no load-time
  * relocation is needed. Returns 0. */
+#if defined(__APPLE__)
+#define CSYM(name) "_" name
+#else
+#define CSYM(name) name
+#endif
+
 int fn(void) { return 3; }
 int data_obj = 4;
-__asm__(".text\n.p2align 3\n.globl text_tbl\n"
-        "text_tbl: .long fn - .\n .long data_obj - .\n .long text_end - .\n .long 0\n"
-        " .quad data_obj - .\n"
+__asm__(".text\n.p2align 3\n.globl " CSYM("text_tbl") "\n"
+        CSYM("text_tbl") ": .long " CSYM("fn") " - .\n .long " CSYM("data_obj") " - .\n .long text_end - .\n .long 0\n"
+        " .quad " CSYM("data_obj") " - .\n"
         "text_end: .long 0\n"
-        ".data\n.p2align 3\n.globl data_tbl\n"
-        "data_tbl: .long fn - .\n .long data_obj - .\n .long data_end - .\n .long 0\n"
-        " .quad fn - .\n"
+        ".data\n.p2align 3\n.globl " CSYM("data_tbl") "\n"
+        CSYM("data_tbl") ": .long " CSYM("fn") " - .\n .long " CSYM("data_obj") " - .\n .long data_end - .\n .long 0\n"
+        " .quad " CSYM("fn") " - .\n"
         "data_end: .long 0\n"
         ".text\n");
 extern const int text_tbl[];

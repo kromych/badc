@@ -1146,7 +1146,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             } else if let Some(symbol) = merged.import_symbols.get(name) {
                 symbol.clone()
             } else if flat_lookup && target == Target::MacOSAarch64 {
-                alloc::format!("_{name}")
+                crate::c5::mach_o_name::spelling(name).into_owned()
             } else {
                 name.clone()
             },
@@ -2084,11 +2084,14 @@ mod tests {
         // on Mach-O, gains the leading underscore the loader matches
         // against the host's exported name. ELF keeps the name verbatim.
         let mut merged = tiny_aarch64_main();
-        merged.imports = alloc::vec!["ext_to_index".to_string()];
+        merged.imports = alloc::vec!["ext_to_index".to_string(), "\u{1}raw_ext".to_string()];
         merged.flat_imports.insert("ext_to_index".to_string());
+        merged.flat_imports.insert("\u{1}raw_ext".to_string());
         let mac = synth_imports(&merged, Target::MacOSAarch64).expect("synth");
         assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
         assert_eq!(mac.imports[0].real_symbol, "_ext_to_index");
+        // A raw name is the symbol as written.
+        assert_eq!(mac.imports[1].real_symbol, "raw_ext");
         let elf = synth_imports(&merged, Target::LinuxAarch64).expect("synth");
         assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
         assert_eq!(elf.imports[0].real_symbol, "ext_to_index");

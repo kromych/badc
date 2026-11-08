@@ -13,11 +13,21 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
+<asm_label_raw_def>:
+               	mov	x0, #0x5                // =5
+               	ret
+
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
                	cmp	w0, #0x2
+               	b.ne	<addr>
+               	bl	<addr>
+               	cmp	w0, #0x3
+               	b.ne	<addr>
+               	bl	<addr>
+               	cmp	w0, #0x5
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
@@ -28,3 +38,10 @@ Disassembly of section .text:
 <asm_label_two>:
                	mov	w0, #0x2                // =2
                	ret
+
+<asm_label_raw>:
+               	mov	w0, #0x3                // =3
+               	ret
+
+<call_five>:
+               	b	<addr>

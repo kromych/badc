@@ -10,8 +10,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-/// Joins a routed name to its DLL in a key; no C identifier or DLL path holds it.
-const SEP: char = '\u{1}';
+/// Joins a routed name to its DLL in a key; no symbol name or DLL path holds
+/// it ([`crate::c5::mach_o_name::RAW`] leads a name).
+const SEP: char = '\u{1f}';
 
 /// The name a key this pass made imports.
 pub(crate) fn routed_name(key: &str) -> Option<&str> {

@@ -9,9 +9,9 @@
 //! instruction field and supplies it through a preceding
 //! `ARM64_RELOC_ADDEND`, and spells a label difference as an
 //! `ARM64_RELOC_SUBTRACTOR` / `ARM64_RELOC_UNSIGNED` pair, so both
-//! fold into the single addend AAELF64 carries. C names arrive with
-//! the Mach-O leading underscore, which the writer re-applies, so the
-//! reader strips one.
+//! fold into the single addend AAELF64 carries. Symbols take badc's
+//! names ([`crate::c5::mach_o_name::name`]), which the writer spells
+//! back.
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -1117,7 +1117,7 @@ fn decode_symbols(
             continue;
         }
         let name = cstr(strtab, n_strx)?;
-        let name = name.strip_prefix('_').unwrap_or(name).to_string();
+        let name = crate::c5::mach_o_name::name(name).into_owned();
         let ext = n_type & N_EXT != 0;
         let mut input_section = None;
         let (section, value, size) = match n_type & N_TYPE {
@@ -1943,10 +1943,14 @@ mod tests {
                 ("_zero", N_SECT | N_EXT, 2, 0, 8),
                 ("_abs", N_ABS | N_EXT, 0, 0, 0x1234),
                 ("ltmp0", N_SECT, 1, 0, 0),
+                // An asm label without the C underscore.
+                ("other_name", N_SECT | N_EXT, 1, 0, 0),
             ],
         ))
         .expect("parse");
         let by = |n: &str| o.symbols.iter().find(|s| s.name == n).expect(n).clone();
+        assert_eq!(by("\u{1}other_name").binding, STB_GLOBAL);
+        assert!(!o.symbols.iter().any(|s| s.name == "other_name"));
         let c = by("tentative");
         assert_eq!(c.section, NativeSymSection::Common);
         assert_eq!((c.value, c.size), (8, 32));
@@ -1956,7 +1960,7 @@ mod tests {
         assert_eq!(by("zero").value, 0);
         assert_eq!(by("abs").section, NativeSymSection::Abs);
         assert_eq!(by("abs").value, 0x1234);
-        assert_eq!(by("ltmp0").binding, STB_LOCAL);
+        assert_eq!(by("\u{1}ltmp0").binding, STB_LOCAL);
         assert_eq!(o.bss_size, 16);
         assert_eq!(by("tentative").kind, STT_OBJECT);
         assert_eq!(by("hidden").kind, STT_FUNC);

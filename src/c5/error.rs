@@ -103,7 +103,9 @@ impl fmt::Display for C5Error {
                 }
                 Ok(())
             }
-            C5Error::Runtime(msg) => write!(f, "error: runtime: {}", msg),
+            C5Error::Runtime(msg) => {
+                write!(f, "error: runtime: {}", crate::c5::mach_o_name::shown(msg))
+            }
         }
     }
 }

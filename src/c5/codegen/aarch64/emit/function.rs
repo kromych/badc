@@ -1060,6 +1060,7 @@ impl FunctionEmitter<'_, '_> {
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target,
             ..
         } = self.fcx;
         let lowered = emit_inline_asm_aarch64(
@@ -1074,6 +1075,7 @@ impl FunctionEmitter<'_, '_> {
             name2entpc,
             extern_data_names,
             data_sym_offsets,
+            target.binary_format(),
             self.cx.asm_sections,
             self.cx.asm_extern_call_sites,
             self.cx.asm_sym_fixups,

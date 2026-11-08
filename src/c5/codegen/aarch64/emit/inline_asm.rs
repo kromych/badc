@@ -500,6 +500,8 @@ struct AsmSymbols<'a> {
     extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// Internal-linkage data object name -> unified data offset.
     data_sym_offsets: &'a alloc::collections::BTreeMap<alloc::string::String, i64>,
+    /// The object format, whose spelling the template's symbols take.
+    format: crate::c5::codegen::BinaryFormat,
 }
 
 /// A statement's operands with their assigned registers: what the
@@ -1847,7 +1849,11 @@ impl<'a> TemplateStream<'a> {
     /// A named label defined in the main stream is a definition of the
     /// unit, as under GNU as: the writers emit a `.text` symbol for it. `.L`
     /// names are assembler-local.
-    fn record_named_labels(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
+    fn record_named_labels(
+        &self,
+        out: &mut AsmSink,
+        format: crate::c5::codegen::BinaryFormat,
+    ) -> Result<(), alloc::string::String> {
         for &(num, off) in &self.label_defs {
             let Some(idx) = num.checked_sub(crate::c5::asm::NAMED_LABEL_BASE) else {
                 continue;
@@ -1858,14 +1864,15 @@ impl<'a> TemplateStream<'a> {
             if crate::c5::asm::is_local_label(name) {
                 continue;
             }
+            let symbol = crate::c5::asm::asm_symbol_name(format, name).into_owned();
             // One definition per name across the unit, as in GNU as.
-            if out.asm_text_labels.iter().any(|l| l.name == name) {
+            if out.asm_text_labels.iter().any(|l| l.name == symbol) {
                 return Err(alloc::format!(
                     "inline asm: symbol `{name}` is already defined"
                 ));
             }
             out.asm_text_labels.push(super::AsmTextLabel {
-                name: alloc::string::String::from(name),
+                name: symbol,
                 text_offset: off,
             });
         }
@@ -1890,6 +1897,7 @@ fn encode_sym_branch(
         (BranchKind::B, super::encode::enc_b(0))
     };
     let name = ops.symbol_name(name)?;
+    let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let native_offset = out.code.len();
     match syms.name2entpc.get(name.as_str()) {
         Some(&ent_pc) => out.fixups.push(Fixup {
@@ -1985,6 +1993,7 @@ fn encode_sym_operand(
             "aarch64 inline asm: operand expression `{expr}` needs a section layout"
         ));
     };
+    let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let target = match syms.data_sym_offsets.get(name.as_str()) {
         Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
         None => crate::c5::asm::AsmSectionTarget::Symbol(name),
@@ -2045,9 +2054,11 @@ fn materialize_sections(
         }
         stream.main_label_off(name).map(LabelLoc::Text)
     };
+    // An operand's symbol enters the section as assembly spells it.
     let operand_sym = |idx: u8| -> Option<(crate::c5::asm::AsmSectionTarget, i64)> {
         crate::c5::asm::asm_operand_data_target(ops.func, *ops.args.get(idx as usize)?, &|vid| {
-            syms.extern_data_names.get(&vid).cloned()
+            let name = syms.extern_data_names.get(&vid)?;
+            Some(crate::c5::asm::asm_symbol_spelling(syms.format, name).into_owned())
         })
     };
     let resolver = crate::c5::asm::AsmOperandResolver {
@@ -2214,6 +2225,7 @@ pub(super) fn emit_inline_asm_aarch64(
     name2entpc: &alloc::collections::BTreeMap<alloc::string::String, usize>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     data_sym_offsets: &alloc::collections::BTreeMap<alloc::string::String, i64>,
+    format: crate::c5::codegen::BinaryFormat,
     asm_sections: &mut crate::c5::asm::AsmSectionSink,
     asm_extern_call_sites: &mut Vec<super::UserExternCallSite>,
     asm_sym_fixups: &mut Vec<super::AsmSymFixup>,
@@ -2252,6 +2264,7 @@ pub(super) fn emit_inline_asm_aarch64(
         name2entpc,
         extern_data_names,
         data_sym_offsets,
+        format,
     };
     match lower_inline_asm(
         &mut out,
@@ -2364,7 +2377,7 @@ fn lower_inline_asm(
     stream.encode(&insns, &ops, out, syms, goto_row)?;
     stream.settle_expr_fixups(out)?;
     let pending_xsec = stream.patch_label_branches(out, !section_blocks.is_empty())?;
-    stream.record_named_labels(out)?;
+    stream.record_named_labels(out, syms.format)?;
     // The replacement's `.org` length assertion reads the main labels.
     let mut deferred_goto_sites: Vec<(usize, LabelBranch, u8)> = Vec::new();
     let deferred_idx: Option<u32> = if deferred_text.is_empty() {

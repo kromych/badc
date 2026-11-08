@@ -15,6 +15,7 @@ mod layout;
 mod lexer;
 #[cfg(feature = "full")]
 mod linker;
+mod mach_o_name;
 mod ms_intrinsic;
 mod object;
 mod op;
@@ -65,6 +66,7 @@ pub use {
     headers::{TargetSet, embedded_headers},
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
+    mach_o_name::name as mach_o_symbol_name,
     preprocessor::{IncludeOrigin, IncludeRecord, IncludeStatus},
     program::{AutoInclude, Program, SymVisibility, VariableInfo},
     vm::{Trace, Vm},

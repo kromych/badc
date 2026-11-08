@@ -3,6 +3,7 @@
 //! expected substring (so we don't pin exact wording of line numbers).
 
 use super::Compiler;
+use crate::c5::asm::asm_symbol_spelling;
 
 fn expect_compile_error(src: &str, needle: &str) {
     match Compiler::new(src.to_string()).compile() {
@@ -2532,9 +2533,9 @@ fn asm_goto_accepts_forward_and_backward_labels() {
 
 #[test]
 fn declarator_asm_label_renames_the_emitted_symbol() {
-    // A GNU asm-label sets the assembler symbol name; the identifier keeps
-    // its own identity, so it stays the lookup key and the only spelling the
-    // source may use.
+    // A GNU asm-label sets the assembler symbol name, as written; the
+    // identifier keeps its own identity, so it stays the lookup key and the
+    // only spelling the source may use.
     super::compile_str_bare("int g asm(\"g\"); int main(void) { return g; }");
     let p = super::compile_str_bare("int g asm(\"real_g\"); int main(void) { return g; }");
     let g = p
@@ -2542,7 +2543,8 @@ fn declarator_asm_label_renames_the_emitted_symbol() {
         .iter()
         .find(|s| s.name == "g")
         .expect("identifier stays the symbol-table key");
-    assert_eq!(g.link_name(), "real_g");
+    let format = p.target.binary_format();
+    assert_eq!(asm_symbol_spelling(format, g.link_name()), "real_g");
     // One identifier, one assembler name: restating it is fine, changing it
     // is not.
     super::compile_str_bare(
@@ -2737,13 +2739,9 @@ fn file_scope_register_asm_binding() {
     // Without `register` the declarator asm suffix is a GNU asm-label, which
     // renames the emitted symbol rather than binding a register.
     let p = super::compile_str_bare("long x asm(\"renamed\"); int main(void) { return 0; }");
-    assert_eq!(
-        p.symbols
-            .iter()
-            .find(|s| s.name == "x")
-            .map(crate::c5::symbol::Symbol::link_name),
-        Some("renamed")
-    );
+    let x = p.symbols.iter().find(|s| s.name == "x").expect("x");
+    let format = p.target.binary_format();
+    assert_eq!(asm_symbol_spelling(format, x.link_name()), "renamed");
 }
 
 /// Windows and Darwin reserve x18, AAPCS64's platform register (Windows

@@ -10786,7 +10786,8 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
         asm(\".weak optional_hook\");\n\
         int main(void) { return 0; }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
-        let program = Compiler::new(String::from(src)).compile().expect("compile");
+        let program =
+            (Compiler::with_target(String::from(src), target).compile()).expect("compile");
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             ..Default::default()

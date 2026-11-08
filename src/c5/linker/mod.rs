@@ -119,7 +119,8 @@ pub use archive::{read_archive_at, read_indexed_archive_at};
 #[allow(unused_imports)]
 pub use coff_object::{
     ImportMember, import_libraries, is_arm64x_native_member, is_coff_import_member, is_coff_object,
-    is_pe_dll, parse_import_member, parse_native_coff, parse_pe_dll, traditional_imports,
+    is_pe_dll, module_definition, parse_import_member, parse_native_coff, parse_pe_dll,
+    traditional_imports,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
@@ -157,9 +158,9 @@ pub use map::{ArchiveInclusion, render_link_map};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use object::{
-    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, SharedLibrary,
-    detect_binary_format, is_elf_object, is_native_object, parse_native_elf, parse_native_object,
-    parse_native_object_for, parse_shared_library,
+    ExportForm, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
+    SharedLibrary, detect_binary_format, is_elf_object, is_native_object, parse_native_elf,
+    parse_native_object, parse_native_object_for, parse_shared_library,
 };
 #[cfg(feature = "std")]
 pub use on_demand::OnDemandSources;

@@ -299,6 +299,7 @@ fn synth_program_and_build(
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
         named_code_sections: merged.named_code_sections.clone(),
+        export_forms: merged.export_forms.clone(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
@@ -1929,6 +1930,7 @@ mod tests {
             applied_text_relocs: Vec::new(),
             named_sections: Vec::new(),
             named_code_sections: Vec::new(),
+            export_forms: Vec::new(),
             resources: Vec::new(),
             text_align: 16,
             // aarch64: `mov w0, #42; ret`.

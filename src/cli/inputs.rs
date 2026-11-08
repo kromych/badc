@@ -520,8 +520,9 @@ impl Inputs {
             let kind = match ext {
                 _ if a == "-" || cli.front.languages.contains_key(a) => InputKind::Source,
                 "c" | "i" | "" | "s" | "S" | "sx" => InputKind::Source,
-                // link.exe takes rc.exe's compiled resources among the objects.
-                "o" | "obj" | "res" => InputKind::Object,
+                // link.exe takes rc.exe's compiled resources and module-definition
+                // files among the objects.
+                "o" | "obj" | "res" | "def" => InputKind::Object,
                 "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => InputKind::Shared,
                 "a" | "lib" => InputKind::Archive,
                 // In --jit / --interp the first unrecognised entry starts the

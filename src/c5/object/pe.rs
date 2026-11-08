@@ -1046,6 +1046,7 @@ impl<'a> PeWriter<'a> {
                 edata_rva,
                 entries,
                 &build.forwarded_exports,
+                &build.export_forms,
                 build.shared_lib_name.as_deref(),
             )?
         } else {
@@ -1920,36 +1921,55 @@ const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPO
 
 /// Build the `.edata` section bytes for an image with exports. A
 /// forwarder's slot holds the RVA of its `dll.export` string, which the
-/// directory carries after the names.
+/// directory carries after the names. An export takes the ordinal `forms`
+/// gives it; the others take the lowest free ones from the lowest given
+/// ordinal, or from 1, in name order, as link.exe assigns them, and a
+/// `NONAME` one has no name table entry.
 fn build_export_directory(
     edata_rva: u32,
     exports: Vec<(String, u32)>,
     forwards: &[(String, String)],
+    forms: &[crate::c5::codegen::ExportForm],
     image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let mut exports: Vec<(String, Option<u32>)> = (exports.into_iter())
         .map(|(name, rva)| (name, Some(rva)))
         .chain(forwards.iter().map(|(name, _)| (name.clone(), None)))
         .collect();
-    // link.exe assigns the ordinals a definition file does not in name
-    // order, so AddressOfFunctions takes the exports sorted by name too.
     exports.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
-    let n = exports.len() as u32;
+    let form = |name: &str| forms.iter().find(|f| f.name == name);
+    let given: alloc::collections::BTreeSet<u32> = (exports.iter())
+        .filter_map(|(n, _)| form(n)?.ordinal.map(u32::from))
+        .collect();
+    let base = given.first().copied().unwrap_or(1);
+    let (mut taken, mut next) = (given.clone(), base);
+    let ordinals: Vec<u32> = (exports.iter())
+        .map(|(n, _)| match form(n).and_then(|f| f.ordinal) {
+            Some(o) => u32::from(o),
+            None => {
+                while !taken.insert(next) {
+                    next += 1;
+                }
+                next
+            }
+        })
+        .collect();
+    let named: Vec<usize> = (0..exports.len())
+        .filter(|&i| !form(&exports[i].0).is_some_and(|f| f.noname))
+        .collect();
+    let funcs = ordinals.iter().map(|o| o - base + 1).max().unwrap_or(0);
+    let names = named.len() as u32;
     let header_size = IMAGE_EXPORT_DIRECTORY_SIZE as u32;
     let funcs_off = header_size;
-    let names_off = funcs_off + 4 * n;
-    let ordinals_off = names_off + 4 * n;
-    let strings_off = ordinals_off + 2 * n;
+    let names_off = funcs_off + 4 * funcs;
+    let ordinals_off = names_off + 4 * names;
+    let strings_off = ordinals_off + 2 * names;
 
-    // The image-name string heads the string blob; per-export names follow,
-    // each NUL-terminated. We compute their RVAs as we go so the
-    // AddressOfNames entries match.
+    // The image-name string heads the string blob, the names follow, each
+    // NUL-terminated, then the forwarders' strings.
     let dll_name = image_name.unwrap_or("c5-output.dll");
     let strings_rva = edata_rva + strings_off;
-    let dll_name_rva = strings_rva;
-
     let mut out = Vec::with_capacity(strings_off as usize + dll_name.len() + 1);
-
     write_struct(
         &mut out,
         &ImageExportDirectory {
@@ -1957,20 +1977,21 @@ fn build_export_directory(
             time_date_stamp: 0,
             major_version: 0,
             minor_version: 0,
-            name_rva: dll_name_rva,
-            ordinal_base: 1,
-            number_of_functions: n,
-            number_of_names: n,
+            name_rva: strings_rva,
+            ordinal_base: base,
+            number_of_functions: funcs,
+            number_of_names: names,
             address_of_functions: edata_rva + funcs_off,
             address_of_names: edata_rva + names_off,
             address_of_name_ordinals: edata_rva + ordinals_off,
         },
     );
 
-    let names_len: u32 = exports.iter().map(|(name, _)| name.len() as u32 + 1).sum();
+    let names_len: u32 = named.iter().map(|&i| exports[i].0.len() as u32 + 1).sum();
     let mut forward_rva = strings_rva + dll_name.len() as u32 + 1 + names_len;
     let mut forward_strings = Vec::new();
-    for (name, rva) in &exports {
+    let mut slots = alloc::vec![0u32; funcs as usize];
+    for ((name, rva), &ordinal) in exports.iter().zip(&ordinals) {
         let rva = rva.unwrap_or_else(|| {
             let (_, to) = (forwards.iter())
                 .find(|(n, _)| n == name)
@@ -1980,27 +2001,22 @@ fn build_export_directory(
             forward_rva += to.len() as u32 + 1;
             at
         });
-        out.extend_from_slice(&rva.to_le_bytes());
+        slots[(ordinal - base) as usize] = rva;
     }
-
-    // The name pointer table must be lexically ordered; the parallel
-    // ordinal table maps each name back to its AddressOfFunctions slot.
-    let mut by_name: Vec<usize> = (0..exports.len()).collect();
-    by_name.sort_by(|&a, &b| exports[a].0.as_bytes().cmp(exports[b].0.as_bytes()));
-
+    out.extend(slots.iter().flat_map(|s| s.to_le_bytes()));
+    // The name pointer table is lexically ordered (the exports already
+    // are); the parallel ordinal table maps each name to its slot.
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
-    for &i in &by_name {
+    for &i in &named {
         out.extend_from_slice(&cur.to_le_bytes());
         cur += exports[i].0.len() as u32 + 1;
     }
-
-    for &i in &by_name {
-        out.extend_from_slice(&(i as u16).to_le_bytes());
+    for &i in &named {
+        out.extend_from_slice(&((ordinals[i] - base) as u16).to_le_bytes());
     }
-
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
-    for &i in &by_name {
+    for &i in &named {
         out.extend_from_slice(exports[i].0.as_bytes());
         out.push(0);
     }
@@ -3444,6 +3460,7 @@ mod tests {
                 ("alpha".to_string(), 0x2000u32),
             ],
             &[],
+            &[],
             Some("t.dll"),
         )
         .expect("build export directory");
@@ -3467,6 +3484,54 @@ mod tests {
                 .unwrap(),
         );
         assert_eq!((ord0, ord1), (0, 1));
+    }
+
+    /// Ordinals as link.exe assigns them for a definition file giving `beta`
+    /// 2 (NONAME), `zeta` 5 and `epsilon` 9: the base is the lowest given
+    /// ordinal, the others take the free ones from it in name order, a gap
+    /// stays an empty slot, and `beta` has no name.
+    #[test]
+    fn export_directory_takes_given_ordinals() {
+        use crate::c5::codegen::ExportForm;
+        let form = |name: &str, ordinal: u16, noname: bool| ExportForm {
+            name: name.to_string(),
+            ordinal: Some(ordinal),
+            noname,
+            private: false,
+        };
+        let names = [
+            "zeta", "alpha", "beta", "gamma", "delta", "outer", "epsilon",
+        ];
+        let exports = (names.iter().enumerate())
+            .map(|(i, n)| (n.to_string(), 0x1000 + 0x10 * i as u32))
+            .collect();
+        let forms = [
+            form("zeta", 5, false),
+            form("beta", 2, true),
+            form("epsilon", 9, false),
+        ];
+        let bytes = build_export_directory(0x5000, exports, &[], &forms, Some("t.dll")).unwrap();
+        let u32_at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let (base, funcs, nnames) = (u32_at(16), u32_at(20), u32_at(24));
+        assert_eq!((base, funcs, nnames), (2, 8, 6));
+        let slot =
+            |ordinal: u32| u32_at(IMAGE_EXPORT_DIRECTORY_SIZE + 4 * (ordinal - base) as usize);
+        let rva =
+            |name: &str| 0x1000 + 0x10 * names.iter().position(|n| *n == name).unwrap() as u32;
+        let expect = [
+            (2, "beta"),
+            (3, "alpha"),
+            (4, "delta"),
+            (5, "zeta"),
+            (6, "gamma"),
+            (7, "outer"),
+            (9, "epsilon"),
+        ];
+        for (ordinal, name) in expect {
+            assert_eq!(slot(ordinal), rva(name), "{name} at {ordinal}");
+        }
+        assert_eq!(slot(8), 0);
+        assert!(!bytes.windows(5).any(|w| w == b"beta\0"));
     }
 
     /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength` in 11

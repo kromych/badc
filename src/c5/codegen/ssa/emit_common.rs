@@ -3396,6 +3396,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         emitted_relocs: alloc::vec::Vec::new(),
         named_sections: alloc::vec::Vec::new(),
         named_code_sections: alloc::vec::Vec::new(),
+        export_forms: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: alloc::vec::Vec::new(),
         data_import_binds: alloc::vec::Vec::new(),

@@ -754,6 +754,7 @@ pub(crate) struct Directives {
     pub(crate) default_libs: Vec<String>,
     /// `/FAILIFMISMATCH:key=value`, which a link checks across its inputs.
     pub(crate) mismatch_keys: Vec<(String, String)>,
+    pub(crate) export_forms: Vec<super::object::ExportForm>,
 }
 
 impl Directives {
@@ -807,6 +808,73 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
 }
 
 /// Adds the options of one directive string to `d`.
+/// A module-definition file, link.exe's `/DEF:` input: its `EXPORTS` as the
+/// `/EXPORT:` options they stand for, in an object of no content for
+/// `machine`, and the image name its `LIBRARY` or `NAME` statement gives.
+/// `;` opens a comment.
+pub fn module_definition(
+    text: &str,
+    machine: super::object::NativeMachine,
+) -> Result<(NativeObject, Option<String>), C5Error> {
+    let bad_def = |what: &str| bad(&format!("module-definition file: {what}"));
+    let (mut options, mut image, mut exporting) = (String::new(), None, false);
+    for line in text
+        .lines()
+        .map(|l| l.split(';').next().unwrap_or("").trim())
+    {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        let Some(&first) = words.first() else {
+            continue;
+        };
+        let unquote = |w: &str| w.trim_matches('"').to_string();
+        match first.to_ascii_uppercase().as_str() {
+            "LIBRARY" | "NAME" => {
+                image = words
+                    .get(1)
+                    .filter(|w| !w.contains('='))
+                    .map(|w| unquote(w));
+                exporting = false;
+                continue;
+            }
+            "EXPORTS" => {
+                exporting = true;
+                if words.len() == 1 {
+                    continue;
+                }
+            }
+            s @ ("HEAPSIZE" | "STACKSIZE" | "SECTIONS" | "STUB" | "VERSION" | "IMPORTS") => {
+                return Err(bad_def(&format!("the `{s}` statement is not supported")));
+            }
+            _ if !exporting => return Err(bad_def(&format!("`{line}` outside `EXPORTS`"))),
+            _ => {}
+        }
+        // `name[=internal] [@ordinal [NONAME]] [DATA] [PRIVATE]`, the `=` and
+        // the ordinal's `@` possibly set apart.
+        let spec = line
+            .strip_prefix(first)
+            .filter(|_| first.eq_ignore_ascii_case("EXPORTS"));
+        let joined = spec.unwrap_or(line).replace(" = ", "=").replace("@ ", "@");
+        let mut parts = joined.split_whitespace();
+        let entry = unquote(parts.next().ok_or_else(|| bad_def("an empty export"))?);
+        options.push_str(&format!(" /EXPORT:{entry}"));
+        for part in parts {
+            match part.to_ascii_uppercase().as_str() {
+                p @ ("NONAME" | "DATA" | "PRIVATE") => options.push_str(&format!(",{p}")),
+                p if p.starts_with('@') => options.push_str(&format!(",{p}")),
+                p => return Err(bad_def(&format!("`{p}` in the export of `{entry}`"))),
+            }
+        }
+    }
+    let mut d = Directives::default();
+    parse_directives(&options, &mut d)?;
+    let mut obj = NativeObject::empty(machine);
+    obj.symbols = d.include_symbols().collect();
+    obj.exports = d.exports;
+    obj.export_aliases = d.export_aliases;
+    obj.export_forms = d.export_forms;
+    Ok((obj, image))
+}
+
 pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5Error> {
     for tok in directive_tokens(text) {
         let Some(opt) = tok.strip_prefix('/').or_else(|| tok.strip_prefix('-')) else {
@@ -824,18 +892,33 @@ pub(crate) fn parse_directives(text: &str, d: &mut Directives) -> Result<(), C5E
             "export" => {
                 let mut parts = arg.split(',');
                 let entry = parts.next().unwrap_or("");
-                let mut data = false;
+                let (mut data, mut noname, mut private, mut ordinal) = (false, false, false, None);
                 for flag in parts {
                     match flag.to_ascii_lowercase().as_str() {
                         "data" => data = true,
-                        "private" => {}
-                        _ => {
-                            return Err(unsupported(&format!(
-                                "`.drectve` option `{tok}` exports by ordinal, which the \
-                                 linker does not carry out"
-                            )));
+                        "private" => private = true,
+                        "noname" => noname = true,
+                        f => {
+                            let n = f.strip_prefix('@').and_then(|n| n.parse::<u16>().ok());
+                            ordinal = Some(n.filter(|&n| n > 0).ok_or_else(|| {
+                                bad(&format!("`.drectve` option `{tok}` is malformed"))
+                            })?);
                         }
                     }
+                }
+                if noname && ordinal.is_none() {
+                    return Err(bad(&format!(
+                        "`.drectve` option `{tok}`: NONAME takes an ordinal"
+                    )));
+                }
+                if ordinal.is_some() || private {
+                    let name = entry.split_once('=').map_or(entry, |(n, _)| n);
+                    d.export_forms.push(super::object::ExportForm {
+                        name: name.to_string(),
+                        ordinal,
+                        noname,
+                        private,
+                    });
                 }
                 match entry.split_once('=') {
                     _ if entry.is_empty() => {
@@ -1955,6 +2038,7 @@ pub fn parse_native_coff(
         default_libs: directives.default_libs.clone(),
         mismatch_keys: directives.mismatch_keys.clone(),
         resources,
+        export_forms: directives.export_forms.clone(),
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -2112,6 +2196,42 @@ mod tests {
     use super::build::{Sec, object, sec, section_aux, sym, weak_aux};
     use super::*;
 
+    /// A module-definition file's exports become `/EXPORT:` options: an
+    /// alias, an ordinal with `NONAME`, `DATA` and `PRIVATE`, with comments
+    /// and a spaced `=` and `@`; `LIBRARY` names the image.
+    #[test]
+    fn a_module_definition_file_reads_as_export_options() {
+        let text = "; probe\nLIBRARY \"probe.dll\"\nEXPORTS\n  zeta @5\n  beta @ 2 NONAME ; by ordinal\n\
+                    gamma DATA\n  delta PRIVATE\n  outer = inner\n";
+        let (obj, name) =
+            module_definition(text, super::super::object::NativeMachine::X86_64).unwrap();
+        assert_eq!(name.as_deref(), Some("probe.dll"));
+        assert_eq!(obj.exports, ["zeta", "beta", "gamma", "delta"]);
+        assert_eq!(obj.export_aliases.len(), 1);
+        assert_eq!(
+            (
+                obj.export_aliases[0].name.as_str(),
+                obj.export_aliases[0].target.as_str()
+            ),
+            ("outer", "inner")
+        );
+        let form = |n: &str| obj.export_forms.iter().find(|f| f.name == n).cloned();
+        assert_eq!(
+            form("beta").map(|f| (f.ordinal, f.noname)),
+            Some((Some(2), true))
+        );
+        assert_eq!(
+            form("zeta").map(|f| (f.ordinal, f.noname)),
+            Some((Some(5), false))
+        );
+        assert!(form("delta").is_some_and(|f| f.private && f.ordinal.is_none()));
+        let err = module_definition(
+            "EXPORTS\n f\nSTACKSIZE 4096\n",
+            super::super::object::NativeMachine::X86_64,
+        );
+        assert!(err.unwrap_err().to_string().contains("`STACKSIZE`"));
+    }
+
     const TEXT: u32 = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | 0x0050_0000;
     const RDATA: u32 = IMAGE_SCN_CNT_INITIALIZED_DATA | 0x0040_0000;
     const DATA: u32 = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE | 0x0040_0000;
@@ -2260,7 +2380,7 @@ mod tests {
             (NativeSymSection::Common, 3, 16)
         );
         assert_eq!(o.discarded, [(".drectve".to_string(), text.len() as u64)]);
-        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@1,NONAME", "/EXPORT:=g"] {
+        for refused in ["/MERGE:.a=.b", "/EXPORT:f,@0", "/EXPORT:f,NONAME", "/EXPORT:=g"] {
             let err = parse(&[sec(".drectve", drectve, refused.as_bytes())], &[]).unwrap_err();
             assert!(err.to_string().contains(&format!("`{refused}`")), "{err}");
         }

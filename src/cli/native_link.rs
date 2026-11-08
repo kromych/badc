@@ -146,11 +146,20 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut source_slots = vec![0; sources.len()];
     // Compiled resource files, which link.exe takes for the image's `.rsrc`.
     let mut resources = Vec::new();
+    // A module-definition file's `LIBRARY` name, for the export directory.
+    let mut def_image_name: Option<String> = None;
     for input in ordered {
         if let LinkInput::Object(path) = &input
             && let Some(res) = read_resource_input(path, cli.target)
         {
             resources.push(res);
+            continue;
+        }
+        if let LinkInput::Object(path) = &input
+            && let Some((obj, name)) = read_definition_input(path, cli.target)
+        {
+            def_image_name = def_image_name.or(name);
+            slots.push(Slot::Fixed(vec![obj]));
             continue;
         }
         let slot = match input {
@@ -278,6 +287,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             subsystem: subsystem_override,
             first_source: sources.first().map(|s| s.as_str()).unwrap_or("a"),
             resources: &resources,
+            library: def_image_name.as_deref(),
         },
         &mut stats,
     );
@@ -537,6 +547,33 @@ fn read_resource_input(path: &str, target: badc::Target) -> Option<Vec<u8>> {
         std::process::exit(1);
     }
     Some(bytes)
+}
+
+/// A module-definition file's exports as an object, and its image name, when
+/// the input is one (by its `.def` suffix): a PE image takes it, as
+/// link.exe's `/DEF:` does, and another image refuses it.
+fn read_definition_input(
+    path: &str,
+    target: badc::Target,
+) -> Option<(badc::NativeObject, Option<String>)> {
+    let is_def = std::path::Path::new(path)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("def"));
+    if !is_def {
+        return None;
+    }
+    let fail = |why: String| -> ! {
+        eprint_diagnostic(format!("badc: error: `{path}`: {why}"));
+        std::process::exit(1);
+    };
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        fail("a module-definition file applies to a PE image".to_string());
+    }
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| fail(e.to_string()));
+    let (mut obj, name) = badc::module_definition(&text, target_machine(target))
+        .unwrap_or_else(|e| fail(e.to_string()));
+    obj.source = path.to_string();
+    Some((obj, name))
 }
 
 /// Read and parse a `.o` input.
@@ -1325,6 +1362,9 @@ struct ImageInputs<'a> {
     first_source: &'a str,
     /// Compiled resource files for a PE image's `.rsrc`.
     resources: &'a [Vec<u8>],
+    /// A module-definition file's `LIBRARY` name, which the export
+    /// directory takes over the output's.
+    library: Option<&'a str>,
 }
 
 /// A freestanding Linux image runs without the dynamic loader unless it
@@ -1365,8 +1405,16 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
 }
 
 /// `--out-implib`: the import library of the DLL just written, read back
-/// from its export directory; `data` names the exports it imports as data.
-fn write_import_library(path: &std::path::Path, dll: &[u8], data: &[&str], cli: &Cli) {
+/// from its export directory; `data` names the exports it imports as data,
+/// and `forms` those it leaves out (`PRIVATE`) or imports by ordinal
+/// (`NONAME`).
+fn write_import_library(
+    path: &std::path::Path,
+    dll: &[u8],
+    data: &[&str],
+    forms: &[badc::ExportForm],
+    cli: &Cli,
+) {
     if cli.mode != Mode::SharedLibrary || !badc::is_pe_dll(dll) {
         eprint_diagnostic("badc: error: --out-implib applies to a PE shared library");
         std::process::exit(1);
@@ -1376,6 +1424,14 @@ fn write_import_library(path: &std::path::Path, dll: &[u8], data: &[&str], cli: 
         std::process::exit(1);
     });
     lib.data_exports.extend(data.iter().map(|n| n.to_string()));
+    for f in forms {
+        if f.private {
+            lib.exports.remove(&f.name);
+        } else if let Some(ordinal) = f.ordinal.filter(|_| f.noname) {
+            lib.exports.insert(f.name.clone());
+            lib.export_ordinals.insert(f.name.clone(), ordinal);
+        }
+    }
     write_output(
         path,
         &badc::write_import_library(&lib),
@@ -1473,7 +1529,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
                 &shared_default_path
             }
         };
-        path.file_name().and_then(|n| n.to_str())
+        image.library.or(path.file_name().and_then(|n| n.to_str()))
     } else {
         None
     };
@@ -1524,7 +1580,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             .filter(|a| a.data)
             .map(|a| a.name.as_str())
             .collect();
-        write_import_library(path, &bytes, &data, cli);
+        write_import_library(path, &bytes, &data, &merged.export_forms, cli);
     }
     if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
         write_output(path, pdb, cli.target, cli.quiet, false);

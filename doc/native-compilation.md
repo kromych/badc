@@ -129,6 +129,12 @@ A compiled resource file (`.res`, as rc.exe writes it) among a PE link's inputs
 becomes the image's `.rsrc` section: the resource directory by type, name and
 language, which the loader reads for the manifest, the version and the strings.
 A cvtres object's resources (`.rsrc$01` / `.rsrc$02`) join them.
+A module-definition file (`.def`) among a PE link's inputs gives the image its
+`EXPORTS`, as link.exe's `/DEF:` does: an export under another name, at an
+`@ordinal`, `NONAME`, `DATA` or `PRIVATE` (kept out of `--out-implib`'s
+library), and `LIBRARY` names the DLL in its export directory. An export
+without an ordinal takes the lowest free one in name order, as link.exe
+assigns them; `/EXPORT:` options in `.drectve` take the same forms.
 Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 

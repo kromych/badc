@@ -6859,6 +6859,114 @@ fn code_seg_and_alloc_text_place_functions_in_code_sections() {
     }
 }
 
+/// A module-definition file among a PE link's inputs gives the DLL its
+/// exports as link.exe takes them: `LIBRARY` names it, an ordinal places an
+/// export, `NONAME` drops its name, `PRIVATE` keeps it out of the import
+/// library, and a client links through that library, on Windows running.
+#[test]
+fn a_module_definition_file_gives_the_dll_its_exports() {
+    let dir = tempdir("pe-def-file");
+    let dll_src = write_source(
+        &dir,
+        "probe.c",
+        "int zeta(void) { return 26; }\nint alpha(void) { return 1; }\n\
+         int beta(void) { return 2; }\nint gamma = 3;\nint delta(void) { return 4; }\n\
+         int inner(void) { return 9; }\nint epsilon(void) { return 5; }\n",
+    );
+    let def = dir.join("probe.def");
+    std::fs::write(
+        &def,
+        "LIBRARY probe.dll\nEXPORTS\n  zeta @5\n  alpha\n  beta @2 NONAME\n  gamma DATA\n\
+         delta PRIVATE\n  outer = inner\n  epsilon @9\n",
+    )
+    .unwrap();
+    let client = write_source(
+        &dir,
+        "client.c",
+        "#include <windows.h>\nint alpha(void);\nint zeta(void);\nint beta(void);\nint outer(void);\n\
+         __declspec(dllimport) extern int gamma;\n\
+         int main(void) {\n\
+           HMODULE m = GetModuleHandleA(\"probe.dll\");\n\
+           if (alpha() != 1 || zeta() != 26 || beta() != 2 || outer() != 9 || gamma != 3) return 1;\n\
+           return GetProcAddress(m, \"delta\") && !GetProcAddress(m, \"beta\") ? 0 : 2; }\n",
+    );
+    for (target, arch) in [("windows-x64", "x64"), ("windows-arm64", "arm64")] {
+        let sub = dir.join(arch);
+        std::fs::create_dir_all(&sub).unwrap();
+        let (dll, lib, exe) = (
+            sub.join("probe-out.dll"),
+            sub.join("probe.lib"),
+            sub.join("client.exe"),
+        );
+        let link = |args: &[&std::ffi::OsStr]| {
+            let out = Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(args)
+                .output()
+                .expect("run badc");
+            assert!(
+                out.status.success(),
+                "{target}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        link(&[
+            "-shared".as_ref(),
+            "-o".as_ref(),
+            dll.as_os_str(),
+            "--out-implib".as_ref(),
+            lib.as_os_str(),
+            dll_src.as_os_str(),
+            def.as_os_str(),
+        ]);
+        link(&[
+            "-o".as_ref(),
+            exe.as_os_str(),
+            client.as_os_str(),
+            lib.as_os_str(),
+        ]);
+        let pe = std::fs::read(&dll).expect("read DLL");
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+        let coff = u32_at(0x3c) + 4;
+        let opt = coff + 20;
+        let edata = u32_at(opt + 112);
+        let table = opt + u16_at(coff + 16);
+        let file = |rva: usize| {
+            (0..u16_at(coff + 2))
+                .map(|i| table + 40 * i)
+                .find(|&h| (u32_at(h + 12)..u32_at(h + 12) + u32_at(h + 8)).contains(&rva))
+                .map(|h| u32_at(h + 20) + rva - u32_at(h + 12))
+                .expect("RVA in a section")
+        };
+        let dir_at = file(edata);
+        let name_at = file(u32_at(dir_at + 12));
+        assert_eq!(
+            &pe[name_at..name_at + 10],
+            b"probe.dll\0",
+            "{target}: LIBRARY names the DLL"
+        );
+        // Base 2, ordinals 2..=9 and six names, as link.exe gives them.
+        assert_eq!(
+            (
+                u32_at(dir_at + 16),
+                u32_at(dir_at + 20),
+                u32_at(dir_at + 24)
+            ),
+            (2, 8, 6),
+            "{target}"
+        );
+        if cfg!(windows) && cfg!(target_arch = "aarch64") == (arch == "arm64") {
+            std::fs::copy(&dll, sub.join("probe.dll")).unwrap();
+            let run = Command::new(&exe)
+                .current_dir(&sub)
+                .output()
+                .expect("run the client");
+            assert_eq!(run.status.code(), Some(0), "{target}: {run:?}");
+        }
+    }
+}
+
 /// `#pragma detect_mismatch` gives the object cl's `/FAILIFMISMATCH` pair:
 /// two units disagreeing on a key fail the PE link, agreeing ones link.
 #[test]

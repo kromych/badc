@@ -408,6 +408,8 @@ pub struct MergedNative {
     /// The inputs' resources, as compiled resource files, for a PE image's
     /// `.rsrc`.
     pub resources: Vec<Vec<u8>>,
+    /// The exports an ordinal, `NONAME` or `PRIVATE` shapes, one per name.
+    pub export_forms: Vec<super::object::ExportForm>,
 }
 
 /// One input section's placement within a merged output stream.
@@ -4782,6 +4784,33 @@ impl<'a> Link<'a> {
         exports
     }
 
+    /// Each export's ordinal, `NONAME` and `PRIVATE` across the inputs; two
+    /// that give a name different forms, or one ordinal two names, stop the
+    /// link, as link.exe's LNK4197 and LNK1223 do.
+    fn merge_export_forms(&self) -> Result<Vec<super::object::ExportForm>, C5Error> {
+        let mut out: Vec<super::object::ExportForm> = Vec::new();
+        for f in self.objs.iter().flat_map(|o| &o.export_forms) {
+            let clash = (out.iter()).find(|g| {
+                (g.name == f.name && g != &f)
+                    || (g.name != f.name && f.ordinal.is_some() && g.ordinal == f.ordinal)
+            });
+            if let Some(g) = clash {
+                return Err(link_err(
+                    Code::LINK,
+                    MODULE,
+                    &format!(
+                        "exports `{}` and `{}` take conflicting ordinals or options",
+                        g.name, f.name
+                    ),
+                ));
+            }
+            if !out.contains(f) {
+                out.push(f.clone());
+            }
+        }
+        Ok(out)
+    }
+
     /// Data-import copy relocations, deduplicated across units: the
     /// binding is declared in a header, so the same `(local, host)`
     /// pair recurs in every unit that included it.
@@ -5215,6 +5244,7 @@ impl<'a> Link<'a> {
             }
         }
         let copy_relocs = self.merge_copy_relocs();
+        let export_forms = self.merge_export_forms()?;
         let tls_index_fixups = self.rebase_tls_index_fixups();
         let tlv = self.merge_tlv_descriptors()?;
         let mut dbg = self.merge_debug_sections();
@@ -5286,6 +5316,7 @@ impl<'a> Link<'a> {
                 .filter(|o| !o.resources.is_empty())
                 .map(|o| o.resources.clone())
                 .collect(),
+            export_forms,
             defined,
             tls_defined: self.tls_defined,
             imports: self.imports,
@@ -6546,65 +6577,7 @@ mod tests {
     /// patcher directly.
     /// An object carrying nothing, for a test that fills in one aspect.
     fn blank_object(machine: NativeMachine) -> NativeObject {
-        NativeObject {
-            unique: Default::default(),
-            source: String::new(),
-            sections: Vec::new(),
-            discarded: Vec::new(),
-            exec_stack: false,
-            text_align: 16,
-            rodata: Vec::new(),
-            rodata_align: 8,
-            relro: Vec::new(),
-            relro_align: 1,
-            relro_relocs: Vec::new(),
-            machine,
-            text: Vec::new(),
-            data: Vec::new(),
-            data_align: 1,
-            bss_size: 0,
-            bss_align: 1,
-            tls_data: Vec::new(),
-            tls_relocs: Vec::new(),
-            tls_bss_size: 0,
-            tls_align: 1,
-            symbols: Vec::new(),
-            text_relocs: Vec::new(),
-            data_relocs: Vec::new(),
-            init_funcs: Vec::new(),
-            dylibs: Vec::new(),
-            import_dylib_map: Vec::new(),
-            exports: Vec::new(),
-            tls_index_fixups: Vec::new(),
-            macho_tlv_descriptors: Vec::new(),
-            macho_tlv_fixups: Vec::new(),
-            tls_symbols: Vec::new(),
-            macho_tlv_descriptor_syms: Vec::new(),
-            elf_tpoff_fixups: Vec::new(),
-            copy_relocs: Vec::new(),
-            prologue_ends: Vec::new(),
-            early_returns: Vec::new(),
-            seh_rows: Vec::new(),
-            unwind: Vec::new(),
-            extern_data_names: Vec::new(),
-            alternate_names: Vec::new(),
-            weak_aliases: Vec::new(),
-            export_aliases: Vec::new(),
-            comdats: Vec::new(),
-            default_libs: Vec::new(),
-            mismatch_keys: Vec::new(),
-            resources: Vec::new(),
-            debug_info: Vec::new(),
-            debug_abbrev: Vec::new(),
-            debug_line: Vec::new(),
-            debug_str: Vec::new(),
-            debug_info_relocs: Vec::new(),
-            debug_line_relocs: Vec::new(),
-            debug_other: Vec::new(),
-            compact_unwind: Vec::new(),
-            eh_frame: None,
-            pe_unwind: Vec::new(),
-        }
+        NativeObject::empty(machine)
     }
 
     fn site(machine: NativeMachine, rtype: u32, offset: u64) -> RelocSite<'static> {
@@ -8004,6 +7977,7 @@ mod tests {
                 default_libs: alloc::vec::Vec::new(),
                 mismatch_keys: Vec::new(),
                 resources: Vec::new(),
+                export_forms: Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),

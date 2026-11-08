@@ -80,8 +80,8 @@ pub use codegen::jit_run_with_sources;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
-    LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
+    ArchiveInclusion, DataImportSlots, ExportForm, ImageOptions, LdsEmit, LdsObject, LdsOptions,
+    LdsResult, LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
     NativeReloc, NativeSymSection, NativeSymbol, OnDemandSources, OrphanHandling,
     PendingImportReloc, PltTrampoline, Preemption, SectionContribution, SectionMap, SharedLibrary,
     TargetCLibrary, ZKeyword, ZKeywords, ZSupport, copy_candidates, detect_binary_format,
@@ -90,11 +90,11 @@ pub use linker::{
     is_mach_o_object, is_native_object, is_pe_dll, is_tbd, library_bindings, link_native_objects,
     link_native_objects_with, link_native_objects_with_options,
     link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script,
-    mach_o_archive_symbols, mach_o_fat_slice, parse_import_member, parse_lds_object,
-    parse_linker_script, parse_mach_o_dylib, parse_native_elf, parse_native_mach_o,
-    parse_native_object, parse_native_object_for, parse_pe_dll, parse_shared_library, parse_tbd,
-    parse_z_keyword, render_link_map, resolve_exec_stack, traditional_imports,
-    write_executable_elf64, write_import_library, write_native_image_and_pdb,
+    mach_o_archive_symbols, mach_o_fat_slice, module_definition, parse_import_member,
+    parse_lds_object, parse_linker_script, parse_mach_o_dylib, parse_native_elf,
+    parse_native_mach_o, parse_native_object, parse_native_object_for, parse_pe_dll,
+    parse_shared_library, parse_tbd, parse_z_keyword, render_link_map, resolve_exec_stack,
+    traditional_imports, write_executable_elf64, write_import_library, write_native_image_and_pdb,
     write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]

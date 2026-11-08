@@ -2114,6 +2114,17 @@ pub struct NamedSection {
     pub write: bool,
 }
 
+/// The `/EXPORT:` options past a plain export: `@ordinal`, the name's slot
+/// in the export address table; `NONAME`, no entry in the name table;
+/// `PRIVATE`, none in the import library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportForm {
+    pub name: String,
+    pub ordinal: Option<u16>,
+    pub noname: bool,
+    pub private: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// What the lowering's sink reported, at the level each row
@@ -2125,6 +2136,8 @@ pub(crate) struct Build {
     /// Named data sections a writer can emit in their own right, as
     /// offsets in the data stream. Only the merged link path fills this.
     pub named_sections: Vec<NamedSection>,
+    /// The exports an ordinal or `NONAME` shapes (PE).
+    pub export_forms: Vec<ExportForm>,
     /// Named code sections, as offsets in `text`. Only the merged link path
     /// fills this, and only the PE writer gives each a header; for it each
     /// one starts on a multiple of the image's section alignment.

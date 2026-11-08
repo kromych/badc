@@ -1025,6 +1025,8 @@ pub struct ExportAlias {
     pub data: bool,
 }
 
+pub use crate::c5::codegen::ExportForm;
+
 /// Result of parsing one native ELF ET_REL object.
 #[derive(Debug, Clone)]
 pub struct NativeObject {
@@ -1203,6 +1205,8 @@ pub struct NativeObject {
     pub mismatch_keys: Vec<(String, String)>,
     /// A cvtres object's resources, as compiled resource file records.
     pub resources: Vec<u8>,
+    /// The `/EXPORT:` options naming an ordinal, `NONAME` or `PRIVATE`.
+    pub export_forms: Vec<ExportForm>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1232,6 +1236,72 @@ pub struct NativeObject {
     pub eh_frame: Option<EhFrameInput>,
     /// A COFF object's `.pdata` entries, which replace the writer's.
     pub pe_unwind: Vec<PeUnwindEntry>,
+}
+
+impl NativeObject {
+    /// An object of no content for `machine`, which a caller fills in.
+    pub fn empty(machine: NativeMachine) -> NativeObject {
+        NativeObject {
+            unique: Default::default(),
+            source: String::new(),
+            sections: Vec::new(),
+            discarded: Vec::new(),
+            exec_stack: false,
+            text_align: 16,
+            rodata: Vec::new(),
+            rodata_align: 8,
+            relro: Vec::new(),
+            relro_align: 1,
+            relro_relocs: Vec::new(),
+            machine,
+            text: Vec::new(),
+            data: Vec::new(),
+            data_align: 1,
+            bss_size: 0,
+            bss_align: 1,
+            tls_data: Vec::new(),
+            tls_relocs: Vec::new(),
+            tls_bss_size: 0,
+            tls_align: 1,
+            symbols: Vec::new(),
+            text_relocs: Vec::new(),
+            data_relocs: Vec::new(),
+            init_funcs: Vec::new(),
+            dylibs: Vec::new(),
+            import_dylib_map: Vec::new(),
+            exports: Vec::new(),
+            tls_index_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
+            macho_tlv_fixups: Vec::new(),
+            tls_symbols: Vec::new(),
+            macho_tlv_descriptor_syms: Vec::new(),
+            elf_tpoff_fixups: Vec::new(),
+            copy_relocs: Vec::new(),
+            prologue_ends: Vec::new(),
+            early_returns: Vec::new(),
+            seh_rows: Vec::new(),
+            unwind: Vec::new(),
+            extern_data_names: Vec::new(),
+            alternate_names: Vec::new(),
+            weak_aliases: Vec::new(),
+            export_aliases: Vec::new(),
+            comdats: Vec::new(),
+            default_libs: Vec::new(),
+            mismatch_keys: Vec::new(),
+            resources: Vec::new(),
+            export_forms: Vec::new(),
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_info_relocs: Vec::new(),
+            debug_line_relocs: Vec::new(),
+            debug_other: Vec::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: None,
+            pe_unwind: Vec::new(),
+        }
+    }
 }
 
 /// A `.pdata` `RUNTIME_FUNCTION` (PE/COFF specification 5.5); `end` is x86-64's.
@@ -1470,6 +1540,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             .collect(),
         mismatch_keys: directives.mismatch_keys,
         resources: Vec::new(),
+        export_forms: directives.export_forms,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

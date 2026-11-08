@@ -14142,7 +14142,8 @@ fn an_unreachable_operand_seals_its_block_with_one_trap() {
 /// object, a library `strlen` of const data folds, and
 /// `__builtin_constant_p` of a load through a parameter folds on const
 /// data. A check that holds drops its call. Type 3 keeps its fallback
-/// 0, and under `-fno-builtin` a call to `strlen` stays a call.
+/// 0, and under `-fno-builtin` a call to `strlen` stays a call while
+/// `__builtin_strlen` still folds, as in gcc.
 #[test]
 fn fortified_inline_overflow_checks_fold() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -14190,7 +14191,7 @@ fn fortified_inline_overflow_checks_fold() {
         (
             "size_t strlen(const char *);\n",
             true,
-            &["over_4", "over_7"],
+            &["over_1", "over_2", "over_4", "over_7"],
         ),
     ];
     for (decl, no_builtin, kept) in cases {

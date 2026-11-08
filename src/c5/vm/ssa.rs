@@ -3952,9 +3952,12 @@ fn run_intrinsic(
         ))),
         // The walker answers 0 on the unoptimized SSA the interpreter
         // runs; the node exists only inside the `-O` pass pipeline.
-        Intrinsic::ConstantP | Intrinsic::ObjectSize | Intrinsic::SubobjectBound => Err(
-            C5Error::Runtime("vm_ssa: a deferred builtin is resolved before execution".to_string()),
-        ),
+        Intrinsic::ConstantP
+        | Intrinsic::ObjectSize
+        | Intrinsic::SubobjectBound
+        | Intrinsic::BuiltinArg => Err(C5Error::Runtime(
+            "vm_ssa: a deferred builtin is resolved before execution".to_string(),
+        )),
         Intrinsic::Sqrt | Intrinsic::Sqrtf => {
             let x = frame.regs[args[0] as usize] as u64;
             let f = if matches!(intr, Intrinsic::Sqrtf) {

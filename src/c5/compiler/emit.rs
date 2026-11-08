@@ -1225,6 +1225,22 @@ impl Compiler {
         id
     }
 
+    /// Wrap `arg` as the first argument of a call spelled as the builtin.
+    pub(super) fn ast_wrap_builtin_arg(&mut self, arg: ExprId) {
+        let pos = self.ast_src_pos();
+        let kind = crate::c5::op::Intrinsic::BuiltinArg as i64;
+        let ty = self.ty;
+        let node = (self.ast).push_expr(
+            Expr::Intrinsic {
+                kind,
+                args: alloc::vec![arg],
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(node);
+    }
+
     /// Wrap `arg` as a pointer with `bytes` left in its subobject.
     pub(super) fn ast_wrap_subobject_bound(&mut self, arg: ExprId, bytes: i64) {
         let pos = self.ast_src_pos();

@@ -298,6 +298,11 @@ pub enum Intrinsic {
     /// bytes left in its subobject, which a deferred [`Self::ObjectSize`] of
     /// types 1 and 3 answers. Only under `-O`; resolved to the pointer.
     SubobjectBound = 87,
+    /// Its argument, the first of a call through a library function's
+    /// `__builtin_` spelling that `-fno-builtin` leaves a plain call, so the
+    /// call folds as the builtin. The walker keeps it only under `-O`;
+    /// resolved to the argument.
+    BuiltinArg = 88,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -452,6 +457,7 @@ impl Intrinsic {
             85 => Some(Intrinsic::EstablisherFrame),
             86 => Some(Intrinsic::ObjectSize),
             87 => Some(Intrinsic::SubobjectBound),
+            88 => Some(Intrinsic::BuiltinArg),
             _ => None,
         }
     }

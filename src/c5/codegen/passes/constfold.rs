@@ -578,8 +578,12 @@ pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
                 let ty = args.get(1).and_then(|&t| imm_of(func, t)).unwrap_or(0);
                 Inst::Imm(crate::c5::compiler::object_size_fallback(ty))
             }
-            // A subobject bound no query is left to read is its pointer.
-            Inst::Intrinsic { kind, args } if *kind == Intrinsic::SubobjectBound as i64 => {
+            // A subobject bound no query is left to read is its pointer, and
+            // a builtin's argument no fold took is the argument.
+            Inst::Intrinsic { kind, args }
+                if *kind == Intrinsic::SubobjectBound as i64
+                    || *kind == Intrinsic::BuiltinArg as i64 =>
+            {
                 Inst::Copy {
                     value: args[0],
                     is_fp: false,

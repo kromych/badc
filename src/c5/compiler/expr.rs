@@ -2440,6 +2440,8 @@ impl Compiler {
     }
 
     fn parse_direct_call(&mut self, id_idx: usize, spelled: String) -> Result<(), C5Error> {
+        let builtin_spelling = super::super::preprocessor::builtins::library_alias(&spelled)
+            .is_some_and(|f| self.library_name_is_opaque(f));
         let s = &self.symbols[id_idx];
         let is_sys_call = s.class == Token::Sys as i64;
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
@@ -2456,6 +2458,7 @@ impl Compiler {
             count_is_constraint: s.prototyped(),
             prototyped: s.prototyped(),
             object_size_params: s.object_size_params,
+            builtin_spelling,
         };
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
@@ -2628,6 +2631,12 @@ impl Compiler {
                 Some(extent) => self.ast_wrap_subobject_bound(arg, extent.remaining()),
                 None => self.note_object_size_param(arg),
             }
+        }
+        if let Some(arg) = self
+            .ast_acc
+            .filter(|_| callee.builtin_spelling && nargs == 0)
+        {
+            self.ast_wrap_builtin_arg(arg);
         }
         let arg_ast = self.ast_acc;
         self.ast_assign();
@@ -3886,6 +3895,7 @@ impl Compiler {
             count_is_constraint: f.params.prototyped,
             prototyped: f.params.prototyped,
             object_size_params: 0,
+            builtin_spelling: false,
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -6854,6 +6864,9 @@ struct DirectCallee {
     /// Arguments convert as if by assignment (C99 6.5.2.2p7).
     prototyped: bool,
     object_size_params: u32,
+    /// A `__builtin_` spelling of a library function `-fno-builtin` keeps a
+    /// plain call, whose first argument is marked to fold as the builtin.
+    builtin_spelling: bool,
 }
 
 impl DirectCallee {

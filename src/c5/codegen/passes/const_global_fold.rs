@@ -98,6 +98,9 @@ pub(crate) struct ConstData<'a> {
     relocs: Vec<(i64, Option<AddrConst>)>,
     /// The C library `strlen`: its binding and its extern entry.
     strlen: (Option<i64>, Option<usize>),
+    /// The unit lets a `strlen` call fold; `-fno-builtin` folds only the
+    /// builtin spelling's.
+    strlen_folds: bool,
     data: &'a [u8],
 }
 
@@ -206,22 +209,20 @@ impl<'a> ConstData<'a> {
             .chain(program.const_data_ranges.iter().copied())
             .collect();
         objects.sort_unstable();
-        let strlen = match program.strlen_folds {
-            false => (None, None),
-            true => (
-                (program.symbols.iter())
-                    .find(|s| s.name == "strlen" && s.class == Token::Sys as i64)
-                    .map(|s| s.val),
-                (program.extern_function_imports.iter())
-                    .find(|(_, name)| name == "strlen")
-                    .map(|&(pc, _)| pc),
-            ),
-        };
+        let strlen = (
+            (program.symbols.iter())
+                .find(|s| s.name == "strlen" && s.class == Token::Sys as i64)
+                .map(|s| s.val),
+            (program.extern_function_imports.iter())
+                .find(|(_, name)| name == "strlen")
+                .map(|&(pc, _)| pc),
+        );
         ConstData {
             intervals,
             objects,
             relocs,
             strlen,
+            strlen_folds: program.strlen_folds,
             data: &program.data,
         }
     }
@@ -412,7 +413,7 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
-            Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND => v = args[0],
+            Inst::Intrinsic { kind, args } if is_wrapper(*kind) => v = args[0],
             _ => return None,
         }
     }
@@ -420,6 +421,19 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
 }
 
 const SUBOBJECT_BOUND: i64 = crate::c5::op::Intrinsic::SubobjectBound as i64;
+const BUILTIN_ARG: i64 = crate::c5::op::Intrinsic::BuiltinArg as i64;
+
+/// A marker the walk sees through to the pointer it wraps.
+fn is_wrapper(kind: i64) -> bool {
+    kind == SUBOBJECT_BOUND || kind == BUILTIN_ARG
+}
+
+/// Whether a library call on `arg` folds: the unit lets the library name
+/// fold, or the call was spelled as the builtin.
+fn folds_as_builtin(func: &FunctionSsa, arg: ValueId, library_folds: bool) -> bool {
+    library_folds
+        || matches!(func.insts.get(arg as usize), Some(Inst::Intrinsic { kind, .. }) if *kind == BUILTIN_ARG)
+}
 
 /// The bytes left in the subobject `v` points into by its call-site bound:
 /// none past its end, unknown ahead of its start.
@@ -456,7 +470,7 @@ fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
             value,
             is_fp: false,
         } if depth > 0 => data_offset(func, *value, depth - 1),
-        Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND && depth > 0 => {
+        Inst::Intrinsic { kind, args } if is_wrapper(*kind) && depth > 0 => {
             data_offset(func, args[0], depth - 1)
         }
         Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
@@ -508,12 +522,18 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
             }
             Inst::CallExt {
                 binding_idx, args, ..
-            } if Some(*binding_idx) == cd.strlen.0 && args.len() == 1 => {
+            } if Some(*binding_idx) == cd.strlen.0
+                && args.len() == 1
+                && folds_as_builtin(func, args[0], cd.strlen_folds) =>
+            {
                 data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
             }
             Inst::Call {
                 target_pc, args, ..
-            } if Some(*target_pc) == cd.strlen.1 && args.len() == 1 => {
+            } if Some(*target_pc) == cd.strlen.1
+                && args.len() == 1
+                && folds_as_builtin(func, args[0], cd.strlen_folds) =>
+            {
                 data_offset(func, args[0], 8).and_then(|o| cd.string_len(o))
             }
             _ => None,

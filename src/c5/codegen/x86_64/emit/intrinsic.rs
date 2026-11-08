@@ -264,7 +264,7 @@ pub(super) fn emit_intrinsic(
     match intrinsic {
         // Resolved to an `Imm` before lowering, by the SSA folds under
         // `-O` and by the walker otherwise.
-        I::ConstantP | I::ObjectSize | I::SubobjectBound => {
+        I::ConstantP | I::ObjectSize | I::SubobjectBound | I::BuiltinArg => {
             fail("a deferred builtin must be resolved before lowering")
         }
         I::VaStart if sysv_variadic_callee(func, abi) => {
@@ -457,6 +457,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         I::ConstantP
         | I::ObjectSize
         | I::SubobjectBound
+        | I::BuiltinArg
         | I::PlatformRegister
         | I::SetjmpAArch64
         | I::LongjmpAArch64

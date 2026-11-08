@@ -20,7 +20,7 @@ pub(super) fn emit_intrinsic(
     match intrinsic {
         // Resolved to an `Imm` before lowering; reaching here is a
         // pass-ordering bug.
-        I::ConstantP | I::ObjectSize | I::SubobjectBound => {
+        I::ConstantP | I::ObjectSize | I::SubobjectBound | I::BuiltinArg => {
             fail("a deferred builtin must be resolved before lowering")
         }
         I::VaStart if aarch64_host_variadic_callee(func, abi) => {
@@ -217,6 +217,7 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         I::ConstantP
         | I::ObjectSize
         | I::SubobjectBound
+        | I::BuiltinArg
         | I::Fma
         | I::Fmaf
         | I::Clz

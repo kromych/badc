@@ -411,6 +411,13 @@ impl<'a> Walker<'a> {
             let t = b.imm(ty);
             return Ok(b.intrinsic(kind, alloc::vec![v, t]));
         }
+        if kind == Intrinsic::BuiltinArg as i64 {
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            return Ok(match self.optimize {
+                true => b.intrinsic(kind, alloc::vec![v]),
+                false => v,
+            });
+        }
         if kind == Intrinsic::SubobjectBound as i64 {
             let v = self.walk_expr_rvalue(b, args[0])?;
             let bytes = match self.ast.expr(args[1]) {

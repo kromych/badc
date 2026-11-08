@@ -463,6 +463,24 @@ fn order_suffix(rest: &str, arm64: bool, np: bool) -> Option<MemOrder> {
 /// for `char`, `short` or `__int64` in place of `long`, and an order.
 fn interlocked(name: &str, arm64: bool) -> Option<Intrinsic> {
     use AtomicKind::*;
+    // `_interlockedadd[64]`: the sum, as `_InterlockedAdd` yields it, on
+    // both targets (measured with cl on x64).
+    if let Some(width) = name.strip_prefix("_interlockedadd") {
+        let ty = match width {
+            "" => Long,
+            "64" => LLong,
+            _ => return None,
+        };
+        return Some(Intrinsic {
+            op: Op::Atomic {
+                kind: AddFetch,
+                order: MemOrder::SeqCst,
+                one: false,
+            },
+            ret: Some(ty),
+            params: alloc::vec![pv(ty), V(ty)],
+        });
+    }
     let rest = name.strip_prefix("_Interlocked")?;
     if let Some(order) = rest.strip_prefix("CompareExchange128") {
         let order = order_suffix(order, arm64, true)?;
@@ -473,32 +491,38 @@ fn interlocked(name: &str, arm64: bool) -> Option<Intrinsic> {
             params,
         });
     }
-    // Longest first: each base is a prefix of none listed before it.
-    const BASES: &[(&str, AtomicKind, bool)] = &[
-        ("CompareExchangePointer", SyncCasVal, true),
-        ("CompareExchange", SyncCasVal, false),
-        ("ExchangePointer", Exchange, true),
-        ("ExchangeAdd", FetchAdd, false),
-        ("Exchange", Exchange, false),
-        ("Increment", AddFetch, false),
-        ("Decrement", SubFetch, false),
-        ("And", FetchAnd, false),
-        ("Xor", FetchXor, false),
-        ("Add", AddFetch, false),
-        ("Or", FetchOr, false),
+    // Longest first: each base is a prefix of none listed before it. The
+    // unsigned bases take the unsigned type of each width.
+    const BASES: &[(&str, AtomicKind, bool, bool)] = &[
+        ("CompareExchangePointer", SyncCasVal, true, false),
+        ("CompareExchange", SyncCasVal, false, false),
+        ("ExchangePointer", Exchange, true, false),
+        ("ExchangeAdd", FetchAdd, false, false),
+        ("Exchange", Exchange, false, false),
+        ("Increment", AddFetch, false, false),
+        ("Decrement", SubFetch, false, false),
+        ("Nand", FetchNand, false, false),
+        ("UMax", FetchMax, false, true),
+        ("UMin", FetchMin, false, true),
+        ("Max", FetchMax, false, false),
+        ("Min", FetchMin, false, false),
+        ("And", FetchAnd, false, false),
+        ("Xor", FetchXor, false, false),
+        ("Add", AddFetch, false, false),
+        ("Or", FetchOr, false, false),
     ];
-    let &(base, kind, pointer) = BASES.iter().find(|b| rest.starts_with(b.0))?;
+    let &(base, kind, pointer, unsigned) = BASES.iter().find(|b| rest.starts_with(b.0))?;
     let rest = &rest[base.len()..];
     let (ty, rest) = if pointer {
         (VoidPtr, rest)
     } else if let Some(r) = rest.strip_prefix("64") {
-        (LLong, r)
+        (if unsigned { ULLong } else { LLong }, r)
     } else if let Some(r) = rest.strip_prefix("16") {
-        (Short, r)
+        (if unsigned { UShort } else { Short }, r)
     } else if let Some(r) = rest.strip_prefix('8') {
-        (Char, r)
+        (if unsigned { UChar } else { Char }, r)
     } else {
-        (Long, rest)
+        (if unsigned { ULong } else { Long }, rest)
     };
     let one = matches!(base, "Increment" | "Decrement");
     let widths_ok = match base {

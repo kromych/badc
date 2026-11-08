@@ -140,6 +140,34 @@ impl<'a> Walker<'a> {
                 let old = b.atomic_rmw(op, addr, value, width, order);
                 Ok(self.extend_atomic_result(b, old, elem_ty))
             }
+            AtomicKind::FetchNand | AtomicKind::FetchMax | AtomicKind::FetchMin => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let signed = !is_unsigned_ty(elem_ty);
+                Ok(
+                    self.cas_retry(b, addr, width, order, elem_ty, |b, old| match kind {
+                        AtomicKind::FetchNand => {
+                            let both = b.binop(BinOp::And, old, value);
+                            b.binop_imm(BinOp::Xor, both, -1)
+                        }
+                        // `old ^ ((old ^ v) & -(take v))`, taking `v` where it
+                        // is the greater (max) or the lesser (min).
+                        _ => {
+                            let (lt, l, r) = match (signed, kind) {
+                                (true, AtomicKind::FetchMax) => (BinOp::Lt, old, value),
+                                (true, _) => (BinOp::Lt, value, old),
+                                (false, AtomicKind::FetchMax) => (BinOp::Ult, old, value),
+                                (false, _) => (BinOp::Ult, value, old),
+                            };
+                            let take = b.binop(lt, l, r);
+                            let zero = b.imm(0);
+                            let mask = b.binop(BinOp::Sub, zero, take);
+                            let diff = b.binop(BinOp::Xor, old, value);
+                            let pick = b.binop(BinOp::And, diff, mask);
+                            b.binop(BinOp::Xor, old, pick)
+                        }
+                    }),
+                )
+            }
             AtomicKind::CompareExchangeStrong => {
                 // C11 7.17.7.4: on a match store `desired` and yield 1,
                 // else write the prior contents into `*expected` and yield
@@ -222,6 +250,13 @@ impl<'a> Walker<'a> {
         let zero = |b: &mut SsaBuilder| (b.imm(0), b.imm(0));
         match kind {
             AtomicKind::Init => unreachable!("lowered by walk_atomic"),
+            // Only MSVC's intrinsics name these, at most 64 bits wide.
+            AtomicKind::FetchNand | AtomicKind::FetchMax | AtomicKind::FetchMin => {
+                Err(WalkError::UnsupportedExpr {
+                    id: args[0],
+                    kind: "a 128-bit nand, max or min exchange",
+                })
+            }
             AtomicKind::Load | AtomicKind::LoadInto => {
                 let prior = if matches!(kind, AtomicKind::Load) {
                     let z = zero(b);
@@ -334,6 +369,39 @@ impl<'a> Walker<'a> {
         b.branch_zero(ok, retry, done);
         b.switch_to(done);
         (prior, desired)
+    }
+
+    /// A read-modify-write as a compare-exchange retry: `next` maps the
+    /// object's value, normalized to `elem_ty`, to the value to store, and
+    /// the loop repeats while another writer changed the object between the
+    /// read and the exchange. The prior value, normalized.
+    fn cas_retry(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        width: u8,
+        order: MemOrder,
+        elem_ty: i64,
+        next: impl Fn(&mut SsaBuilder, ValueId) -> ValueId,
+    ) -> ValueId {
+        let slot = b.alloc_synthetic_local();
+        let first = b.load(addr, int_load_kind(width));
+        let seen_at = b.local_addr(slot);
+        b.store(seen_at, first, StoreKind::I64);
+        let (retry, done) = (b.new_block(), b.new_block());
+        b.jmp(retry);
+        b.switch_to(retry);
+        let seen_at = b.local_addr(slot);
+        let raw = b.load(seen_at, LoadKind::I64);
+        let old = self.extend_atomic_result(b, raw, elem_ty);
+        let new = next(b, old);
+        let prior = b.atomic_cas(addr, raw, new, width, order);
+        let seen_at = b.local_addr(slot);
+        b.store(seen_at, prior, StoreKind::I64);
+        let ok = self.cas_matched(b, prior, raw, width);
+        b.branch_zero(ok, retry, done);
+        b.switch_to(done);
+        old
     }
 
     /// The object a compare-exchange's `expected` operand points to, as a

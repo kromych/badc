@@ -1600,6 +1600,21 @@ fn arm64_msvc_va_start_checks_its_operands() {
     }
 }
 
+/// MSVC's Nand / Max / Min / UMax / UMin interlocked families, `_interlockedadd`
+/// and winnt.h's ordered spellings, on both PE targets at -O0 and -O.
+#[cfg(feature = "full")]
+#[test]
+fn msvc_interlocked_nand_max_min_families() {
+    use crate::{CompileOptions, Target};
+    for t in [Target::WindowsX64, Target::WindowsAarch64] {
+        for optimize in [false, true] {
+            let opts = CompileOptions::default().with_optimize(optimize);
+            let got = super::run_fixture_with("msvc_interlocked_nand_max_min.c", t, opts);
+            assert_eq!(got, 0, "{t:?} -O={optimize}");
+        }
+    }
+}
+
 /// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list
 /// ends in `...`. As under gcc and clang, it is an error in a function with
 /// fixed arguments in every spelling: the `<stdarg.h>` macro,

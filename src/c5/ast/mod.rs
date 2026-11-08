@@ -169,6 +169,13 @@ pub(crate) enum AtomicKind {
     FetchAnd,
     FetchOr,
     FetchXor,
+    /// MSVC's `_InterlockedNand` / `_InterlockedMax` / `_InterlockedMin`
+    /// families: store `~(*p & v)`, the greater or the lesser of `*p` and
+    /// `v` (compared as the object's type is signed or not), and yield the
+    /// prior `*p`.
+    FetchNand,
+    FetchMax,
+    FetchMin,
     /// `atomic_compare_exchange_strong(p, expected, desired)` --
     /// if `*p == *expected`, store `desired` and yield 1; otherwise
     /// store `*p` into `*expected` and yield 0.

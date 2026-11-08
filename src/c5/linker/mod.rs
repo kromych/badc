@@ -52,6 +52,7 @@ mod got_relax;
 mod image;
 #[cfg(feature = "std")]
 mod implib;
+mod import_routes;
 mod import_slots;
 #[cfg(feature = "std")]
 pub(crate) mod kernel32;

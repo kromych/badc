@@ -1114,6 +1114,10 @@ pub fn link_native_objects_with<'a>(
     check_mismatch_keys(objs)?;
     let slot_reads = super::import_slots::bind_slot_reads(objs)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
+    let routes = (opts.format == BinaryFormat::Pe)
+        .then(|| super::import_routes::split_routes(objs))
+        .flatten();
+    let objs = routes.as_deref().unwrap_or(objs);
     let mut link = Link::new(objs, opts, shared_libs)?;
     link.lay_out_tls()?;
     link.lay_out_sections();
@@ -4730,6 +4734,12 @@ impl<'a> Link<'a> {
                     }
                     break;
                 }
+            }
+        }
+        // A name routed to a second DLL imports under its own spelling.
+        for key in routing.keys() {
+            if let Some(name) = super::import_routes::routed_name(key) {
+                import_symbols.insert(String::from(*key), String::from(name));
             }
         }
         // A copy is bound to the library whose object it copies.

@@ -6330,6 +6330,63 @@ fn cl_objects_with_structured_exception_handling_catch_at_run_time() {
     }
 }
 
+/// A PE image imports through one descriptor per DLL, so two units may
+/// take one name from two DLLs: each import keeps its own DLL, and the
+/// program reaches both.
+#[test]
+fn two_units_import_one_name_from_two_dlls() {
+    let dir = tempdir("pe-import-two-dlls");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "#pragma dylib(msvcrt, \"msvcrt.dll\")\n\
+         #pragma binding(msvcrt::strlen, \"strlen\")\n\
+         unsigned long long strlen(const char *);\n\
+         unsigned long long a_len(const char *s) { return strlen(s); }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "#pragma dylib(ntdll, \"ntdll.dll\")\n\
+         #pragma binding(ntdll::strlen, \"strlen\")\n\
+         unsigned long long strlen(const char *);\n\
+         unsigned long long a_len(const char *);\n\
+         static const char *volatile hello = \"hello\";\n\
+         int main(void) { return a_len(hello + 2) == 3 && strlen(hello) == 5 ? 0 : 1; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let exe = dir.join(format!("two-{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args([a.as_os_str(), b.as_os_str(), "-o".as_ref(), exe.as_os_str()]),
+            &format!("link {target}"),
+        );
+        let pe = std::fs::read(&exe).expect("read image");
+        let from = |dll: &str| {
+            (pe_import_directory(&pe).into_iter())
+                .find(|(d, _)| d.eq_ignore_ascii_case(dll))
+                .is_some_and(|(_, names)| names.iter().any(|n| n == "strlen"))
+        };
+        assert!(
+            from("msvcrt.dll") && from("ntdll.dll"),
+            "{target}: {:?}",
+            pe_import_directory(&pe)
+        );
+        if cfg!(windows)
+            && target.ends_with(
+                std::env::consts::ARCH
+                    .replace("aarch64", "arm64")
+                    .replace("x86_64", "x64")
+                    .as_str(),
+            )
+        {
+            let out = Command::new(&exe).output().expect("run the image");
+            assert_eq!(out.status.code(), Some(0), "{target}");
+        }
+    }
+}
+
 /// A name import's hint/name entry takes the hint the import library's
 /// member states, as link.exe writes it: lib.exe numbered seh_dll_cl's
 /// exports 0, 1 and 2 in name order.

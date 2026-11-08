@@ -4459,7 +4459,8 @@ impl Compiler {
             return void_ty();
         }
         let mut result_ty = else_ty;
-        let arith = |t: i64| !is_pointer_ty(t) && !is_struct_ty(t);
+        // The 128-bit integer is laid out as an aggregate but is arithmetic.
+        let arith = |t: i64| !is_pointer_ty(t) && (!is_struct_ty(t) || self.is_int128_ty(t));
         let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
         let then_ptr = is_pointer_ty(then_ty);
         let else_ptr = is_pointer_ty(else_ty);

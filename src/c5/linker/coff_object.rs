@@ -277,6 +277,8 @@ fn section_name(field: &[u8], strtab: &[u8]) -> Result<String, C5Error> {
     )
 }
 
+const IMAGE_SCN_TYPE_NO_PAD: u32 = 0x8;
+
 /// One section header, plus what the parse assigns it.
 struct Sect {
     name: String,
@@ -293,9 +295,14 @@ struct Sect {
 }
 
 impl Sect {
+    /// The `IMAGE_SCN_ALIGN_*` field; without one the default is 16, and the
+    /// legacy `IMAGE_SCN_TYPE_NO_PAD` asks for 1, as LLVM's COFF reader takes it.
     fn align(&self) -> u64 {
+        if self.flags & IMAGE_SCN_TYPE_NO_PAD != 0 {
+            return 1;
+        }
         match (self.flags >> 20) & 0xF {
-            0 => 1,
+            0 => 16,
             n => 1 << (n - 1),
         }
     }
@@ -2274,6 +2281,22 @@ mod tests {
 
     fn parse(secs: &[Sec], syms: &[super::build::Sym]) -> Result<NativeObject, C5Error> {
         parse_native_coff(&object(AMD64, secs, syms), None)
+    }
+
+    /// A section with no `IMAGE_SCN_ALIGN_*` field is 16-aligned, and one
+    /// with `IMAGE_SCN_TYPE_NO_PAD` 1-aligned.
+    #[test]
+    fn a_section_without_an_alignment_is_sixteen_aligned() {
+        let plain = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE;
+        for (flags, want) in [(plain, 16), (plain | IMAGE_SCN_TYPE_NO_PAD, 1)] {
+            let o = parse(
+                &[sec(".data", DATA, &[1]), sec(".data$b", flags, &[2])],
+                &[sym("second", 0, 2, IMAGE_SYM_CLASS_EXTERNAL)],
+            )
+            .unwrap();
+            let second = o.symbols.iter().find(|s| s.name == "second").unwrap();
+            assert_eq!(second.value, want, "flags {flags:#x}");
+        }
     }
 
     /// `REL32_k` measures from `k` bytes past the field's end, which the

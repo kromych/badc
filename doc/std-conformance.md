@@ -775,6 +775,10 @@ structure loads, float16 and bfloat16 are not provided.
   with or without a VM-instruction error), the SVM family (`__svm_clgi`
   through `__svm_vmrun`) and port I/O (`__inbyte` through
   `__outdwordstring`).
+- A definition of an intrinsic's name outside a system header is an error,
+  as cl's C2169 is: calls lower to the intrinsic and would never reach it.
+  `#pragma function(name, ...)` makes the names functions, which calls
+  reach and a unit may define; `#pragma intrinsic(name)` takes that back.
 - The `_Interlocked` intrinsics are each one atomic instruction:
   `lock`-prefixed on x64, and the FEAT_LSE form on arm64, with the `_acq`,
   `_rel` and `_nf` orders. cl emits the LSE form under `/arch:armv8.1`; its

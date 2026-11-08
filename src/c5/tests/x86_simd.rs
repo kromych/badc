@@ -804,6 +804,53 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
     }
 }
 
+/// A unit may not define an intrinsic's name, as cl rejects it (C2169):
+/// every call lowers to the intrinsic, so the body would never run.
+/// `#pragma function(name)` makes the name a function, which calls reach,
+/// and `#pragma intrinsic(name)` takes that back. The name is free on a
+/// target where it is no intrinsic.
+#[cfg(feature = "full")]
+#[test]
+fn a_definition_of_an_intrinsic_needs_pragma_function() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let body = "static unsigned long __segmentlimit(unsigned long s) { return s + 7; }\n\
+                unsigned long f(unsigned long s) { return __segmentlimit(s); }\n";
+    let compile = |src: String, target| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src, target, opts).compile()
+    };
+    let Err(err) = compile(body.to_string(), Target::WindowsX64) else {
+        panic!("the definition compiled");
+    };
+    let text = alloc::format!("{err}");
+    assert!(
+        text.contains("`__segmentlimit` is an intrinsic, which cannot be defined")
+            && text.contains("[B2021]"),
+        "{text}"
+    );
+    let program = compile(
+        alloc::format!("#pragma function(__segmentlimit)\n{body}"),
+        Target::WindowsX64,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj = crate::emit_native_with_options(&program, Target::WindowsX64, nopts)
+        .expect("emit the object");
+    let f = super::codegen::function_bytes(&obj, "f");
+    assert!(
+        !f.windows(2).any(|w| w == [0x0f, 0x03]) && f.contains(&0xe8),
+        "f calls the definition, not `lsl`: {f:02x?}"
+    );
+    let restored = alloc::format!(
+        "#pragma function(__segmentlimit)\n#pragma intrinsic(__segmentlimit)\n{body}"
+    );
+    assert!(compile(restored, Target::WindowsX64).is_err());
+    compile(body.to_string(), Target::LinuxX64).unwrap_or_else(|e| panic!("{e}"));
+}
+
 /// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
 /// forms on windows-x64, whatever declares them; windows-arm64 has none.
 #[cfg(feature = "full")]

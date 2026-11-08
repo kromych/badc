@@ -1353,6 +1353,16 @@ impl Compiler {
         // The parameter declarations and the body declare with their own
         // attributes (C99 6.9.1p6).
         self.current_func_attrs = core::mem::take(&mut self.pending.attrs);
+        // cl's C2169: the calls lower to the intrinsic, never to this body. A
+        // system header's definition is the implementation's (C17 7.1.3).
+        let name = &self.symbols[id_idx].name;
+        if self.is_call_site_intrinsic(name) && self.in_user_source() {
+            let text = format!(
+                "`{name}` is an intrinsic, which cannot be defined; \
+                 `#pragma function({name})` makes it a function"
+            );
+            return Err(self.compile_err_at(Code::INVALID_DECLARATION, def.line, text));
+        }
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
         self.symbols[id_idx].binding.decl_line = def.line;

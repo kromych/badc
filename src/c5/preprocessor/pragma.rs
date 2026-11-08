@@ -179,6 +179,7 @@ impl Preprocessor {
             "binding(",
             "export(",
             "intrinsic(",
+            "function(",
             "entrypoint(",
             "subsystem(",
             "comment(",
@@ -212,7 +213,18 @@ impl Preprocessor {
             .strip_prefix("intrinsic(")
             .and_then(|s| s.strip_suffix(')'))
         {
+            for name in inner.split(',').map(|n| n.trim().trim_matches('"')) {
+                self.functions.remove(name);
+            }
             return self.parse_pragma_intrinsic(inner.trim(), site);
+        }
+        if let Some(inner) = args
+            .strip_prefix("function(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            let names = inner.split(',').map(str::trim).filter(|n| !n.is_empty());
+            self.functions.extend(names.map(String::from));
+            return Ok(());
         }
         if let Some(inner) = args
             .strip_prefix("entrypoint(")

@@ -347,6 +347,9 @@ pub(crate) struct Preprocessor {
     /// `Symbol::intrinsic`. A new one needs an `Intrinsic` variant in
     /// `op.rs` and an entry in [`Self::parse_pragma_intrinsic`].
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
+    /// `#pragma function(name, ...)`: call-site intrinsics the unit calls
+    /// and may define as functions, as MSVC's pragma makes them.
+    pub functions: alloc::collections::BTreeSet<String>,
     /// Recording state for the source pass of a compile that may retry
     /// with an extended force-include list; see [`Self::process_recording`].
     /// `None` outside that pass.
@@ -1348,6 +1351,7 @@ impl Preprocessor {
             warn_disabled: BTreeSet::new(),
             diag_pragmas: 0,
             intrinsics,
+            functions: alloc::collections::BTreeSet::new(),
             reuse: None,
         }
     }

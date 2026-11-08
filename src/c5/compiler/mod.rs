@@ -2332,6 +2332,8 @@ pub struct Compiler {
     /// call-site lowering can substitute an `Inst::Intrinsic`
     /// emit for the regular call + stack-cleanup sequence.
     pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
+    /// [`Preprocessor::functions`].
+    pp_functions: alloc::collections::BTreeSet<String>,
 
     /// Thread-local data segment. Same shape as `data` but the
     /// codegen lowers accesses with the per-target TLS sequence
@@ -3143,6 +3145,7 @@ impl Compiler {
         let pp_default_libs = pp.default_libs;
         let pp_linker_directives = pp.linker_directives;
         let pp_intrinsics = pp.intrinsics;
+        let pp_functions = pp.functions;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -3291,6 +3294,7 @@ impl Compiler {
             pp_default_libs,
             pp_linker_directives,
             pp_intrinsics,
+            pp_functions,
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),

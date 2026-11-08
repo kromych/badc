@@ -1741,7 +1741,7 @@ impl Compiler {
         if let Some(kind) = super::value_builtin::ValueBuiltin::of(name) {
             return Some(BuiltinCall::Value(kind));
         }
-        if super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target) {
+        if self.is_call_site_intrinsic(name) {
             return Some(BuiltinCall::Ms);
         }
         let class = self.symbols[id_idx].class;

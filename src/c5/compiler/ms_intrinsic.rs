@@ -23,6 +23,13 @@ enum Operand {
 }
 
 impl Compiler {
+    /// Whether a call of `name` lowers to its intrinsic: `#pragma function`
+    /// makes it a call of the function.
+    pub(super) fn is_call_site_intrinsic(&self, name: &str) -> bool {
+        super::super::preprocessor::builtins::is_ms_intrinsic(name, self.target)
+            && !self.pp_functions.contains(name)
+    }
+
     fn ms_scalar_ty(&self, s: Scalar) -> i64 {
         let unsigned = |t: Ty| t as i64 | UNSIGNED_BIT;
         match s {

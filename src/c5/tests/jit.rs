@@ -103,6 +103,21 @@ fn parity() -> Vec<(&'static str, i32)> {
         .collect()
 }
 
+/// The C library's locale is the program's (C17 7.11.1.1), and the
+/// programs the JIT runs share one process and one C library: a program
+/// that sets the locale runs with no other beside it.
+static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
+    if src.contains("setlocale(") {
+        let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
+        run()
+    } else {
+        let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
+        run()
+    }
+}
+
 /// Compile `src` and run it through the JIT with `args` as argv.
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
@@ -111,7 +126,7 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    jit_run(&program, &argv).expect("jit_run failed")
+    beside_others(src, || jit_run(&program, &argv)).expect("jit_run failed")
 }
 
 /// JIT-run with the native optimizer on (the same pipeline that
@@ -123,7 +138,10 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let opts = NativeOptions::new().with_optimize();
-    jit_run_with_options(&program, &argv, opts, &mut |_| {}).expect("jit_run_with_options failed")
+    beside_others(src, || {
+        jit_run_with_options(&program, &argv, opts, &mut |_| {})
+    })
+    .expect("jit_run_with_options failed")
 }
 
 // ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but

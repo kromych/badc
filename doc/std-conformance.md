@@ -572,11 +572,13 @@ with register, memory and immediate constraints, `asm goto`,
 `__attribute__((naked))` function bodies, and file-scope `asm(...)`. The same
 assembler builds `.s` and `.S` files (`badc -c foo.S -o foo.o`). It implements
 a subset of GNU as; [linux-kernel.md](linux-kernel.md) has coverage figures.
-For windows-x64 it takes GNU as's `.seh_proc` / `.seh_pushreg` /
-`.seh_stackalloc` / `.seh_setframe` (rbp) / `.seh_savexmm` /
-`.seh_endprologue` / `.seh_endproc`, which give the function its PE unwind
-row, and the `.def` / `.scl` / `.type` / `.endef` block; a language handler
-(`.seh_handler`) and arm64's `.seh_*` forms are refused.
+On the Windows targets it takes GNU as's `.seh_*` unwind directives, which
+give the function its PE unwind row: x64's `.seh_pushreg`, `.seh_stackalloc`,
+`.seh_setframe` (rbp) and `.seh_savexmm`, and arm64's save, allocation,
+frame-pointer and `.seh_nop` forms, one per prologue and epilogue
+instruction, with `.seh_startepilogue` / `.seh_endepilogue`. A language
+handler (`.seh_handler`) is refused. The `.def` / `.scl` / `.type` /
+`.endef` block is accepted.
 File-scope `asm(...)` belongs to no function: its text reaches the object as
 written, and the assembler and linker resolve the names in it. Naming a
 `static` definition there does not keep the definition; mark it

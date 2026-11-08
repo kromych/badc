@@ -1110,11 +1110,8 @@ pub(crate) fn parse_section_item(
                 lax_div: false,
             };
             let eval = |s: &str| eval_asm_value(s, &ctx).ok().and_then(|v| v.to_abs());
-            match cfi::parse_seh_directive(tok, rest.trim(), &eval) {
-                Ok(op) if !is_aarch64 => Ok(AsmSectionItem::Cfi(cfi::CfiOp::Seh(op))),
-                Ok(_) => Err(alloc::format!(
-                    "inline asm: `{tok}` takes arm64's form, which is not supported"
-                )),
+            match cfi::parse_seh_directive(tok, rest.trim(), is_aarch64, &eval) {
+                Ok(op) => Ok(AsmSectionItem::Cfi(cfi::CfiOp::Seh(op))),
                 Err(m) => Err(alloc::format!("inline asm: {m}")),
             }
         }

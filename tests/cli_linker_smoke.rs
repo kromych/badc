@@ -6860,9 +6860,9 @@ fn code_seg_and_alloc_text_place_functions_in_code_sections() {
 }
 
 /// GNU as's `.seh_*` directives in a `.s` unit give its function a PE
-/// unwind row, so an exception raised past the function's frame reaches a
-/// handler beyond it; the `.def` / `.scl` / `.type` / `.endef` block gcc
-/// writes for the symbol is accepted.
+/// unwind row, on x64 and arm64, so an exception raised past the
+/// function's frame reaches a handler beyond it; the `.def` / `.scl` /
+/// `.type` / `.endef` block gcc writes for the symbol is accepted.
 #[test]
 fn seh_directives_in_an_assembly_unit_unwind_its_function() {
     let dir = tempdir("pe-asm-seh");
@@ -6936,19 +6936,45 @@ fn seh_directives_in_an_assembly_unit_unwind_its_function() {
         let run = Command::new(&exe).output().expect("run the image");
         assert_eq!(run.status.code(), Some(0), "{run:?}");
     }
+    // arm64's form: a step per prologue instruction and a described
+    // epilogue; an instruction no directive follows is refused.
+    let a64 = "\t.text\n\t.globl call_through\n\t.seh_proc call_through\ncall_through:\n\
+               \tstp x29, x30, [sp, #-32]!\n\t.seh_save_fplr_x 32\n\tstr x19, [sp, #16]\n\
+               \t.seh_save_reg x19, 16\n\tmov x29, sp\n\t.seh_set_fp\n\t.seh_endprologue\n\
+               \tmov x19, #0x1234\n\tblr x0\n\tmov x0, x19\n\t.seh_startepilogue\n\
+               \tldr x19, [sp, #16]\n\t.seh_save_reg x19, 16\n\tldp x29, x30, [sp], #32\n\
+               \t.seh_save_fplr_x 32\n\t.seh_endepilogue\n\tret\n\t.seh_endproc\n";
+    let a64_src = write_source(&dir, "through-a64.s", a64);
+    let a64_exe = dir.join("through-a64.exe");
+    let out = Command::new(badc())
+        .arg("--target=windows-arm64")
+        .args([
+            main.as_os_str(),
+            a64_src.as_os_str(),
+            "-o".as_ref(),
+            a64_exe.as_os_str(),
+        ])
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    if cfg!(all(windows, target_arch = "aarch64")) {
+        let run = Command::new(&a64_exe).output().expect("run the image");
+        assert_eq!(run.status.code(), Some(0), "{run:?}");
+    }
+    let gap = a64.replace("\t.seh_save_reg x19, 16\n\tmov x29", "\tmov x29");
     let out = Command::new(badc())
         .args(["--target=windows-arm64", "-c", "-o"])
-        .arg(dir.join("through-arm64.o"))
-        .arg(write_source(
-            &dir,
-            "a64.s",
-            "\t.text\n\t.seh_proc f\nf:\n\tret\n\t.seh_endproc\n",
-        ))
+        .arg(dir.join("gap.o"))
+        .arg(write_source(&dir, "gap.s", &gap))
         .output()
         .expect("run badc");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        !out.status.success() && err.contains("arm64's form"),
+        !out.status.success() && err.contains("`.seh_nop` stands for one"),
         "{err}"
     );
 }

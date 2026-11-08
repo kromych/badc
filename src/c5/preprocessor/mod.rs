@@ -2673,11 +2673,7 @@ impl<'p, 's> LinePass<'p, 's> {
             // `pack()` does not. Batching them through the preprocessor's
             // accumulators would lose that order, so the line passes
             // through and the lexer folds it into its state in place.
-            PragmaDirective::Other
-                if pragma_is_pack(args)
-                    || pragma_is_visibility(args, self.pp.dollar())
-                    || pragma_is_fp_contract(args, self.pp.dollar()) =>
-            {
+            PragmaDirective::Other if self.pp.lexer_reads_pragma(args) => {
                 self.pass_through(spelling);
                 return Ok(Emitted::Yes);
             }
@@ -3028,8 +3024,5 @@ use directive::{
 };
 use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
-use pragma::{
-    PragmaDirective, parse_pragma_directive, pragma_is_fp_contract, pragma_is_pack,
-    pragma_is_visibility,
-};
+use pragma::{PragmaDirective, parse_pragma_directive};
 use text::{replace_trigraphs, unfold_and_strip};

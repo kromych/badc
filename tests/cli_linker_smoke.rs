@@ -6586,6 +6586,90 @@ fn declspec_allocate_places_an_object_in_its_named_section() {
     }
 }
 
+/// MSVC's `data_seg`, `const_seg` and `bss_seg` pragmas name the section of
+/// the definitions after them by kind, with `push` / `pop` frames; `_Pragma`
+/// and `__pragma` spell the same, and a block-scope static follows them too.
+#[test]
+fn segment_pragmas_place_definitions_in_their_named_sections() {
+    let dir = tempdir("pe-segment-pragmas");
+    write_source(
+        &dir,
+        "seg.c",
+        "#pragma data_seg(\"SEGDATA\")\n\
+         int x = 0x11111111;\n\
+         #pragma data_seg()\n\
+         int y = 4;\n\
+         #pragma const_seg(\"SEGCONST\")\n\
+         const int c = 0x22222222;\n\
+         #pragma bss_seg(push, saved, \"SEGBSS\")\n\
+         int z;\n\
+         #pragma bss_seg(pop, saved)\n\
+         int w;\n\
+         _Pragma(\"data_seg(\\\"VIAOP\\\")\") int a = 0x33333333;\n\
+         __pragma(data_seg(\"VIAMS\")) int b = 0x44444444;\n\
+         #pragma data_seg()\n\
+         int f(void) {\n\
+         #pragma data_seg(\"LOCALS\")\n\
+         static int s = 0x55555555;\n\
+         #pragma data_seg()\n\
+         return s;\n\
+         }\n\
+         int main(void) { return f() + x + y + c + z + w + a + b; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let out = Command::new(badc())
+            .arg(format!("--target={target}"))
+            .args(["seg.c", "-o", "seg.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success() && !err.contains("warning"),
+            "{target}: {err}"
+        );
+        let pe = std::fs::read(dir.join("seg.exe")).expect("read image");
+        let u16_at = |off: usize| u16::from_le_bytes([pe[off], pe[off + 1]]) as usize;
+        let u32_at = |off: usize| u32::from_le_bytes(pe[off..off + 4].try_into().unwrap()) as usize;
+        let coff = u32_at(0x3c) + 4;
+        let table = coff + 20 + u16_at(coff + 16);
+        // A section's virtual size and first four file bytes.
+        let section = |name: &[u8]| {
+            (0..u16_at(coff + 2))
+                .map(|i| table + 40 * i)
+                .find(|&h| {
+                    pe[h..h + 8].starts_with(name)
+                        && pe[h + name.len()..h + 8].iter().all(|&b| b == 0)
+                })
+                .map(|h| {
+                    let raw = (u32_at(h + 16) > 0).then(|| u32_at(h + 20));
+                    (
+                        u32_at(h + 8),
+                        raw.map(|r| u32::from_le_bytes(pe[r..r + 4].try_into().unwrap())),
+                    )
+                })
+        };
+        for (name, value) in [
+            (&b"SEGDATA"[..], 0x11111111u32),
+            (b"SEGCONST", 0x22222222),
+            (b"VIAOP", 0x33333333),
+            (b"VIAMS", 0x44444444),
+            (b"LOCALS", 0x55555555),
+        ] {
+            assert_eq!(
+                section(name),
+                Some((4, Some(value))),
+                "{target}: {}",
+                String::from_utf8_lossy(name)
+            );
+        }
+        assert!(
+            matches!(section(b"SEGBSS"), Some((4, _))),
+            "{target}: SEGBSS"
+        );
+    }
+}
+
 /// A DLL whose `DllMain` one of several units defines enters there, as a
 /// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
 /// the export table gives where the test exports it.

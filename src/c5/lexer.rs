@@ -677,6 +677,9 @@ pub(crate) struct Lexer {
     pub(crate) fp_contract: bool,
     /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
     pub(crate) fp_contract_default: bool,
+    /// The sections MSVC's segment pragmas name here. Scanned inline like
+    /// `pack`.
+    pub(crate) segments: crate::c5::segment_pragma::Segments,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -872,6 +875,7 @@ impl Lexer {
             visibility_stack: vec![None],
             fp_contract: true,
             fp_contract_default: true,
+            segments: Default::default(),
         }
     }
 
@@ -2062,6 +2066,8 @@ impl Lexer {
                     self.apply_visibility_directive(dir);
                 } else if let Some(state) = parse_pragma_fp_contract_line(body) {
                     self.fp_contract = state.unwrap_or(self.fp_contract_default);
+                } else if let Ok(line) = core::str::from_utf8(body) {
+                    self.segments.apply_line(line);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic()

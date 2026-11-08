@@ -1732,6 +1732,7 @@ impl Compiler {
         let ent_pc = self.next_ent_pc;
         self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
+        self.place_by_segment_pragma(id_idx, crate::c5::segment_pragma::SegKind::Code);
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
         }
@@ -2327,6 +2328,15 @@ impl Compiler {
             return Ok(());
         }
         let defines = !extern_seen || self.lex.tk == Token::Assign;
+        if defines && !thread_local {
+            use crate::c5::segment_pragma::SegKind;
+            let kind = match self.lex.tk == Token::Assign {
+                true if super::types::is_const_object_ty(ty) => SegKind::Const,
+                true => SegKind::Data,
+                false => SegKind::Bss,
+            };
+            self.place_by_segment_pragma(id_idx, kind);
+        }
         let decl_align =
             self.object_alignment(id_idx, ty, base_type_align, thread_local, defines)?;
         let was_extern_only_decl = !defines && array_size != -1;
@@ -2401,6 +2411,28 @@ impl Compiler {
                 was_extern_only_decl,
             )
         }
+    }
+
+    /// The section MSVC's segment pragmas give a definition that names none of
+    /// its own: `alloc_text`'s or `code_seg`'s for a function, `const_seg`,
+    /// `data_seg` or `bss_seg`'s for an object.
+    pub(super) fn place_by_segment_pragma(
+        &mut self,
+        id_idx: usize,
+        kind: crate::c5::segment_pragma::SegKind,
+    ) {
+        use crate::c5::segment_pragma::SegKind;
+        if self.symbols[id_idx].section_name.is_some() {
+            return;
+        }
+        let segments = &self.lex.segments;
+        let section = match kind {
+            SegKind::Code => {
+                (segments.alloc_text(&self.symbols[id_idx].name)).or_else(|| segments.section(kind))
+            }
+            _ => segments.section(kind),
+        };
+        self.symbols[id_idx].section_name = section.map(alloc::string::String::from);
     }
 
     /// C99 6.2.2: record the object, its source position and its linkage.

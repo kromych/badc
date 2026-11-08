@@ -732,6 +732,10 @@ structure loads, float16 and bfloat16 are not provided.
 - `#pragma section("name", ...)` and `__declspec(allocate("name"))` on the
   PE targets: the object goes to the named section, as with GNU `section`, and
   the image keeps it under the name's first eight bytes.
+- `#pragma data_seg`, `const_seg`, `bss_seg` and `code_seg`, with their
+  `push` / `pop` forms, and `#pragma alloc_text` on the PE targets: a
+  definition without a section of its own takes the one in effect for its
+  kind. The image folds a code section into `.text`.
 - `#pragma comment(lib, "name")`, a default library, and on the PE targets
   `#pragma comment(linker, "options")`, link.exe options the object carries as
   cl's `.drectve` does: `/EXPORT:` (under another name, or forwarded as

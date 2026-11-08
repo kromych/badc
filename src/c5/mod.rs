@@ -24,6 +24,7 @@ mod preprocessor;
 mod program;
 #[cfg(feature = "full")]
 mod runtime;
+mod segment_pragma;
 mod softfp;
 mod symbol;
 mod token;

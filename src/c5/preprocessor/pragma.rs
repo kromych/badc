@@ -126,9 +126,7 @@ impl Preprocessor {
                 self.parse_pragma_macro_stack(verb, operand, site)?;
             }
             PragmaDirective::Other => {
-                let lexer_reads = pragma_is_pack(args)
-                    || pragma_is_visibility(args, self.dollar())
-                    || pragma_is_fp_contract(args, self.dollar());
+                let lexer_reads = self.lexer_reads_pragma(args);
                 if !lexer_reads {
                     self.parse_pragma(args, site)?;
                 }
@@ -147,6 +145,17 @@ impl Preprocessor {
     /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
     /// and `once` are handled elsewhere and bypass this function.
     /// Any other directive is accepted with a warning.
+    /// Whether `args` is a pragma whose state holds from its position, which
+    /// the line passes through for the lexer to fold in place: `pack`, GCC
+    /// `visibility`, `STDC FP_CONTRACT`, and on the PE targets MSVC's segment
+    /// pragmas.
+    pub(super) fn lexer_reads_pragma(&self, args: &str) -> bool {
+        pragma_is_pack(args)
+            || pragma_is_visibility(args, self.dollar())
+            || pragma_is_fp_contract(args, self.dollar())
+            || (self.target.is_windows() && crate::c5::segment_pragma::is_segment_pragma(args))
+    }
+
     pub(super) fn parse_pragma(&mut self, args: &str, site: Site<'_>) -> Result<(), C5Error> {
         let (line_no, filename) = (site.line, site.file);
         let args = args.trim();

@@ -773,11 +773,22 @@ impl Compiler {
                 // drops below the natural alignment.
                 self.symbols[d.loc_idx].type_align = a.obj_align.max(0);
             }
+            use crate::c5::segment_pragma::SegKind;
+            let kind = match self.lex.tk == Token::Assign {
+                true if object_const => SegKind::Const,
+                true => SegKind::Data,
+                false => SegKind::Bss,
+            };
             self.static_duration_init += 1;
             let r = self.allocate_static_local(d.loc_idx, d.ty, d.array_size);
             self.static_duration_init -= 1;
             r?;
             self.push_block_static_record(d.loc_idx, d.ty);
+            if let Some(record) = self.symbols[d.loc_idx].entity_record
+                && !self.symbols[d.loc_idx].is_thread_local
+            {
+                self.place_by_segment_pragma(record as usize, kind);
+            }
             self.ast_emit_static_local_decl(d.loc_idx as u32);
         } else {
             // TR 18037 5.1.2 (GCC named address spaces): an object

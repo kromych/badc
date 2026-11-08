@@ -812,21 +812,25 @@ impl crate::c5::x86_simd::FloatEnv for FpEnv {
         f64::from_bits(a).partial_cmp(&f64::from_bits(b))
     }
 
-    fn to_int(&mut self, a: u64, truncate: bool, bits: u32) -> i64 {
-        let (min, x) = (i64::MIN >> (64 - bits), f64::from_bits(a));
-        let low = min as f64;
-        // Truncation keeps what lies above `min - 1`, which at 64 bits rounds
-        // to `min` itself; a NaN fails every bound.
+    fn to_int(&mut self, a: u64, truncate: bool, bits: u32, signed: bool) -> i64 {
+        let min = i64::MIN >> (64 - bits);
+        let (low, high, indefinite) = match signed {
+            true => (min as f64, -(min as f64), min),
+            false => (0.0, (1u64 << bits) as f64, (1i64 << bits) - 1),
+        };
+        let x = f64::from_bits(a);
+        // Truncation keeps what lies above `low - 1`, which at 64 bits rounds
+        // to `low` itself; a NaN fails every bound.
         let fits = match truncate {
-            true => x < -low && (x > low - 1.0 || x == low),
+            true => x < high && (x > low - 1.0 || x == low),
             false => {
                 let r = f64::from_bits(self.round_integral(a, false));
-                r >= low && r < -low
+                r >= low && r < high
             }
         };
         if !fits {
             self.flags |= INVALID;
-            return min;
+            return indefinite;
         }
         match truncate {
             true => self.float_to_int(a, true),
@@ -834,7 +838,7 @@ impl crate::c5::x86_simd::FloatEnv for FpEnv {
         }
     }
 
-    fn int32_to_float(&mut self, n: i32, single: bool) -> u64 {
+    fn integer_to_float(&mut self, n: i64, single: bool) -> u64 {
         self.int_to_float(i128::from(n), if single { BINARY32 } else { BINARY64 })
     }
 

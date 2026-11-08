@@ -701,6 +701,61 @@ fn disp8_compressed_displacement() {
 /// The extended register file: xmm/ymm16..31 and zmm0..31 reach ModRM.reg
 /// through `R'`, ModRM.rm through `X` in the register-direct form, and
 /// EVEX.vvvv through `V'`.
+/// AVX-512F's unsigned doubleword conversions, which have no VEX form, at
+/// each length, from memory, broadcast and under a zeroing mask; the bytes
+/// are clang's.
+#[test]
+fn unsigned_doubleword_conversions() {
+    gas(
+        "vcvtps2udq %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x79, 0xC1],
+    );
+    gas(
+        "vcvtps2udq %ymm9, %ymm17",
+        &[0x62, 0xC1, 0x7C, 0x28, 0x79, 0xC9],
+    );
+    gas(
+        "vcvtps2udq %zmm2, %zmm3",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x79, 0xDA],
+    );
+    gas(
+        "vcvtps2udq 32(%rcx), %zmm7",
+        &[0x62, 0xF1, 0x7C, 0x48, 0x79, 0xB9, 0x20, 0x00, 0x00, 0x00],
+    );
+    gas(
+        "vcvtps2udq 4(%rcx){1to16}, %zmm7",
+        &[0x62, 0xF1, 0x7C, 0x58, 0x79, 0x79, 0x01],
+    );
+    gas(
+        "vcvtps2udq %xmm1, %xmm0{%k1}{z}",
+        &[0x62, 0xF1, 0x7C, 0x89, 0x79, 0xC1],
+    );
+    gas(
+        "vcvttps2udq %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x78, 0xC1],
+    );
+    gas(
+        "vcvttps2udq %ymm3, %ymm4",
+        &[0x62, 0xF1, 0x7C, 0x28, 0x78, 0xE3],
+    );
+    gas(
+        "vcvttps2udq 16(%rax), %xmm5",
+        &[0x62, 0xF1, 0x7C, 0x08, 0x78, 0x68, 0x01],
+    );
+    gas(
+        "vcvtudq2ps %xmm1, %xmm0",
+        &[0x62, 0xF1, 0x7F, 0x08, 0x7A, 0xC1],
+    );
+    gas(
+        "vcvtudq2ps %zmm30, %zmm1",
+        &[0x62, 0x91, 0x7F, 0x48, 0x7A, 0xCE],
+    );
+    gas(
+        "vcvtudq2ps 64(%rdx), %ymm2",
+        &[0x62, 0xF1, 0x7F, 0x28, 0x7A, 0x52, 0x02],
+    );
+}
+
 #[test]
 fn extended_registers() {
     gas(

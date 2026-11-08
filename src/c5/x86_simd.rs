@@ -170,6 +170,8 @@ pub(crate) enum FOp {
 pub(crate) enum Cvt {
     IntToSingle,
     SingleToInt { truncate: bool },
+    UIntToSingle,
+    SingleToUInt { truncate: bool },
     IntToDouble,
     DoubleToInt { truncate: bool },
     SingleToDouble,
@@ -184,10 +186,11 @@ pub(crate) trait FloatEnv {
     /// `None` when unordered. A signaling comparison raises invalid for
     /// any NaN, a quiet one for a signaling NaN.
     fn compare(&mut self, a: u64, b: u64, signaling: bool) -> Option<core::cmp::Ordering>;
-    /// A `bits`-wide integer; the integer indefinite, the type's minimum,
-    /// for a NaN or a value out of range.
-    fn to_int(&mut self, a: u64, truncate: bool, bits: u32) -> i64;
-    fn int32_to_float(&mut self, n: i32, single: bool) -> u64;
+    /// A `bits`-wide integer, at most 32 bits when unsigned; the integer
+    /// indefinite, the signed minimum or the unsigned maximum, for a NaN or
+    /// a value out of range.
+    fn to_int(&mut self, a: u64, truncate: bool, bits: u32, signed: bool) -> i64;
+    fn integer_to_float(&mut self, n: i64, single: bool) -> u64;
     fn to_single(&mut self, a: u64) -> u64;
     /// A `float` lane as a `double` result: a signaling NaN quieted, with
     /// invalid.
@@ -351,6 +354,10 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_cvtdq2ps", "cvtdq2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::IntToSingle), 0),
     op("__builtin_ia32_cvtps2dq", "cvtps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: false }), 0),
     op("__builtin_ia32_cvttps2dq", "cvttps2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToInt { truncate: true }), 0),
+    // AVX-512F with VL: the unsigned doubleword conversions.
+    op("__builtin_ia32_cvtudq2ps128", "vcvtudq2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::UIntToSingle), 0),
+    op("__builtin_ia32_cvtps2udq128", "vcvtps2udq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToUInt { truncate: false }), 0),
+    op("__builtin_ia32_cvttps2udq128", "vcvttps2udq", Form::V, Ret::V4si, Sem::Convert(Cvt::SingleToUInt { truncate: true }), 0),
     op("__builtin_ia32_cvtdq2pd", "cvtdq2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::IntToDouble), 0),
     op("__builtin_ia32_cvtpd2dq", "cvtpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: false }), 0),
     op("__builtin_ia32_cvttpd2dq", "cvttpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: true }), 0),
@@ -891,7 +898,7 @@ pub(crate) fn eval_to_int(
     bits: u32,
 ) -> Option<i64> {
     match sem {
-        Sem::ToInt(w, truncate) => Some(env.to_int(flane(a, w, 0), truncate, bits)),
+        Sem::ToInt(w, truncate) => Some(env.to_int(flane(a, w, 0), truncate, bits, true)),
         _ => None,
     }
 }
@@ -941,20 +948,26 @@ pub(crate) fn eval_float(
         Sem::Convert(cvt) => {
             o = [0; 16];
             match cvt {
-                Cvt::IntToSingle => (0..4).for_each(|i| {
-                    let x = env.int32_to_float(slane(a, 4, i) as i32, true);
-                    set_flane(&mut o, 4, i, x);
+                Cvt::IntToSingle | Cvt::UIntToSingle => (0..4).for_each(|i| {
+                    let n = match cvt {
+                        Cvt::IntToSingle => slane(a, 4, i) as i32 as i64,
+                        _ => slane(a, 4, i) as u32 as i64,
+                    };
+                    set_flane(&mut o, 4, i, env.integer_to_float(n, true));
                 }),
-                Cvt::SingleToInt { truncate } => (0..4).for_each(|i| {
-                    let x = env.to_int(flane(a, 4, i), truncate, 32);
-                    set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
-                }),
+                Cvt::SingleToInt { truncate } | Cvt::SingleToUInt { truncate } => {
+                    let signed = matches!(cvt, Cvt::SingleToInt { .. });
+                    (0..4).for_each(|i| {
+                        let x = env.to_int(flane(a, 4, i), truncate, 32, signed);
+                        set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
+                    })
+                }
                 Cvt::IntToDouble => (0..2).for_each(|i| {
-                    let x = env.int32_to_float(slane(a, 4, i) as i32, false);
+                    let x = env.integer_to_float(slane(a, 4, i) as i32 as i64, false);
                     set_flane(&mut o, 8, i, x);
                 }),
                 Cvt::DoubleToInt { truncate } => (0..2).for_each(|i| {
-                    let x = env.to_int(flane(a, 8, i), truncate, 32);
+                    let x = env.to_int(flane(a, 8, i), truncate, 32, true);
                     set_lane(&mut o, 4, i, x as u64 & 0xFFFF_FFFF);
                 }),
                 Cvt::SingleToDouble => (0..2).for_each(|i| {

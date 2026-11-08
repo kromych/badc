@@ -482,6 +482,9 @@ const TABLE: &[(&str, Form)] = {
     ("vcvtdq2ps",  rm(0, 1, false, 0x5B, Full)),
     ("vcvtps2dq",  rm(1, 1, false, 0x5B, Full)),
     ("vcvttps2dq", rm(2, 1, false, 0x5B, Full)),
+    ("vcvtps2udq",  rm(0, 1, false, 0x79, Full)),
+    ("vcvttps2udq", rm(0, 1, false, 0x78, Full)),
+    ("vcvtudq2ps",  rm(3, 1, false, 0x7A, Full)),
     ("vsqrtps",    rm(0, 1, false, 0x51, Full)), ("vsqrtpd", rm(1, 1, true, 0x51, Full)),
     ("vmovddup",   rm(3, 1, true,  0x12, Dup)),
     ]

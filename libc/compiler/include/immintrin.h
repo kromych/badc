@@ -928,6 +928,33 @@ static inline __m256i _mm256_cvttps_epi32(__m256 __A) {
                             _mm_cvttps_epi32(__badc_lo_ps(__A)));
 }
 
+/* AVX-512F with VL: the unsigned doubleword conversions. */
+static inline __m128 _mm_cvtepu32_ps(__m128i __A) {
+    return __builtin_ia32_cvtudq2ps128((__v4si)__A);
+}
+
+static inline __m128i _mm_cvtps_epu32(__m128 __A) {
+    return (__m128i)__builtin_ia32_cvtps2udq128(__A);
+}
+
+static inline __m128i _mm_cvttps_epu32(__m128 __A) {
+    return (__m128i)__builtin_ia32_cvttps2udq128(__A);
+}
+
+static inline __m256 _mm256_cvtepu32_ps(__m256i __A) {
+    return __badc_join_ps(_mm_cvtepu32_ps(_mm256_castsi256_si128(__A)),
+                          _mm_cvtepu32_ps(_mm256_extracti128_si256(__A, 1)));
+}
+
+static inline __m256i _mm256_cvtps_epu32(__m256 __A) {
+    return _mm256_set_m128i(_mm_cvtps_epu32(__badc_hi_ps(__A)), _mm_cvtps_epu32(__badc_lo_ps(__A)));
+}
+
+static inline __m256i _mm256_cvttps_epu32(__m256 __A) {
+    return _mm256_set_m128i(_mm_cvttps_epu32(__badc_hi_ps(__A)),
+                            _mm_cvttps_epu32(__badc_lo_ps(__A)));
+}
+
 static inline __m256d _mm256_cvtps_pd(__m128 __A) {
     return __badc_join_pd(_mm_cvtps_pd(__A), _mm_cvtps_pd(_mm_movehl_ps(__A, __A)));
 }

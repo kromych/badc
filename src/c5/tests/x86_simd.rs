@@ -1462,6 +1462,11 @@ fn floating_rows_emit_their_instruction() {
             &[0xf3, 0x4d, 0x0f, 0x2c, 0xde],
             "cvttss2si64",
         ),
+        (
+            "__v4si f(__v4sf a) { return __builtin_ia32_cvtps2udq128(a); }",
+            &[0x62, 0x51, 0x7c, 0x08, 0x79, 0xfe],
+            "vcvtps2udq",
+        ),
     ] {
         assert_emits(&format!("{PS}{src}"), expected, what);
     }
@@ -1525,11 +1530,11 @@ fn floating_rows_compute_in_the_environment() {
             self.0 += 1;
             None
         }
-        fn to_int(&mut self, _: u64, _: bool, _: u32) -> i64 {
+        fn to_int(&mut self, _: u64, _: bool, _: u32, _: bool) -> i64 {
             self.0 += 1;
             0
         }
-        fn int32_to_float(&mut self, _: i32, _: bool) -> u64 {
+        fn integer_to_float(&mut self, _: i64, _: bool) -> u64 {
             self.0 += 1;
             0
         }
@@ -1548,6 +1553,49 @@ fn floating_rows_compute_in_the_environment() {
         let scalar = x86_simd::eval_to_int(&mut env, op.sem, &a, 32).is_some();
         assert_eq!(packed || scalar, floating(op.sem), "{}", op.name);
         assert_eq!(env.0 > 0, floating(op.sem), "{}", op.name);
+    }
+}
+
+/// AVX-512's unsigned doubleword conversions compute in the interpreter as
+/// the SDM defines them; no validation box executes AVX-512 to record them.
+/// `vcvtps2udq` rounds in the current direction, `vcvttps2udq` truncates,
+/// and a NaN or a result outside [0, 2^32) is invalid with all ones;
+/// `vcvtudq2ps` rounds the unsigned value to nearest even.
+#[test]
+fn the_interpreter_computes_the_unsigned_doubleword_conversions() {
+    let src = "#include <immintrin.h>\n#include <fenv.h>\n#include <math.h>\n\
+        static int same(__m128i v, unsigned a, unsigned b, unsigned c, unsigned d) {\n\
+            unsigned r[4];\n\
+            _mm_storeu_si128((__m128i *)r, v);\n\
+            return r[0] == a && r[1] == b && r[2] == c && r[3] == d;\n\
+        }\n\
+        int main(void) {\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            __m128i r = _mm_cvtps_epu32(_mm_setr_ps(3.5f, 4294967040.0f, -0.4f, 2.5f));\n\
+            if (!same(r, 4, 4294967040u, 0, 2)) return 1;\n\
+            if (fetestexcept(FE_INVALID) || !fetestexcept(FE_INEXACT)) return 2;\n\
+            fesetround(FE_UPWARD);\n\
+            r = _mm_cvtps_epu32(_mm_setr_ps(3.25f, -0.75f, 0.5f, -1.0f));\n\
+            fesetround(FE_TONEAREST);\n\
+            if (!same(r, 4, 0, 1, 0xffffffffu)) return 3;\n\
+            feclearexcept(FE_ALL_EXCEPT);\n\
+            r = _mm_cvttps_epu32(_mm_setr_ps(-1.0f, 4294967296.0f, 1.9f, NAN));\n\
+            if (!same(r, 0xffffffffu, 0xffffffffu, 1, 0xffffffffu)) return 4;\n\
+            if (!fetestexcept(FE_INVALID)) return 5;\n\
+            float b[4];\n\
+            _mm_storeu_ps(b, _mm_cvtepu32_ps(_mm_setr_epi32(-1, 1, (int)0x80000001u, 16777217)));\n\
+            if (b[0] != 4294967296.0f || b[1] != 1.0f || b[2] != 2147483648.0f || b[3] != 16777216.0f)\n\
+                return 6;\n\
+            unsigned w[8];\n\
+            _mm256_storeu_si256((__m256i *)w, _mm256_cvttps_epu32(_mm256_set1_ps(7.75f)));\n\
+            return w[0] == 7 && w[7] == 7 ? 0 : 7;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        let program = crate::Compiler::with_options(src.to_string(), target, Default::default())
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: check {rc} failed");
     }
 }
 

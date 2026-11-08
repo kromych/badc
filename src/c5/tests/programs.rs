@@ -2232,6 +2232,7 @@ fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
 
 /// MSVC's `__break` on arm64 is `brk` of its constant, the comment field a
 /// debugger reads.
+#[cfg(feature = "full")]
 #[test]
 fn msvc_break_is_brk_of_its_constant() {
     use crate::{CompileOptions, NativeOptions, OutputKind, Target};

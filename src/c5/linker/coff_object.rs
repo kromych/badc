@@ -590,6 +590,9 @@ fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
             SectionFamily::Tdata
         });
     }
+    // The WDK's `<f>_$fo_bdd$` / `_$fo_rvas$` let link.exe route calls through
+    // a `fothk` thunk the kernel may retarget; kept as data, the calls reach
+    // `<f>`'s default body, the thunk's own target.
     let content =
         IMAGE_SCN_CNT_CODE | IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_CNT_UNINITIALIZED_DATA;
     let group = (f & content == 0).then(|| s.name.split('$').next().unwrap_or_default());

@@ -764,16 +764,6 @@ static inline __m256d _mm256_blend_pd(__m256d __A, __m256d __B, const int __M) {
     return (__m256d)__a;
 }
 
-static inline __m128 _mm_blend_ps(__m128 __A, __m128 __B, const int __M) {
-    return _mm256_castps256_ps128(_mm256_blend_ps(_mm256_castps128_ps256(__A),
-                                                  _mm256_castps128_ps256(__B), __M & 15));
-}
-
-static inline __m128d _mm_blend_pd(__m128d __A, __m128d __B, const int __M) {
-    return _mm256_castpd256_pd128(_mm256_blend_pd(_mm256_castpd128_pd256(__A),
-                                                  _mm256_castpd128_pd256(__B), __M & 3));
-}
-
 /* BLENDVPS / BLENDVPD take a lane of the second operand where the mask
 ** lane's sign bit is set. */
 static inline __m256 _mm256_blendv_ps(__m256 __A, __m256 __B, __m256 __M) {
@@ -790,16 +780,6 @@ static inline __m256d _mm256_blendv_pd(__m256d __A, __m256d __B, __m256d __M) {
         if (__m[__i] < 0)
             __a[__i] = __b[__i];
     return (__m256d)__a;
-}
-
-static inline __m128 _mm_blendv_ps(__m128 __A, __m128 __B, __m128 __M) {
-    return _mm256_castps256_ps128(_mm256_blendv_ps(
-        _mm256_castps128_ps256(__A), _mm256_castps128_ps256(__B), _mm256_castps128_ps256(__M)));
-}
-
-static inline __m128d _mm_blendv_pd(__m128d __A, __m128d __B, __m128d __M) {
-    return _mm256_castpd256_pd128(_mm256_blendv_pd(
-        _mm256_castpd128_pd256(__A), _mm256_castpd128_pd256(__B), _mm256_castpd128_pd256(__M)));
 }
 
 static inline int _mm256_movemask_ps(__m256 __A) {

@@ -260,6 +260,63 @@ fn ssse3_ops_emit_their_instruction() {
     );
 }
 
+/// The SSE4.1 forms and PCMPGTQ take the 0F38 map, the immediate blends 0F3A.
+#[cfg(feature = "full")]
+#[test]
+fn sse41_ops_emit_their_instruction() {
+    for (builtin, opcode, unary) in [
+        ("pminsb128", 0x38u8, false),
+        ("pmaxsb128", 0x3c, false),
+        ("pminuw128", 0x3a, false),
+        ("pmaxuw128", 0x3e, false),
+        ("pminsd128", 0x39, false),
+        ("pmaxsd128", 0x3d, false),
+        ("pminud128", 0x3b, false),
+        ("pmaxud128", 0x3f, false),
+        ("pmulld128", 0x40, false),
+        ("pmuldq128", 0x28, false),
+        ("packusdw128", 0x2b, false),
+        ("pcmpgtq", 0x37, false),
+        ("pmovsxbw128", 0x20, true),
+        ("pmovsxbd128", 0x21, true),
+        ("pmovsxbq128", 0x22, true),
+        ("pmovsxwd128", 0x23, true),
+        ("pmovsxwq128", 0x24, true),
+        ("pmovsxdq128", 0x25, true),
+        ("pmovzxbw128", 0x30, true),
+        ("pmovzxbd128", 0x31, true),
+        ("pmovzxbq128", 0x32, true),
+        ("pmovzxwd128", 0x33, true),
+        ("pmovzxwq128", 0x34, true),
+        ("pmovzxdq128", 0x35, true),
+    ] {
+        let src = if unary {
+            format!("__m128i f(__m128i a) {{ return (__m128i)__builtin_ia32_{builtin}(a); }}")
+        } else {
+            format!(
+                "__m128i f(__m128i a, __m128i b) {{ return (__m128i)__builtin_ia32_{builtin}(a, b); }}"
+            )
+        };
+        assert_emits(&src, &[0x66, 0x45, 0x0f, 0x38, opcode, 0xfe], builtin);
+    }
+    // pblendw $0xa5, %xmm14, %xmm15   66 45 0f 3a 0e fe a5
+    // blendps $0x5, %xmm14, %xmm15    66 45 0f 3a 0c fe 05
+    // blendpd $0x2, %xmm14, %xmm15    66 45 0f 3a 0d fe 02
+    for (builtin, opcode, imm) in [
+        ("pblendw128", 0x0eu8, 0xa5u8),
+        ("blendps", 0x0c, 5),
+        ("blendpd", 0x0d, 2),
+    ] {
+        assert_emits(
+            &format!(
+                "__m128i f(__m128i a, __m128i b) {{ return (__m128i)__builtin_ia32_{builtin}(a, b, {imm}); }}"
+            ),
+            &[0x66, 0x45, 0x0f, 0x3a, opcode, 0xfe, imm],
+            builtin,
+        );
+    }
+}
+
 #[cfg(feature = "full")]
 #[test]
 fn element_access_uses_the_extract_and_insert_instructions() {
@@ -294,6 +351,31 @@ fn element_access_uses_the_extract_and_insert_instructions() {
         "__m128i f(__m128i a, int x) { return (__m128i)__builtin_ia32_vec_set_v8hi(a, x, 2); }",
         &[0x66, 0x44, 0x0f, 0xc4, 0xfa, 0x02],
         "pinsrw",
+    );
+    // pextrb $0x3, %xmm14, %r11d   66 45 0f 3a 14 f3 03
+    // pextrq $0x1, %xmm14, %r11    66 4d 0f 3a 16 f3 01
+    // movq   %r11, (%rax)          4c 89 18, the quadword stored whole
+    // pinsrb $0x5, %edx, %xmm15    66 44 0f 3a 20 fa 05
+    // pinsrq $0x1, %rdx, %xmm15    66 4c 0f 3a 22 fa 01
+    assert_emits(
+        "int f(__m128i a) { return __builtin_ia32_vec_ext_v16qi(a, 3); }",
+        &[0x66, 0x45, 0x0f, 0x3a, 0x14, 0xf3, 0x03],
+        "pextrb",
+    );
+    assert_emits(
+        "long long f(__m128i a) { return __builtin_ia32_vec_ext_v2di(a, 1); }",
+        &[0x66, 0x4d, 0x0f, 0x3a, 0x16, 0xf3, 0x01, 0x4c, 0x89, 0x18],
+        "pextrq",
+    );
+    assert_emits(
+        "__m128i f(__m128i a, int x) { return (__m128i)__builtin_ia32_vec_set_v16qi(a, x, 5); }",
+        &[0x66, 0x44, 0x0f, 0x3a, 0x20, 0xfa, 0x05],
+        "pinsrb",
+    );
+    assert_emits(
+        "__m128i f(__m128i a, long long x) { return (__m128i)__builtin_ia32_vec_set_v2di(a, x, 1); }",
+        &[0x66, 0x4c, 0x0f, 0x3a, 0x22, 0xfa, 0x01],
+        "pinsrq",
     );
     assert_emits(
         "int f(__m128i a) { return __builtin_ia32_pmovmskb128(a); }",
@@ -1343,6 +1425,51 @@ fn ssse3_lanes_follow_the_instruction() {
     assert_eq!(x86_simd::eval(Sem::AlignR, &hi, &lo, 32, 0), [0; 16]);
 }
 
+/// PMOVSX / PMOVZX, PMULDQ, the immediate blends and PCMPGTQ.
+#[test]
+fn sse41_lanes_follow_the_instruction() {
+    let a = v([
+        0x80, 0x7f, 0xff, 0x01, 0, 0, 0, 0x80, 9, 9, 9, 9, 0xfe, 0xff, 0xff, 0xff,
+    ]);
+    let sx = x86_simd::eval(Sem::Extend(1, 2, true), &a, &[0; 16], 0, 0);
+    assert_eq!(&sx[..8], &[0x80, 0xff, 0x7f, 0x00, 0xff, 0xff, 0x01, 0x00]);
+    let zx = x86_simd::eval(Sem::Extend(1, 2, false), &a, &[0; 16], 0, 0);
+    assert_eq!(&zx[..8], &[0x80, 0x00, 0x7f, 0x00, 0xff, 0x00, 0x01, 0x00]);
+    // Doubleword 1 is 0x80000000: sign-extended to the second quadword.
+    let dq = x86_simd::eval(Sem::Extend(4, 8, true), &a, &[0; 16], 0, 0);
+    assert_eq!(&dq[8..], &[0, 0, 0, 0x80, 0xff, 0xff, 0xff, 0xff]);
+    let bq = x86_simd::eval(Sem::Extend(1, 8, false), &a, &[0; 16], 0, 0);
+    assert_eq!(
+        bq,
+        v([0x80, 0, 0, 0, 0, 0, 0, 0, 0x7f, 0, 0, 0, 0, 0, 0, 0])
+    );
+    // Doublewords 0 and 2: 0x01ff7f80 * 3, 0x09090909 * -2 (unsigned 0xfffffffe).
+    let b = v([3, 0, 0, 0, 0, 0, 0, 0, 0xfe, 0xff, 0xff, 0xff, 0, 0, 0, 0]);
+    let m = x86_simd::eval(Sem::MulEven(true), &a, &b, 0, 0);
+    assert_eq!(&m[..8], &0x05fe_7e80u64.to_le_bytes());
+    assert_eq!(&m[8..], &0xffff_ffff_eded_edeeu64.to_le_bytes());
+    let u = x86_simd::eval(Sem::MulEven(false), &a, &b, 0, 0);
+    assert_eq!(&u[8..], &0x0909_0908_eded_edeeu64.to_le_bytes());
+    let ones = [0xff; 16];
+    let bw = x86_simd::eval(Sem::Blend(2), &[0; 16], &ones, 0xa5, 0);
+    assert_eq!(
+        bw,
+        v([
+            0xff, 0xff, 0, 0, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 0xff, 0xff
+        ])
+    );
+    let bd = x86_simd::eval(Sem::Blend(8), &[0; 16], &ones, 2, 0);
+    assert_eq!(&bd[..8], &[0; 8]);
+    assert_eq!(&bd[8..], &[0xff; 8]);
+    // 1 > 0, but -1 is not, which an unsigned compare would give.
+    let c = v([
+        1, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    ]);
+    let gt = x86_simd::eval(Sem::CmpGt(8), &c, &[0; 16], 0, 0);
+    assert_eq!(&gt[..8], &[0xff; 8]);
+    assert_eq!(&gt[8..], &[0; 8]);
+}
+
 /// PAVG rounds the unsigned mean up; PMIN / PMAX compare as the row says.
 #[test]
 fn averages_and_extremes_read_the_lanes_as_the_instruction_does() {
@@ -1617,7 +1744,9 @@ fn floating_rows_compute_in_the_environment() {
         | Sem::Max(..)
         | Sem::MulAddWords
         | Sem::MulAddBytes
-        | Sem::MulEvenU
+        | Sem::MulEven(_)
+        | Sem::Extend(..)
+        | Sem::Blend(_)
         | Sem::AddSat(..)
         | Sem::SubSat(..)
         | Sem::SadBytes

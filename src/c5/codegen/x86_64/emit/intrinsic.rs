@@ -155,21 +155,14 @@ pub(super) fn emit_x86_simd(
                 return fail("x86 simd: operand 1 has no place");
             };
             load128(code, src_x, a)?;
-            // `pextrw` zero-extends into the 32-bit register; `pextrd`
-            // writes all 32 bits. Both leave a zero-extended `int`.
-            insn(
-                code,
-                row.mnem,
-                &[imm8, xmm(src_x), gpr(SCRATCH_R11, AsmRegSize::Long)],
-            )?;
+            // `pextrb` and `pextrw` zero-extend into the 32-bit register;
+            // `pextrd` writes all 32 bits and `pextrq` all 64.
+            let size = int_size(row.int_width.max(4));
+            insn(code, row.mnem, &[imm8, xmm(src_x), gpr(SCRATCH_R11, size)])?;
             let Some(d) = operand(code, 0, SCRATCH_R10) else {
                 return fail("x86 simd: destination has no place");
             };
-            return insn(
-                code,
-                "mov",
-                &[gpr(SCRATCH_R11, AsmRegSize::Long), at(d, AsmRegSize::Long)],
-            );
+            return insn(code, "mov", &[gpr(SCRATCH_R11, size), at(d, size)]);
         }
         Form::Insert => {
             let Some(a) = operand(code, 1, SCRATCH_R10) else {

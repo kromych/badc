@@ -151,8 +151,12 @@ pub(crate) enum Sem {
     Move,
     /// Hardware random number generator.
     Rand,
-    /// Unsigned products of the low doubleword of each quadword.
-    MulEvenU,
+    /// Products of each quadword's low doubleword, signed when `true`.
+    MulEven(bool),
+    /// The low lanes widened from the first width to the second, signed when `true`.
+    Extend(u8, u8, bool),
+    /// Lane `i` of the second operand where immediate bit `i` is set.
+    Blend(u8),
     /// Floating-point arithmetic on lanes of the width; the scalar form
     /// computes lane 0 alone, the others from the first operand.
     Float(FOp, u8, bool),
@@ -344,10 +348,41 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_pmulhrsw128", "pmulhrsw", Form::Vv, Ret::V8hi, Sem::MulHrs, 0),
     // PALIGNR's builtin counts bits, as gcc's does.
     op("__builtin_ia32_palignr128", "palignr", Form::VvI, Ret::V2di, Sem::AlignR, 0),
-    // SSE4.1.
+    // SSE4.1, and SSE4.2's PCMPGTQ.
     op("__builtin_ia32_pcmpeqq", "pcmpeqq", Form::Vv, Ret::V2di, Sem::CmpEq(8), 0),
+    op("__builtin_ia32_pcmpgtq", "pcmpgtq", Form::Vv, Ret::V2di, Sem::CmpGt(8), 0),
+    op("__builtin_ia32_vec_ext_v16qi", "pextrb", Form::Extract, Ret::Int, Sem::Move, 1),
+    op("__builtin_ia32_vec_set_v16qi", "pinsrb", Form::Insert, Ret::V16qi, Sem::Move, 1),
     op("__builtin_ia32_vec_ext_v4si", "pextrd", Form::Extract, Ret::Int, Sem::Move, 4),
     op("__builtin_ia32_vec_set_v4si", "pinsrd", Form::Insert, Ret::V4si, Sem::Move, 4),
+    op("__builtin_ia32_vec_ext_v2di", "pextrq", Form::Extract, Ret::Int64, Sem::Move, 8),
+    op("__builtin_ia32_vec_set_v2di", "pinsrq", Form::Insert, Ret::V2di, Sem::Move, 8),
+    op("__builtin_ia32_pminsb128", "pminsb", Form::Vv, Ret::V16qi, Sem::Min(1, true), 0),
+    op("__builtin_ia32_pmaxsb128", "pmaxsb", Form::Vv, Ret::V16qi, Sem::Max(1, true), 0),
+    op("__builtin_ia32_pminuw128", "pminuw", Form::Vv, Ret::V8hi, Sem::Min(2, false), 0),
+    op("__builtin_ia32_pmaxuw128", "pmaxuw", Form::Vv, Ret::V8hi, Sem::Max(2, false), 0),
+    op("__builtin_ia32_pminsd128", "pminsd", Form::Vv, Ret::V4si, Sem::Min(4, true), 0),
+    op("__builtin_ia32_pmaxsd128", "pmaxsd", Form::Vv, Ret::V4si, Sem::Max(4, true), 0),
+    op("__builtin_ia32_pminud128", "pminud", Form::Vv, Ret::V4si, Sem::Min(4, false), 0),
+    op("__builtin_ia32_pmaxud128", "pmaxud", Form::Vv, Ret::V4si, Sem::Max(4, false), 0),
+    op("__builtin_ia32_pmulld128", "pmulld", Form::Vv, Ret::V4si, Sem::MulLo(4), 0),
+    op("__builtin_ia32_pmuldq128", "pmuldq", Form::Vv, Ret::V2di, Sem::MulEven(true), 0),
+    op("__builtin_ia32_packusdw128", "packusdw", Form::Vv, Ret::V8hi, Sem::PackUnsigned(4), 0),
+    op("__builtin_ia32_pmovsxbw128", "pmovsxbw", Form::V, Ret::V8hi, Sem::Extend(1, 2, true), 0),
+    op("__builtin_ia32_pmovsxbd128", "pmovsxbd", Form::V, Ret::V4si, Sem::Extend(1, 4, true), 0),
+    op("__builtin_ia32_pmovsxbq128", "pmovsxbq", Form::V, Ret::V2di, Sem::Extend(1, 8, true), 0),
+    op("__builtin_ia32_pmovsxwd128", "pmovsxwd", Form::V, Ret::V4si, Sem::Extend(2, 4, true), 0),
+    op("__builtin_ia32_pmovsxwq128", "pmovsxwq", Form::V, Ret::V2di, Sem::Extend(2, 8, true), 0),
+    op("__builtin_ia32_pmovsxdq128", "pmovsxdq", Form::V, Ret::V2di, Sem::Extend(4, 8, true), 0),
+    op("__builtin_ia32_pmovzxbw128", "pmovzxbw", Form::V, Ret::V8hi, Sem::Extend(1, 2, false), 0),
+    op("__builtin_ia32_pmovzxbd128", "pmovzxbd", Form::V, Ret::V4si, Sem::Extend(1, 4, false), 0),
+    op("__builtin_ia32_pmovzxbq128", "pmovzxbq", Form::V, Ret::V2di, Sem::Extend(1, 8, false), 0),
+    op("__builtin_ia32_pmovzxwd128", "pmovzxwd", Form::V, Ret::V4si, Sem::Extend(2, 4, false), 0),
+    op("__builtin_ia32_pmovzxwq128", "pmovzxwq", Form::V, Ret::V2di, Sem::Extend(2, 8, false), 0),
+    op("__builtin_ia32_pmovzxdq128", "pmovzxdq", Form::V, Ret::V2di, Sem::Extend(4, 8, false), 0),
+    op("__builtin_ia32_pblendw128", "pblendw", Form::VvI, Ret::V8hi, Sem::Blend(2), 0),
+    op("__builtin_ia32_blendps", "blendps", Form::VvI, Ret::V4sf, Sem::Blend(4), 0),
+    op("__builtin_ia32_blendpd", "blendpd", Form::VvI, Ret::V2df, Sem::Blend(8), 0),
     // AES-NI.
     op("__builtin_ia32_aesenc128", "aesenc", Form::Vv, Ret::V2di, Sem::AesEnc, 0),
     op("__builtin_ia32_aesenclast128", "aesenclast", Form::Vv, Ret::V2di, Sem::AesEncLast, 0),
@@ -402,7 +437,7 @@ pub(crate) const OPS: &[SimdOp] = &[
     op("__builtin_ia32_cvttpd2dq", "cvttpd2dq", Form::V, Ret::V4si, Sem::Convert(Cvt::DoubleToInt { truncate: true }), 0),
     op("__builtin_ia32_cvtps2pd", "cvtps2pd", Form::V, Ret::V2df, Sem::Convert(Cvt::SingleToDouble), 0),
     op("__builtin_ia32_cvtpd2ps", "cvtpd2ps", Form::V, Ret::V4sf, Sem::Convert(Cvt::DoubleToSingle), 0),
-    op("__builtin_ia32_pmuludq128", "pmuludq", Form::Vv, Ret::V2di, Sem::MulEvenU, 0),
+    op("__builtin_ia32_pmuludq128", "pmuludq", Form::Vv, Ret::V2di, Sem::MulEven(false), 0),
     op("__builtin_ia32_cvtss2si", "cvtss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, false), 4),
     op("__builtin_ia32_cvttss2si", "cvttss2si", Form::ToInt, Ret::Int, Sem::ToInt(4, true), 4),
     op("__builtin_ia32_cvtsd2si", "cvtsd2si", Form::ToInt, Ret::Int, Sem::ToInt(8, false), 4),
@@ -432,13 +467,14 @@ pub(crate) fn get(index: u32) -> &'static SimdOp {
 impl SimdOp {
     /// The stores the instruction performs, as `(operand index, bytes)`:
     /// the result through the destination address -- 16 bytes for a
-    /// vector, 4 for an `int` -- and for `RdRand` the random value through
+    /// vector, 4 for an `int`, 8 for a `long long` -- and for `RdRand` the
+    /// random value through
     /// the pointer operand as well. The store form has no destination of
     /// its own; its 16 bytes go through the pointer operand, its first.
     pub(crate) fn stores(&self) -> impl Iterator<Item = (usize, u8)> {
         let width = if self.form.returns_vector() || self.form == Form::Store {
             16
-        } else if self.form == Form::ToInt {
+        } else if self.form == Form::ToInt || (self.form == Form::Extract && self.int_width == 8) {
             self.int_width
         } else {
             4
@@ -960,14 +996,30 @@ pub(crate) fn eval(sem: Sem, a: &[u8; 16], b: &[u8; 16], imm: u8, count: u64) ->
             set_lane(&mut o, 4, 2, sub_word(x3) as u64);
             set_lane(&mut o, 4, 3, (rot_word(sub_word(x3)) ^ imm as u32) as u64);
         }
-        Sem::MulEvenU => {
+        Sem::MulEven(signed) => {
             for i in 0..2 {
-                set_lane(
-                    &mut o,
-                    8,
-                    i,
-                    (lane(a, 8, i) & 0xFFFF_FFFF) * (lane(b, 8, i) & 0xFFFF_FFFF),
-                );
+                let x = if signed {
+                    (slane(a, 4, 2 * i) * slane(b, 4, 2 * i)) as u64
+                } else {
+                    lane(a, 4, 2 * i) * lane(b, 4, 2 * i)
+                };
+                set_lane(&mut o, 8, i, x);
+            }
+        }
+        Sem::Extend(from, to, signed) => {
+            for i in 0..16 / to as usize {
+                let x = if signed {
+                    slane(a, from, i) as u64
+                } else {
+                    lane(a, from, i)
+                };
+                set_lane(&mut o, to, i, x & mask(to));
+            }
+        }
+        Sem::Blend(w) => {
+            for i in 0..16 / w as usize {
+                let src = if imm >> i & 1 != 0 { b } else { a };
+                set_lane(&mut o, w, i, lane(src, w, i));
             }
         }
         Sem::Move | Sem::Rand => o = *a,

@@ -675,7 +675,9 @@ operations lower to the instruction the Intel SDM gives for them, through
 `__builtin_ia32_*` builtins with gcc's names. The composition intrinsics
 (`_mm_set*`, `_mm_setr*`, `_mm_cvtsi*`), `_mm_loadl_epi64`,
 `_mm_storel_epi64`, the 16-, 32- and 64-bit `_mm_loadu_si*` and
-`_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations and the
+`_mm_storeu_si*`, the SSE3 floating operations, the `__m64` operations, the
+SSE4.1 operations whose instruction reads `xmm0` or yields a flag, rounds, or
+forms dot products or sums of differences, the string compares and the
 256-bit integer subset are written lane by lane over the vector extension; the
 `__m64` ones use no MMX register and the 256-bit ones no VEX instruction. An operation outside the subset is absent, so a unit that needs
 one fails at the undeclared name.
@@ -687,14 +689,14 @@ one fails at the undeclared name.
 | `<emmintrin.h>` | SSE2 on `__m128i`: add and subtract, saturating add and subtract, `_mm_sad_epu8`, `_mm_mullo_epi16`, `_mm_mulhi_epi16` / `_epu16`, `_mm_madd_epi16`, `_mm_avg_epu8` / `_epu16`, `_mm_min_*` and `_mm_max_*`, logic, compares, packs, interleaves, shifts by an immediate or a vector count, the byte shifts under both names, shuffles, element access, `_mm_movemask_epi8`, `_mm_move_epi64`, loads and stores, the non-temporal stores as ordinary ones and `_mm_maskmoveu_si128` byte by byte, `_mm_clflush`, `_mm_undefined_*`; `_mm_set*`, `_mm_setr*` and `_mm_cvtsi*`; `_mm_mul_epu32`; on `__m128d`, the double-precision counterparts of `<xmmintrin.h>`'s operations and the conversions between `__m128`, `__m128d` and `__m128i`; `_mm_shuffle_pd`; the `__m128`, `__m128i` and `__m128d` casts; the fences. |
 | `<pmmintrin.h>` | SSE3: `addsub`, horizontal add and subtract, `lddqu`, the duplicating moves and loads, `monitor` and `mwait`. |
 | `<tmmintrin.h>` | SSSE3: `_mm_shuffle_epi8`, `_mm_maddubs_epi16`, `_mm_abs_*`, `_mm_sign_*`, the horizontal sums and differences, `_mm_mulhrs_epi16`, `_mm_alignr_epi8` and the `__m64` forms. |
-| `<smmintrin.h>` | SSE4.1: `_mm_cmpeq_epi64`, `_mm_extract_epi32`, `_mm_insert_epi32`; SSE4.2: `_mm_crc32_u8`, `_u16`, `_u32` and `_u64`. |
+| `<smmintrin.h>` | SSE4.1: the minimums and maximums, `_mm_mullo_epi32`, `_mm_mul_epi32`, `_mm_packus_epi32`, `_mm_cmpeq_epi64`, the `_mm_cvtepi*` and `_mm_cvtepu*` extensions, the blends, the element extracts and inserts, `_mm_testz_si128` / `_testc` / `_testnzc` and the `_mm_test_*` forms, `_mm_round_*`, `_mm_floor_*` and `_mm_ceil_*` with the `_MM_FROUND_*` modes, `_mm_dp_ps` / `_pd`, `_mm_minpos_epu16`, `_mm_mpsadbw_epu8`, `_mm_stream_load_si128`; SSE4.2: `_mm_cmpgt_epi64`, the `_mm_cmpestr*` and `_mm_cmpistr*` string compares with the `_SIDD_*` controls, `_mm_crc32_u8`, `_u16`, `_u32` and `_u64`. |
 | `<nmmintrin.h>` | SSE4.2, through `<smmintrin.h>`. |
 | `<wmmintrin.h>` | AES-NI and `_mm_clmulepi64_si128`. |
 | `<immintrin.h>` | The above; of AVX and AVX2, `__m256i` with its loads, stores, `_mm256_setzero_si256`, `_mm256_set1_*`, the broadcasts from `__m128i`, the 128-bit casts, extract and insert, logic, `_mm256_testz_si256`, add, subtract, `_mm256_cmpeq_*`, `_mm256_cmpgt_epi32` / `_epi64`, `_mm256_movemask_epi8`, the element extracts and inserts, `_mm256_set_*` / `_mm256_setr_*`, the permutes, `_mm256_shuffle_epi8`, the element and byte shifts by an immediate, `_mm256_mullo_epi32`, `_mm256_mul_epu32`, `_mm256_madd_epi16`, `_mm256_maddubs_epi16`, `_mm256_sad_epu8`, `_mm256_subs_epu16` and the interleaves; of AVX on `__m256` and `__m256d`, the arithmetic, minimum, maximum and square root, logic, `addsub` and the horizontal forms, `_mm256_cmp_ps` / `_pd` and `_mm_cmp_ps` / `_pd` / `_ss` / `_sd` by all 32 predicates, conversions, `_mm256_set*`, loads, stores, broadcasts, casts, 128-bit extract and insert, permutes, shuffles, interleaves, blends and `_mm256_movemask_ps` / `_pd`, each built from the SSE operations on the two halves; the FMA3 forms, 128- and 256-bit; of AVX-512F with VL, `_mm_cvtps_epu32`, `_mm_cvttps_epu32`, `_mm_cvtepu32_ps` and their 256-bit forms; `_rdrand*_step`, `_rdseed*_step`, `_xgetbv`, `_tzcnt_u32`, `_tzcnt_u64`, `_mm_popcnt_u32` and `_mm_popcnt_u64`. |
 | `<x86intrin.h>` | The above and the scalar set: byte swaps, bit scans, rotates, `rdtsc`, `rdtscp`, `rdpmc` and the RFLAGS access. |
 
 Not provided: AVX2 past the 256-bit integer subset,
-AVX-512, and the rest of SSE4.1 and SSE4.2 past the operations listed. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
+and AVX-512. `_mm_load_si128` and `_mm_store_si128` use the unaligned move.
 An intrinsic whose last operand its instruction encodes as an `imm8` is a
 macro, as gcc's are without `-O`; a lane move written over the vector
 extension takes its selector as an argument. The rest are `static inline` functions, which `-O` inlines so the

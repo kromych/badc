@@ -1616,3 +1616,158 @@ static inline long long _mm_popcnt_u64(unsigned long long __X) {
     return __builtin_popcountll(__X);
 }
 #endif
+
+/* BMI1, BMI2, LZCNT and ADX, which gcc's <immintrin.h> carries through
+** <bmiintrin.h>, <bmi2intrin.h>, <lzcntintrin.h> and <adxintrin.h>: the
+** instructions' results, computed on any processor. */
+static inline unsigned int _lzcnt_u32(unsigned int __X) {
+    return __X ? (unsigned int)__builtin_clz(__X) : 32;
+}
+static inline unsigned short __tzcnt_u16(unsigned short __X) {
+    return __X ? (unsigned short)__builtin_ctz(__X) : 16;
+}
+static inline unsigned int _andn_u32(unsigned int __X, unsigned int __Y) {
+    return ~__X & __Y;
+}
+static inline unsigned int __bextr_u32(unsigned int __X, unsigned int __C) {
+    unsigned int __s = __C & 0xff, __n = __C >> 8 & 0xff;
+    unsigned int __v = __s < 32 ? __X >> __s : 0;
+    return __n < 32 ? __v & ((1u << __n) - 1) : __v;
+}
+static inline unsigned int _bextr_u32(unsigned int __X, unsigned int __S, unsigned int __N) {
+    return __bextr_u32(__X, (__S & 0xff) | (__N & 0xff) << 8);
+}
+static inline unsigned int _blsi_u32(unsigned int __X) { return __X & -__X; }
+static inline unsigned int _blsmsk_u32(unsigned int __X) { return __X ^ (__X - 1); }
+static inline unsigned int _blsr_u32(unsigned int __X) { return __X & (__X - 1); }
+static inline unsigned int _bzhi_u32(unsigned int __X, unsigned int __Y) {
+    unsigned int __n = __Y & 0xff;
+    return __n < 32 ? __X & ((1u << __n) - 1) : __X;
+}
+static inline unsigned int _pdep_u32(unsigned int __X, unsigned int __M) {
+    unsigned int __r = 0;
+    for (unsigned int __b = 1; __M; __b <<= 1, __M &= __M - 1)
+        if (__X & __b)
+            __r |= __M & -__M;
+    return __r;
+}
+static inline unsigned int _pext_u32(unsigned int __X, unsigned int __M) {
+    unsigned int __r = 0;
+    for (unsigned int __b = 1; __M; __b <<= 1, __M &= __M - 1)
+        if (__X & __M & -__M)
+            __r |= __b;
+    return __r;
+}
+static inline unsigned int _mulx_u32(unsigned int __X, unsigned int __Y, unsigned int *__P) {
+    unsigned long long __r = (unsigned long long)__X * __Y;
+    *__P = (unsigned int)(__r >> 32);
+    return (unsigned int)__r;
+}
+static inline unsigned char _addcarry_u32(unsigned char __C, unsigned int __X, unsigned int __Y,
+                                          unsigned int *__P) {
+    unsigned long long __r = (unsigned long long)__X + __Y + (__C != 0);
+    *__P = (unsigned int)__r;
+    return (unsigned char)(__r >> 32);
+}
+static inline unsigned char _addcarryx_u32(unsigned char __C, unsigned int __X, unsigned int __Y,
+                                           unsigned int *__P) {
+    return _addcarry_u32(__C, __X, __Y, __P);
+}
+static inline unsigned char _subborrow_u32(unsigned char __C, unsigned int __X, unsigned int __Y,
+                                           unsigned int *__P) {
+    unsigned long long __r = (unsigned long long)__X - __Y - (__C != 0);
+    *__P = (unsigned int)__r;
+    return (unsigned char)(__r >> 63);
+}
+
+#ifdef __x86_64__
+static inline unsigned long long _lzcnt_u64(unsigned long long __X) {
+    return __X ? (unsigned long long)__builtin_clzll(__X) : 64;
+}
+static inline unsigned long long _andn_u64(unsigned long long __X, unsigned long long __Y) {
+    return ~__X & __Y;
+}
+static inline unsigned long long __bextr_u64(unsigned long long __X, unsigned long long __C) {
+    unsigned int __s = __C & 0xff, __n = __C >> 8 & 0xff;
+    unsigned long long __v = __s < 64 ? __X >> __s : 0;
+    return __n < 64 ? __v & ((1ull << __n) - 1) : __v;
+}
+static inline unsigned long long _bextr_u64(unsigned long long __X, unsigned int __S,
+                                            unsigned int __N) {
+    return __bextr_u64(__X, (__S & 0xff) | (__N & 0xff) << 8);
+}
+static inline unsigned long long _blsi_u64(unsigned long long __X) { return __X & -__X; }
+static inline unsigned long long _blsmsk_u64(unsigned long long __X) { return __X ^ (__X - 1); }
+static inline unsigned long long _blsr_u64(unsigned long long __X) { return __X & (__X - 1); }
+static inline unsigned long long _bzhi_u64(unsigned long long __X, unsigned int __Y) {
+    unsigned int __n = __Y & 0xff;
+    return __n < 64 ? __X & ((1ull << __n) - 1) : __X;
+}
+static inline unsigned long long _pdep_u64(unsigned long long __X, unsigned long long __M) {
+    unsigned long long __r = 0;
+    for (unsigned long long __b = 1; __M; __b <<= 1, __M &= __M - 1)
+        if (__X & __b)
+            __r |= __M & -__M;
+    return __r;
+}
+static inline unsigned long long _pext_u64(unsigned long long __X, unsigned long long __M) {
+    unsigned long long __r = 0;
+    for (unsigned long long __b = 1; __M; __b <<= 1, __M &= __M - 1)
+        if (__X & __M & -__M)
+            __r |= __b;
+    return __r;
+}
+static inline unsigned long long _mulx_u64(unsigned long long __X, unsigned long long __Y,
+                                           unsigned long long *__P) {
+    unsigned __int128 __r = (unsigned __int128)__X * __Y;
+    *__P = (unsigned long long)(__r >> 64);
+    return (unsigned long long)__r;
+}
+static inline unsigned char _addcarry_u64(unsigned char __C, unsigned long long __X,
+                                          unsigned long long __Y, unsigned long long *__P) {
+    unsigned __int128 __r = (unsigned __int128)__X + __Y + (__C != 0);
+    *__P = (unsigned long long)__r;
+    return (unsigned char)(__r >> 64);
+}
+static inline unsigned char _addcarryx_u64(unsigned char __C, unsigned long long __X,
+                                           unsigned long long __Y, unsigned long long *__P) {
+    return _addcarry_u64(__C, __X, __Y, __P);
+}
+static inline unsigned char _subborrow_u64(unsigned char __C, unsigned long long __X,
+                                           unsigned long long __Y, unsigned long long *__P) {
+    unsigned __int128 __r = (unsigned __int128)__X - __Y - (__C != 0);
+    *__P = (unsigned long long)__r;
+    return (unsigned char)(__r >> 127);
+}
+#endif
+
+#ifdef _WIN32
+/* MSVC's BMI2 shifts and rotate, the count masked to the operand width. */
+static inline unsigned int _rorx_u32(unsigned int __X, const unsigned int __N) {
+    unsigned int __n = __N & 31;
+    return __n ? __X >> __n | __X << (32 - __n) : __X;
+}
+static inline unsigned long long _rorx_u64(unsigned long long __X, const unsigned int __N) {
+    unsigned int __n = __N & 63;
+    return __n ? __X >> __n | __X << (64 - __n) : __X;
+}
+static inline int _sarx_i32(int __X, unsigned int __N) { return __X >> (__N & 31); }
+static inline long long _sarx_i64(long long __X, unsigned int __N) { return __X >> (__N & 63); }
+static inline unsigned int _shlx_u32(unsigned int __X, unsigned int __N) { return __X << (__N & 31); }
+static inline unsigned long long _shlx_u64(unsigned long long __X, unsigned int __N) {
+    return __X << (__N & 63);
+}
+static inline unsigned int _shrx_u32(unsigned int __X, unsigned int __N) { return __X >> (__N & 31); }
+static inline unsigned long long _shrx_u64(unsigned long long __X, unsigned int __N) {
+    return __X >> (__N & 63);
+}
+#else
+/* gcc's spellings of LZCNT, which MSVC's are the compiler's own. */
+static inline unsigned short __lzcnt16(unsigned short __X) {
+    return __X ? (unsigned short)(__builtin_clz(__X) - 16) : 16;
+}
+static inline unsigned int __lzcnt32(unsigned int __X) { return _lzcnt_u32(__X); }
+#ifdef __x86_64__
+static inline unsigned long long __lzcnt64(unsigned long long __X) { return _lzcnt_u64(__X); }
+#endif
+#endif

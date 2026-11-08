@@ -2441,6 +2441,8 @@ pub struct Compiler {
     /// its address at param val=2; struct-returning callees treat
     /// declared params as starting at val=3.
     current_func_return_ty: i64,
+    /// The function being defined and its parameters.
+    object_size_scope: Option<(usize, Vec<usize>)>,
 
     /// True while parsing the body of a function whose declared
     /// return type was bare `void` (`Symbol::returns_void`): a bare
@@ -3315,6 +3317,7 @@ impl Compiler {
             pending_incomplete_objects: Vec::new(),
             pending_asm_globl: Vec::new(),
             current_func_return_ty: 0,
+            object_size_scope: None,
             current_func_returns_void: false,
             current_func_variadic: false,
             current_func_last_param: None,

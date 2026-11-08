@@ -1,7 +1,8 @@
 // __builtin_object_size and __builtin_constant_p of a parameter answer
 // once inlining reaches the object: the bytes left in a defined object
-// under -O, the type's fallback otherwise. Type 3 keeps its fallback 0.
-// A load operand of __builtin_constant_p is not performed.
+// under -O, the type's fallback otherwise. Type 3 answers the subobject
+// the argument addresses, as gcc -O2 does. A load operand of
+// __builtin_constant_p is not performed.
 #include <string.h>
 
 #define FI static inline __attribute__((__always_inline__))
@@ -23,7 +24,8 @@ int main(void) {
         return 1;
     if (b != 7 && b != 0)
         return 2;
-    if (size3(buf) != 0)
+    size_t c = size3(buf);
+    if (c != 10 && c != 0)
         return 4;
     int k = loads_constant(msg);
     if (k != 0 && k != 2)

@@ -294,6 +294,10 @@ pub enum Intrinsic {
     /// point answers the type's fallback for every survivor. Produced only
     /// under `-O`, so no emitter or the interpreter ever sees one.
     ObjectSize = 86,
+    /// Its first argument, a pointer with the constant second argument's
+    /// bytes left in its subobject, which a deferred [`Self::ObjectSize`] of
+    /// types 1 and 3 answers. Only under `-O`; resolved to the pointer.
+    SubobjectBound = 87,
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
@@ -447,6 +451,7 @@ impl Intrinsic {
             84 => Some(Intrinsic::FuncletFrame),
             85 => Some(Intrinsic::EstablisherFrame),
             86 => Some(Intrinsic::ObjectSize),
+            87 => Some(Intrinsic::SubobjectBound),
             _ => None,
         }
     }

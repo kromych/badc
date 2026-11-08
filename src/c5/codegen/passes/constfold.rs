@@ -573,14 +573,21 @@ pub(crate) fn resolve_constant_p(func: &mut FunctionSsa) -> bool {
     let mut changed = false;
     for i in 0..func.insts.len() {
         let answer = match &func.insts[i] {
-            Inst::Intrinsic { kind, .. } if *kind == Intrinsic::ConstantP as i64 => 0,
+            Inst::Intrinsic { kind, .. } if *kind == Intrinsic::ConstantP as i64 => Inst::Imm(0),
             Inst::Intrinsic { kind, args } if *kind == Intrinsic::ObjectSize as i64 => {
                 let ty = args.get(1).and_then(|&t| imm_of(func, t)).unwrap_or(0);
-                crate::c5::compiler::object_size_fallback(ty)
+                Inst::Imm(crate::c5::compiler::object_size_fallback(ty))
+            }
+            // A subobject bound no query is left to read is its pointer.
+            Inst::Intrinsic { kind, args } if *kind == Intrinsic::SubobjectBound as i64 => {
+                Inst::Copy {
+                    value: args[0],
+                    is_fp: false,
+                }
             }
             _ => continue,
         };
-        func.insts[i] = Inst::Imm(answer);
+        func.insts[i] = answer;
         changed = true;
     }
     changed

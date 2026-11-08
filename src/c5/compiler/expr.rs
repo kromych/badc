@@ -2453,6 +2453,7 @@ impl Compiler {
             count_known: s.prototyped() || old_style_def,
             count_is_constraint: s.prototyped(),
             prototyped: s.prototyped(),
+            object_size_params: s.object_size_params,
         };
         let mut nargs = 0;
         // The per-argument stores consume the AST vstack slots they push;
@@ -2583,7 +2584,21 @@ impl Compiler {
 
         self.emit_lea(temp_off);
         self.ast_psh();
-        self.expr(Token::Assign as i64)?;
+        // Under -O an argument to a parameter whose subobject the callee
+        // measures carries the subobject's bound into the inlined body.
+        let measured = self.optimize && nargs < 32 && callee.object_size_params >> nargs & 1 == 1;
+        if measured {
+            self.pending.object_size_operands += 1;
+            self.pending.object_ref = None;
+        }
+        let parsed = self.expr(Token::Assign as i64);
+        if measured {
+            self.pending.object_size_operands -= 1;
+        }
+        parsed?;
+        let bound = (measured.then(|| self.pending.object_ref.take()).flatten())
+            .filter(|r| r.addr)
+            .and_then(|r| r.sub);
 
         if (nargs as usize) < callee.params.len() {
             self.convert_declared_argument(callee, nargs, arg_line)?;
@@ -2606,6 +2621,12 @@ impl Compiler {
             }
         }
 
+        if let Some(arg) = self.ast_acc.filter(|_| measured) {
+            match bound {
+                Some(extent) => self.ast_wrap_subobject_bound(arg, extent.remaining()),
+                None => self.note_object_size_param(arg),
+            }
+        }
         let arg_ast = self.ast_acc;
         self.ast_assign();
         Ok((temp_off, arg_ast))
@@ -3859,6 +3880,7 @@ impl Compiler {
             count_known: f.params.prototyped,
             count_is_constraint: f.params.prototyped,
             prototyped: f.params.prototyped,
+            object_size_params: 0,
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -6826,6 +6848,7 @@ struct DirectCallee {
     count_is_constraint: bool,
     /// Arguments convert as if by assignment (C99 6.5.2.2p7).
     prototyped: bool,
+    object_size_params: u32,
 }
 
 impl DirectCallee {

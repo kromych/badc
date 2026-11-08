@@ -211,6 +211,33 @@ impl Compiler {
     /// forms (2 and 3) 0. The designator is resolved at parse time, so
     /// an answer that is known is exact and the two estimates coincide;
     /// the minimum bit then only picks the fallback.
+    /// Flag the current function's parameter `id` points into.
+    pub(super) fn note_object_size_param(&mut self, mut id: super::super::ast::ExprId) {
+        use super::super::ast::Expr;
+        let Some((func, params)) = &self.object_size_scope else {
+            return;
+        };
+        loop {
+            match self.ast.expr(id) {
+                Expr::Cast { child, .. } => id = *child,
+                Expr::Binary {
+                    op: super::super::ir::BinOp::Add | super::super::ir::BinOp::Sub,
+                    lhs,
+                    ..
+                } => id = *lhs,
+                Expr::Ident { sym, .. } => {
+                    if let Some(pos) = params.iter().position(|&p| p == *sym as usize)
+                        && pos < 32
+                    {
+                        self.symbols[*func].object_size_params |= 1 << pos;
+                    }
+                    return;
+                }
+                _ => return,
+            }
+        }
+    }
+
     pub(super) fn parse_object_size_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_object_size (`.
         let saved_ty = self.ty;
@@ -261,6 +288,9 @@ impl Compiler {
         if extent.is_none()
             && let Some(id) = operand.filter(|&id| self.constant_p_operand_defers(id))
         {
+            if kind & 1 == 1 {
+                self.note_object_size_param(id);
+            }
             let pos = self.ast_src_pos();
             let ty = self.ty;
             let type_lit = self.ast.push_expr(

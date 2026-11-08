@@ -14204,6 +14204,65 @@ fn fortified_inline_overflow_checks_fold() {
     }
 }
 
+/// A fortified inline's `__builtin_object_size(p, 1)` of a parameter
+/// answers the subobject the caller's argument addresses, as gcc -O2
+/// resolves it after inlining: a member array, an element of it, a member
+/// reached through a pointer or of a local, and through an inline that
+/// passes its own parameter on. Type 3 answers the same and type 0 the
+/// whole object. A check the bound fails keeps its call.
+#[test]
+fn an_inlined_object_size_answers_the_arguments_subobject() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "\
+        typedef __SIZE_TYPE__ size_t;\n\
+        #define FI static inline __attribute__((__always_inline__))\n\
+        extern void over_1(void), over_2(void), over_3(void), over_4(void);\n\
+        extern void over_5(void), over_6(void), over_7(void), over_8(void);\n\
+        extern void sink(void *);\n\
+        FI size_t room(const void *p) { return __builtin_object_size(p, 1); }\n\
+        FI size_t whole(const void *p) { return __builtin_object_size(p, 0); }\n\
+        FI size_t least(const void *p) { return __builtin_object_size(p, 3); }\n\
+        FI size_t inner(const char *p) { return room(p + 2); }\n\
+        struct s { char buf[16]; int tail; } inst;\n\
+        void f1(void) { if (room(inst.buf) != 16) over_1(); }\n\
+        void f2(void) { if (room(&inst.buf[4]) != 12) over_2(); }\n\
+        void f3(void) { if (whole(inst.buf) != 20) over_3(); }\n\
+        void f4(void) { if (least(inst.buf) != 16) over_4(); }\n\
+        void f5(struct s *ps) { if (room(ps->buf) != 16) over_5(); }\n\
+        void f6(void) { struct s l; if (room(l.buf) != 16) over_6(); sink(&l); }\n\
+        void f7(void) { if (inner(inst.buf) != 14) over_7(); }\n\
+        void f8(void) { if (room(inst.buf) < 17) over_8(); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let prog = crate::Compiler::with_options(
+            SRC.to_string(),
+            target,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile for {target:?}: {e}"));
+        let obj = emit_native_with_options(
+            &prog,
+            target,
+            NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..NativeOptions::new().with_optimize()
+            },
+        )
+        .unwrap_or_else(|e| panic!("emit for {target:?}: {e}"));
+        let syms = elf_symbol_shndx(&obj);
+        for n in 1..=8 {
+            let name = alloc::format!("over_{n}");
+            assert_eq!(
+                syms.iter().any(|(s, _)| *s == name),
+                n == 8,
+                "{target:?}: {name}"
+            );
+        }
+    }
+}
+
 /// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
 /// defines, so it must not fold to one: folding makes
 /// `__builtin_constant_p` over the result true and decides the guard of

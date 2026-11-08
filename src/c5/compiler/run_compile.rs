@@ -1450,7 +1450,10 @@ impl Compiler {
             .indices
             .last()
             .map(|&idx| (idx, self.symbols[idx].val, params.last_register));
-        self.parse_function_body_items(&params)?;
+        self.object_size_scope = Some((id_idx, params.indices.clone()));
+        let body = self.parse_function_body_items(&params);
+        self.object_size_scope = None;
+        body?;
         self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;

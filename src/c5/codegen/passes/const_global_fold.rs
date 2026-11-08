@@ -412,10 +412,40 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
                 off = off.wrapping_sub(*rhs_imm);
                 v = *lhs;
             }
+            Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND => v = args[0],
             _ => return None,
         }
     }
     None
+}
+
+const SUBOBJECT_BOUND: i64 = crate::c5::op::Intrinsic::SubobjectBound as i64;
+
+/// The bytes left in the subobject `v` points into by its call-site bound:
+/// none past its end, unknown ahead of its start.
+fn subobject_left(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
+    match func.insts.get(v as usize)? {
+        Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND => {
+            match func.insts.get(*args.get(1)? as usize)? {
+                Inst::Imm(n) => Some(*n),
+                _ => None,
+            }
+        }
+        Inst::Copy {
+            value,
+            is_fp: false,
+        } if depth > 0 => subobject_left(func, *value, depth - 1),
+        Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
+            let step = match op {
+                BinOp::Add => *rhs_imm,
+                BinOp::Sub => rhs_imm.checked_neg()?,
+                _ => return None,
+            };
+            let left = subobject_left(func, *lhs, depth - 1)?;
+            (step >= 0).then(|| (left - step).max(0))
+        }
+        _ => None,
+    }
 }
 
 /// The data offset `v` addresses: an `ImmData` plus constants.
@@ -426,6 +456,9 @@ fn data_offset(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
             value,
             is_fp: false,
         } if depth > 0 => data_offset(func, *value, depth - 1),
+        Inst::Intrinsic { kind, args } if *kind == SUBOBJECT_BOUND && depth > 0 => {
+            data_offset(func, args[0], depth - 1)
+        }
         Inst::BinopI { op, lhs, rhs_imm } if depth > 0 => {
             let base = data_offset(func, *lhs, depth - 1)?;
             match op {
@@ -460,12 +493,18 @@ pub(crate) fn fold_data_queries(func: &mut FunctionSsa, cd: &ConstData<'_>) -> b
                     .and_then(|o| cd.read(o, width))
                     .and_then(|v| matches!(v, ConstValue::Bytes(_)).then_some(1))
             }
-            Inst::Intrinsic { kind, args } if *kind == size => {
-                let ty = args.get(1).map(|&t| &func.insts[t as usize]);
-                (args.first())
-                    .filter(|_| matches!(ty, Some(Inst::Imm(0..=2))))
-                    .and_then(|&p| data_offset(func, p, 8))
-                    .and_then(|o| cd.remaining(o))
+            Inst::Intrinsic { kind, args } if *kind == size && args.len() == 2 => {
+                let p = args[0];
+                let whole = || data_offset(func, p, 8).and_then(|o| cd.remaining(o));
+                match func.insts[args[1] as usize] {
+                    Inst::Imm(0 | 2) => whole(),
+                    Inst::Imm(1) => match (subobject_left(func, p, 8), whole()) {
+                        (Some(sub), Some(all)) => Some(sub.min(all)),
+                        (sub, all) => sub.or(all),
+                    },
+                    Inst::Imm(3) => subobject_left(func, p, 8),
+                    _ => None,
+                }
             }
             Inst::CallExt {
                 binding_idx, args, ..

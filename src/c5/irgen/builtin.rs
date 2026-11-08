@@ -411,6 +411,15 @@ impl<'a> Walker<'a> {
             let t = b.imm(ty);
             return Ok(b.intrinsic(kind, alloc::vec![v, t]));
         }
+        if kind == Intrinsic::SubobjectBound as i64 {
+            let v = self.walk_expr_rvalue(b, args[0])?;
+            let bytes = match self.ast.expr(args[1]) {
+                crate::c5::ast::Expr::IntLit { val, .. } if self.optimize => *val,
+                _ => return Ok(v),
+            };
+            let n = b.imm(bytes);
+            return Ok(b.intrinsic(kind, alloc::vec![v, n]));
+        }
         // The va_* intrinsics receive the address of the va_list
         // storage. Where `ap` is a va_list reached through a pointer,
         // the System V spelling of `__va_list_self(ap)` is a bare deref

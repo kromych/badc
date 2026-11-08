@@ -1225,6 +1225,29 @@ impl Compiler {
         id
     }
 
+    /// Wrap `arg` as a pointer with `bytes` left in its subobject.
+    pub(super) fn ast_wrap_subobject_bound(&mut self, arg: ExprId, bytes: i64) {
+        let pos = self.ast_src_pos();
+        let n = self.ast.push_expr(
+            Expr::IntLit {
+                val: bytes,
+                ty: Ty::Long as i64,
+            },
+            pos,
+        );
+        let kind = crate::c5::op::Intrinsic::SubobjectBound as i64;
+        let ty = self.ty;
+        let node = self.ast.push_expr(
+            Expr::Intrinsic {
+                kind,
+                args: alloc::vec![arg, n],
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(node);
+    }
+
     /// Push a floating-point-literal expression. The lexer already
     /// stored `f64::to_bits()` cast to `i64` in `lex.ival`; the AST
     /// keeps the bit pattern in a `u64` so it round-trips through

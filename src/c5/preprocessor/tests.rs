@@ -4871,6 +4871,15 @@ fn msvcs_neon_header_name_binds_the_embedded_neon_header() {
         out.contains("vld1q_u8"),
         "the embedded NEON header expected"
     );
+    // MSVC's unions are storage beside the vector types.
+    let src = "#include <arm64_neon.h>\n\
+               union u { __n128 n128; unsigned int ul[4]; };\n\
+               int f(void) { union u x = { .n128 = { .n128_u64 = { 1, 2 } } };\n\
+               __n64 d = { .n64_u8 = { 3 } };\n\
+               return (int)x.n128.n128_u64[1] + d.n64_u8[0] + (int)sizeof(__n128) + _Alignof(__n128); }\n";
+    let opts = crate::CompileOptions::default().with_no_entry_point(true);
+    (crate::Compiler::with_options(src.to_string(), Target::WindowsAarch64, opts).compile())
+        .expect("the unions compile");
     std::fs::remove_dir_all(&dir).ok();
 }
 

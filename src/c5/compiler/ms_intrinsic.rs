@@ -241,11 +241,39 @@ impl Compiler {
         let list_ty = add_ptr_level(add_ptr_level(plain_char_ty(self.lex.char_signed)));
         let list = self.parse_builtin_value(name, 0, list_ty)?;
         let mut rest = alloc::vec::Vec::new();
+        let mut tys = alloc::vec::Vec::new();
         while self.list_separator(')', "argument")? {
-            rest.push((self.lex.line, self.discard_unevaluated_node()?));
+            let line = self.lex.line;
+            let (node, ty) = self.discard_unevaluated_typed()?;
+            rest.push((line, node));
+            tys.push(ty);
         }
         if let [(line, last)] = rest[..] {
             self.check_va_start_operand(last, line);
+        }
+        // arm64's form, `__va_start(&ap, &v, _SLOTSIZEOF(v), __alignof(v), &v)`:
+        // the operands go unevaluated, and clang checks the named
+        // argument's address and its slot size as these do.
+        if self.target.is_windows() && self.target.is_aarch64() {
+            let wrong = match tys[..] {
+                [] | [_] => Some(alloc::string::String::from(
+                    "takes the named argument's address and slot size",
+                )),
+                [addr, ..] if !super::types::is_pointer_ty(addr) => {
+                    Some(alloc::string::String::from(
+                        "takes the named argument's address as its second operand",
+                    ))
+                }
+                [_, size, ..] if super::types::unqualified_object_ty(size) != self.size_t_ty() => {
+                    Some(alloc::string::String::from(
+                        "takes the slot size as `size_t`, its third operand",
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(what) = wrong {
+                return Err(self.compile_err(Code::INVALID_ARGUMENTS, format!("`{name}` {what}")));
+            }
         }
         self.next()?;
         self.mark_emit_other();

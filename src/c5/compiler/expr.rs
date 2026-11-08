@@ -5805,20 +5805,27 @@ impl Compiler {
     pub(super) fn discard_unevaluated_node(
         &mut self,
     ) -> Result<Option<super::super::ast::ExprId>, C5Error> {
+        Ok(self.discard_unevaluated_typed()?.0)
+    }
+
+    /// [`Self::discard_unevaluated_node`] with the expression's type.
+    pub(super) fn discard_unevaluated_typed(
+        &mut self,
+    ) -> Result<(Option<super::super::ast::ExprId>, i64), C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
         let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
-        let node = self.ast_acc;
+        let (node, ty) = (self.ast_acc, self.ty);
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;
         self.clear_recent_emits();
         self.code_reloc_sym_idx.truncate(saved_reloc);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        result.map(|_| node)
+        result.map(|_| (node, ty))
     }
 
     /// Parse one assignment-expression for its type only. The lexer

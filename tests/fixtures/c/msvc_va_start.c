@@ -35,7 +35,11 @@ static long long past_registers(int a, int b, int c, int d, int e, int f, int g,
 
 static int through_pointer(int n, ...) {
     va_list ap, *p = &ap;
+#if defined(__aarch64__)
+    __va_start(p, &n, SLOT(n), __alignof(n), &n);
+#else
     __va_start(p, n);
+#endif
     int tens = VA_ARG(ap, int);
     return tens * 10 + VA_ARG(ap, int);
 }

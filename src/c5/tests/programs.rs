@@ -1549,7 +1549,7 @@ fn msvc_intrinsics_lower_at_the_call_site() {
 fn msvc_va_start_lowers_as_the_builtin() {
     use crate::{CompileOptions, Target};
     let unit = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
-                int f(int n, ...) { va_list ap; __va_start(&ap, n, 4, 4, &n);\n\
+                int f(int n, ...) { va_list ap; __va_start(&ap, &n, sizeof n, 4, &n);\n\
                 return *(int *)ap; }\n";
     for t in [Target::WindowsX64, Target::WindowsAarch64] {
         let dump = super::perf_codegen::ssa_dump_for(unit, "f", t, false);
@@ -1562,6 +1562,42 @@ fn msvc_va_start_lowers_as_the_builtin() {
     }
     let dump = super::perf_codegen::ssa_dump_for(unit, "f", Target::LinuxX64, false);
     assert!(dump.contains("Call"), "LinuxX64:\n{dump}");
+}
+
+/// arm64's `__va_start(&ap, &v, slot size, alignment, &v)` goes unevaluated
+/// and is checked as clang checks it: the named argument's address, a
+/// pointer, and the slot size, a `size_t`, both present.
+#[test]
+fn arm64_msvc_va_start_checks_its_operands() {
+    use crate::{CompileOptions, Target};
+    let compile = |call: &str| {
+        let src = format!(
+            "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n\
+             int f(int n, ...) {{ va_list ap; {call}; return 0; }}\n"
+        );
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let compiled = crate::Compiler::with_options(src, Target::WindowsAarch64, opts).compile();
+        compiled.map(|_| ()).map_err(|e| e.to_string())
+    };
+    assert_eq!(
+        compile("__va_start(&ap, &n, sizeof(n), __alignof(n), &n)"),
+        Ok(())
+    );
+    assert_eq!(
+        compile("__va_start(&ap, &n, (sizeof(n) + 7) & ~7, 8, &n)"),
+        Ok(())
+    );
+    for (call, says) in [
+        ("__va_start(&ap, &n, 8, 8, &n)", "slot size as `size_t`"),
+        (
+            "__va_start(&ap, 1.5, sizeof(n), 8, &n)",
+            "named argument's address",
+        ),
+        ("__va_start(&ap, &n)", "address and slot size"),
+    ] {
+        let err = compile(call).expect_err(call);
+        assert!(err.contains(says), "{call}: {err}");
+    }
 }
 
 /// C99 7.15.1.4p1: `va_start` belongs to a function whose parameter list
@@ -1594,7 +1630,8 @@ fn va_start_needs_a_variadic_function() {
     ];
     let ms = "typedef char *va_list;\nvoid __va_start(va_list *, ...);\n";
     let ms_x64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, a); }}\n");
-    let ms_arm64 = format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, 4, 4, &a); }}\n");
+    let ms_arm64 =
+        format!("{ms}void f(int a) {{ va_list ap; __va_start(&ap, &a, sizeof a, 4, &a); }}\n");
     let fixed = "`va_start` used in function with fixed arguments";
     for t in [
         Target::LinuxX64,
@@ -1667,8 +1704,8 @@ fn a_parameter_named_like_its_function_keeps_the_function_type() {
 /// (clang; gcc warns with no flag). The lines are clang 22's for the same
 /// unit; an array parameter, a parenthesized one and the arm64 form of
 /// MSVC's `__va_start` draw nothing, as in clang. Every target, in the
-/// `<stdarg.h>`, `__builtin_` and x64 `__va_start` spellings; `-Wno-varargs`
-/// silences each.
+/// `<stdarg.h>` and `__builtin_` spellings, and windows-x64 in its
+/// `__va_start` spelling; `-Wno-varargs` silences each.
 #[test]
 fn va_start_and_va_arg_operands_draw_varargs() {
     use crate::c5::diag::{Code, Config, Level};
@@ -1708,8 +1745,13 @@ fn va_start_and_va_arg_operands_draw_varargs() {
     let ms = format!(
         "typedef char *V;\nvoid __va_start(V *, ...);\n#define S(ap, v) __va_start(&ap, v)\n\
          #define E(ap) (void)(ap)\n{body}\
-         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, 1, 1, &a); return 0; }}\n"
+         int arm64(char a, ...) {{ V ap; __va_start(&ap, &a, sizeof a, 1, &a); return 0; }}\n"
     );
+    // arm64 takes only its own form, which draws nothing.
+    let arm64 = "typedef char *V;\nvoid __va_start(V *, ...);\n\
+                 int f(char a, ...) { V ap; __va_start(&ap, &a, sizeof a, 1, &a); return 0; }\n";
+    let target = Target::WindowsAarch64;
+    assert!(lines(arm64, target, Level::Warning).is_empty());
     // The first seven lines of `body` warn, and the `va_arg` line after it.
     let want = |src: &str| -> Vec<u32> {
         let first = src[..src.find(body).unwrap()].matches('\n').count() as u32 + 1;
@@ -1724,7 +1766,7 @@ fn va_start_and_va_arg_operands_draw_varargs() {
         Target::WindowsAarch64,
     ] {
         let mut units = alloc::vec![&stdarg, &builtin];
-        if t.is_windows() {
+        if t == Target::WindowsX64 {
             units.push(&ms);
         }
         for src in units {

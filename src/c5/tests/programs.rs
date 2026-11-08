@@ -2152,6 +2152,11 @@ fn msvc_intrinsics_check_their_operands() {
             "argument 1 of `__dmb` is not an integer constant expression",
         ),
         (
+            "void f(void) { __break(0x10000); }",
+            a64,
+            "argument 1 of `__break` is 65536, not 0 to 65535",
+        ),
+        (
             "int f(unsigned long *i) { return _BitScanForward(i); }",
             x64,
             "too few arguments to `_BitScanForward` (expected 2, got 1)",
@@ -2223,6 +2228,26 @@ fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
         reported[0].contains("__none_such") && reported[0].contains(":4:"),
         "{reported:?}"
     );
+}
+
+/// MSVC's `__break` on arm64 is `brk` of its constant, the comment field a
+/// debugger reads.
+#[test]
+fn msvc_break_is_brk_of_its_constant() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let src = "void f(void) { __break(0x1234); }\n".to_string();
+    let program = (crate::Compiler::with_options(src, Target::WindowsAarch64, opts).compile())
+        .expect("compiles");
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::default()
+    };
+    let obj =
+        crate::emit_native_with_options(&program, Target::WindowsAarch64, nopts).expect("emit");
+    let bytes = super::codegen::function_bytes(&obj, "f");
+    let brk = (0xd420_0000u32 | 0x1234 << 5).to_le_bytes();
+    assert!(bytes.windows(4).any(|w| w == brk), "{bytes:02x?}");
 }
 
 #[test]

@@ -324,7 +324,7 @@ impl<'a> Walker<'a> {
                 emit_asm(b, name, Vec::new(), 0, true);
                 b.imm(0)
             }
-            Op::Barrier(name) => {
+            Op::InsnImm(name) => {
                 emit_asm(b, &format!("{name} #{imm}"), Vec::new(), 0, true);
                 b.imm(0)
             }

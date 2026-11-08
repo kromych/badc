@@ -197,8 +197,9 @@ pub(crate) enum Op {
     ReadEflags,
     /// RFLAGS from the operand, through `pushq` and `popfq`.
     WriteEflags,
-    /// `dmb`, `dsb` or `isb` with the constant option.
-    Barrier(&'static str),
+    /// An instruction of the constant immediate: `dmb`, `dsb` or `isb` of
+    /// the option, `brk` of the comment.
+    InsnImm(&'static str),
     /// `rep stos` of `(destination, value, count)` elements of the width.
     RepStos {
         width: u8,
@@ -455,9 +456,10 @@ const FIXED: &[Row] = &[
     ("__wfi", Arm64, Op::Insn("wfi"), None, &[]),
     ("__sev", Arm64, Op::Insn("sev"), None, &[]),
     ("__sevl", Arm64, Op::Insn("sevl"), None, &[]),
-    ("__dmb", Arm64, Op::Barrier("dmb"), None, &[K(15)]),
-    ("__dsb", Arm64, Op::Barrier("dsb"), None, &[K(15)]),
-    ("__isb", Arm64, Op::Barrier("isb"), None, &[K(15)]),
+    ("__dmb", Arm64, Op::InsnImm("dmb"), None, &[K(15)]),
+    ("__dsb", Arm64, Op::InsnImm("dsb"), None, &[K(15)]),
+    ("__isb", Arm64, Op::InsnImm("isb"), None, &[K(15)]),
+    ("__break", Arm64, Op::InsnImm("brk"), None, &[K(0xffff)]),
     ("_CountLeadingZeros", Arm64, bits(LZ, 4), Some(UInt), &[V(ULong)]),
     ("_CountLeadingZeros64", Arm64, bits(LZ, 8), Some(UInt), &[V(ULLong)]),
     ("_CountTrailingZeros", Arm64, bits(TZ, 4), Some(UInt), &[V(ULong)]),

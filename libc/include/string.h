@@ -241,6 +241,8 @@ errno_t memset_s(void *s, rsize_t smax, int c, rsize_t n);
 // programs reach for directly; the POSIX aliases (stricmp /
 // strnicmp / strlwr / strupr) bind to the same symbols.
 #include <corecrt.h>
+// The UCRT's <string.h> and <wchar.h> include <errno.h> (corecrt_memcpy_s.h).
+#include <errno.h>
 #pragma binding(msvcrt::memcpy_s,  "memcpy_s")
 #pragma binding(msvcrt::memmove_s, "memmove_s")
 #pragma binding(msvcrt::_strupr_l, "_strupr_l")

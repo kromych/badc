@@ -166,7 +166,9 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 struct __c5_FILE;
 
 #ifdef _WIN32
-// The UCRT's corecrt_w*.h sets, which its <wchar.h> includes.
+// The UCRT's corecrt_w*.h sets, which its <wchar.h> includes, and the
+// <errno.h> its corecrt_memcpy_s.h includes.
+#include <errno.h>
 #include <__badc_wstring.h>
 #include <__badc_wstdlib.h>
 #include <__badc_wstdio.h>

@@ -2360,6 +2360,28 @@ fn windows_tchar_bounds_checked_names_reach_msvcrt() {
     }
 }
 
+/// The UCRT's `<string.h>`, `<memory.h>` and `<wchar.h>` include `<errno.h>`
+/// through corecrt_memcpy_s.h, so `errno` and its macros follow them on the
+/// Windows targets; glibc's `<string.h>` does not.
+#[test]
+fn windows_string_headers_reach_errno_as_the_ucrts_do() {
+    use crate::Target;
+    for header in ["string.h", "memory.h", "wchar.h"] {
+        let src = alloc::format!(
+            "#include <{header}>\nint f(void) {{ errno = EOVERFLOW; return errno; }}\n"
+        );
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            let opts = crate::CompileOptions::default().with_no_entry_point(true);
+            let compiled = crate::Compiler::with_options(src.clone(), t, opts).compile();
+            assert!(compiled.is_ok(), "{t:?} <{header}>: {:?}", compiled.err());
+        }
+    }
+    let src = "#include <string.h>\nint f(void) { return errno; }\n".to_string();
+    let opts = crate::CompileOptions::default().with_no_entry_point(true);
+    let err = (crate::Compiler::with_options(src, Target::LinuxX64, opts).compile()).unwrap_err();
+    assert!(err.to_string().contains("errno"), "{err}");
+}
+
 /// On the Windows targets `<string.h>` declares the wide-string functions the
 /// UCRT's declares through corecrt_wstring.h and vcruntime_string.h, with its
 /// prototypes, alone and beside `<wchar.h>`; each imports msvcrt.dll's entry

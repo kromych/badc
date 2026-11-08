@@ -649,11 +649,18 @@ impl<'a> PeWriter<'a> {
                 ));
             }
         };
+        // The stub's record spans the padding up to the code behind it.
+        let stub_len = match self.stub_at {
+            0 => self.text_prologue_len,
+            _ => self.stub.bytes.len() as u32,
+        };
+        let stub = (self.stub_at, stub_len, &self.stub.a64_prologue[..]);
         let pdata = build_pdata(
             self.machine,
             l.text_rva,
             l.text_size,
             self.text_prologue_len,
+            stub,
             &build.fn_unwind,
             &build.a64_unwind,
             &build.early_returns,
@@ -2728,6 +2735,8 @@ struct EntryStub {
     bytes: Vec<u8>,
     direct_call_runtime: Vec<(u32, &'static str)>,
     direct_call_main_offset: Option<u32>,
+    /// The arm64 steps of its prologue, one per instruction from its start.
+    a64_prologue: Vec<crate::c5::codegen::A64Step>,
 }
 
 impl EntryStub {
@@ -2736,6 +2745,7 @@ impl EntryStub {
             bytes: Vec::new(),
             direct_call_runtime: Vec::new(),
             direct_call_main_offset: None,
+            a64_prologue: Vec::new(),
         }
     }
 }
@@ -2787,6 +2797,7 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
         bytes,
         direct_call_runtime: Vec::new(),
         direct_call_main_offset: None,
+        a64_prologue: Vec::new(),
     }
 }
 
@@ -2807,12 +2818,19 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
                 bytes,
                 direct_call_runtime: vec![(call_off, RT_ENTRY)],
                 direct_call_main_offset: None,
+                a64_prologue: Vec::new(),
             }
         }
+        // A frame record first, as the CRT's entry has one, so a stack walk
+        // from `__c5_entry` reaches the loader's caller; the call does not
+        // return, so the record states no epilogue.
         Machine::Aarch64 => {
             use super::aarch64 as a;
-            let mut bytes: Vec<u8> = Vec::with_capacity(16);
-            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0));
+            use crate::c5::codegen::A64Step;
+            let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            a::emit(&mut bytes, 0xA9BF_7BFD); // stp x29, x30, [sp, #-16]!
+            a::emit(&mut bytes, 0x9100_03FD); // mov x29, sp
+            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 16));
             a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
             let bl_off = bytes.len() as u32;
             a::emit(&mut bytes, a::enc_bl(0)); // patched to __c5_entry
@@ -2821,6 +2839,7 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
                 bytes,
                 direct_call_runtime: vec![(bl_off, RT_ENTRY)],
                 direct_call_main_offset: None,
+                a64_prologue: vec![A64Step::SaveFpLrX(16), A64Step::SetFp],
             }
         }
     }
@@ -2849,6 +2868,7 @@ fn build_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
+    stub: (u32, u32, &[crate::c5::codegen::A64Step]),
     fn_unwind: &[super::FnUnwind],
     a64_unwind: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
@@ -2869,6 +2889,7 @@ fn build_pdata(
             text_rva,
             text_size,
             text_prologue_len,
+            stub,
             a64_unwind,
             early_returns,
             foreign,
@@ -3098,10 +3119,12 @@ fn build_x86_64_pdata(
 /// AArch64 `.pdata`: an entry with an `.xdata` record for each prologue `a64`
 /// describes, over the frame path alone where a return precedes the frame,
 /// the inputs' entries, packed frameless ones over the rest.
+#[allow(clippy::too_many_arguments)]
 fn build_aarch64_pdata(
     text_rva: u32,
     text_size: u32,
     text_prologue_len: u32,
+    stub: (u32, u32, &[crate::c5::codegen::A64Step]),
     a64: &[super::A64Unwind],
     early_returns: &[super::EarlyReturn],
     foreign: &[super::PeUnwindRange],
@@ -3155,6 +3178,15 @@ fn build_aarch64_pdata(
             x.extend(language);
         }
         rows.push((body + begin, body + end, Data::Xdata(x)));
+    }
+    // The entry stub's prologue, with no epilogue.
+    let (stub_at, stub_len, stub_steps) = stub;
+    if !stub_steps.is_empty() {
+        let codes = super::arm64_unwind::step_codes(stub_steps)
+            .ok_or_else(|| C5Error::internal(String::from("the entry stub's prologue codes")))?;
+        let x = super::arm64_unwind::xdata(stub_len, &codes, &[])
+            .ok_or_else(|| C5Error::internal(String::from("the entry stub's unwind record")))?;
+        rows.push((stub_at, stub_at + stub_len, Data::Xdata(x)));
     }
     rows.sort_by_key(|r| r.0);
     let mut entries: Vec<(u32, Data)> = Vec::new();
@@ -3543,7 +3575,7 @@ mod tests {
             rows: &[],
             handler: 0,
         };
-        let p = build_aarch64_pdata(0x1000, text_size, 0, &[], &[], &[], seh).unwrap();
+        let p = build_aarch64_pdata(0x1000, text_size, 0, (0, 0, &[]), &[], &[], &[], seh).unwrap();
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
@@ -3566,12 +3598,36 @@ mod tests {
         assert_eq!(&s.bytes[14..16], &[0x0F, 0x0B], "adapter must end in ud2");
     }
 
+    /// The arm64 adapter opens a frame record, which its unwind record
+    /// states with no epilogue, since the call does not return.
     #[test]
     fn entry_adapter_calls_c5_entry_aarch64() {
+        use crate::c5::codegen::A64Step;
         let s = build_entry_stub(Machine::Aarch64, false);
-        assert_eq!(s.bytes.len(), 16);
-        assert_eq!(s.direct_call_runtime, vec![(8, RT_ENTRY)]);
+        assert_eq!(s.bytes.len(), 24);
+        assert_eq!(s.direct_call_runtime, vec![(16, RT_ENTRY)]);
         assert_eq!(s.direct_call_main_offset, None);
+        assert_eq!(s.a64_prologue, [A64Step::SaveFpLrX(16), A64Step::SetFp]);
+        let seh = Seh {
+            rows: &[],
+            handler: 0,
+        };
+        let stub = (0, 24, &s.a64_prologue[..]);
+        let p = build_aarch64_pdata(0x1000, 0x40, 32, stub, &[], &[], &[], seh).unwrap();
+        // The stub's entry points at `.xdata` (low bits 0), whose header
+        // gives 6 words, no epilogue scope (E clear, count 0) and one code word.
+        assert_eq!(u32::from_le_bytes(p.bytes[..4].try_into().unwrap()), 0x1000);
+        assert_eq!(u32::from_le_bytes(p.bytes[4..8].try_into().unwrap()) & 3, 0);
+        let header = u32::from_le_bytes(p.xdata[..4].try_into().unwrap());
+        assert_eq!(
+            (
+                header & 0x3_FFFF,
+                (header >> 21) & 1,
+                (header >> 22) & 0x1F,
+                header >> 27
+            ),
+            (6, 0, 0, 1)
+        );
     }
 
     /// Offset within the Optional Header at which DataDirectory[i] begins.
@@ -4435,7 +4491,8 @@ mod tests {
             steps: alloc::vec![crate::c5::codegen::A64Step::SaveFpLr(512)],
             exits: Vec::new(),
         };
-        let arm64 = build_aarch64_pdata(0x1000, 16, 0, &[a64], &[], &[], seh).map(|_| ());
+        let arm64 =
+            build_aarch64_pdata(0x1000, 16, 0, (0, 0, &[]), &[a64], &[], &[], seh).map(|_| ());
         for (got, why) in [
             (x64, "has a frame and no recorded unwind steps"),
             (arm64, "no unwind code describes a step"),

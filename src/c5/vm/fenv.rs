@@ -160,6 +160,29 @@ fn is_snan(bits: u64) -> bool {
     is_nan(bits) && bits & QUIET == 0
 }
 
+/// A `float`'s register form, the binary64 pattern of its value; a NaN keeps
+/// its quiet bit and payload, as a copy of it does (IEC 60559 5.5.1).
+pub(super) fn f32_to_reg(bits: u32) -> u64 {
+    let f = f32::from_bits(bits);
+    if !f.is_nan() {
+        return f64::from(f).to_bits();
+    }
+    signed(
+        bits >> 31 != 0,
+        EXP_MASK | u64::from(bits & 0x7f_ffff) << 29,
+    )
+}
+
+/// The `float` a register holds, its NaN payload kept as [`f32_to_reg`] does.
+pub(super) fn reg_to_f32(reg: u64) -> u32 {
+    if !is_nan(reg) {
+        return (f64::from_bits(reg) as f32).to_bits();
+    }
+    let payload = ((reg & !(SIGN | EXP_MASK)) >> 29) as u32;
+    let sign = ((reg >> 32) as u32) & 0x8000_0000;
+    sign | 0x7f80_0000 | if payload == 0 { 0x40_0000 } else { payload }
+}
+
 fn signed(neg: bool, magnitude: u64) -> u64 {
     if neg { magnitude | SIGN } else { magnitude }
 }
@@ -542,6 +565,16 @@ impl FpEnv {
     }
 
     /// A `double` converted to `float` (C99 6.3.1.5).
+    /// A `float` converted to `double`: exact, but a signaling NaN is
+    /// quieted and raises invalid (IEC 60559 5.4.2).
+    pub(super) fn widen(&mut self, a: u64) -> u64 {
+        if is_snan(a) {
+            self.flags |= INVALID;
+            return a | QUIET;
+        }
+        a
+    }
+
     pub(super) fn narrow(&mut self, a: u64) -> u64 {
         match class(a) {
             Class::Nan => self.propagate(a, a, BINARY32),

@@ -1203,7 +1203,7 @@ fn collect_call_args(
             continue;
         }
         if matches!(frame.func.f32_values.get(a as usize), Some(true)) {
-            out.push((f64::from_bits(val as u64) as f32).to_bits() as i64);
+            out.push(i64::from(super::fenv::reg_to_f32(val as u64)));
             continue;
         }
         out.push(val);
@@ -1227,7 +1227,7 @@ fn run_inst<H: Host>(
             // its single-precision value, so widen at the definition.
             frame.regs[v as usize] = if matches!(frame.func.f32_values.get(v as usize), Some(true))
             {
-                (f32::from_bits(*k as u32) as f64).to_bits() as i64
+                super::fenv::f32_to_reg(*k as u32) as i64
             } else {
                 *k
             };
@@ -1619,7 +1619,7 @@ fn run_inst<H: Host>(
                 FpCastKind::UFpToInt => fp.float_to_int(raw as u64, false),
                 FpCastKind::IntToFp => fp.int_to_float(i128::from(raw), f) as i64,
                 FpCastKind::UIntToFp => fp.int_to_float(i128::from(raw as u64), f) as i64,
-                FpCastKind::F32ToF64 => raw,
+                FpCastKind::F32ToF64 => fp.widen(raw as u64) as i64,
                 FpCastKind::F64ToF32 => fp.narrow(raw as u64) as i64,
             };
             return Ok(());
@@ -4327,8 +4327,7 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
         // accumulator carries f64 bit patterns, so the load
         // expands the in-memory f32 to f64 and returns its bits.
         LoadKind::F32 => {
-            let bits = u32::from_le_bytes(slice.try_into().unwrap());
-            (f32::from_bits(bits) as f64).to_bits() as i64
+            super::fenv::f32_to_reg(u32::from_le_bytes(slice.try_into().unwrap())) as i64
         }
         // `double` is already 8 bytes; the c5 accumulator carries
         // f64 bit patterns, so the load returns the raw 64-bit value.
@@ -4378,7 +4377,7 @@ fn store_to_memory(
         // accumulator carries f64 bit patterns, so the store
         // collapses to f32 before writing the 4 bytes.
         StoreKind::F32 => {
-            let f = f64::from_bits(value as u64) as f32;
+            let f = super::fenv::reg_to_f32(value as u64);
             mem.write_bytes(addr, &f.to_le_bytes())
         }
         // `double` is 8 bytes; write the raw f64 bit pattern.

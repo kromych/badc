@@ -559,6 +559,27 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
     }
 }
 
+/// The interpreter keeps a signaling NaN `float` through a copy and quiets
+/// it, raising invalid, in a conversion and in arithmetic, as each target's
+/// processor does.
+#[test]
+fn the_interpreter_copies_a_signaling_nan_float_unchanged() {
+    use crate::{Compiler, Target};
+    let src = super::load_fixture("signaling_nan_float_copy_keeps_its_bits.c");
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = Compiler::with_options(src.clone(), target, Default::default())
+            .compile()
+            .expect("compile");
+        let rc = super::Vm::new(program).run().expect("run");
+        assert_eq!(rc, 0, "{target:?}: check {rc}");
+    }
+}
+
 /// The interpreter computes CRC32 as the instructions do: x86's CRC32 and
 /// AArch64's CRC32C* the CRC-32C, AArch64's CRC32* the IEEE CRC-32, each
 /// giving its check value over "123456789" from all ones, inverted at the end.

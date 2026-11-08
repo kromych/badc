@@ -103,13 +103,48 @@ fn parity() -> Vec<(&'static str, i32)> {
         .collect()
 }
 
-/// The C library's locale is the program's (C17 7.11.1.1), and the
-/// programs the JIT runs share one process and one C library: a program
-/// that sets the locale runs with no other beside it.
+/// The locale (C17 7.11.1.1) and the working directory are the program's,
+/// and the programs the JIT runs share one process: a program that sets
+/// either runs with no other beside it.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
+/// The sources running now. A fixture names its files by process, and the
+/// parity runs share the process, so one source runs once at a time.
+static RUNNING: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+static FINISHED: std::sync::Condvar = std::sync::Condvar::new();
+
+/// A source's turn, given back when its run ends, a panicking one too.
+struct Turn(u64);
+
+impl Turn {
+    fn take(src: &str) -> Turn {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        src.hash(&mut h);
+        let key = h.finish();
+        let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+        while running.contains(&key) {
+            running = FINISHED.wait(running).unwrap_or_else(|e| e.into_inner());
+        }
+        running.push(key);
+        Turn(key)
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+        running.retain(|&k| k != self.0);
+        FINISHED.notify_all();
+    }
+}
+
 fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
-    if src.contains("setlocale(") {
+    let _turn = Turn::take(src);
+    if ["setlocale(", "chdir(", "SetCurrentDirectory"]
+        .iter()
+        .any(|call| src.contains(call))
+    {
         let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
         run()
     } else {

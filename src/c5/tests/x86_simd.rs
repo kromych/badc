@@ -1866,6 +1866,58 @@ fn the_interpreter_computes_the_unsigned_doubleword_conversions() {
     }
 }
 
+/// The interpreter runs the fences, which order nothing in one thread, and
+/// reads and loads MXCSR through its floating-point environment: the flags,
+/// the masks and the rounding control, which governs the scalar operations.
+/// It refuses what it does not model: an unmasked exception, and on
+/// linux-x64, whose `fegetround` reads the x87 control word, an MXCSR
+/// rounding direction apart from that word's.
+#[test]
+fn the_interpreter_runs_the_fences_and_mxcsr_access() {
+    const SRC: &str = "#include <xmmintrin.h>\n#include <emmintrin.h>\n#include <fenv.h>\n\
+        int main(void) {\n\
+            _mm_mfence(); _mm_lfence(); _mm_sfence();\n\
+            if (_mm_getcsr() != 0x1f80) return 1;\n\
+            volatile float a = 1.0f, b = 3.0f;\n\
+            volatile float z = a / b; (void)z;\n\
+            if (_MM_GET_EXCEPTION_STATE() != _MM_EXCEPT_INEXACT) return 2;\n\
+            _MM_SET_EXCEPTION_STATE(0);\n\
+            if (fetestexcept(FE_ALL_EXCEPT)) return 3;\n\
+            fesetround(FE_UPWARD);\n\
+            if (_MM_GET_ROUNDING_MODE() != _MM_ROUND_UP) return 4;\n\
+            fesetround(FE_TONEAREST);\n\
+            float n = a / b;\n\
+            _MM_SET_ROUNDING_MODE(_MM_ROUND_DOWN);\n\
+            float d = a / b;\n\
+            return d < n && fegetround() == FE_DOWNWARD ? 0 : 5;\n\
+        }\n";
+    let run = |target| {
+        let program = crate::Compiler::with_options(SRC.to_string(), target, Default::default())
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        super::Vm::new(program).run()
+    };
+    assert_eq!(run(crate::Target::WindowsX64).expect("run"), 0);
+    let err = run(crate::Target::LinuxX64).expect_err("divergent rounding refused");
+    assert!(
+        err.to_string()
+            .contains("apart from the x87 control word's"),
+        "{err}"
+    );
+    let unmasked = "#include <xmmintrin.h>\nint main(void) { _mm_setcsr(0x1f00); return 0; }\n";
+    let program = (crate::Compiler::with_options(
+        unmasked.to_string(),
+        crate::Target::WindowsX64,
+        Default::default(),
+    )
+    .compile())
+    .expect("compiles");
+    let err = super::Vm::new(program)
+        .run()
+        .expect_err("unmasked exception refused");
+    assert!(err.to_string().contains("unmasks an exception"), "{err}");
+}
+
 /// The floating-point rows, and the AVX and FMA forms built on them, compute
 /// in the interpreter as the instructions do: the fixtures' hashes, which
 /// the instructions gave in each rounding direction, hold under the

@@ -3405,10 +3405,38 @@ fn run_inline_asm(
             // The interpreter is not a CPU emulator: a mnemonic reached through
             // the catalogue is refused rather than modelled. Such inline asm is
             // an ahead-of-time / JIT construct, executed natively there.
+            // The interpreter is single-threaded: a fence orders nothing.
+            Mnemonic::Table("mfence" | "lfence" | "sfence") => {}
             Mnemonic::Table(name) | Mnemonic::ExtMov { name, .. } => {
                 return Err(C5Error::Runtime(alloc::format!(
                     "inline asm: `{name}` is not supported under --interp"
                 )));
+            }
+            // `stmxcsr` / `ldmxcsr` of a memory operand, whose register in the
+            // model holds the stored value or, for an input, the address.
+            Mnemonic::MemExt0F {
+                opcode: 0xAE,
+                ext: ext @ (2 | 3),
+                ..
+            } => {
+                let AsmOpnd::Ref { idx, .. } = ops[0] else {
+                    return Err(C5Error::Runtime(alloc::string::String::from(
+                        "inline asm: MXCSR access needs a memory operand under --interp",
+                    )));
+                };
+                let Some(r) = op_reg[idx as usize] else {
+                    continue;
+                };
+                if ext == 3 {
+                    xregs[r as usize] = mem.fp.mxcsr() as i64;
+                } else {
+                    let v = load_from_memory(mem, xregs[r as usize] as usize, LoadKind::U32)?;
+                    if let Err(what) = mem.fp.set_mxcsr(v as u32) {
+                        return Err(C5Error::Runtime(alloc::format!(
+                            "inline asm: MXCSR {v:#x} {what}, which the interpreter does not model"
+                        )));
+                    }
+                }
             }
             Mnemonic::Sse2Rr { .. }
             | Mnemonic::SseMov { .. }

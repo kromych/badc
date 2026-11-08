@@ -45,6 +45,39 @@ static inline void _mm_setcsr(unsigned int __csr) {
     __asm__ __volatile__("ldmxcsr %0" : : "m"(__csr));
 }
 
+/* MXCSR's fields: the exception flags, their masks, the rounding control
+** and flush-to-zero. */
+#define _MM_EXCEPT_MASK 0x003f
+#define _MM_EXCEPT_INVALID 0x0001
+#define _MM_EXCEPT_DENORM 0x0002
+#define _MM_EXCEPT_DIV_ZERO 0x0004
+#define _MM_EXCEPT_OVERFLOW 0x0008
+#define _MM_EXCEPT_UNDERFLOW 0x0010
+#define _MM_EXCEPT_INEXACT 0x0020
+#define _MM_MASK_MASK 0x1f80
+#define _MM_MASK_INVALID 0x0080
+#define _MM_MASK_DENORM 0x0100
+#define _MM_MASK_DIV_ZERO 0x0200
+#define _MM_MASK_OVERFLOW 0x0400
+#define _MM_MASK_UNDERFLOW 0x0800
+#define _MM_MASK_INEXACT 0x1000
+#define _MM_ROUND_MASK 0x6000
+#define _MM_ROUND_NEAREST 0x0000
+#define _MM_ROUND_DOWN 0x2000
+#define _MM_ROUND_UP 0x4000
+#define _MM_ROUND_TOWARD_ZERO 0x6000
+#define _MM_FLUSH_ZERO_MASK 0x8000
+#define _MM_FLUSH_ZERO_ON 0x8000
+#define _MM_FLUSH_ZERO_OFF 0x0000
+#define _MM_GET_EXCEPTION_STATE() (_mm_getcsr() & _MM_EXCEPT_MASK)
+#define _MM_GET_EXCEPTION_MASK() (_mm_getcsr() & _MM_MASK_MASK)
+#define _MM_GET_ROUNDING_MODE() (_mm_getcsr() & _MM_ROUND_MASK)
+#define _MM_GET_FLUSH_ZERO_MODE() (_mm_getcsr() & _MM_FLUSH_ZERO_MASK)
+#define _MM_SET_EXCEPTION_STATE(x) _mm_setcsr((_mm_getcsr() & ~_MM_EXCEPT_MASK) | (x))
+#define _MM_SET_EXCEPTION_MASK(x) _mm_setcsr((_mm_getcsr() & ~_MM_MASK_MASK) | (x))
+#define _MM_SET_ROUNDING_MODE(x) _mm_setcsr((_mm_getcsr() & ~_MM_ROUND_MASK) | (x))
+#define _MM_SET_FLUSH_ZERO_MODE(x) _mm_setcsr((_mm_getcsr() & ~_MM_FLUSH_ZERO_MASK) | (x))
+
 /* PREFETCHh hints. On the Windows targets they take MSVC's values, which
 ** <winnt.h> defines again; elsewhere gcc's, bit 2 selecting a prefetch for
 ** writing and bits 0-1 the locality. _mm_prefetch is a function of MSVC's

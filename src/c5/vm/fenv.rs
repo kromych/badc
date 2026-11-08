@@ -704,6 +704,40 @@ impl FpEnv {
         m[self.round as usize]
     }
 
+    /// SSE's MXCSR: the exception flags (but the unmodelled denormal flag),
+    /// every exception masked, and the rounding control.
+    pub(super) fn mxcsr(&self) -> u32 {
+        const BITS: [u32; 5] = [0x01, 0x04, 0x08, 0x10, 0x20];
+        let flags = (0..5).filter(|&i| self.flags & 1 << i != 0);
+        let rc = match self.round {
+            Round::Nearest => 0,
+            Round::Down => 1,
+            Round::Up => 2,
+            Round::Zero => 3,
+        };
+        flags.fold(0x1f80 | rc << 13, |acc, i| acc | BITS[i])
+    }
+
+    /// Load MXCSR, or the part of it this model lacks: an unmasked
+    /// exception, denormals-are-zero, flush-to-zero, and on linux-x64,
+    /// whose `long double` and `fegetround` follow the x87 control word, a
+    /// rounding direction apart from that word's.
+    pub(super) fn set_mxcsr(&mut self, v: u32) -> Result<(), &'static str> {
+        if v & !0x603f != 0x1f80 {
+            return Err("unmasks an exception or sets DAZ or FZ");
+        }
+        let round = [Round::Nearest, Round::Down, Round::Up, Round::Zero][(v >> 13 & 3) as usize];
+        if self.target == Target::LinuxX64 && round != self.round {
+            return Err("sets a rounding direction apart from the x87 control word's");
+        }
+        const BITS: [u32; 5] = [0x01, 0x04, 0x08, 0x10, 0x20];
+        self.flags = (0..5)
+            .filter(|&i| v & BITS[i] != 0)
+            .fold(0, |acc, i| acc | 1 << i);
+        self.round = round;
+        Ok(())
+    }
+
     /// `fesetround`; false for a value that names no direction.
     pub(super) fn set_round(&mut self, value: i32) -> bool {
         let dirs = [Round::Nearest, Round::Up, Round::Down, Round::Zero];

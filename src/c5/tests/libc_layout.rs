@@ -852,6 +852,18 @@ fn a_mismatched_layout_is_rejected() {
 /// `DWORD` is `unsigned long`, the string pointers are const-correct, and
 /// under `STRICT` each handle points at a struct of its own. The PE image
 /// records take winnt.h's packing.
+/// MSVC's name for XCR0's `_xgetbv` index.
+#[test]
+fn immintrin_h_names_the_xcr0_index() {
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        check_values(
+            target,
+            &["immintrin.h"],
+            &[("_XCR_XFEATURE_ENABLED_MASK", 0)],
+        );
+    }
+}
+
 /// winnt.h's reasons a DLL entry point or a TLS callback is called for.
 #[test]
 fn windows_h_names_the_dll_entry_reasons() {

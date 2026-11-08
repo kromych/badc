@@ -1496,6 +1496,9 @@ static inline long long _xgetbv(unsigned int __A) {
     return __builtin_ia32_xgetbv(__A);
 }
 
+/* XCR0's index, as MSVC's <immintrin.h> names it. */
+#define _XCR_XFEATURE_ENABLED_MASK 0
+
 /* BMI1's TZCNT, which gcc's <immintrin.h> carries through <bmiintrin.h>:
 ** the operand width for a zero operand. */
 static inline unsigned int _tzcnt_u32(unsigned int __X) {

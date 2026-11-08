@@ -2962,12 +2962,7 @@ fn parse_init_array_section_name(name: &str) -> Option<(bool, Option<u32>)> {
     }
 }
 
-/// bfd's test for a section name a `__start_` / `__stop_` pair can be
-/// spliced onto: every byte alphanumeric or `_`, so no standard family
-/// name qualifies -- each carries a `.`.
-pub fn is_c_identifier(name: &str) -> bool {
-    !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-}
+pub(crate) use crate::c5::ident::is_c_identifier;
 
 pub(crate) use crate::c5::object::eh_frame::EH_FRAME;
 

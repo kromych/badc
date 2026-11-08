@@ -167,7 +167,6 @@ pub(crate) fn data_object_aligns(
 /// A zero-length array (`T x[] = {}`, `T x[0]`) is the one object whose
 /// recorded size is a real zero rather than an absent record, so it is
 /// answered before the fallback runs.
-#[cfg(feature = "native-emit")]
 pub(crate) fn data_object_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
     use crate::c5::compiler::types::{is_pointer_ty, strip_unsigned};
     use crate::c5::token::Ty;
@@ -212,7 +211,6 @@ pub(crate) fn data_object_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
 /// tentative-definition path applies (C99 6.9.2); `copy` is the object's
 /// own size, which is what moves when the object is carved out into a
 /// named section. They differ only in the trailing padding.
-#[cfg(feature = "native-emit")]
 pub(crate) struct DataObjectExtent {
     pub copy: u64,
     pub extent: u64,
@@ -220,7 +218,6 @@ pub(crate) struct DataObjectExtent {
 
 /// Measure a defined data global. Returns `None` for a symbol that
 /// reserved no storage.
-#[cfg(feature = "native-emit")]
 pub(crate) fn data_object_extent(sym: &crate::c5::symbol::Symbol) -> Option<DataObjectExtent> {
     let computed = data_object_byte_size(sym);
     let extent = (sym.reserved_data_bytes as u64).max(computed);

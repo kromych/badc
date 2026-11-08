@@ -1105,7 +1105,8 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         "the dead object lies between the page and the cache-line object"
     );
     let pack = |sets: &LiveSets| {
-        let (out, bss, _) = apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, None);
+        let (out, bss, _) =
+            apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, false, None);
         (out, bss)
     };
     let with_live = |live: &dyn Fn(usize) -> bool| LiveSets {

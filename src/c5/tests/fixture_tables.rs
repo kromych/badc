@@ -52,9 +52,6 @@
 //!     macros are Linux-only: the macOS-hosted tables reject the
 //!     compile, and on Windows every check sits behind `__linux__` /
 //!     `__aarch64__`, leaving a row that asserts nothing.
-//!   * `named_code_section_bounds.c` in the ELF tables -- TODO(#1985):
-//!     the single-image writer defines no `__start_` / `__stop_` bounds of
-//!     a named section; the CLI list runs it.
 //!   * `asm_template_names_renamed_static.c` -- TODO: the x86-64
 //!     single-image ELF writer and the JIT report a function the unit
 //!     defines and an inline-asm `sym(%rip)` names undefined.
@@ -227,6 +224,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("library_function_address_is_one_pointer.c", 0),
     ("attribute_section_placement.c", 0),
     ("named_code_section_bounds.c", 0),
+    ("named_data_section_bounds.c", 0),
     ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
     // native list -- its nested-compound-literal table is mis-relocated on
@@ -1684,6 +1682,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
     ("attribute_section_placement.c", 0),
+    ("named_code_section_bounds.c", 0),
+    ("named_data_section_bounds.c", 0),
     ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),
@@ -2916,6 +2916,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("attribute_alias_keeps_declared_type.c", 0),
     ("c99_float_math_and_vsscanf.c", 0),
     ("attribute_section_placement.c", 0),
+    ("named_code_section_bounds.c", 0),
+    ("named_data_section_bounds.c", 0),
     ("inline_section_mandatory.c", 0),
     ("speculative_init_parse_data_rewind.c", 0),
     ("zero_length_array_decay.c", 0),

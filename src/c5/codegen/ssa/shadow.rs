@@ -1134,8 +1134,14 @@ pub(crate) fn compact_program_data(
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
-    let (out, bss_size, _map) =
-        apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
+    let (out, bss_size, _map) = apply_data_liveness(
+        program.clone(),
+        &sets,
+        &live_func_pcs,
+        segregate,
+        false,
+        None,
+    );
     Ok(Compaction {
         program: out,
         bss_size,
@@ -1171,6 +1177,7 @@ pub(crate) fn apply_data_liveness(
     sets: &LiveSets,
     live_func_pcs: &alloc::collections::BTreeSet<usize>,
     segregate: bool,
+    image: bool,
     ssa: Option<(&mut [FunctionSsa], &DataMap)>,
 ) -> (Program, i64, DataMap) {
     let data_len = out.data.len() as i64;
@@ -1289,9 +1296,37 @@ pub(crate) fn apply_data_liveness(
     // layout it produces records the answer as a position -- everything
     // at or past the file image is zero-fill -- and the object writer
     // reads it back through that watershed rather than re-deriving it.
+    // In an image the objects of a C-identifier section stay together and
+    // file-backed, so `__start_` / `__stop_` bound them as a link bounds the
+    // section it groups.
+    // Each moves as its own bytes at its own alignment, as the relocatable
+    // writer carves it into its section.
+    let mut group: Vec<Option<alloc::string::String>> = alloc::vec![None; n];
+    let (mut obj_len, mut align): (Vec<i64>, Vec<i64>) = (0..n)
+        .map(|i| (obj_end(i) - starts[i], obj_align[i]))
+        .unzip();
+    if image {
+        use crate::c5::token::Token;
+        for sym in &out.symbols {
+            let name = sym.section_name.as_deref();
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && !sym.is_thread_local
+                && (0..data_len).contains(&sym.val)
+                && let Some(name) = name.filter(|n| crate::c5::ident::is_c_identifier(n))
+                && let Some(size) = crate::c5::layout::data_object_extent(sym)
+            {
+                let i = interval_of(sym.val);
+                group[i] = Some(name.into());
+                obj_len[i] = obj_len[i].min(size.copy as i64);
+                align[i] = sym.data_align.max(1);
+            }
+        }
+    }
     let bss: Vec<bool> = (0..n)
         .map(|i| {
             segregate
+                && group[i].is_none()
                 && i != 0
                 && live[i]
                 && !has_reloc_slot[i]
@@ -1355,6 +1390,24 @@ pub(crate) fn apply_data_liveness(
         }
     };
 
+    // A section takes the region the most writable of its objects needs, and
+    // its objects follow the others in name order.
+    let mut group_region: alloc::collections::BTreeMap<&str, u8> = Default::default();
+    for i in (0..n).filter(|&i| live[i]) {
+        if let Some(g) = group[i].as_deref() {
+            let r = group_region.entry(g).or_insert(REGION_RO);
+            *r = (*r).max(region_of(i));
+        }
+    }
+    let region_of = |i: usize| {
+        group[i]
+            .as_deref()
+            .map_or(region_of(i), |g| group_region[g])
+    };
+    let mut order: Vec<usize> = (0..n).filter(|&i| group[i].is_none()).collect();
+    for g in group_region.keys() {
+        order.extend((0..n).filter(|&i| group[i].as_deref() == Some(g)));
+    }
     // The packed layout invalidates the parse-recorded padding ranges;
     // rebuild them from the gaps this pass itself creates.
     let mut new_pad_ranges: Vec<(i64, i64)> = Vec::new();
@@ -1363,11 +1416,13 @@ pub(crate) fn apply_data_liveness(
     let mut data_ro_len: i64 = 0;
     let mut data_relro_len: i64 = 0;
     for pass in [REGION_RO, REGION_RELRO, REGION_RW] {
-        for i in 0..n {
+        let mut ends_group = false;
+        for &i in &order {
             if !live[i] || is_bss(i) || region_of(i) != pass {
                 continue;
             }
-            let a = obj_align[i];
+            ends_group = group[i].is_some();
+            let a = align[i];
             let want = starts[i].rem_euclid(a);
             let pad_start = new_data.len() as i64;
             while (new_data.len() as i64).rem_euclid(a) != want {
@@ -1377,12 +1432,18 @@ pub(crate) fn apply_data_liveness(
                 new_pad_ranges.push((pad_start, new_data.len() as i64));
             }
             new_base[i] = new_data.len() as i64;
-            new_data.extend_from_slice(&out.data[starts[i] as usize..obj_end(i) as usize]);
+            let at = starts[i] as usize;
+            new_data.extend_from_slice(&out.data[at..at + obj_len[i] as usize]);
         }
         // Each region ends on an `img_align` boundary so the next one's
-        // packed residues hold at any aligned placement of it.
+        // packed residues hold at any aligned placement of it. A section
+        // ending the region keeps a byte past it, so its `__stop_` is not the
+        // next region's first byte, which the writers place on another page.
         if pass != REGION_RW && !new_data.is_empty() {
             let pad_start = new_data.len() as i64;
+            if ends_group {
+                new_data.push(0);
+            }
             while (new_data.len() as i64).rem_euclid(img_align) != 0 {
                 new_data.push(0);
             }
@@ -1441,7 +1502,7 @@ pub(crate) fn apply_data_liveness(
     // immediates, padding spans, alignment marks, object starts -- is
     // rewritten through it by `Program::remap_data_offsets`, whose
     // implementations destructure their types exhaustively.
-    let obj_lens: Vec<i64> = (0..n).map(|i| obj_end(i) - starts[i]).collect();
+    let obj_lens = obj_len;
     let map_to = PackedData {
         starts,
         new_base: &new_base,

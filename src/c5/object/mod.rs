@@ -486,7 +486,12 @@ pub fn emit_native_reporting(
     let ssa_dump = core::mem::take(&mut build.ssa_dump);
     let program = &compacted;
     build.bss_size = bss_size;
-    let defs = crate::c5::codegen::unit_definitions(program, &build);
+    let mut defs = crate::c5::codegen::unit_definitions(program, &build);
+    if output_kind != OutputKind::Relocatable {
+        for (name, def) in crate::c5::codegen::section_bounds(program, &build) {
+            defs.entry(name).or_insert(def);
+        }
+    }
     let mut imports = target.binds_data_imports().then(|| {
         let flat = target == Target::MacOSAarch64;
         crate::c5::codegen::DataImportSlots::new(&build, flat, "a single-file image")
@@ -593,6 +598,7 @@ fn compact_and_lower(
         && !options.pie
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
+    let image = options.output_kind != OutputKind::Relocatable;
     if program.data.is_empty() {
         let build = crate::c5::codegen::lower_for_with_prebuilt(
             &program,
@@ -608,7 +614,7 @@ fn compact_and_lower(
     if program.finished_functions.is_empty() || shadow::data_dce_disabled() {
         let sets = shadow::LiveSets::everything(&program);
         let (laid, bss_size, _map) =
-            shadow::apply_data_liveness(program, &sets, &sets.func_pcs, segregate, None);
+            shadow::apply_data_liveness(program, &sets, &sets.func_pcs, segregate, image, None);
         let build = crate::c5::codegen::lower_for_with_prebuilt(
             &laid,
             target,
@@ -647,6 +653,7 @@ fn compact_and_lower(
         &report.sets,
         &report.sets.func_pcs,
         segregate,
+        image,
         Some((&mut report.ssa.funcs, &identity)),
     );
     let mut build = crate::c5::codegen::lower_for_with_prebuilt(

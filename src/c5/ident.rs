@@ -195,6 +195,13 @@ pub(crate) fn is_ident(s: &str, dollar: Dollar) -> bool {
     !s.is_empty() && ident_len(s.as_bytes(), 0, dollar) == s.len()
 }
 
+/// bfd's test for a section name a `__start_` / `__stop_` pair can be
+/// spliced onto: every byte alphanumeric or `_`, so no standard family
+/// name qualifies -- each carries a `.`.
+pub(crate) fn is_c_identifier(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
 /// Whether identifier `s` is reserved for any use (C99 7.1.3p1): an
 /// underscore followed by an uppercase letter or another underscore.
 pub(crate) fn is_reserved(s: &str) -> bool {

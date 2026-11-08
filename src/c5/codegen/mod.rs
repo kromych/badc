@@ -3815,6 +3815,58 @@ pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
     defs
 }
 
+/// The `__start_` / `__stop_` pair of each C-identifier section the unit's
+/// functions or objects name, which its own image defines as a link does:
+/// the lowering groups a section's functions and the layout its objects.
+pub(crate) fn section_bounds(program: &Program, build: &Build) -> Vec<(String, UnitDef)> {
+    use crate::c5::token::Token;
+    fn named(s: &crate::c5::symbol::Symbol) -> Option<&str> {
+        (s.section_name.as_deref()).filter(|n| crate::c5::ident::is_c_identifier(n))
+    }
+    let functions =
+        || (program.symbols.iter()).filter(|s| s.class == Token::Fun as i64 && s.defined_here);
+    let section_of: alloc::collections::BTreeMap<&str, Option<&str>> =
+        functions().map(|s| (s.def_link_name(), named(s))).collect();
+    let mut text: alloc::collections::BTreeMap<&str, (usize, usize)> = Default::default();
+    let mut current = None;
+    for (k, (&pc, name)) in build.func_ent_pcs.iter().zip(&build.func_names).enumerate() {
+        // A funclet, which no symbol names, follows its function.
+        current = section_of.get(name.as_str()).copied().unwrap_or(current);
+        let (Some(sec), Some(&start)) = (current, build.pc_to_native.get(pc)) else {
+            continue;
+        };
+        let next = (build.func_ent_pcs.get(k + 1)).and_then(|&p| build.pc_to_native.get(p));
+        let end = (build.func_ends.get(k).or(next).copied()).unwrap_or(build.text.len());
+        let e = text.entry(sec).or_insert((start, end));
+        *e = (e.0.min(start), e.1.max(end));
+    }
+    let mut data: alloc::collections::BTreeMap<&str, (u64, u64)> = Default::default();
+    for s in &program.symbols {
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_thread_local
+            && let Some(sec) = named(s).filter(|sec| !text.contains_key(sec))
+        {
+            let (start, end) = (
+                s.val.max(0) as u64,
+                (s.val + s.data_byte_size).max(0) as u64,
+            );
+            let e = data.entry(sec).or_insert((start, end));
+            *e = (e.0.min(start), e.1.max(end));
+        }
+    }
+    let pair = |sec: &str, a: UnitDef, b: UnitDef| {
+        [(format!("__start_{sec}"), a), (format!("__stop_{sec}"), b)]
+    };
+    (text.into_iter())
+        .flat_map(|(sec, (a, b))| pair(sec, UnitDef::Text(a), UnitDef::Text(b)))
+        .chain(
+            (data.into_iter())
+                .flat_map(|(sec, (a, b))| pair(sec, UnitDef::Data(a), UnitDef::Data(b))),
+        )
+        .collect()
+}
+
 /// Whether the RIP-relative field at `field` is the operand of a `lea`.
 pub(crate) fn x86_64_lea_rip(code: &[u8], field: usize) -> bool {
     field >= 2 && code[field - 2] == 0x8D && code[field - 1] & 0xC7 == 0x05

@@ -2,8 +2,7 @@
 ** UCRT export; the compiler lowers every other call declared here at the
 ** call site, whatever declares it, as MSVC does. The header also carries
 ** the vector intrinsics, as MSVC's includes <immintrin.h> on x86-64 and
-** its NEON header on arm64.
-** TODO: the 256-bit vector types and their intrinsics. */
+** its NEON header on arm64. */
 #pragma once
 
 #ifdef _WIN32

@@ -8,10 +8,11 @@
 #include <smmintrin.h>
 #include <wmmintrin.h>
 
-/* The 256-bit integer operations of AVX and AVX2 this build carries,
-** written lane by lane over the vector extension as the SDM defines each
-** instruction; no VEX instruction is emitted, so a unit may call them
-** behind a CPUID check as with cl, which needs no /arch option for them. */
+/* The 256-bit types and the integer operations of AVX and AVX2, written
+** lane by lane over the vector extension as the SDM defines each
+** instruction or, below, as the SSE instruction on each 128-bit half; no
+** VEX instruction is emitted, so a unit may call them behind a CPUID check
+** as with cl, which needs no /arch option for them. */
 #pragma push_macro("__attribute__")
 #undef __attribute__
 typedef long long __m256i __attribute__((__vector_size__(32)));
@@ -434,6 +435,393 @@ static inline __m256i _mm256_unpacklo_epi64(__m256i __A, __m256i __B) {
 static inline __m256i _mm256_unpackhi_epi64(__m256i __A, __m256i __B) {
     return (__m256i){__A[1], __B[1], __A[3], __B[3]};
 }
+
+/* The rest of AVX2's integer operations, and AVX's on __m256i. Each one an
+** SSE instruction applies to a 128-bit half applies to the two halves, so
+** it lowers to that instruction twice; the ones with an immediate operand,
+** the cross-half ones, the variable shifts, the masked transfers and the
+** gathers are written lane by lane. */
+
+static inline __m128i __badc_lo_si(__m256i __A) {
+    return (__m128i){__A[0], __A[1]};
+}
+
+static inline __m128i __badc_hi_si(__m256i __A) {
+    return (__m128i){__A[2], __A[3]};
+}
+
+static inline __m256i __badc_join_si(__m128i __L, __m128i __H) {
+    return (__m256i){__L[0], __L[1], __H[0], __H[1]};
+}
+
+#define __BADC_AVX2_BINARY(name)                                                  \
+    static inline __m256i _mm256_##name(__m256i __A, __m256i __B) {               \
+        return __badc_join_si(_mm_##name(__badc_lo_si(__A), __badc_lo_si(__B)),   \
+                              _mm_##name(__badc_hi_si(__A), __badc_hi_si(__B)));  \
+    }
+__BADC_AVX2_BINARY(adds_epi8)
+__BADC_AVX2_BINARY(adds_epi16)
+__BADC_AVX2_BINARY(adds_epu8)
+__BADC_AVX2_BINARY(adds_epu16)
+__BADC_AVX2_BINARY(subs_epi8)
+__BADC_AVX2_BINARY(subs_epi16)
+__BADC_AVX2_BINARY(subs_epu8)
+__BADC_AVX2_BINARY(avg_epu8)
+__BADC_AVX2_BINARY(avg_epu16)
+__BADC_AVX2_BINARY(min_epi8)
+__BADC_AVX2_BINARY(min_epi16)
+__BADC_AVX2_BINARY(min_epi32)
+__BADC_AVX2_BINARY(min_epu8)
+__BADC_AVX2_BINARY(min_epu16)
+__BADC_AVX2_BINARY(min_epu32)
+__BADC_AVX2_BINARY(max_epi8)
+__BADC_AVX2_BINARY(max_epi16)
+__BADC_AVX2_BINARY(max_epi32)
+__BADC_AVX2_BINARY(max_epu8)
+__BADC_AVX2_BINARY(max_epu16)
+__BADC_AVX2_BINARY(max_epu32)
+__BADC_AVX2_BINARY(mulhi_epi16)
+__BADC_AVX2_BINARY(mulhi_epu16)
+__BADC_AVX2_BINARY(mulhrs_epi16)
+__BADC_AVX2_BINARY(mullo_epi16)
+__BADC_AVX2_BINARY(mul_epi32)
+__BADC_AVX2_BINARY(sign_epi8)
+__BADC_AVX2_BINARY(sign_epi16)
+__BADC_AVX2_BINARY(sign_epi32)
+__BADC_AVX2_BINARY(hadd_epi16)
+__BADC_AVX2_BINARY(hadd_epi32)
+__BADC_AVX2_BINARY(hadds_epi16)
+__BADC_AVX2_BINARY(hsub_epi16)
+__BADC_AVX2_BINARY(hsub_epi32)
+__BADC_AVX2_BINARY(hsubs_epi16)
+__BADC_AVX2_BINARY(cmpgt_epi8)
+__BADC_AVX2_BINARY(cmpgt_epi16)
+__BADC_AVX2_BINARY(packs_epi16)
+__BADC_AVX2_BINARY(packs_epi32)
+__BADC_AVX2_BINARY(packus_epi16)
+__BADC_AVX2_BINARY(packus_epi32)
+__BADC_AVX2_BINARY(unpacklo_epi8)
+__BADC_AVX2_BINARY(unpacklo_epi16)
+__BADC_AVX2_BINARY(unpackhi_epi8)
+__BADC_AVX2_BINARY(unpackhi_epi16)
+#undef __BADC_AVX2_BINARY
+
+#define __BADC_AVX2_UNARY(name)                                                   \
+    static inline __m256i _mm256_##name(__m256i __A) {                            \
+        return __badc_join_si(_mm_##name(__badc_lo_si(__A)), _mm_##name(__badc_hi_si(__A))); \
+    }
+__BADC_AVX2_UNARY(abs_epi8)
+__BADC_AVX2_UNARY(abs_epi16)
+__BADC_AVX2_UNARY(abs_epi32)
+#undef __BADC_AVX2_UNARY
+
+/* The shifts by a count, an int or a vector's low quadword, per half. */
+#define __BADC_AVX2_SHIFT(name, count)                                            \
+    static inline __m256i _mm256_##name(__m256i __A, count __C) {                 \
+        return __badc_join_si(_mm_##name(__badc_lo_si(__A), __C), _mm_##name(__badc_hi_si(__A), __C)); \
+    }
+__BADC_AVX2_SHIFT(slli_epi16, int)
+__BADC_AVX2_SHIFT(srli_epi16, int)
+__BADC_AVX2_SHIFT(srai_epi16, int)
+__BADC_AVX2_SHIFT(srai_epi32, int)
+__BADC_AVX2_SHIFT(sll_epi16, __m128i)
+__BADC_AVX2_SHIFT(sll_epi32, __m128i)
+__BADC_AVX2_SHIFT(sll_epi64, __m128i)
+__BADC_AVX2_SHIFT(srl_epi16, __m128i)
+__BADC_AVX2_SHIFT(srl_epi32, __m128i)
+__BADC_AVX2_SHIFT(srl_epi64, __m128i)
+__BADC_AVX2_SHIFT(sra_epi16, __m128i)
+__BADC_AVX2_SHIFT(sra_epi32, __m128i)
+#undef __BADC_AVX2_SHIFT
+
+#define _mm256_bslli_epi128 _mm256_slli_si256
+#define _mm256_bsrli_epi128 _mm256_srli_si256
+
+/* VPSLLV / VPSRLV / VPSRAV: each lane shifted by the unsigned count in the
+** same lane of the second operand; a count past the lane width clears it,
+** or fills it with the sign. */
+#define __BADC_SHIFTV(name, ty, vec, lane, n, bits, op)                           \
+    static inline ty name(ty __A, ty __C) {                                       \
+        vec __a = (vec)__A, __c = (vec)__C;                                       \
+        for (int __i = 0; __i < n; __i++)                                         \
+            __a[__i] = op;                                                        \
+        return (ty)__a;                                                           \
+    }
+#define __BADC_SLL(u, bits) ((u)__c[__i] >= bits ? 0 : (u)__a[__i] << (u)__c[__i])
+#define __BADC_SRL(u, bits) ((u)__c[__i] >= bits ? 0 : (u)__a[__i] >> (u)__c[__i])
+#define __BADC_SRA(u, bits) (__a[__i] >> ((u)__c[__i] >= bits ? bits - 1 : (u)__c[__i]))
+__BADC_SHIFTV(_mm_sllv_epi32, __m128i, __v4si, int, 4, 32, __BADC_SLL(unsigned, 32))
+__BADC_SHIFTV(_mm_srlv_epi32, __m128i, __v4si, int, 4, 32, __BADC_SRL(unsigned, 32))
+__BADC_SHIFTV(_mm_srav_epi32, __m128i, __v4si, int, 4, 32, __BADC_SRA(unsigned, 32))
+__BADC_SHIFTV(_mm_sllv_epi64, __m128i, __v2di, long long, 2, 64, __BADC_SLL(unsigned long long, 64))
+__BADC_SHIFTV(_mm_srlv_epi64, __m128i, __v2di, long long, 2, 64, __BADC_SRL(unsigned long long, 64))
+__BADC_SHIFTV(_mm256_sllv_epi32, __m256i, __v8si, int, 8, 32, __BADC_SLL(unsigned, 32))
+__BADC_SHIFTV(_mm256_srlv_epi32, __m256i, __v8si, int, 8, 32, __BADC_SRL(unsigned, 32))
+__BADC_SHIFTV(_mm256_srav_epi32, __m256i, __v8si, int, 8, 32, __BADC_SRA(unsigned, 32))
+__BADC_SHIFTV(_mm256_sllv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SLL(unsigned long long, 64))
+__BADC_SHIFTV(_mm256_srlv_epi64, __m256i, __v4di, long long, 4, 64, __BADC_SRL(unsigned long long, 64))
+#undef __BADC_SHIFTV
+#undef __BADC_SLL
+#undef __BADC_SRL
+#undef __BADC_SRA
+
+/* VPSHUFD, VPSHUFHW, VPSHUFLW and VPALIGNR act on each 128-bit lane with
+** the one imm8. */
+static inline __m256i _mm256_shuffle_epi32(__m256i __A, const int __M) {
+    __v8si __a = (__v8si)__A, __r;
+    for (int __i = 0; __i < 8; __i++)
+        __r[__i] = __a[(__i & 4) | (__M >> 2 * (__i & 3) & 3)];
+    return (__m256i)__r;
+}
+
+static inline __m256i _mm256_shufflehi_epi16(__m256i __A, const int __M) {
+    __v16hi __a = (__v16hi)__A, __r = __a;
+    for (int __i = 0; __i < 16; __i++)
+        if (__i & 4)
+            __r[__i] = __a[(__i & 12) | (__M >> 2 * (__i & 3) & 3)];
+    return (__m256i)__r;
+}
+
+static inline __m256i _mm256_shufflelo_epi16(__m256i __A, const int __M) {
+    __v16hi __a = (__v16hi)__A, __r = __a;
+    for (int __i = 0; __i < 16; __i++)
+        if (!(__i & 4))
+            __r[__i] = __a[(__i & 8) | (__M >> 2 * (__i & 3) & 3)];
+    return (__m256i)__r;
+}
+
+static inline __m256i _mm256_alignr_epi8(__m256i __A, __m256i __B, const int __N) {
+    __v32qu __a = (__v32qu)__A, __b = (__v32qu)__B, __r;
+    unsigned __n = (unsigned)__N & 0xFF;
+    for (int __i = 0; __i < 32; __i++) {
+        unsigned __k = (__i & 15) + __n;
+        __r[__i] = __k < 16 ? __b[(__i & 16) + __k] : __k < 32 ? __a[(__i & 16) + __k - 16] : 0;
+    }
+    return (__m256i)__r;
+}
+
+/* VPBLENDW repeats its imm8 over each 128-bit lane; VPBLENDD takes a bit
+** per doubleword. */
+static inline __m256i _mm256_blend_epi16(__m256i __A, __m256i __B, const int __M) {
+    __v16hi __a = (__v16hi)__A, __b = (__v16hi)__B;
+    for (int __i = 0; __i < 16; __i++)
+        if (__M >> (__i & 7) & 1)
+            __a[__i] = __b[__i];
+    return (__m256i)__a;
+}
+
+static inline __m256i _mm256_blend_epi32(__m256i __A, __m256i __B, const int __M) {
+    __v8si __a = (__v8si)__A, __b = (__v8si)__B;
+    for (int __i = 0; __i < 8; __i++)
+        if (__M >> __i & 1)
+            __a[__i] = __b[__i];
+    return (__m256i)__a;
+}
+
+static inline __m128i _mm_blend_epi32(__m128i __A, __m128i __B, const int __M) {
+    __v4si __a = (__v4si)__A, __b = (__v4si)__B;
+    for (int __i = 0; __i < 4; __i++)
+        if (__M >> __i & 1)
+            __a[__i] = __b[__i];
+    return (__m128i)__a;
+}
+
+static inline __m256i _mm256_blendv_epi8(__m256i __A, __m256i __B, __m256i __M) {
+    return __badc_join_si(_mm_blendv_epi8(__badc_lo_si(__A), __badc_lo_si(__B), __badc_lo_si(__M)),
+                          _mm_blendv_epi8(__badc_hi_si(__A), __badc_hi_si(__B), __badc_hi_si(__M)));
+}
+
+/* VMPSADBW: the low lane by imm8[2:0], the high one by imm8[5:3]. */
+static inline __m256i _mm256_mpsadbw_epu8(__m256i __A, __m256i __B, const int __M) {
+    return __badc_join_si(_mm_mpsadbw_epu8(__badc_lo_si(__A), __badc_lo_si(__B), __M),
+                          _mm_mpsadbw_epu8(__badc_hi_si(__A), __badc_hi_si(__B), __M >> 3));
+}
+
+/* VPMOVSX / VPMOVZX: the low lanes of the 128-bit operand, widened, the
+** upper half of the result from the lanes after the lower half's. */
+#define __BADC_AVX2_EXTEND(name, bytes)                                           \
+    static inline __m256i _mm256_##name(__m128i __A) {                            \
+        return __badc_join_si(_mm_##name(__A), _mm_##name(_mm_srli_si128(__A, bytes))); \
+    }
+__BADC_AVX2_EXTEND(cvtepi8_epi16, 8)
+__BADC_AVX2_EXTEND(cvtepi8_epi32, 4)
+__BADC_AVX2_EXTEND(cvtepi8_epi64, 2)
+__BADC_AVX2_EXTEND(cvtepi16_epi32, 8)
+__BADC_AVX2_EXTEND(cvtepi16_epi64, 4)
+__BADC_AVX2_EXTEND(cvtepi32_epi64, 8)
+__BADC_AVX2_EXTEND(cvtepu8_epi16, 8)
+__BADC_AVX2_EXTEND(cvtepu8_epi32, 4)
+__BADC_AVX2_EXTEND(cvtepu8_epi64, 2)
+__BADC_AVX2_EXTEND(cvtepu16_epi32, 8)
+__BADC_AVX2_EXTEND(cvtepu16_epi64, 4)
+__BADC_AVX2_EXTEND(cvtepu32_epi64, 8)
+#undef __BADC_AVX2_EXTEND
+
+/* VPBROADCASTB/W/D/Q into a 128-bit result. */
+static inline __m128i _mm_broadcastb_epi8(__m128i __X) {
+    return _mm_set1_epi8(((__v16qi)__X)[0]);
+}
+
+static inline __m128i _mm_broadcastw_epi16(__m128i __X) {
+    return _mm_set1_epi16(((__v8hi)__X)[0]);
+}
+
+static inline __m128i _mm_broadcastd_epi32(__m128i __X) {
+    return _mm_set1_epi32(((__v4si)__X)[0]);
+}
+
+static inline __m128i _mm_broadcastq_epi64(__m128i __X) {
+    return _mm_set1_epi64x(((__v2di)__X)[0]);
+}
+
+#define _mm_broadcastsi128_si256 _mm256_broadcastsi128_si256
+
+static inline __m256i _mm256_set_epi16(short __q15, short __q14, short __q13, short __q12,
+                                       short __q11, short __q10, short __q09, short __q08,
+                                       short __q07, short __q06, short __q05, short __q04,
+                                       short __q03, short __q02, short __q01, short __q00) {
+    return (__m256i)(__v16hi){__q00, __q01, __q02, __q03, __q04, __q05, __q06, __q07,
+                              __q08, __q09, __q10, __q11, __q12, __q13, __q14, __q15};
+}
+
+static inline __m256i _mm256_setr_epi16(short __q00, short __q01, short __q02, short __q03,
+                                        short __q04, short __q05, short __q06, short __q07,
+                                        short __q08, short __q09, short __q10, short __q11,
+                                        short __q12, short __q13, short __q14, short __q15) {
+    return (__m256i)(__v16hi){__q00, __q01, __q02, __q03, __q04, __q05, __q06, __q07,
+                              __q08, __q09, __q10, __q11, __q12, __q13, __q14, __q15};
+}
+
+static inline __m256i _mm256_setr_epi64x(long long __A, long long __B, long long __C,
+                                         long long __D) {
+    return (__m256i){__A, __B, __C, __D};
+}
+
+static inline __m256i _mm256_setr_m128i(__m128i __L, __m128i __H) {
+    return __badc_join_si(__L, __H);
+}
+
+/* An extract zero-extends its word, as VPEXTRW does. */
+static inline int _mm256_extract_epi16(__m256i __A, const int __N) {
+    return ((__v16hu)__A)[__N & 15];
+}
+
+static inline __m256i _mm256_insert_epi16(__m256i __A, int __I, const int __N) {
+    __v16hi __r = (__v16hi)__A;
+    __r[__N & 15] = (short)__I;
+    return (__m256i)__r;
+}
+
+static inline int _mm256_cvtsi256_si32(__m256i __A) {
+    return ((__v8si)__A)[0];
+}
+
+/* The non-temporal transfers are ordinary ones, VLDDQU the unaligned load. */
+static inline void _mm256_stream_si256(__m256i *__P, __m256i __A) {
+    _mm256_storeu_si256((__m256i_u *)__P, __A);
+}
+
+static inline __m256i _mm256_stream_load_si256(void const *__P) {
+    return _mm256_loadu_si256((__m256i_u const *)__P);
+}
+
+static inline __m256i _mm256_lddqu_si256(__m256i const *__P) {
+    return _mm256_loadu_si256((__m256i_u const *)__P);
+}
+
+static inline __m256i _mm256_loadu2_m128i(__m128i_u const *__H, __m128i_u const *__L) {
+    return __badc_join_si(_mm_loadu_si128((__m128i const *)__L),
+                          _mm_loadu_si128((__m128i const *)__H));
+}
+
+static inline void _mm256_storeu2_m128i(__m128i_u *__H, __m128i_u *__L, __m256i __A) {
+    _mm_storeu_si128((__m128i *)__L, __badc_lo_si(__A));
+    _mm_storeu_si128((__m128i *)__H, __badc_hi_si(__A));
+}
+
+/* VPTEST's CF: whether the AND of the first operand's complement with the
+** second is zero. */
+static inline int _mm256_testc_si256(__m256i __A, __m256i __B) {
+    __m256i __r = ~__A & __B;
+    return (__r[0] | __r[1] | __r[2] | __r[3]) == 0;
+}
+
+static inline int _mm256_testnzc_si256(__m256i __A, __m256i __B) {
+    return !_mm256_testz_si256(__A, __B) && !_mm256_testc_si256(__A, __B);
+}
+
+static inline __m256i _mm256_undefined_si256(void) {
+    return _mm256_setzero_si256();
+}
+
+/* VPMASKMOVD / VPMASKMOVQ and VMASKMOVPS / VMASKMOVPD: a lane loaded or
+** stored where the mask lane's sign bit is set; a load gives zero in the
+** others, and no other lane's memory is accessed. */
+#define __BADC_MASKMOV(load, store, ty, mty, ety, lty, lane, n)                   \
+    static inline ty load(ety const *__P, mty __M) {                              \
+        lty __m = (lty)__M, __r;                                                  \
+        for (int __i = 0; __i < n; __i++) {                                       \
+            lane __x = 0;                                                         \
+            if (__m[__i] < 0)                                                     \
+                __builtin_memcpy(&__x, __P + __i, sizeof __x);                    \
+            __r[__i] = __x;                                                       \
+        }                                                                         \
+        return (ty)__r;                                                           \
+    }                                                                             \
+    static inline void store(ety *__P, mty __M, ty __A) {                         \
+        lty __m = (lty)__M, __a = (lty)__A;                                       \
+        for (int __i = 0; __i < n; __i++)                                         \
+            if (__m[__i] < 0) {                                                   \
+                lane __x = __a[__i];                                              \
+                __builtin_memcpy(__P + __i, &__x, sizeof __x);                    \
+            }                                                                     \
+    }
+__BADC_MASKMOV(_mm_maskload_epi32, _mm_maskstore_epi32, __m128i, __m128i, int, __v4si, int, 4)
+__BADC_MASKMOV(_mm256_maskload_epi32, _mm256_maskstore_epi32, __m256i, __m256i, int, __v8si, int, 8)
+__BADC_MASKMOV(_mm_maskload_epi64, _mm_maskstore_epi64, __m128i, __m128i, long long, __v2di,
+               long long, 2)
+__BADC_MASKMOV(_mm256_maskload_epi64, _mm256_maskstore_epi64, __m256i, __m256i, long long, __v4di,
+               long long, 4)
+
+/* VPGATHER / VGATHER: lane k loaded from the base plus the index lane k,
+** sign-extended, times the scale; the masked forms load where the mask
+** lane's sign bit is set and take the source lane elsewhere. Result lanes
+** past the gathered ones are zero. */
+#define __BADC_GATHER(pre, kind, ty, lty, lane, ety, ity, ilty, n)                \
+    static inline ty pre##_mask_##kind(ty __S, ety const *__B, ity __I, ty __M, const int __K) { \
+        lty __s = (lty)__S, __m = (lty)__M, __r = {0};                            \
+        ilty __i = (ilty)__I;                                                     \
+        for (int __k = 0; __k < n; __k++) {                                       \
+            lane __x = __s[__k];                                                  \
+            if (__m[__k] < 0)                                                     \
+                __builtin_memcpy(&__x, (char const *)__B + (long long)__i[__k] * __K, sizeof __x); \
+            __r[__k] = __x;                                                       \
+        }                                                                         \
+        return (ty)__r;                                                           \
+    }                                                                             \
+    static inline ty pre##_##kind(ety const *__B, ity __I, const int __K) {       \
+        lty __ones = {0};                                                         \
+        for (int __k = 0; __k < n; __k++)                                         \
+            __ones[__k] = -1;                                                     \
+        return pre##_mask_##kind((ty)(lty){0}, __B, __I, (ty)__ones, __K);        \
+    }
+__BADC_GATHER(_mm, i32gather_epi32, __m128i, __v4si, int, int, __m128i, __v4si, 4)
+__BADC_GATHER(_mm256, i32gather_epi32, __m256i, __v8si, int, int, __m256i, __v8si, 8)
+__BADC_GATHER(_mm, i32gather_epi64, __m128i, __v2di, long long, long long, __m128i, __v4si, 2)
+__BADC_GATHER(_mm256, i32gather_epi64, __m256i, __v4di, long long, long long, __m128i, __v4si, 4)
+__BADC_GATHER(_mm, i64gather_epi32, __m128i, __v4si, int, int, __m128i, __v2di, 2)
+__BADC_GATHER(_mm256, i64gather_epi32, __m128i, __v4si, int, int, __m256i, __v4di, 4)
+__BADC_GATHER(_mm, i64gather_epi64, __m128i, __v2di, long long, long long, __m128i, __v2di, 2)
+__BADC_GATHER(_mm256, i64gather_epi64, __m256i, __v4di, long long, long long, __m256i, __v4di, 4)
+__BADC_GATHER(_mm, i32gather_ps, __m128, __v4si, int, float, __m128i, __v4si, 4)
+__BADC_GATHER(_mm256, i32gather_ps, __m256, __v8si, int, float, __m256i, __v8si, 8)
+__BADC_GATHER(_mm, i32gather_pd, __m128d, __v2di, long long, double, __m128i, __v4si, 2)
+__BADC_GATHER(_mm256, i32gather_pd, __m256d, __v4di, long long, double, __m128i, __v4si, 4)
+__BADC_GATHER(_mm, i64gather_ps, __m128, __v4si, int, float, __m128i, __v2di, 2)
+__BADC_GATHER(_mm256, i64gather_ps, __m128, __v4si, int, float, __m256i, __v4di, 4)
+__BADC_GATHER(_mm, i64gather_pd, __m128d, __v2di, long long, double, __m128i, __v2di, 2)
+__BADC_GATHER(_mm256, i64gather_pd, __m256d, __v4di, long long, double, __m256i, __v4di, 4)
+#undef __BADC_GATHER
 
 /* AVX's floating-point operations. Each one an SSE instruction applies to
 ** a 128-bit half applies to the two halves, so it lowers to that SSE
@@ -962,6 +1350,158 @@ static inline float _mm256_cvtss_f32(__m256 __A) {
 
 static inline double _mm256_cvtsd_f64(__m256d __A) {
     return __A[0];
+}
+
+__BADC_MASKMOV(_mm_maskload_ps, _mm_maskstore_ps, __m128, __m128i, float, __v4si, int, 4)
+__BADC_MASKMOV(_mm256_maskload_ps, _mm256_maskstore_ps, __m256, __m256i, float, __v8si, int, 8)
+__BADC_MASKMOV(_mm_maskload_pd, _mm_maskstore_pd, __m128d, __m128i, double, __v2di, long long, 2)
+__BADC_MASKMOV(_mm256_maskload_pd, _mm256_maskstore_pd, __m256d, __m256i, double, __v4di,
+               long long, 4)
+#undef __BADC_MASKMOV
+
+/* VBROADCASTSS / VBROADCASTSD from a register. */
+static inline __m128 _mm_broadcastss_ps(__m128 __X) {
+    return (__m128)_mm_set1_epi32(((__v4si)__X)[0]);
+}
+
+static inline __m256 _mm256_broadcastss_ps(__m128 __X) {
+    return (__m256)_mm256_set1_epi32(((__v4si)__X)[0]);
+}
+
+static inline __m128d _mm_broadcastsd_pd(__m128d __X) {
+    return (__m128d)_mm_set1_epi64x(((__v2di)__X)[0]);
+}
+
+static inline __m256d _mm256_broadcastsd_pd(__m128d __X) {
+    return (__m256d)_mm256_set1_epi64x(((__v2di)__X)[0]);
+}
+
+/* VPERMILPS / VPERMILPD by a vector: each lane picks within its 128-bit
+** lane, PS by the selector's low two bits, PD by its bit 1. VPERMPD and
+** VPERMPS pick across the whole register. */
+static inline __m128 _mm_permutevar_ps(__m128 __A, __m128i __C) {
+    __v4si __a = (__v4si)__A, __c = (__v4si)__C, __r;
+    for (int __i = 0; __i < 4; __i++)
+        __r[__i] = __a[__c[__i] & 3];
+    return (__m128)__r;
+}
+
+static inline __m256 _mm256_permutevar_ps(__m256 __A, __m256i __C) {
+    __v8si __a = (__v8si)__A, __c = (__v8si)__C, __r;
+    for (int __i = 0; __i < 8; __i++)
+        __r[__i] = __a[(__i & 4) | (__c[__i] & 3)];
+    return (__m256)__r;
+}
+
+static inline __m128d _mm_permutevar_pd(__m128d __A, __m128i __C) {
+    __v2di __a = (__v2di)__A, __c = (__v2di)__C, __r;
+    for (int __i = 0; __i < 2; __i++)
+        __r[__i] = __a[__c[__i] >> 1 & 1];
+    return (__m128d)__r;
+}
+
+static inline __m256d _mm256_permutevar_pd(__m256d __A, __m256i __C) {
+    __v4di __a = (__v4di)__A, __c = (__v4di)__C, __r;
+    for (int __i = 0; __i < 4; __i++)
+        __r[__i] = __a[(__i & 2) | (__c[__i] >> 1 & 1)];
+    return (__m256d)__r;
+}
+
+static inline __m256d _mm256_permute4x64_pd(__m256d __A, const int __M) {
+    return (__m256d)_mm256_permute4x64_epi64((__m256i)__A, __M);
+}
+
+static inline __m256 _mm256_permutevar8x32_ps(__m256 __A, __m256i __I) {
+    return (__m256)_mm256_permutevar8x32_epi32((__m256i)__A, __I);
+}
+
+/* VTESTPS / VTESTPD: PTEST's flags over the lanes' sign bits alone. */
+#define __BADC_VTEST(name, ty, lty, n, lane)                                      \
+    static inline int name(ty __A, ty __B) {                                      \
+        lty __a = (lty)__A, __b = (lty)__B;                                       \
+        int __f = 1;                                                              \
+        for (int __i = 0; __i < n; __i++)                                         \
+            __f &= (lane) >= 0;                                                   \
+        return __f;                                                               \
+    }
+__BADC_VTEST(_mm_testz_ps, __m128, __v4si, 4, __a[__i] & __b[__i])
+__BADC_VTEST(_mm_testc_ps, __m128, __v4si, 4, ~__a[__i] & __b[__i])
+__BADC_VTEST(_mm256_testz_ps, __m256, __v8si, 8, __a[__i] & __b[__i])
+__BADC_VTEST(_mm256_testc_ps, __m256, __v8si, 8, ~__a[__i] & __b[__i])
+__BADC_VTEST(_mm_testz_pd, __m128d, __v2di, 2, __a[__i] & __b[__i])
+__BADC_VTEST(_mm_testc_pd, __m128d, __v2di, 2, ~__a[__i] & __b[__i])
+__BADC_VTEST(_mm256_testz_pd, __m256d, __v4di, 4, __a[__i] & __b[__i])
+__BADC_VTEST(_mm256_testc_pd, __m256d, __v4di, 4, ~__a[__i] & __b[__i])
+#undef __BADC_VTEST
+
+static inline int _mm_testnzc_ps(__m128 __A, __m128 __B) {
+    return !_mm_testz_ps(__A, __B) && !_mm_testc_ps(__A, __B);
+}
+
+static inline int _mm256_testnzc_ps(__m256 __A, __m256 __B) {
+    return !_mm256_testz_ps(__A, __B) && !_mm256_testc_ps(__A, __B);
+}
+
+static inline int _mm_testnzc_pd(__m128d __A, __m128d __B) {
+    return !_mm_testz_pd(__A, __B) && !_mm_testc_pd(__A, __B);
+}
+
+static inline int _mm256_testnzc_pd(__m256d __A, __m256d __B) {
+    return !_mm256_testz_pd(__A, __B) && !_mm256_testc_pd(__A, __B);
+}
+
+/* ROUNDPS / ROUNDPD and DPPS on each 128-bit half. */
+static inline __m256 _mm256_round_ps(__m256 __A, const int __M) {
+    return __badc_join_ps(_mm_round_ps(__badc_lo_ps(__A), __M), _mm_round_ps(__badc_hi_ps(__A), __M));
+}
+
+static inline __m256d _mm256_round_pd(__m256d __A, const int __M) {
+    return __badc_join_pd(_mm_round_pd(__badc_lo_pd(__A), __M), _mm_round_pd(__badc_hi_pd(__A), __M));
+}
+
+#define _mm256_floor_ps(V) _mm256_round_ps((V), _MM_FROUND_FLOOR)
+#define _mm256_floor_pd(V) _mm256_round_pd((V), _MM_FROUND_FLOOR)
+#define _mm256_ceil_ps(V) _mm256_round_ps((V), _MM_FROUND_CEIL)
+#define _mm256_ceil_pd(V) _mm256_round_pd((V), _MM_FROUND_CEIL)
+
+static inline __m256 _mm256_dp_ps(__m256 __A, __m256 __B, const int __M) {
+    return __badc_join_ps(_mm_dp_ps(__badc_lo_ps(__A), __badc_lo_ps(__B), __M),
+                          _mm_dp_ps(__badc_hi_ps(__A), __badc_hi_ps(__B), __M));
+}
+
+static inline void _mm256_stream_ps(float *__P, __m256 __A) {
+    _mm256_storeu_ps(__P, __A);
+}
+
+static inline void _mm256_stream_pd(double *__P, __m256d __A) {
+    _mm256_storeu_pd(__P, __A);
+}
+
+static inline __m256 _mm256_loadu2_m128(float const *__H, float const *__L) {
+    return __badc_join_ps(_mm_loadu_ps(__L), _mm_loadu_ps(__H));
+}
+
+static inline __m256d _mm256_loadu2_m128d(double const *__H, double const *__L) {
+    return __badc_join_pd(_mm_loadu_pd(__L), _mm_loadu_pd(__H));
+}
+
+static inline void _mm256_storeu2_m128(float *__H, float *__L, __m256 __A) {
+    _mm_storeu_ps(__L, __badc_lo_ps(__A));
+    _mm_storeu_ps(__H, __badc_hi_ps(__A));
+}
+
+static inline void _mm256_storeu2_m128d(double *__H, double *__L, __m256d __A) {
+    _mm_storeu_pd(__L, __badc_lo_pd(__A));
+    _mm_storeu_pd(__H, __badc_hi_pd(__A));
+}
+
+/* The SDM leaves the lanes undefined; these give zero. */
+static inline __m256 _mm256_undefined_ps(void) {
+    return _mm256_setzero_ps();
+}
+
+static inline __m256d _mm256_undefined_pd(void) {
+    return _mm256_setzero_pd();
 }
 
 /* VZEROUPPER / VZEROALL: no VEX instruction is emitted, so no upper state

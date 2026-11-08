@@ -6757,6 +6757,37 @@ fn code_seg_and_alloc_text_place_functions_in_code_sections() {
     }
 }
 
+/// `#pragma detect_mismatch` gives the object cl's `/FAILIFMISMATCH` pair:
+/// two units disagreeing on a key fail the PE link, agreeing ones link.
+#[test]
+fn detect_mismatch_fails_a_link_whose_units_disagree() {
+    let dir = tempdir("pe-detect-mismatch");
+    write_source(
+        &dir,
+        "a.c",
+        "#pragma detect_mismatch(\"probe_ver\", \"1\")\nint a(void) { return 0; }\n",
+    );
+    for (unit, value, links) in [("same.c", "1", true), ("other.c", "2", false)] {
+        write_source(
+            &dir,
+            unit,
+            &format!(
+                "#pragma detect_mismatch(\"probe_ver\", \"{value}\")\n\
+                 int a(void);\nint main(void) {{ return a(); }}\n"
+            ),
+        );
+        let out = Command::new(badc())
+            .args(["--target=windows-x64", "a.c", unit, "-o", "t.exe"])
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.success(), links, "{unit}: {err}");
+        assert!(!err.contains("warning"), "{unit}: {err}");
+        assert_eq!(err.contains("`probe_ver` is `1`"), !links, "{unit}: {err}");
+    }
+}
+
 /// A DLL whose `DllMain` one of several units defines enters there, as a
 /// single-unit DLL does: AddressOfEntryPoint is the function's RVA, which
 /// the export table gives where the test exports it.

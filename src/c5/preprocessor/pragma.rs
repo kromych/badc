@@ -246,6 +246,12 @@ impl Preprocessor {
             }
             return Ok(());
         }
+        if let Some(inner) =
+            (args.strip_prefix("detect_mismatch(")).and_then(|s| s.strip_suffix(')'))
+        {
+            self.parse_pragma_detect_mismatch(inner.trim(), site);
+            return Ok(());
+        }
         // MSVC's `#pragma section("name", attributes)` declares a section a
         // later `__declspec(allocate("name"))` places objects in; the section
         // takes the kind of what it holds, as with GNU `section`.
@@ -970,6 +976,28 @@ impl Preprocessor {
         self.linker_directives.push(options);
     }
 
+    /// `#pragma detect_mismatch("name", "value")`: cl's
+    /// `/FAILIFMISMATCH:"name=value"`, which a PE link checks across its
+    /// inputs.
+    fn parse_pragma_detect_mismatch(&mut self, inner: &str, site: Site<'_>) {
+        let (name, rest) = quoted_strings(inner);
+        let (value, rest) = match rest.strip_prefix(',') {
+            Some(rest) => quoted_strings(rest.trim_start()),
+            None => (String::new(), rest),
+        };
+        if name.is_empty() || name.contains('=') || value.is_empty() || !rest.is_empty() {
+            let text = format!("malformed `#pragma detect_mismatch({inner})` -- ignored");
+            self.warn(PRAGMA_SYNTAX, site, text);
+            return;
+        }
+        if self.target.binary_format() != crate::c5::codegen::BinaryFormat::Pe {
+            let text = "`#pragma detect_mismatch` takes effect in a PE link only -- ignored";
+            self.warn(UNKNOWN_PRAGMA, site, text.into());
+            return;
+        }
+        (self.linker_directives).push(format!("/FAILIFMISMATCH:\"{name}={value}\""));
+    }
+
     /// The concatenated string literals of a `#pragma comment(kind, ...)`
     /// operand; a warning and `None` when it is not one.
     fn pragma_comment_string(
@@ -979,15 +1007,7 @@ impl Preprocessor {
         what: &str,
         site: Site<'_>,
     ) -> Option<String> {
-        let mut text = String::new();
-        let mut rest = operand;
-        while let Some(body) = rest.strip_prefix('"') {
-            let Some(end) = body.find('"') else {
-                break;
-            };
-            text.push_str(&body[..end]);
-            rest = body[end + 1..].trim_start();
-        }
+        let (text, rest) = quoted_strings(operand);
         if !rest.is_empty() || text.is_empty() {
             self.warn(
                 PRAGMA_SYNTAX,
@@ -1336,6 +1356,21 @@ fn pragma_weak_operand(args: &str) -> Option<&str> {
     let rest = args.strip_prefix("weak")?;
     rest.starts_with(|c: char| c.is_ascii_whitespace())
         .then(|| rest.trim())
+}
+
+/// The adjacent string literals opening `operand`, concatenated, and the
+/// text after them.
+fn quoted_strings(operand: &str) -> (String, &str) {
+    let mut text = String::new();
+    let mut rest = operand;
+    while let Some(body) = rest.strip_prefix('"') {
+        let Some(end) = body.find('"') else {
+            break;
+        };
+        text.push_str(&body[..end]);
+        rest = body[end + 1..].trim_start();
+    }
+    (text, rest)
 }
 
 /// True when `args` is the head of a `pack(...)` pragma -- the

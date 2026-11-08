@@ -742,6 +742,8 @@ structure loads, float16 and bfloat16 are not provided.
   cl's `.drectve` does: `/EXPORT:` (under another name, or forwarded as
   `name=dll.export`; `,DATA`), `/INCLUDE:`, `/DEFAULTLIB:`, `/alternatename:`
   and `/FAILIFMISMATCH:`. Elsewhere it warns and is ignored, as in clang.
+  `#pragma detect_mismatch("name", "value")` gives the object cl's
+  `/FAILIFMISMATCH:"name=value"`.
 - `<intrin.h>` on the Windows targets is the compiler's own, like the
   intrinsic headers: MSVC's include directory, a system directory, does not
   supply it, as clang's copy shadows MSVC's. A project's own `<intrin.h>` in

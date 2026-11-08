@@ -93,6 +93,14 @@ pub(crate) fn page_fields(adrp_addr: i64, target_addr: i64) -> Result<(i32, u32)
     Ok((pages as i32, (target_addr & 0xFFF) as u32))
 }
 
+/// `word` with bits 25:0 holding `distance / 4`, the field of `b` and `bl`
+/// that R_AARCH64_JUMP26 and CALL26 fill; `None` for a distance that is
+/// unaligned or beyond 128 MiB either way.
+pub(crate) fn branch26_word(word: u32, distance: i64) -> Option<u32> {
+    (distance & 3 == 0 && (-(1 << 27)..1 << 27).contains(&distance))
+        .then_some((word & !0x03ff_ffff) | ((distance >> 2) as u32 & 0x03ff_ffff))
+}
+
 /// `adrp` word carrying `pages`, keeping `word`'s destination register.
 pub(crate) fn adrp_word(word: u32, pages: i32) -> Result<u32, PairError> {
     if word & 0x9F00_0000 != 0x9000_0000 {

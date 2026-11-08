@@ -598,6 +598,20 @@ pub struct DataPcRel {
     pub width: u8,
     /// The slot holds `S + A - ImageBase`, PE's image-relative address.
     pub image_relative: bool,
+    /// The slot is an AArch64 branch word: `(S + A - P) >> 2` fills bits
+    /// 25:0 and the word's other bits stay (R_AARCH64_JUMP26, CALL26).
+    pub branch26: bool,
+}
+
+/// What a deferred data slot holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DataSlot {
+    /// `S + A - P` at a width of 4 or 8 bytes.
+    PcRel(u8),
+    /// `S + A - ImageBase`, PE's image-relative address.
+    ImageRelative,
+    /// An AArch64 branch word's 26-bit field.
+    Branch26,
 }
 
 /// Where a defined symbol lives in the merged image, and the
@@ -4375,11 +4389,15 @@ impl<'a> Link<'a> {
                 | (NativeMachine::Aarch64, R_AARCH64_PREL64) => Some(8),
                 _ => None,
             };
-        if let Some(width) = pcrel_width {
-            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, width, false);
-        }
-        if reloc.rtype == R_PE_ADDR32NB {
-            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, 4, true);
+        let slot = match (self.machine, reloc.rtype) {
+            _ if reloc.rtype == R_PE_ADDR32NB => Some(DataSlot::ImageRelative),
+            (NativeMachine::Aarch64, R_AARCH64_JUMP26 | R_AARCH64_CALL26) => {
+                Some(DataSlot::Branch26)
+            }
+            _ => pcrel_width.map(DataSlot::PcRel),
+        };
+        if let Some(slot) = slot {
+            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, slot);
         }
         // The remaining kinds are the 8-byte absolute pointer
         // initializers.
@@ -4600,8 +4618,8 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// A pc-relative data slot, or with `image_relative` `S + A - ImageBase`.
-    #[allow(clippy::too_many_arguments)]
+    /// A data slot whose value is `S + A` less the slot's address or the
+    /// image base, in the form `slot` gives.
     fn resolve_data_pcrel(
         &mut self,
         unit: usize,
@@ -4609,13 +4627,17 @@ impl<'a> Link<'a> {
         reloc: &NativeReloc,
         slot_offset: u64,
         in_tls: bool,
-        width: u8,
-        image_relative: bool,
+        slot: DataSlot,
     ) -> Result<(), C5Error> {
-        let what = if image_relative {
-            "image-relative data slot"
-        } else {
-            "pc-relative data slot"
+        let image_relative = slot == DataSlot::ImageRelative;
+        let width = match slot {
+            DataSlot::PcRel(width) => width,
+            DataSlot::ImageRelative | DataSlot::Branch26 => 4,
+        };
+        let what = match slot {
+            DataSlot::ImageRelative => "image-relative data slot",
+            DataSlot::Branch26 => "branch in a data section",
+            DataSlot::PcRel(_) => "pc-relative data slot",
         };
         let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
@@ -4704,6 +4726,7 @@ impl<'a> Link<'a> {
             anchor: merged_target(section, value, 0, self.data.len())?,
             width,
             image_relative,
+            branch26: slot == DataSlot::Branch26,
         });
         Ok(())
     }
@@ -6073,6 +6096,7 @@ fn emit_plt(
             anchor: MergedTarget::Text(stub_at as i64),
             width: 4,
             image_relative: true,
+            branch26: false,
         });
     }
     // A `__try` scope table names an imported language handler by its

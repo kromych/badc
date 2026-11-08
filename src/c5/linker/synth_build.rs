@@ -960,6 +960,7 @@ fn synth_data_pcrel(merged: &MergedNative) -> Vec<crate::c5::codegen::DataPcRelR
                 target_in_data,
                 width: r.width,
                 image_relative: r.image_relative,
+                branch26: r.branch26,
             }
         })
         .collect()

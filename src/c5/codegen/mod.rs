@@ -3414,6 +3414,9 @@ pub(crate) struct DataPcRelReloc {
     pub width: u8,
     /// The slot holds the RVA `target_vaddr - image base`, not a distance.
     pub image_relative: bool,
+    /// The slot is an AArch64 branch word: the distance over 4 fills bits
+    /// 25:0 and the word's other bits stay.
+    pub branch26: bool,
 }
 
 /// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte

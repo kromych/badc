@@ -1280,6 +1280,21 @@ mod jit_impl {
                 };
                 let at = r.slot_data_offset as usize;
                 let value = (base + r.target_offset) as i64 - (data_vmaddr + at as u64) as i64;
+                if r.branch26 {
+                    let word = bytes
+                        .get(at..at + 4)
+                        .map(|w| u32::from_le_bytes(w.try_into().unwrap()));
+                    let Some(word) = word
+                        .and_then(|w| crate::c5::codegen::aarch64::patch::branch26_word(w, value))
+                    else {
+                        return Err(C5Error::hard(
+                            Code::RELOCATION,
+                            format!("JIT: the branch at data slot {at:#x} cannot reach {value:#x}"),
+                        ));
+                    };
+                    bytes[at..at + 4].copy_from_slice(&word.to_le_bytes());
+                    continue;
+                }
                 let width = r.width as usize;
                 let fits = width == 8 || i32::try_from(value).is_ok();
                 let Some(slot) = bytes.get_mut(at..at + width).filter(|_| fits) else {

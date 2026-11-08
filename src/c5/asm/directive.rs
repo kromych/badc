@@ -106,6 +106,8 @@ fn elf_reloc_type_by_name(name: &str) -> Option<u32> {
         "R_AARCH64_PREL64" => 260,
         "R_AARCH64_PREL32" => 261,
         "R_AARCH64_PREL16" => 262,
+        "R_AARCH64_JUMP26" => 282,
+        "R_AARCH64_CALL26" => 283,
         _ => return None,
     })
 }

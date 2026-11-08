@@ -374,6 +374,20 @@ fn patch_data_pcrel_relocs(
             super::link::MergedTarget::Text(off) => text_vaddr.wrapping_add(off as u64),
         };
         let value = target as i64 - (data_vaddr + r.slot_offset) as i64;
+        if r.branch26 {
+            let word = u32::from_le_bytes(data[slot..slot + 4].try_into().unwrap());
+            let word = crate::c5::codegen::aarch64::patch::branch26_word(word, value).ok_or_else(
+                || {
+                    link_err(
+                        Code::RELOCATION,
+                        MODULE,
+                        &format!("a branch at data slot 0x{slot:x} cannot reach 0x{target:x}"),
+                    )
+                },
+            )?;
+            data[slot..slot + 4].copy_from_slice(&word.to_le_bytes());
+            continue;
+        }
         if width == 8 {
             data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
             continue;

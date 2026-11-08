@@ -1611,11 +1611,11 @@ static inline float __badc_bits_f32(unsigned __u) {
 
 /* Converts `__n` lanes of `__a` under the immediate `__imm`: its bits 1:0
 ** select the rounding, unless bit 2 defers to MXCSR.RC. */
-static inline void __badc_cvtps_ph(const float *__a, unsigned short *__out, int __n, int __imm) {
+static inline void __badc_cvtps_ph(const float *__a, unsigned short *__dst, int __n, int __imm) {
     unsigned __csr = _mm_getcsr(), __flags = 0;
     unsigned __rc = (__imm & 4) ? __csr >> 13 & 3 : (unsigned)__imm & 3;
     for (int __i = 0; __i < __n; __i++)
-        __out[__i] = __badc_f32_to_f16(__badc_f32_bits(__a[__i]), __rc, __csr, &__flags);
+        __dst[__i] = __badc_f32_to_f16(__badc_f32_bits(__a[__i]), __rc, __csr, &__flags);
     if (__flags)
         _mm_setcsr(__csr | __flags);
 }

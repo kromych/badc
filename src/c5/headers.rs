@@ -971,6 +971,70 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The Windows SDK's sal.h, concurrencysal.h, specstrings.h and
+    /// driverspecs.h define these names as object-like macros, and under
+    /// `--msvc` they precede the compiler's headers (winnt.h includes
+    /// `<intrin.h>`), so no compiler header may use one as an identifier.
+    #[test]
+    fn compiler_headers_compile_after_the_sdk_annotation_macros() {
+        use crate::{CompileOptions, Compiler, Target};
+        const SAL: &str = "\
+            __allocator __analysis_noreturn __bound __callback __checkReturn __deref \
+            __deref_in __deref_in_opt __deref_in_opt_out __deref_inout __deref_inout_nz \
+            __deref_inout_nz_opt __deref_inout_opt __deref_inout_z __deref_inout_z_opt \
+            __deref_nonvolatile __deref_opt_in __deref_opt_in_opt __deref_opt_inout \
+            __deref_opt_inout_nz __deref_opt_inout_nz_opt __deref_opt_inout_opt \
+            __deref_opt_inout_z __deref_opt_inout_z_opt __deref_opt_out __deref_opt_out_nz_opt \
+            __deref_opt_out_opt __deref_opt_out_z __deref_opt_out_z_opt __deref_out \
+            __deref_out_bound __deref_out_nz __deref_out_nz_opt __deref_out_opt __deref_out_z \
+            __deref_out_z_opt __deref_volatile __drv_IoGetDmaAdapter __drv_KMDF __drv_NDIS \
+            __drv_WDM __drv_acquiresCancelSpinLock __drv_acquiresCriticalRegion \
+            __drv_acquiresPriorityRegion __drv_aliasesMem __drv_constant \
+            __drv_dispatchType_other __drv_floatRestored __drv_floatSaved __drv_floatUsed \
+            __drv_inTry __drv_interlocked __drv_isCancelIRQL __drv_isObjectPointer \
+            __drv_mustHoldCancelSpinLock __drv_mustHoldCriticalRegion \
+            __drv_mustHoldPriorityRegion __drv_neverHoldCancelSpinLock \
+            __drv_neverHoldCriticalRegion __drv_neverHoldPriorityRegion __drv_nonConstant \
+            __drv_notInTry __drv_notPointer __drv_raisesIRQL __drv_releasesCancelSpinLock \
+            __drv_releasesCriticalRegion __drv_releasesPriorityRegion __drv_restoresIRQL \
+            __drv_sameIRQL __drv_savesIRQL __drv_typeBitset __drv_typeCond __drv_typeConst \
+            __drv_typeExpr __drv_useCancelIRQL __encoded_array __encoded_pointer __exceptthat \
+            __fallthrough __field_encoded_array __field_encoded_pointer __field_nullterminated \
+            __format_string __gdi_entry __in __in_bound __in_nz __in_nz_opt __in_opt __in_z \
+            __in_z_opt __inner_allocator __inner_exceptthat __inout __inout_nz __inout_nz_opt \
+            __inout_opt __inout_z __inout_z_opt __interlocked __internal_kernel_driver \
+            __kernel_code __kernel_driver __kernel_entry __maybenull __maybevalid \
+            __no_competing_thread __nonvolatile __nothrow __notnull __notvalid __null \
+            __nullnullterminated __nullterminated __out __out_bound __out_nz __out_nz_opt \
+            __out_opt __out_z __out_z_opt __override __possibly_notnullterminated __post \
+            __post_deref_except_maybenull __post_except_maybenull __post_invalid \
+            __post_nullnullterminated __pre __pre_deref_except_maybenull \
+            __pre_except_maybenull __prefast_operator_new_null __prefast_operator_new_throws \
+            __readonly __refparam __requires_no_locks_held __reserved __rpc_entry \
+            __specstrings __useHeader __user_code __user_driver __valid __valueUndefined \
+            __volatile";
+        let sal: alloc::string::String = SAL
+            .split_whitespace()
+            .map(|n| alloc::format!("#define {n}\n"))
+            .collect();
+        let mut failures = alloc::vec::Vec::new();
+        for target in Target::ALL.into_iter().filter(|t| t.is_windows()) {
+            for &(name, targets, _) in embedded_headers() {
+                if !compiler_header(name) || !targets.contains(target) {
+                    continue;
+                }
+                let src = alloc::format!("{sal}#include <{name}>\n");
+                let opts = CompileOptions::default()
+                    .with_no_entry_point(true)
+                    .with_msvc(true);
+                if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+                    failures.push(alloc::format!("{} <{name}>: {e}", target.id_str()));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     /// The C99 library functions a target lacked a declaration for are
     /// declared on every target with the standard type (C99 7.12, 7.19.6.14).
     #[test]
